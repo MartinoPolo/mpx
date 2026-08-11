@@ -35,6 +35,14 @@ describe("cli",()=>{
     expect(text).not.toContain("do-not-print"); expect(text).not.toContain("stack");
   });
 
+  it("explains the selected provider by role",async()=>{
+    const cwd=await fixture(JSON.stringify({schemaVersion:1,project:{id:"sample"},repository:{provider:"github",remote:"origin"},issues:{provider:"none"}})), io=captureIo();
+    expect(await run(["--json","--cwd",cwd,"provider","explain","repository"],io,{env:{}})).toBe(0);
+    const data=JSON.parse(io.out[0]!).data;
+    expect(data).toMatchObject({role:"repository",provider:"github",adapter:"gh"});
+    expect(data.capabilities.every((capability:string)=>!capability.startsWith("issue."))).toBe(true);
+  });
+
   it("uses exit two for usage errors",async()=>{
     const io=captureIo();
     expect(await run(["--json","unknown"],io,{env:{}})).toBe(2);

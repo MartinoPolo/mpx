@@ -94,7 +94,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<unknown> {
       role,
       provider: descriptor.id,
       adapter: descriptor.backend,
-      capabilities: descriptor.capabilities,
+      capabilities: descriptor.capabilities.filter((capability) =>
+        role === "issues" ? capability.startsWith("issue.") : !capability.startsWith("issue."),
+      ),
       connection: resolved.scope.connections[descriptor.id] ?? null,
     };
   }
