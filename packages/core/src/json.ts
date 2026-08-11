@@ -11,7 +11,7 @@ export function parseStrictJson(input: string): JsonValue {
     throw new SyntaxError(`${message} at position ${position}`);
   };
   const whitespace = () => {
-    while (/\s/u.test(input[position] ?? "") && input[position] !== "\u00a0") position++;
+    while (/[\u0009\u000a\u000d\u0020]/u.test(input[position] ?? "")) position++;
   };
   const parseString = (): string => {
     if (input[position++] !== '"') fail("Expected string");

@@ -1,3 +1,5 @@
+import { MpxError } from "@mpx/core";
+
 export const ISSUE_CAPABILITIES = [
   "issue.list", "issue.view", "issue.create", "issue.edit", "issue.comment",
   "issue.label", "issue.move", "issue.finish",
@@ -21,30 +23,14 @@ export type ProviderErrorCode =
   | "CAPABILITY_UNSUPPORTED"
   | "UNTRUSTED_PROVIDER_INJECTION";
 
-/** Local equivalent of the planned @mpx/core structured error. */
-export class ProviderError extends Error {
-  readonly code: ProviderErrorCode;
-  readonly capability: string | undefined;
-  readonly retryable: boolean;
-  readonly remediation: string | undefined;
-  readonly providerData: Readonly<Record<string, unknown>> | undefined;
-
+export class ProviderError extends MpxError {
   constructor(code: ProviderErrorCode, message: string, options: {
-    capability?: string; retryable?: boolean; remediation?: string;
-    providerData?: Readonly<Record<string, unknown>>;
+    capability?: string;
+    retryable?: boolean;
+    remediation?: string;
   } = {}) {
-    super(message);
+    super({ code, message, ...options });
     this.name = "ProviderError";
-    this.code = code;
-    this.capability = options.capability;
-    this.retryable = options.retryable ?? false;
-    this.remediation = options.remediation;
-    this.providerData = options.providerData;
-  }
-
-  toJSON(): Readonly<Record<string, unknown>> {
-    return Object.freeze({ code: this.code, message: this.message, capability: this.capability,
-      retryable: this.retryable, remediation: this.remediation, providerData: this.providerData });
   }
 }
 
@@ -137,4 +123,4 @@ function validateDescriptor(descriptor: ProviderDescriptor): void {
   }
 }
 
-export const providerRegistry = new ProviderRegistry();
+export const providerRegistry: ProviderRegistry = new ProviderRegistry();

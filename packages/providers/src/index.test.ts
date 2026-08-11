@@ -1,3 +1,4 @@
+import { errorEnvelope } from "@mpx/core";
 import { describe, expect, it } from "vitest";
 import {
   BUILTIN_PROVIDERS, CI_CAPABILITIES, ISSUE_CAPABILITIES, ProviderError,
@@ -46,5 +47,19 @@ describe("registry validation", () => {
     expect(() => providerRegistry.assertCapability("generic", "ci.logs")).toThrowError(expect.objectContaining({ code: "CAPABILITY_UNSUPPORTED", capability: "ci.logs", retryable: false }));
     expect(() => providerRegistry.assertCapability("github", "repo.delete")).toThrowError(ProviderError);
     expect(() => providerRegistry.get("missing")).toThrowError(expect.objectContaining({ code: "PROVIDER_NOT_FOUND" }));
+  });
+
+  it("preserves provider capability errors in public envelopes", () => {
+    let error: unknown;
+    try {
+      providerRegistry.assertCapability("generic", "ci.logs");
+    } catch (caught) {
+      error = caught;
+    }
+    expect(errorEnvelope(error)).toMatchObject({
+      ok: false,
+      error: { code: "CAPABILITY_UNSUPPORTED", capability: "ci.logs", retryable: false },
+      warnings: [],
+    });
   });
 });

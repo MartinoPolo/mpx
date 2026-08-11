@@ -13,20 +13,20 @@ export interface SuccessEnvelope<T extends JsonValue = JsonValue> {
   apiVersion: 1;
   ok: true;
   data: T;
-  diagnostics: Diagnostic[];
+  warnings: Diagnostic[];
 }
 
 export interface ErrorEnvelope {
   apiVersion: 1;
   ok: false;
   error: PublicError;
-  diagnostics: Diagnostic[];
+  warnings: Diagnostic[];
 }
 
 export type ApiEnvelope<T extends JsonValue = JsonValue> = SuccessEnvelope<T> | ErrorEnvelope;
 
-export const successEnvelope = <T extends JsonValue>(data: T, diagnostics: Diagnostic[] = []): SuccessEnvelope<T> =>
-  ({ apiVersion: 1, ok: true, data, diagnostics });
+export const successEnvelope = <T extends JsonValue>(data: T, warnings: Diagnostic[] = []): SuccessEnvelope<T> =>
+  ({ apiVersion: 1, ok: true, data, warnings });
 
-export const errorEnvelope = (error: unknown, diagnostics: Diagnostic[] = []): ErrorEnvelope =>
-  ({ apiVersion: 1, ok: false, error: serializePublicError(error), diagnostics });
+export const errorEnvelope = (error: unknown, warnings: Diagnostic[] = []): ErrorEnvelope =>
+  ({ apiVersion: 1, ok: false, error: serializePublicError(error), warnings });

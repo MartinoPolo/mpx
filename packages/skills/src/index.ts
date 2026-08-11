@@ -29,18 +29,18 @@ export interface ResolveOptions {
   scopeExposure?: ExposureSettings; projectExposure?: ExposureSettings; mappingVersion: string;
 }
 export interface ManifestEntry {
-  identity: string; publicName: string; packs: SkillPack[]; exposure: Exposure;
+  identity: string; publicName: string; packs: SkillPack[]; exposure: Exposure; exposureSource: string;
   description?: string; triggers?: string; source: { kind: "canonical"; path: string; realPath: string; contentHash: string };
   permissions: { userInvocation: boolean; modelInvocation: boolean };
   compatibility: { claude: boolean; pi: boolean; diagnostics: string[] };
 }
 export interface ResolvedManifest {
-  schemaVersion: 1; artifactKey: string; runtime: Runtime; scope: string; projectId?: string;
+  schemaVersion: 1; artifactKey: string; catalogHash: string; runtime: Runtime; scope: string; projectId?: string;
   mappingVersion: string; entries: ManifestEntry[];
 }
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const allowedTop = new Set(["name", "description", "triggers", "disable-model-invocation", "metadata"]);
+const allowedTop = new Set(["name", "description", "triggers", "metadata"]);
 
 function scalar(raw: string): string | boolean | string[] {
   const value = raw.trim();
@@ -155,16 +155,19 @@ function stable(value: unknown): string { if (Array.isArray(value)) return `[${v
 export function resolveManifest(catalog: readonly CanonicalSkill[], options: ResolveOptions): ResolvedManifest {
   const enabled = new Set(options.enabledPacks);
   const entries: ManifestEntry[] = catalog.filter(s => s.skillPacks.some(p => enabled.has(p))).map((skill): ManifestEntry => {
-    const exposure = effectiveExposure(skill, options).exposure;
+    const effective = effectiveExposure(skill, options);
+    const exposure = effective.exposure;
     const visible = exposure === "full";
-    return { identity: skill.identity, publicName: `/mpx:${skill.identity}`, packs: [...skill.skillPacks].sort(), exposure,
+    return { identity: skill.identity, publicName: `/mpx:${skill.identity}`, packs: [...skill.skillPacks].sort(), exposure, exposureSource: effective.source,
       ...(visible ? { description: skill.description, ...(skill.triggers ? { triggers: skill.triggers } : {}) } : {}),
       source: { kind: "canonical", path: skill.sourcePath, realPath: skill.realPath, contentHash: skill.contentHash },
       permissions: { userInvocation: exposure !== "off", modelInvocation: exposure === "full" || exposure === "name-only" },
       compatibility: { claude: true, pi: true, diagnostics: [] } };
   }).filter(x => x.exposure !== "off").sort((a,b) => a.identity.localeCompare(b.identity));
-  const keyInput = { runtime: options.runtime, scope: options.scope, projectId: options.projectId ?? null, mappingVersion: options.mappingVersion, enabledPacks: [...options.enabledPacks].sort(), scopeExposure: options.scopeExposure ?? null, projectExposure: options.projectExposure ?? null, catalog: catalog.map(x => ({ identity:x.identity, hash:x.contentHash })).sort((a,b)=>a.identity.localeCompare(b.identity)) };
-  const base = { schemaVersion: 1 as const, artifactKey: createHash("sha256").update(stable(keyInput)).digest("hex"), runtime: options.runtime, scope: options.scope, mappingVersion: options.mappingVersion, entries };
+  const catalogProjection = catalog.map(x => ({ identity:x.identity, hash:x.contentHash })).sort((a,b)=>a.identity.localeCompare(b.identity));
+  const catalogHash = createHash("sha256").update(stable(catalogProjection)).digest("hex");
+  const keyInput = { runtime: options.runtime, scope: options.scope, projectId: options.projectId ?? null, mappingVersion: options.mappingVersion, enabledPacks: [...options.enabledPacks].sort(), scopeExposure: options.scopeExposure ?? null, projectExposure: options.projectExposure ?? null, catalogHash };
+  const base = { schemaVersion: 1 as const, artifactKey: createHash("sha256").update(stable(keyInput)).digest("hex"), catalogHash, runtime: options.runtime, scope: options.scope, mappingVersion: options.mappingVersion, entries };
   return options.projectId ? { ...base, projectId: options.projectId } : base;
 }
 
@@ -180,7 +183,10 @@ export function doctor(canonical: readonly CanonicalSkill[], project: { skills: 
 }
 
 export function searchSkills(manifest: ResolvedManifest, catalog: readonly CanonicalSkill[], query: string, options: { artifactKey?: string; runtime?: boolean; limit?: number } = {}): Array<{ identity: string; publicName: string; description: string; score: number }> {
+  if (query.length > 200) throw new SkillCatalogError([{ code: "QUERY_TOO_LONG", message: "skill search queries are limited to 200 characters" }]);
   if (options.runtime && (!options.artifactKey || options.artifactKey !== manifest.artifactKey)) throw new SkillCatalogError([{ code: "STALE_ARTIFACT", message: "runtime search requires the exact launch-bound artifact key" }]);
+  const currentCatalogHash = createHash("sha256").update(stable(catalog.map(x => ({ identity:x.identity, hash:x.contentHash })).sort((a,b)=>a.identity.localeCompare(b.identity)))).digest("hex");
+  if (options.runtime && currentCatalogHash !== manifest.catalogHash) throw new SkillCatalogError([{ code: "STALE_ARTIFACT", message: "canonical skill content no longer matches the launch-bound artifact" }]);
   const limit = Math.max(0, Math.min(20, options.limit ?? 20)); const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean); const source = new Map(catalog.map(x => [x.identity, x]));
   return manifest.entries.filter(x => x.exposure === "full" || x.exposure === "name-only").map(entry => { const skill = source.get(entry.identity)!; const haystack = `${skill.identity} ${skill.description} ${skill.triggers ?? ""}`.toLowerCase(); const score = terms.reduce((n,t) => n + (haystack.includes(t) ? (skill.identity.includes(t) ? 3 : 1) : 0), 0); return { identity: skill.identity, publicName: entry.publicName, description: skill.description, score }; }).filter(x => terms.length === 0 || x.score > 0).sort((a,b) => b.score-a.score || a.identity.localeCompare(b.identity)).slice(0, limit);
 }
