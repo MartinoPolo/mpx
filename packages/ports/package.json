@@ -1,23 +1,20 @@
 {
-  "name": "@mpx/skills",
+  "name": "@mpx/ports",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": ".\/dist\/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json && vitest run",
-    "test": "vitest run",
+    "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@mpx/config": "workspace:*",
-    "@mpx/core": "workspace:*"
+    "@mpx/core": "workspace:*",
+    "@mpx/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

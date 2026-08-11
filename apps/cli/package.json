@@ -7,13 +7,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit && vitest run",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@mpx/core": "workspace:*",
     "@mpx/config": "workspace:*",
     "@mpx/providers": "workspace:*",
-    "@mpx/skills": "workspace:*"
+    "@mpx/skills": "workspace:*",
+    "@mpx/ports": "workspace:*",
+    "@mpx/windows": "workspace:*",
+    "@mpx/status": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
