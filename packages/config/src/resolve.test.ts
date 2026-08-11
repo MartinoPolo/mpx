@@ -1,0 +1,4 @@
+import {expect,it,vi} from "vitest";import {resolveConfig} from "./resolve.js";import type {ProjectConfig,UserConfig} from "./types.js";
+vi.mock("node:fs/promises",()=>({realpath:async(p:string)=>p}));
+const project:ProjectConfig={schemaVersion:1,project:{id:"acme/app"},repository:{provider:"github",remote:"origin"}};
+it("uses longest root and deterministic override/default provenance",async()=>{const user:UserConfig={scopes:{work:{roots:["C:/_MP_work"],skillPacks:["core"]},nested:{roots:["C:/_MP_work/team"],skillPacks:["work"]}},projects:{"acme/app":{skillPacks:["special"]}}};const a=await resolveConfig(project,user,"C:/_MP_work/team/repo");const b=await resolveConfig(project,user,"C:/_MP_work/team/repo");expect(a.scope.name).toBe("nested");expect(a.scope.skillPacks).toEqual(["special"]);expect(a).toEqual(b);expect(a.project.issues).toEqual({provider:"none"});expect(a.provenance.map(x=>x.pointer)).toEqual([...a.provenance.map(x=>x.pointer)].sort())});

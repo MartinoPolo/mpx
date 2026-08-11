@@ -1,0 +1,5 @@
+import { readFile } from "node:fs/promises"; import { parseStrictJson } from "./strict-json.js"; import { assertValid, validateUserConfig } from "./schema.js"; import type { UserConfig } from "./types.js";
+const fullToken=/^\$\{(MPX_[A-Z0-9_]+)\}$/;
+export function interpolateUserConfig(value:unknown, env:NodeJS.ProcessEnv=process.env):unknown { if(typeof value==="string"){if(value.includes("${")){const m=fullToken.exec(value);if(!m)throw new Error(`Partial or invalid environment token: ${value}`);const v=env[m[1]!];if(!v)throw new Error(`Unknown environment token: ${m[1]}`);return v}return value} if(Array.isArray(value))return value.map(x=>interpolateUserConfig(x,env));if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,interpolateUserConfig(v,env)]));return value }
+export function parseUserConfig(text:string,env?:NodeJS.ProcessEnv):UserConfig {const value=interpolateUserConfig(parseStrictJson(text),env);assertValid(validateUserConfig,value);return value as UserConfig}
+export async function loadUserConfig(path:string,env?:NodeJS.ProcessEnv){return parseUserConfig(await readFile(path,"utf8"),env)}
