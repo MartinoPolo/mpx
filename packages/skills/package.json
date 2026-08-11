@@ -14,6 +14,10 @@
     "check": "tsc -p tsconfig.json && vitest run",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@mpx/config": "workspace:*",
+    "@mpx/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "typescript": "^5.8.3",

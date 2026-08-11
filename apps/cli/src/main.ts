@@ -39,7 +39,17 @@ async function project(parsed:Parsed):Promise<DiscoveredConfig>{
   return found;
 }
 function resolveOptions(resolved:Awaited<ReturnType<typeof resolveConfig>>):ResolveOptions {
-  return {runtime:"pi",scope:resolved.scope.name,projectId:resolved.project.project.id,enabledPacks:resolved.scope.skillPacks as ResolveOptions["enabledPacks"],scopeExposure:resolved.scope.skillExposure,mappingVersion:"1"};
+  return {
+    runtime: "pi",
+    scope: resolved.scope.name,
+    projectId: resolved.project.project.id,
+    enabledPacks: resolved.scope.skillPacks,
+    scopeExposure: resolved.scope.skillExposure,
+    ...(resolved.scope.projectSkillExposure
+      ? { projectExposure: resolved.scope.projectSkillExposure }
+      : {}),
+    mappingVersion: "1",
+  };
 }
 function human(value:unknown):string {
   if (Array.isArray(value)) return value.map(item=>typeof item==="string"?item:JSON.stringify(item)).join("\n")+"\n";
@@ -69,8 +79,24 @@ async function execute(parsed:Parsed, context:CliContext):Promise<unknown> {
     return {diagnostics:[...configDoctor(found.config,user),...skillDoctor(catalog,local)],resolvedScope:resolved.scope.name};
   }
   if (group==="provider" && ["list","explain"].includes(action??"")) {
-    if (action==="list") { const role=parsed.options.get("role"); return providerRegistry.list(role as "repository"|"issues"|undefined); }
-    if (!args[0]) throw new UsageError("provider explain requires an id"); return providerRegistry.get(args[0]);
+    if (action==="list") {
+      const role=parsed.options.get("role");
+      if (role !== undefined && role !== "repository" && role !== "issues") throw new UsageError("--role must be repository or issues");
+      return providerRegistry.list(role);
+    }
+    const role = args[0];
+    if (role !== "repository" && role !== "issues") throw new UsageError("provider explain requires repository or issues");
+    const found = await project(parsed);
+    const resolved = await resolveConfig(found.config, await userConfig(context), found.root);
+    const providerId = role === "repository" ? found.config.repository.provider : found.config.issues?.provider ?? "none";
+    const descriptor = providerRegistry.get(providerId, role);
+    return {
+      role,
+      provider: descriptor.id,
+      adapter: descriptor.backend,
+      capabilities: descriptor.capabilities,
+      connection: resolved.scope.connections[descriptor.id] ?? null,
+    };
   }
   if (group==="skill" && ["list","search","show","explain"].includes(action??"")) {
     const catalog=await inventoryCanonical(await catalogPath(context,parsed.cwd));

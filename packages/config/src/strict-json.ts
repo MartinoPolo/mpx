@@ -1,8 +1,7 @@
-const dangerous = new Set(["__proto__", "prototype", "constructor"]);
-export class StrictJsonError extends SyntaxError { constructor(message: string, public readonly offset?: number) { super(message); this.name = "StrictJsonError" } }
+import { parseStrictJson as parseCoreStrictJson } from "@mpx/core";
+
+export const StrictJsonError = SyntaxError;
+
 export function parseStrictJson(text: string): unknown {
-  let i=0; const ws=()=>{while (/\s/.test(text[i]??"")) i++};
-  const str=():string=>{ const start=i; if(text[i++]!==`"`) throw new StrictJsonError("Expected string",i); while(i<text.length){ if(text[i]===`"`){i++; return JSON.parse(text.slice(start,i)) as string} if(text[i]==="\\") i+=2; else i++; } throw new StrictJsonError("Unterminated string",start)};
-  const value=():void=>{ ws(); if(text[i]===`{`){i++; ws(); const keys=new Set<string>(); if(text[i]===`}`){i++;return} while(true){ws(); const at=i,key=str(); if(keys.has(key)) throw new StrictJsonError(`Duplicate key: ${key}`,at); if(dangerous.has(key)) throw new StrictJsonError(`Dangerous key: ${key}`,at); keys.add(key); ws(); if(text[i++]!==`:`) throw new StrictJsonError("Expected colon",i-1); value(); ws(); if(text[i]===`}`){i++;return} if(text[i++]!==`,`) throw new StrictJsonError("Expected comma",i-1)} } else if(text[i]===`[`){i++;ws();if(text[i]===`]`){i++;return}while(true){value();ws();if(text[i]===`]`){i++;return}if(text[i++]!==`,`)throw new StrictJsonError("Expected comma",i-1)}} else if(text[i]===`"`) {str()} else { const m=text.slice(i).match(/^(?:true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/); if(!m) throw new StrictJsonError("Invalid JSON value",i); i+=m[0].length } };
-  value(); ws(); if(i!==text.length) throw new StrictJsonError("Trailing content",i); try{return JSON.parse(text) as unknown}catch(e){throw new StrictJsonError((e as Error).message)}
+  return parseCoreStrictJson(text);
 }

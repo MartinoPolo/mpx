@@ -45,6 +45,9 @@ importers:
 
   packages/config:
     dependencies:
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
       ajv:
         specifier: ^8.17.1
         version: 8.20.0
@@ -75,6 +78,13 @@ importers:
         version: 3.2.7(@types/node@22.20.1)
 
   packages/skills:
+    dependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../config
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

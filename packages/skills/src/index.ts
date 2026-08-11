@@ -1,11 +1,10 @@
+import { EXPOSURES, SKILL_PACKS, type Exposure, type SkillPack } from "@mpx/config";
+import { isPathWithinRoot } from "@mpx/core";
 import { createHash } from "node:crypto";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
-export const SKILL_PACKS = ["core", "work", "personal"] as const;
-export const EXPOSURES = ["full", "name-only", "explicit-only", "off"] as const;
-export type SkillPack = typeof SKILL_PACKS[number];
-export type Exposure = typeof EXPOSURES[number];
+export { EXPOSURES, SKILL_PACKS, type Exposure, type SkillPack } from "@mpx/config";
 export type Runtime = "claude" | "pi";
 
 export interface Diagnostic { code: string; message: string; path?: string }
@@ -78,8 +77,7 @@ function frontmatter(text: string): { data: Record<string, unknown>; body: strin
 
 async function contained(root: string, candidate: string): Promise<string> {
   const [realRoot, realCandidate] = await Promise.all([realpath(root), realpath(candidate)]);
-  const relative = path.relative(realRoot, realCandidate);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`source escapes inventory root: ${candidate}`);
+  if (!isPathWithinRoot(realCandidate, realRoot)) throw new Error(`source escapes inventory root: ${candidate}`);
   return realCandidate;
 }
 

@@ -1,10 +1,92 @@
-import { realpath } from "node:fs/promises"; import { resolve, sep } from "node:path"; import type { ExposureConfig, ProjectConfig, ProvenanceEntry, ResolvedConfig, UserConfig } from "./types.js"; import { sortProvenance } from "./provenance.js";
-const win=process.platform==="win32";
-function norm(p:string){let n=resolve(p).replace(/[\/]+$/g,"");return win?n.toLowerCase():n}
-function contains(root:string,path:string){return path===root||path.startsWith(root+sep)||path.startsWith(root+(sep==="\\"?"/":"\\"))}
-export async function classifyScope(cwd:string,user:UserConfig):Promise<{name:string;root?:string}>{const path=norm(await realpath(cwd));let best:{name:string;root:string}|undefined;for(const [name,s] of Object.entries(user.scopes))for(const raw of s.roots){let root:string;try{root=norm(await realpath(raw))}catch{root=norm(raw)}if(contains(root,path)&&(!best||root.length>best.root.length))best={name,root}}return best??{name:"core"}}
-export async function resolveConfig(project:ProjectConfig,user:UserConfig,cwd:string):Promise<ResolvedConfig>{const found=await classifyScope(cwd,user);const scope=user.scopes[found.name];const override=user.projects?.[project.project.id];const provenance:ProvenanceEntry[]=[];const mark=(pointer:string,source:ProvenanceEntry["source"])=>provenance.push({pointer,source});
- const p:ProjectConfig=structuredClone(project);if(!p.issues){p.issues={provider:"none"};mark("/project/issues","default")}if(!p.tooling){p.tooling={packageManager:"auto"};mark("/project/tooling","default")}else if(!p.tooling.packageManager){p.tooling.packageManager="auto";mark("/project/tooling/packageManager","default")}
- const packs=override?.skillPacks??scope?.skillPacks??["core"];mark("/scope/skillPacks",override?.skillPacks?"user-project":scope?.skillPacks?"user-scope":"default");
- const exposure:ExposureConfig={default:override?.skillExposure?.default??scope?.skillExposure?.default??"name-only",skills:{...(scope?.skillExposure?.skills??{}),...(override?.skillExposure?.skills??{})}};mark("/scope/skillExposure/default",override?.skillExposure?.default?"user-project":scope?.skillExposure?.default?"user-scope":"default");
- const connections={...(scope?.connections??{}),...(override?.connections??{})};return {project:p,scope:{name:found.name,...(found.root?{root:found.root}:{}),skillPacks:[...packs],skillExposure:exposure,connections},provenance:sortProvenance(provenance)}}
+import { isPathWithinRoot } from "@mpx/core";
+import { realpath } from "node:fs/promises";
+import type {
+  ExposureConfig,
+  ProjectConfig,
+  ProvenanceEntry,
+  ResolvedConfig,
+  UserConfig,
+} from "./types.js";
+import { sortProvenance } from "./provenance.js";
+
+export async function classifyScope(
+  cwd: string,
+  userConfig: UserConfig,
+): Promise<{ name: string; root?: string }> {
+  const canonicalCwd = await realpath(cwd);
+  let best: { name: string; root: string } | undefined;
+
+  for (const [name, scope] of Object.entries(userConfig.scopes)) {
+    for (const configuredRoot of scope.roots) {
+      let canonicalRoot: string;
+      try {
+        canonicalRoot = await realpath(configuredRoot);
+      } catch {
+        continue;
+      }
+      if (
+        isPathWithinRoot(canonicalCwd, canonicalRoot) &&
+        (!best || canonicalRoot.length > best.root.length)
+      ) {
+        best = { name, root: canonicalRoot };
+      }
+    }
+  }
+
+  return best ?? { name: "core" };
+}
+
+export async function resolveConfig(
+  projectConfig: ProjectConfig,
+  userConfig: UserConfig,
+  cwd: string,
+): Promise<ResolvedConfig> {
+  const found = await classifyScope(cwd, userConfig);
+  const scope = userConfig.scopes[found.name];
+  const projectOverride = userConfig.projects?.[projectConfig.project.id];
+  const provenance: ProvenanceEntry[] = [];
+  const mark = (pointer: string, source: ProvenanceEntry["source"]): void => {
+    provenance.push({ pointer, source });
+  };
+
+  const project = structuredClone(projectConfig);
+  if (!project.issues) {
+    project.issues = { provider: "none" };
+    mark("/project/issues", "default");
+  }
+  if (!project.tooling) {
+    project.tooling = { packageManager: "auto" };
+    mark("/project/tooling", "default");
+  }
+
+  const skillPacks = projectOverride?.skillPacks ?? scope?.skillPacks ?? ["core"];
+  mark(
+    "/scope/skillPacks",
+    projectOverride?.skillPacks ? "user-project" : scope?.skillPacks ? "user-scope" : "default",
+  );
+
+  const skillExposure: ExposureConfig = structuredClone(scope?.skillExposure ?? {});
+  if (scope?.skillExposure) mark("/scope/skillExposure", "user-scope");
+  const projectSkillExposure = projectOverride?.skillExposure
+    ? structuredClone(projectOverride.skillExposure)
+    : undefined;
+  if (projectSkillExposure) mark("/scope/projectSkillExposure", "user-project");
+
+  const connections = {
+    ...(scope?.connections ?? {}),
+    ...(projectOverride?.connections ?? {}),
+  };
+
+  return {
+    project,
+    scope: {
+      name: found.name,
+      ...(found.root ? { root: found.root } : {}),
+      skillPacks: [...skillPacks],
+      skillExposure,
+      ...(projectSkillExposure ? { projectSkillExposure } : {}),
+      connections,
+    },
+    provenance: sortProvenance(provenance),
+  };
+}
