@@ -1,0 +1,21 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://mpx.dev/schemas/mpxconfig.schema.json","type":"object","additionalProperties":false,
+ "required":["schemaVersion","project","repository"],"properties":{
+  "$schema":{"type":"string"},"schemaVersion":{"const":1},
+  "project":{"type":"object","additionalProperties":false,"required":["id"],"properties":{"id":{"type":"string","minLength":1}}},
+  "repository":{"type":"object","additionalProperties":false,"required":["provider","remote"],"properties":{"provider":{"enum":["github","gitlab","gerrit","generic"]},"remote":{"type":"string","minLength":1}}},
+  "issues":{"oneOf":[
+   {"type":"object","additionalProperties":false,"required":["provider"],"properties":{"provider":{"enum":["github","gitlab","local","none"]}}},
+   {"type":"object","additionalProperties":false,"required":["provider","boardId","states"],"properties":{"provider":{"const":"kanbanflow"},"boardId":{"type":"string","minLength":1},"boardName":{"type":"string"},"states":{"type":"object","additionalProperties":false,"required":["todo","wip","review","done"],"properties":{"todo":{"type":"string"},"wip":{"type":"string"},"review":{"type":"string"},"done":{"type":"string"},"archive":{"type":"string"}}}}}
+  ]},
+  "tooling":{"type":"object","additionalProperties":false,"properties":{"packageManager":{"enum":["auto","pnpm","yarn","npm","bun","none"]}}},
+  "workflow":{"type":"object","additionalProperties":false,"properties":{"branch":{"type":"object","additionalProperties":false,"properties":{"base":{"type":"string"},"template":{"type":"string","pattern":"^(?:[^{}]|[{](?:author|issue|slug)[}])+$"}}},"codeReview":{"type":"object","additionalProperties":false,"properties":{"openAsDraft":{"type":"boolean"},"markReady":{"enum":["human","agent"]},"merge":{"enum":["human","agent"]}}}}},
+  "worktrees":{"type":"object","additionalProperties":false,"properties":{"postCreate":{"type":"object","additionalProperties":false,"required":["execution"],"properties":{"execution":{"enum":["foreground","background","none"]},"steps":{"type":"array","items":{"oneOf":[{"$ref":"#/$defs/installStep"},{"$ref":"#/$defs/scriptStep"}]}}}}}},
+  "development":{"type":"object","additionalProperties":false,"required":["services"],"properties":{"services":{"type":"object","additionalProperties":{"$ref":"#/$defs/service"}}}}
+ },
+ "$defs":{
+  "installStep":{"type":"object","additionalProperties":false,"required":["id","uses"],"properties":{"id":{"type":"string","minLength":1},"uses":{"const":"package-install"},"after":{"type":"array","items":{"type":"string"},"uniqueItems":true},"required":{"type":"boolean"},"timeoutSeconds":{"type":"integer","minimum":1},"workingDirectory":{"type":"string"},"environment":{"type":"array","items":{"type":"string"}}}},
+  "scriptStep":{"type":"object","additionalProperties":false,"required":["id","uses","script"],"properties":{"id":{"type":"string","minLength":1},"uses":{"const":"package-script"},"script":{"type":"string","minLength":1},"after":{"type":"array","items":{"type":"string"},"uniqueItems":true},"required":{"type":"boolean"},"timeoutSeconds":{"type":"integer","minimum":1},"workingDirectory":{"type":"string"},"environment":{"type":"array","items":{"type":"string"}}}},
+  "service":{"type":"object","additionalProperties":false,"required":["scope","port","start"],"properties":{"scope":{"enum":["checkout","project"]},"port":{"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"enum":["managed","fixed-shared"]},"preferred":{"type":"integer","minimum":1,"maximum":65535},"family":{"type":"string","minLength":1}}},"environmentVariable":{"type":"string","pattern":"^[A-Z_][A-Z0-9_]*$"},"protocol":{"enum":["http","https","tcp"]},"start":{"type":"object","additionalProperties":false,"required":["type","script"],"properties":{"type":{"const":"package-script"},"script":{"type":"string","minLength":1}}}}}
+ }
+}

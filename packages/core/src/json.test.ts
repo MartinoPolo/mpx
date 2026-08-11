@@ -6,6 +6,7 @@ describe("strict JSON", () => {
   it.each([
     '{"a":1,"a":2}', '{"x":{"constructor":1}}', '{"__proto__":{}}', '{"prototype":0}',
     "{'a':1}", '{"a":NaN}', '{"a":Infinity}', '{"a":01}', '{"a":1,}', '[1,]', '{"a":undefined}', 'true false', '"\u0001"',
+    "\ftrue", "\v{}",
   ])("rejects malicious or nonstandard input %s", (input) => expect(() => parseStrictJson(input)).toThrow(SyntaxError));
 });
 

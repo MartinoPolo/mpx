@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -21,6 +21,13 @@ if (!localAppData || !projectRoot) throw new Error("LOCALAPPDATA and MPX_PROJECT
 const snapshotRoot = path.join(localAppData, "mpx", "migration-snapshots", now);
 const filesRoot = path.join(snapshotRoot, "files");
 await mkdir(filesRoot, { recursive: true });
+execFileSync("icacls.exe", [
+  snapshotRoot,
+  "/inheritance:r",
+  "/grant:r",
+  `${process.env.USERNAME}:(OI)(CI)F`,
+  "SYSTEM:(OI)(CI)F",
+], { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
 
 function run(command, args, cwd) {
   try {
@@ -48,6 +55,38 @@ for (const name of sourceNames) {
     repositories.push({ name, path: repositoryPath, present: false });
     continue;
   }
+
+  const repositorySnapshotRoot = path.join(snapshotRoot, "repositories", name);
+  await mkdir(repositorySnapshotRoot, { recursive: true });
+  const bundlePath = path.join(repositorySnapshotRoot, "history.bundle");
+  execFileSync("git", ["bundle", "create", bundlePath, "--all"], {
+    cwd: repositoryPath,
+    windowsHide: true,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  const trackedPatch = run("git", ["diff", "--binary", "HEAD"], repositoryPath);
+  await writeFile(path.join(repositorySnapshotRoot, "tracked.patch"), `${trackedPatch}\n`);
+
+  const untrackedOutput = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
+    cwd: repositoryPath,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  const untracked = untrackedOutput.split("\0").filter(Boolean);
+  for (const relativePath of untracked) {
+    const sourcePath = path.resolve(repositoryPath, relativePath);
+    const relative = path.relative(repositoryPath, sourcePath);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error(`Untracked path escaped repository: ${relativePath}`);
+    }
+    const destinationPath = path.join(repositorySnapshotRoot, "untracked", relative);
+    await mkdir(path.dirname(destinationPath), { recursive: true });
+    await cp(sourcePath, destinationPath, {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
+  }
+
   repositories.push({
     name,
     path: repositoryPath,
@@ -57,6 +96,9 @@ for (const name of sourceNames) {
     branch: run("git", ["branch", "--show-current"], repositoryPath),
     status: run("git", ["status", "--short"], repositoryPath),
     remotes: run("git", ["remote", "-v"], repositoryPath),
+    bundlePath,
+    trackedPatchPath: path.join(repositorySnapshotRoot, "tracked.patch"),
+    untracked,
   });
 }
 
@@ -65,9 +107,26 @@ const candidates = [
   path.join(userHome, ".bashrc"),
   path.join(userHome, ".bash_profile"),
   path.join(userHome, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"),
-  path.join(userHome, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"),
+  path.join(userHome, "Documents", "WindowsPowerShell", "profile.ps1"),
+  path.join(userHome, ".claude", "settings.json"),
+  path.join(userHome, ".claude", "plugins", "installed_plugins.json"),
+  path.join(userHome, ".claude", "plugins", "known_marketplaces.json"),
+  path.join(userHome, ".claude-work", "settings.json"),
+  path.join(userHome, ".claude-work", "plugins", "installed_plugins.json"),
+  path.join(userHome, ".claude-work", "plugins", "known_marketplaces.json"),
   path.join(localAppData, "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "settings.json"),
   path.join(localAppData, "Microsoft", "Windows Terminal", "settings.json"),
+  path.join(process.env.MPX_OBSIDIAN_VAULT ?? "", "_Projekty", "Mini Projekty", "Issues", "Active", "mpx-ports.md"),
+  path.join(process.env.MPX_OBSIDIAN_VAULT ?? "", "_Projekty", "Mini Projekty", "Issues", "Active", "claude-resurrect.md"),
+];
+
+const directoryCandidates = [
+  path.join(localAppData, "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "icons"),
+  path.join(process.env.MPX_AI_GENERATED ?? "", "_RAYCAST"),
+  path.join(process.env.MPX_OBSIDIAN_VAULT ?? "", "_Projekty", "MpxClaudeCode"),
+  path.join(projectRoot, "agent-resurrect", "saves"),
+  path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Resurrect Agent Sessions.lnk"),
+  path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Save Agent Sessions.lnk"),
 ];
 
 const files = [];
@@ -82,6 +141,53 @@ for (const sourcePath of candidates) {
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
+}
+
+const directories = [];
+for (const sourcePath of directoryCandidates) {
+  try {
+    await stat(sourcePath);
+    const safeName = sourcePath.replace(/^([A-Za-z]):/, "$1").replaceAll(/[\\/:]/g, "_");
+    const destinationPath = path.join(filesRoot, safeName);
+    await cp(sourcePath, destinationPath, { recursive: true, verbatimSymlinks: true, errorOnExist: true });
+    directories.push({ sourcePath, destinationPath });
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+const piRoot = path.join(userHome, ".pi", "agent");
+const piLinks = [];
+const piEntries = [
+  "agents", "extensions", "prompts", "themes", "settings.json", "subagents.json",
+  "keybindings.json", "APPEND_SYSTEM.md", "AGENTS.md", "skills",
+];
+try {
+  for (const name of await readdir(path.join(piRoot, "skills"))) piEntries.push(path.join("skills", name));
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
+for (const name of piEntries) {
+  const linkPath = path.join(piRoot, name);
+  try {
+    const linkStat = await lstat(linkPath);
+    piLinks.push({
+      path: linkPath,
+      type: linkStat.isSymbolicLink() ? "symbolic-link" : linkStat.isDirectory() ? "directory" : "file",
+      target: linkStat.isSymbolicLink() ? await readlink(linkPath) : undefined,
+    });
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+const scheduledTaskXml = run("powershell.exe", [
+  "-NoProfile",
+  "-Command",
+  "Export-ScheduledTask -TaskName 'agent-resurrect-autosave' -ErrorAction SilentlyContinue",
+]);
+if (scheduledTaskXml && !scheduledTaskXml.startsWith("ERROR:")) {
+  await writeFile(path.join(snapshotRoot, "agent-resurrect-autosave.xml"), `${scheduledTaskXml}\n`);
 }
 
 const powerShellProfilePaths = run("powershell.exe", [
@@ -106,6 +212,8 @@ const manifest = {
   machine: process.env.COMPUTERNAME,
   repositories,
   files,
+  directories,
+  piLinks,
   powerShellProfilePaths,
   scheduledTasks,
   environment,

@@ -1,0 +1,1 @@
+{"schemaVersion":1,"project":{"id":"acme/kanban"},"repository":{"provider":"generic","remote":"origin"},"issues":{"provider":"kanbanflow","boardId":"board","states":{"todo":"a","wip":"b","review":"c","done":"d"}}}
