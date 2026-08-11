@@ -1,0 +1,50 @@
+import { describe, expect, it } from "vitest";
+import {
+  BUILTIN_PROVIDERS, CI_CAPABILITIES, ISSUE_CAPABILITIES, ProviderError,
+  ProviderRegistry, REVIEW_CAPABILITIES, providerRegistry,
+  type ProviderDescriptor,
+} from "./index.js";
+
+describe("provider contracts", () => {
+  it("publishes the migration capability contract", () => {
+    expect({ issues: ISSUE_CAPABILITIES, review: REVIEW_CAPABILITIES, ci: CI_CAPABILITIES }).toEqual({
+      issues: ["issue.list", "issue.view", "issue.create", "issue.edit", "issue.comment", "issue.label", "issue.move", "issue.finish"],
+      review: ["review.view", "review.create", "review.update", "review.ready"],
+      ci: ["ci.status", "ci.watch", "ci.logs", "ci.retry"],
+    });
+  });
+
+  it("lists built-ins deterministically and by role", () => {
+    expect(providerRegistry.list().map(({ id }) => id)).toEqual(["generic", "gerrit", "github", "gitlab", "kanbanflow", "local", "none"]);
+    expect(providerRegistry.list("repository").map(({ id }) => id)).toEqual(["generic", "gerrit", "github", "gitlab"]);
+    expect(providerRegistry.list("issues").map(({ id }) => id)).toEqual(["github", "gitlab", "kanbanflow", "local", "none"]);
+  });
+
+  it("returns immutable descriptors and strict schemas", () => {
+    const github = providerRegistry.get("github", "repository");
+    expect(Object.isFrozen(github)).toBe(true);
+    expect(Object.isFrozen(github.capabilities)).toBe(true);
+    expect(providerRegistry.schema("none", "issues")).toEqual({ type: "object", properties: {}, additionalProperties: false });
+  });
+});
+
+describe("registry validation", () => {
+  const github = BUILTIN_PROVIDERS[0]!;
+  it("rejects duplicate IDs", () => {
+    expect(() => new ProviderRegistry([github, github])).toThrowError(expect.objectContaining({ code: "PROVIDER_DUPLICATE" }));
+  });
+  it("rejects executable/backend injection", () => {
+    expect(() => new ProviderRegistry([{ ...github, backend: "filesystem" }])).toThrowError(expect.objectContaining({ code: "UNTRUSTED_PROVIDER_INJECTION" }));
+  });
+  it("rejects unknown capabilities and invalid role combinations", () => {
+    const unknown = { ...github, capabilities: ["issue.delete"] } as unknown as ProviderDescriptor;
+    expect(() => new ProviderRegistry([unknown])).toThrowError(expect.objectContaining({ code: "CAPABILITY_UNKNOWN" }));
+    const mismatch = { ...github, roles: ["repository"], capabilities: ["issue.list"] } as ProviderDescriptor;
+    expect(() => new ProviderRegistry([mismatch])).toThrowError(expect.objectContaining({ code: "PROVIDER_INVALID" }));
+  });
+  it("fails capability checks structurally", () => {
+    expect(() => providerRegistry.assertCapability("generic", "ci.logs")).toThrowError(expect.objectContaining({ code: "CAPABILITY_UNSUPPORTED", capability: "ci.logs", retryable: false }));
+    expect(() => providerRegistry.assertCapability("github", "repo.delete")).toThrowError(ProviderError);
+    expect(() => providerRegistry.get("missing")).toThrowError(expect.objectContaining({ code: "PROVIDER_NOT_FOUND" }));
+  });
+});
