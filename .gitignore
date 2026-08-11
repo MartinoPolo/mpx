@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.worktree-ports.json
+.env
+.env.*
+!.env.example
+.local/
+artifacts/
