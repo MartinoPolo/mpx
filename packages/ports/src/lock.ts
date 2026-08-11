@@ -129,9 +129,15 @@ export class InterprocessLock {
         };
       } catch (error) {
         await rm(candidate, { recursive: true, force: true });
+        const code = (error as NodeJS.ErrnoException).code;
+        const contentionError = readyToRename && ["EEXIST", "ENOTEMPTY", "EPERM", "EACCES"].includes(code ?? "");
         let lockExists = false;
-        if (readyToRename) { try { await stat(this.lockPath); lockExists = true; } catch { /* The rename failure was not contention. */ } }
-        if (!lockExists) throw error;
+        if (readyToRename) { try { await stat(this.lockPath); lockExists = true; } catch { /* The owner may have released between rename and inspection. */ } }
+        if (!lockExists) {
+          if (!contentionError) throw error;
+          await delay(this.options.retryMs);
+          continue;
+        }
         if (await this.recoverIfStale()) continue;
         if (this.options.now() - started >= this.options.timeoutMs) throw new MpxError({ code: "PORT_LOCK_TIMEOUT", message: "Timed out waiting for the port registry lock.", retryable: true });
         await delay(this.options.retryMs);
