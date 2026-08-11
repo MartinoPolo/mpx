@@ -8,3 +8,4 @@ coverage/
 !.env.example
 .local/
 artifacts/
+.worktree-install.log
