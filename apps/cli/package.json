@@ -1,0 +1,23 @@
+{
+  "name": "mpx",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "mpx": "./dist/main.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit && vitest run",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mpx/core": "workspace:*",
+    "@mpx/config": "workspace:*",
+    "@mpx/providers": "workspace:*",
+    "@mpx/skills": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
