@@ -12,4 +12,13 @@ it("interpolates only approved complete MPX root tokens",()=>{
   expect(()=>parseUserConfig('{"scopes":{"x":{"roots":["${MPX_SECRET}"]}}}',{MPX_SECRET:"secret"})).toThrow();
 });
 it("rejects unknown skill packs",()=>expect(()=>parseUserConfig('{"scopes":{"x":{"roots":["C:/work"],"skillPacks":["unknown"]}}}')).toThrow());
+it("requires a preferred port for fixed-shared services",()=>{
+  const service={scope:"checkout",port:{mode:"fixed-shared"},start:{type:"package-script",script:"dev"}};
+  expect(()=>assertValid(validateProject,{...base(),development:{services:{app:service}}})).toThrow();
+});
+it("accepts bounded family identifiers and rejects unsafe ones",()=>{
+  const service=(family:string)=>({scope:"checkout",port:{mode:"managed",preferred:4173,family},start:{type:"package-script",script:"dev"}});
+  expect(()=>assertValid(validateProject,{...base(),development:{services:{app:service("web.preview")}}})).not.toThrow();
+  expect(()=>assertValid(validateProject,{...base(),development:{services:{app:service("../web")}}})).toThrow();
+});
 it("init is deterministic and read-only",()=>expect(planInit("C:/repo",false)).toEqual(planInit("C:/repo",false)));
