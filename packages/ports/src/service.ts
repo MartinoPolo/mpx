@@ -13,6 +13,14 @@ export interface EnsureResult { lease: LeaseRecord; warnings: PortWarning[] }
 export interface LeaseFile { schemaVersion: 1; leaseId: string; projectId: string; worktreeId: string; configHash: string; services: Record<string, number> }
 export interface RebuildRequest { roots: string[] }
 export interface RebuildResult { discovered: number; rebuilt: number; roots: number }
+export interface LeaseReleaseIdentity {
+  readonly schemaVersion: 1; readonly leaseId: string; readonly projectId: string; readonly repositoryId: string;
+  readonly worktreeId: string; readonly worktreePath: string; readonly role: "linked"; readonly configHash: string;
+  readonly gitAdminPath?: string; readonly commonGitPath?: string;
+}
+export interface LinkedReleaseRequest { repositoryCwd: string; identity: LeaseReleaseIdentity; projectionTombstonePath?: string }
+export interface LinkedReleaseResult { released: boolean; identity: LeaseReleaseIdentity }
+export interface ReconcileResult { removed: string[]; repaired: string[]; orphaned: LeaseReleaseIdentity[] }
 export interface PortServiceDependencies {
   store: RegistryStore; git: GitWorktreeAdapter; platform: PortPlatformAdapter;
   createId?: () => string; now?: () => number; writeLeaseFile?: (file: string, value: string) => Promise<void>;
@@ -27,6 +35,29 @@ function definitions(config: ProjectConfig): PortServiceDefinition[] {
 }
 function localShape(lease: LeaseRecord): LeaseFile { return { schemaVersion: 1, leaseId: lease.leaseId, projectId: lease.projectId, worktreeId: lease.worktreeId, configHash: lease.configHash, services: lease.services }; }
 function sameMap(a: Record<string, number>, b: Record<string, number>): boolean { return JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort()); }
+function sameLease(a: LeaseRecord, b: LeaseRecord): boolean {
+  const normalize = (lease: LeaseRecord): LeaseRecord => ({ ...lease, services: Object.fromEntries(Object.entries(lease.services).sort(([left], [right]) => left.localeCompare(right))), claims: [...lease.claims].sort((left, right) => left.port - right.port) });
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
+function releaseIdentity(lease: LeaseRecord): LeaseReleaseIdentity {
+  if (lease.role !== "linked") throw new MpxError({ code: "PORT_LINKED_LEASE_REQUIRED", message: "A linked worktree lease is required." });
+  return Object.freeze({ schemaVersion: 1, leaseId: lease.leaseId, projectId: lease.projectId, repositoryId: lease.repositoryId, worktreeId: lease.worktreeId, worktreePath: lease.worktreePath, role: "linked", configHash: lease.configHash, ...(lease.gitAdminPath ? { gitAdminPath: lease.gitAdminPath } : {}), ...(lease.commonGitPath ? { commonGitPath: lease.commonGitPath } : {}) });
+}
+function sameReleaseIdentity(lease: LeaseRecord, identity: LeaseReleaseIdentity): boolean {
+  if (identity.schemaVersion !== 1 || identity.role !== "linked") return false;
+  const expected = releaseIdentity(lease);
+  return Object.keys(expected).length === Object.keys(identity).length && Object.entries(expected).every(([key, value]) => identity[key as keyof LeaseReleaseIdentity] === value);
+}
+function validReleaseIdentity(identity: LeaseReleaseIdentity): boolean {
+  const required = ["schemaVersion", "leaseId", "projectId", "repositoryId", "worktreeId", "worktreePath", "role", "configHash"];
+  const allowed = [...required, "gitAdminPath", "commonGitPath"];
+  const value = identity as unknown as Record<string, unknown>;
+  return value.schemaVersion === 1 && value.role === "linked" && required.every((key) => key in value)
+    && Object.keys(value).every((key) => allowed.includes(key))
+    && [value.leaseId, value.projectId, value.repositoryId, value.worktreeId, value.worktreePath].every((item) => typeof item === "string" && item.length > 0)
+    && typeof value.configHash === "string" && canonicalHashPattern.test(value.configHash)
+    && [value.gitAdminPath, value.commonGitPath].every((item) => item === undefined || (typeof item === "string" && item.length > 0));
+}
 function parseLeaseFile(value: JsonValue, code = "PORT_LEASE_INVALID"): LeaseFile {
   if (typeof value !== "object" || value === null || Array.isArray(value) || Object.keys(value).sort().join(",") !== "configHash,leaseId,projectId,schemaVersion,services,worktreeId" || value.schemaVersion !== 1 || typeof value.leaseId !== "string" || value.leaseId.length === 0 || typeof value.projectId !== "string" || value.projectId.length === 0 || typeof value.worktreeId !== "string" || value.worktreeId.length === 0 || typeof value.configHash !== "string" || !canonicalHashPattern.test(value.configHash) || typeof value.services !== "object" || value.services === null || Array.isArray(value.services) || Object.entries(value.services).some(([name, port]) => name.length === 0 || typeof port !== "number" || !Number.isSafeInteger(port) || port < 1 || port > 65_535)) throw new MpxError({ code, message: code === "PORT_LEASE_INVALID" ? "The local port lease has an invalid shape." : "A rebuild projection is malformed or inconsistent." });
   return value as unknown as LeaseFile;
@@ -72,7 +103,7 @@ export class PortService {
     validateRequestHash(request);
     const current = await this.dependencies.git.identify(request.cwd);
     if (request.projectRoot && path.normalize(await realpath(request.projectRoot)) !== path.normalize(current.path)) throw new MpxError({ code: "PORT_PROJECT_ROOT_MISMATCH", message: "Port-managed configuration must be located at the Git worktree root." });
-    const all = await this.dependencies.git.list(request.cwd); const holds: PortHold[] = []; const files: LeaseRecord[] = []; const warnings: PortWarning[] = [];
+    const all = await this.dependencies.git.list(request.cwd); const holds: PortHold[] = []; const warnings: PortWarning[] = [];
     const mainIdentity = all.find(({ role }) => role === "main");
     if (current.role === "linked" && !mainIdentity) throw new MpxError({ code: "PORT_MAIN_NOT_FOUND", message: "Git did not report the main worktree." });
     let selected!: LeaseRecord;
@@ -94,12 +125,14 @@ export class PortService {
         state.leases = state.leases.filter((lease) =>
           lease.repositoryId !== current.repositoryId || lease.worktreeId !== current.worktreeId,
         );
-        selected = await this.allocate(state, current, request, warnings, holds); files.push(selected);
+        selected = await this.allocate(state, current, request, warnings, holds);
       });
     } finally { await Promise.all(holds.map((hold) => hold.release())); }
-    // Registry commit is deliberately before projections: retry finds selected unchanged.
-    if (!files.some(({ leaseId }) => leaseId === selected.leaseId)) files.push(selected);
-    for (const lease of files) await this.writeProjection(lease);
+    await this.dependencies.store.transaction(async (state) => {
+      const authoritative = state.leases.find(({ leaseId }) => leaseId === selected.leaseId);
+      if (!authoritative || !sameLease(authoritative, selected)) throw new MpxError({ code: "PORT_ENSURE_SUPERSEDED", message: "The selected port lease was superseded before its projection could be published.", retryable: true });
+      await this.writeProjection(authoritative);
+    });
     return { lease: selected, warnings };
   }
   private async allocate(state: RegistryState, identity: WorktreeIdentity, request: EnsureRequest, warnings: PortWarning[], holds: PortHold[]): Promise<LeaseRecord> {
@@ -173,21 +206,64 @@ export class PortService {
     return localShape(lease);
   }
   async list(): Promise<LeaseRecord[]> { return (await this.dependencies.store.read()).leases; }
+  async captureReleaseIdentity(request: EnsureRequest): Promise<LeaseReleaseIdentity> {
+    await this.resolve(request);
+    const identity = await this.dependencies.git.identify(request.cwd);
+    const lease = (await this.dependencies.store.read()).leases.find((candidate) => candidate.repositoryId === identity.repositoryId && candidate.worktreeId === identity.worktreeId);
+    if (!lease || lease.projectId !== request.config.project.id || lease.configHash !== request.configHash) throw new MpxError({ code: "PORT_LEASE_MISMATCH", message: "The lease no longer matches the authoritative registry." });
+    return releaseIdentity(lease);
+  }
+  private async validateTombstone(file: string, identity: LeaseReleaseIdentity): Promise<"valid" | "missing"> {
+    const expectedPrefix = `${path.join(identity.worktreePath, ".worktree-ports.json")}.released-`;
+    if (!path.normalize(file).startsWith(path.normalize(expectedPrefix))) throw new MpxError({ code: "PORT_RELEASE_TOMBSTONE_INVALID", message: "The projection tombstone is outside the captured worktree identity." });
+    try {
+      const status = await lstat(file);
+      if (!status.isFile() || status.isSymbolicLink()) throw new Error("not a regular file");
+      const projection = parseLeaseFile(parseStrictJson(await readFile(file, "utf8")), "PORT_RELEASE_TOMBSTONE_INVALID");
+      if (projection.leaseId !== identity.leaseId || projection.projectId !== identity.projectId || projection.worktreeId !== identity.worktreeId || projection.configHash !== identity.configHash) throw new Error("identity mismatch");
+      return "valid";
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+      if (error instanceof MpxError && error.code === "PORT_RELEASE_TOMBSTONE_INVALID") throw error;
+      throw new MpxError({ code: "PORT_RELEASE_TOMBSTONE_INVALID", message: "The projection tombstone is malformed, unsafe, or bound to another lease.", details: { cause: String(error) } });
+    }
+  }
+  async releaseLinkedAfterRemoval(request: LinkedReleaseRequest): Promise<LinkedReleaseResult> {
+    if (!validReleaseIdentity(request.identity)) throw new MpxError({ code: "PORT_RELEASE_IDENTITY_MISMATCH", message: "The captured release identity is malformed." });
+    const current = await this.dependencies.git.identify(request.repositoryCwd);
+    if (current.repositoryId !== request.identity.repositoryId || (request.identity.commonGitPath !== undefined && current.commonGitPath !== request.identity.commonGitPath)) throw new MpxError({ code: "PORT_RELEASE_REPOSITORY_MISMATCH", message: "The surviving checkout does not belong to the captured repository." });
+    const worktrees = await this.dependencies.git.list(request.repositoryCwd);
+    if (worktrees.some((candidate) => candidate.prunable === undefined && candidate.repositoryId === request.identity.repositoryId && candidate.worktreeId === request.identity.worktreeId)) throw new MpxError({ code: "PORT_WORKTREE_STILL_PRESENT", message: "Git still reports the linked worktree; its lease cannot be released yet." });
+    const tombstone = request.projectionTombstonePath === undefined ? undefined : await this.validateTombstone(request.projectionTombstonePath, request.identity);
+    let released = false;
+    await this.dependencies.store.transaction((state) => {
+      const boundMain = state.leases.find((candidate) => candidate.role === "main" && candidate.repositoryId === request.identity.repositoryId && candidate.projectId === request.identity.projectId && candidate.configHash === request.identity.configHash);
+      if (!boundMain) throw new MpxError({ code: "PORT_RELEASE_IDENTITY_MISMATCH", message: "The captured release identity is not bound to the authoritative main lease." });
+      const lease = state.leases.find((candidate) => candidate.leaseId === request.identity.leaseId);
+      if (!lease) return;
+      if (!sameReleaseIdentity(lease, request.identity)) throw new MpxError({ code: "PORT_RELEASE_IDENTITY_MISMATCH", message: "The captured release identity does not match the authoritative lease." });
+      if (request.projectionTombstonePath !== undefined && tombstone === "missing") throw new MpxError({ code: "PORT_RELEASE_TOMBSTONE_INVALID", message: "The projection tombstone is missing while the lease remains authoritative." });
+      state.leases = state.leases.filter((candidate) => candidate !== lease); released = true;
+    });
+    if (request.projectionTombstonePath !== undefined && tombstone === "valid") await rm(request.projectionTombstonePath, { force: true });
+    return { released, identity: request.identity };
+  }
+  async resolveOrphan(request: LinkedReleaseRequest): Promise<LinkedReleaseResult> { return this.releaseLinkedAfterRemoval(request); }
   async release(request: { cwd: string }): Promise<void> {
     const identity = await this.dependencies.git.identify(request.cwd);
     const projectionPath = path.join(identity.path, ".worktree-ports.json");
     const tombstonePath = `${projectionPath}.released-${randomUUID()}`;
     let projectionMoved = false;
     try {
-      await rename(projectionPath, tombstonePath);
-      projectionMoved = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    try {
-      await this.dependencies.store.transaction((state) => {
+      await this.dependencies.store.transaction(async (state) => {
         const target = state.leases.find((lease) => lease.repositoryId === identity.repositoryId && lease.worktreeId === identity.worktreeId);
         if (target?.role === "main" && state.leases.some((lease) => lease.repositoryId === identity.repositoryId && lease.role === "linked")) throw new MpxError({ code: "PORT_MAIN_HAS_LINKS", message: "Release linked worktree leases before the main lease." });
+        try {
+          await rename(projectionPath, tombstonePath);
+          projectionMoved = true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
         state.leases = state.leases.filter((lease) => lease !== target);
       });
     } catch (error) {
@@ -196,8 +272,8 @@ export class PortService {
     }
     if (projectionMoved) await rm(tombstonePath, { force: true });
   }
-  async reconcile(request: { cwd: string }): Promise<{ removed: string[]; repaired: string[] }> {
-    const current = await this.dependencies.git.identify(request.cwd); const worktrees = await this.dependencies.git.list(request.cwd); const known = new Set(worktrees.map(({ worktreeId }) => worktreeId)); const mainIdentity = worktrees.find(({ role }) => role === "main"); const removed: string[] = []; const repaired: LeaseRecord[] = [];
+  async reconcile(request: { cwd: string; orphanPolicy?: "release" | "report" }): Promise<ReconcileResult> {
+    const current = await this.dependencies.git.identify(request.cwd); const worktrees = (await this.dependencies.git.list(request.cwd)).filter(worktree => worktree.prunable === undefined); const known = new Set(worktrees.map(({ worktreeId }) => worktreeId)); const mainIdentity = worktrees.find(({ role }) => role === "main"); const removed: string[] = []; const repaired: LeaseRecord[] = []; const orphaned: LeaseReleaseIdentity[] = [];
     await this.dependencies.store.transaction(async (state) => {
       const staleMainIds = new Set(state.leases.filter((lease) => lease.repositoryId === current.repositoryId && lease.role === "main" && mainIdentity && lease.worktreeId !== mainIdentity.worktreeId).map(({ leaseId }) => leaseId));
       const staleMainKeys = new Set(state.leases.filter(({ leaseId }) => staleMainIds.has(leaseId)).map((lease) => `${lease.repositoryId}\u0000${lease.projectId}\u0000${lease.configHash}`));
@@ -206,21 +282,40 @@ export class PortService {
         if (staleMainIds.has(lease.leaseId) || (lease.role === "linked" && staleMainKeys.has(`${lease.repositoryId}\u0000${lease.projectId}\u0000${lease.configHash}`))) {
           removed.push(lease.worktreeId);
         } else if (lease.repositoryId === current.repositoryId && lease.role === "linked" && !known.has(lease.worktreeId)) {
-          try {
-            await lstat(lease.worktreePath);
-            retained.push(lease);
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") removed.push(lease.worktreeId);
-            else retained.push(lease);
+          let missing = false;
+          try { await lstat(lease.worktreePath); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+              missing = true;
+              orphaned.push(releaseIdentity(lease));
+            } else {
+              throw new MpxError({ code: "PORT_RECONCILE_INSPECTION_FAILED", message: "A linked worktree path could not be inspected during reconcile.", details: { worktreeId: lease.worktreeId, cause: String(error) } });
+            }
           }
+          if (missing && request.orphanPolicy !== "report") removed.push(lease.worktreeId);
+          else retained.push(lease);
         } else retained.push(lease);
       }
       state.leases = retained;
       repaired.push(...state.leases.filter((lease) => lease.repositoryId === current.repositoryId && known.has(lease.worktreeId)));
       state.lastReconciledAt = this.now();
     });
-    const repairedIds: string[] = []; for (const lease of repaired) { try { const status = await lstat(path.join(lease.worktreePath, ".worktree-ports.json")); if (status.isFile() && !status.isSymbolicLink()) continue; } catch { /* repair */ } await this.writeProjection(lease); repairedIds.push(lease.worktreeId); }
-    return { removed, repaired: repairedIds };
+    const repairedIds: string[] = [];
+    for (const lease of repaired) {
+      let repairedNow = false;
+      await this.dependencies.store.transaction(async (state) => {
+        const authoritative = state.leases.find(({ leaseId }) => leaseId === lease.leaseId);
+        if (!authoritative || !sameLease(authoritative, lease)) return;
+        try {
+          const status = await lstat(path.join(authoritative.worktreePath, ".worktree-ports.json"));
+          if (status.isFile() && !status.isSymbolicLink()) return;
+        } catch { /* repair */ }
+        await this.writeProjection(authoritative);
+        repairedNow = true;
+      });
+      if (repairedNow) repairedIds.push(lease.worktreeId);
+    }
+    return { removed, repaired: repairedIds, orphaned };
   }
   async rebuild(request: RebuildRequest): Promise<RebuildResult> {
     try {

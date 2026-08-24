@@ -20,7 +20,7 @@ The main worktree uses slot 0. Linked worktrees begin at slot 1 and advance the 
 
 Registry updates use an interprocess lock and atomic replacement. Stale lock recovery uses lock ownership/fingerprint and age checks; clients must not delete locks manually. The registry commits before projections, so retrying `ensure` repairs a missing projection without changing an already stable lease. Ordinary `reconcile` removes leases for disappeared linked worktrees and repairs missing projections for worktrees still reported by Git.
 
-`mpx ports reconcile --rebuild` is the explicit disaster-recovery path for a missing or corrupt registry. It scans only roots declared in user scopes plus the current project root, never follows symbolic links, and rebuilds exclusively from strict local projections, current validated project configurations, and current Git identities. Any malformed, tampered, conflicting, or orphaned candidate aborts the complete atomic rebuild; old registry-only metadata is never reused.
+`mpx ports reconcile --rebuild` is the explicit disaster-recovery path for a missing or corrupt registry. It scans only roots declared in user domains plus the current project root, never follows symbolic links, and rebuilds exclusively from strict local projections, current validated project configurations, and current Git identities. Any malformed, tampered, conflicting, or orphaned candidate aborts the complete atomic rebuild; old registry-only metadata is never reused.
 
 ## Commands
 

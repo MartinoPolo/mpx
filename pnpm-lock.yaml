@@ -26,6 +26,9 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mpx/launch':
+        specifier: workspace:*
+        version: link:../../packages/launch
       '@mpx/ports':
         specifier: workspace:*
         version: link:../../packages/ports
@@ -41,6 +44,9 @@ importers:
       '@mpx/windows':
         specifier: workspace:*
         version: link:../../packages/windows
+      '@mpx/worktrees':
+        specifier: workspace:*
+        version: link:../../packages/worktrees
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -62,6 +68,25 @@ importers:
         version: 8.20.0
 
   packages/core:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/launch:
+    dependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../config
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -154,6 +179,25 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../ports
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/worktrees:
+    dependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../config
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

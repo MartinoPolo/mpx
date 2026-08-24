@@ -1,0 +1,61 @@
+{
+  "identities": {
+    "personal": {
+      "domain": "personal",
+      "runtimeRoots": { "claude": "~/.claude", "pi": "~/.pi/agent" },
+      "gitAuthorRoute": "personal",
+      "providerRoutes": { "github": "github-personal" },
+      "sshRoute": "personal-agent",
+      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false }
+    },
+    "work": {
+      "domain": "work",
+      "runtimeRoots": { "claude": "~/.claude-work", "pi": "~/.pi/agent-work" },
+      "gitAuthorRoute": "work",
+      "providerRoutes": { "gitlab": "gitlab-work", "kanbanflow": "kanbanflow-work" },
+      "sshRoute": "work-agent",
+      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false }
+    }
+  },
+  "domains": {
+    "personal": ["${MPX_PROJECTS}"],
+    "work": ["${MPX_WORK}"],
+    "oss": ["${MPX_CLONED}"],
+    "assistant-input": ["${MPX_OBSIDIAN_VAULT}"],
+    "assistant-output": ["${MPX_AI_GENERATED}"],
+    "cloud": ["${MPX_ONEDRIVE}"]
+  },
+  "contentScopes": {
+    "personal": { "roots": ["${MPX_PROJECTS}"], "skillPacks": ["core", "personal"] },
+    "work": { "roots": ["${MPX_WORK}"], "skillPacks": ["core", "work"] }
+  },
+  "modes": {
+    "project": { "resources": { "selected-project": "read-write" } },
+    "developer": { "resources": { "identity-domain": "read-write", "cloned-repositories": "read-only" } },
+    "personal-assistant": { "resources": { "assistant-input": "read-write", "assistant-output": "read-write" } },
+    "computer-control": { "resources": { "computer-control-config": "read-write", "computer-control-executable-settings": "staged-write" } },
+    "unrestricted": { "resources": { "host": "read-write" } }
+  },
+  "skillPolicies": {
+    "clean": { "skillExposure": { "default": "explicit-only" } },
+    "developer": { "skillPacks": ["core"], "skillExposure": { "default": "name-only" } },
+    "personal-assistant": { "skillPacks": ["core", "personal"], "skillExposure": { "default": "name-only" } }
+  },
+  "presets": {
+    "personal-dev": { "identity": "personal", "mode": "developer", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation" },
+    "personal-research": { "identity": "personal", "mode": "project", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "research" },
+    "work-project": { "identity": "work", "mode": "project", "skillPolicy": "developer", "contentScope": "work", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation" },
+    "work-delivery": { "identity": "work", "mode": "project", "skillPolicy": "developer", "contentScope": "work", "executor": "docker", "workspace": "clone", "networkPolicy": "delivery" }
+  },
+  "launchDefaults": {
+    "scopes": { "personal": { "personal": "personal-dev" }, "work": { "work": "work-project" } },
+    "projects": { "MartinoPolo/mpx": { "personal": "personal-dev", "work": "work-project" } }
+  },
+  "networkPolicies": {
+    "research": { "preset": "allow-all", "denyPrivateNetworks": true },
+    "implementation": { "preset": "balanced", "approvedProjectAdditions": true },
+    "delivery": { "extends": "implementation", "approvedDeliveryAdditions": true },
+    "minimal": { "preset": "deny-all", "requiredRuntimeEndpoints": true }
+  },
+  "executors": { "host": {}, "docker": {} }
+}
