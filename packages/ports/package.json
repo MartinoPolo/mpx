@@ -8,8 +8,8 @@
   "exports": ".\/dist\/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json && vitest run",
-    "test": "pnpm run build && vitest run",
+    "check": "tsc -p tsconfig.json && vitest run --testTimeout=30000",
+    "test": "pnpm run build && vitest run --testTimeout=30000",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

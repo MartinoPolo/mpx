@@ -1,22 +1,250 @@
-import { access } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MpxError } from "@mpx/core";
+import { isSafeRouteLabel, preparationPlan, type PreparationPlan, type ProjectConfig } from "@mpx/config";
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from "@mpx/ports";
 import { createStatusProvider, type StatusProvider } from "@mpx/status";
-import { WindowsPortPlatformAdapter } from "@mpx/windows";
+import { createGitHubAdapters } from "@mpx/provider-github";
+import { createGitLabAdapters } from "@mpx/provider-gitlab";
+import { createKanbanFlowAdapter } from "@mpx/provider-kanbanflow";
+import { BUILTIN_PROVIDERS, ProviderRegistry, ProviderService, providerRegistry, type ProviderAdapter, type ProviderDescriptor, type ProviderProcessExecutor, type ProviderProcessRequest, type ProviderProcessResult } from "@mpx/providers";
+import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/windows";
+import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
+import { sha256Canonical, type JsonValue } from "@mpx/core";
 
-export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild">;
+export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild" | "captureReleaseIdentity" | "releaseLinkedAfterRemoval" | "resolveOrphan">;
+export interface CliWorktreeService {
+  create(request: Record<string, unknown>): Promise<unknown>;
+  remove(request: Record<string, unknown>): Promise<unknown>;
+  list(request: {cwd:string}): Promise<unknown>;
+  select(request: {cwd:string;path:string}): Promise<{path:string}>;
+  status(request: {cwd:string}): Promise<unknown>;
+  prepare(request: Record<string, unknown>): Promise<unknown>;
+  cancel(request: Record<string, unknown>): Promise<unknown>;
+  reconcile(request: Record<string, unknown>): Promise<unknown>;
+}
+
+export interface CliProviderService {
+  invoke(request: { providerId: string; capability: string; route?: string; input: JsonValue }): Promise<unknown>;
+}
+
+export interface CliRepositorySelectorResolver {
+  resolve(request: { root: string; remote: string }): Promise<string>;
+}
 
 export interface CliContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
+  accessFile?: (file: string) => Promise<void>;
   portService?: CliPortService;
   portServiceFactory?: (stateRoot: string) => CliPortService;
   statusProvider?: StatusProvider;
   statusProviderFactory?: (portService: CliPortService) => StatusProvider;
+  worktreeService?: CliWorktreeService;
+  worktreeServiceFactory?: (stateRoot: string, portService: CliPortService, operationCwd: string) => CliWorktreeService;
+  preparationRuntimeFactory?: (stateRoot: string, environment: NodeJS.ProcessEnv) => CliPreparationRuntime;
+  providerService?: CliProviderService;
+  providerProcessExecutor?: ProviderProcessExecutor;
+  repositorySelectorResolver?: CliRepositorySelectorResolver;
+  /** Application-owned trusted extensions; never populated from project configuration. */
+  trustedProviderComposition?: Readonly<{ descriptors: readonly ProviderDescriptor[]; adapters: readonly ProviderAdapter[] }>;
 }
 export const defaultContext: CliContext = { env: process.env };
+
+const builtInProviderExecutables = new Set(["gh", "glab", "kf"]);
+const providerProcessTimeoutMilliseconds = 120_000;
+const providerProcessMaxBufferBytes = 10 * 1024 * 1024;
+const safeRepositorySegment = /^[A-Za-z0-9_.][A-Za-z0-9._-]*$/u;
+const safeRemoteName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+
+type ExecutableResolver = (executable: string, operationCwd: string, environment: NodeJS.ProcessEnv) => Promise<string>;
+
+function environmentValue(environment: NodeJS.ProcessEnv, name: string): string | undefined {
+  return Object.entries(environment).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
+}
+
+function resolutionError(code: string, message: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(message), { code });
+}
+
+function isWithin(directory: string, candidate: string): boolean {
+  const relative = path.relative(directory, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+async function resolveTrustedExecutableOnPath(executable: string, operationCwd: string, environment: NodeJS.ProcessEnv): Promise<string> {
+  if (!path.isAbsolute(operationCwd)) throw resolutionError("EINVAL", "The operation cwd must be absolute.");
+  const canonicalOperationCwd = await realpath(operationCwd);
+  const pathValue = environmentValue(environment, "PATH") ?? "";
+  const pathExtensions = process.platform === "win32"
+    ? ["", ...(environmentValue(environment, "PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean).map(extension => extension.startsWith(".") ? extension : `.${extension}`)]
+    : [""];
+
+  for (const rawDirectory of pathValue.split(path.delimiter)) {
+    const directory = rawDirectory.startsWith('"') && rawDirectory.endsWith('"') ? rawDirectory.slice(1, -1) : rawDirectory;
+    if (!path.isAbsolute(directory)) continue;
+    for (const extension of pathExtensions) {
+      const candidate = path.join(directory, `${executable}${extension}`);
+      try {
+        if (!(await stat(candidate)).isFile()) continue;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "ENOTDIR") continue;
+        throw error;
+      }
+      const canonicalCandidate = await realpath(candidate);
+      if (isWithin(canonicalOperationCwd, canonicalCandidate)) throw resolutionError("EACCES", "Executables inside the operation cwd are not trusted.");
+      return canonicalCandidate;
+    }
+  }
+  throw resolutionError("ENOENT", "The trusted executable was not found on PATH.");
+}
+
+export async function resolveBuiltInProviderExecutable(executable: string, operationCwd: string, environment: NodeJS.ProcessEnv = process.env): Promise<string> {
+  if (!builtInProviderExecutables.has(executable)) throw resolutionError("EINVAL", "The provider executable is not a trusted built-in.");
+  return resolveTrustedExecutableOnPath(executable, operationCwd, environment);
+}
+
+export function classifyProviderProcessResult(error: unknown, stdout: string, stderr: string, authExitCodes: readonly number[] = []): ProviderProcessResult {
+  if (error !== null && error !== undefined) {
+    const exitCode = (error as { code?: unknown }).code;
+    if (typeof exitCode !== "number" || !Number.isInteger(exitCode) || exitCode < 0) throw error;
+    return { exitCode, stdout, stderr, ...(authExitCodes.includes(exitCode) ? { failure: "auth" as const } : {}) };
+  }
+  return { exitCode: 0, stdout, stderr };
+}
+
+function routeBoundEnvironment(environment: NodeJS.ProcessEnv, executable: string, route: string | undefined): NodeJS.ProcessEnv {
+  if (route === undefined || !isSafeRouteLabel(route)) throw resolutionError("EINVAL", "A safe provider route is required.");
+  const appData = environmentValue(environment, "APPDATA");
+  if (!appData || !path.isAbsolute(appData)) throw resolutionError("EINVAL", "APPDATA must be an absolute path for provider authentication.");
+  const isolatedEntries = Object.entries(environment).filter(([key]) => !["gh_config_dir", "glab_config_dir", "mpx_provider_route"].includes(key.toLowerCase()));
+  const result: NodeJS.ProcessEnv = { ...Object.fromEntries(isolatedEntries), MPX_PROVIDER_ROUTE: route };
+  if (executable === "gh") result.GH_CONFIG_DIR = path.join(appData, "mpx", "provider-routes", "github", route);
+  if (executable === "glab") result.GLAB_CONFIG_DIR = path.join(appData, "mpx", "provider-routes", "gitlab", route);
+  return result;
+}
+
+export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
+  readonly #resolutionCache = new Map<string, string>();
+
+  constructor(private readonly environment: NodeJS.ProcessEnv = process.env, private readonly executableResolver: ExecutableResolver = resolveBuiltInProviderExecutable) {}
+
+  async execute(request: ProviderProcessRequest): Promise<ProviderProcessResult> {
+    const [executable, ...args] = request.argv;
+    if (!builtInProviderExecutables.has(executable)) throw resolutionError("EINVAL", "The provider executable is not a trusted built-in.");
+    const childEnvironment = routeBoundEnvironment(this.environment, executable, request.route);
+    const operationCwd = request.cwd ?? process.cwd();
+    const canonicalOperationCwd = await realpath(operationCwd);
+    const cacheKey = JSON.stringify([executable, canonicalOperationCwd, environmentValue(this.environment, "PATH") ?? "", environmentValue(this.environment, "PATHEXT") ?? ""]);
+    let resolvedExecutable = this.#resolutionCache.get(cacheKey);
+    if (resolvedExecutable === undefined) {
+      resolvedExecutable = await this.executableResolver(executable, canonicalOperationCwd, this.environment);
+      if (!path.isAbsolute(resolvedExecutable)) throw resolutionError("EACCES", "The provider executable did not resolve to an absolute path.");
+      resolvedExecutable = await realpath(resolvedExecutable);
+      if (isWithin(canonicalOperationCwd, resolvedExecutable)) throw resolutionError("EACCES", "Provider executables inside the operation cwd are not trusted.");
+      this.#resolutionCache.set(cacheKey, resolvedExecutable);
+    } else {
+      resolvedExecutable = await realpath(resolvedExecutable);
+      if (isWithin(canonicalOperationCwd, resolvedExecutable)) throw resolutionError("EACCES", "Provider executables inside the operation cwd are not trusted.");
+    }
+    return new Promise((resolve, reject) => execFile(resolvedExecutable, args, {
+      cwd: canonicalOperationCwd,
+      env: childEnvironment,
+      windowsHide: true,
+      timeout: request.timeoutMilliseconds ?? providerProcessTimeoutMilliseconds,
+      maxBuffer: providerProcessMaxBufferBytes,
+    }, (error, stdout, stderr) => {
+      try { resolve(classifyProviderProcessResult(error, stdout, stderr, request.authExitCodes ?? [])); }
+      catch (failure) { reject(failure); }
+    }));
+  }
+}
+
+function repositorySelectorError(code: string, message: string): MpxError {
+  return new MpxError({ code, message, retryable: false });
+}
+
+function validRepositorySegment(value: string): boolean {
+  return value !== "." && value !== ".." && safeRepositorySegment.test(value);
+}
+
+export function parseForgeRepositoryUrl(value: string): string {
+  if (value.length === 0 || value !== value.trim() || /[\\\0]/u.test(value)) throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL is invalid.");
+  let host: string;
+  let pathValue: string;
+  const scp = /^(?:([^@/:?#]+)@)?([^@/:?#]+):([^?#]+)$/u.exec(value);
+  if (scp && !value.includes("://")) {
+    const user = scp[1];
+    if (user !== undefined && user !== "git") throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL has untrusted credentials.");
+    host = scp[2]!.toLowerCase();
+    pathValue = scp[3]!;
+  } else {
+    let remote: URL;
+    try { remote = new URL(value); } catch { throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL is invalid."); }
+    if (remote.protocol !== "https:" && remote.protocol !== "ssh:") throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL scheme is unsupported.");
+    if ((remote.username !== "" && remote.username !== "git") || remote.password !== "") throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL has untrusted credentials.");
+    if (remote.search !== "" || remote.hash !== "" || remote.port !== "") throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL contains unsupported components.");
+    host = remote.hostname.toLowerCase();
+    pathValue = remote.pathname.startsWith("/") ? remote.pathname.slice(1) : remote.pathname;
+  }
+  if (!validRepositorySegment(host) || pathValue.includes("%")) throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL is unsafe.");
+  const segments = pathValue.split("/");
+  if (segments.length !== 2) throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL must identify one owner and repository.");
+  const owner = segments[0]!;
+  const repository = segments[1]!.endsWith(".git") ? segments[1]!.slice(0, -4) : segments[1]!;
+  if (!validRepositorySegment(owner) || !validRepositorySegment(repository)) throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL contains unsafe path segments.");
+  return `${host}/${owner}/${repository}`;
+}
+
+export class NodeRepositorySelectorResolver implements CliRepositorySelectorResolver {
+  constructor(private readonly environment: NodeJS.ProcessEnv = process.env) {}
+
+  async resolve(request: { root: string; remote: string }): Promise<string> {
+    if (!path.isAbsolute(request.root) || !safeRemoteName.test(request.remote) || request.remote === "." || request.remote === "..") {
+      throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote is invalid.");
+    }
+    let gitExecutable: string;
+    try { gitExecutable = await resolveTrustedExecutableOnPath("git", request.root, this.environment); }
+    catch { throw repositorySelectorError("REPOSITORY_SELECTOR_UNAVAILABLE", "A trusted Git executable is required to resolve the configured repository remote."); }
+    const output = await new Promise<string>((resolve, reject) => execFile(gitExecutable, ["-C", request.root, "config", "--get", `remote.${request.remote}.url`], {
+      cwd: request.root,
+      env: { ...this.environment, GIT_TERMINAL_PROMPT: "0" },
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: providerProcessTimeoutMilliseconds,
+      maxBuffer: providerProcessMaxBufferBytes,
+    }, (error, stdout) => error ? reject(error) : resolve(stdout))).catch(() => {
+      throw repositorySelectorError("REPOSITORY_REMOTE_UNAVAILABLE", "The configured repository remote URL is missing or unavailable.");
+    });
+    const lines = output.split(/\r?\n/u).filter(line => line.length > 0);
+    if (lines.length !== 1) throw repositorySelectorError("REPOSITORY_REMOTE_INVALID", "The configured repository remote URL is malformed.");
+    return parseForgeRepositoryUrl(lines[0]!);
+  }
+}
+
+export function configuredProviderRegistry(context: CliContext): ProviderRegistry {
+  const extensions = context.trustedProviderComposition?.descriptors ?? [];
+  return extensions.length === 0 ? providerRegistry : new ProviderRegistry([...BUILTIN_PROVIDERS, ...extensions], extensions);
+}
+
+export async function providerService(context: CliContext, config: ProjectConfig, cwd: string, selection?: { providerId: string; capability: string }): Promise<CliProviderService> {
+  if (context.providerService) return context.providerService;
+  const executor = context.providerProcessExecutor ?? new NodeProviderProcessExecutor(context.env);
+  const selectedProvider = selection?.providerId;
+  const needsForgeRepository = selectedProvider === undefined || selectedProvider === "github" || selectedProvider === "gitlab";
+  const repository = needsForgeRepository
+    ? await (context.repositorySelectorResolver ?? new NodeRepositorySelectorResolver(context.env)).resolve({ root: cwd, remote: config.repository.remote })
+    : undefined;
+  const adapters = [
+    ...(selectedProvider === undefined || selectedProvider === "github" ? createGitHubAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
+    ...(selectedProvider === undefined || selectedProvider === "gitlab" ? createGitLabAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
+    ...(selectedProvider === undefined || selectedProvider === "kanbanflow" ? [createKanbanFlowAdapter(executor, { cwd, ...(config.issues?.provider === "kanbanflow" && config.issues.states !== undefined ? { states: config.issues.states } : {}) })] : []),
+    ...(context.trustedProviderComposition?.adapters.filter(adapter => selectedProvider === undefined || adapter.providerId === selectedProvider) ?? []),
+  ];
+  return new ProviderService(configuredProviderRegistry(context), adapters);
+}
 
 export function stateRoot(context: CliContext): string {
   const localAppData = context.env.LOCALAPPDATA;
@@ -36,6 +264,201 @@ export function ports(context: CliContext): CliPortService {
     git: new RealGitWorktreeAdapter(),
     platform: new WindowsPortPlatformAdapter(),
   });
+}
+
+interface CliPreparationRuntime {
+  run(request: { key: string; plan: PreparationPlan; worktreeRoot: string; packageManager: ConfiguredPackageManager; exactApproval?: string; validateOnly?: boolean }): Promise<unknown>;
+  retry(request: { key: string; plan: PreparationPlan; worktreeRoot: string; packageManager: ConfiguredPackageManager; exactApproval?: string }): Promise<unknown>;
+  cancel(key: string): Promise<{ status: string }>;
+  reconcile(key: string): Promise<{ status: string }>;
+}
+
+interface PreparationRuntime extends CliPreparationRuntime {
+  adapters: PreparationAdapters;
+  engine: PreparationEngine;
+}
+
+export function windowsProcessIdentityInspector(windows: Pick<WindowsProcessCapabilities, "inspect">) {
+  return { inspect: async (pid: number) => {
+    try { const identity = await windows.inspect(pid); return identity ? { status: "present" as const, pid, startFingerprint: identity.startFingerprint } : { status: "absent" as const, pid }; }
+    catch { return { status: "unknown" as const, pid }; }
+  } };
+}
+
+export function preparationRuntime(root: string, environment: NodeJS.ProcessEnv, workerEntry = fileURLToPath(new URL("./main.js", import.meta.url))): PreparationRuntime {
+  const preparationRoot = path.join(root, "worktrees", "preparation");
+  const windowsProcesses = new WindowsProcessCapabilities();
+  const processAdapter = new NodePreparationProcessAdapter(windowsProcesses, preparationRoot);
+  const adapters: PreparationAdapters = {
+    evidence: new NodePreparationEvidenceAdapter(),
+    store: new NodePreparationStore(preparationRoot, { processIdentityInspector: windowsProcessIdentityInspector(windowsProcesses) }),
+    process: processAdapter,
+    execution: new NodePreparationExecutionAdapter({ process: processAdapter, stateRoot: preparationRoot, workerEntry, environment: environment as Readonly<Record<string, string>> }),
+    clock: { now: Date.now, sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) },
+    paths: nodePreparationPaths,
+  };
+  const engine = new PreparationEngine(adapters);
+  const approvedRequest = async (request: { key: string; plan: PreparationPlan; worktreeRoot: string; packageManager: ConfiguredPackageManager; exactApproval?: string; validateOnly?: boolean }) => {
+    const logDirectory = path.join(preparationRoot, "logs", sha256Canonical(request.key as unknown as JsonValue));
+    const packageManager = await resolvePreparationPackageManager(request.worktreeRoot, request.plan, request.packageManager);
+    const approval = await createPreparationApproval({ ...request, packageManager, environment }, adapters); const expectedApprovals = preparationApprovalPhrases(approval);
+    const expectedApproval = JSON.stringify(expectedApprovals);
+    if (request.exactApproval === undefined) return { response: { schemaVersion: 1, owner: "mpx", status: "approval-required", expectedApproval, expectedApprovals, approval } };
+    let supplied: unknown; try { supplied = JSON.parse(request.exactApproval); } catch { supplied = undefined; }
+    if (JSON.stringify(supplied) !== expectedApproval) throw new MpxError({ code: "PREPARATION_APPROVAL_STALE", message: "Separate exact package-automation and explicit-executable approvals are required for the current evidence.", details: { expectedApprovals } });
+    return { engineRequest: { ...request, ...expectedApprovals, packageManager, approval, environment, logDirectory }, expectedApproval, approval };
+  };
+  return { adapters, engine, cancel: key => engine.cancel(key), reconcile: key => engine.reconcile(key), run: async request => {
+    if (request.plan.execution === "none") return { status: "ready" };
+    const approved = await approvedRequest(request);
+    if (approved.response) return approved.response;
+    if (request.validateOnly) return { status: "approved", expectedApproval: approved.expectedApproval, approval: approved.approval };
+    return engine.prepare(approved.engineRequest!);
+  }, retry: async request => {
+    const approved = await approvedRequest(request);
+    return approved.response ?? engine.retry(approved.engineRequest!);
+  } };
+}
+
+export function verifyPreparationWorkerHandshake(state: { worker?: { pid: number; startFingerprint: string; ownerToken?: string }; owner?: string; runId?: string; status?: string } | undefined, inspection: { startFingerprint: string; owner: "mpx" | "other"; ownerToken?: string } | undefined, pid: number, runId: string): boolean {
+  return state?.owner === "mpx" && state.runId === runId && state.status === "preparing" && state.worker?.pid === pid && typeof state.worker.startFingerprint === "string" && state.worker.startFingerprint.length > 0 && state.worker.ownerToken !== undefined && inspection?.owner === "mpx" && inspection.startFingerprint === state.worker.startFingerprint && inspection.ownerToken === state.worker.ownerToken;
+}
+
+export async function requireRepositoryBoundLifecycleState(key: string, cwd: string, foundation: ReturnType<typeof createNodeLifecycleFoundation>) {
+  const state = await foundation.state.load(key);
+  if (!state) throw new MpxError({ code: "WORKTREE_LIFECYCLE_STATE_MISSING", message: "The lifecycle key does not exist." });
+  assertLifecycleStateIdentity(state);
+  if (key !== deriveLifecycleKey(state.repositoryIdentity, state.branch)) throw new MpxError({ code: "WORKTREE_LIFECYCLE_STATE_INVALID", message: "The lifecycle key identity is invalid." });
+  const repository = await foundation.repository.resolve(cwd);
+  if (!sameLifecyclePath(repository.commonGitDirectory, state.repositoryIdentity) || !sameLifecyclePath(repository.mainRoot, state.mainRoot)) throw new MpxError({ code: "WORKTREE_REPOSITORY_MISMATCH", message: "The lifecycle key belongs to another repository." });
+  if (repository.config.project.id !== state.repositoryId) throw new MpxError({ code: "WORKTREE_REPOSITORY_MISMATCH", message: "The lifecycle key belongs to another repository." });
+  const inventoryEntry = (await foundation.git.list(repository.mainRoot)).find(entry => sameLifecyclePath(entry.path, state.worktreePath));
+  if (!inventoryEntry || inventoryEntry.branch !== state.branch) throw new MpxError({ code: "WORKTREE_REPOSITORY_MISMATCH", message: "The lifecycle key is not bound to this repository worktree and branch." });
+  return { state, repository };
+}
+
+export async function executeInternalPreparationWorker(requestFile: string, workerToken: string | undefined): Promise<void> {
+  const preparationRoot = path.dirname(path.dirname(path.resolve(requestFile)));
+  const request = await awaitBackgroundPreparationActivation(requestFile, preparationRoot, workerToken);
+  delete process.env.MPX_PREPARATION_WORKER_TOKEN;
+  const runtime = preparationRuntime(path.dirname(path.dirname(preparationRoot)), process.env);
+  const store = runtime.adapters.store;
+  const processAdapter = runtime.adapters.process;
+  let persistedWorker: { pid: number; startFingerprint: string; ownerToken?: string } | undefined;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const state = await store.load(request.key);
+    const inspection = await processAdapter.inspect(process.pid);
+    if (verifyPreparationWorkerHandshake(state, inspection, process.pid, request.runId)) { persistedWorker = state!.worker; break; }
+    if (attempt === 199) throw new MpxError({ code: "PREPARATION_WORKER_HANDSHAKE_FAILED", message: "The worker was not durably registered by its parent." });
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  const foreground = { ...request.plan, execution: "foreground" as const };
+  await runtime.engine.resume({ key: request.key, runId: request.runId, plan: foreground, approval: request.approval, ...(request.packageAutomationApproval === undefined ? {} : { packageAutomationApproval: request.packageAutomationApproval }), ...(request.explicitExecutableApproval === undefined ? {} : { explicitExecutableApproval: request.explicitExecutableApproval }), worktreeRoot: request.worktreeRoot, packageManager: request.packageManager, environment: process.env, logDirectory: request.logDirectory, ...(persistedWorker === undefined ? {} : { worker: persistedWorker }) });
+}
+
+export function worktrees(context: CliContext, operationCwd = process.cwd()): CliWorktreeService {
+  if (context.worktreeService) return context.worktreeService;
+  const root=stateRoot(context), portService=ports(context);
+  if (context.worktreeServiceFactory) return context.worktreeServiceFactory(root,portService,operationCwd);
+  const includeDependencies=createNodeWorktreeIncludeDependencies();
+  const preparation=context.preparationRuntimeFactory?.(root,context.env) ?? preparationRuntime(root,context.env);
+  const windowsProcesses = new WindowsProcessCapabilities();
+  const productionPreparation = "adapters" in preparation ? preparation as PreparationRuntime : undefined;
+  const foundation=createNodeLifecycleFoundation(path.join(root,"worktrees"), "git", {
+    operationCwd,
+    processIdentityInspector: windowsProcessIdentityInspector(windowsProcesses),
+    ...(productionPreparation === undefined ? {} : { isPreparationWorkerActive: async state => {
+      const preparationState = await productionPreparation.adapters.store.load(state.key);
+      if (!preparationState || !["preparing", "cancelling"].includes(preparationState.status) || !preparationState.worker) return false;
+      try {
+        const inspected = await productionPreparation.adapters.process.inspect(preparationState.worker.pid);
+        return inspected?.owner === "mpx" && inspected.startFingerprint === preparationState.worker.startFingerprint && inspected.ownerToken === preparationState.worker.ownerToken;
+      } catch { return true; }
+    } }),
+  });
+  const lifecycle=new WorktreeLifecycleService({
+    ...foundation, ports:portService,
+    includes:{
+      inspect:async request=>{
+        try { await access(path.join(request.mainRoot,".worktreeinclude")); }
+        catch(error) { if((error as NodeJS.ErrnoException).code==="ENOENT") return {status:"absent" as const,manifestSha256:sha256Canonical({absent:true} as JsonValue)}; throw error; }
+        const plan=await planWorktreeIncludes(request,includeDependencies);
+        return {status:request.exactHumanApproval===plan.approval ? "approved" as const : "approval-required" as const,manifestSha256:plan.manifestSha256,expectedApproval:plan.approval};
+      },
+      copy:async request=>{
+        try { await access(path.join(request.mainRoot,".worktreeinclude")); }
+        catch(error) { if((error as NodeJS.ErrnoException).code==="ENOENT") return {manifestSha256:sha256Canonical({absent:true} as JsonValue)}; throw error; }
+        const plan=await planWorktreeIncludes(request,includeDependencies);
+        if(request.expectedManifestSha256!==undefined && request.expectedManifestSha256!==plan.manifestSha256) throw new MpxError({code:"WORKTREE_INCLUDE_APPROVAL_STALE",message:"The durable include manifest no longer matches current files."});
+        return executeWorktreeIncludePlan(plan,request.exactHumanApproval??"",includeDependencies,request.allowExistingRecovery??false);
+      },
+    },
+    preparation:{
+      prepare:request=>preparation.run(request) as Promise<{status:string}>,
+      cancel:key=>preparation.cancel(key), reconcile:key=>preparation.reconcile(key),
+    },
+    configHash:config=>sha256Canonical(config as unknown as JsonValue),
+  });
+  const git=foundation.git as GitAdapter;
+  const fsAdapter:FileSystemAdapter={realpath,readText:file=>readFile(file,"utf8"),writeText:(file,content)=>writeFile(file,content,"utf8"),mkdir:directory=>mkdir(directory,{recursive:true}).then(()=>undefined),exists:async value=>{try{await access(value);return true}catch{return false}}};
+  const mru=new FileMruStore(path.join(root,"worktrees","mru.json"),fsAdapter);
+  return {
+    create:request=>lifecycle.create(request as never), remove:request=>lifecycle.remove(request as never),
+    list:async({cwd})=>{const repository=await resolveRepository(cwd,{git,fs:fsAdapter});return listWorktrees(git,repository.mainRoot)},
+    status:request=>lifecycle.status(request), reconcile:async request=>{
+      const result=await lifecycle.reconcile({cwd:String(request.cwd)}), orphaned=[...(result.orphaned??[])];
+      if(orphaned.length===0) return result;
+      const expectedApproval=`APPROVE WORKTREE ORPHAN RELEASE ${sha256Canonical(orphaned as JsonValue)}`;
+      if(request.orphanApproval===undefined) return {...result,expectedApproval};
+      if(request.orphanApproval!==expectedApproval) throw new MpxError({code:"WORKTREE_ORPHAN_APPROVAL_STALE",message:"Exact trusted approval for the current orphan set is required.",details:{expectedApproval}});
+      const resolutions=[]; for(const identity of orphaned) resolutions.push(await portService.resolveOrphan({repositoryCwd:String(request.cwd),identity} as never));
+      return {...result,status:"resolved",orphaned:[],resolutions};
+    },
+    select:async({cwd,path:requested})=>{const repository=await resolveRepository(cwd,{git,fs:fsAdapter});return selectWorktree({repository:repository.commonGitDirectory,path:requested,inventory:await listWorktrees(git,repository.mainRoot),store:mru})},
+    prepare:async request=>{
+      const key=String(request.key), cwd=String(request.cwd);
+      const bound=await requireRepositoryBoundLifecycleState(key,cwd,foundation);
+      const release=await foundation.lock.acquire(bound.repository.commonGitDirectory);
+      try {
+        const {state,repository}=await requireRepositoryBoundLifecycleState(key,cwd,foundation);
+        const currentConfigHash=sha256Canonical(repository.config as unknown as JsonValue);
+        if(state.configHash!==currentConfigHash) throw new MpxError({code:"WORKTREE_CONFIG_HASH_MISMATCH",message:"The durable creation configuration does not match the current configuration evidence."});
+        const configuredPlan=preparationPlan(repository.config), plan=state.preparationExecution===undefined?configuredPlan:{...configuredPlan,execution:state.preparationExecution}, packageManager=(repository.config.tooling?.packageManager??"auto") as ConfiguredPackageManager;
+        const result=await preparation.retry({key,plan,worktreeRoot:state.worktreePath,packageManager,...(typeof request.approval==="string"?{exactApproval:request.approval}:{})}) as {status?:string};
+        if(result.status && result.status!=="approval-required") {
+          state.preparationStatus=result.status;
+          state.status=result.status==="ready" ? "ready" : result.status==="preparing" ? "preparing" : result.status==="unknown" ? "unknown" : "failed";
+          if(state.status==="ready") delete state.failure;
+          else if(state.status!=="preparing") state.failure={phase:"preparation",code:result.status==="cancelled"?"PREPARATION_CANCELLED":result.status==="unknown"?"PREPARATION_UNKNOWN":"PREPARATION_FAILED",message:`Preparation ended with status ${result.status}.`};
+          state.updatedAt=Date.now(); await foundation.state.writeAtomic(key,state);
+        }
+        return result;
+      } finally { await release(); }
+    },
+    cancel:async request=>{
+      const key=String(request.key), cwd=String(request.cwd);
+      const repository=await foundation.repository.resolve(cwd);
+      const release=await foundation.lock.acquire(repository.commonGitDirectory);
+      try {
+        const bound=await requireRepositoryBoundLifecycleState(key,cwd,foundation);
+        let cancellation:{status:string};
+        try { cancellation=await preparation.cancel(key); }
+        catch (error) {
+          const current=await foundation.state.load(key);
+          if (current) { current.preparationStatus="unknown"; current.status="unknown"; current.failure={phase:"preparation",code:"PREPARATION_UNKNOWN",message:error instanceof Error?error.message:String(error)}; current.updatedAt=Date.now(); await foundation.state.writeAtomic(key,current); }
+          throw error;
+        }
+        bound.state.preparationStatus=cancellation.status;
+        if(cancellation.status==="cancelled") { bound.state.status="failed"; bound.state.failure={phase:"preparation",code:"PREPARATION_CANCELLED",message:"Preparation was cancelled."}; }
+        else if(cancellation.status==="unknown") { bound.state.status="unknown"; bound.state.failure={phase:"preparation",code:"PREPARATION_UNKNOWN",message:"Preparation ownership or completion could not be verified."}; }
+        else if(cancellation.status==="ready") { bound.state.status="ready"; delete bound.state.failure; }
+        else { bound.state.status="failed"; bound.state.failure={phase:"preparation",code:"PREPARATION_FAILED",message:`Preparation ended with status ${cancellation.status}.`}; }
+        bound.state.updatedAt=Date.now(); await foundation.state.writeAtomic(key,bound.state);
+        return cancellation;
+      } finally { await release(); }
+    },
+
+  };
 }
 
 export function status(context: CliContext, service?: CliPortService): StatusProvider {

@@ -1,17 +1,39 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { PortService, RegistryStore, type GitWorktreeAdapter, type PortPlatformAdapter, type WorktreeIdentity } from "./index.js";
+import { PortService, RegistryStore, type GitWorktreeAdapter, type PortPlatformAdapter, type RegistryState, type WorktreeIdentity } from "./index.js";
 import type { ProjectConfig } from "@mpx/config";
 import { MpxError, sha256Canonical, type JsonValue } from "@mpx/core";
 const roots: string[] = []; const temp = async () => { const root = await mkdtemp(path.join(tmpdir(), "mpx-service-")); roots.push(root); return root; };
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
 const identity = (repo: string, id: string, worktreePath: string, role: "main"|"linked"): WorktreeIdentity => ({ repositoryId: repo, worktreeId: id, path: worktreePath, role, commonGitPath: `${worktreePath}/.git-common`, gitAdminPath: `${worktreePath}/.git`, head: "abc" });
 const platform: PortPlatformAdapter = { holdAvailablePorts: async () => ({ release: async () => undefined }), inspectListeners: async () => [], killProcess: async () => undefined, inspectProcess: async () => undefined };
-const config = (projectId = "project", scope: "checkout"|"project" = "checkout", mode: "managed"|"fixed-shared" = "managed"): ProjectConfig => ({ schemaVersion: 1, project: { id: projectId }, repository: { provider: "generic", remote: "x" }, development: { services: { app: { scope, port: { mode, preferred: 5100 }, start: { type: "package-script", script: "dev" } } } } });
+const config = (projectId = "project", scope: "checkout"|"project" = "checkout", mode: "managed"|"fixed-shared" = "managed"): ProjectConfig => ({ schemaVersion: 1, project: { id: projectId.includes("/") ? projectId : `fixture/${projectId}` }, repository: { provider: "generic", remote: "x" }, development: { services: { app: { scope, port: { mode, preferred: 5100 }, start: { type: "package-script", script: "dev" } } } } });
 const git = (current: WorktreeIdentity, all = [current]): GitWorktreeAdapter => ({ identify: async () => current, list: async () => all });
 const request = (cwd: string, value: ProjectConfig = config()) => ({ cwd, config: value, configHash: sha256Canonical(value as unknown as JsonValue) });
+class RepairTransactionProbeStore extends RegistryStore {
+  private calls = 0;
+  constructor(stateRoot: string, private readonly secondTransactionEntered: () => void) { super(stateRoot); }
+  override async transaction<T>(operation: (state: RegistryState) => T | Promise<T>): Promise<T> {
+    if (++this.calls === 2) this.secondTransactionEntered();
+    return super.transaction(operation);
+  }
+}
+class ReleaseTransactionProbeStore extends RegistryStore {
+  constructor(stateRoot: string, private readonly transactionCompleted: () => void) { super(stateRoot); }
+  override async transaction<T>(operation: (state: RegistryState) => T | Promise<T>): Promise<T> {
+    return super.transaction(async (state) => { const result = await operation(state); this.transactionCompleted(); return result; });
+  }
+}
+class PausePublicationStore extends RegistryStore {
+  private transactions = 0;
+  constructor(stateRoot: string, private readonly publicationStarted: () => void, private readonly resume: Promise<void>) { super(stateRoot); }
+  override async transaction<T>(operation: (state: RegistryState) => T | Promise<T>): Promise<T> {
+    if (++this.transactions === 2) { this.publicationStarted(); await this.resume; }
+    return super.transaction(operation);
+  }
+}
 
 describe("PortService leases", () => {
   it("keeps repeated ensure stable after the main reservation", async () => {
@@ -76,6 +98,27 @@ describe("PortService leases", () => {
     expect(await service.list()).toEqual(before);
   });
 
+  it("rejects a superseded same-main ensure before publishing its projection", async () => {
+    const root = await temp(), cwd = await temp();
+    const current = identity("repo", "main", cwd, "main");
+    const first = config();
+    const second = { ...first, repository: { ...first.repository, remote: "changed" } };
+    let signalPublication!: () => void;
+    const publicationStarted = new Promise<void>((resolve) => { signalPublication = resolve; });
+    let resumePublication!: () => void;
+    const publicationResume = new Promise<void>((resolve) => { resumePublication = resolve; });
+    const serviceA = new PortService({ store: new PausePublicationStore(root, signalPublication, publicationResume), git: git(current), platform });
+    const serviceB = new PortService({ store: new RegistryStore(root), git: git(current), platform });
+    const ensuringA = serviceA.ensure(request(cwd, first));
+    await publicationStarted;
+    const resultB = await serviceB.ensure(request(cwd, second));
+    resumePublication();
+    await expect(ensuringA).rejects.toMatchObject({ code: "PORT_ENSURE_SUPERSEDED", retryable: true });
+    const registry = await serviceB.list();
+    expect(registry).toEqual([resultB.lease]);
+    expect(JSON.parse(await readFile(path.join(cwd, ".worktree-ports.json"), "utf8"))).toMatchObject({ leaseId: resultB.lease.leaseId, projectId: resultB.lease.projectId, worktreeId: resultB.lease.worktreeId, configHash: resultB.lease.configHash, services: resultB.lease.services });
+  });
+
   it("warns but permits duplicate fixed-shared claims", async () => {
     const root = await temp(), a = await temp(), b = await temp();
     await new PortService({ store: new RegistryStore(root), git: git(identity("a", "a", a, "main")), platform }).ensure(request(a, config("a", "checkout", "fixed-shared")));
@@ -129,6 +172,38 @@ describe("PortService leases", () => {
     expect((await service.resolve(request(cwd))).leaseId).toBe(retry.lease.leaseId);
     const file = path.join(cwd, ".worktree-ports.json"); await (await import("node:fs/promises")).writeFile(file, "{}"); await expect(service.resolve(request(cwd))).rejects.toMatchObject({ code: "PORT_LEASE_INVALID" });
     await (await import("node:fs/promises")).writeFile(file, JSON.stringify({ schemaVersion: 1, leaseId: retry.lease.leaseId, projectId: "project", worktreeId: "copied", configHash: retry.lease.configHash, services: { app: 5100 } })); await expect(service.resolve(request(cwd))).rejects.toMatchObject({ code: "PORT_LEASE_MISMATCH" });
+  });
+  it("removes only the exact new identity-bound lease when projection publication fails", async () => {
+    const root=await temp(), cwd=await temp(), projection=path.join(cwd,".worktree-ports.json");
+    const service=new PortService({store:new RegistryStore(root),git:git(identity("r","w",cwd,"main")),platform,writeLeaseFile:async(file,value)=>{await writeFile(file,value);throw new MpxError({code:"PROJECTION_FAILED",message:"sensitive projection"});}});
+    await expect(service.ensure(request(cwd))).rejects.toMatchObject({code:"PROJECTION_FAILED"});
+    expect(await service.list()).toEqual([]);
+    await expect(readFile(projection,"utf8")).rejects.toMatchObject({code:"ENOENT"});
+  });
+  it("restores the displaced identity-bound lease and projection after changed-config projection failure", async () => {
+    const root=await temp(), cwd=await temp(), current=identity("r","w",cwd,"main"), initial=new PortService({store:new RegistryStore(root),git:git(current),platform});
+    const original=config(), first=await initial.ensure(request(cwd,original)), projection=path.join(cwd,".worktree-ports.json"), before=await readFile(projection,"utf8");
+    const changed={...original,repository:{...original.repository,remote:"changed"}};
+    const failing=new PortService({store:new RegistryStore(root),git:git(current),platform,writeLeaseFile:async(file,value)=>{await writeFile(file,value);throw new MpxError({code:"PROJECTION_FAILED",message:"sensitive projection"});}});
+    await expect(failing.ensure(request(cwd,changed))).rejects.toMatchObject({code:"PROJECTION_FAILED"});
+    expect(await failing.list()).toEqual([first.lease]);
+    expect(await readFile(projection,"utf8")).toBe(before);
+  });
+  it("preserves the prior projection when changed-config publication fails before writing", async () => {
+    const root=await temp(), cwd=await temp(), current=identity("r","w",cwd,"main"), initial=new PortService({store:new RegistryStore(root),git:git(current),platform});
+    const original=config(), first=await initial.ensure(request(cwd,original)), projection=path.join(cwd,".worktree-ports.json"), before=await readFile(projection,"utf8");
+    const changed={...original,repository:{...original.repository,remote:"changed"}};
+    const failing=new PortService({store:new RegistryStore(root),git:git(current),platform,writeLeaseFile:async()=>{throw new MpxError({code:"PROJECTION_FAILED",message:"sensitive projection"});}});
+    await expect(failing.ensure(request(cwd,changed))).rejects.toMatchObject({code:"PROJECTION_FAILED"});
+    expect(await failing.list()).toEqual([first.lease]);
+    expect(await readFile(projection,"utf8")).toBe(before);
+  });
+  it("reports projection and exact-compensation failures structurally without replacing an unsafe projection", async () => {
+    const root=await temp(), cwd=await temp(), projection=path.join(cwd,".worktree-ports.json");
+    const service=new PortService({store:new RegistryStore(root),git:git(identity("r","w",cwd,"main")),platform,writeLeaseFile:async()=>{await mkdir(projection);throw new MpxError({code:"PROJECTION_FAILED",message:"sensitive projection"});}});
+    await expect(service.ensure(request(cwd))).rejects.toMatchObject({code:"PORT_ENSURE_COMPENSATION_FAILED",details:{originalCode:"PROJECTION_FAILED",compensationCode:"PORT_COMPENSATION_CONFLICT"}});
+    await expect(lstat(projection)).resolves.toMatchObject({});
+    expect(await service.list()).toEqual([]);
   });
   it("rejects forged hashes and linked-first reservation", async () => {
     const root = await temp(), mainPath = await temp(), linkedPath = await temp(); const main = identity("r", "m", mainPath, "main"), linked = identity("r", "l", linkedPath, "linked");
@@ -255,5 +330,64 @@ describe("PortService leases", () => {
     await unlink(path.join(mainPath, ".worktree-ports.json")); const repaired = await service.reconcile({ cwd: linkedPath }); expect(repaired.repaired).toContain("m");
     adapter.list = async () => [main]; await rm(linkedPath, { recursive: true });
     const removed = await service.reconcile({ cwd: mainPath }); expect(removed.removed).toContain("l"); expect((await service.list()).map(({ worktreeId }) => worktreeId)).toEqual(["m"]);
+  });
+
+  it("does not resurrect a projection when release races reconcile repair", async () => {
+    const root = await temp(), cwd = await temp();
+    const current = identity("r", "w", cwd, "main");
+    const seed = new PortService({ store: new RegistryStore(root), git: git(current), platform });
+    await seed.ensure(request(cwd));
+    const projection = path.join(cwd, ".worktree-ports.json");
+    await unlink(projection);
+
+    let resumeRepair!: () => void;
+    const repairPaused = new Promise<void>((resolve) => { resumeRepair = resolve; });
+    let repairReached!: () => void;
+    const repairStarted = new Promise<void>((resolve) => { repairReached = resolve; });
+    let repairTransactionEntered!: () => void;
+    const repairTransaction = new Promise<void>((resolve) => { repairTransactionEntered = resolve; });
+    const repairing = new PortService({
+      store: new RepairTransactionProbeStore(root, repairTransactionEntered), git: git(current), platform,
+      writeLeaseFile: async (file, value) => { repairReached(); await repairPaused; await writeFile(file, value); },
+    });
+    let releaseTransactionCompleted!: () => void;
+    const releaseCompleted = new Promise<void>((resolve) => { releaseTransactionCompleted = resolve; });
+    const releasing = new PortService({ store: new ReleaseTransactionProbeStore(root, releaseTransactionCompleted), git: git(current), platform });
+    const reconciling = repairing.reconcile({ cwd });
+    await repairStarted;
+    const release = releasing.release({ cwd });
+    await Promise.race([repairTransaction.then(() => "repair"), releaseCompleted.then(() => "release")]);
+    resumeRepair();
+    await Promise.all([reconciling, release]);
+
+    expect(await releasing.list()).toEqual([]);
+    await expect(readFile(projection, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports a prunable linked worktree as absent and permits exact identity-bound recovery", async () => {
+    const root = await temp(), mainPath = await temp(), linkedPath = await temp();
+    const linked = identity("r", "l", linkedPath, "linked"), main = { ...identity("r", "m", mainPath, "main"), commonGitPath: linked.commonGitPath };
+    await new PortService({ store: new RegistryStore(root), git: git(main, [main, linked]), platform }).ensure(request(mainPath));
+    const adapter = git(linked, [main, linked]); const service = new PortService({ store: new RegistryStore(root), git: adapter, platform });
+    const lease = (await service.ensure(request(linkedPath))).lease;
+    const captured = await service.captureReleaseIdentity(request(linkedPath));
+    await rm(linkedPath, { recursive: true, force: true });
+    adapter.identify = async () => main;
+    adapter.list = async () => [main, { ...linked, prunable: "gitdir file points to non-existent location" }];
+    await expect(service.reconcile({ cwd: mainPath, orphanPolicy: "report" })).resolves.toMatchObject({ orphaned: [{ leaseId: lease.leaseId }] });
+    await expect(service.resolveOrphan({ repositoryCwd: mainPath, identity: captured })).resolves.toMatchObject({ released: true });
+  });
+
+  it("fails reconcile structurally when orphan inspection hits a non-ENOENT lstat error", async () => {
+    const root = await temp(), mainPath = await temp(), linkedPath = await temp();
+    const store = new RegistryStore(root);
+    const main = identity("r", "m", mainPath, "main");
+    const service = new PortService({ store, git: git(main, [main]), platform });
+    const ensured = await service.ensure(request(mainPath));
+    await store.write({ schemaVersion: 1, leases: [
+      ensured.lease,
+      { ...ensured.lease, leaseId: "linked", worktreeId: "l", worktreePath: `${linkedPath}\0invalid`, role: "linked", slot: 1, claims: [{ port: 5101, exclusive: true }], services: { app: 5101 }, updatedAt: 2 },
+    ] });
+    await expect(service.reconcile({ cwd: mainPath })).rejects.toMatchObject({ code: "PORT_RECONCILE_INSPECTION_FAILED" });
   });
 });

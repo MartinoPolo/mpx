@@ -2,7 +2,7 @@ import net from "node:net";
 import { describe, expect, it } from "vitest";
 import { MpxError } from "@mpx/core";
 import type { PowerShellRunner, SocketBinder } from "./index.js";
-import { WindowsPortPlatformAdapter } from "./index.js";
+import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "./index.js";
 
 const result = (stdout: string, exitCode = 0) => ({ stdout, stderr: "sensitive stderr", exitCode });
 const runner = (...responses: Array<ReturnType<typeof result>>): PowerShellRunner => ({ run: async () => responses.shift() ?? result("") });
@@ -33,6 +33,8 @@ describe("WindowsPortPlatformAdapter", () => {
     for (const adapter of [new WindowsPortPlatformAdapter({ runner: runner(result("not-json")) }), new WindowsPortPlatformAdapter({ runner: runner(result("secret stdout", 7)) })]) {
       await expect(adapter.inspectListeners()).rejects.toSatisfy((error: unknown) => error instanceof MpxError && !JSON.stringify(error.toPublic()).includes("secret") && !JSON.stringify(error.toPublic()).includes("not-json"));
     }
+    await expect(new WindowsProcessCapabilities({ runner: runner(result("secret stdout", 7)) }).terminateTree({ pid: 41, startFingerprint: "birth-41" })).rejects.toMatchObject({ code: "WINDOWS_POWERSHELL_FAILED" });
+    await expect(new WindowsProcessCapabilities({ runner: { run: async () => { throw new Error("boom"); } } }).terminateTree({ pid: 41, startFingerprint: "birth-41" })).rejects.toMatchObject({ code: "WINDOWS_POWERSHELL_FAILED" });
   });
 
   it("returns JSON-safe allowlisted listener data without command lines or secrets", async () => {
@@ -87,4 +89,70 @@ describe("WindowsPortPlatformAdapter", () => {
       await expect(adapter.killProcess({ pid: 42, startedAt: "2025-01-01T00:00:00.000Z" })).rejects.toMatchObject({ code: status === "missing" ? "PROCESS_DISAPPEARED" : "PROCESS_FINGERPRINT_MISMATCH" });
     }
   });
+
+  it("does not attempt descendant termination when the owned tree root is missing", async () => {
+    let script = "";
+    const capabilities = new WindowsProcessCapabilities({ runner: { run: async value => { script = value; return result('{"status":"missing"}'); } } });
+    await expect(capabilities.terminateTree({ pid: 41, startFingerprint: "birth-41" })).rejects.toMatchObject({ code: "PROCESS_DISAPPEARED" });
+    const rootGuard = script.indexOf("if ($null -eq $root)");
+    const children = script.indexOf("$children = @{}");
+    const stopProcess = script.indexOf("Stop-Process");
+    expect(rootGuard).toBeGreaterThanOrEqual(0);
+    expect(children).toBeGreaterThanOrEqual(0);
+    expect(stopProcess).toBeGreaterThanOrEqual(0);
+    expect(rootGuard).toBeLessThan(children);
+    expect(rootGuard).toBeLessThan(stopProcess);
+  });
+
+  it("does not attempt descendant termination when the tree root fingerprint mismatches", async () => {
+    let script = "";
+    const capabilities = new WindowsProcessCapabilities({ runner: { run: async value => { script = value; return result('{"status":"mismatch"}'); } } });
+    await expect(capabilities.terminateTree({ pid: 41, startFingerprint: "birth-41" })).rejects.toMatchObject({ code: "PROCESS_FINGERPRINT_MISMATCH" });
+    const fingerprintGuard = script.indexOf("if ($actual -cne $StartedAt)");
+    const children = script.indexOf("$children = @{}");
+    const stopProcess = script.indexOf("Stop-Process");
+    expect(fingerprintGuard).toBeGreaterThanOrEqual(0);
+    expect(children).toBeGreaterThanOrEqual(0);
+    expect(stopProcess).toBeGreaterThanOrEqual(0);
+    expect(fingerprintGuard).toBeLessThan(children);
+    expect(fingerprintGuard).toBeLessThan(stopProcess);
+  });
+
+  it("maps an unproven tree termination to structured unknown instead of success", async () => {
+    const capabilities = new WindowsProcessCapabilities({ runner: runner(result('{"status":"unknown","reason":"convergence-timeout"}')) });
+    await expect(capabilities.terminateTree({ pid: 41, startFingerprint: "birth-41" })).rejects.toMatchObject({ code: "PROCESS_TERMINATION_UNKNOWN" });
+  });
+
+  it("stops the verified root before entering the bounded descendant convergence loop", async () => {
+    let script = "";
+    const capabilities = new WindowsProcessCapabilities({ runner: { run: async value => { script = value; return result('{"status":"unknown"}'); } } });
+    await expect(capabilities.terminateTree({ pid: 41, startFingerprint: "birth-41" })).rejects.toMatchObject({ code: "PROCESS_TERMINATION_UNKNOWN" });
+    const rootStop = script.indexOf("Stop-Process -Id $PidValue");
+    const loop = script.indexOf("$consecutiveAbsent");
+    const enumerate = script.indexOf("Get-CimInstance Win32_Process -ErrorAction Stop", rootStop + 1);
+    expect(rootStop).toBeGreaterThanOrEqual(0);
+    expect(loop).toBeGreaterThan(rootStop);
+    expect(enumerate).toBeGreaterThan(rootStop);
+    expect(script).toContain("$maxAttempts");
+    expect(script).toContain("$order");
+    expect(script).toContain("-Force");
+  });
+
+  it("terminates only a fingerprint-matched process tree through the narrow native adapter", async () => {
+    const calls: Array<{ script: string; parameters?: Readonly<Record<string, string>> }> = [];
+    const capabilities = new WindowsProcessCapabilities({ runner: { run: async (script, parameters) => {
+      calls.push({ script, parameters });
+      return calls.length === 1 ? result('{"ProcessId":41,"StartedAt":"birth-41"}') : result('{"status":"killed","count":3}');
+    } } });
+    expect(await capabilities.inspect(41)).toEqual({ pid: 41, startFingerprint: "birth-41" });
+    await capabilities.terminateTree({ pid: 41, startFingerprint: "birth-41" });
+    expect(calls[1]!.parameters).toEqual({ PidValue: "41", StartedAt: "birth-41" });
+    expect(calls[1]!.script).toContain("ParentProcessId");
+    expect(calls[1]!.script).toContain("Get-CimInstance Win32_Process -Filter");
+    expect(calls[1]!.script).toContain("$rootCurrent");
+    expect(calls[1]!.script).toContain("-ErrorAction Stop");
+    expect(calls[1]!.script).not.toContain("SilentlyContinue");
+    expect(calls[1]!.script).not.toContain("taskkill");
+  });
+
 });

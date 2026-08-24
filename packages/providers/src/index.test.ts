@@ -10,7 +10,7 @@ describe("provider contracts", () => {
   it("publishes the migration capability contract", () => {
     expect({ issues: ISSUE_CAPABILITIES, review: REVIEW_CAPABILITIES, ci: CI_CAPABILITIES }).toEqual({
       issues: ["issue.list", "issue.view", "issue.create", "issue.edit", "issue.comment", "issue.label", "issue.move", "issue.finish"],
-      review: ["review.view", "review.create", "review.update", "review.ready"],
+      review: ["review.view", "review.create", "review.update", "review.comment", "review.ready", "review.merge"],
       ci: ["ci.status", "ci.watch", "ci.logs", "ci.retry"],
     });
   });
@@ -27,6 +27,13 @@ describe("provider contracts", () => {
     expect(Object.isFrozen(github.capabilities)).toBe(true);
     expect(providerRegistry.schema("none", "issues")).toEqual({ type: "object", properties: {}, additionalProperties: false });
   });
+
+  it("advertises only issue capabilities implemented by each trusted built-in", () => {
+    expect(providerRegistry.get("github", "issues").capabilities).not.toContain("issue.move");
+    expect(providerRegistry.get("gitlab", "issues").capabilities).not.toContain("issue.move");
+    expect(providerRegistry.get("kanbanflow", "issues").capabilities).toContain("issue.move");
+    expect(providerRegistry.get("local", "issues").capabilities).toEqual([]);
+  });
 });
 
 describe("registry validation", () => {
@@ -34,6 +41,12 @@ describe("registry validation", () => {
   it("rejects duplicate IDs", () => {
     expect(() => new ProviderRegistry([github, github])).toThrowError(expect.objectContaining({ code: "PROVIDER_DUPLICATE" }));
   });
+  it("accepts only caller-explicit trusted extension descriptors", () => {
+    const extension = { id: "trusted-issues", roles: ["issues"], capabilities: ["issue.list"], backend: "trusted-sdk", schema: { type: "object", properties: {}, additionalProperties: false } } as const;
+    const registry = new ProviderRegistry([...BUILTIN_PROVIDERS, extension], [extension]);
+    expect(registry.get("trusted-issues", "issues")).toMatchObject({ backend: "trusted-sdk", capabilities: ["issue.list"] });
+  });
+
   it("rejects executable/backend injection", () => {
     expect(() => new ProviderRegistry([{ ...github, backend: "filesystem" }])).toThrowError(expect.objectContaining({ code: "UNTRUSTED_PROVIDER_INJECTION" }));
   });

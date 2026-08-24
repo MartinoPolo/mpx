@@ -1,6 +1,7 @@
 import { execFile as execFileCallback } from "node:child_process";
 import net from "node:net";
 import { promisify } from "node:util";
+import path from "node:path";
 import { MpxError, parseStrictJson } from "@mpx/core";
 import type { ListenerInfo, PortHold, PortPlatformAdapter, ProcessFingerprint, ProcessInfo } from "@mpx/ports";
 
@@ -11,6 +12,11 @@ export interface SocketBinder { bind(port: number, host: "127.0.0.1" | "::1"): P
 export interface WindowsPortPlatformAdapterOptions { runner?: PowerShellRunner; binder?: SocketBinder }
 
 const execFile = promisify(execFileCallback);
+function nativePowerShellExecutable(): string {
+  const systemRoot = process.env.SystemRoot ?? process.env.SYSTEMROOT;
+  if (!systemRoot || !path.isAbsolute(systemRoot)) throw new MpxError({ code: "WINDOWS_POWERSHELL_UNAVAILABLE", message: "SystemRoot must identify an absolute Windows installation root." });
+  return path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
 
 export class NativePowerShellRunner implements PowerShellRunner {
   async run(script: string, parameters: Readonly<Record<string, string>> = {}): Promise<PowerShellResult> {
@@ -24,7 +30,7 @@ export class NativePowerShellRunner implements PowerShellRunner {
       environment[environmentName] = value;
     }
     try {
-      const { stdout, stderr } = await execFile("powershell.exe", args, { encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024, env: environment });
+      const { stdout, stderr } = await execFile(nativePowerShellExecutable(), args, { encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024, env: environment });
       return { stdout, stderr, exitCode: 0 };
     } catch (error) {
       const failure = error as { stdout?: string; stderr?: string; code?: number };
@@ -75,6 +81,91 @@ $actual = if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}el
 if ($actual -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
 Stop-Process -Id $PidValue -ErrorAction Stop
 @{status='killed'} | ConvertTo-Json -Compress`;
+
+const TREE_KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
+$StartedAt = $env:MPX_STARTED_AT
+function Get-Fingerprint($Process) { if($Process.CreationDate){$Process.CreationDate.ToUniversalTime().ToString('o')}else{''} }
+try {
+  # Verify the complete root identity, then stop it before inspecting descendants again.
+  $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+  $root = $all | Where-Object { $_.ProcessId -eq $PidValue } | Select-Object -First 1
+  if ($null -eq $root) { @{status='missing'} | ConvertTo-Json -Compress; exit 0 }
+  $actual = Get-Fingerprint $root
+  if ($actual -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
+  $rootCurrent = @(Get-CimInstance Win32_Process -Filter ("ProcessId=" + $PidValue) -ErrorAction Stop)
+  if ($rootCurrent.Count -eq 0) { @{status='missing'} | ConvertTo-Json -Compress; exit 0 }
+  if ($rootCurrent.Count -ne 1 -or (Get-Fingerprint $rootCurrent[0]) -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
+  Stop-Process -Id $PidValue -Force -ErrorAction Stop
+
+  $maxAttempts = 20
+  $consecutiveAbsent = 0
+  $totalStopped = 1
+  for ($attempt = 0; $attempt -lt $maxAttempts; $attempt++) {
+    # Every pass uses a fresh complete table; the closure is rooted at the original PID.
+    $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+    $rootCurrent = @($all | Where-Object { $_.ProcessId -eq $PidValue } | Select-Object -First 1)
+    if ($rootCurrent.Count -gt 0 -and (Get-Fingerprint $rootCurrent[0]) -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
+    $children = @{}
+    foreach($item in $all){ $parent=[int]$item.ParentProcessId; if(!$children.ContainsKey($parent)){$children[$parent]=@()}; $children[$parent] += ,$item }
+    $order = New-Object System.Collections.Generic.List[object]
+    $visited = @{}
+    function Add-Descendants([int]$parent){
+      if($visited.ContainsKey($parent)){ return }
+      $visited[$parent] = $true
+      if(!$children.ContainsKey($parent)){ return }
+      foreach($child in @($children[$parent])){ Add-Descendants ([int]$child.ProcessId); $order.Add($child) }
+    }
+    Add-Descendants $PidValue
+
+    # The post-order closure is leaf-first. Never stop a PID without rechecking its birth fingerprint.
+    foreach($child in $order){
+      $snapshotFingerprint = Get-Fingerprint $child
+      if (!$snapshotFingerprint) { @{status='unknown';reason='descendant-fingerprint-unavailable'} | ConvertTo-Json -Compress; exit 0 }
+      $current = @(Get-CimInstance Win32_Process -Filter ("ProcessId=" + [int]$child.ProcessId) -ErrorAction Stop)
+      if ($current.Count -eq 0) { continue }
+      if ($current.Count -ne 1 -or (Get-Fingerprint $current[0]) -cne $snapshotFingerprint) { @{status='unknown';reason='descendant-fingerprint-mismatch'} | ConvertTo-Json -Compress; exit 0 }
+      Stop-Process -Id ([int]$child.ProcessId) -Force -ErrorAction Stop
+      $totalStopped++
+    }
+
+    if ($rootCurrent.Count -eq 0 -and $order.Count -eq 0) { $consecutiveAbsent++ } else { $consecutiveAbsent = 0 }
+    if ($consecutiveAbsent -ge 2) { @{status='killed';count=$totalStopped} | ConvertTo-Json -Compress; exit 0 }
+  }
+  @{status='unknown';reason='convergence-not-proven'} | ConvertTo-Json -Compress
+} catch {
+  @{status='unknown';reason='windows-process-operation-failed'} | ConvertTo-Json -Compress
+}`;
+
+export interface OwnedWindowsProcess { pid: number; startFingerprint: string }
+export interface WindowsProcessCapabilitiesOptions { runner?: PowerShellRunner }
+
+/** Narrow Windows-native process identity and tree termination boundary. */
+export class WindowsProcessCapabilities {
+  private readonly runner: PowerShellRunner;
+  constructor(options: WindowsProcessCapabilitiesOptions = {}) { this.runner = options.runner ?? new NativePowerShellRunner(); }
+  private async invoke(script: string, parameters: Readonly<Record<string, string>>): Promise<unknown> {
+    let output: PowerShellResult;
+    try { output = await this.runner.run(script, parameters); } catch { throw new MpxError({ code: "WINDOWS_POWERSHELL_FAILED", message: "Windows process operation failed.", retryable: true }); }
+    if (output.exitCode !== 0) throw new MpxError({ code: "WINDOWS_POWERSHELL_FAILED", message: "Windows process operation failed.", retryable: true });
+    try { return output.stdout.trim() ? parseStrictJson(output.stdout) : null; } catch { throw malformed(); }
+  }
+  async inspect(pid: number): Promise<OwnedWindowsProcess | undefined> {
+    if (!Number.isInteger(pid) || pid < 1) throw new MpxError({ code: "PROCESS_FINGERPRINT_INVALID", message: "A valid PID is required." });
+    const parsed = await this.invoke(PROCESS_SCRIPT, { PidValue: String(pid) });
+    if (parsed === null) return undefined;
+    const item = record(parsed); const actualPid = requiredInteger(item.ProcessId); const startedAt = optionalString(item.StartedAt);
+    if (actualPid !== pid || !startedAt) throw malformed();
+    return { pid, startFingerprint: startedAt };
+  }
+  async terminateTree(process: OwnedWindowsProcess): Promise<void> {
+    const parsed = record(await this.invoke(TREE_KILL_SCRIPT, { PidValue: String(process.pid), StartedAt: process.startFingerprint }));
+    if (parsed.status === "killed") return;
+    if (parsed.status === "missing") throw new MpxError({ code: "PROCESS_DISAPPEARED", message: "The process disappeared before it could be terminated." });
+    if (parsed.status === "mismatch") throw new MpxError({ code: "PROCESS_FINGERPRINT_MISMATCH", message: "The PID now belongs to a different process." });
+    if (parsed.status === "unknown") throw new MpxError({ code: "PROCESS_TERMINATION_UNKNOWN", message: "The process tree could not be proven terminated.", retryable: true });
+    throw malformed();
+  }
+}
 
 type UnknownRecord = Record<string, unknown>;
 const record = (value: unknown): UnknownRecord => {
