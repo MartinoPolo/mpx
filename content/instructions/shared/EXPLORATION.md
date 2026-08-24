@@ -7,15 +7,15 @@ Canonical policy for finding things. Skills reference this file instead of resta
 Searching from the main thread pulls every hit into the conversation and burns the
 context the orchestration itself needs. Spawn `Explore` and keep only its conclusion.
 
-Applies t<configured-path>locating files, tracing a symbol, discovering naming conventions,
+Applies to: locating files, tracing a symbol, discovering naming conventions,
 mapping a subsystem. Reading two or three already-known files is not exploration —
 just read them.
 
 ## Never pass `model` when spawning `Explore`
 
-`agents/Explore.md` pins `mode<configured-path>appropriate runtime class` and overrides the built-in, so every
+`agents/Explore.md` pins `model: appropriate runtime class` and overrides the built-in, so every
 exploration — including the ones runtime delegates automatically, without anyone
-asking — already runs on appropriate runtime class. Verifie<configured-path>bare `Explore` spawns resolve to
+asking — already runs on appropriate runtime class. Verified: bare `Explore` spawns resolve to
 `runtime-appropriate runtime class-5` while the main thread runs `runtime-appropriate runtime class-5[1m]`.
 
 Passing `model` at the call site re-states what the agent already declares and
@@ -29,24 +29,26 @@ to keep research fast and cheap. Every other agent loads both. There is no setti
 change this, and it is tied to the **name** `Explore`, so the local override inherits
 the behaviour.
 
-Consequenc<configured-path>repo rules, naming conventions, and the `MPX_*` table in this file do not
+Consequence: repo rules, naming conventions, and the `MPX_*` table in this file do not
 reach an `Explore` sub-agent on their own. Any rule the search depends on goes into the
 delegation prompt itself. The main thread — not the sub-agent — reconciles findings
 against repo conventions.
 
-`Explore` is also one-sho<configured-path>it returns no agent ID and cannot be resumed with
+`Explore` is also one-shot: it returns no agent ID and cannot be resumed with
 `SendMessage`. Ask for everything you need in the first prompt.
 
 ## State the breadth
 
-`Explore`'s body maps these words to concrete stopping criteria, so say which you wan<configured-path>| Breadth         | Use for                                                        |
+`Explore`'s body maps these words to concrete stopping criteria, so say which you want:
+
+| Breadth         | Use for                                                        |
 | --------------- | -------------------------------------------------------------- |
 | `quick`         | One known concept, obvious location                            |
 | `medium`        | Obvious locations plus one alternative naming convention       |
 | `very thorough` | Exhaust conventions, sibling dirs, config, tests               |
 
 Breadth is a search-scope instruction, not a reasoning-effort setting. It reaches the
-agent as prompt text and the agent body acts on it. The `effor<configured-path>reasoning knob is
+agent as prompt text and the agent body acts on it. The `effort:` reasoning knob is
 frontmatter only — see [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md) § 7.
 
 ## Explore instead of asking
@@ -60,7 +62,7 @@ Used by `mpx grill`, `mpx hitl`, and any skill that interviews the user.
 ## Library documentation is not in this repo
 
 For third-party library or framework behaviour, spawn `context7-docs-fetcher`
-(Context7 MC<configured-path>resolve-library-id`, then `query-docs`). Do not infer an API from
+(Context7 MCP: `resolve-library-id`, then `query-docs`). Do not infer an API from
 local `node_modules` or from memory.
 
 ## Paths outside the working directory
@@ -89,7 +91,7 @@ variable as unavailable and say so; do not substitute a guessed path.
 
 Markdown does not interpolate environment variables, so `$MPX_WORK` written in a
 skill body is literal text. There are exactly three working channels for a machine
-root to reach an agen<configured-path>the `machine-paths.mjs` SessionStart hook (main thread only —
+root to reach an agent: the `machine-paths.mjs` SessionStart hook (main thread only —
 it does **not** propagate into sub-agent contexts), a runtime lookup inside the agent
 (`env | grep '^MPX_'`), and `` !`command` `` preprocessing in a skill body.
 

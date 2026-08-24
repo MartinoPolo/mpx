@@ -21,12 +21,16 @@ Do NOT edit files. Do NOT retry with modified commands.
 ## Output
 
 ```markdown
-Checks Ru<configured-path>- [command] — PASS
+Checks Run:
+
+- [command] — PASS
 - [command] — FAIL
 
-Failure<configured-path>- [command]
+Failures:
+
+- [command]
   - file:line (if available)
   - error summary
 
-Overal<configured-path>PASS | FAIL
+Overall: PASS | FAIL
 ```

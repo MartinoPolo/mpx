@@ -20,16 +20,22 @@ Wrap `./scripts/detect-project-scripts.mjs`. Use this skill when agents need a r
 
 ## Detector Contract
 
-Script pat<configured-path>bash
+Script path:
+
+```bash
 SCRIPT_DETECTOR="./scripts/detect-project-scripts.mjs"
 node "$SCRIPT_DETECTOR"
 ```
 
-Usag<configured-path>bash
+Usage:
+
+```bash
 node "$SCRIPT_DETECTOR" [project_dir] [--recursive|-r] [--category|-c <name>] [--json]
 ```
 
-Category option<configured-path>- `frontend`
+Category options:
+
+- `frontend`
 - `backend`
 - `database`
 - `build`
@@ -38,7 +44,9 @@ Category option<configured-path>- `frontend`
 - `test`
 - `other`
 
-Behavio<configured-path>- Default (no flags): root `package.json` scripts only, concise text lines
+Behavior:
+
+- Default (no flags): root `package.json` scripts only, concise text lines
 - `--recursive`: scans nested `package.json` files and prints package headers with category groups
 - `--category`: filters scripts to one category in either default or recursive mode
 - `--json`: returns machine-readable JSON with package/script metadata
@@ -49,17 +57,23 @@ Behavio<configured-path>- Default (no flags): root `package.json` scripts only, 
 node "$SCRIPT_DETECTOR" <target-path>
 ```
 
-Default output forma<configured-path>- `<packageManager> <scriptName> (<scriptCommand>) [:port]`
+Default output format:
+
+- `<packageManager> <scriptName> (<scriptCommand>) [:port]`
 
 If detector returns an error line, report it and stop.
 
-## Step 1<configured-path>Optional detector modes
+## Step 1a: Optional detector modes
 
-Recursive sca<configured-path>bash
+Recursive scan:
+
+```bash
 node "$SCRIPT_DETECTOR" <target-path> --recursive
 ```
 
-Category filtered sca<configured-path>bash
+Category filtered scan:
+
+```bash
 node "$SCRIPT_DETECTOR" <target-path> --category frontend
 ```
 
@@ -71,20 +85,27 @@ node "$SCRIPT_DETECTOR" <target-path> --recursive --json
 
 ## Example Outputs
 
-Default, no flag<configured-path>text
+Default, no flags:
+
+```text
 yarn build (turbo run build)
 yarn dev (turbo run dev)
 yarn lint (turbo run lint)
 ```
 
-With category filte<configured-path>text
+With category filter:
+
+```text
 yarn dev (turbo run dev)
 yarn frontend (yarn turbo run start:dev --filter=@atc/frontend)
 ```
 
-Recursive with package header<configured-path>text
+Recursive with package headers:
+
+```text
 [apps/frontend] @atc/frontend
-  fronten<configured-path>yarn dev (vite --port 3000 --strictPort || vite --port 3010) :3000
+  frontend:
+    yarn dev (vite --port 3000 --strictPort || vite --port 3010) :3000
 ```
 
 JSON mode (truncated):
@@ -112,15 +133,19 @@ JSON mode (truncated):
 
 ## Step 2: Rank preferred run commands
 
-For each category, prefer scripts in this orde<configured-path>- Fronten<configured-path>dev`, `start`, `preview`, `dev:web`, `dev:client`
-- Backen<configured-path>dev:api`, `dev:server`, `start:api`, `start:server`, `dev`, `start`
-- Databas<configured-path>db:migrate`, `migrate`, `prisma:migrate`, `db:seed`, `seed`
+For each category, prefer scripts in this order:
+
+- Frontend: `dev`, `start`, `preview`, `dev:web`, `dev:client`
+- Backend: `dev:api`, `dev:server`, `start:api`, `start:server`, `dev`, `start`
+- Database: `db:migrate`, `migrate`, `prisma:migrate`, `db:seed`, `seed`
 
 Favor root package commands when equivalent.
 
 ## Step 3: Return concise plan
 
-Return this structur<configured-path>json
+Return this structure:
+
+```json
 {
   "packageManager": "npm|pnpm|yarn|bun|unknown",
   "frontend": {

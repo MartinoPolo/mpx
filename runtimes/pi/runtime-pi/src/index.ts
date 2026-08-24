@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   parseResolvedSkillManifestV4,
@@ -8,20 +8,20 @@ import {
   publishRuntimeArtifact,
   validateRuntimeContext,
   type PublishedRuntimeArtifact,
+  type PublishedRuntimeArtifactReference,
   type RuntimeBinding,
   type RuntimeContextV1,
-  type RuntimeSkillArtifactReferenceV4,
 } from "@mpx/runtime-contracts";
-import { classifyDangerousCommand } from "@mpx/runtime-hooks";
+import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from "@mpx/runtime-hooks";
 import {
   initialModelContext,
   enumerateSkillDirectory,
   loadSkillBody,
+  MAX_SKILL_BODY_BYTES,
   modelSearchSkills,
   verifyRuntimeSkillArtifact,
-  type CanonicalSkill,
+  type CatalogSkill,
   type LoadedSkillBody,
-  type ProjectSkill,
   type ResolvedManifest,
   type RuntimeSkillArtifact,
 } from "@mpx/skills";
@@ -36,7 +36,7 @@ export interface PiAdapterInput {
   context: RuntimeContextV1;
   manifest: ResolvedManifest;
   artifact: RuntimeSkillArtifact;
-  catalog: readonly CanonicalSkill[];
+  catalog: readonly CatalogSkill[];
   canonicalRoot: string;
   currentBinding: RuntimeBinding;
   expectedLaunch: { launchKey: string; descriptorDigest: string };
@@ -86,9 +86,8 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
 
   for (const entry of [...input.artifact.entries].sort((a, b) => a.identity.localeCompare(b.identity))) {
     if (!entry.permissions.humanInvocation) continue;
-    const expectedName = `/mpx:${entry.identity}`;
-    if (entry.publicName !== expectedName) restart([{ code: "PUBLIC_NAME_INVALID" }]);
-    input.pi.registerCommand(expectedName.slice(1), {
+    if (!entry.publicName.startsWith("/") || entry.publicName.length < 2) restart([{ code: "PUBLIC_NAME_INVALID" }]);
+    input.pi.registerCommand(entry.publicName.slice(1), {
       ...(entry.description ? { description: entry.description } : {}),
       handler: async (_args: string) => { const loaded = await expand(entry.identity, "human-explicit"); await input.pi.sendUserMessage([{ type: "text", text: loaded.wrappedBody }]); },
     });
@@ -102,15 +101,15 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
   };
 }
 
-export interface PiProjectionRevalidation { readonly directory: string; readonly reference: RuntimeSkillArtifactReferenceV4 }
+export interface PiProjectionRevalidation { readonly directory: string; readonly reference: PublishedRuntimeArtifactReference }
 export interface PiPublishedProjection {
   readonly directory: string; readonly extension: string; readonly runtimeContextFile: string; readonly theme: "green";
-  readonly artifactKey: string; readonly reference: RuntimeSkillArtifactReferenceV4; readonly files: readonly string[];
-  readonly reused: boolean; readonly revalidation: PiProjectionRevalidation; readonly projectSkills: readonly string[];
+  readonly artifactKey: string; readonly reference: PublishedRuntimeArtifactReference; readonly files: readonly string[];
+  readonly reused: boolean; readonly revalidation: PiProjectionRevalidation;
 }
 export interface PiInvocationInput {
-  executable: string; accountRoot: string; cwd: string; runtimeContext: RuntimeContextV1; projectSkills?: readonly string[]; immutableProjectionDirectory?: string; statusSnapshotPath?: string;
-  extension?: string; theme?: "green" | "amber"; runtimeContextFile?: string; projection?: PiPublishedProjection; projectionReference?: RuntimeSkillArtifactReferenceV4;
+  executable: string; accountRoot: string; cwd: string; runtimeContext: RuntimeContextV1; immutableProjectionDirectory?: string; statusSnapshotPath?: string;
+  extension?: string; theme?: "green" | "amber"; runtimeContextFile?: string; projection?: PiPublishedProjection; projectionReference?: PublishedRuntimeArtifactReference;
 }
 export interface PiInvocationPlan { executable: string; cwd: string; args: string[]; env: Record<string, string> }
 function absolute(value: string, label: string): string {
@@ -122,17 +121,11 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
   const runtimeContextFile = input.projection?.runtimeContextFile ?? input.runtimeContextFile;
   const theme = input.projection?.theme ?? input.theme;
   if (!extension || !runtimeContextFile || !theme) throw new Error("validated Pi projection is required");
-  if (input.projection && (input.projection.revalidation.directory !== input.projection.directory || input.projection.revalidation.reference.artifactKey !== input.projection.reference.artifactKey)) throw new Error("Pi projection revalidation binding is invalid");
+  if (input.projection && (input.projection.revalidation.directory !== input.projection.directory || input.projection.revalidation.reference.projectionKey !== input.projection.reference.projectionKey)) throw new Error("Pi projection revalidation binding is invalid");
   const context = parseRuntimeContextV1(input.runtimeContext);
-  const projectionDirectory = input.projection?.directory ?? input.immutableProjectionDirectory;
-  const skills = [...(input.projectSkills ?? input.projection?.projectSkills ?? [])].map((skill) => {
-    const normalized = absolute(skill, "immutable project skill");
-    if (!projectionDirectory || !containsRealPath(path.join(projectionDirectory, "project-skills"), normalized)) throw new Error("project skill must be inside the immutable projection");
-    return normalized;
-  });
   return {
     executable: absolute(input.executable, "trusted executable"), cwd: absolute(input.cwd, "cwd"),
-    args: ["--no-extensions", "--extension", absolute(extension, "immutable extension"), "--no-skills", ...skills.flatMap((skill) => ["--skill", skill]), "--theme", theme],
+    args: ["--no-extensions", "--extension", absolute(extension, "immutable extension"), "--no-skills", "--theme", theme],
     env: { PI_CODING_AGENT_DIR: absolute(input.accountRoot, "native account root"), MPX_RUNTIME: "pi", MPX_RUNTIME_CONTEXT: JSON.stringify(context), MPX_RUNTIME_CONTEXT_FILE: absolute(runtimeContextFile, "runtime context"), ...(input.statusSnapshotPath ? { MPX_STATUS_SNAPSHOT_FILE: absolute(input.statusSnapshotPath, "status snapshot") } : {}), ...((input.projection?.reference ?? input.projectionReference) ? { MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(input.projection?.reference ?? input.projectionReference) } : {}) },
   };
 }
@@ -156,7 +149,7 @@ export function createPiProjection() {
 export interface PiProjectionBuildInput {
   readonly manifest: ResolvedManifest;
   readonly artifact: RuntimeSkillArtifact;
-  readonly catalog: readonly CanonicalSkill[];
+  readonly catalog: readonly CatalogSkill[];
   readonly canonicalRoot: string;
   readonly context: RuntimeContextV1;
   readonly expectedLaunch: { readonly launchKey: string; readonly descriptorDigest: string };
@@ -166,7 +159,7 @@ export interface PiProjectionBuildInput {
   readonly launchBanner: string;
   readonly assetsRoot?: string;
   readonly vendorProvenanceFile?: string;
-  readonly projectSkills?: readonly ProjectSkill[];
+  readonly artifactRevalidator?: Parameters<typeof publishRuntimeArtifact>[0]["revalidate"];
 }
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -194,7 +187,7 @@ function piExtensionSource(descriptor: {
   const data = JSON.stringify(descriptor);
   return [
     'import { createHash } from "node:crypto";',
-    'import { lstat, readFile, readdir, realpath } from "node:fs/promises";',
+    'import { lstat, open, opendir, realpath } from "node:fs/promises";',
     'import path from "node:path";',
     'import { fileURLToPath } from "node:url";',
     'const root = path.dirname(fileURLToPath(import.meta.url));',
@@ -206,22 +199,31 @@ function piExtensionSource(descriptor: {
     'function within(rootPath, candidate) { const relative = path.relative(rootPath, candidate); return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)); }',
     'function disclosure() { const lines = projection.entries.filter((entry) => projection.modelSearchAllowlist.includes(entry.identity)).map((entry) => entry.exposure === "full" ? `- ${entry.publicName}: ${entry.canonicalDescription}${entry.canonicalTriggers ? ` (triggers: ${entry.canonicalTriggers})` : ""}` : `- ${entry.publicName}`); return lines.length === 0 ? "" : "\\n\\nMPX skills:\\n" + lines.join("\\n"); }',
     'function score(entry, query) { if (query.length === 0) return 1; const haystack = `${entry.identity} ${entry.canonicalDescription ?? ""} ${entry.canonicalTriggers ?? ""}`.toLowerCase(); if (!haystack.includes(query)) return 0; return entry.identity.toLowerCase().includes(query) ? 3 : 1; }',
-    'async function regularFile(file, code) { let stat; try { stat = await lstat(file); } catch { restart(code); } if (!stat.isFile() || stat.isSymbolicLink()) restart(code); return stat; }',
-    'async function readJson(file, code) { let text; try { text = await readFile(file, "utf8"); } catch { restart(code); } try { return JSON.parse(text); } catch { restart(code); } }',
-    'function expectedProjectionReference(fileMap, reference) { const fileMapHash = digest(fileMap); const artifactKey = digest({ schemaVersion: 4, runtime: reference.runtime, manifestKey: reference.manifestKey, fileMapHash }); return { schemaVersion: 4, runtime: reference.runtime, manifestKey: reference.manifestKey, artifactKey, fileMapHash }; }',
+    'const MAX_CONTEXT_BYTES = 1024 * 1024, MAX_METADATA_BYTES = 4 * 1024 * 1024, MAX_STATUS_BYTES = 1024 * 1024, MAX_FILE_BYTES = 16 * 1024 * 1024, MAX_AGGREGATE_BYTES = 256 * 1024 * 1024, MAX_FILES = 10000, MAX_DIRECTORIES = 10000, MAX_DEPTH = 64;',
+    'async function readBounded(file, maximum, code) { let handle; try { handle=await open(file,"r"); const opened=await handle.stat({bigint:true}), named=await lstat(file,{bigint:true}); if(!opened.isFile()||!named.isFile()||named.isSymbolicLink()||opened.dev!==named.dev||opened.ino!==named.ino||opened.size>BigInt(maximum))restart(code); const size=Number(opened.size),bytes=Buffer.alloc(size);let offset=0;while(offset<bytes.length){const read=await handle.read(bytes,offset,bytes.length-offset,offset);if(read.bytesRead===0)restart(code);offset+=read.bytesRead;}if((await handle.read(Buffer.alloc(1),0,1,size)).bytesRead!==0)restart(code);const finalOpened=await handle.stat({bigint:true}),finalNamed=await lstat(file,{bigint:true});if(!finalOpened.isFile()||!finalNamed.isFile()||finalNamed.isSymbolicLink()||finalOpened.dev!==opened.dev||finalOpened.ino!==opened.ino||finalNamed.dev!==opened.dev||finalNamed.ino!==opened.ino||finalOpened.size!==opened.size||finalNamed.size!==opened.size||finalOpened.mtimeNs!==opened.mtimeNs||finalOpened.ctimeNs!==opened.ctimeNs||finalNamed.mtimeNs!==named.mtimeNs||finalNamed.ctimeNs!==named.ctimeNs)restart(code);return bytes;}catch{restart(code);}finally{await handle?.close().catch(()=>{});} }',
+    'async function readJson(file, code, maximum = MAX_CONTEXT_BYTES) { const text = (await readBounded(file, maximum, code)).toString("utf8"); try { return JSON.parse(text); } catch { restart(code); } }',
+    'function expectedProjectionReference(fileMap, reference) { const fileMapHash = digest(fileMap); const projectionKey = digest({ schemaVersion: 1, launchBinding: reference.launchBinding, fileMapHash }); return { projectionKey, launchBinding: reference.launchBinding, fileMapHash }; }',
     'async function validateContext() { const file = await readJson(path.join(root, "runtime-context.json"), "LAUNCH_CONTEXT_CHANGED"); let env; try { env = JSON.parse(process.env.MPX_RUNTIME_CONTEXT ?? "null"); } catch { restart("LAUNCH_CONTEXT_CHANGED"); } if (!same(file, env) || file?.runtimeArtifact?.runtime !== "pi" || file?.launchKey !== env?.launchKey || file?.launchDescriptor?.digest !== env?.launchDescriptor?.digest || file?.manifestKey !== projection.manifestKey || !same(file?.runtimeArtifact, env?.runtimeArtifact) || !same(file?.binding, env?.binding)) restart("LAUNCH_CONTEXT_CHANGED"); return file; }',
-    'async function scan(directory, files) { for (const entry of (await readdir(directory, { withFileTypes: true }).catch(() => restart("ARTIFACT_FILE_MAP_CHANGED"))).sort((left, right) => left.name.localeCompare(right.name))) { const absolute = path.join(directory, entry.name); let stat; try { stat = await lstat(absolute); } catch { restart("ARTIFACT_FILE_MAP_CHANGED"); } if (stat.isSymbolicLink()) restart("ARTIFACT_SYMLINK"); let resolved; try { resolved = await realpath(absolute); } catch { restart("ARTIFACT_FILE_MAP_CHANGED"); } if (!within(root, resolved)) restart("ARTIFACT_ESCAPE"); if (stat.isDirectory()) await scan(absolute, files); else if (stat.isFile()) files.push(path.relative(root, absolute).split(path.sep).join("/")); else restart("ARTIFACT_SPECIAL_FILE"); } }',
-    'async function validateProjection() { let expected; try { expected = JSON.parse(process.env.MPX_RUNTIME_PROJECTION_REFERENCE ?? "null"); } catch { restart("ARTIFACT_BINDING_CHANGED"); } if (!expected || expected.runtime !== "pi") restart("ARTIFACT_BINDING_CHANGED"); const metadata = await readJson(path.join(root, ".mpx-runtime-artifact.json"), "ARTIFACT_BINDING_CHANGED"); if (!same(metadata?.reference, expected)) restart("ARTIFACT_BINDING_CHANGED"); if (!Array.isArray(metadata?.fileMap)) restart("ARTIFACT_BINDING_CHANGED"); const fileMap = metadata.fileMap.map((entry) => ({ path: String(entry?.path ?? ""), sha256: String(entry?.sha256 ?? ""), bytes: Number(entry?.bytes) })).sort((left, right) => left.path.localeCompare(right.path)); if (fileMap.some((entry) => !entry.path || !/^[a-f0-9]{64}$/u.test(entry.sha256) || !Number.isSafeInteger(entry.bytes) || entry.bytes < 0 || entry.path === ".mpx-runtime-artifact.json")) restart("ARTIFACT_BINDING_CHANGED"); if (!same(expectedProjectionReference(fileMap, metadata.reference), metadata.reference)) restart("ARTIFACT_BINDING_CHANGED"); const actualFiles = []; await scan(root, actualFiles); const expectedFiles = fileMap.map((entry) => entry.path).sort(); const publishedFiles = actualFiles.filter((entry) => entry !== ".mpx-runtime-artifact.json").sort(); if (!same(publishedFiles, expectedFiles)) restart("ARTIFACT_FILE_MAP_CHANGED"); for (const entry of fileMap) { const file = path.join(root, ...entry.path.split("/")); const resolved = await realpath(file).catch(() => restart("ARTIFACT_FILE_MAP_CHANGED")); if (!within(root, resolved)) restart("ARTIFACT_ESCAPE"); const stat = await regularFile(file, "ARTIFACT_FILE_MAP_CHANGED"); const content = await readFile(file).catch(() => restart("ARTIFACT_FILE_MAP_CHANGED")); if (stat.size !== entry.bytes || digest(content) !== entry.sha256) restart("ARTIFACT_FILE_MAP_CHANGED"); } }',
+    'const metadataControl = /[\\0-\\x1F\\x7F-\\x9F]/u, windowsReserved = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/iu; function metadataText(value, maximum) { return typeof value === "string" && value.length > 0 && value.length <= maximum && !metadataControl.test(value); } function portableFile(value) { if (!metadataText(value,4096) || value.includes("\\\\") || path.posix.isAbsolute(value)) return false; const parts=value.split("/"); return parts.length<=MAX_DEPTH && parts.every((part)=>part.length>0&&part!=="."&&part!==".."&&part.length<=255&&!/[<>:\"|?*]/u.test(part)&&!/[. ]$/u.test(part)&&!windowsReserved.test(part)); }',
+    'async function validateReference() { let expected; try { expected = JSON.parse(process.env.MPX_RUNTIME_PROJECTION_REFERENCE ?? "null"); } catch { restart("ARTIFACT_BINDING_CHANGED"); } const referenceKeys=["projectionKey","launchBinding","fileMapHash"], bindingKeys=["launchKey","descriptorDigest","runtimeArtifactKey","runtime","manifestKey"]; if(!exact(expected,referenceKeys)||!exact(expected.launchBinding,bindingKeys)||!/^[a-f0-9]{64}$/u.test(expected.projectionKey)||!/^[a-f0-9]{64}$/u.test(expected.fileMapHash)||!metadataText(expected.launchBinding.launchKey,256)||!metadataText(expected.launchBinding.descriptorDigest,256)||!metadataText(expected.launchBinding.runtimeArtifactKey,256)||expected.launchBinding.runtime!=="pi"||!metadataText(expected.launchBinding.manifestKey,256)||expected.launchBinding.runtimeArtifactKey!==projection.artifactKey) restart("ARTIFACT_BINDING_CHANGED"); const metadata = await readJson(path.join(root, ".mpx-runtime-artifact.json"), "ARTIFACT_BINDING_CHANGED", MAX_METADATA_BYTES); if(!exact(metadata,["schemaVersion","reference","fileMap"])||metadata.schemaVersion!==1||!exact(metadata.reference,referenceKeys)||!exact(metadata.reference.launchBinding,bindingKeys)||!same(metadata.reference,expected)||!Array.isArray(metadata.fileMap)||metadata.fileMap.length>MAX_FILES) restart("ARTIFACT_BINDING_CHANGED"); let aggregate=0, previous=""; const paths=new Set(), expectedDirectories=new Set([""]); const fileMap=[]; for(const entry of metadata.fileMap){const identity=typeof entry?.path==="string"?entry.path.toLowerCase():"";if(!exact(entry,["path","sha256","bytes"])||!portableFile(entry.path)||entry.path===".mpx-runtime-artifact.json"||paths.has(identity)||(previous&&previous>=entry.path)||!/^[a-f0-9]{64}$/u.test(entry.sha256)||!Number.isSafeInteger(entry.bytes)||entry.bytes<0||entry.bytes>MAX_FILE_BYTES)restart("ARTIFACT_BINDING_CHANGED"); paths.add(identity);previous=entry.path;aggregate+=entry.bytes; if(!Number.isSafeInteger(aggregate)||aggregate>MAX_AGGREGATE_BYTES)restart("ARTIFACT_BINDING_CHANGED"); const parts=entry.path.split("/"); for(let index=1;index<parts.length;index++)expectedDirectories.add(parts.slice(0,index).join("/")); fileMap.push({path:entry.path,sha256:entry.sha256,bytes:entry.bytes});} if(expectedDirectories.size>MAX_DIRECTORIES)restart("ARTIFACT_BINDING_CHANGED"); if(!same(expectedProjectionReference(fileMap,metadata.reference),metadata.reference))restart("ARTIFACT_BINDING_CHANGED"); return { reference: expected, fileMap, expectedDirectories }; }',
+    'async function hashExpected(file, expected) { let handle; try { handle=await open(file,"r"); const opened=await handle.stat(), named=await lstat(file), resolved=await realpath(file); if(!opened.isFile()||!named.isFile()||named.isSymbolicLink()||opened.dev!==named.dev||opened.ino!==named.ino||opened.size!==expected.bytes||!within(root,resolved))restart("ARTIFACT_FILE_MAP_CHANGED"); const hash=createHash("sha256"), buffer=Buffer.alloc(Math.min(64*1024,Math.max(1,expected.bytes))); let offset=0; while(offset<expected.bytes){const read=await handle.read(buffer,0,Math.min(buffer.length,expected.bytes-offset),offset);if(read.bytesRead===0)restart("ARTIFACT_FILE_MAP_CHANGED");hash.update(buffer.subarray(0,read.bytesRead));offset+=read.bytesRead;} if((await handle.read(buffer,0,1,expected.bytes)).bytesRead!==0)restart("ARTIFACT_FILE_MAP_CHANGED"); const finalNamed=await lstat(file); if(finalNamed.dev!==opened.dev||finalNamed.ino!==opened.ino||hash.digest("hex")!==expected.sha256)restart("ARTIFACT_FILE_MAP_CHANGED"); } catch(error){if(error?.message?.startsWith("RESTART_REQUIRED:"))throw error;restart("ARTIFACT_FILE_MAP_CHANGED");} finally{await handle?.close().catch(()=>{});} }',
+    'async function validateProjection() { const metadata=await validateReference(), expectedFiles=new Map(metadata.fileMap.map((entry)=>[entry.path,entry])), seenFiles=new Set(), seenDirectories=new Set([""]), pending=[""]; while(pending.length){const relativeDirectory=pending.pop(), depth=relativeDirectory===""?0:relativeDirectory.split("/").length;if(depth>MAX_DEPTH||seenDirectories.size>MAX_DIRECTORIES)restart("ARTIFACT_FILE_MAP_CHANGED"); const directory=path.join(root,...(relativeDirectory?relativeDirectory.split("/"):[])); let stream;try{stream=await opendir(directory);}catch{restart("ARTIFACT_FILE_MAP_CHANGED");} try{for await(const item of stream){const relative=relativeDirectory?`${relativeDirectory}/${item.name}`:item.name;if(relative===".mpx-runtime-artifact.json")continue;const absolute=path.join(directory,item.name);let stat;try{stat=await lstat(absolute);}catch{restart("ARTIFACT_FILE_MAP_CHANGED");}if(stat.isSymbolicLink())restart("ARTIFACT_SYMLINK");if(stat.isDirectory()){if(!metadata.expectedDirectories.has(relative)||seenDirectories.has(relative))restart("ARTIFACT_FILE_MAP_CHANGED");seenDirectories.add(relative);pending.push(relative);}else if(stat.isFile()){const expected=expectedFiles.get(relative);if(!expected||seenFiles.has(relative))restart("ARTIFACT_FILE_MAP_CHANGED");seenFiles.add(relative);await hashExpected(absolute,expected);}else restart("ARTIFACT_SPECIAL_FILE");}}catch(error){if(error?.message?.startsWith("RESTART_REQUIRED:"))throw error;restart("ARTIFACT_FILE_MAP_CHANGED");}} if(seenFiles.size!==expectedFiles.size||seenDirectories.size!==metadata.expectedDirectories.size)restart("ARTIFACT_FILE_MAP_CHANGED"); }',
+    'async function ensureBound() { await validateContext(); return validateReference(); }',
+    'async function ensureExpected(relative) { const metadata=await ensureBound(), expected=metadata.fileMap.find((entry)=>entry.path===relative); if(!expected)restart("ARTIFACT_FILE_MAP_CHANGED"); await hashExpected(path.join(root,...relative.split("/")),expected); }',
+    'async function ensureSkill(identity) { const metadata=await ensureBound(), prefix=`skills/${identity}/`, selected=metadata.fileMap.filter((entry)=>entry.path.startsWith(prefix));if(!selected.length)restart("SKILL_BODY_INVALID");try{for(const expected of selected)await hashExpected(path.join(root,...expected.path.split("/")),expected);}catch{restart("SKILL_BODY_INVALID");} }',
     'async function ensureFresh() { await validateContext(); await validateProjection(); }',
     'const statusControl = /[\\0-\\x1F\\x7F-\\x9F]/u; const statusId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u; function safeText(value, maximum) { return typeof value === "string" && value.length <= maximum && !statusControl.test(value); } function exact(value, keys) { return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join() === [...keys].sort().join(); }',
     'function parseStatus(x) { if (!exact(x, ["schemaVersion","project","worktree","portResolution","services","diagnostics"]) || x.schemaVersion !== 1 || !exact(x.project,["id","cwd"]) || !safeText(x.project.id,256) || !safeText(x.project.cwd,4096) || !exact(x.worktree,["id","path","role","branch"]) || !(x.worktree.id===null||safeText(x.worktree.id,256)) || !(x.worktree.path===null||safeText(x.worktree.path,4096)) || !(x.worktree.branch===null||safeText(x.worktree.branch,512)) || ![null,"main","linked"].includes(x.worktree.role) || !["valid","missing","invalid","stale"].includes(x.portResolution) || !Array.isArray(x.services) || x.services.length>256 || !Array.isArray(x.diagnostics) || x.diagnostics.length>256) restart("STATUS_SNAPSHOT_INVALID"); const ids=new Set(); for(const s of x.services){if(!exact(s,["id","mode","scope","protocol","port","listening","conflict","pid"])||!statusId.test(s.id)||ids.has(s.id)||!["managed","fixed-shared"].includes(s.mode)||!["checkout","project"].includes(s.scope)||!["http","https","tcp"].includes(s.protocol)||!(s.port===null||Number.isInteger(s.port)&&s.port>=1&&s.port<=65535)||typeof s.listening!=="boolean"||!["none","external","unknown"].includes(s.conflict)||!(s.pid===null||Number.isSafeInteger(s.pid)&&s.pid>=1))restart("STATUS_SNAPSHOT_INVALID");ids.add(s.id)} for(const d of x.diagnostics)if(!exact(d,["code","severity","message","serviceId"])||!statusId.test(d.code)||!["info","warning","error"].includes(d.severity)||!safeText(d.message,1024)||!(d.serviceId===null||statusId.test(d.serviceId)))restart("STATUS_SNAPSHOT_INVALID"); return x; }',
+    'async function readStatusBytes(file) { let handle;try{handle=await open(file,"r");const opened=await handle.stat({bigint:true}),named=await lstat(file,{bigint:true});if(!opened.isFile()||!named.isFile()||named.isSymbolicLink()||opened.size>BigInt(MAX_STATUS_BYTES)||named.size>BigInt(MAX_STATUS_BYTES))restart("STATUS_SNAPSHOT_INVALID");const size=Number(opened.size),bytes=Buffer.alloc(size);let offset=0;while(offset<size){const read=await handle.read(bytes,offset,size-offset,offset);if(read.bytesRead===0)restart("STATUS_SNAPSHOT_INVALID");offset+=read.bytesRead;}if((await handle.read(Buffer.alloc(1),0,1,size)).bytesRead!==0)restart("STATUS_SNAPSHOT_INVALID");return bytes;}catch{restart("STATUS_SNAPSHOT_INVALID");}finally{await handle?.close().catch(()=>{});} }',
+    'async function readStatusSnapshot(file) { const opened=await readStatusBytes(file),named=await readStatusBytes(file);if(!opened.equals(named))restart("STATUS_SNAPSHOT_INVALID");let value;try{value=JSON.parse(named.toString("utf8"));}catch{restart("STATUS_SNAPSHOT_INVALID");}return parseStatus(value); }',
     'function ports(x) { if (x.portResolution !== "valid") return `ports ${x.portResolution}`; if (!x.services.length) return "ports none"; return "ports " + [...x.services].sort((a,b) => a.id.localeCompare(b.id)).map((s) => `${s.id}:${s.port ?? "?"}${s.conflict === "external" ? "!" : s.conflict === "unknown" ? "?" : s.listening ? "*" : ""}`).join(" "); }',
-    'let statusRefresh; async function refreshStatus(ctx) { if(statusRefresh)return statusRefresh; statusRefresh=(async()=>{const file = process.env.MPX_STATUS_SNAPSHOT_FILE ?? path.join(root, projection.statusSnapshot); const snapshot = parseStatus(await readJson(file, "STATUS_SNAPSHOT_INVALID")); ctx.ui.setStatus("mpx", `${projection.launchBanner} | ${ports(snapshot)}`);})().finally(()=>{statusRefresh=undefined}); return statusRefresh; }',
-    'async function body(identity, invocation) { await ensureFresh(); const entry = projection.entries.find((item) => item.identity === identity); if (!entry) restart("RUNTIME_ARTIFACT_TAMPERED"); const file = path.join(root, "skills", identity, "body.md"); await regularFile(file, "SKILL_BODY_INVALID"); const body = await readFile(file, "utf8"); const contentHash = entry.contentHash; return { identity, body, wrappedBody: `<!-- mpx-skill identity=${identity} origin=${invocation} runtime=pi artifact=${projection.artifactKey} hash=${contentHash} -->\n${body}<!-- /mpx-skill -->`, provenance: { artifactKey: projection.artifactKey, contentHash, invocation, runtime: "pi", sourcePath: entry.sourcePath } }; }',
+    'let statusRefresh, statusGeneration=0, statusStopped=true; async function refreshStatus(ctx,generation) { if(statusRefresh)return statusRefresh; const refresh=(async()=>{const file=process.env.MPX_STATUS_SNAPSHOT_FILE??path.join(root,projection.statusSnapshot);const snapshot=await readStatusSnapshot(file);if(statusStopped||generation!==statusGeneration)return;ctx.ui.setStatus("mpx",`${projection.launchBanner} | ${ports(snapshot)}`);})();const tracked=refresh.finally(()=>{if(statusRefresh===tracked)statusRefresh=undefined;});statusRefresh=tracked;return tracked; }',
+    'async function body(identity, invocation) { await ensureSkill(identity); const entry = projection.entries.find((item) => item.identity === identity); if (!entry) restart("RUNTIME_ARTIFACT_TAMPERED"); const file = path.join(root, "skills", identity, "body.md"); let handle; try { handle = await open(file, "r"); const stat = await handle.stat(); if (!stat.isFile() || stat.size > MAX_FILE_BYTES) restart("SKILL_BODY_INVALID"); const resolved = await realpath(file).catch(() => restart("SKILL_BODY_INVALID")); const namedStat = await lstat(file).catch(() => restart("SKILL_BODY_INVALID")); if (!within(root, resolved) || !namedStat.isFile() || namedStat.isSymbolicLink() || namedStat.dev !== stat.dev || namedStat.ino !== stat.ino || namedStat.size !== stat.size) restart("ARTIFACT_ESCAPE"); const bytes = Buffer.alloc(stat.size); let offset = 0; while (offset < bytes.length) { const read = await handle.read(bytes, offset, bytes.length - offset, offset); if (read.bytesRead === 0) restart("SKILL_BODY_INVALID"); offset += read.bytesRead; } if ((await handle.read(Buffer.alloc(1), 0, 1, stat.size)).bytesRead !== 0) restart("SKILL_BODY_INVALID"); const finalStat = await handle.stat(), finalNamedStat = await lstat(file); if (!finalStat.isFile() || finalStat.isSymbolicLink() || !finalNamedStat.isFile() || finalNamedStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalNamedStat.dev !== stat.dev || finalNamedStat.ino !== stat.ino || finalStat.size !== stat.size || finalNamedStat.size !== stat.size || finalStat.mtimeMs !== stat.mtimeMs || finalStat.ctimeMs !== stat.ctimeMs || finalNamedStat.mtimeMs !== namedStat.mtimeMs || finalNamedStat.ctimeMs !== namedStat.ctimeMs || digest(bytes) !== entry.contentHash) restart("SKILL_BODY_INVALID"); const body = parseProjectedBody(bytes); const contentHash = entry.contentHash; return { identity, body, wrappedBody: `<!-- mpx-skill identity=${identity} origin=${invocation} runtime=pi artifact=${projection.artifactKey} hash=${contentHash} -->\n${body}<!-- /mpx-skill -->`, provenance: { artifactKey: projection.artifactKey, contentHash, invocation, runtime: "pi", sourcePath: entry.sourcePath } }; } catch { restart("SKILL_BODY_INVALID"); } finally { await handle?.close().catch(() => {}); } }',
+    'function parseProjectedBody(bytes) { const text = bytes.toString("utf8").replaceAll("\\r\\n", "\\n"); if (!text.startsWith("---\\n")) restart("SKILL_BODY_INVALID"); const end = text.indexOf("\\n---\\n", 4); if (end < 0) restart("SKILL_BODY_INVALID"); return text.slice(end + 5); }',
     'function modelEntries() { return projection.entries.filter((entry) => projection.modelSearchAllowlist.includes(entry.identity)); }',
     'function search(query) { const value = String(query ?? "").trim().toLowerCase(); if (value.length > 200) throw new Error("QUERY_TOO_LONG"); return modelEntries().map((entry) => ({ ...entry, score: score(entry, value) })).filter((entry) => value.length === 0 || entry.score > 0).sort((left, right) => right.score - left.score || left.identity.localeCompare(right.identity)).slice(0, 20).map(({ identity, publicName, canonicalDescription, canonicalTriggers, score }) => ({ identity, publicName, description: canonicalDescription ?? `mpx skill ${identity}`, ...(canonicalTriggers ? { triggers: canonicalTriggers } : {}), score })); }',
-    'export async function activate(pi) { await ensureFresh(); for (const name of projection.commandAllowlist) { const entry = projection.entries.find((item) => item.publicName.slice(1) === name); pi.registerCommand(name, { ...(entry?.commandDescription ? { description: entry.commandDescription } : {}), handler: async (_args) => { const loaded = await body(entry.identity, "human-explicit"); await pi.sendUserMessage([{ type: "text", text: loaded.wrappedBody }]); } }); } if (typeof pi.registerTool === "function") { pi.registerTool({ name: "mpx_model_search", label: "MPX search", description: "Search available skills.", parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string", description: "Search query." } }, required: ["query"] }, async execute(_toolCallId, params) { await ensureFresh(); const results = search(params?.query); return { content: [{ type: "text", text: JSON.stringify(results) }], details: { results } }; } }); pi.registerTool({ name: "mpx_model_load", label: "MPX load", description: "Load one available skill.", parameters: { type: "object", additionalProperties: false, properties: { identity: { type: "string", description: "Skill identifier." } }, required: ["identity"] }, async execute(_toolCallId, params) { const identity = String(params?.identity ?? ""); if (!projection.modelSearchAllowlist.includes(identity)) throw new Error("SKILL_INVOCATION_DENIED"); const loaded = await body(identity, "model"); return { content: [{ type: "text", text: loaded.wrappedBody }], details: { identity: loaded.identity, provenance: loaded.provenance } }; } }); } if (typeof pi.on === "function") { let statusContext, statusTimer; pi.on("before_agent_start", async (event) => { await ensureFresh(); if (statusContext) await refreshStatus(statusContext); return { systemPrompt: `${String(event?.systemPrompt ?? "")}${disclosure()}` }; }); pi.on("session_start", async (_event, ctx) => { statusContext = ctx; await refreshStatus(ctx); if(statusTimer)clearInterval(statusTimer); statusTimer=setInterval(() => { void refreshStatus(ctx).catch(() => ctx.ui.setStatus("mpx", `${projection.launchBanner} | ports invalid`)); }, 1000); statusTimer.unref?.(); }); pi.on("session_shutdown", async () => { statusContext=undefined; if(statusTimer){clearInterval(statusTimer);statusTimer=undefined;} }); } }',
-    'export async function modelSearch(query) { await ensureFresh(); return search(query); }',
+    'export async function activate(pi) { await ensureFresh(); for (const name of projection.commandAllowlist) { const entry = projection.entries.find((item) => item.publicName.slice(1) === name); pi.registerCommand(name, { ...(entry?.commandDescription ? { description: entry.commandDescription } : {}), handler: async (_args) => { const loaded = await body(entry.identity, "human-explicit"); await pi.sendUserMessage([{ type: "text", text: loaded.wrappedBody }]); } }); } if (typeof pi.registerTool === "function") { pi.registerTool({ name: "mpx_model_search", label: "MPX search", description: "Search available skills.", parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string", description: "Search query." } }, required: ["query"] }, async execute(_toolCallId, params) { await ensureBound(); const results = search(params?.query); return { content: [{ type: "text", text: JSON.stringify(results) }], details: { results } }; } }); pi.registerTool({ name: "mpx_model_load", label: "MPX load", description: "Load one available skill.", parameters: { type: "object", additionalProperties: false, properties: { identity: { type: "string", description: "Skill identifier." } }, required: ["identity"] }, async execute(_toolCallId, params) { const identity = String(params?.identity ?? ""); if (!projection.modelSearchAllowlist.includes(identity)) throw new Error("SKILL_INVOCATION_DENIED"); const loaded = await body(identity, "model"); return { content: [{ type: "text", text: loaded.wrappedBody }], details: { identity: loaded.identity, provenance: loaded.provenance } }; } }); } if (typeof pi.on === "function") { let statusContext, statusTimer; pi.on("tool_call", async (event) => { if (event?.toolName !== "bash") return; await ensureExpected("dangerous-command-policy.mjs"); const {classifyDangerousCommand}=await import("./dangerous-command-policy.mjs"); const decision = classifyDangerousCommand(event?.input?.command); if (decision.action === "block") return { block: true, reason: `${decision.code}: ${decision.message}` }; }); pi.on("before_agent_start", async (event) => { await ensureBound(); if (statusContext) await refreshStatus(statusContext,statusGeneration); return { systemPrompt: `${String(event?.systemPrompt ?? "")}${disclosure()}` }; }); pi.on("session_start", async (_event, ctx) => { const generation=++statusGeneration;statusStopped=false;statusContext=ctx;await ensureFresh();if(statusStopped||generation!==statusGeneration)return;if(statusTimer){clearInterval(statusTimer);statusTimer=undefined;}const previous=statusRefresh;if(previous)await previous.catch(()=>{});if(statusStopped||generation!==statusGeneration)return;await refreshStatus(ctx,generation);if(statusStopped||generation!==statusGeneration)return;statusTimer=setInterval(() => { void refreshStatus(ctx,generation).catch(() => {if(!statusStopped&&generation===statusGeneration)ctx.ui.setStatus("mpx", `${projection.launchBanner} | ports invalid`);}); }, 1000); statusTimer.unref?.(); }); pi.on("session_shutdown", async () => { statusStopped=true;++statusGeneration;statusContext=undefined;if(statusTimer){clearInterval(statusTimer);statusTimer=undefined;}const pending=statusRefresh;if(pending)await pending.catch(()=>{}); }); } }',
+    'export async function modelSearch(query) { await ensureBound(); return search(query); }',
     'export default activate;',
     '',
   ].join('\n');
@@ -260,13 +262,52 @@ async function copyGeneratedAssets(staging: string, assetsRoot: string, provenan
   await emit(staging, "vendor/subagents/VENDORED.md", (await regularText(provenanceFile, "vendor provenance")).replaceAll("\r\n", "\n"));
   await emit(staging, "vendor/subagents/LICENSE", (await regularText(path.join(path.dirname(provenanceFile), "LICENSE"), "vendor license")).replaceAll("\r\n", "\n"));
 }
+async function validatedSkillBytes(skill: CatalogSkill, loaded: LoadedSkillBody): Promise<Buffer> {
+  let handle;
+  try {
+    handle = await open(skill.sourcePath, "r");
+    const opened = await handle.stat({ bigint: true });
+    const named = await lstat(skill.sourcePath, { bigint: true });
+    const resolved = await realpath(skill.sourcePath);
+    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink()
+      || opened.dev !== named.dev || opened.ino !== named.ino
+      || opened.size !== named.size || opened.size > BigInt(MAX_SKILL_BODY_BYTES)
+      || !sameFilesystemPath(resolved, skill.realPath)) throw new Error("identity mismatch");
+    const bytes = Buffer.alloc(Number(opened.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesRead === 0) throw new Error("short read");
+      offset += result.bytesRead;
+    }
+    if ((await handle.read(Buffer.alloc(1), 0, 1, bytes.length)).bytesRead !== 0) throw new Error("file grew");
+    const finalOpened = await handle.stat({ bigint: true });
+    const finalNamed = await lstat(skill.sourcePath, { bigint: true });
+    if (!finalOpened.isFile() || !finalNamed.isFile() || finalNamed.isSymbolicLink()
+      || finalOpened.dev !== opened.dev || finalOpened.ino !== opened.ino
+      || finalNamed.dev !== opened.dev || finalNamed.ino !== opened.ino
+      || finalOpened.size !== opened.size || finalNamed.size !== opened.size
+      || finalOpened.mtimeNs !== opened.mtimeNs || finalOpened.ctimeNs !== opened.ctimeNs
+      || finalNamed.mtimeNs !== named.mtimeNs || finalNamed.ctimeNs !== named.ctimeNs
+      || digest(bytes) !== loaded.provenance.contentHash) throw new Error("content mismatch");
+    return bytes;
+  } catch {
+    throw new Error(`SKILL_CONTENT_STALE: skill '${skill.identity}' changed during Pi projection`);
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+function sameFilesystemPath(left: string, right: string): boolean {
+  return process.platform === "win32" ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase() : path.resolve(left) === path.resolve(right);
+}
+
 function freezeProjection(published: PublishedRuntimeArtifact): PiPublishedProjection {
   const reference = Object.freeze({ ...published.reference });
   const directory = path.resolve(published.directory);
   return Object.freeze({
     directory, extension: path.join(directory, "extension.mjs"), runtimeContextFile: path.join(directory, "runtime-context.json"), theme: "green" as const,
-    artifactKey: reference.artifactKey, reference, files: Object.freeze(published.fileMap.map((file) => file.path)), reused: published.reused,
-    revalidation: Object.freeze({ directory, reference }), projectSkills: Object.freeze([]),
+    artifactKey: reference.launchBinding.runtimeArtifactKey, reference, files: Object.freeze(published.fileMap.map((file) => file.path)), reused: published.reused,
+    revalidation: Object.freeze({ directory, reference }),
   });
 }
 
@@ -280,14 +321,15 @@ export async function buildPiProjection(input: PiProjectionBuildInput): Promise<
   if (!validation.valid) restart(validation.diagnostics);
   const catalog = new Map(input.catalog.map((skill) => [skill.identity, skill]));
   const entries: Array<{ identity: string; publicName: string; exposure: "full" | "name-only" | "explicit-only" | "off"; contentHash: string; sourcePath: string; commandDescription?: string; canonicalDescription?: string; canonicalTriggers?: string }> = [];
-  const bodies = new Map<string, string>();
+  const bodies = new Map<string, Buffer>();
   for (const entry of [...input.artifact.entries].sort((a, b) => a.identity.localeCompare(b.identity))) {
-    const canonical = catalog.get(entry.identity);
-    if (!canonical) throw new Error(`STALE_CATALOG: missing ${entry.identity}`);
+    const skill = catalog.get(entry.identity);
+    if (!skill) throw new Error(`STALE_CATALOG: missing ${entry.identity}`);
     const invocation = entry.permissions.modelInvocation ? "model" : "human-explicit";
     const loaded = await loadSkillBody({ canonicalRoot: input.canonicalRoot, manifest, artifact: input.artifact, runtime: "pi", identity: entry.identity, invocation });
-    bodies.set(entry.identity, loaded.body.replaceAll("\r\n", "\n"));
-    entries.push({ identity: entry.identity, publicName: entry.publicName, exposure: entry.exposure, contentHash: loaded.provenance.contentHash, sourcePath: loaded.provenance.sourcePath, ...(entry.permissions.humanInvocation ? { commandDescription: canonical.description } : {}), ...(entry.permissions.modelInvocation ? { canonicalDescription: canonical.description, ...(canonical.triggers ? { canonicalTriggers: canonical.triggers } : {}) } : {}) });
+    bodies.set(entry.identity, await validatedSkillBytes(skill, loaded));
+    const triggers = "triggers" in skill ? skill.triggers : undefined;
+    entries.push({ identity: entry.identity, publicName: entry.publicName, exposure: entry.exposure, contentHash: loaded.provenance.contentHash, sourcePath: loaded.provenance.sourcePath, ...(entry.permissions.humanInvocation ? { commandDescription: skill.description } : {}), ...(entry.permissions.modelInvocation ? { canonicalDescription: skill.description, ...(triggers ? { canonicalTriggers: triggers } : {}) } : {}) });
   }
   const commandAllowlist = input.artifact.entries.filter((entry) => entry.permissions.humanInvocation).map((entry) => entry.publicName.slice(1)).sort();
   const modelSearchAllowlist = input.artifact.entries.filter((entry) => entry.permissions.modelInvocation).map((entry) => entry.identity).sort();
@@ -298,18 +340,19 @@ export async function buildPiProjection(input: PiProjectionBuildInput): Promise<
     await emit(staging, "projection.json", jsonFile(descriptor));
     await emit(staging, "runtime-context.json", jsonFile(context));
     await emit(staging, "extension.mjs", piExtensionSource({ manifestKey: manifest.manifestKey, artifactKey: input.artifact.reference.artifactKey, launchBanner: input.launchBanner, statusSnapshot: "status/status-snapshot.json", commandAllowlist, modelSearchAllowlist, entries }));
+    await emit(staging, "dangerous-command-policy.mjs", `${dangerousCommandPolicyModuleSource}\n`);
     await emit(staging, "status/status-snapshot.json", jsonFile(statusSnapshot));
     await emit(staging, "settings.json", jsonFile(piSettings));
     await emit(staging, "keybindings.json", jsonFile(piKeybindings));
     for (const [identity, body] of bodies) {
       await emit(staging, `skills/${identity}/body.md`, body);
-      const canonical = catalog.get(identity)!;
-      for (const support of await enumerateSkillDirectory(path.dirname(canonical.sourcePath))) if (support.relativePath !== "SKILL.md") await emit(staging, `skills/${identity}/${support.relativePath}`, support.bytes);
+      const skill = catalog.get(identity)!;
+      for (const support of await enumerateSkillDirectory(path.dirname(skill.sourcePath))) if (support.relativePath !== "SKILL.md") await emit(staging, `skills/${identity}/${support.relativePath}`, support.bytes);
     }
-    for (const projectSkill of input.projectSkills ?? []) for (const file of await enumerateSkillDirectory(path.dirname(projectSkill.sourcePath))) await emit(staging, `project-skills/${projectSkill.identity}/${file.relativePath}`, file.bytes);
     await copyGeneratedAssets(staging, input.assetsRoot ?? path.join(packageRoot, "projection"), input.vendorProvenanceFile ?? path.join(packageRoot, "vendor", "subagents", "VENDORED.md"));
-    const frozen = freezeProjection(await publishRuntimeArtifact({ sourceRoot: staging, artifactsRoot: input.artifactsRoot, runtime: "pi", manifestKey: manifest.manifestKey }));
-    return Object.freeze({ ...frozen, projectSkills: Object.freeze((input.projectSkills ?? []).map(skill => path.join(frozen.directory, "project-skills", skill.identity))) });
+    const launchBinding = { launchKey: context.launchKey, descriptorDigest: context.launchDescriptor.digest, runtimeArtifactKey: input.artifact.reference.artifactKey, runtime: "pi" as const, manifestKey: manifest.manifestKey };
+    const published = await publishRuntimeArtifact({ sourceRoot: staging, artifactsRoot: input.artifactsRoot, launchBinding, ...(input.artifactRevalidator ? { revalidate: input.artifactRevalidator } : {}) });
+    return freezeProjection(published);
   } finally { await rm(staging, { recursive: true, force: true }); }
 }
 

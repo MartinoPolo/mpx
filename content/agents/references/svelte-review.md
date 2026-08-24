@@ -1,7 +1,7 @@
 # Svelte 5 Review Reference
 
 Judgment-based patterns for Svelte 5 with runes — not caught by linting.
-Built from [Svelte 5 documentation](http<configured-path>svelte.dev/docs).
+Built from [Svelte 5 documentation](https://svelte.dev/docs).
 
 ---
 
@@ -27,7 +27,7 @@ Svelte 5 replaces implicit reactivity with explicit runes. All old patterns (`$:
 
   // Deep reactivity — objects and arrays are proxied
   let todos = $state([
-    { i<configured-path>1, tex<configured-path>'Learn Svelte', don<configured-path>false }
+    { id: 1, text: 'Learn Svelte', done: false }
   ]);
 
   // Nested mutations trigger updates automatically
@@ -66,7 +66,7 @@ Svelte 5 replaces implicit reactivity with explicit runes. All old patterns (`$:
   let summary = $derived.by(() => {
     const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
     const tax = subtotal * 0.1;
-    return { subtotal, tax, tota<configured-path>subtotal + tax };
+    return { subtotal, tax, total: subtotal + tax };
   });
 
   // Filtered/reduced derived state
@@ -74,7 +74,7 @@ Svelte 5 replaces implicit reactivity with explicit runes. All old patterns (`$:
 </script>
 ```
 
-### Key rul<configured-path>$derived must be side-effect free
+### Key rule: $derived must be side-effect free
 
 The expression inside `$derived()` should only compute and return a value. No mutations, no API calls, no DOM manipulation.
 
@@ -91,7 +91,7 @@ The expression inside `$derived()` should only compute and return a value. No mu
 
   // ✅ DO use $effect for actual side effects
   $effect(() => {
-    document.title = `Coun<configured-path>${count}`;
+    document.title = `Count: ${count}`;
   });
 
   // ✅ Cleanup via return
@@ -123,7 +123,7 @@ The expression inside `$derived()` should only compute and return a value. No mu
   let { name, count = 0 } = $props();
 
   // Renaming (e.g., reserved words)
-  let { clas<configured-path>className, ...rest } = $props();
+  let { class: className, ...rest } = $props();
 
   // All props without destructuring
   let props = $props();
@@ -132,7 +132,9 @@ The expression inside `$derived()` should only compute and return a value. No mu
 
 ## Stores vs Runes
 
-Runes are preferred for component-level state. Stores remain useful fo<configured-path>- **Cross-component shared state** — global/app-level state accessed by many unrelated components
+Runes are preferred for component-level state. Stores remain useful for:
+
+- **Cross-component shared state** — global/app-level state accessed by many unrelated components
 - **Interop with existing store-based libraries**
 
 ```javascript
@@ -164,17 +166,17 @@ Strong convention — flag deviations in review but don't block if justified. On
 
   // 2. Types / Interfaces
   interface Props {
-    nam<configured-path>string;
+    name: string;
     count?: number;
     class?: string;
   }
 
   // 3. Constants (pure data, no reactive dependencies)
   const MAX_ITEMS = 50;
-  const variant_styles = { primar<configured-path>'bg-blue-500', secondar<configured-path>'bg-gray-500' };
+  const variant_styles = { primary: 'bg-blue-500', secondary: 'bg-gray-500' };
 
   // 4. Props
-  let { name, count = 0, clas<configured-path>class_name }: Props = $props();
+  let { name, count = 0, class: class_name }: Props = $props();
 
   // 5. Context (set_* and use_* calls)
   set_feature_context();
@@ -186,7 +188,7 @@ Strong convention — flag deviations in review but don't block if justified. On
 
   // 7. Functions (event handlers, helpers)
   function handle_click() { /* ... */ }
-  const handle_input = (<configured-path>Event) => { /* ... */ };
+  const handle_input = (e: Event) => { /* ... */ };
 
   // 8. Effects & Lifecycle (side-effect wiring)
   $effect(() => { document.title = `${name} (${count})`; });

@@ -1,6 +1,6 @@
 # Linux Commands
 
-> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat everything here as a starting poin<configured-path>dry-run each command, confirm paths exist, and prefer reporting over deleting until a run has proven itself.
+> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat everything here as a starting point: dry-run each command, confirm paths exist, and prefer reporting over deleting until a run has proven itself.
 
 Domain rules live in [DOMAINS.md](DOMAINS.md). The bundled `scripts/*.ps1` are Windows-only; on Linux the shell commands below replace them.
 
@@ -46,11 +46,11 @@ pnpm store prune
 yarn cache clean
 uv cache clean
 cargo cache --autoclean
-sudo apt clean            # o<configured-path>dnf clean all / pacman -Sc
+sudo apt clean            # or: dnf clean all / pacman -Sc
 journalctl --vacuum-size=200M
 ```
 
-Cache root<configured-path>~/.cache`, `~/.npm`, `~/.local/share/pnpm/store`, `~/.cargo/registry/src`, `~/.gradle/caches`, `~/.cache/ms-playwright`, `/var/cache`, `/var/tmp`.
+Cache roots: `~/.cache`, `~/.npm`, `~/.local/share/pnpm/store`, `~/.cargo/registry/src`, `~/.gradle/caches`, `~/.cache/ms-playwright`, `/var/cache`, `/var/tmp`.
 
 `journalctl` logs and old kernels in `/boot` are frequently the largest system-side win.
 
@@ -75,13 +75,13 @@ git -C "<repo>" log -1 --format=%cI     # activity check, 3-month cutoff
 ### 4. Apps and orphaned app data
 
 ```bash
-apt list --installed          # o<configured-path>dnf list installed / pacman -Qe
+apt list --installed          # or: dnf list installed / pacman -Qe
 sudo apt autoremove           # orphaned dependencies
 flatpak uninstall --unused
 snap list --all               # then remove disabled revisions
 ```
 
-Leftover config after remova<configured-path>~/.config`, `~/.local/share`, `~/.cache`. Match those against the installed-package list; anything unmatched and older than 6 months qualifies.
+Leftover config after removal: `~/.config`, `~/.local/share`, `~/.cache`. Match those against the installed-package list; anything unmatched and older than 6 months qualifies.
 
 ### 5. Screenshots
 
@@ -100,7 +100,7 @@ sha256sum "<file>"                                              # hash only same
 command -v rdfind && rdfind -dryrun true "<root>"               # if available
 ```
 
-Nextcloud and Syncthing conflict copie<configured-path>*conflicted copy*`, `*.sync-conflict-*`.
+Nextcloud and Syncthing conflict copies: `*conflicted copy*`, `*.sync-conflict-*`.
 
 ### 7. Downloads and installers
 

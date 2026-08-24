@@ -22,7 +22,8 @@ for model selection, tool grants, and naming that this skill applies.
 
 ### Step 1: Fetch Guidelines
 
-Spawn a `runtime-code-guide` agent (subagent_typ<configured-path>runtime-code-guide`) with the promp<configured-path>> "What are the latest the active runtime guidelines for authoring custom agents (sub-agents)? Include frontmatter fields, file structure, tool allowlists, model selection, description rules, and any best practices."
+Spawn a `runtime-code-guide` agent (subagent_type: `runtime-code-guide`) with the prompt:
+> "What are the latest the active runtime guidelines for authoring custom agents (sub-agents)? Include frontmatter fields, file structure, tool allowlists, model selection, description rules, and any best practices."
 
 Store the returned guidelines for use in Step 4.
 
@@ -40,13 +41,15 @@ If the invocation input provided, use as initial agent name/description and ask 
 
 ### Step 3: Draft the Agent
 
-Create `agents/<agent-name>.md` with this structur<configured-path>markdown
+Create `agents/<agent-name>.md` with this structure:
+
+````markdown
 ---
-nam<configured-path><agent-name>
-descriptio<configured-path><one-line what it does and when to use it>
-tool<configured-path><comma-separated tool list>
-mode<configured-path><appropriate runtime class|appropriate runtime class|appropriate runtime class>
-colo<configured-path><color>
+name: <agent-name>
+description: <one-line what it does and when to use it>
+tools: <comma-separated tool list>
+model: <appropriate runtime class|appropriate runtime class|appropriate runtime class>
+color: <color>
 ---
 
 # <Agent Title>
@@ -107,7 +110,7 @@ behaviour. See [`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL.md
 | Orchestrator (spawns sub-agents) | `Read, Grep, Glob, Bash, Agent`                                       |
 | Browser tester                   | `Read, Glob, Grep, Bash, AskUserQuestion` + chrome-devtools MCP tools |
 
-`tools` is a strict allowlis<configured-path>an unlisted tool is absent from the agent's schema
+`tools` is a strict allowlist: an unlisted tool is absent from the agent's schema
 entirely. `Agent` is **not** granted by default — an agent without it cannot delegate,
 and its parent must spawn on its behalf and pass results back in. Full tool-grant
 semantics, including `disallowedTools`, are in
@@ -115,8 +118,10 @@ semantics, including `disallowedTools`, are in
 
 **An agent that needs MCP tools enumerates none of them.** Every name in `tools` is
 reprinted in the agent roster in every session, so a long MCP list is a standing context
-charge that also rots when the server renames a tool. Omit `tools` and subtract instea<configured-path>yaml
-disallowedTool<configured-path>Write, Edit, NotebookEdit, Agent
+charge that also rots when the server renames a tool. Omit `tools` and subtract instead:
+
+```yaml
+disallowedTools: Write, Edit, NotebookEdit, Agent
 ```
 
 `AskUserQuestion` is stripped from every sub-agent whatever the frontmatter says, so
@@ -126,24 +131,24 @@ granting it is always dead.
 
 | Model class | Concrete runtime model | Best for |
 | --- | --- | --- |
-| mechanical | `appropriate runtime class` | Fast bounded wor<configured-path>running checks, committing, simple lookups |
+| mechanical | `appropriate runtime class` | Fast bounded work: running checks, committing, simple lookups |
 | standard | `appropriate runtime class` | Exploration, review, docs, bounded judgment |
 | advanced | `appropriate runtime class` | Implementation, architecture, analysis, multi-step reasoning |
 | frontier | `fable` at `high` | Deliberate manual large-task orchestration; do not create a standing agent |
 
 **Name a concrete model in every standing agent this repo owns.** `inherit` is valid, and omitting
-`mode<configured-path>means exactly the same thing — both resolve to the main conversation's model,
+`model:` means exactly the same thing — both resolve to the main conversation's model,
 which on this machine is `runtime-appropriate runtime class-5[1m]`, the most expensive option. An agent left
 on `inherit` gets silently expensive the moment the session model changes.
 
 #### Explicit Tool References (mandatory)
 
-- provider-specific CL<configured-path>specify exact `gh` command (e.g., `mpx pr list`)
-- Bash command<configured-path>name exact command/script
-- Sub-agent spawn<configured-path>name the exact agent type, and pass `model` only when that type
+- provider-specific CLI: specify exact `gh` command (e.g., `mpx pr list`)
+- Bash commands: name exact command/script
+- Sub-agent spawns: name the exact agent type, and pass `model` only when that type
   declares none — [`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL.md) § 1.
   `effort` is not a spawn parameter; pin it in the agent's frontmatter instead (§ 7)
-- Describe a model in prose nowher<configured-path>only a real `model` parameter selects one (§ 1)
+- Describe a model in prose nowhere: only a real `model` parameter selects one (§ 1)
 
 ### Step 4: Validate Against Guidelines
 
@@ -155,14 +160,17 @@ Compare the drafted agent against the guidelines fetched in Step 1:
 4. Check description format — matches guideline conventions?
 5. Check body structure — does it follow the recommended layout?
 
-For each mismatch foun<configured-path>- Fix it in the draft
+For each mismatch found:
+- Fix it in the draft
 - Record what was changed and why (guideline reference)
 
 If the guidelines suggest improvements beyond what this skill's conventions cover, note them as optional suggestions for the user.
 
 ### Step 5: Review with User
 
-Present the drafted agent and verif<configured-path>- **Guideline changes**: list any modifications made during validation (what changed, why, guideline reference)
+Present the drafted agent and verify:
+
+- **Guideline changes**: list any modifications made during validation (what changed, why, guideline reference)
 - **Optional improvements**: suggestions from guidelines that go beyond current conventions
 - Does the description accurately trigger delegation?
 - Are tools minimal and sufficient?
@@ -173,7 +181,9 @@ Ask the user for feedback. Iterate until approved.
 
 ### Review Checklist
 
-Before finalizing, verif<configured-path>- [ ] Name is lowercase with hyphens, matches filename (or matches a built-in's capitalisation exactly, if overriding one)
+Before finalizing, verify:
+
+- [ ] Name is lowercase with hyphens, matches filename (or matches a built-in's capitalisation exactly, if overriding one)
 - [ ] Description front-loads use cases, under 250 chars
 - [ ] Tools list matches what the body actually uses, and uses `Agent` rather than the deprecated `Task`
 - [ ] `Agent` is granted if — and only if — the agent spawns sub-agents

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * tutorial-create compiler.
- * Usag<configured-path>node compile.js <source.md> [--out <dir>] [--no-index]
+ * Usage: node compile.js <source.md> [--out <dir>] [--no-index]
  *
  * Compiles a compact `<slug>.source.md` (see reference/SOURCE_FORMAT.md) into a
  * self-contained interactive HTML tutorial using TEMPLATE.html, then regenerates
@@ -31,7 +31,7 @@ function escapeHtml(text) {
 }
 
 function fail(message) {
-  console.error(`[compile] ERRO<configured-path>${message}`);
+  console.error(`[compile] ERROR: ${message}`);
   process.exit(1);
 }
 
@@ -39,7 +39,7 @@ function resolveTutorialsRoot() {
   if (process.env.TUTORIALS_ROOT) return process.env.TUTORIALS_ROOT;
   if (process.env.MPX_AI_GENERATED) return join(process.env.MPX_AI_GENERATED, "_TUTORIALS");
   if (process.env.MPX_ONEDRIVE) return join(process.env.MPX_ONEDRIVE, "AI GENERATED", "_TUTORIALS");
-  fail("cannot locate the tutorials roo<configured-path>set the machine environment variable MPX_AI_GENERATED (or TUTORIALS_ROOT / MPX_ONEDRIVE).");
+  fail("cannot locate the tutorials root: set the machine environment variable MPX_AI_GENERATED (or TUTORIALS_ROOT / MPX_ONEDRIVE).");
 }
 
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -47,7 +47,7 @@ const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "sev
 /* ---------------- inline markup ---------------- */
 
 /**
- * Renders inline marku<configured-path>code`, **bold**, [text](url), ((glossary term)).
+ * Renders inline markup: `code`, **bold**, [text](url), ((glossary term)).
  * Escapes HTML first; code spans are protected from further processing.
  */
 function renderInline(text) {
@@ -57,15 +57,15 @@ function renderInline(text) {
     codeSpans.push(`<code>${code}</code>`);
     return `\x00${codeSpans.length - 1}\x00`;
   });
-  // glossar<configured-path>((display|key)) or ((key))
+  // glossary: ((display|key)) or ((key))
   html = html.replace(/\(\(([^)|]+)(?:\|([^)]+))?\)\)/g, (_, a, b) => {
     const display = a.trim();
     const key = (b || a).trim();
     return `<span class="gloss" tabindex="0" data-term="${escapeHtml(key)}">${display}</span>`;
   });
-  // link<configured-path>text](url)
+  // links: [text](url)
   html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
-    if (url.startsWith("fil<configured-path>")) {
+    if (url.startsWith("file://")) {
       return `<a class="inline-file-link" href="${url}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">\u{1F4C1}</span>${label}</a>`;
     }
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
@@ -83,9 +83,9 @@ function renderInline(text) {
    reveal bodies) — annotated-code notes are excluded, since in `brief` they carry the
    content rather than padding it. Budgets warn; they never fail the build. */
 const FORMATS = {
-  brie<configured-path>{ word<configured-path>60, qui<configured-path>false, reveal<configured-path>false },
-  standar<configured-path>{ word<configured-path>200, qui<configured-path>true, reveal<configured-path>true },
-  dee<configured-path>{ word<configured-path>Infinity, qui<configured-path>true, reveal<configured-path>true },
+  brief: { words: 60, quiz: false, reveals: false },
+  standard: { words: 200, quiz: true, reveals: true },
+  deep: { words: Infinity, quiz: true, reveals: true },
 };
 const TITLE_MAX_CHARS = 40;
 
@@ -94,11 +94,11 @@ function parseSource(raw) {
   if (!fmMatch) fail("missing YAML frontmatter");
   const meta = parseYaml(fmMatch[1]);
   for (const field of ["title", "type", "category", "slug", "date"]) {
-    if (!meta[field]) fail(`frontmatter missing required fiel<configured-path>${field}`);
+    if (!meta[field]) fail(`frontmatter missing required field: ${field}`);
   }
-  if (!["topic", "code-showcase"].includes(meta.type)) fail(`type must be topic|code-showcase, go<configured-path>${meta.type}`);
+  if (!["topic", "code-showcase"].includes(meta.type)) fail(`type must be topic|code-showcase, got: ${meta.type}`);
   meta.format = meta.format || "standard";
-  if (!FORMATS[meta.format]) fail(`format must be ${Object.keys(FORMATS).join("|")}, go<configured-path>${meta.format}`);
+  if (!FORMATS[meta.format]) fail(`format must be ${Object.keys(FORMATS).join("|")}, got: ${meta.format}`);
   const body = raw.slice(fmMatch[0].length);
   const lines = body.split(/\r?\n/);
 
@@ -109,7 +109,7 @@ function parseSource(raw) {
 
   const pushParagraph = (buffer) => {
     const text = buffer.join(" ").trim();
-    if (text && current) current.blocks.push({ kin<configured-path>"p", text });
+    if (text && current) current.blocks.push({ kind: "p", text });
     buffer.length = 0;
   };
 
@@ -120,7 +120,7 @@ function parseSource(raw) {
     const heading = line.match(/^# +([a-z0-9-]+) *\| *(.+)$/);
     if (heading) {
       pushParagraph(para);
-      current = { slu<configured-path>heading[1], titl<configured-path>heading[2].trim(), block<configured-path>};
+      current = { slug: heading[1], title: heading[2].trim(), blocks: [] };
       sections.push(current);
       i++;
       continue;
@@ -168,7 +168,7 @@ function parseSource(raw) {
   return { meta, sections, quiz };
 }
 
-/** Parses a fenced code block starting at lines[start]; consumes trailing @<configured-path>annotation lines. */
+/** Parses a fenced code block starting at lines[start]; consumes trailing @N: annotation lines. */
 function parseCodeFence(lines, start) {
   const open = lines[start].match(/^```(\w+)?(?: +(.+))?$/);
   const lang = open[1] || "text";
@@ -182,7 +182,7 @@ function parseCodeFence(lines, start) {
   i++; // closing fence
 
   if (lang === "mermaid") {
-    return { bloc<configured-path>{ kin<configured-path>"mermaid", cod<configured-path>codeLines.join("\n") }, nex<configured-path>i };
+    return { block: { kind: "mermaid", code: codeLines.join("\n") }, next: i };
   }
 
   // strip //@N or #@N markers, remember which line owns which note
@@ -196,32 +196,32 @@ function parseCodeFence(lines, start) {
     return codeLine;
   });
 
-  // trailing @<configured-path>Title | body lines
+  // trailing @N: Title | body lines
   const notes = {};
   while (i < lines.length) {
     const note = lines[i].match(/^@(\d+): *([^|]+?) *\| *(.+)$/);
     if (!note) break;
-    notes[Number(note[1])] = { titl<configured-path>note[2].trim(), bod<configured-path>note[3].trim() };
+    notes[Number(note[1])] = { title: note[2].trim(), body: note[3].trim() };
     i++;
   }
 
   const annotated = Object.keys(noteByLine).length > 0;
   return {
-    bloc<configured-path>{ kin<configured-path>annotated ? "annotated-code" : "code", lang, fname, cod<configured-path>cleaned.join("\n"), noteByLine, notes },
-    nex<configured-path>i,
+    block: { kind: annotated ? "annotated-code" : "code", lang, fname, code: cleaned.join("\n"), noteByLine, notes },
+    next: i,
   };
 }
 
 function parseContainer(name, arg, inner) {
   if (name === "info" || name === "warn") {
-    return { kin<configured-path>"callout", ton<configured-path>name, titl<configured-path>arg || (name === "info" ? "Good to know" : "Watch out"), bod<configured-path>inner.join(" ").trim() };
+    return { kind: "callout", tone: name, title: arg || (name === "info" ? "Good to know" : "Watch out"), body: inner.join(" ").trim() };
   }
   if (name === "recap") {
     const bullets = inner.filter((l) => l.trim().startsWith("- ")).map((l) => l.trim().slice(2));
-    return { kin<configured-path>"recap", bullets };
+    return { kind: "recap", bullets };
   }
   if (name === "reveal") {
-    return { kin<configured-path>"reveal", questio<configured-path>arg, bod<configured-path>inner.join(" ").trim() };
+    return { kind: "reveal", question: arg, body: inner.join(" ").trim() };
   }
   if (name === "walkthrough") {
     return parseWalkthrough(inner);
@@ -245,17 +245,17 @@ function parsePlaygroundControls(raw) {
     const range = text.match(/^(-?\d+)\.\.(-?\d+)(?: +step +(\d+))?$/);
     if (range) {
       controls[prop] = {
-        typ<configured-path>"range",
-        mi<configured-path>Number(range[1]),
-        ma<configured-path>Number(range[2]),
-        ste<configured-path>range[3] ? Number(range[3]) : 1,
-        uni<configured-path>prop === "gap" ? "px" : "",
-        defaul<configured-path>Number(range[1]),
+        type: "range",
+        min: Number(range[1]),
+        max: Number(range[2]),
+        step: range[3] ? Number(range[3]) : 1,
+        unit: prop === "gap" ? "px" : "",
+        default: Number(range[1]),
       };
     } else {
       const values = text.split("|").map((v) => v.trim()).filter(Boolean);
-      if (values.length < 2) fail(`playgroun<configured-path>control "${prop}" needs "a | b" enum or "min..max" range, go<configured-path>${text}`);
-      controls[prop] = { typ<configured-path>"enum", values, defaul<configured-path>values[0] };
+      if (values.length < 2) fail(`playground: control "${prop}" needs "a | b" enum or "min..max" range, got: ${text}`);
+      controls[prop] = { type: "enum", values, default: values[0] };
     }
   }
   return controls;
@@ -293,13 +293,13 @@ function parsePlayground(inner) {
   try {
     raw = parseYaml(inner.join("\n"));
   } catch (error) {
-    fail(`playgroun<configured-path>invalid YAML — ${error.message}`);
+    fail(`playground: invalid YAML — ${error.message}`);
   }
-  if (!raw || typeof raw !== "object") fail("playgroun<configured-path>empty config");
+  if (!raw || typeof raw !== "object") fail("playground: empty config");
 
   const container = parsePlaygroundControls(raw.container);
   const item = parsePlaygroundControls(raw.item);
-  if (!Object.keys(container).length) fail("playgroun<configured-path>needs at least one container control");
+  if (!Object.keys(container).length) fail("playground: needs at least one container control");
 
   const itemCount = clampItemCount(raw.items, 3);
   const authoredLabels = typeof raw["item-labels"] === "string"
@@ -326,15 +326,15 @@ function parsePlayground(inner) {
       }
     }
     return {
-      titl<configured-path>String(challenge.title),
-      brie<configured-path>String(challenge.brief || ""),
-      hin<configured-path>challenge.hint ? String(challenge.hint) : "",
-      item<configured-path>count,
-      targe<configured-path>{ containe<configured-path>targetContainer, item<configured-path>targetItems },
+      title: String(challenge.title),
+      brief: String(challenge.brief || ""),
+      hint: challenge.hint ? String(challenge.hint) : "",
+      items: count,
+      target: { container: targetContainer, items: targetItems },
     };
   });
 
-  return { kin<configured-path>"playground", confi<configured-path>{ itemCount, itemLabels, container, item, challenges } };
+  return { kind: "playground", config: { itemCount, itemLabels, container, item, challenges } };
 }
 
 function parseWalkthrough(inner) {
@@ -351,7 +351,7 @@ function parseWalkthrough(inner) {
     }
     const step = line.match(/^== *(\d+(?:-\d+)?) *\| *(.+)$/);
     if (step) {
-      steps.push({ rang<configured-path>step[1], titl<configured-path>step[2].trim(), bod<configured-path>});
+      steps.push({ range: step[1], title: step[2].trim(), body: [] });
       i++;
       continue;
     }
@@ -359,22 +359,22 @@ function parseWalkthrough(inner) {
     i++;
   }
   if (!code || !steps.length) fail("walkthrough needs a code fence and at least one `== range | title` step");
-  return { kin<configured-path>"walkthrough", code, steps };
+  return { kind: "walkthrough", code, steps };
 }
 
 function parseQuiz(inner) {
   const questions = [];
   let q = null;
   for (const line of inner) {
-    const question = line.match(/^<configured-path>*(.+)$/);
+    const question = line.match(/^Q: *(.+)$/);
     if (question) {
-      q = { tex<configured-path>question[1].trim(), option<configured-path>, explanatio<configured-path>"" };
+      q = { text: question[1].trim(), options: [], explanation: "" };
       questions.push(q);
       continue;
     }
     const option = line.match(/^- \[([ x])\] *(.+)$/);
     if (option && q) {
-      q.options.push({ correc<configured-path>option[1] === "x", tex<configured-path>option[2].trim() });
+      q.options.push({ correct: option[1] === "x", text: option[2].trim() });
       continue;
     }
     const explain = line.match(/^> *(.+)$/);
@@ -384,7 +384,7 @@ function parseQuiz(inner) {
   }
   if (!questions.length) fail("quiz container has no questions");
   for (const question of questions) {
-    if (!question.options.some((o) => o.correct)) fail(`quiz question has no correct optio<configured-path>${question.text}`);
+    if (!question.options.some((o) => o.correct)) fail(`quiz question has no correct option: ${question.text}`);
   }
   return questions;
 }
@@ -395,7 +395,7 @@ let highlighter = null;
 
 async function initHighlighter(langs) {
   const valid = [...new Set(langs)].filter((l) => l in bundledLanguages);
-  highlighter = await createHighlighter({ theme<configured-path>SHIKI_THEME], lang<configured-path>valid.length ? valid : ["javascript"] });
+  highlighter = await createHighlighter({ themes: [SHIKI_THEME], langs: valid.length ? valid : ["javascript"] });
 }
 
 /** Returns per-line HTML (token spans, fully escaped). */
@@ -404,7 +404,7 @@ function highlightLines(code, lang) {
   if (effectiveLang === "text" || !highlighter) {
     return code.split("\n").map((l) => escapeHtml(l) || " ");
   }
-  const { tokens } = highlighter.codeToTokens(code, { lan<configured-path>effectiveLang, them<configured-path>SHIKI_THEME });
+  const { tokens } = highlighter.codeToTokens(code, { lang: effectiveLang, theme: SHIKI_THEME });
   return tokens.map((lineTokens) => {
     if (!lineTokens.length) return " ";
     return lineTokens
@@ -416,18 +416,18 @@ function highlightLines(code, lang) {
 /* ---------------- HTML rendering ---------------- */
 
 const SVG = {
-  chec<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-  checkThi<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-  inf<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
-  war<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
-  cloc<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  pla<configured-path>'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
-  boo<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
-  qui<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>',
-  chevro<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
-  ta<configured-path>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M21 12A9 9 0 1 1 3 12"/></svg>',
-  okSmal<configured-path>'<svg class="ok-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-  errSmal<configured-path>'<svg class="err-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  checkThin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+  quiz: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+  tap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M21 12A9 9 0 1 1 3 12"/></svg>',
+  okSmall: '<svg class="ok-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  errSmall: '<svg class="err-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
 };
 
 let revealCounter = 0;
@@ -446,8 +446,8 @@ async function getMermaidRenderer() {
 }
 
 const MERMAID_THEMES = {
-  ligh<configured-path>{ them<configured-path>"neutral" },
-  dar<configured-path>{ them<configured-path>"dark" },
+  light: { theme: "neutral" },
+  dark: { theme: "dark" },
 };
 
 async function renderMermaidVariant(renderer, code, workDir, variant) {
@@ -455,16 +455,16 @@ async function renderMermaidVariant(renderer, code, workDir, variant) {
   const output = join(workDir, `diagram-${mermaidCounter}-${variant}.svg`);
   writeFileSync(input, code, "utf8");
   await renderer.run(input, output, {
-    quie<configured-path>true,
-    outputForma<configured-path>"svg",
-    puppeteerConfi<configured-path>{ headles<configured-path>"new" },
-    parseMMDOption<configured-path>{
-      backgroundColo<configured-path>"transparent",
-      svgI<configured-path>mermaid-${mermaidCounter}-${variant}`,
-      mermaidConfi<configured-path>{
+    quiet: true,
+    outputFormat: "svg",
+    puppeteerConfig: { headless: "new" },
+    parseMMDOptions: {
+      backgroundColor: "transparent",
+      svgId: `mermaid-${mermaidCounter}-${variant}`,
+      mermaidConfig: {
         ...MERMAID_THEMES[variant],
-        fontFamil<configured-path>'"Segoe UI", system-ui, sans-serif',
-        flowchar<configured-path>{ nodeSpacin<configured-path>30, rankSpacin<configured-path>36 },
+        fontFamily: '"Segoe UI", system-ui, sans-serif',
+        flowchart: { nodeSpacing: 30, rankSpacing: 36 },
       },
     },
   });
@@ -474,21 +474,21 @@ async function renderMermaidVariant(renderer, code, workDir, variant) {
 async function renderMermaid(code) {
   const renderer = await getMermaidRenderer();
   if (!renderer) {
-    console.warn("[compile] WARNIN<configured-path>diagram skipped — install @mermaid-js/mermaid-cli to render mermaid blocks");
-    return "<!-- mermaid diagram skippe<configured-path>@mermaid-js/mermaid-cli not installed -->";
+    console.warn("[compile] WARNING: diagram skipped — install @mermaid-js/mermaid-cli to render mermaid blocks");
+    return "<!-- mermaid diagram skipped: @mermaid-js/mermaid-cli not installed -->";
   }
   mermaidCounter++;
   const workDir = join(tmpdir(), `tutorial-mermaid-${process.pid}`);
-  mkdirSync(workDir, { recursiv<configured-path>true });
+  mkdirSync(workDir, { recursive: true });
   try {
     const lightSvg = await renderMermaidVariant(renderer, code, workDir, "light");
     const darkSvg = await renderMermaidVariant(renderer, code, workDir, "dark");
     return `<figure class="diagram"><div class="diagram-light">${lightSvg}</div><div class="diagram-dark">${darkSvg}</div></figure>`;
   } catch (error) {
-    console.warn(`[compile] WARNIN<configured-path>diagram skipped — mermaid render faile<configured-path>${error.message}`);
-    return "<!-- mermaid diagram skippe<configured-path>render failed -->";
+    console.warn(`[compile] WARNING: diagram skipped — mermaid render failed: ${error.message}`);
+    return "<!-- mermaid diagram skipped: render failed -->";
   } finally {
-    rmSync(workDir, { recursiv<configured-path>true, forc<configured-path>true });
+    rmSync(workDir, { recursive: true, force: true });
   }
 }
 
@@ -629,32 +629,32 @@ function renderPlaygroundReadout(config) {
   };
 
   pushLine(".container {");
-  pushLine("  displa<configured-path>flex;");
+  pushLine("  display: flex;");
   for (const [prop, control] of Object.entries(config.container)) {
     const value = controlValueText(control, control.default);
-    pushLine(`  ${prop}: ${value};`, { slo<configured-path>c:${prop}`, value });
+    pushLine(`  ${prop}: ${value};`, { slot: `c:${prop}`, value });
   }
   pushLine("}");
 
   const itemProps = Object.entries(config.item);
   if (itemProps.length) {
     for (let n = 1; n <= PLAYGROUND_MAX_ITEMS; n++) {
-      pushLine("", { rul<configured-path>n, hidde<configured-path>true });
-      pushLine(`.item:nth-child(${n}) {`, { rul<configured-path>n, hidde<configured-path>true });
+      pushLine("", { rule: n, hidden: true });
+      pushLine(`.item:nth-child(${n}) {`, { rule: n, hidden: true });
       for (const [prop, control] of itemProps) {
         const value = controlValueText(control, control.default);
-        pushLine(`  ${prop}: ${value};`, { rul<configured-path>n, hidde<configured-path>true, slo<configured-path>i${n}:${prop}`, dec<configured-path>i${n}:${prop}`, value });
+        pushLine(`  ${prop}: ${value};`, { rule: n, hidden: true, slot: `i${n}:${prop}`, decl: `i${n}:${prop}`, value });
       }
-      pushLine("}", { rul<configured-path>n, hidde<configured-path>true });
+      pushLine("}", { rule: n, hidden: true });
     }
   }
 
   const cssText = cssLines.join("\n");
   let tokenLines;
   if (highlighter && "css" in bundledLanguages) {
-    tokenLines = highlighter.codeToTokens(cssText, { lan<configured-path>"css", them<configured-path>SHIKI_THEME }).tokens;
+    tokenLines = highlighter.codeToTokens(cssText, { lang: "css", theme: SHIKI_THEME }).tokens;
   } else {
-    tokenLines = cssLines.map((line) => [{ conten<configured-path>line, colo<configured-path>null }]);
+    tokenLines = cssLines.map((line) => [{ content: line, color: null }]);
   }
 
   const htmlLines = cssLines.map((line, index) => {
@@ -703,7 +703,7 @@ function renderPlaygroundControlRow(scope, prop, control) {
 }
 
 function renderPlayground(block, sectionSlug) {
-  const config = { sectio<configured-path>sectionSlug, ...block.config };
+  const config = { section: sectionSlug, ...block.config };
   const uid = `pg-${sectionSlug}`;
 
   const tabs = [
@@ -745,7 +745,7 @@ function renderPlayground(block, sectionSlug) {
     : "";
 
   const realItems = Array.from(
-    { lengt<configured-path>config.itemCount },
+    { length: config.itemCount },
     (_, i) => `<button type="button" class="pg-item">${escapeHtml(config.itemLabels[i])}</button>`
   ).join("");
 
@@ -794,7 +794,8 @@ async function renderBlock(block, nextBlock, sectionSlug) {
       return renderPlayground(block, sectionSlug);
     case "mermaid":
       return await renderMermaid(block.code);
-    defaul<configured-path>fail(`unknown block kin<configured-path>${block.kind}`);
+    default:
+      fail(`unknown block kind: ${block.kind}`);
   }
 }
 
@@ -835,7 +836,7 @@ function renderVideos(videos) {
   const cards = videos
     .map(
       (v) =>
-        `        <a class="video-card" href="${escapeHtml(v.url)}" target="_blank" rel="noopener noreferrer" aria-label="Watc<configured-path>${escapeHtml(v.title)} on ${escapeHtml(v.channel)}">
+        `        <a class="video-card" href="${escapeHtml(v.url)}" target="_blank" rel="noopener noreferrer" aria-label="Watch: ${escapeHtml(v.title)} on ${escapeHtml(v.channel)}">
           <span class="video-thumb"><span class="play">${SVG.play}</span></span>
           <span class="video-info">
             <span class="vtitle">${escapeHtml(v.title)}</span>
@@ -860,7 +861,7 @@ function renderReferences(references) {
           try { sub = new URL(r.url).hostname; } catch { /* keep raw */ }
           return `            <li><a class="ref-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer"><span class="rl-mark">\u{1F4C4}</span><span class="rl-body"><span class="rl-title">${escapeHtml(r.title)}</span><span class="rl-sub">${escapeHtml(sub)}</span></span><span class="rl-arrow" aria-hidden="true">↗</span></a></li>`;
         }
-        const fileUrl = "fil<configured-path>" + String(r.file).replace(/\\/g, "/").replace(/^\/+/, "");
+        const fileUrl = "file:///" + String(r.file).replace(/\\/g, "/").replace(/^\/+/, "");
         const sub = String(r.file).replace(/\\/g, "/").split("/").slice(-2).join("/");
         return `            <li><a class="ref-link" href="${escapeHtml(fileUrl)}"><span class="rl-mark">\u{1F4C1}</span><span class="rl-body"><span class="rl-title">${escapeHtml(r.title)}</span><span class="rl-sub">${escapeHtml(sub)}</span></span></a></li>`;
       })
@@ -919,7 +920,7 @@ ${qHtml}
 
 /* ---------------- reading time ---------------- */
 
-/* Counts code by LINE, not by bloc<configured-path>a four-line diff is not a page of code, and a flat
+/* Counts code by LINE, not by block: a four-line diff is not a page of code, and a flat
    per-block cost made short-form tutorials read as three times longer than they are.
    Annotation note bodies count as prose — in `brief` they are the actual reading. */
 function estimateReadMinutes(sections) {
@@ -939,7 +940,7 @@ function estimateReadMinutes(sections) {
         addCode(block.code);
         for (const note of Object.values(block.notes)) words += countWords(note.title) + countWords(note.body);
       } else if (block.kind === "mermaid") codeLines += 10;
-      else codeLines += 20; // playgroun<configured-path>interactive, so budget more than its config implies
+      else codeLines += 20; // playground: interactive, so budget more than its config implies
     }
   }
   return Math.max(1, Math.round(words / 180 + codeLines / 30));
@@ -964,9 +965,9 @@ function collectTutorials(root) {
       }
       if (!meta) {
         const titleMatch = head.match(/<title>([^<]*)<\/title>/);
-        meta = { titl<configured-path>titleMatch ? titleMatch[1] : file, slu<configured-path>basename(file, ".html"), section<configured-path>};
+        meta = { title: titleMatch ? titleMatch[1] : file, slug: basename(file, ".html"), sections: [] };
       }
-      tutorials.push({ ...meta, categor<configured-path>entry, hre<configured-path>${entry}/${file}` });
+      tutorials.push({ ...meta, category: entry, href: `${entry}/${file}` });
     }
   }
   return tutorials;
@@ -975,7 +976,7 @@ function collectTutorials(root) {
 function generateIndex(root) {
   const tutorials = collectTutorials(root);
   if (!existsSync(root)) {
-    console.warn(`[compile] WARNIN<configured-path>tutorials root not found, index skippe<configured-path>${root}`);
+    console.warn(`[compile] WARNING: tutorials root not found, index skipped: ${root}`);
     return;
   }
   const byCategory = {};
@@ -1020,7 +1021,7 @@ ${cards}
   (function () {
     try {
       var stored = localStorage.getItem('tutorial-theme') || 'system';
-      var mql = window.matchMedia('(prefers-color-schem<configured-path>dark)');
+      var mql = window.matchMedia('(prefers-color-scheme: dark)');
       var resolved = stored === 'system' ? (mql.matches ? 'dark' : 'light') : stored;
       document.documentElement.setAttribute('data-theme', resolved);
     } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
@@ -1028,69 +1029,69 @@ ${cards}
 </script>
 <style>
   :root {
-    --fon<configured-path>system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --mon<configured-path>ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Menlo", monospace;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Menlo", monospace;
     --accent-1: #7c5cff;
-    --accent-gra<configured-path>linear-gradient(135deg, #7c5cff 0%, #5b6dff 55%, #4aa8ff 100%);
+    --accent-grad: linear-gradient(135deg, #7c5cff 0%, #5b6dff 55%, #4aa8ff 100%);
   }
   html[data-theme="light"] {
-    --b<configured-path>#f4f5fb; --surfac<configured-path>#ffffff; --surface-2: #f7f8fd; --surface-3: #eef1fa;
-    --borde<configured-path>#e4e7f2; --border-stron<configured-path>#d3d8ea;
-    --tex<configured-path>#1a1c2e; --text-2: #4a5069; --text-3: #757b96;
-    --shadow-car<configured-path>0 1px 2px rgba(24,28,55,.06), 0 8px 24px -12px rgba(24,28,55,.16);
-    --shadow-po<configured-path>0 4px 12px rgba(24,28,55,.10), 0 24px 48px -16px rgba(24,28,55,.28);
-    --ring-trac<configured-path>#e6e9f5;
+    --bg: #f4f5fb; --surface: #ffffff; --surface-2: #f7f8fd; --surface-3: #eef1fa;
+    --border: #e4e7f2; --border-strong: #d3d8ea;
+    --text: #1a1c2e; --text-2: #4a5069; --text-3: #757b96;
+    --shadow-card: 0 1px 2px rgba(24,28,55,.06), 0 8px 24px -12px rgba(24,28,55,.16);
+    --shadow-pop: 0 4px 12px rgba(24,28,55,.10), 0 24px 48px -16px rgba(24,28,55,.28);
+    --ring-track: #e6e9f5;
   }
   html[data-theme="dark"] {
-    --b<configured-path>#0d0d13; --surfac<configured-path>#16161f; --surface-2: #1b1c27; --surface-3: #22232f;
-    --borde<configured-path>#262735; --border-stron<configured-path>#33344a;
-    --tex<configured-path>#ecedf6; --text-2: #b3b6cc; --text-3: #7f8299;
-    --shadow-car<configured-path>0 1px 1px rgba(0,0,0,.4), 0 12px 32px -18px rgba(0,0,0,.7);
-    --shadow-po<configured-path>0 8px 40px -8px rgba(90,80,220,.35), 0 24px 60px -20px rgba(0,0,0,.8);
-    --ring-trac<configured-path>#262735;
+    --bg: #0d0d13; --surface: #16161f; --surface-2: #1b1c27; --surface-3: #22232f;
+    --border: #262735; --border-strong: #33344a;
+    --text: #ecedf6; --text-2: #b3b6cc; --text-3: #7f8299;
+    --shadow-card: 0 1px 1px rgba(0,0,0,.4), 0 12px 32px -18px rgba(0,0,0,.7);
+    --shadow-pop: 0 8px 40px -8px rgba(90,80,220,.35), 0 24px 60px -20px rgba(0,0,0,.8);
+    --ring-track: #262735;
   }
-  * { box-sizin<configured-path>border-box; }
-  html, body { max-widt<configured-path>100%; overflow-<configured-path>hidden; }
-  body { margi<configured-path>0; font-famil<configured-path>var(--font); backgroun<configured-path>var(--bg); colo<configured-path>var(--text); line-heigh<configured-path>1.6; -webkit-font-smoothin<configured-path>antialiased; transitio<configured-path>background .35s ease, color .35s ease; }
+  * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background .35s ease, color .35s ease; }
   html[data-theme="dark"] body {
-    backgroun<configured-path>radial-gradient(1000px 500px at 15% -10%, rgba(124,92,255,.10), transparent 60%),
+    background: radial-gradient(1000px 500px at 15% -10%, rgba(124,92,255,.10), transparent 60%),
                 radial-gradient(900px 500px at 100% 0%, rgba(74,168,255,.07), transparent 55%), var(--bg);
   }
-  .topbar { positio<configured-path>sticky; to<configured-path>0; z-inde<configured-path>50; displa<configured-path>flex; align-item<configured-path>center; justify-conten<configured-path>space-between; ga<configured-path>16px;
-    paddin<configured-path>12px clamp(16px, 4vw, 40px); backgroun<configured-path>color-mix(in srgb, var(--bg) 78%, transparent);
-    backdrop-filte<configured-path>saturate(1.4) blur(14px); border-botto<configured-path>1px solid var(--border); }
-  .brand { displa<configured-path>flex; align-item<configured-path>center; ga<configured-path>10px; font-weigh<configured-path>700; letter-spacin<configured-path>-.01em; font-siz<configured-path>15px; }
-  .brand .logo { widt<configured-path>28px; heigh<configured-path>28px; border-radiu<configured-path>9px; backgroun<configured-path>var(--accent-grad); displa<configured-path>grid; place-item<configured-path>center;
-    box-shado<configured-path>0 4px 14px -4px rgba(124,92,255,.6); fle<configured-path>none; }
-  .brand .logo svg { widt<configured-path>16px; heigh<configured-path>16px; colo<configured-path>#fff; }
-  .theme-toggle { displa<configured-path>inline-flex; paddin<configured-path>3px; ga<configured-path>2px; backgroun<configured-path>var(--surface-2); borde<configured-path>1px solid var(--border); border-radiu<configured-path>11px; }
-  .theme-toggle button { displa<configured-path>grid; place-item<configured-path>center; widt<configured-path>34px; heigh<configured-path>30px; borde<configured-path>none; border-radiu<configured-path>8px; backgroun<configured-path>transparent;
-    colo<configured-path>var(--text-3); curso<configured-path>pointer; transitio<configured-path>background .2s ease, color .2s ease; }
-  .theme-toggle button svg { widt<configured-path>17px; heigh<configured-path>17px; }
-  .theme-toggle button:hover { colo<configured-path>var(--text); backgroun<configured-path>var(--surface-3); }
-  .theme-toggle button[aria-pressed="true"] { backgroun<configured-path>var(--surface); colo<configured-path>var(--accent-1); box-shado<configured-path>var(--shadow-card); }
-  .wrap { max-widt<configured-path>1200px; margi<configured-path>0 auto; paddin<configured-path>40px clamp(16px, 4vw, 40px) 96px; }
-  h1 { font-siz<configured-path>clamp(30px, 5vw, 42px); letter-spacin<configured-path>-.03em; margi<configured-path>0 0 6px; font-weigh<configured-path>820; }
-  .sub { colo<configured-path>var(--text-2); margi<configured-path>0 0 34px; font-siz<configured-path>16px; }
-  .cat h2 { font-siz<configured-path>13px; font-weigh<configured-path>800; text-transfor<configured-path>uppercase; letter-spacin<configured-path>.09em; colo<configured-path>var(--text-3); margi<configured-path>34px 0 14px; }
-  .grid { displa<configured-path>grid; grid-template-column<configured-path>repeat(auto-fill, minmax(300px, 1fr)); ga<configured-path>16px; }
-  .tut-card { displa<configured-path>flex; flex-directio<configured-path>column; ga<configured-path>8px; paddin<configured-path>20px; backgroun<configured-path>var(--surface); borde<configured-path>1px solid var(--border);
-    border-radiu<configured-path>18px; text-decoratio<configured-path>none; colo<configured-path>inherit; box-shado<configured-path>var(--shadow-card);
-    transitio<configured-path>transform .22s cubic-bezier(.16,1,.3,1), box-shadow .22s ease, border-color .22s ease; }
-  .tut-card:hover { transfor<configured-path>translateY(-3px); box-shado<configured-path>var(--shadow-pop); border-colo<configured-path>var(--border-strong); }
-  .tc-eyebrow { displa<configured-path>inline-flex; align-sel<configured-path>flex-start; paddin<configured-path>4px 10px; border-radiu<configured-path>999px;
-    backgroun<configured-path>color-mix(in srgb, var(--accent-1) 12%, transparent); colo<configured-path>var(--accent-1); font-siz<configured-path>11px; font-weigh<configured-path>700; letter-spacin<configured-path>.02em; }
-  .tc-title { font-weigh<configured-path>750; font-siz<configured-path>17px; letter-spacin<configured-path>-.02em; line-heigh<configured-path>1.25; }
-  .tc-sub { font-siz<configured-path>13.5px; colo<configured-path>var(--text-2); line-heigh<configured-path>1.45; }
-  .tc-meta { displa<configured-path>flex; flex-wra<configured-path>wrap; ga<configured-path>6px; margin-to<configured-path>2px; }
-  .chip { displa<configured-path>inline-flex; align-item<configured-path>center; paddin<configured-path>3px 10px; backgroun<configured-path>var(--surface-2); borde<configured-path>1px solid var(--border);
-    border-radiu<configured-path>999px; font-siz<configured-path>11.5px; colo<configured-path>var(--text-3); font-weigh<configured-path>600; }
-  .tc-progress { displa<configured-path>flex; align-item<configured-path>center; ga<configured-path>10px; margin-to<configured-path>6px; }
-  .tc-bar { fle<configured-path>1; heigh<configured-path>6px; border-radiu<configured-path>999px; backgroun<configured-path>var(--ring-track); overflo<configured-path>hidden; }
-  .tc-fill { displa<configured-path>block; heigh<configured-path>100%; widt<configured-path>0; border-radiu<configured-path>999px; backgroun<configured-path>var(--accent-grad); transitio<configured-path>width .5s cubic-bezier(.16,1,.3,1); }
-  .tc-count { font-siz<configured-path>11.5px; font-weigh<configured-path>700; colo<configured-path>var(--text-3); font-variant-numeri<configured-path>tabular-nums; white-spac<configured-path>nowrap; }
-  .empty { colo<configured-path>var(--text-3); }
-  @media (prefers-reduced-motio<configured-path>reduce) { * { animation-duratio<configured-path>.001ms !important; transition-duratio<configured-path>.001ms !important; } }
+  .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px clamp(16px, 4vw, 40px); background: color-mix(in srgb, var(--bg) 78%, transparent);
+    backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; font-size: 15px; }
+  .brand .logo { width: 28px; height: 28px; border-radius: 9px; background: var(--accent-grad); display: grid; place-items: center;
+    box-shadow: 0 4px 14px -4px rgba(124,92,255,.6); flex: none; }
+  .brand .logo svg { width: 16px; height: 16px; color: #fff; }
+  .theme-toggle { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px; }
+  .theme-toggle button { display: grid; place-items: center; width: 34px; height: 30px; border: none; border-radius: 8px; background: transparent;
+    color: var(--text-3); cursor: pointer; transition: background .2s ease, color .2s ease; }
+  .theme-toggle button svg { width: 17px; height: 17px; }
+  .theme-toggle button:hover { color: var(--text); background: var(--surface-3); }
+  .theme-toggle button[aria-pressed="true"] { background: var(--surface); color: var(--accent-1); box-shadow: var(--shadow-card); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 40px clamp(16px, 4vw, 40px) 96px; }
+  h1 { font-size: clamp(30px, 5vw, 42px); letter-spacing: -.03em; margin: 0 0 6px; font-weight: 820; }
+  .sub { color: var(--text-2); margin: 0 0 34px; font-size: 16px; }
+  .cat h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .09em; color: var(--text-3); margin: 34px 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .tut-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; text-decoration: none; color: inherit; box-shadow: var(--shadow-card);
+    transition: transform .22s cubic-bezier(.16,1,.3,1), box-shadow .22s ease, border-color .22s ease; }
+  .tut-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-pop); border-color: var(--border-strong); }
+  .tc-eyebrow { display: inline-flex; align-self: flex-start; padding: 4px 10px; border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-1) 12%, transparent); color: var(--accent-1); font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+  .tc-title { font-weight: 750; font-size: 17px; letter-spacing: -.02em; line-height: 1.25; }
+  .tc-sub { font-size: 13.5px; color: var(--text-2); line-height: 1.45; }
+  .tc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .chip { display: inline-flex; align-items: center; padding: 3px 10px; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 999px; font-size: 11.5px; color: var(--text-3); font-weight: 600; }
+  .tc-progress { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .tc-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--ring-track); overflow: hidden; }
+  .tc-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--accent-grad); transition: width .5s cubic-bezier(.16,1,.3,1); }
+  .tc-count { font-size: 11.5px; font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty { color: var(--text-3); }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
 </style>
 </head>
 <body>
@@ -1114,7 +1115,7 @@ ${empty}
 <script>
 (function () {
   "use strict";
-  var mql = window.matchMedia('(prefers-color-schem<configured-path>dark)');
+  var mql = window.matchMedia('(prefers-color-scheme: dark)');
   function currentPref() { return localStorage.getItem('tutorial-theme') || 'system'; }
   function applyTheme(pref) {
     var resolved = pref === 'system' ? (mql.matches ? 'dark' : 'light') : pref;
@@ -1147,7 +1148,7 @@ ${empty}
 </html>
 `;
   writeFileSync(join(root, "index.html"), html, "utf8");
-  console.log(`[compile] index regenerate<configured-path>${join(root, "index.html")} (${tutorials.length} tutorial${tutorials.length === 1 ? "" : "s"})`);
+  console.log(`[compile] index regenerated: ${join(root, "index.html")} (${tutorials.length} tutorial${tutorials.length === 1 ? "" : "s"})`);
 }
 
 /* ---------------- main ---------------- */
@@ -1170,17 +1171,17 @@ function sectionProseWords(section) {
 }
 
 function lintAuthoring(meta, sections, format) {
-  const warn = (message) => console.warn(`[compile] WARNIN<configured-path>${message}`);
+  const warn = (message) => console.warn(`[compile] WARNING: ${message}`);
   for (const section of sections) {
     if (section.title.length > TITLE_MAX_CHARS) {
       warn(`${section.slug}: title is ${section.title.length} chars (max ${TITLE_MAX_CHARS}) — it will wrap in the contents rail`);
     }
     const words = sectionProseWords(section);
     if (words > format.words) {
-      warn(`${section.slug}: ${words} prose words (forma<configured-path>${meta.format} budget is ${format.words})`);
+      warn(`${section.slug}: ${words} prose words (format: ${meta.format} budget is ${format.words})`);
     }
     if (!format.reveals && section.blocks.some((b) => b.kind === "reveal")) {
-      warn(`${section.slug}: :::reveal is not used in forma<configured-path>${meta.format}`);
+      warn(`${section.slug}: :::reveal is not used in format: ${meta.format}`);
     }
   }
 }
@@ -1188,20 +1189,20 @@ function lintAuthoring(meta, sections, format) {
 async function main() {
   const args = process.argv.slice(2);
   const sourceArg = args.find((a) => !a.startsWith("--"));
-  if (!sourceArg) fail("usag<configured-path>node compile.js <source.md> [--out <dir>] [--no-index]");
+  if (!sourceArg) fail("usage: node compile.js <source.md> [--out <dir>] [--no-index]");
   const outFlag = args.indexOf("--out");
   const outDir = outFlag >= 0 ? resolve(args[outFlag + 1]) : null;
   const skipIndex = args.includes("--no-index");
 
   const sourcePath = resolve(sourceArg);
-  if (!existsSync(sourcePath)) fail(`source not foun<configured-path>${sourcePath}`);
+  if (!existsSync(sourcePath)) fail(`source not found: ${sourcePath}`);
   const raw = readFileSync(sourcePath, "utf8");
   const { meta, sections, quiz } = parseSource(raw);
 
   if (meta.type === "code-showcase" && quiz) fail("code-showcase tutorials must not contain a quiz");
   const format = FORMATS[meta.format];
-  if (!format.quiz && quiz) fail(`forma<configured-path>${meta.format} must not contain a quiz`);
-  if (format.quiz && meta.type === "topic" && !quiz) console.warn("[compile] WARNIN<configured-path>topic tutorial has no quiz (expected one)");
+  if (!format.quiz && quiz) fail(`format: ${meta.format} must not contain a quiz`);
+  if (format.quiz && meta.type === "topic" && !quiz) console.warn("[compile] WARNING: topic tutorial has no quiz (expected one)");
   lintAuthoring(meta, sections, format);
 
   // collect languages for shiki
@@ -1222,18 +1223,18 @@ async function main() {
 
   const glossary = {};
   for (const [key, def] of Object.entries(meta.glossary || {})) {
-    glossary[key] = { ter<configured-path>key.charAt(0).toUpperCase() + key.slice(1), de<configured-path>renderInline(def) };
+    glossary[key] = { term: key.charAt(0).toUpperCase() + key.slice(1), def: renderInline(def) };
   }
 
   const indexMeta = {
-    titl<configured-path>meta.title,
-    subtitl<configured-path>meta.subtitle || "",
-    typ<configured-path>meta.type,
-    categor<configured-path>meta.category,
-    slu<configured-path>meta.slug,
-    dat<configured-path>String(meta.date),
+    title: meta.title,
+    subtitle: meta.subtitle || "",
+    type: meta.type,
+    category: meta.category,
+    slug: meta.slug,
+    date: String(meta.date),
     readMin,
-    section<configured-path>sections.map((s) => ({ slu<configured-path>s.slug, titl<configured-path>s.title })),
+    sections: sections.map((s) => ({ slug: s.slug, title: s.title })),
   };
   const metaComment = `<!--tutorial-meta ${JSON.stringify(indexMeta).replace(/--/g, "-\\u002d")}-->`;
 
@@ -1265,10 +1266,10 @@ async function main() {
   }
 
   const leftover = html.match(/\{\{[A-Z_]+\}\}/);
-  if (leftover) fail(`unfilled template placeholde<configured-path>${leftover[0]}`);
+  if (leftover) fail(`unfilled template placeholder: ${leftover[0]}`);
 
   const targetDir = outDir || dirname(sourcePath);
-  mkdirSync(targetDir, { recursiv<configured-path>true });
+  mkdirSync(targetDir, { recursive: true });
   const outPath = join(targetDir, `${meta.slug}.html`);
   writeFileSync(outPath, html, "utf8");
   console.log(`[compile] wrote ${outPath}`);
@@ -1277,6 +1278,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`[compile] ERRO<configured-path>${error.stack || error.message}`);
+  console.error(`[compile] ERROR: ${error.stack || error.message}`);
   process.exit(1);
 });

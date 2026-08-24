@@ -278,13 +278,13 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
     }
     const opts=resolveOptions(user,{identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,repositoryId,...(projectId ? {projectId} : {})});
-    const canonicalRoot=await catalogPath(context,parsed.cwd), catalog=await inventoryCanonical(canonicalRoot);
-    const projectInventory=found ? await inventoryProjectSkills(found.root,catalog) : {skills:[],diagnostics:[]};
+    const canonicalRoot=await catalogPath(context,parsed.cwd), canonicalCatalog=await inventoryCanonical(canonicalRoot);
+    const projectInventory=found ? await inventoryProjectSkills(found.root,canonicalCatalog) : {skills:[],diagnostics:[]};
     if(projectInventory.diagnostics.length) throw new SkillCatalogError(projectInventory.diagnostics);
-    const projectSkills=projectInventory.skills;
+    const catalog=[...canonicalCatalog,...projectInventory.skills].sort((left,right)=>left.identity.localeCompare(right.identity));
     const manifest=resolveManifest(catalog,opts), artifact=createRuntimeSkillArtifact(manifest,catalog,{runtime:selection.runtime});
     const scope=user.contentScopes[selection.contentScope.name]!, projectOverride=projectId?user.projects?.[projectId]:undefined;
-    const skillArtifact=createSkillArtifactReference({runtime:selection.runtime,identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,projectId:projectId??null,catalogHash:sha256Canonical(catalog.map(skill=>({identity:skill.identity,contentHash:skill.contentHash})) as unknown as JsonValue),enabledPacks:resolveEffectiveSkillPacks({contentScopeSkillPacks:scope.skillPacks,projectSkillPacks:projectOverride?.skillPacks,skillPolicySkillPacks:selection.skillPolicy.declaration.skillPacks}),skillPolicyConfig:selection.skillPolicy.declaration as unknown as JsonValue,contentScopeExposure:(scope.skillExposure??{}) as unknown as JsonValue,projectExposure:(projectOverride?.skillExposure??null) as unknown as JsonValue});
+    const skillArtifact=createSkillArtifactReference({runtime:selection.runtime,identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,projectId:projectId??null,catalogHash:sha256Canonical(catalog.map(skill=>({identity:skill.identity,contentHash:skill.contentHash,...("directoryHash" in skill?{origin:"project",directoryHash:skill.directoryHash,realPath:skill.realPath,realProjectRoot:skill.realProjectRoot}:{origin:"canonical"})})) as unknown as JsonValue),enabledPacks:resolveEffectiveSkillPacks({contentScopeSkillPacks:scope.skillPacks,projectSkillPacks:projectOverride?.skillPacks,skillPolicySkillPacks:selection.skillPolicy.declaration.skillPacks}),skillPolicyConfig:selection.skillPolicy.declaration as unknown as JsonValue,contentScopeExposure:(scope.skillExposure??{}) as unknown as JsonValue,projectExposure:(projectOverride?.skillExposure??null) as unknown as JsonValue});
     const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(context,selection.executor), tty=context.launchTty??directProcessTty();
     let hostApproval:{reason:string;approvalKey:string}|undefined;
     if(selection.executor==="host" && action!=="explain") {
@@ -306,8 +306,8 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const statusSnapshot = found
       ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
       : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
-    await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,...(found?{projectRoot:found.root}:{}),environment:context.env,context,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(projectSkills.length?{projectSkills}:{})});
-    return {data:null,warnings,silent:true};
+    const processResult=await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,environment:context.env,context,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot});
+    return {data:null,warnings,silent:true,exitCode:processResult.exitCode};
   }
   if (group === "worktree" && ["create","remove","list","select","status","prepare","cancel","reconcile"].includes(action ?? "")) {
     const service=worktrees(context, parsed.cwd);
@@ -484,8 +484,11 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const skillPolicyOption=parsed.options.get("skill-policy");
     if (typeof skillPolicyOption !== "string") throw new MpxError({code:"SKILL_POLICY_REQUIRED",message:"Skill resolution requires an explicit skill policy."});
     if (!user.skillPolicies[skillPolicyOption]) throw new MpxError({code:"SKILL_POLICY_UNKNOWN",message:`Unknown skill policy '${skillPolicyOption}'.`});
-    const catalog=await inventoryCanonical(await catalogPath(context,parsed.cwd));
+    const canonicalCatalog=await inventoryCanonical(await catalogPath(context,parsed.cwd));
     const found=await discoverProjectConfig(parsed.cwd);
+    const projectInventory=found ? await inventoryProjectSkills(found.root,canonicalCatalog) : {skills:[],diagnostics:[]};
+    if(projectInventory.diagnostics.length) throw new SkillCatalogError(projectInventory.diagnostics);
+    const catalog=[...canonicalCatalog,...projectInventory.skills].sort((left,right)=>left.identity.localeCompare(right.identity));
     const cwdClassification=await knownCwdClassification(parsed.cwd,user);
     const contentScopeOption=parsed.options.get("content-scope");
     const projectId=found?.config.project.id, contentScope=typeof contentScopeOption==="string"?contentScopeOption:cwdClassification.contentScope;
@@ -502,7 +505,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     if (action==="complete") return {data:{artifact,completions:humanCompleteSkills(runtimeArtifact,args.join(" "))},warnings};
     const skill=catalog.find((item:{identity:string})=>item.identity===identity);
     const entry=runtimeArtifact.entries.find((item)=>item.identity===identity);
-    if (action==="show") { const detail=humanSkillDetail(runtimeArtifact,catalog,identity); if(!detail || !skill || !entry) throw new MpxError({code:"SKILL_NOT_FOUND",message:`Skill '${identity}' was not found in the launch-bound artifact.`}); return { data:{artifact,skill:{...detail,skillPacks:skill.skillPacks,exposure:entry.exposure}}, warnings }; }
+    if (action==="show") { const detail=humanSkillDetail(runtimeArtifact,catalog,identity); if(!detail || !skill || !entry) throw new MpxError({code:"SKILL_NOT_FOUND",message:`Skill '${identity}' was not found in the launch-bound artifact.`}); return { data:{artifact,skill:{...detail,skillPacks:"skillPacks" in skill?skill.skillPacks:[],exposure:entry.exposure}}, warnings }; }
     if (action==="explain") { if(!skill) throw new MpxError({code:"SKILL_NOT_FOUND",message:`Skill '${identity}' was not found.`}); return { data:{artifact,skill:explainSkill(skill,opts)}, warnings }; }
     const limit=Number(parsed.options.get("limit")??20);
     if (!Number.isInteger(limit)) throw new UsageError("--limit must be an integer");

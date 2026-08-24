@@ -14,11 +14,13 @@ tracker. Resolve which tracker CLI and how to run each verb via
 [ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md).
 
 Shared conventions — folder layout, project discovery, mockup HTML rules, container context, the
-`Design needed` labe<configured-path>DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
+`Design needed` label: [DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
 
 ## Step 1: Parse arguments
 
-Argument `all` → [Batch mode](#batch-mode). Otherwis<configured-path>- **Variant** — first token, a letter A–Z, case-insensitive
+Argument `all` → [Batch mode](#batch-mode). Otherwise:
+
+- **Variant** — first token, a letter A–Z, case-insensitive
 - **Refinements** — everything after it
 
 `B make header sticky, use Badge for status, add empty state` → variant B, three refinements.
@@ -40,15 +42,20 @@ directories, read real props and variants from source, and note the gaps.
 
 ## Step 4: Adopt missing components
 
-For each ga<configured-path>1. Spawn `context7-docs-fetcher` against the project's component library.
-2. Install with the detected package manager. shadcn project<configured-path><pm-exec> shadcn@latest add <name> --yes --overwrite` — `pnpm dlx`, `npx`, `yarn dlx`, or
+For each gap:
+
+1. Spawn `context7-docs-fetcher` against the project's component library.
+2. Install with the detected package manager. shadcn projects:
+   `<pm-exec> shadcn@latest add <name> --yes --overwrite` — `pnpm dlx`, `npx`, `yarn dlx`, or
    `bunx` per DESIGN_PIPELINE.md § Project discovery, and `shadcn-svelte@latest` on Svelte.
-   Other librarie<configured-path>their own documented install command.
+   Other libraries: their own documented install command.
 3. Record the adoption in `SUMMARY.md`.
 
 ## Step 5: Write `refined.html`
 
-`designs/<component-name>/refined.html`, following DESIGN_PIPELINE.md § Mockup HTML rules, plu<configured-path>- The chosen variant as visual and structural base
+`designs/<component-name>/refined.html`, following DESIGN_PIPELINE.md § Mockup HTML rules, plus:
+
+- The chosen variant as visual and structural base
 - **Every** refinement requirement applied
 - Every state from the brief, not just the happy path
 - Eyebrow label `REFINED — Variant <X> + <short refinement summary>`
@@ -65,8 +72,8 @@ the summary carries only implementation-relevant decisions and the component map
 
 ## Refinements Applied
 
-Variant <X> refined wit<configured-path>comma-separated list]. See the design brief for full requirements.
-Key structural changes from the base varian<configured-path>1–3 sentences].
+Variant <X> refined with: [comma-separated list]. See the design brief for full requirements.
+Key structural changes from the base variant: [1–3 sentences].
 
 ## Component Map
 
@@ -96,7 +103,9 @@ Only what is not already in the brief.]
 
 ## Step 7: Update the brief
 
-Insert below the `# Title` headin<configured-path>markdown
+Insert below the `# Title` heading:
+
+```markdown
 > **Status**: Refined (Variant <X>)
 > **Refined mockup**: `designs/<component-name>/refined.html`
 > **Summary**: `designs/<component-name>/SUMMARY.md`
@@ -109,10 +118,12 @@ than recording it in the summary.
 ## Step 8: Comment on the tracker issue/task
 
 Ask for the design issue/task number if unknown, then comment on it (verb + concrete CLI in
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md)) with this bod<configured-path>markdown
+[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md)) with this body:
+
+```markdown
 ## Design Refined
 
-Variant **<X>** refine<configured-path>comma-separated refinements]
+Variant **<X>** refined: [comma-separated refinements]
 
 **Artifacts:**
 - `designs/<component-name>/refined.html` — open in browser to review
@@ -128,7 +139,9 @@ Run this only once the user has reviewed `refined.html` and approved it. Before 
 The `Design needed` gate maps to a concrete label/column per tracker — see
 [ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md) § Label mapping.
 
-1. **Find candidates** — these signals are complementary, use whichever return result<configured-path>- the design issue/task's child tasks
+1. **Find candidates** — these signals are complementary, use whichever return results:
+
+    - the design issue/task's child tasks
     - open issues/tasks referencing `designs/<component-name>`
     - open issues/tasks carrying the `Design needed` gate that mention `<component-name>`
 
@@ -144,8 +157,10 @@ The `Design needed` gate maps to a concrete label/column per tracker — see
 Open `refined.html` through Chrome DevTools MCP when available, no screenshot — the user reviews
 it themselves.
 
-Report in this orde<configured-path>1. **Artifacts** — `refined.html`, `SUMMARY.md`, brief updated
-2. **Component map** — counts onl<configured-path>N reuse, N adopted, N custom
+Report in this order:
+
+1. **Artifacts** — `refined.html`, `SUMMARY.md`, brief updated
+2. **Component map** — counts only: N reuse, N adopted, N custom
 3. **Unblocked** — `#<num> — <title>` per issue whose gate was cleared
 4. **Ready to execute** — those unblocked issues carrying no other open `blocked-by`, so the user
    knows what can go to `mpx execute` next
@@ -154,4 +169,4 @@ Report in this orde<configured-path>1. **Artifacts** — `refined.html`, `SUMMAR
 ## Batch mode
 
 Argument `all`: refine every design folder whose variant choice is recorded but unprocessed.
-Procedur<configured-path>BATCH_MODE.md](BATCH_MODE.md).
+Procedure: [BATCH_MODE.md](BATCH_MODE.md).

@@ -11,7 +11,7 @@ import {
   type RuntimeSkillArtifactReferenceV4,
 } from "@mpx/runtime-contracts";
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { lstat, open, opendir, readFile, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 
 export { EXPOSURES, SKILL_PACKS, type Exposure, type SkillPack, type SkillPolicyConfig } from "@mpx/config";
@@ -29,9 +29,11 @@ export interface CanonicalSkill {
   defaultExposure: Exposure; sourcePath: string; realPath: string; contentHash: string;
 }
 export interface ProjectSkill {
-  identity: string; description: string; projectExposure?: "full" | "explicit-only";
+  identity: string; description: string; projectExposure: "full" | "explicit-only";
   disableModelInvocation: boolean; sourcePath: string; realPath: string;
+  contentHash: string; directoryHash: string; projectRoot: string; realProjectRoot: string;
 }
+export type CatalogSkill = CanonicalSkill | ProjectSkill;
 export interface ExposureSettings { default?: Exposure; skills?: Record<string, Exposure> }
 export interface ResolveOptions {
   repositoryId: string; contentScope: string; projectId?: string; enabledPacks: readonly SkillPack[];
@@ -46,7 +48,9 @@ export type ResolvedManifest = ResolvedSkillManifestV4;
 export interface RuntimeSkillEntry {
   identity: string; publicName: string; packs: SkillPack[]; exposure: Exposure; metadataHash: string;
   description?: string; triggers?: string;
-  source: { kind: "canonical"; path: string; realPath: string; contentHash: string };
+  source:
+    | { kind: "canonical"; path: string; realPath: string; contentHash: string }
+    | { kind: "project"; path: string; realPath: string; contentHash: string; directoryHash: string; projectRoot: string; realProjectRoot: string };
   permissions: { humanInvocation: boolean; modelInvocation: boolean };
 }
 export interface RuntimeSkillArtifact {
@@ -59,31 +63,59 @@ export const MAX_SKILL_SEARCH_RESULTS = 20;
 export const MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH = 200;
 export const MAX_HUMAN_SKILL_SEARCH_RESULTS = 20;
 export const MAX_SKILL_BODY_BYTES = 256 * 1024;
+export const MAX_PROJECT_SKILL_CANDIDATES = 256;
+export const MAX_PROJECT_SKILL_DIRECTORY_ENTRIES = 4_096;
+export const MAX_PROJECT_SKILL_INVENTORY_BYTES = 16 * 1024 * 1024;
 export const MAX_SKILL_DIRECTORY_FILES = 128;
 export const MAX_SKILL_DIRECTORY_BYTES = 4 * 1024 * 1024;
+export const MAX_SKILL_DIRECTORY_DIRECTORIES = 128;
+export const MAX_SKILL_DIRECTORY_DEPTH = 16;
 export interface SkillDirectoryFile { readonly relativePath: string; readonly bytes: Buffer }
 
+class ProjectSkillInventoryByteLimitError extends Error {}
+
+async function readExactSkillFile(candidate: string, stat: Awaited<ReturnType<typeof lstat>>, remainingBytes: number): Promise<Buffer> {
+  if (stat.size > MAX_SKILL_DIRECTORY_BYTES) throw new Error("skill directory file exceeds byte limit");
+  if (stat.size > remainingBytes) throw new Error("skill directory exceeds byte limit");
+  const handle = await open(candidate, "r");
+  try {
+    const initial = await handle.stat(); const linked = await lstat(candidate);
+    if (!initial.isFile() || linked.isSymbolicLink() || !linked.isFile() || initial.dev !== stat.dev || initial.ino !== stat.ino || linked.dev !== initial.dev || linked.ino !== initial.ino || initial.size !== stat.size || initial.mtimeMs !== stat.mtimeMs) throw new Error("skill directory file changed while reading");
+    const bytes = Buffer.alloc(initial.size); let offset = 0;
+    while (offset < bytes.length) { const read = await handle.read(bytes, offset, bytes.length - offset, offset); if (read.bytesRead === 0) throw new Error("skill directory file changed while reading"); offset += read.bytesRead; }
+    if ((await handle.read(Buffer.alloc(1), 0, 1, initial.size)).bytesRead !== 0) throw new Error("skill directory file grew while reading");
+    const final = await handle.stat(); const finalLinked = await lstat(candidate);
+    if (final.dev !== initial.dev || final.ino !== initial.ino || finalLinked.dev !== initial.dev || finalLinked.ino !== initial.ino || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || finalLinked.isSymbolicLink()) throw new Error("skill directory file changed while reading");
+    return bytes;
+  } finally { await handle.close(); }
+}
+
 /** Snapshots one validated skill directory without following links or special files. */
-export async function enumerateSkillDirectory(directory: string): Promise<readonly SkillDirectoryFile[]> {
+export async function enumerateSkillDirectory(directory: string, inventoryBytesRemaining = Number.MAX_SAFE_INTEGER): Promise<readonly SkillDirectoryFile[]> {
   const rootStat = await lstat(directory);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error("skill directory must be a regular directory");
-  const root = await realpath(directory); const files: SkillDirectoryFile[] = []; let totalBytes = 0;
-  const visit = async (current: string): Promise<void> => {
-    for (const entry of (await readdir(current, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name))) {
+  const root = await realpath(directory); const files: SkillDirectoryFile[] = []; let totalBytes = 0, directoryCount = 0;
+  const visit = async (current: string, depth: number): Promise<void> => {
+    const entries = await opendir(current);
+    for await (const entry of entries) {
       const candidate = path.join(current, entry.name); const stat = await lstat(candidate);
       if (stat.isSymbolicLink()) throw new Error("skill directory cannot contain symlinks");
       const resolved = await realpath(candidate);
       if (!isPathWithinRoot(resolved, root)) throw new Error("skill directory entry escapes its root");
-      if (stat.isDirectory()) await visit(candidate);
-      else if (stat.isFile()) {
+      if (stat.isDirectory()) {
+        directoryCount += 1; if (directoryCount > MAX_SKILL_DIRECTORY_DIRECTORIES) throw new Error("skill directory exceeds directory count limit");
+        const childDepth = depth + 1; if (childDepth > MAX_SKILL_DIRECTORY_DEPTH) throw new Error("skill directory exceeds depth limit");
+        await visit(candidate, childDepth);
+      } else if (stat.isFile()) {
         if (files.length >= MAX_SKILL_DIRECTORY_FILES) throw new Error("skill directory exceeds file count limit");
-        const bytes = await readFile(candidate); totalBytes += bytes.length;
-        if (totalBytes > MAX_SKILL_DIRECTORY_BYTES) throw new Error("skill directory exceeds byte limit");
+        if (stat.size > MAX_SKILL_DIRECTORY_BYTES) throw new Error("skill directory file exceeds byte limit");
+        if (stat.size > inventoryBytesRemaining - totalBytes) throw new ProjectSkillInventoryByteLimitError("project skill inventory byte limit exceeded");
+        const bytes = await readExactSkillFile(candidate, stat, MAX_SKILL_DIRECTORY_BYTES - totalBytes); totalBytes += bytes.length;
         files.push(Object.freeze({ relativePath: path.relative(root, candidate).split(path.sep).join("/"), bytes }));
       } else throw new Error("skill directory contains a special file");
     }
   };
-  await visit(root); return Object.freeze(files);
+  await visit(root, 0); files.sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0); return Object.freeze(files);
 }
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -166,16 +198,44 @@ export async function inventoryCanonical(root: string): Promise<CanonicalSkill[]
 }
 
 export interface ProjectSkillDirectoryEntry { readonly name: string; isDirectory(): boolean; isSymbolicLink?(): boolean }
+export interface ProjectSkillDirectory { [Symbol.asyncIterator](): AsyncIterator<ProjectSkillDirectoryEntry> }
 export interface ProjectSkillFileSystem {
-  readdir(root: string, options: { withFileTypes: true }): Promise<ProjectSkillDirectoryEntry[]>;
+  opendir(root: string): Promise<ProjectSkillDirectory>;
   realpath(file: string): Promise<string>;
   readFile(file: string, encoding: "utf8"): Promise<string>;
+  enumerateDirectory?(directory: string, inventoryBytesRemaining: number): Promise<readonly SkillDirectoryFile[]>;
 }
 const projectSkillFileSystem: ProjectSkillFileSystem = {
-  readdir: (root, options) => readdir(root, options),
+  opendir,
   realpath,
   readFile: (file, encoding) => readFile(file, encoding),
+  enumerateDirectory: enumerateSkillDirectory,
 };
+
+async function projectSkillCandidates(root: string, filesystem: ProjectSkillFileSystem): Promise<ProjectSkillDirectoryEntry[]> {
+  const directory = await filesystem.opendir(root);
+  const iterator = directory[Symbol.asyncIterator]();
+  const candidates: ProjectSkillDirectoryEntry[] = [];
+  let entriesExamined = 0;
+  try {
+    while (true) {
+      const result = await iterator.next();
+      if (result.done) return candidates;
+      entriesExamined += 1;
+      if (entriesExamined > MAX_PROJECT_SKILL_DIRECTORY_ENTRIES) {
+        throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_LIMIT", message: `project skill inventory exceeds ${MAX_PROJECT_SKILL_DIRECTORY_ENTRIES} directory entries`, path: root }]);
+      }
+      const entry = result.value;
+      if (!entry.isDirectory() && !entry.isSymbolicLink?.()) continue;
+      candidates.push(entry);
+      if (candidates.length > MAX_PROJECT_SKILL_CANDIDATES) {
+        throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_LIMIT", message: `project skill inventory exceeds ${MAX_PROJECT_SKILL_CANDIDATES} candidates`, path: root }]);
+      }
+    }
+  } finally {
+    await iterator.return?.();
+  }
+}
 function absentInventory(error: unknown): boolean { return (error as NodeJS.ErrnoException)?.code === "ENOENT" || (error as NodeJS.ErrnoException)?.code === "ENOTDIR"; }
 function inventoryIoFailure(error: unknown): boolean { return typeof (error as NodeJS.ErrnoException)?.code === "string" && !absentInventory(error); }
 async function containedProject(root: string, candidate: string, filesystem: ProjectSkillFileSystem): Promise<string> {
@@ -184,35 +244,63 @@ async function containedProject(root: string, candidate: string, filesystem: Pro
   return realCandidate;
 }
 export async function inventoryProjectSkills(projectRoot: string, canonical: readonly CanonicalSkill[] = [], filesystem: ProjectSkillFileSystem = projectSkillFileSystem): Promise<{ skills: ProjectSkill[]; diagnostics: Diagnostic[] }> {
-  const root = path.join(projectRoot, ".agents", "skills"); const diagnostics: Diagnostic[] = []; const skills: ProjectSkill[] = []; const names = new Set(canonical.map(x => x.identity));
-  let entries: ProjectSkillDirectoryEntry[];
-  try { entries = await filesystem.readdir(root, { withFileTypes: true }); }
+  const root = path.join(projectRoot, ".agents", "skills"); const diagnostics: Diagnostic[] = []; const skills: ProjectSkill[] = []; const acceptedIdentities = new Set(canonical.map(x => x.identity));
+  let candidates: ProjectSkillDirectoryEntry[];
+  try { candidates = await projectSkillCandidates(root, filesystem); }
   catch (error) {
+    if (error instanceof SkillCatalogError) throw error;
     if (absentInventory(error)) return { skills, diagnostics };
     throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_FAILED", message: String((error as Error).message), path: root }]);
   }
-  for (const entry of entries.sort((a,b) => a.name.localeCompare(b.name))) {
+  let realProjectRoot: string;
+  try { realProjectRoot = await filesystem.realpath(projectRoot); }
+  catch (error) {
+    if (inventoryIoFailure(error)) throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_FAILED", message: String((error as Error).message), path: root }]);
+    realProjectRoot = projectRoot;
+  }
+  let inventoryBytes = 0;
+  for (const entry of candidates.sort((a,b) => a.name.localeCompare(b.name))) {
     if (entry.isSymbolicLink?.()) { diagnostics.push({ code: "PROJECT_SKILL_INVALID", message: "project skill directories cannot be symlinks", path: path.join(root, entry.name) }); continue; }
     if (!entry.isDirectory()) continue; const file = path.join(root, entry.name, "SKILL.md");
     try {
-      const real = await containedProject(root, file, filesystem); const { data } = frontmatter(await filesystem.readFile(real, "utf8"));
+      const real = await containedProject(root, file, filesystem);
+      let files: readonly SkillDirectoryFile[];
+      if (filesystem.enumerateDirectory) files = await filesystem.enumerateDirectory(path.dirname(real), MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes);
+      else {
+        const text = await filesystem.readFile(real, "utf8");
+        files = [{ relativePath: "SKILL.md", bytes: Buffer.from(text, "utf8") }];
+      }
+      const candidateBytes = files.reduce((total, item) => total + item.bytes.length, 0);
+      if (candidateBytes > MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes) throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_LIMIT", message: `project skill inventory exceeds ${MAX_PROJECT_SKILL_INVENTORY_BYTES} bytes`, path: file }]);
+      inventoryBytes += candidateBytes;
+      const skillFile = files.find((item) => item.relativePath === "SKILL.md");
+      if (!skillFile) throw new Error("project skill directory has no SKILL.md");
+      const text = skillFile.bytes.toString("utf8");
+      const { data } = frontmatter(text);
       const name = data.name;
       if (typeof name !== "string" || !ID.test(name) || name !== entry.name || name.startsWith("mpx-") || name.includes(":")) throw new Error("project identity is invalid or attempts /mpx:* namespace");
-      if (names.has(name) || skills.some(x => x.identity === name)) throw new Error("deterministic runtime collision");
+      if (acceptedIdentities.has(name)) throw new Error("deterministic runtime collision");
       const mpx = (data.metadata as Record<string, unknown> | undefined)?.mpx as Record<string, unknown> | undefined;
       const exposure = mpx?.projectExposure;
       if (exposure !== "full" && exposure !== "explicit-only") throw new Error("metadata.mpx.projectExposure must be full or explicit-only");
       const disabled = data["disable-model-invocation"] === true;
       if ((exposure === "full" && disabled) || (exposure === "explicit-only" && !disabled)) throw new Error("projectExposure and disable-model-invocation mismatch");
       if (typeof data.description !== "string") throw new Error("description is required");
-      skills.push({ identity: name, description: data.description, projectExposure: exposure, disableModelInvocation: disabled, sourcePath: file, realPath: real });
+      acceptedIdentities.add(name);
+      skills.push({ identity: name, description: data.description, projectExposure: exposure, disableModelInvocation: disabled, sourcePath: file, realPath: real, contentHash: createHash("sha256").update(skillFile.bytes).digest("hex"), directoryHash: directoryDigest(files), projectRoot, realProjectRoot });
     } catch (error) {
+      if (error instanceof SkillCatalogError) throw error;
+      if (error instanceof ProjectSkillInventoryByteLimitError) throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_LIMIT", message: `project skill inventory exceeds ${MAX_PROJECT_SKILL_INVENTORY_BYTES} bytes`, path: file }]);
       if (inventoryIoFailure(error)) throw new SkillCatalogError([{ code: "PROJECT_SKILL_INVENTORY_FAILED", message: String((error as Error).message), path: file }]);
       diagnostics.push({ code: "PROJECT_SKILL_INVALID", message: String((error as Error).message), path: file });
     }
   }
   return { skills, diagnostics };
 }
+
+function isProjectSkill(skill: CatalogSkill): skill is ProjectSkill { return "directoryHash" in skill; }
+function directoryDigest(files: readonly SkillDirectoryFile[]): string { return digest(files.map((file) => ({ path: file.relativePath, bytes: file.bytes.length, sha256: createHash("sha256").update(file.bytes).digest("hex") }))); }
+function skillSourceHash(skill: CatalogSkill): string { return isProjectSkill(skill) ? digest({ kind: "project", projectRoot: skill.realProjectRoot, path: skill.realPath, contentHash: skill.contentHash, directoryHash: skill.directoryHash }) : skill.contentHash; }
 
 function effectiveExposure(skill: CanonicalSkill, options: ResolveOptions): { exposure: Exposure; source: string } {
   const p = options.projectExposure, s = options.contentScopeExposure;
@@ -227,13 +315,17 @@ function effectiveExposure(skill: CanonicalSkill, options: ResolveOptions): { ex
 /** Disclosure descends from initial body metadata to name, explicit human lookup, then absence. */
 const disclosureRank: Record<Exposure, number> = { full: 3, "name-only": 2, "explicit-only": 1, off: 0 };
 
-function policyExposure(skill: CanonicalSkill, options: ResolveOptions): { exposure: Exposure; source: string } {
-  const base = effectiveExposure(skill, options);
+function narrower(left: Exposure, right: Exposure): Exposure { return disclosureRank[left] <= disclosureRank[right] ? left : right; }
+function policyExposure(skill: CatalogSkill, options: ResolveOptions): { exposure: Exposure; source: string } {
   const policy = options.skillPolicyConfig.skillExposure;
-  const policyExposure = policy.skills?.[skill.identity] ?? policy.default;
-  const policySource = policy.skills?.[skill.identity] ? "skill override" : "default";
-  const exposure = disclosureRank[policyExposure] < disclosureRank[base.exposure] ? policyExposure : base.exposure;
-  return { exposure, source: `${base.source}; narrowed by skill policy '${options.skillPolicy}' ${policySource} (${policyExposure})` };
+  const selectedPolicyExposure = policy.skills?.[skill.identity] ?? policy.default;
+  if (isProjectSkill(skill)) {
+    const scopeExposure = options.contentScopeExposure?.skills?.[skill.identity] ?? options.contentScopeExposure?.default ?? "full";
+    const projectExposure = options.projectExposure?.skills?.[skill.identity] ?? options.projectExposure?.default ?? "full";
+    return { exposure: [scopeExposure, projectExposure, selectedPolicyExposure].reduce(narrower, skill.projectExposure as Exposure), source: `project catalog ceiling (${skill.projectExposure}); narrowed by content scope (${scopeExposure}), project (${projectExposure}), and skill policy '${options.skillPolicy}' (${selectedPolicyExposure})` };
+  }
+  const base = effectiveExposure(skill, options);
+  return { exposure: narrower(base.exposure, selectedPolicyExposure), source: `${base.source}; narrowed by skill policy '${options.skillPolicy}' (${selectedPolicyExposure})` };
 }
 
 function stable(value: unknown): string { if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`; if (value && typeof value === "object") return `{${Object.entries(value).sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`; return JSON.stringify(value); }
@@ -242,7 +334,7 @@ function effectiveSkillPacks(options: ResolveOptions): SkillPack[] {
   return resolveEffectiveSkillPacks({ contentScopeSkillPacks: options.enabledPacks, skillPolicySkillPacks: options.skillPolicyConfig.skillPacks });
 }
 
-export function resolveManifest(catalog: readonly CanonicalSkill[], options: ResolveOptions): ResolvedManifest {
+export function resolveManifest(catalog: readonly CatalogSkill[], options: ResolveOptions): ResolvedManifest {
   const enabled = new Set(effectiveSkillPacks(options));
   const resolution = {
     identity: options.identity,
@@ -254,7 +346,7 @@ export function resolveManifest(catalog: readonly CanonicalSkill[], options: Res
     mapping: options.mapping ?? {},
   };
   const decisions: ResolvedSkillDecisionV4[] = catalog.map((skill) => {
-    const packIncluded = skill.skillPacks.some((pack) => enabled.has(pack));
+    const packIncluded = isProjectSkill(skill) || skill.skillPacks.some((pack) => enabled.has(pack));
     const effective = policyExposure(skill, options);
     const off = effective.exposure === "off";
     const included = packIncluded && !off;
@@ -271,13 +363,14 @@ export function resolveManifest(catalog: readonly CanonicalSkill[], options: Res
         resolution,
         identity: skill.identity,
         description: skill.description,
-        triggers: skill.triggers ?? null,
-        packs: [...skill.skillPacks].sort(),
-        defaultExposure: skill.defaultExposure,
+        triggers: isProjectSkill(skill) ? null : skill.triggers ?? null,
+        origin: isProjectSkill(skill) ? { kind: "project", projectRoot: skill.realProjectRoot, directoryHash: skill.directoryHash } : { kind: "canonical" },
+        packs: isProjectSkill(skill) ? [] : [...skill.skillPacks].sort(),
+        defaultExposure: isProjectSkill(skill) ? skill.projectExposure : skill.defaultExposure,
         effectiveExposure: effective.exposure,
         exposureSource: effective.source,
       }),
-      sourceHash: skill.contentHash,
+      sourceHash: skillSourceHash(skill),
     };
   });
   return createResolvedSkillManifestV4({
@@ -286,9 +379,9 @@ export function resolveManifest(catalog: readonly CanonicalSkill[], options: Res
   });
 }
 
-export function explainSkill(skill: CanonicalSkill, options: ResolveOptions): { identity: string; included: boolean; exposure?: Exposure; source?: string } {
+export function explainSkill(skill: CatalogSkill, options: ResolveOptions): { identity: string; included: boolean; exposure?: Exposure; source?: string } {
   const enabled = new Set(effectiveSkillPacks(options));
-  const packIncluded = skill.skillPacks.some((pack) => enabled.has(pack));
+  const packIncluded = isProjectSkill(skill) || skill.skillPacks.some((pack) => enabled.has(pack));
   if (!packIncluded) return { identity: skill.identity, included: false };
   const result = policyExposure(skill, options);
   return { identity: skill.identity, included: result.exposure !== "off", exposure: result.exposure, source: result.source };
@@ -310,28 +403,22 @@ function artifactFileMap(entries: readonly RuntimeSkillEntry[]): unknown[] {
     metadataHash: entry.metadataHash,
     description: entry.description ?? null,
     triggers: entry.triggers ?? null,
-    source: { kind: entry.source.kind, path: entry.source.path, realPath: entry.source.realPath, contentHash: entry.source.contentHash },
+    source: entry.source.kind === "project"
+      ? { kind: entry.source.kind, path: entry.source.path, realPath: entry.source.realPath, contentHash: entry.source.contentHash, directoryHash: entry.source.directoryHash, projectRoot: entry.source.projectRoot, realProjectRoot: entry.source.realProjectRoot }
+      : { kind: entry.source.kind, path: entry.source.path, realPath: entry.source.realPath, contentHash: entry.source.contentHash },
     permissions: { ...entry.permissions },
   })).sort((a,b) => a.identity.localeCompare(b.identity));
 }
 
-export function createRuntimeSkillArtifact(manifestValue: ResolvedManifest, catalog: readonly CanonicalSkill[], options: { runtime: Runtime; mapping?: Readonly<Record<string, string>> }): RuntimeSkillArtifact {
+export function createRuntimeSkillArtifact(manifestValue: ResolvedManifest, catalog: readonly CatalogSkill[], options: { runtime: Runtime; mapping?: Readonly<Record<string, string>> }): RuntimeSkillArtifact {
   const manifest = parseResolvedSkillManifestV4(manifestValue);
   const source = new Map(catalog.map((skill) => [skill.identity, skill]));
-  if (source.size !== manifest.decisions.length) catalogError("STALE_CATALOG", "canonical catalog membership no longer matches the resolved manifest");
+  if (source.size !== manifest.decisions.length) catalogError("STALE_CATALOG", "skill catalog membership no longer matches the resolved manifest");
   for (const decision of manifest.decisions) {
-    if (source.get(decision.identity)?.contentHash !== decision.sourceHash) catalogError("STALE_CATALOG", `skill '${decision.identity}' no longer matches the resolved manifest`);
+    const skill = source.get(decision.identity);
+    if (!skill || skillSourceHash(skill) !== decision.sourceHash) catalogError("STALE_CATALOG", `skill '${decision.identity}' no longer matches the resolved manifest`);
   }
-  const entries = manifest.decisions.filter((decision) => decision.included).map((decision): RuntimeSkillEntry => {
-    const skill = source.get(decision.identity)!;
-    const publicName = options.mapping?.[skill.identity] ?? `/mpx:${skill.identity}`;
-    return {
-      identity: skill.identity, publicName, packs: [...skill.skillPacks].sort(), exposure: decision.exposure, metadataHash: decision.metadataHash,
-      ...(decision.exposure === "full" ? { description: skill.description, ...(skill.triggers ? { triggers: skill.triggers } : {}) } : {}),
-      source: { kind: "canonical", path: skill.sourcePath, realPath: skill.realPath, contentHash: skill.contentHash },
-      permissions: { ...decision.permissions },
-    };
-  }).sort((a,b) => a.identity.localeCompare(b.identity));
+  const entries = manifest.decisions.filter((decision) => decision.included).map((decision): RuntimeSkillEntry => runtimeEntry(source.get(decision.identity)!, decision, options.mapping ?? {})).sort((a,b) => a.identity.localeCompare(b.identity));
   const fileMapHash = digest(artifactFileMap(entries));
   const artifactKey = digest({ schemaVersion: 4, runtime: options.runtime, manifestKey: manifest.manifestKey, fileMapHash });
   const reference = createRuntimeSkillArtifactReferenceV4({ runtime: options.runtime, manifestKey: manifest.manifestKey, artifactKey, fileMapHash });
@@ -343,8 +430,19 @@ function catalogError(code: string, message: string): never { throw new SkillCat
 function tampered(reason: string, identity?: string): never {
   throw new RuntimeContractError("RUNTIME_ARTIFACT_TAMPERED", "runtime artifact no longer matches its bound resolved manifest", { restartRequired: true, reason, ...(identity === undefined ? {} : { identity }) });
 }
-function expectedRuntimeEntries(manifest: ResolvedManifest, catalog: readonly CanonicalSkill[], mapping: Readonly<Record<string, string>>): RuntimeSkillEntry[] {
-  const source = new Map<string, CanonicalSkill>();
+function runtimeEntry(skill: CatalogSkill, decision: ResolvedSkillDecisionV4, mapping: Readonly<Record<string, string>>): RuntimeSkillEntry {
+  const project = isProjectSkill(skill);
+  return {
+    identity: skill.identity, publicName: mapping[skill.identity] ?? (project ? `/${skill.identity}` : `/mpx:${skill.identity}`), packs: project ? [] : [...skill.skillPacks].sort(), exposure: decision.exposure, metadataHash: decision.metadataHash,
+    ...(decision.exposure === "full" ? { description: skill.description, ...(!project && skill.triggers ? { triggers: skill.triggers } : {}) } : {}),
+    source: project
+      ? { kind: "project", path: skill.sourcePath, realPath: skill.realPath, contentHash: skill.contentHash, directoryHash: skill.directoryHash, projectRoot: skill.projectRoot, realProjectRoot: skill.realProjectRoot }
+      : { kind: "canonical", path: skill.sourcePath, realPath: skill.realPath, contentHash: skill.contentHash },
+    permissions: { ...decision.permissions },
+  };
+}
+function expectedRuntimeEntries(manifest: ResolvedManifest, catalog: readonly CatalogSkill[], mapping: Readonly<Record<string, string>>): RuntimeSkillEntry[] {
+  const source = new Map<string, CatalogSkill>();
   for (const skill of catalog) { if (source.has(skill.identity)) tampered("duplicate-catalog-identity", skill.identity); source.set(skill.identity, skill); }
   if (source.size !== manifest.decisions.length) tampered("catalog-membership");
   const decisionIds = new Set<string>();
@@ -353,18 +451,14 @@ function expectedRuntimeEntries(manifest: ResolvedManifest, catalog: readonly Ca
     if (decisionIds.has(decision.identity)) tampered("duplicate-manifest-decision", decision.identity);
     decisionIds.add(decision.identity);
     const skill = source.get(decision.identity);
-    if (!skill || skill.contentHash !== decision.sourceHash) tampered("catalog-source-hash", decision.identity);
+    if (!skill || skillSourceHash(skill) !== decision.sourceHash) tampered("catalog-source-hash", decision.identity);
     if (!decision.included) continue;
     if (decision.exposure === "off" || decision.exclusionReasons.includes("off") || decision.exclusionReasons.includes("pack-excluded")) tampered("invalid-inclusion-decision", decision.identity);
-    entries.push({
-      identity: skill.identity, publicName: mapping[skill.identity] ?? `/mpx:${skill.identity}`, packs: [...skill.skillPacks].sort(), exposure: decision.exposure, metadataHash: decision.metadataHash,
-      ...(decision.exposure === "full" ? { description: skill.description, ...(skill.triggers ? { triggers: skill.triggers } : {}) } : {}),
-      source: { kind: "canonical", path: skill.sourcePath, realPath: skill.realPath, contentHash: skill.contentHash }, permissions: { ...decision.permissions },
-    });
+    entries.push(runtimeEntry(skill, decision, mapping));
   }
   return entries.sort((a,b) => a.identity.localeCompare(b.identity));
 }
-export function verifyRuntimeSkillArtifact(artifact: RuntimeSkillArtifact, manifestValue: ResolvedManifest, catalog: readonly CanonicalSkill[], options: { runtime: Runtime; mapping?: Readonly<Record<string, string>> }): RuntimeSkillArtifact {
+export function verifyRuntimeSkillArtifact(artifact: RuntimeSkillArtifact, manifestValue: ResolvedManifest, catalog: readonly CatalogSkill[], options: { runtime: Runtime; mapping?: Readonly<Record<string, string>> }): RuntimeSkillArtifact {
   let manifest: ResolvedManifest;
   try { manifest = parseResolvedSkillManifestV4(manifestValue); } catch { return tampered("manifest-invalid"); }
   if (artifact.schemaVersion !== 4 || artifact.runtime !== options.runtime || artifact.manifestKey !== manifest.manifestKey) tampered("artifact-binding");
@@ -390,7 +484,7 @@ export function verifyRuntimeSkillArtifact(artifact: RuntimeSkillArtifact, manif
   return artifact;
 }
 
-function validateArtifact(artifact: RuntimeSkillArtifact, catalog?: readonly CanonicalSkill[], artifactKey?: string): RuntimeSkillArtifact {
+function validateArtifact(artifact: RuntimeSkillArtifact, catalog?: readonly CatalogSkill[], artifactKey?: string): RuntimeSkillArtifact {
   try {
     if (artifact.schemaVersion !== 4 || artifact.manifestKey !== artifact.reference.manifestKey || artifact.runtime !== artifact.reference.runtime) throw new Error("schema or binding mismatch");
     const reference = parseRuntimeSkillArtifactReferenceV4(artifact.reference);
@@ -399,37 +493,37 @@ function validateArtifact(artifact: RuntimeSkillArtifact, catalog?: readonly Can
     if (reference.fileMapHash !== fileMapHash || reference.artifactKey !== calculatedKey || (artifactKey !== undefined && artifactKey !== reference.artifactKey)) throw new Error("artifact hash mismatch");
     if (catalog) {
       const source = new Map(catalog.map((skill) => [skill.identity, skill]));
-      for (const entry of artifact.entries) if (source.get(entry.identity)?.contentHash !== entry.source.contentHash) throw new Error("catalog hash mismatch");
+      for (const entry of artifact.entries) { const skill = source.get(entry.identity); if (!skill || skill.contentHash !== entry.source.contentHash || (isProjectSkill(skill) && (entry.source.kind !== "project" || skill.directoryHash !== entry.source.directoryHash))) throw new Error("catalog hash mismatch"); }
     }
     return artifact;
   } catch { return catalogError("STALE_ARTIFACT", "runtime operation requires the current exact v4 artifact"); }
 }
 
-export function searchSkills(artifact: RuntimeSkillArtifact, catalog: readonly CanonicalSkill[], query: string, options: { artifactKey?: string; runtime?: boolean; limit?: number } = {}): Array<{ identity: string; publicName: string; description: string; score: number }> {
+export function searchSkills(artifact: RuntimeSkillArtifact, catalog: readonly CatalogSkill[], query: string, options: { artifactKey?: string; runtime?: boolean; limit?: number } = {}): Array<{ identity: string; publicName: string; description: string; score: number }> {
   if (query.length > MAX_SKILL_SEARCH_QUERY_LENGTH) catalogError("QUERY_TOO_LONG", `skill search queries are limited to ${MAX_SKILL_SEARCH_QUERY_LENGTH} characters`);
   validateArtifact(artifact, catalog, options.runtime ? options.artifactKey : undefined);
   const limit = Math.max(0, Math.min(MAX_SKILL_SEARCH_RESULTS, options.limit ?? MAX_SKILL_SEARCH_RESULTS));
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean); const source = new Map(catalog.map(x => [x.identity, x]));
   return artifact.entries.filter((entry) => (entry.exposure === "full" || entry.exposure === "name-only") && entry.permissions.modelInvocation).flatMap(entry => {
     const skill = source.get(entry.identity); if (!skill) return [];
-    const haystack = `${skill.identity} ${skill.description} ${skill.triggers ?? ""}`.toLowerCase();
+    const haystack = `${skill.identity} ${skill.description} ${isProjectSkill(skill) ? "" : skill.triggers ?? ""}`.toLowerCase();
     const score = terms.reduce((n,t) => n + (haystack.includes(t) ? (skill.identity.includes(t) ? 3 : 1) : 0), 0);
     return [{ identity: skill.identity, publicName: entry.publicName, description: skill.description, score }];
   }).filter(x => terms.length === 0 || x.score > 0).sort((a,b) => b.score-a.score || a.identity.localeCompare(b.identity)).slice(0, limit);
 }
 
-export function modelSearchSkills(artifact: RuntimeSkillArtifact, catalog: readonly CanonicalSkill[], query: string, options: { artifactKey: string; limit?: number }): Array<{ identity: string; publicName: string; description: string; score: number }> {
+export function modelSearchSkills(artifact: RuntimeSkillArtifact, catalog: readonly CatalogSkill[], query: string, options: { artifactKey: string; limit?: number }): Array<{ identity: string; publicName: string; description: string; score: number }> {
   return searchSkills(artifact, catalog, query, { runtime: true, artifactKey: options.artifactKey, ...(options.limit === undefined ? {} : { limit: options.limit }) });
 }
 
-export function humanSearchSkills(artifact: RuntimeSkillArtifact, catalog: readonly CanonicalSkill[], query: string, options: { limit?: number } = {}): Array<{ identity: string; publicName: string; description: string; score: number }> {
+export function humanSearchSkills(artifact: RuntimeSkillArtifact, catalog: readonly CatalogSkill[], query: string, options: { limit?: number } = {}): Array<{ identity: string; publicName: string; description: string; score: number }> {
   if (query.length > MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH) catalogError("QUERY_TOO_LONG", `human skill search queries are limited to ${MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH} characters`);
   validateArtifact(artifact, catalog);
   const limit = Math.max(0, Math.min(MAX_HUMAN_SKILL_SEARCH_RESULTS, options.limit ?? MAX_HUMAN_SKILL_SEARCH_RESULTS));
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean); const source = new Map(catalog.map((skill) => [skill.identity, skill]));
   return artifact.entries.filter((entry) => entry.permissions.humanInvocation).flatMap((entry) => {
     const skill = source.get(entry.identity); if (!skill) return [];
-    const haystack = `${skill.identity} ${skill.description} ${skill.triggers ?? ""}`.toLowerCase();
+    const haystack = `${skill.identity} ${skill.description} ${isProjectSkill(skill) ? "" : skill.triggers ?? ""}`.toLowerCase();
     const score = terms.reduce((total, term) => total + (haystack.includes(term) ? (skill.identity.includes(term) ? 3 : 1) : 0), 0);
     return [{ identity: skill.identity, publicName: entry.publicName, description: skill.description, score }];
   }).filter((result) => terms.length === 0 || result.score > 0).sort((a,b) => b.score-a.score || a.identity.localeCompare(b.identity)).slice(0, limit);
@@ -438,7 +532,7 @@ export function humanSearchSkills(artifact: RuntimeSkillArtifact, catalog: reado
 export interface HumanSkillName { identity: string; publicName: string }
 export function humanListSkills(artifact: RuntimeSkillArtifact): HumanSkillName[] { validateArtifact(artifact); return artifact.entries.filter(x => x.permissions.humanInvocation).map(({identity, publicName}) => ({identity, publicName})).sort((a,b) => a.identity.localeCompare(b.identity)); }
 export function humanCompleteSkills(artifact: RuntimeSkillArtifact, prefix: string): string[] { const normalized = prefix.toLowerCase(); return humanListSkills(artifact).map(x => x.publicName).filter(x => x.toLowerCase().startsWith(normalized)); }
-export function humanSkillDetail(artifact: RuntimeSkillArtifact, catalog: readonly CanonicalSkill[], identity: string): { identity: string; publicName: string; description: string } | undefined { validateArtifact(artifact, catalog); const entry = artifact.entries.find(x => x.identity === identity && x.permissions.humanInvocation); const skill = catalog.find(x => x.identity === identity); return entry && skill ? { identity, publicName: entry.publicName, description: skill.description } : undefined; }
+export function humanSkillDetail(artifact: RuntimeSkillArtifact, catalog: readonly CatalogSkill[], identity: string): { identity: string; publicName: string; description: string } | undefined { validateArtifact(artifact, catalog); const entry = artifact.entries.find(x => x.identity === identity && x.permissions.humanInvocation); const skill = catalog.find(x => x.identity === identity); return entry && skill ? { identity, publicName: entry.publicName, description: skill.description } : undefined; }
 export function initialModelContext(artifact: RuntimeSkillArtifact): Array<{ identity: string; publicName: string; description?: string; triggers?: string }> { validateArtifact(artifact); return artifact.entries.filter(x => x.permissions.modelInvocation).map(x => ({ identity: x.identity, publicName: x.publicName, ...(x.exposure === "full" && x.description ? {description:x.description} : {}), ...(x.exposure === "full" && x.triggers ? {triggers:x.triggers} : {}) })); }
 
 export type SkillInvocation = "model" | "human-explicit";
@@ -457,15 +551,30 @@ export async function loadSkillBody(request: SkillBodyRequest): Promise<LoadedSk
   if (request.invocation !== "model" && request.invocation !== "human-explicit") catalogError("SKILL_INVOCATION_INVALID", "skill invocation must be model or human-explicit");
   const permitted = request.invocation === "model" ? entry.permissions.modelInvocation : entry.permissions.humanInvocation;
   if (!permitted) catalogError("SKILL_INVOCATION_DENIED", `skill '${request.identity}' does not permit ${request.invocation} loading`);
-  const expectedSourcePath = path.join(request.canonicalRoot, entry.identity, "SKILL.md");
-  let currentPath: string; try { currentPath = await contained(request.canonicalRoot, entry.source.path); } catch { return catalogError("SKILL_PATH_INVALID", `skill '${request.identity}' is outside its canonical root`); }
-  if (entry.source.kind !== "canonical" || !samePath(entry.source.path, expectedSourcePath)) catalogError("SKILL_PROVENANCE_MISMATCH", `skill '${request.identity}' source does not match its canonical identity path`);
+  let currentPath: string;
+  if (entry.source.kind === "canonical") {
+    const expectedSourcePath = path.join(request.canonicalRoot, entry.identity, "SKILL.md");
+    try { currentPath = await contained(request.canonicalRoot, entry.source.path); } catch { return catalogError("SKILL_PATH_INVALID", `skill '${request.identity}' is outside its canonical root`); }
+    if (!samePath(entry.source.path, expectedSourcePath)) catalogError("SKILL_PROVENANCE_MISMATCH", `skill '${request.identity}' source does not match its canonical identity path`);
+  } else {
+    const expectedSourcePath = path.join(entry.source.projectRoot, ".agents", "skills", entry.identity, "SKILL.md");
+    if (!samePath(entry.source.path, expectedSourcePath)) catalogError("SKILL_PROVENANCE_MISMATCH", `skill '${request.identity}' source does not match its project identity path`);
+    try {
+      const resolvedProjectRoot = await realpath(entry.source.projectRoot);
+      currentPath = await contained(entry.source.projectRoot, entry.source.path);
+      if (!samePath(resolvedProjectRoot, entry.source.realProjectRoot)) catalogError("SKILL_PATH_STALE", `skill '${request.identity}' project root no longer matches the artifact`);
+      if (directoryDigest(await enumerateSkillDirectory(path.dirname(currentPath))) !== entry.source.directoryHash) catalogError("SKILL_DIRECTORY_STALE", `skill '${request.identity}' directory no longer matches the artifact`);
+    } catch (error) {
+      if (error instanceof SkillCatalogError) throw error;
+      return catalogError("SKILL_PATH_INVALID", `skill '${request.identity}' is outside its project root or no longer inventory-safe`);
+    }
+  }
   if (!samePath(currentPath, entry.source.realPath)) catalogError("SKILL_PATH_STALE", `skill '${request.identity}' no longer resolves to its artifact path`);
   const text = await readFile(currentPath, "utf8");
   if (Buffer.byteLength(text, "utf8") > MAX_SKILL_BODY_BYTES) catalogError("SKILL_BODY_TOO_LARGE", `skill files are limited to ${MAX_SKILL_BODY_BYTES} bytes`);
   const contentHash = createHash("sha256").update(text).digest("hex");
   if (contentHash !== entry.source.contentHash) catalogError("SKILL_CONTENT_STALE", `skill '${request.identity}' content no longer matches the artifact`);
   const body = frontmatter(text).body; const artifactKey = request.artifact.reference.artifactKey;
-  const provenance = { artifactKey, contentHash, invocation: request.invocation, runtime: request.runtime, sourcePath: `content/skills/${entry.identity}/SKILL.md` };
+  const provenance = { artifactKey, contentHash, invocation: request.invocation, runtime: request.runtime, sourcePath: entry.source.kind === "canonical" ? `content/skills/${entry.identity}/SKILL.md` : path.relative(entry.source.projectRoot, entry.source.path).split(path.sep).join("/") };
   return { identity: entry.identity, body, wrappedBody: `<!-- mpx-skill identity=${entry.identity} origin=${request.invocation} runtime=${request.runtime} artifact=${artifactKey} hash=${contentHash} -->\n${body}<!-- /mpx-skill -->`, provenance };
 }

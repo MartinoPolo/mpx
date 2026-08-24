@@ -19,11 +19,13 @@ Both are **gitignored** — they point outside the repo and are per-machine. The
 
 ### Image resolution
 
-Board items reference screenshots as bare-filename wikilink<configured-path>![[Pasted image 20260712212316.png]]` (an optional `|<width>` suffix is display-only, e.g. `![[img.png|639]]`). Resolve each by reading `.mpx/board-files/<filename>` — the junction makes every vault attachment readable at a stable project-relative path. Never rely on the wikilink being a path; it is only a filename.
+Board items reference screenshots as bare-filename wikilinks: `![[Pasted image 20260712212316.png]]` (an optional `|<width>` suffix is display-only, e.g. `![[img.png|639]]`). Resolve each by reading `.mpx/board-files/<filename>` — the junction makes every vault attachment readable at a stable project-relative path. Never rely on the wikilink being a path; it is only a filename.
 
 ## Sections (H1 headings) — the pipeline
 
-The board is a four-lane pipeline. Every note starts in `# To Process`; the skills **move** it lane-by-lane as work progresses (they never delete or retype the note). `mpx board-setup` seeds all four heading<configured-path>markdown
+The board is a four-lane pipeline. Every note starts in `# To Process`; the skills **move** it lane-by-lane as work progresses (they never delete or retype the note). `mpx board-setup` seeds all four headings:
+
+```markdown
 # To Process
 
 # Ready to implement
@@ -46,7 +48,9 @@ Only `# To Process` items are converted to issues; items in the other three lane
 
 ### Type classification (from content)
 
-`mpx board-to-issues` reads each note and picks the GitHub type label from what it describe<configured-path>| Note describes | Type label | Native? |
+`mpx board-to-issues` reads each note and picks the GitHub type label from what it describes:
+
+| Note describes | Type label | Native? |
 |---|---|---|
 | a defect / something broken | `bug` | yes |
 | a chore / audit / refactor | `task` | yes (custom) |

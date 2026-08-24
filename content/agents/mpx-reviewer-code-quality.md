@@ -2,7 +2,7 @@
 name: mpx-reviewer-code-quality
 description: "Read-only reviewer for DRY, SoC, dead code, duplication, naming, constants, and maintainability."
 ---
-# Reviewe<configured-path>Code Quality
+# Reviewer: Code Quality
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
 

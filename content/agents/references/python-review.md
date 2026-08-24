@@ -1,7 +1,7 @@
 # Python Review Reference
 
 Judgment-based patterns not caught by linting or type-checking.
-Adapted from [awesome-skills/code-review-skill](http<configured-path>github.com/awesome-skills/code-review-skill).
+Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 
@@ -12,16 +12,18 @@ from typing import Protocol, runtime_checkable
 
 # ✅ Duck typing with type safety — prefer over ABC when possible
 class Readable(Protocol):
-    def read(self, siz<configured-path>int = -1) -> byte<configured-path>...
+    def read(self, size: int = -1) -> bytes: ...
 
-def process_stream(strea<configured-path>Readable) -> byte<configured-path>return stream.read()  # any object with .read() works
+def process_stream(stream: Readable) -> bytes:
+    return stream.read()  # any object with .read() works
 
 # ✅ Runtime-checkable protocol
 @runtime_checkable
 class Drawable(Protocol):
-    def draw(self) -> Non<configured-path>...
+    def draw(self) -> None: ...
 
-def render(ob<configured-path>object) -> Non<configured-path>if isinstance(obj, Drawable):
+def render(obj: object) -> None:
+    if isinstance(obj, Drawable):
         obj.draw()
 ```
 
@@ -32,9 +34,9 @@ from typing import TypedDict, Required, NotRequired
 
 # ✅ Type-safe dictionaries — prefer over bare dict[str, Any]
 class ConfigDict(TypedDict, total=False):
-    debu<configured-path>bool
-    timeou<configured-path>int
-    hos<configured-path>Required[str]  # this one is mandatory
+    debug: bool
+    timeout: int
+    host: Required[str]  # this one is mandatory
 ```
 
 ## Async Patterns
@@ -63,17 +65,22 @@ async def with_executor():
 ```python
 # ❌ Ignoring cancellation
 async def bad_worker():
-    while Tru<configured-path>await do_work()  # no cleanup on cancel
+    while True:
+        await do_work()  # no cleanup on cancel
 
 # ✅ Handle CancelledError, clean up, re-raise
 async def good_worker():
-    tr<configured-path>while Tru<configured-path>await do_work()
-    except asyncio.CancelledErro<configured-path>await cleanup()
+    try:
+        while True:
+            await do_work()
+    except asyncio.CancelledError:
+        await cleanup()
         raise  # re-raise so caller knows
 
 # ✅ TaskGroup for structured concurrency (Python 3.11+)
 async def fetch_multiple():
-    async with asyncio.TaskGroup() as t<configured-path>task1 = tg.create_task(fetch_url("url1"))
+    async with asyncio.TaskGroup() as tg:
+        task1 = tg.create_task(fetch_url("url1"))
         task2 = tg.create_task(fetch_url("url2"))
     return task1.result(), task2.result()
 ```
@@ -82,9 +89,11 @@ async def fetch_multiple():
 
 ```python
 # ✅ Semaphore to limit concurrent operations
-async def fetch_with_limit(url<configured-path>list[str], max_concurren<configured-path>int = 10):
+async def fetch_with_limit(urls: list[str], max_concurrent: int = 10):
     semaphore = asyncio.Semaphore(max_concurrent)
-    async def fetch_one(ur<configured-path>str) -> st<configured-path>async with semaphor<configured-path>return await fetch_url(url)
+    async def fetch_one(url: str) -> str:
+        async with semaphore:
+            return await fetch_url(url)
     return await asyncio.gather(*[fetch_one(url) for url in urls])
 ```
 
@@ -94,21 +103,28 @@ async def fetch_with_limit(url<configured-path>list[str], max_concurren<configur
 
 ```python
 # ❌ Bare except or swallowed exception
-tr<configured-path>result = risky_operation()
-excep<configured-path># catches KeyboardInterrupt too
+try:
+    result = risky_operation()
+except:  # catches KeyboardInterrupt too
     pass
 
 # ❌ Losing original exception context
-tr<configured-path>result = external_api.call()
-except APIError as <configured-path>raise RuntimeError("API failed")  # original error lost
+try:
+    result = external_api.call()
+except APIError as e:
+    raise RuntimeError("API failed")  # original error lost
 
 # ✅ Specific catch + exception chain
-tr<configured-path>result = external_api.call()
-except APIError as <configured-path>raise RuntimeError("API failed") from e  # preserves chain
+try:
+    result = external_api.call()
+except APIError as e:
+    raise RuntimeError("API failed") from e  # preserves chain
 
 # ✅ Multiple specific types
-tr<configured-path>result = parse_and_process(data)
-except (ValueError, TypeError, KeyError) as <configured-path>raise DataProcessingError(str(e)) from e
+try:
+    result = parse_and_process(data)
+except (ValueError, TypeError, KeyError) as e:
+    raise DataProcessingError(str(e)) from e
 ```
 
 ### Custom exception hierarchies
@@ -118,12 +134,12 @@ except (ValueError, TypeError, KeyError) as <configured-path>raise DataProcessin
 class AppError(Exception): pass
 
 class ValidationError(AppError):
-    def __init__(self, fiel<configured-path>str, messag<configured-path>str):
+    def __init__(self, field: str, message: str):
         self.field = field
         super().__init__(f"{field}: {message}")
 
 class NotFoundError(AppError):
-    def __init__(self, resourc<configured-path>str, i<configured-path>str | int):
+    def __init__(self, resource: str, id: str | int):
         super().__init__(f"{resource} with id {id} not found")
 ```
 
@@ -140,7 +156,8 @@ def add_item(item, items=[]):
 
 # ✅ Use None sentinel
 def add_item(item, items=None):
-    if items is Non<configured-path>items = []
+    if items is None:
+        items = []
     items.append(item)
     return items
 ```
@@ -149,22 +166,24 @@ def add_item(item, items=None):
 
 ```python
 # ❌ Shared across ALL instances
-class Use<configured-path>permissions = []  # every User shares this list
+class User:
+    permissions = []  # every User shares this list
 
 # ✅ Initialize in __init__ or use dataclass
 @dataclass
-class Use<configured-path>permission<configured-path>list = field(default_factory=list)
+class User:
+    permissions: list = field(default_factory=list)
 ```
 
 ### Closure over loop variable
 
 ```python
 # ❌ All lambdas capture the same variable
-funcs = [lambd<configured-path>i for i in range(3)]
+funcs = [lambda: i for i in range(3)]
 [f() for f in funcs]  # [2, 2, 2] — not [0, 1, 2]
 
 # ✅ Capture value via default argument
-funcs = [lambda i=<configured-path>i for i in range(3)]
+funcs = [lambda i=i: i for i in range(3)]
 ```
 
 ## Performance Judgment Calls
@@ -173,11 +192,11 @@ funcs = [lambda i=<configured-path>i for i in range(3)]
 
 ```python
 # ❌ Linear search in list — O(n) per lookup
-if item in large_lis<configured-path>...
+if item in large_list: ...
 
 # ✅ Set for membership testing — O(1)
 large_set = set(large_list)
-if item in large_se<configured-path>...
+if item in large_set: ...
 ```
 
 ### Generator vs list
@@ -200,17 +219,20 @@ total = sum(x**2 for x in range(1_000_000))
 
 ```python
 # ✅ IO-bound → ThreadPoolExecutor
-with ThreadPoolExecutor(max_workers=10) as executo<configured-path>results = list(executor.map(fetch_url, urls))
+with ThreadPoolExecutor(max_workers=10) as executor:
+    results = list(executor.map(fetch_url, urls))
 
 # ✅ CPU-bound → ProcessPoolExecutor
-with ProcessPoolExecutor() as executo<configured-path>results = list(executor.map(heavy_computation, data))
+with ProcessPoolExecutor() as executor:
+    results = list(executor.map(heavy_computation, data))
 ```
 
 ## Modern Python (3.10+)
 
 ```python
 # ✅ Pattern matching — cleaner than if/elif chains for structured data
-match respons<configured-path>case {"status": "ok", "data": data}:
+match response:
+    case {"status": "ok", "data": data}:
         return process_data(data)
     case {"status": "error", "message": msg}:
         raise APIError(msg)
@@ -219,7 +241,9 @@ match respons<configured-path>case {"status": "ok", "data": data}:
 
 # ✅ ExceptionGroup for batch errors (3.11+)
 errors = []
-for item in item<configured-path>tr<configured-path>process(item)
-    except Exception as <configured-path>errors.append(e)
-if error<configured-path>raise ExceptionGroup("Batch failed", errors)
+for item in items:
+    try: process(item)
+    except Exception as e: errors.append(e)
+if errors:
+    raise ExceptionGroup("Batch failed", errors)
 ```

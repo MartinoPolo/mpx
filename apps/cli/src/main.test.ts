@@ -227,6 +227,16 @@ describe("cli",()=>{
     expect(text).not.toContain("C:/native");
   });
 
+  it("includes project skills in advertised launch-bound resolution",async()=>{
+    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
+    const directory=path.join(cwd,".agents","skills","local");
+    await mkdir(directory,{recursive:true});
+    await writeFile(path.join(directory,"SKILL.md"),"---\nname: local\ndescription: Local project behavior\nmetadata:\n  mpx:\n    projectExposure: full\n---\nLOCAL BODY\n");
+    const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    expect(await run(["--json","--cwd",cwd,"skill","list","--identity","work","--runtime","pi","--skill-policy","clean"],io,{env,catalogRoot})).toBe(0);
+    expect(JSON.parse(io.out[0]!).data.skills).toEqual(expect.arrayContaining([{identity:"local",publicName:"/local",exposure:"explicit-only"}]));
+  });
+
   it("lists skills in a known non-project directory with a null projectId",async()=>{
     const cwd=await directory(), env=await configuredLaunchEnv(cwd), io=captureIo();
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));

@@ -16,7 +16,7 @@ what is actually on screen rather than assuming a clean slate. And network heade
 redacted, so treat anything the browser sees as transcript-visible and keep credentials out
 of the report.
 
-An inline `mcpServer<configured-path>block was tried here and silently did nothing on the active runtime
+An inline `mcpServers:` block was tried here and silently did nothing on the active runtime
 2.1.212 — the field is documented for sub-agents but had no effect even with a
 non-colliding server name, so do not re-add one expecting `--headless`/`--isolated` to take.
 
@@ -26,7 +26,7 @@ trustworthy, repeatable, or run unattended belongs in raw Playwright — see
 
 ## Input from Parent
 
-Target URL (default `htt<configured-path>localhost:3000`), numbered testing requirements with expected
+Target URL (default `http://localhost:3000`), numbered testing requirements with expected
 outcomes, and optional auth context.
 
 ## Execution Workflow
@@ -44,10 +44,10 @@ outcomes, and optional auth context.
 ### 2. Authenticate
 
 Use parent-provided auth context when present. Otherwise read credentials from the first
-of these that exist<configured-path>.local/credentials.md`, `.local/CREDENTIALS.md`, `CREDENTIALS.md`,
+of these that exists: `.local/credentials.md`, `.local/CREDENTIALS.md`, `CREDENTIALS.md`,
 `.local/*.md`, `.env.local`, `.env`. Match keys case-insensitively — login keys `login`,
 `username`, `user`, `name`, `email`; secret keys `password`, `pass`, `secret`, `token` —
-across `ke<configured-path>value`, `key=value`, `KEY="value"`, table rows and bullets.
+across `key: value`, `key=value`, `KEY="value"`, table rows and bullets.
 
 Use values **exactly as found**; copy them verbatim rather than reformatting or
 recombining parts of a username or email.
@@ -65,14 +65,14 @@ Report credentials as `[provided]`, never as values.
 Across multiple routes, drive tabs with `new_page`, `list_pages`, `select_page` and
 `close_page` — one page per target.
 
-Per requiremen<configured-path>perform the UI actions (`click`, `fill`, `hover`, `drag`, `press_key`,
+Per requirement: perform the UI actions (`click`, `fill`, `hover`, `drag`, `press_key`,
 `select_page`), assert against `take_snapshot`, pull `list_console_messages` and
 `list_network_requests` where relevant, capture `take_screenshot` evidence, and record
 `PASS` / `FAIL` / `BLOCKED`. Work through every requirement; a failure never stops the run.
 
 ### 4. Performance and audits (on request)
 
-When the parent asks for performance rather than behaviou<configured-path>performance_start_trace`,
+When the parent asks for performance rather than behaviour: `performance_start_trace`,
 exercise the flow, `performance_stop_trace`, then `performance_analyze_insight` for the
 Core Web Vitals breakdown. `lighthouse_audit` gives a full category score. `emulate`
 applies CPU and network throttling — state which profile was used in the report, since a
@@ -82,8 +82,8 @@ number without its throttling profile is not comparable to anything.
 
 ```
 ## Browser Test Report
-Targe<configured-path>url]   Dat<configured-path>date]   Throttlin<configured-path>profile, or none]
-Tota<configured-path>N | Pas<configured-path>N | Fai<configured-path>N | Blocke<configured-path>N
+Target: [url]   Date: [date]   Throttling: [profile, or none]
+Total: N | Pass: N | Fail: N | Blocked: N
 
 | # | Requirement | Result | Evidence | Details |
 |---|-------------|--------|----------|---------|

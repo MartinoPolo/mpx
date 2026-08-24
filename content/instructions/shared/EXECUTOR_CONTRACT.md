@@ -1,6 +1,6 @@
 # Executor Contract
 
-Shared contract for the implementation agent<configured-path>executor` and `tdd-executor`.
+Shared contract for the implementation agents: `executor` and `tdd-executor`.
 Each agent states its own working loop; everything below applies to both.
 
 ## Role boundary
@@ -14,14 +14,18 @@ in the output and leave it alone.
 
 ## What the parent passes
 
-The parent is responsible for supplyin<configured-path>- **Scope summary** — the issue/checklist/task context this chunk belongs to
+The parent is responsible for supplying:
+
+- **Scope summary** — the issue/checklist/task context this chunk belongs to
 - **Work items** — the concrete units to implement (see each agent for the unit type)
 - **Acceptance criteria** — what "done" means for this chunk
 - **Verification commands** — optional; the exact check/test commands, verbatim
 
 ### Who verifies
 
-Two valid arrangements — the parent picks by whether it passed verification command<configured-path>| Parent passes commands | This agent                                   | Parent then                        |
+Two valid arrangements — the parent picks by whether it passed verification commands:
+
+| Parent passes commands | This agent                                   | Parent then                        |
 | ---------------------- | -------------------------------------------- | ---------------------------------- |
 | Yes                    | Runs them and reports the result             | Trusts the reported result         |
 | No                     | Applies the work, reports what it touched    | Re-verifies (usually `checker`) |
@@ -48,25 +52,37 @@ the parent spawn it and pass the result back.
 
 ## Blockers
 
-When blocke<configured-path>- Stop expanding scope
+When blocked:
+
+- Stop expanding scope
 - Record the blocker with what was attempted and why it failed
 - Continue with the remaining independent work items
 
 ## Output format
 
 ```markdown
-Scop<configured-path>name/id]
-Statu<configured-path>Completed | Partial | Blocked
+Scope: [name/id]
+Status: Completed | Partial | Blocked
 
-Complete<configured-path>- [work item] — [evidenc<configured-path>test file, command that now passes]
+Completed:
 
-Skipped/Faile<configured-path>- [work item] — [reason]
+- [work item] — [evidence: test file, command that now passes]
 
-Files Change<configured-path>- path/to/file
+Skipped/Failed:
 
-Blocker<configured-path>- [none, o<configured-path>what was attempted and why it failed]
+- [work item] — [reason]
 
-Needs From Paren<configured-path>- [none, o<configured-path>docs fetch, browser verification, missing instructions]
+Files Changed:
+
+- path/to/file
+
+Blockers:
+
+- [none, or: what was attempted and why it failed]
+
+Needs From Parent:
+
+- [none, or: docs fetch, browser verification, missing instructions]
 ```
 
 ## Related

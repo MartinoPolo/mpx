@@ -855,7 +855,7 @@ both appended to [`VENDORED.md`](file:///C:/_MP_projects/mpx-pi/extensions/subag
 | File | Edit | Why |
 | --- | --- | --- |
 | `ui/agent-widget.ts` | new exported `buildModelThinkingCells()`, called from `renderFinishedLine()` and the running-agent header; finished stats now go through `fgPreservingNestedStyles` | upstream shows model/thinking only in the spawn-time tags, so the panel could not say which agent ran which model. `thinkingGauge` is imported from `../../footer.js` — panel and main bar share one gauge definition |
-| `index.ts` | `buildEventData()` also emits `model` and `thinking` from `record.invocation` | the shared event bus is the footer's only view of a finished agent. Both fields stay `undefined` for an agent on the parent's model, so the payload shape is unchanged for every other consumer |
+| `index.ts` | `buildEventData()` also emits `model` and `thinking` from `record.invocation` | the shared event bus is the footer's only view of a finished agent. The actual resolved model is emitted for both inherited and pinned runs; thinking remains absent when unspecified |
 
 The **Σ tally needs no fork state at all**: `pi.events` is one shared bus
 (`loader.js:401`, `types.d.ts:1015`), the fork already publishes `subagents:completed` /

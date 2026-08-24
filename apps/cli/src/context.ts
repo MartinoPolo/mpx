@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, opendir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MpxError } from "@mpx/core";
@@ -123,8 +123,17 @@ function routeBoundEnvironment(environment: NodeJS.ProcessEnv, executable: strin
   if (!appData || !path.isAbsolute(appData)) throw resolutionError("EINVAL", "APPDATA must be an absolute path for provider authentication.");
   const isolatedEntries = Object.entries(environment).filter(([key]) => !["gh_config_dir", "glab_config_dir", "mpx_provider_route"].includes(key.toLowerCase()));
   const result: NodeJS.ProcessEnv = { ...Object.fromEntries(isolatedEntries), MPX_PROVIDER_ROUTE: route };
-  if (executable === "gh") result.GH_CONFIG_DIR = path.join(appData, "mpx", "provider-routes", "github", route);
-  if (executable === "glab") result.GLAB_CONFIG_DIR = path.join(appData, "mpx", "provider-routes", "gitlab", route);
+  const runtimeBound = environmentValue(environment, "MPX_RUNTIME_CONTEXT") !== undefined;
+  if (executable === "gh") {
+    const injected = environmentValue(environment, "MPX_RUNTIME_ROUTE_PROVIDER_GITHUB");
+    if (runtimeBound && (!injected || !path.isAbsolute(injected))) throw resolutionError("EINVAL", "The exact launch-injected GitHub route is required.");
+    result.GH_CONFIG_DIR = runtimeBound ? injected! : path.join(appData, "mpx", "provider-routes", "github", route);
+  }
+  if (executable === "glab") {
+    const injected = environmentValue(environment, "MPX_RUNTIME_ROUTE_PROVIDER_GITLAB");
+    if (runtimeBound && (!injected || !path.isAbsolute(injected))) throw resolutionError("EINVAL", "The exact launch-injected GitLab route is required.");
+    result.GLAB_CONFIG_DIR = runtimeBound ? injected! : path.join(appData, "mpx", "provider-routes", "gitlab", route);
+  }
   return result;
 }
 
@@ -275,24 +284,41 @@ function routeWithin(root: string, candidate: string): boolean {
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 async function validatePrivateRouteData(root: string): Promise<void> {
-  let fileCount = 0, totalBytes = 0;
-  const visit = async (directory: string): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+  let fileCount = 0, directoryCount = 0, totalBytes = 0;
+  const visit = async (directory: string, depth: number): Promise<void> => {
+    const entries = await opendir(directory);
+    for await (const entry of entries) {
       const candidate = path.join(directory, entry.name), candidateStat = await lstat(candidate);
       if (candidateStat.isSymbolicLink() || !routeWithin(root, await realpath(candidate))) throw new Error("route data link or escape");
-      if (candidateStat.isDirectory()) await visit(candidate);
-      else if (candidateStat.isFile()) {
+      if (candidateStat.isDirectory()) {
+        directoryCount += 1; if (directoryCount > 128) throw new Error("route data exceeds directory bounds");
+        const childDepth = depth + 1; if (childDepth > 16) throw new Error("route data exceeds depth bounds");
+        await visit(candidate, childDepth);
+      } else if (candidateStat.isFile()) {
         fileCount += 1; totalBytes += candidateStat.size;
         if (fileCount > 256 || totalBytes > 8 * 1024 * 1024) throw new Error("route data exceeds bounds");
       } else throw new Error("route data special file");
     }
   };
-  await visit(root);
+  await visit(root, 0);
+}
+
+function exactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...keys].sort().join(",");
+}
+async function validateMcpRouteDescriptor(value: unknown, label: string, descriptorFile: string, stateRoot: string, projectRoot?: string): Promise<void> {
+  if (!exactKeys(value, ["mcpServers"]) || !exactKeys(value.mcpServers, [label])) throw new Error("mcp config shape");
+  const server = value.mcpServers[label];
+  if (!exactKeys(server, ["type", "command", "args"]) || server.type !== "stdio" || typeof server.command !== "string" || server.command.length === 0 || server.command.length > 4096 || /[\0-\x1f\x7f]/u.test(server.command) || (!path.win32.isAbsolute(server.command) && !path.posix.isAbsolute(server.command))) throw new Error("mcp server shape");
+  if (!Array.isArray(server.args) || server.args.length > 64 || server.args.some(argument => typeof argument !== "string" || argument.length > 4096 || /[\0-\x1f\x7f]/u.test(argument))) throw new Error("mcp argument bounds");
+  if (/\.(?:cmd|bat|ps1)$/iu.test(server.command) || /^(?:sh|bash|zsh|fish|cmd|powershell|pwsh)(?:\.exe)?$/iu.test(path.basename(server.command))) throw new Error("mcp shell command");
+  const commandStat = await lstat(server.command), command = await realpath(server.command);
+  if (!commandStat.isFile() || commandStat.isSymbolicLink() || routeWithin(stateRoot, command) || routeWithin(path.dirname(descriptorFile), command) || (projectRoot !== undefined && routeWithin(await realpath(projectRoot), command))) throw new Error("mcp command trust");
 }
 
 export class NodePrivateRouteMaterializer implements RouteMaterializer {
   constructor(readonly root: string) {}
-  async materialize(descriptorInput: LaunchDescriptor): Promise<Readonly<Record<string, string>>> {
+  async materialize(descriptorInput: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> {
     const selections = privateRouteSelections(descriptorInput);
     let descriptor: LaunchDescriptor;
     try { descriptor = parseLaunchDescriptorV2(descriptorInput); }
@@ -313,9 +339,15 @@ export class NodePrivateRouteMaterializer implements RouteMaterializer {
         if (!routeWithin(canonicalRoot, canonicalData)) throw new Error("route escape");
         await validatePrivateRouteData(canonicalData);
         const binding = JSON.parse(await readFile(bindingFile, "utf8")) as unknown;
-        const expected = { schemaVersion: 1, runtime: descriptor.runtime, identity: descriptor.identity, kind: selection.kind, label: selection.label };
+        const expected = { schemaVersion: 1, runtime: descriptor.runtime, identity: descriptor.identity, kind: selection.kind, label: selection.label, ...(selection.kind === "mcp" ? { launchKey: descriptor.launchKey } : {}) };
         if (JSON.stringify(binding) !== JSON.stringify(expected)) throw new Error("route binding");
-        materialized[selection.key] = canonicalData;
+        if (selection.kind === "mcp") {
+          const descriptorFile = path.join(canonicalData, "route.json");
+          const descriptorStat = await lstat(descriptorFile);
+          if (descriptorStat.isSymbolicLink() || !descriptorStat.isFile() || descriptorStat.size > 16_384 || !routeWithin(canonicalData, await realpath(descriptorFile))) throw new Error("mcp route descriptor shape");
+          await validateMcpRouteDescriptor(JSON.parse(await readFile(descriptorFile, "utf8")), selection.label, descriptorFile, canonicalRoot, projectRoot);
+          materialized[selection.key] = descriptorFile;
+        } else materialized[selection.key] = canonicalData;
       }
       return Object.freeze(materialized);
     } catch { throw privateRouteError("PRIVATE_ROUTE_UNAVAILABLE", "A selected private route is missing, malformed, or not bound to this launch."); }
@@ -324,7 +356,7 @@ export class NodePrivateRouteMaterializer implements RouteMaterializer {
 
 class EnvironmentRouteMaterializer implements RouteMaterializer {
   constructor(readonly environment: NodeJS.ProcessEnv) {}
-  materialize(descriptor: LaunchDescriptor): Promise<Readonly<Record<string, string>>> { return new NodePrivateRouteMaterializer(stateRoot({ env: this.environment })).materialize(descriptor); }
+  materialize(descriptor: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> { return new NodePrivateRouteMaterializer(stateRoot({ env: this.environment })).materialize(descriptor, projectRoot); }
 }
 class EnvironmentLaunchAuditStore implements LaunchAuditStore {
   constructor(readonly environment: NodeJS.ProcessEnv) {}

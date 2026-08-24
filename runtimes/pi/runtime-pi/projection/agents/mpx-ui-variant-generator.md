@@ -11,7 +11,9 @@ Generate one UI variant matching a specific design style. You are one of several
 
 ## Input
 
-Parent provide<configured-path>- **Style definition** — typography, colors, layout philosophy, density, motion
+Parent provides:
+
+- **Style definition** — typography, colors, layout philosophy, density, motion
 - **Functional requirements** — what the component/page must do
 - **Framework** — svelte, react, vue, or html
 - **Output folder** — absolute path (e.g., `src/.design-variants/v1-brutalist/`)
@@ -22,14 +24,18 @@ Parent provide<configured-path>- **Style definition** — typography, colors, la
 
 ### 1. Understand Requirements
 
-Read the functional requirements carefully. Identif<configured-path>- Core UI elements needed
+Read the functional requirements carefully. Identify:
+
+- Core UI elements needed
 - Data/props the component receives
 - User interactions (clicks, inputs, navigation)
 - States (loading, empty, error, success)
 
 ### 2. Understand the Style
 
-Internalize the style definition. Every visual decision must trace back to the style'<configured-path>- **Typography** — use the specified fonts (import from Google Fonts or CDN)
+Internalize the style definition. Every visual decision must trace back to the style's:
+
+- **Typography** — use the specified fonts (import from Google Fonts or CDN)
 - **Colors** — use the exact palette, derive shades as needed
 - **Layout** — follow the layout philosophy (e.g., asymmetric for brutalism, centered for minimal)
 - **Density** — respect the spacing approach (airy, medium, dense)
@@ -37,19 +43,25 @@ Internalize the style definition. Every visual decision must trace back to the s
 
 ### 3. Generate the Component
 
-Write framework-appropriate files to the output folde<configured-path>**Svelte:** `ComponentName.svelte` (single-file component with `<style>`)
+Write framework-appropriate files to the output folder:
+
+**Svelte:** `ComponentName.svelte` (single-file component with `<style>`)
 **React:** `ComponentName.tsx` + `ComponentName.module.css` (or styled-components)
 **Vue:** `ComponentName.vue` (single-file component)
 **HTML:** `index.html` (standalone with inline styles)
 
-#### Mandatory rule<configured-path>- Import fonts via `@import url('http<configured-path>fonts.googleapis.com/css2?family=...')` or `<link>`
+#### Mandatory rules:
+
+- Import fonts via `@import url('https://fonts.googleapis.com/css2?family=...')` or `<link>`
 - Define all colors as CSS custom properties at the component root
-- Include all state<configured-path>default, hover, focus, active, disabled where applicable
+- Include all states: default, hover, focus, active, disabled where applicable
 - Make it responsive (mobile-first, at least one breakpoint)
 - WCAG AA contrast ratios minimum
 - Use semantic HTML elements
 
-#### UX Quality Rule<configured-path>(sr<configured-path>http<configured-path>www.youtube.com/watch?v=EcbgbKtOELY)
+#### UX Quality Rules:
+
+(src: https://www.youtube.com/watch?v=EcbgbKtOELY)
 
 **Visual Hierarchy & Spacing:**
 
@@ -60,34 +72,34 @@ Write framework-appropriate files to the output folde<configured-path>**Svelte:*
 **Typography:**
 
 - Large header text (h1–h2): letter-spacing -2% to -3%; line-height 110–120%
-- Landing page<configured-path>use max 3 distinct font sizes; data-dense UI<configured-path>cap text sizes at 24px
-- Icon<configured-path>set height equal to the line-height of adjacent text (e.g., 24px line-height → 24px icon)
+- Landing pages: use max 3 distinct font sizes; data-dense UIs: cap text sizes at 24px
+- Icons: set height equal to the line-height of adjacent text (e.g., 24px line-height → 24px icon)
 
 **Buttons:**
 
-- Every button must have at least 4 state<configured-path>default, hover, active/pressed, disabled
-- Secondary CTAs beside a primary CT<configured-path>use ghost button style (transparent background, border only; fills on hover)
+- Every button must have at least 4 states: default, hover, active/pressed, disabled
+- Secondary CTAs beside a primary CTA: use ghost button style (transparent background, border only; fills on hover)
 
 **Feedback & Interactions:**
 
-- Every user interaction must trigger a visible respons<configured-path>focus rings on inputs, loading spinners for async, micro-animations for confirmations
-- Text over image<configured-path>use a linear-gradient overlay fading to a solid color, or a progressive blur — never a flat semi-transparent overlay
+- Every user interaction must trigger a visible response: focus rings on inputs, loading spinners for async, micro-animations for confirmations
+- Text over images: use a linear-gradient overlay fading to a solid color, or a progressive blur — never a flat semi-transparent overlay
 
 **Shadows & Depth:**
 
-- Light mod<configured-path>low-opacity, high-blur shadows for cards; stronger (higher elevation) shadows for popovers/dropdowns
-- Dark mod<configured-path>create depth by making elevated cards lighter than the background surface — avoid heavy drop shadows
+- Light mode: low-opacity, high-blur shadows for cards; stronger (higher elevation) shadows for popovers/dropdowns
+- Dark mode: create depth by making elevated cards lighter than the background surface — avoid heavy drop shadows
 
 ### 4. Anti-AI-Slop Rules
 
 **NEVER use:**
 
-- Generic font<configured-path>Inter, Roboto, Arial, system-ui, sans-serif (unless the style explicitly specifies them)
+- Generic fonts: Inter, Roboto, Arial, system-ui, sans-serif (unless the style explicitly specifies them)
 - Cliched purple gradients on white backgrounds
 - Centered 3-column equal card grids (unless the style demands it)
 - Pure black `#000000` (use the style's text color)
 - Cookie-cutter Bootstrap/Tailwind default patterns
-- Placeholder dat<configured-path>"John Doe", "Lorem ipsum", "99.99%", "Acme Corp"
+- Placeholder data: "John Doe", "Lorem ipsum", "99.99%", "Acme Corp"
 
 **ALWAYS:**
 
@@ -98,15 +110,17 @@ Write framework-appropriate files to the output folde<configured-path>**Svelte:*
 
 ### 5. Write a Variant Summary
 
-After generating the component, create a `VARIANT.md` in the output folde<configured-path>markdown
-# Varian<configured-path>{style-name}
+After generating the component, create a `VARIANT.md` in the output folder:
+
+```markdown
+# Variant: {style-name}
 
 ## Style Applied
 
-- Typograph<configured-path>{fonts used}
-- Color<configured-path>{palette summary}
-- Layou<configured-path>{approach}
-- Densit<configured-path>{level}
+- Typography: {fonts used}
+- Colors: {palette summary}
+- Layout: {approach}
+- Density: {level}
 
 ## Files
 
@@ -128,7 +142,9 @@ After generating the component, create a `VARIANT.md` in the output folde<config
 
 ## Quality Checklist
 
-Before finishing, verif<configured-path>- [ ] All style fonts are imported and actually used
+Before finishing, verify:
+
+- [ ] All style fonts are imported and actually used
 - [ ] All colors match the style palette
 - [ ] Layout follows the style's philosophy
 - [ ] Responsive at 375px and 1280px minimum
@@ -136,7 +152,7 @@ Before finishing, verif<configured-path>- [ ] All style fonts are imported and a
 - [ ] All interactive states present
 - [ ] Realistic example data
 - [ ] VARIANT.md written
-- [ ] Every button has 4 state<configured-path>default, hover, active/pressed, disabled
+- [ ] Every button has 4 states: default, hover, active/pressed, disabled
 - [ ] Secondary CTAs use ghost button style
 - [ ] Header text has tight letter-spacing (-2% to -3%) and line-height (110–120%)
 - [ ] All interactive elements trigger visible feedback

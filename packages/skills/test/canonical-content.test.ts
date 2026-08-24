@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { inventoryCanonical } from "../src/index.js";
 
@@ -47,6 +48,32 @@ async function body(identity: string): Promise<string> {
 }
 
 describe("canonical provider-neutral workflow skills", () => {
+  it("contains no configured-path corruption markers anywhere in canonical skills", async () => {
+    const marker = ["<configured", "path>"].join("-");
+    const entries = await readdir(canonicalRoot, { recursive: true, withFileTypes: true });
+    const violations: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const file = path.join(entry.parentPath, entry.name);
+      if ((await readFile(file)).includes(marker)) violations.push(path.relative(canonicalRoot, file));
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("restores representative swallowed URL, type annotation, and object-key text", async () => {
+    const review = await readFile(path.resolve(canonicalRoot, "../agents/references/typescript-review.md"), "utf8");
+    expect(review).toContain("https://github.com/awesome-skills/code-review-skill");
+    expect(review).toContain("function getLength(value: string | string[]): number");
+    expect(review).toContain("const config = { endpoint: '/api', method: 'GET' }");
+  });
+
+  it("keeps executable canonical JavaScript syntactically valid", async () => {
+    for (const relativePath of ["grill-voice/scripts/grill-voice.js", "tutorial-create/scripts/compile.js"]) {
+      const result = spawnSync(process.execPath, ["--check", path.join(canonicalRoot, relativePath)], { encoding: "utf8" });
+      expect(result.status, `${relativePath}: ${result.stderr}`).toBe(0);
+    }
+  });
+
   it("loads and classifies the complete Phase F skill inventory", async () => {
     const catalog = await inventoryCanonical(canonicalRoot);
     const actual = Object.groupBy(catalog, (skill) => `${skill.skillPacks.join("+")}/${skill.defaultExposure}`);
@@ -92,7 +119,7 @@ describe("canonical provider-neutral workflow skills", () => {
         ["provider comparison table", /^(?:\s*\|[^\n]*(?:provider[^\n]*command|command[^\n]*provider|GitHub|GitLab|KanbanFlow)[^\n]*\|\s*)$/imu],
         ["legacy identity", /\/(?:mp(?:-gh)?|kf):[a-z0-9-]+/iu],
         ["runtime placeholder", /(?:\$ARGUMENTS|\$\{[^}]+\}|\{\{[^}]+\}\})/u],
-        ["absolute path", /(?:\b[A-Za-z]:[\\/]|\/(?:Users|home|_MP_projects|_MP_work|_MP_apps)\/)/u],
+        ["absolute machine path", /(?:\b[A-Za-z]:[\\/](?:Users|_MP_projects|_MP_work|_MP_apps)[\\/]|\/(?:Users|home|_MP_projects|_MP_work|_MP_apps)\/)/u],
       ];
       for (const [kind, pattern] of forbidden) if (pattern.test(content)) violations.push(`${identity}: ${kind}`);
     }

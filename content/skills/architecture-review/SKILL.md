@@ -12,7 +12,9 @@ Explore a codebase like an AI would, surface architectural friction, discover op
 
 A **deep module** (John Ousterhout, "A Philosophy of Software Design") has a small interface hiding a large implementation. Deep modules are more testable, more AI-navigable, and let you test at the boundary instead of inside.
 
-Before startin<configured-path>1. Read `./../shared/deep-modules.md` now — deep vs shallow module evaluation.
+Before starting:
+
+1. Read `./../shared/deep-modules.md` now — deep vs shallow module evaluation.
 2. Read `./../shared/interface-design.md` now — interface design rules for testability.
 3. Read `./REFERENCE.md` now — dependency categories and the issue template.
 
@@ -20,7 +22,9 @@ Before startin<configured-path>1. Read `./../shared/deep-modules.md` now — dee
 
 ### 1. Explore the codebase
 
-Spawn `Explore` sub-agent (breadt<configured-path>very thorough) to navigate the codebase naturally. Explore the codebase organically, noting where you experience friction, rather than following rigid heuristic<configured-path>- Where does understanding one concept require bouncing between many small files?
+Spawn `Explore` sub-agent (breadth: very thorough) to navigate the codebase naturally. Explore the codebase organically, noting where you experience friction, rather than following rigid heuristics:
+
+- Where does understanding one concept require bouncing between many small files?
 - Where are modules so shallow that the interface is nearly as complex as the implementation?
 - Where have pure functions been extracted just for testability, but the real bugs hide in how they're called?
 - Where do tightly-coupled modules create integration risk in the seams between them?
@@ -30,7 +34,9 @@ The friction you encounter IS the signal.
 
 ### 2. Present candidates
 
-Present a numbered list of deepening opportunities. For each candidate, sho<configured-path>- **Cluster**: Which modules/concepts are involved
+Present a numbered list of deepening opportunities. For each candidate, show:
+
+- **Cluster**: Which modules/concepts are involved
 - **Why they're coupled**: Shared types, call patterns, co-ownership of a concept
 - **Dependency category**: See `./REFERENCE.md` for the four categories
 - **Test impact**: What existing tests would be replaced by boundary tests
@@ -41,7 +47,9 @@ Ask the user which candidate to explore next — interfaces come later, in Step 
 
 ### 4. Frame the problem space
 
-Before spawning sub-agents, write a user-facing explanation of the problem space for the chosen candidat<configured-path>- The constraints any new interface would need to satisfy
+Before spawning sub-agents, write a user-facing explanation of the problem space for the chosen candidate:
+
+- The constraints any new interface would need to satisfy
 - The dependencies it would need to rely on
 - A rough illustrative code sketch to make the constraints concrete — this is not a proposal, just a way to ground the constraints
 
@@ -49,14 +57,18 @@ Show this to the user, then immediately proceed to Step 5. The user reads and th
 
 ### 5. Design multiple interfaces
 
-Spawn 3+ `general-purpose` sub-agents in parallel with `mode<configured-path>"appropriate runtime class"`. Each must produce a **radically different** interface for the deepened module. Tell each to reason through the trade-offs before committing to a shape.
+Spawn 3+ `general-purpose` sub-agents in parallel with `model: "appropriate runtime class"`. Each must produce a **radically different** interface for the deepened module. Tell each to reason through the trade-offs before committing to a shape.
 
-Prompt each sub-agent with a separate technical brief (file paths, coupling details, dependency category, what's being hidden). This brief is independent of the user-facing explanation in Step 4. Give each agent a different design constrain<configured-path>- Agent 1: "Minimize the interface — aim for 1-3 entry points max"
+Prompt each sub-agent with a separate technical brief (file paths, coupling details, dependency category, what's being hidden). This brief is independent of the user-facing explanation in Step 4. Give each agent a different design constraint:
+
+- Agent 1: "Minimize the interface — aim for 1-3 entry points max"
 - Agent 2: "Maximize flexibility — support many use cases and extension"
 - Agent 3: "Optimize for the most common caller — make the default case trivial"
 - Agent 4 (if applicable): "Design around the ports & adapters pattern for cross-boundary dependencies"
 
-Each sub-agent output<configured-path>1. Interface signature (types, methods, params)
+Each sub-agent outputs:
+
+1. Interface signature (types, methods, params)
 2. Usage example showing how callers use it
 3. What complexity it hides internally
 4. Dependency strategy (how deps are handled — see `./REFERENCE.md`)
@@ -64,7 +76,7 @@ Each sub-agent output<configured-path>1. Interface signature (types, methods, pa
 
 Present designs sequentially, then compare them in prose.
 
-After comparing, give your own recommendatio<configured-path>which design you think is strongest and why. If elements from different designs would combine well, propose a hybrid. Be opinionated — the user wants a strong read, not just a menu.
+After comparing, give your own recommendation: which design you think is strongest and why. If elements from different designs would combine well, propose a hybrid. Be opinionated — the user wants a strong read, not just a menu.
 
 ### 6. User picks an interface (or accepts recommendation)
 
@@ -72,7 +84,7 @@ After comparing, give your own recommendatio<configured-path>which design you th
 
 Log a refactor RFC as an issue/task in the project's tracker (verb + concrete CLI in
 [`shared/ISSUE_TRACKER.md`](../shared/ISSUE_TRACKER.md)). Use the body template in
-`./REFERENCE.md`, title `refacto<configured-path>module description]`, and apply the
+`./REFERENCE.md`, title `refactor: [module description]`, and apply the
 tracker's `refactor` type label (see ISSUE_TRACKER.md § Label mapping). Log it immediately and
 share the reference — skip a review step first.
 

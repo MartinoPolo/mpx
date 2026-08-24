@@ -15,7 +15,7 @@ metadata:
 - Scan the current conversation for domain-relevant nouns, verbs, and concepts
 - If the invocation input specifies a topic, focus extraction on that area
 - Read `.mpx/CONTEXT.md` § Domain Language. If CONTEXT.md doesn't exist, report error and stop.
-- Also sca<configured-path>epic issues, README, key source files for domain terms
+- Also scan: epic issues, README, key source files for domain terms
 
 **Step 2: Identify problems**
 
@@ -26,7 +26,7 @@ metadata:
 **Step 3: Propose vocabulary**
 
 - Be opinionated — when multiple words exist for the same concept, pick ONE canonical term
-- For each ter<configured-path>canonical name, one-sentence definition
+- For each term: canonical name, one-sentence definition
 - Group terms into natural clusters (by subdomain, lifecycle, or actor)
 - Show relationships between terms with cardinality (e.g., "A **User** has many **Sessions**")
 
@@ -43,10 +43,12 @@ Only write confirmed terms.
 
 **Step 5: Write**
 
-Update `.mpx/CONTEXT.md` `## Domain Language` section using definition-list forma<configured-path>markdown
+Update `.mpx/CONTEXT.md` `## Domain Language` section using definition-list format:
+
+```markdown
 ## Domain Language
 
-**Workspace** — Top-level containe<configured-path>one GitHub repo + one project folder + one window.
+**Workspace** — Top-level container: one GitHub repo + one project folder + one window.
 **Issue** — Atomic work unit. One GitHub issue, one worktree, one branch, one color.
 
 _Avoid_: "task" for Issue, "project" for Workspace.
@@ -58,14 +60,14 @@ _Avoid_: "task" for Issue, "project" for Workspace.
 
 ## Flagged Ambiguities
 
-- "workspace" was previously used for both the app container and VS Code workspace — resolve<configured-path>**Workspace** is the Grovekeeper container only.
+- "workspace" was previously used for both the app container and VS Code workspace — resolved: **Workspace** is the Grovekeeper container only.
 ```
 
-If updatin<configured-path>merge new terms into existing structure, update changed definitions, preserve terms that haven't changed.
+If updating: merge new terms into existing structure, update changed definitions, preserve terms that haven't changed.
 
 **Step 6: Summary**
 
-- Output inlin<configured-path>number of terms added, updated, and unchanged
+- Output inline: number of terms added, updated, and unchanged
 - List any unresolved ambiguities for future discussion
 
 ### Rules
@@ -74,4 +76,4 @@ If updatin<configured-path>merge new terms into existing structure, update chang
 - Keep definitions to ONE sentence maximum
 - Flag conflicts explicitly — never silently resolve ambiguity
 - Show relationships with bold term names and cardinality
-- When re-runnin<configured-path>read existing file, incorporate new terms, update definitions, re-flag ambiguities
+- When re-running: read existing file, incorporate new terms, update definitions, re-flag ambiguities

@@ -13,12 +13,16 @@ You analyze GitHub issues combined with codebase exploration results to produce 
 
 ## Input
 
-You receiv<configured-path>1. **Issue data** - title, body, labels, comments from GitHub
+You receive:
+
+1. **Issue data** - title, body, labels, comments from GitHub
 2. **Exploration results** - relevant files, code snippets, patterns found
 
 ## Output
 
-Produce a structured analysi<configured-path>markdown
+Produce a structured analysis:
+
+```markdown
 ## Root Cause Analysis
 
 [Explain why the issue occurs. Reference specific code locations.]

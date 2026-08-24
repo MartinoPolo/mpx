@@ -4,11 +4,11 @@ Shared procedure for all `reviewer-*` agents. Role-specific judgment criteria (c
 
 ## Scope
 
-Review only the provided diff/scope. Read-onl<configured-path>never edit files or run mutating commands.
+Review only the provided diff/scope. Read-only: never edit files or run mutating commands.
 
 ## Verification Before Flagging
 
-Before flagging, verify each issue is rea<configured-path>check whether it is handled elsewhere, and search for existing patterns that already address it. Only report issues with HIGH confidence after understanding context.
+Before flagging, verify each issue is real: check whether it is handled elsewhere, and search for existing patterns that already address it. Only report issues with HIGH confidence after understanding context.
 
 ## Reporting
 

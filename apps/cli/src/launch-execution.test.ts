@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ExecutionError, compactLaunchBanner, createLaunchExecutionAudit, type ExecutorAdapter, type RuntimeAdapter } from "@mpx/executors";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import type { LaunchDescriptor } from "@mpx/launch";
+import { revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
 import { run } from "./main.js";
 import { captureIo } from "./io.js";
 import { NodeLaunchStatusSnapshotMaterializer, resolveLaunchStatusSnapshotPath, type LaunchExecutionContext } from "./launch-execution.js";
@@ -30,6 +31,9 @@ async function launchFixture(): Promise<{ cwd: string; env: NodeJS.ProcessEnv; c
   return { cwd, env: { APPDATA: appdata, LOCALAPPDATA: appdata }, catalogRoot: fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog", import.meta.url)) };
 }
 
+function publishedReference(input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) {
+  return { projectionKey: "f".repeat(64), fileMapHash: "e".repeat(64), launchBinding: { launchKey: input.runtimeContext.launchKey, descriptorDigest: input.runtimeContext.launchDescriptor.digest, runtimeArtifactKey: input.artifact.reference.artifactKey, runtime: input.descriptor.runtime, manifestKey: input.manifest.manifestKey } };
+}
 function materializeRoutes(descriptor: { routes: { gitAuthor: string; providers: Record<string, string>; ssh?: string | null; mcp: { allow: readonly string[] } } }) {
   return {
     [`git:${descriptor.routes.gitAuthor}`]: `C:/state/routes/git/${descriptor.routes.gitAuthor}`,
@@ -61,7 +65,8 @@ async function provisionRoute(root: string, descriptor: LaunchDescriptor, kind: 
   const directory = path.join(root, "private-routes", descriptor.identity.name, descriptor.runtime, kind, label);
   const data = path.join(directory, "data");
   await mkdir(data, { recursive: true });
-  await writeFile(path.join(directory, "binding.json"), JSON.stringify({ schemaVersion: 1, runtime: descriptor.runtime, identity: descriptor.identity, kind, label }));
+  await writeFile(path.join(directory, "binding.json"), JSON.stringify({ schemaVersion: 1, runtime: descriptor.runtime, identity: descriptor.identity, kind, label, ...(kind === "mcp" ? { launchKey: descriptor.launchKey } : {}) }));
+  if (kind === "mcp") await writeFile(path.join(data, "route.json"), JSON.stringify({ mcpServers: { [label]: { type: "stdio", command: process.execPath, args: [] } } }));
   return data;
 }
 
@@ -95,7 +100,35 @@ describe("production private launch services", () => {
       "ssh:ssh-work": await provisionRoute(root, selected, "ssh", "ssh-work"),
       "mcp:context7": await provisionRoute(root, selected, "mcp", "context7"),
     };
-    await expect(new NodePrivateRouteMaterializer(root).materialize(selected)).resolves.toEqual(expected);
+    await expect(new NodePrivateRouteMaterializer(root).materialize(selected, fixture.cwd)).resolves.toEqual({ ...expected, "mcp:context7": path.join(expected["mcp:context7"], "route.json") });
+  });
+
+  it.each([
+    { mcpServers: { context7: { type: "http", url: "https://private.invalid" } } },
+    { mcpServers: { context7: { type: "stdio", command: "relative/server", args: [] } } },
+    { mcpServers: { context7: { type: "stdio", command: "C:/trusted/server.exe", args: [], env: { API_TOKEN: "secret" } } } },
+    { mcpServers: { context7: { type: "stdio", command: "C:/trusted/server.exe", args: [], extra: true } } },
+  ])("rejects unsupported or injectable MCP route descriptors before projection", async routeDescriptor => {
+    const fixture = await launchFixture();
+    const selected = withRoutes(await explainedDescriptor(fixture), { gitAuthor: "git-work", providers: {}, ssh: null, mcp: { allow: ["context7"], shareNativeAuth: false } });
+    const root = path.join(fixture.env.LOCALAPPDATA!, "mpx");
+    await provisionRoute(root, selected, "git", "git-work");
+    const data = await provisionRoute(root, selected, "mcp", "context7");
+    await writeFile(path.join(data, "route.json"), JSON.stringify(routeDescriptor));
+    const error = await new NodePrivateRouteMaterializer(root).materialize(selected, fixture.cwd).catch(reason => reason);
+    expect(error).toMatchObject({ code: "PRIVATE_ROUTE_UNAVAILABLE" });
+    expect(JSON.stringify(error)).not.toContain(JSON.stringify(routeDescriptor));
+  });
+
+  it("rejects wide and deep empty private route data", async () => {
+    const fixture = await launchFixture(); const selected = await explainedDescriptor(fixture); const root = path.join(fixture.env.LOCALAPPDATA!, "mpx");
+    const wide = await provisionRoute(root, selected, "git", selected.routes.gitAuthor);
+    for (let index = 0; index <= 128; index += 1) await mkdir(path.join(wide, `d-${index}`));
+    await expect(new NodePrivateRouteMaterializer(root).materialize(selected)).rejects.toMatchObject({ code: "PRIVATE_ROUTE_UNAVAILABLE" });
+    await rm(wide, { recursive: true }); await mkdir(wide);
+    let current = wide;
+    for (let depth = 0; depth <= 16; depth += 1) { current = path.join(current, "d"); await mkdir(current); }
+    await expect(new NodePrivateRouteMaterializer(root).materialize(selected)).rejects.toMatchObject({ code: "PRIVATE_ROUTE_UNAVAILABLE" });
   });
 
   it("reuses stable preprovisioned route data across launch keys", async () => {
@@ -143,7 +176,7 @@ describe("Phase F launch execution", () => {
     });
     const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
     const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => ({
-      directory: `C:/immutable/${runtime}`, reference: input.artifact.reference,
+      directory: `C:/immutable/${runtime}`, reference: publishedReference(input),
       ...(runtime === "pi" ? { extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" } : { pluginDirectory: "C:/immutable/claude" }),
     }));
     const auditRecords: unknown[] = [];
@@ -181,6 +214,142 @@ describe("Phase F launch execution", () => {
     expect(JSON.stringify(error)).not.toContain(pathForOne);
   });
 
+  it("awaits failed refresh fallback during shutdown and cancels all later status work", async () => {
+    const fixture = await launchFixture(), io = captureIo();
+    const executable = path.join(fixture.env.APPDATA!, "pi-refresh.exe");
+    await writeFile(executable, "trusted\n");
+    const stateRoot = path.join(fixture.env.LOCALAPPDATA!, "mpx");
+    await mkdir(stateRoot, { recursive: true });
+    const snapshot = { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "wt-refresh", path: fixture.cwd, role: "main" as const, branch: "main" }, portResolution: "valid" as const, services: [], diagnostics: [] };
+    const deferred = <T>() => {
+      let resolve!: (value: T) => void, reject!: (reason: unknown) => void;
+      const promise = new Promise<T>((onResolve, onReject) => { resolve = onResolve; reject = onReject; });
+      return { promise, resolve, reject };
+    };
+    const processExit = deferred<{ exitCode: number; stdout: string; stderr: string; truncated: boolean }>();
+    const normalWrite = deferred<string | undefined>();
+    const fallbackRead = deferred<typeof snapshot>();
+    const fallbackWrite = deferred<void>();
+    const productionMaterializer = new NodeLaunchStatusSnapshotMaterializer(stateRoot);
+    let materializations = 0;
+    const materializer = { materialize: vi.fn(async (input: Parameters<NodeLaunchStatusSnapshotMaterializer["materialize"]>[0]) => {
+      materializations += 1;
+      if (materializations === 1) return productionMaterializer.materialize(input);
+      if (materializations === 2) return normalWrite.promise;
+      await fallbackWrite.promise;
+      return productionMaterializer.materialize(input);
+    }) };
+    let scheduled: (() => Promise<void>) | undefined;
+    const cancel = vi.fn();
+    const clock = { schedule: vi.fn((callback: () => Promise<void>, intervalMs: number) => { expect(intervalMs).toBe(1_000); scheduled = callback; return cancel; }) };
+    const execute = vi.fn(async () => processExit.promise);
+    const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
+    const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => ({ directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }));
+    const statusProvider = { snapshot: vi.fn(async () => snapshot) };
+    const reader = vi.fn(async () => fallbackRead.promise);
+
+    const launch = run(["--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, {
+      env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable }, catalogRoot: fixture.catalogRoot,
+      launchExecutorAdapters: [executor], launchProjectionBuilder: builder, launchProjectionValidator: async () => undefined,
+      launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) }, launchStatusSnapshotMaterializer: materializer,
+      launchStatusSnapshotReader: reader, launchStatusRefreshClock: clock, statusProvider,
+    });
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    const refresh = scheduled!();
+    await vi.waitFor(() => expect(materializer.materialize).toHaveBeenCalledTimes(2));
+    processExit.resolve({ exitCode: 0, stdout: "", stderr: "", truncated: false });
+    normalWrite.reject(new Error("normal refresh failed"));
+    await vi.waitFor(() => expect(reader).toHaveBeenCalledOnce());
+    expect(cancel).toHaveBeenCalledOnce();
+    let shutdownReturned = false;
+    void launch.then(() => { shutdownReturned = true; });
+    await Promise.resolve();
+    expect(shutdownReturned).toBe(false);
+    fallbackRead.resolve(snapshot);
+    await vi.waitFor(() => expect(materializer.materialize).toHaveBeenCalledTimes(3));
+    expect(shutdownReturned).toBe(false);
+    fallbackWrite.resolve();
+    await expect(refresh).resolves.toBeUndefined();
+    await expect(launch).resolves.toBe(0);
+    const completedMaterializations = materializer.materialize.mock.calls.length;
+    await scheduled!();
+    expect(materializer.materialize).toHaveBeenCalledTimes(completedMaterializations);
+    expect(statusProvider.snapshot).toHaveBeenCalledTimes(2);
+    expect(cancel).toHaveBeenCalledOnce();
+    await rm(path.join(stateRoot, "status"), { recursive: true, force: true });
+  });
+
+  it.each(["materialize", "fallback-read"] as const)("bounds shutdown when live status %s never resolves and suppresses late work", async hungStage => {
+    const fixture = await launchFixture(), io = captureIo();
+    const executable = path.join(fixture.env.APPDATA!, `pi-hung-${hungStage}.exe`);
+    await writeFile(executable, "trusted\n");
+    const stateRoot = path.join(fixture.env.LOCALAPPDATA!, "mpx");
+    await mkdir(stateRoot, { recursive: true });
+    const snapshot = { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "wt-hung", path: fixture.cwd, role: "main" as const, branch: "main" }, portResolution: "valid" as const, services: [], diagnostics: [] };
+    const deferred = <T>() => {
+      let resolve!: (value: T) => void, reject!: (reason: unknown) => void;
+      const promise = new Promise<T>((onResolve, onReject) => { resolve = onResolve; reject = onReject; });
+      return { promise, resolve, reject };
+    };
+    const processExit = deferred<{ exitCode: number; stdout: string; stderr: string; truncated: boolean }>();
+    const hung = deferred<string | undefined>();
+    const hungRead = deferred<typeof snapshot>();
+    const shutdownDeadline = deferred<void>();
+    const productionMaterializer = new NodeLaunchStatusSnapshotMaterializer(stateRoot);
+    let materializations = 0, refreshSignal: AbortSignal | undefined, readSignal: AbortSignal | undefined;
+    const materializer = { materialize: vi.fn(async (input: Parameters<NodeLaunchStatusSnapshotMaterializer["materialize"]>[0], signal?: AbortSignal) => {
+      materializations += 1;
+      if (materializations === 1) return productionMaterializer.materialize(input, signal);
+      refreshSignal = signal;
+      if (hungStage === "materialize") return hung.promise;
+      throw new Error("normal refresh failed");
+    }) };
+    const reader = vi.fn(async (_file: string, signal?: AbortSignal) => { readSignal = signal; return hungRead.promise; });
+    let scheduled: (() => Promise<void>) | undefined;
+    const cancel = vi.fn();
+    const clock = { schedule: vi.fn((callback: () => Promise<void>) => { scheduled = callback; return cancel; }) };
+    const wait = vi.fn((milliseconds: number) => { expect(milliseconds).toBe(250); return shutdownDeadline.promise; });
+    const execute = vi.fn(async () => processExit.promise);
+    const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
+    const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => ({ directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }));
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const launch = run(["--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, {
+        env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable }, catalogRoot: fixture.catalogRoot,
+        launchExecutorAdapters: [executor], launchProjectionBuilder: builder, launchProjectionValidator: async () => undefined,
+        launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) }, launchStatusSnapshotMaterializer: materializer,
+        launchStatusSnapshotReader: reader, launchStatusRefreshClock: clock, launchStatusShutdownClock: { wait }, launchStatusShutdownDeadlineMs: 250,
+        statusProvider: { snapshot: vi.fn(async () => snapshot) },
+      });
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      const refresh = scheduled!();
+      if (hungStage === "materialize") await vi.waitFor(() => expect(refreshSignal).toBeDefined());
+      else await vi.waitFor(() => expect(reader).toHaveBeenCalledOnce());
+      processExit.resolve({ exitCode: 0, stdout: "", stderr: "", truncated: false });
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+      expect(refreshSignal?.aborted).toBe(true);
+      if (hungStage === "fallback-read") expect(readSignal?.aborted).toBe(true);
+      let returned = false;
+      void launch.then(() => { returned = true; });
+      await Promise.resolve();
+      expect(returned).toBe(false);
+      shutdownDeadline.resolve();
+      await expect(launch).resolves.toBe(0);
+      expect(wait).toHaveBeenCalledOnce();
+      hung.resolve(undefined);
+      if (hungStage === "fallback-read") hungRead.reject(new Error("late read rejection"));
+      await expect(refresh).resolves.toBeUndefined();
+      await Promise.resolve();
+      expect(materializer.materialize).toHaveBeenCalledTimes(2);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      hungRead.promise.catch(() => undefined);
+      await rm(path.join(stateRoot, "status"), { recursive: true, force: true });
+    }
+  });
+
   it("gates the safe default Docker executor without falling back to host", async () => {
     const fixture = await launchFixture(), io = captureIo();
     expect(await run(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, launchRoutes: { materialize: async () => ({}) } })).toBe(1);
@@ -192,6 +361,30 @@ describe("Phase F launch execution", () => {
     expect(await run(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...fake.context })).toBe(0);
     expect(fake.execute).toHaveBeenCalledOnce();
     expect(io.out).toEqual([]); expect(io.err).toEqual([]);
+  });
+
+  it("returns a nonzero runtime process exit from a silent launch", async () => {
+    const fixture = await launchFixture(), fake = verifiedExecution(), io = captureIo();
+    fake.execute.mockResolvedValueOnce({ exitCode: 7, stdout: "", stderr: "runtime failed", truncated: false });
+    expect(await run(["--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...fake.context })).toBe(7);
+    expect(io.out).toEqual([]);
+  });
+
+  it("accepts reordered exact executor evidence at the CLI preflight boundary and rejects extra fields", async () => {
+    for (const extra of [false, true]) {
+      const fixture = await launchFixture(), fake = verifiedExecution(), io = captureIo();
+      let checks = 0;
+      const executor = fake.context.launchExecutorAdapters![0]!;
+      const verify = async () => {
+        checks += 1;
+        const evidence = { evidenceDigest: "a".repeat(64), status: "verified" as const, verifier: "fake-docker" };
+        return checks === 1 || !extra ? evidence : { ...evidence, extra: true } as typeof evidence;
+      };
+      const context = { ...fake.context, launchExecutorAdapters: [{ ...executor, verify }] };
+      expect(await run(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...context })).toBe(extra ? 1 : 0);
+      if (extra) expect(JSON.parse(io.out[0]!)).toMatchObject({ error: { code: "LAUNCH_RESTART_REQUIRED" } });
+      expect(fake.execute).toHaveBeenCalledTimes(extra ? 0 : 1);
+    }
   });
 
   it.each([
@@ -269,6 +462,35 @@ describe("Phase F launch execution", () => {
   it.each([
     ["pi", "MPX_PI_EXECUTABLE"],
     ["claude", "MPX_CLAUDE_EXECUTABLE"],
+  ] as const)("uses the trusted %s publisher verification without a second CLI hash walk", async (runtime, executableVariable) => {
+    const fixture = await launchFixture(), io = captureIo();
+    const executable = path.join(fixture.env.APPDATA!, `${runtime}-publisher.exe`);
+    await writeFile(executable, "trusted\n");
+    const execute = vi.fn(async (_request: Parameters<ExecutorAdapter["execute"]>[0]) => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }));
+    const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
+    const validator = vi.fn(async () => undefined);
+    const artifactRevalidator = vi.fn(revalidateRuntimeArtifact);
+    const contentRoot = await mkdtemp(path.join(tmpdir(), "mpx-publisher-content-"));
+    const catalogRoot = path.join(contentRoot, "catalog");
+    await cp(fixture.catalogRoot, catalogRoot, { recursive: true });
+    await mkdir(path.join(contentRoot, "agents"));
+
+    expect(await run(["--cwd", fixture.cwd, "launch", runtime, "--identity", "work"], io, {
+      env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, [executableVariable]: executable }, catalogRoot,
+      launchExecutorAdapters: [executor], launchProjectionValidator: validator, launchProjectionArtifactRevalidator: artifactRevalidator,
+      launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) },
+    }), JSON.stringify(io)).toBe(0);
+
+    expect(artifactRevalidator).toHaveBeenCalledOnce();
+    expect(validator).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0]![0].environment.MPX_RUNTIME_PROJECTION_REFERENCE).toBeDefined();
+    await rm(contentRoot, { recursive: true, force: true });
+  });
+
+  it.each([
+    ["pi", "MPX_PI_EXECUTABLE"],
+    ["claude", "MPX_CLAUDE_EXECUTABLE"],
   ] as const)("builds and revalidates the production %s projection before execution", async (runtime, executableVariable) => {
     const fixture=await launchFixture(), io=captureIo(), effects:string[]=[];
     const executable = path.join(fixture.env.APPDATA!, `${runtime}.exe`);
@@ -277,7 +499,7 @@ describe("Phase F launch execution", () => {
     const executor:ExecutorAdapter={name:"docker",verify:async()=>({status:"verified",verifier:"fake-docker",evidenceDigest:"a".repeat(64)}),execute};
     const builder=vi.fn(async(input:Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0])=>{
       effects.push("build");
-      return {directory:`C:/immutable/${runtime}`,reference:input.artifact.reference,...(runtime==="pi"?{extension:"C:/immutable/pi/extension.mjs",runtimeContextFile:"C:/immutable/pi/runtime-context.json",theme:"green"}:{pluginDirectory:"C:/immutable/claude"})};
+      return {directory:`C:/immutable/${runtime}`,reference:publishedReference(input),...(runtime==="pi"?{extension:"C:/immutable/pi/extension.mjs",runtimeContextFile:"C:/immutable/pi/runtime-context.json",theme:"green"}:{pluginDirectory:"C:/immutable/claude"})};
     });
     const validator=vi.fn(async()=>{effects.push("validate");});
     expect(await run(["--cwd",fixture.cwd,"launch",runtime,"--identity","work"],io,{env:{...fixture.env,MPX_APPS:fixture.env.APPDATA,[executableVariable]:executable},catalogRoot:fixture.catalogRoot,launchExecutorAdapters:[executor],launchProjectionBuilder:builder,launchProjectionValidator:validator,launchRoutes:{materialize:async descriptor=>materializeRoutes(descriptor)}})).toBe(0);
@@ -285,6 +507,16 @@ describe("Phase F launch execution", () => {
     expect(builder).toHaveBeenCalledOnce(); expect(validator).toHaveBeenCalledOnce(); expect(execute).toHaveBeenCalledOnce();
     expect(JSON.stringify(builder.mock.calls[0]![0])).not.toContain(`C:/native/work/${runtime}`);
     expect(JSON.stringify(io)).not.toContain(`C:/native/work/${runtime}`);
+  });
+
+  it("rejects a mismatched explicit published binding before validation or invocation", async () => {
+    const fixture = await launchFixture(), io = captureIo(), execute = vi.fn(), validator = vi.fn();
+    const executable = path.join(fixture.env.APPDATA!, "pi-binding.exe"); await writeFile(executable, "trusted\n");
+    const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
+    const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => ({ directory: "C:/immutable/pi", reference: { ...publishedReference(input), launchBinding: { ...publishedReference(input).launchBinding, launchKey: "0".repeat(64) } }, extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }));
+    expect(await run(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable }, catalogRoot: fixture.catalogRoot, launchExecutorAdapters: [executor], launchProjectionBuilder: builder, launchProjectionValidator: validator, launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) } })).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ ok: false, error: { code: "LAUNCH_RESTART_REQUIRED" } });
+    expect(validator).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled();
   });
 
   it("performs no projection or process side effects when a launch precondition fails", async () => {
@@ -302,7 +534,7 @@ describe("Phase F launch execution", () => {
     const effects: string[] = [];
     const execute = vi.fn(async (_request: Parameters<ExecutorAdapter["execute"]>[0]) => { effects.push("process"); return { exitCode: 0, stdout: "", stderr: "", truncated: false }; });
     const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
-    const builder = vi.fn(async () => { effects.push("build"); return { directory: "C:/immutable/pi", reference: { schemaVersion: 4 as const, runtime: "pi" as const, manifestKey: "c".repeat(64), artifactKey: "d".repeat(64), fileMapHash: "e".repeat(64) }, extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }; });
+    const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => { effects.push("build"); return { directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }; });
     const statusProvider = { snapshot: vi.fn(async () => { effects.push("status"); return { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing" as const, services: [], diagnostics: [] }; }) };
     const launchRoutes = { materialize: vi.fn(async descriptor => { effects.push("routes"); return materializeRoutes(descriptor); }) };
 
@@ -331,7 +563,7 @@ describe("Phase F launch execution", () => {
     const effects: string[] = [];
     const execute = vi.fn(async (_request: Parameters<ExecutorAdapter["execute"]>[0]) => { effects.push("process"); return { exitCode: 0, stdout: "", stderr: "", truncated: false }; });
     const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
-    const builder = vi.fn(async () => { effects.push("build"); return { directory: "C:/immutable/pi", reference: { schemaVersion: 4 as const, runtime: "pi" as const, manifestKey: "c".repeat(64), artifactKey: "d".repeat(64), fileMapHash: "e".repeat(64) }, extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }; });
+    const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => { effects.push("build"); return { directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }; });
     const statusProvider = { snapshot: vi.fn(async () => { effects.push("status"); return { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing" as const, services: [], diagnostics: [] }; }) };
     const launchRoutes = { materialize: vi.fn(async descriptor => { effects.push("routes"); return materializeRoutes(descriptor); }) };
 
@@ -352,7 +584,7 @@ describe("Phase F launch execution", () => {
     expect(effects).toEqual([]);
   });
 
-  it("launches from a nested cwd using only immutable projected project skill argv", async () => {
+  it("binds a nested project skill into the combined artifact without native Pi skill argv", async () => {
     const fixture = await launchFixture(), io = captureIo();
     const nested = path.join(fixture.cwd, "packages", "web");
     const skillDirectory = path.join(fixture.cwd, ".agents", "skills", "local");
@@ -361,14 +593,15 @@ describe("Phase F launch execution", () => {
     const executable = path.join(fixture.env.APPDATA!, "pi-nested.exe"); await writeFile(executable, "trusted\n");
     const execute = vi.fn(async (_request: Parameters<ExecutorAdapter["execute"]>[0]) => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }));
     const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
-    const immutableSkill = "C:/immutable/pi/project-skills/local";
     const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => {
       expect(input.descriptor.intendedPolicy.inputsDigest).toBe(sha256Canonical({ schemaVersion: 1, manifestKey: input.manifest.manifestKey, skillArtifactKey: input.descriptor.skillArtifact.artifactKey } as unknown as JsonValue));
-      return { directory: "C:/immutable/pi", reference: input.artifact.reference, extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const, projectSkills: [immutableSkill] };
+      expect(input.catalog.find((skill) => skill.identity === "local")).toMatchObject({ sourcePath: path.join(skillDirectory, "SKILL.md"), directoryHash: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+      expect(input.artifact.entries.find((entry) => entry.identity === "local")?.source.kind).toBe("project");
+      return { directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const };
     });
     expect(await run(["--cwd", nested, "launch", "pi", "--identity", "work"], io, { env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable }, catalogRoot: fixture.catalogRoot, launchExecutorAdapters: [executor], launchProjectionBuilder: builder, launchProjectionValidator: async () => undefined, launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) } })).toBe(0);
-    expect(builder.mock.calls[0]![0].projectSkills?.[0]?.sourcePath).toBe(path.join(skillDirectory, "SKILL.md"));
-    expect(execute.mock.calls[0]![0]).toMatchObject({ cwd: nested, argv: expect.arrayContaining(["--skill", immutableSkill]) });
+    expect(execute.mock.calls[0]![0]).toMatchObject({ cwd: nested });
+    expect(execute.mock.calls[0]![0].argv).not.toContain("--skill");
     expect(execute.mock.calls[0]![0].argv.join(" ")).not.toContain(skillDirectory);
   });
 
@@ -379,7 +612,7 @@ describe("Phase F launch execution", () => {
     const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
     const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => {
       effects.push(`build:${input.launchBanner}`);
-      return { directory: "C:/immutable/pi", reference: input.artifact.reference, extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const };
+      return { directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const };
     });
     const validator = vi.fn(async () => { effects.push("validate"); });
     const statusProvider = { snapshot: vi.fn(async () => { effects.push("status"); return { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "wt-1", path: fixture.cwd, role: "main" as const, branch: "main" }, portResolution: "valid" as const, services: [{ id: "web", mode: "managed" as const, scope: "checkout" as const, protocol: "http" as const, port: 4100, listening: true, conflict: "none" as const, pid: 7 }], diagnostics: [] }; }) };
@@ -442,10 +675,12 @@ describe("Phase F launch execution", () => {
     expect(JSON.parse(output).data).toHaveProperty("nativeRuntimeRootDigest");
   });
 
-  it("reports only the validated immutable runtime tuple from launch current", async () => {
+  it("reports the logical skill artifact separately from the exact validated published projection binding", async () => {
     const io = captureIo();
     const context = { schemaVersion: 1, launchKey: "a".repeat(64), launchDescriptor: { reference: "launch.json", digest: "b".repeat(64) }, manifestKey: "c".repeat(64), runtimeArtifact: { schemaVersion: 4, runtime: "pi", manifestKey: "c".repeat(64), artifactKey: "d".repeat(64), fileMapHash: "e".repeat(64) }, binding: { projectId: "sample/app", repositoryId: "sample/app", contentScope: "work" } };
-    expect(await run(["--json", "launch", "current"], io, { env: { MPX_RUNTIME_CONTEXT: JSON.stringify(context) } })).toBe(0);
-    expect(JSON.parse(io.out[0]!).data).toEqual({ launchKey: "a".repeat(64), descriptorDigest: "b".repeat(64), manifestKey: "c".repeat(64), artifactKey: "d".repeat(64), binding: context.binding });
+    const launchBinding = { launchKey: context.launchKey, descriptorDigest: context.launchDescriptor.digest, runtimeArtifactKey: context.runtimeArtifact.artifactKey, runtime: "pi", manifestKey: context.manifestKey };
+    const projection = { projectionKey: "f".repeat(64), launchBinding, fileMapHash: "9".repeat(64) };
+    expect(await run(["--json", "launch", "current"], io, { env: { MPX_RUNTIME_CONTEXT: JSON.stringify(context), MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projection) } })).toBe(0);
+    expect(JSON.parse(io.out[0]!).data).toEqual({ launchKey: context.launchKey, descriptorDigest: context.launchDescriptor.digest, manifestKey: context.manifestKey, artifactKey: context.runtimeArtifact.artifactKey, projectionKey: projection.projectionKey, launchBinding, binding: context.binding });
   });
 });

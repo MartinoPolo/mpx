@@ -2,7 +2,7 @@
 name: mpx-reviewer-performance
 description: "Read-only performance reviewer for changed code."
 ---
-# Reviewe<configured-path>Performance
+# Reviewer: Performance
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
 

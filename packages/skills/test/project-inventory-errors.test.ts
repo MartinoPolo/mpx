@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { inventoryProjectSkills, SkillCatalogError, type ProjectSkillFileSystem } from "../src/index.js";
+import { inventoryProjectSkills, SkillCatalogError, type ProjectSkillDirectoryEntry, type ProjectSkillFileSystem } from "../src/index.js";
 
 function failure(code: "EACCES" | "EIO" | "ENOENT" | "ENOTDIR"): NodeJS.ErrnoException {
   return Object.assign(new Error(code), { code });
 }
 
+function streamed(entries: readonly ProjectSkillDirectoryEntry[]) {
+  return { async *[Symbol.asyncIterator]() { yield* entries; } };
+}
+
 describe("project skill inventory filesystem failures", () => {
   it.each(["EACCES", "EIO"] as const)("surfaces %s structurally and performs no later filesystem access", async (code) => {
     const filesystem: ProjectSkillFileSystem = {
-      readdir: vi.fn(async () => { throw failure(code); }),
+      opendir: vi.fn(async () => { throw failure(code); }),
       realpath: vi.fn(),
       readFile: vi.fn(),
     };
@@ -22,7 +26,7 @@ describe("project skill inventory filesystem failures", () => {
 
   it.each(["EACCES", "EIO"] as const)("fails structurally when reading skill content returns %s", async (code) => {
     const filesystem: ProjectSkillFileSystem = {
-      readdir: vi.fn(async () => [{ name: "review", isDirectory: () => true }]),
+      opendir: vi.fn(async () => streamed([{ name: "review", isDirectory: () => true }])),
       realpath: vi.fn(async (file) => file),
       readFile: vi.fn(async () => { throw failure(code); }),
     };
@@ -31,7 +35,7 @@ describe("project skill inventory filesystem failures", () => {
 
   it("fails structurally when traversal hits an I/O error before reading skill content", async () => {
     const filesystem: ProjectSkillFileSystem = {
-      readdir: vi.fn(async () => [{ name: "review", isDirectory: () => true }]),
+      opendir: vi.fn(async () => streamed([{ name: "review", isDirectory: () => true }])),
       realpath: vi.fn(async () => { throw failure("EIO"); }),
       readFile: vi.fn(),
     };
@@ -41,7 +45,7 @@ describe("project skill inventory filesystem failures", () => {
 
   it.each(["ENOENT", "ENOTDIR"] as const)("treats only %s as an absent inventory", async (code) => {
     const filesystem: ProjectSkillFileSystem = {
-      readdir: vi.fn(async () => { throw failure(code); }),
+      opendir: vi.fn(async () => { throw failure(code); }),
       realpath: vi.fn(),
       readFile: vi.fn(),
     };

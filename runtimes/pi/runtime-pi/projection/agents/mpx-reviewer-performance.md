@@ -5,7 +5,7 @@ model: openai-codex/gpt-5.6-luna
 tools: read,grep,find,ls,bash
 
 ---
-# Reviewe<configured-path>Performance
+# Reviewer: Performance
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
 

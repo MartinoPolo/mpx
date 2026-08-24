@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, opendir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION = 4 as const;
@@ -149,90 +149,172 @@ export interface RuntimeAdapter<TContext = RuntimeContextV1, TResult = unknown> 
 }
 
 export interface RuntimeArtifactFile { readonly path: string; readonly sha256: string; readonly bytes: number }
-interface ArtifactMetadata { schemaVersion: 1; reference: RuntimeSkillArtifactReferenceV4; fileMap: RuntimeArtifactFile[] }
-export interface PublishedRuntimeArtifact { readonly directory: string; readonly reference: RuntimeSkillArtifactReferenceV4; readonly fileMap: readonly RuntimeArtifactFile[]; readonly reused: boolean }
+export interface RuntimeProjectionLaunchBinding {
+  readonly launchKey: string;
+  readonly descriptorDigest: string;
+  readonly runtimeArtifactKey: string;
+  readonly runtime: RuntimeName;
+  readonly manifestKey: string;
+}
+export interface PublishedRuntimeArtifactReference {
+  readonly projectionKey: string;
+  readonly launchBinding: RuntimeProjectionLaunchBinding;
+  readonly fileMapHash: string;
+}
+export interface RuntimeArtifactInventoryLimits {
+  readonly maxFileCount: number; readonly maxFileBytes: number; readonly maxAggregateBytes: number;
+  readonly maxDirectoryCount?: number; readonly maxDepth?: number;
+}
+export const DEFAULT_RUNTIME_ARTIFACT_INVENTORY_LIMITS = Object.freeze({ maxFileCount: 10_000, maxFileBytes: 16 * 1024 * 1024, maxAggregateBytes: 256 * 1024 * 1024, maxDirectoryCount: 1_024, maxDepth: 32 });
+interface ResolvedRuntimeArtifactInventoryLimits { maxFileCount: number; maxFileBytes: number; maxAggregateBytes: number; maxDirectoryCount: number; maxDepth: number }
+interface ArtifactMetadata { schemaVersion: 1; reference: PublishedRuntimeArtifactReference; fileMap: RuntimeArtifactFile[] }
+interface InventoryFile { relative: string; absolute: string; bytes: number; mtimeMs: number; device: number; inode: number; content: Buffer; sha256: string }
+export interface PublishedRuntimeArtifact { readonly directory: string; readonly reference: PublishedRuntimeArtifactReference; readonly fileMap: readonly RuntimeArtifactFile[]; readonly reused: boolean }
 const METADATA = ".mpx-runtime-artifact.json";
+const MAX_METADATA_BYTES = 4 * 1024 * 1024;
+const SHA256 = /^[a-f0-9]{64}$/u;
 
 function portable(relative: string): string { return relative.split(path.sep).join("/"); }
 function within(candidate: string, root: string): boolean { const rel = path.relative(root, candidate); return rel === "" || (!rel.startsWith(`..${path.sep}`) && rel !== ".." && !path.isAbsolute(rel)); }
-async function scanFiles(root: string, omitMetadata = false): Promise<Array<{ relative: string; absolute: string }>> {
-  const rootStat = await lstat(root).catch(() => fail("SOURCE_MISSING", `directory does not exist: ${root}`));
-  if (rootStat.isSymbolicLink()) fail("SOURCE_SYMLINK", "source or artifact root may not be a symlink");
-  if (!rootStat.isDirectory()) fail("INVALID_DIRECTORY", "artifact source must be a directory");
-  const realRoot = await realpath(root); const files: Array<{ relative: string; absolute: string }> = [];
-  async function visit(directory: string): Promise<void> {
-    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
-      const absolute = path.join(directory, entry.name); const stat = await lstat(absolute);
-      if (stat.isSymbolicLink()) fail("SOURCE_SYMLINK", `symlink is forbidden: ${portable(path.relative(root, absolute))}`);
-      const resolved = await realpath(absolute); if (!within(resolved, realRoot)) fail("SOURCE_ESCAPE", "source entry escapes its root");
-      if (stat.isDirectory()) await visit(absolute);
-      else if (stat.isFile()) { const relative = portable(path.relative(root, absolute)); if (!omitMetadata || relative !== METADATA) files.push({ relative, absolute }); }
-      else fail("SOURCE_SPECIAL_FILE", "only regular files and directories may be published");
-    }
-  }
-  await visit(root); return files.sort((a, b) => a.relative.localeCompare(b.relative));
+function positiveLimit(value: number, label: string): number { if (!Number.isSafeInteger(value) || value < 0) fail("INVALID_CONTRACT", `${label} must be a non-negative safe integer`); return value; }
+function parseLimits(value: RuntimeArtifactInventoryLimits | undefined): ResolvedRuntimeArtifactInventoryLimits {
+  const limits = value ?? DEFAULT_RUNTIME_ARTIFACT_INVENTORY_LIMITS;
+  return {
+    maxFileCount: positiveLimit(limits.maxFileCount, "maxFileCount"), maxFileBytes: positiveLimit(limits.maxFileBytes, "maxFileBytes"),
+    maxAggregateBytes: positiveLimit(limits.maxAggregateBytes, "maxAggregateBytes"), maxDirectoryCount: positiveLimit(limits.maxDirectoryCount ?? DEFAULT_RUNTIME_ARTIFACT_INVENTORY_LIMITS.maxDirectoryCount, "maxDirectoryCount"),
+    maxDepth: positiveLimit(limits.maxDepth ?? DEFAULT_RUNTIME_ARTIFACT_INVENTORY_LIMITS.maxDepth, "maxDepth"),
+  };
 }
-async function mapFiles(root: string, omitMetadata = false): Promise<RuntimeArtifactFile[]> {
-  const result: RuntimeArtifactFile[] = [];
-  for (const file of await scanFiles(root, omitMetadata)) {
-    const content = await readFile(file.absolute); const current = await lstat(file.absolute);
-    if (!current.isFile() || current.isSymbolicLink()) fail("SOURCE_CHANGED", `source changed while reading: ${file.relative}`);
-    result.push({ path: file.relative, sha256: createHash("sha256").update(content).digest("hex"), bytes: content.byteLength });
-  }
+function parseLaunchBinding(value: RuntimeProjectionLaunchBinding): RuntimeProjectionLaunchBinding {
+  const item = record(value, "launchBinding"); exactKeys(item, ["launchKey", "descriptorDigest", "runtimeArtifactKey", "runtime", "manifestKey"], "launchBinding");
+  return { launchKey: text(item.launchKey, "launchBinding.launchKey"), descriptorDigest: text(item.descriptorDigest, "launchBinding.descriptorDigest"), runtimeArtifactKey: text(item.runtimeArtifactKey, "launchBinding.runtimeArtifactKey"), runtime: runtime(item.runtime), manifestKey: text(item.manifestKey, "launchBinding.manifestKey") };
+}
+function digest(value: unknown, label: string): string { const result = text(value, label); if (!SHA256.test(result)) fail("INVALID_CONTRACT", `${label} must be a lowercase SHA-256 digest`); return result; }
+function parsePublishedReference(value: PublishedRuntimeArtifactReference): PublishedRuntimeArtifactReference {
+  const item = record(value, "reference"); exactKeys(item, ["projectionKey", "launchBinding", "fileMapHash"], "reference");
+  return { projectionKey: digest(item.projectionKey, "reference.projectionKey"), launchBinding: parseLaunchBinding(item.launchBinding as RuntimeProjectionLaunchBinding), fileMapHash: digest(item.fileMapHash, "reference.fileMapHash") };
+}
+function safePortablePath(value: unknown, label: string): string {
+  const result = text(value, label); const segments = result.split("/");
+  const reserved = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu;
+  if (result.length > 1_024 || result !== result.normalize("NFC") || result.includes("\\") || path.posix.isAbsolute(result) || segments.some(segment => !segment || segment === "." || segment === ".." || reserved.test(segment) || /[\u0000-\u001f<>:"|?*]/u.test(segment) || /[ .]$/u.test(segment))) fail("INVALID_CONTRACT", `${label} must be a safe portable relative path`);
   return result;
 }
-function referenceFor(runtimeName: RuntimeName, manifestKey: string, fileMap: readonly RuntimeArtifactFile[]): RuntimeSkillArtifactReferenceV4 {
-  const fileMapHash = hash(fileMap); const artifactKey = hash({ schemaVersion: 4, runtime: runtimeName, manifestKey, fileMapHash });
-  return createRuntimeSkillArtifactReferenceV4({ runtime: runtimeName, manifestKey, artifactKey, fileMapHash });
+function comparePortable(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
+function sameIdentity(left: { dev: number; ino: number }, right: { dev: number; ino: number }): boolean { return left.dev === right.dev && left.ino === right.ino; }
+async function exactHandleRead(file: string, maximumBytes: number, changedCode: string, description: string, expected?: { bytes: number; mtimeMs: number; device: number; inode: number }): Promise<Buffer> {
+  const handle = await open(file, "r");
+  try {
+    const initial = await handle.stat(); const linked = await lstat(file);
+    if (!initial.isFile() || linked.isSymbolicLink() || !linked.isFile() || !sameIdentity(initial, linked) || initial.size > maximumBytes || expected && (initial.size !== expected.bytes || initial.mtimeMs !== expected.mtimeMs || initial.dev !== expected.device || initial.ino !== expected.inode)) fail(changedCode, `${description} is oversized, replaced, or not a regular file`);
+    const content = Buffer.alloc(initial.size); let offset = 0;
+    while (offset < content.length) { const read = await handle.read(content, offset, content.length - offset, offset); if (read.bytesRead === 0) fail(changedCode, `${description} changed while reading`); offset += read.bytesRead; }
+    if ((await handle.read(Buffer.alloc(1), 0, 1, initial.size)).bytesRead !== 0) fail(changedCode, `${description} grew while reading`);
+    const final = await handle.stat(); const finalLinked = await lstat(file);
+    if (!sameIdentity(initial, final) || !sameIdentity(final, finalLinked) || final.size !== initial.size || final.mtimeMs !== initial.mtimeMs || finalLinked.isSymbolicLink()) fail(changedCode, `${description} changed while reading`);
+    return content;
+  } finally { await handle.close(); }
 }
-function metadata(reference: RuntimeSkillArtifactReferenceV4, fileMap: readonly RuntimeArtifactFile[]): ArtifactMetadata { return { schemaVersion: 1, reference, fileMap: [...fileMap] }; }
+function parseMetadata(value: unknown, limits: ResolvedRuntimeArtifactInventoryLimits): ArtifactMetadata {
+  const item = record(value, "metadata"); exactKeys(item, ["schemaVersion", "reference", "fileMap"], "metadata");
+  if (item.schemaVersion !== 1 || !Array.isArray(item.fileMap)) fail("INVALID_CONTRACT", "artifact metadata has an unsupported shape");
+  if (item.fileMap.length > limits.maxFileCount) fail("MAX_FILE_COUNT", "artifact metadata exceeds the configured file count");
+  const seen = new Set<string>(); const directories = new Set<string>(); let aggregateBytes = 0; let previous = "";
+  const fileMap = item.fileMap.map((value, index) => {
+    const file = record(value, `fileMap[${index}]`); exactKeys(file, ["path", "sha256", "bytes"], `fileMap[${index}]`);
+    const relative = safePortablePath(file.path, `fileMap[${index}].path`); const portableIdentity = relative.toLowerCase(); const bytes = positiveLimit(file.bytes as number, `fileMap[${index}].bytes`);
+    if (seen.has(portableIdentity) || previous && comparePortable(previous, relative) >= 0) fail("INVALID_CONTRACT", "artifact file map paths must be unique and sorted"); seen.add(portableIdentity); previous = relative;
+    if (bytes > limits.maxFileBytes) fail("MAX_FILE_BYTES", "artifact metadata exceeds the configured per-file byte limit"); aggregateBytes += bytes;
+    if (aggregateBytes > limits.maxAggregateBytes) fail("MAX_AGGREGATE_BYTES", "artifact metadata exceeds the configured aggregate byte limit");
+    const segments = relative.split("/"); if (segments.length - 1 > limits.maxDepth) fail("MAX_DEPTH", "artifact metadata exceeds the configured depth");
+    for (let depth = 1; depth < segments.length; depth += 1) directories.add(segments.slice(0, depth).join("/"));
+    if (directories.size > limits.maxDirectoryCount) fail("MAX_DIRECTORY_COUNT", "artifact metadata exceeds the configured directory count");
+    return { path: relative, sha256: digest(file.sha256, `fileMap[${index}].sha256`), bytes };
+  });
+  return { schemaVersion: 1, reference: parsePublishedReference(item.reference as PublishedRuntimeArtifactReference), fileMap };
+}
+async function boundedRead(file: Omit<InventoryFile, "content" | "sha256">): Promise<Buffer> { return exactHandleRead(file.absolute, file.bytes, "SOURCE_CHANGED", `source file ${file.relative}`, file); }
+async function inventoryFiles(root: string, omitMetadata = false, configuredLimits?: RuntimeArtifactInventoryLimits): Promise<InventoryFile[]> {
+  const limits = parseLimits(configuredLimits); const rootStat = await lstat(root).catch(() => fail("SOURCE_MISSING", `directory does not exist: ${root}`));
+  if (rootStat.isSymbolicLink()) fail("SOURCE_SYMLINK", "source or artifact root may not be a symlink");
+  if (!rootStat.isDirectory()) fail("INVALID_DIRECTORY", "artifact source must be a directory");
+  const realRoot = await realpath(root); const discovered: Array<Omit<InventoryFile, "content" | "sha256">> = []; const portableEntries = new Set<string>(); let aggregateBytes = 0, directoryCount = 0;
+  async function visit(directory: string, depth: number): Promise<void> {
+    const entries = await opendir(directory);
+    for await (const entry of entries) {
+      const absolute = path.join(directory, entry.name); const stat = await lstat(absolute); const relative = safePortablePath(portable(path.relative(root, absolute)), "artifact source path"); const portableIdentity = relative.toLowerCase();
+      if (portableEntries.has(portableIdentity)) fail("INVALID_CONTRACT", "artifact source paths must be uniquely portable"); portableEntries.add(portableIdentity);
+      if (stat.isSymbolicLink()) fail("SOURCE_SYMLINK", `symlink is forbidden: ${relative}`);
+      const resolved = await realpath(absolute); if (!within(resolved, realRoot)) fail("SOURCE_ESCAPE", "source entry escapes its root");
+      if (stat.isDirectory()) {
+        directoryCount += 1; if (directoryCount > limits.maxDirectoryCount) fail("MAX_DIRECTORY_COUNT", "artifact source exceeds the configured directory count", { limit: limits.maxDirectoryCount });
+        const childDepth = depth + 1; if (childDepth > limits.maxDepth) fail("MAX_DEPTH", "artifact source exceeds the configured depth", { limit: limits.maxDepth });
+        await visit(absolute, childDepth);
+      } else if (stat.isFile()) {
+        if (omitMetadata && relative === METADATA) continue;
+        if (discovered.length + 1 > limits.maxFileCount) fail("MAX_FILE_COUNT", "artifact source exceeds the configured file count", { limit: limits.maxFileCount });
+        if (stat.size > limits.maxFileBytes) fail("MAX_FILE_BYTES", `artifact file exceeds the configured byte limit: ${relative}`, { limit: limits.maxFileBytes, bytes: stat.size });
+        aggregateBytes += stat.size; if (aggregateBytes > limits.maxAggregateBytes) fail("MAX_AGGREGATE_BYTES", "artifact source exceeds the configured aggregate byte limit", { limit: limits.maxAggregateBytes, bytes: aggregateBytes });
+        discovered.push({ relative, absolute, bytes: stat.size, mtimeMs: stat.mtimeMs, device: stat.dev, inode: stat.ino });
+      } else fail("SOURCE_SPECIAL_FILE", "only regular files and directories may be published");
+    }
+  }
+  await visit(root, 0); discovered.sort((a, b) => comparePortable(a.relative, b.relative));
+  const inventory: InventoryFile[] = [];
+  for (const file of discovered) { const content = await boundedRead(file); inventory.push({ ...file, content, sha256: createHash("sha256").update(content).digest("hex") }); }
+  return inventory;
+}
+function fileMapFor(inventory: readonly InventoryFile[]): RuntimeArtifactFile[] { return inventory.map((file) => ({ path: file.relative, sha256: file.sha256, bytes: file.bytes })); }
+function referenceFor(launchBinding: RuntimeProjectionLaunchBinding, fileMap: readonly RuntimeArtifactFile[]): PublishedRuntimeArtifactReference {
+  const canonicalBinding = parseLaunchBinding(launchBinding); const fileMapHash = hash(fileMap); const projectionKey = hash({ schemaVersion: 1, launchBinding: canonicalBinding, fileMapHash });
+  return { projectionKey, launchBinding: canonicalBinding, fileMapHash };
+}
+function metadata(reference: PublishedRuntimeArtifactReference, fileMap: readonly RuntimeArtifactFile[]): ArtifactMetadata { return { schemaVersion: 1, reference, fileMap: [...fileMap] }; }
 function same(left: unknown, right: unknown): boolean { return stable(left) === stable(right); }
 
-export async function revalidateRuntimeArtifact(directory: string, expected: RuntimeSkillArtifactReferenceV4): Promise<{ valid: boolean; diagnostics: RuntimeContractDiagnostic[] }> {
+export async function revalidateRuntimeArtifact(directory: string, expectedInput: PublishedRuntimeArtifactReference, inventoryLimits?: RuntimeArtifactInventoryLimits): Promise<{ valid: boolean; diagnostics: RuntimeContractDiagnostic[] }> {
   const diagnostics: RuntimeContractDiagnostic[] = [];
   try {
+    const limits = parseLimits(inventoryLimits); const expected = parsePublishedReference(expectedInput);
     const stat = await lstat(directory); if (stat.isSymbolicLink() || !stat.isDirectory()) fail("ARTIFACT_SYMLINK", "artifact destination must be a real directory");
-    const stored = JSON.parse(await readFile(path.join(directory, METADATA), "utf8")) as ArtifactMetadata;
-    const files = await mapFiles(directory, true); const calculated = referenceFor(expected.runtime, expected.manifestKey, files);
+    const metadataBytes = await exactHandleRead(path.join(directory, METADATA), MAX_METADATA_BYTES, "INVALID_CONTRACT", "artifact metadata");
+    const stored = parseMetadata(JSON.parse(metadataBytes.toString("utf8")) as unknown, limits);
+    const files = fileMapFor(await inventoryFiles(directory, true, inventoryLimits)); const calculated = referenceFor(expected.launchBinding, files);
     if (!same(stored, metadata(expected, files)) || !same(calculated, expected)) diagnostics.push({ code: "ARTIFACT_FILE_MAP_CHANGED", message: "runtime artifact files or metadata no longer match the launch binding", restartRequired: true });
-  } catch (error) {
-    diagnostics.push({ code: "ARTIFACT_FILE_MAP_CHANGED", message: error instanceof Error ? error.message : "runtime artifact cannot be validated", restartRequired: true });
-  }
+  } catch (error) { diagnostics.push({ code: "ARTIFACT_FILE_MAP_CHANGED", message: error instanceof Error ? error.message : "runtime artifact cannot be validated", restartRequired: true }); }
   return { valid: diagnostics.length === 0, diagnostics };
 }
 
-export async function publishRuntimeArtifact(input: { sourceRoot: string; artifactsRoot: string; runtime: RuntimeName; manifestKey: string }): Promise<PublishedRuntimeArtifact> {
-  const fileMap = await mapFiles(input.sourceRoot); const reference = referenceFor(runtime(input.runtime), text(input.manifestKey, "manifestKey"), fileMap);
+export async function publishRuntimeArtifact(input: { sourceRoot: string; artifactsRoot: string; launchBinding: RuntimeProjectionLaunchBinding; inventoryLimits?: RuntimeArtifactInventoryLimits; revalidate?: typeof revalidateRuntimeArtifact }): Promise<PublishedRuntimeArtifact> {
+  const revalidate = input.revalidate ?? revalidateRuntimeArtifact;
+  const inventory = await inventoryFiles(input.sourceRoot, false, input.inventoryLimits); const fileMap = fileMapFor(inventory); const reference = referenceFor(input.launchBinding, fileMap);
   await mkdir(input.artifactsRoot, { recursive: true }); const rootStat = await lstat(input.artifactsRoot);
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) fail("ARTIFACT_ROOT_INVALID", "artifact root must be a real directory");
-  const destination = path.join(input.artifactsRoot, reference.artifactKey);
-  const existing = await lstat(destination).catch(() => undefined);
+  const destination = path.join(input.artifactsRoot, reference.projectionKey); const existing = await lstat(destination).catch(() => undefined);
   if (existing) {
     if (existing.isSymbolicLink() || !existing.isDirectory()) fail("ARTIFACT_DESTINATION_INVALID", "existing artifact destination is not a real directory");
-    const validation = await revalidateRuntimeArtifact(destination, reference);
+    const validation = await revalidate(destination, reference, input.inventoryLimits);
     if (!validation.valid) fail("ARTIFACT_MISMATCH", "existing artifact destination is not exactly equal to the requested artifact");
     return { directory: destination, reference, fileMap, reused: true };
   }
-  const temporary = path.join(input.artifactsRoot, `.${reference.artifactKey}.tmp-${randomUUID()}`);
-  await mkdir(temporary);
+  const temporary = path.join(input.artifactsRoot, `.${reference.projectionKey}.tmp-${randomUUID()}`); await mkdir(temporary);
   try {
-    for (const file of await scanFiles(input.sourceRoot)) { const target = path.join(temporary, ...file.relative.split("/")); await mkdir(path.dirname(target), { recursive: true }); await copyFile(file.absolute, target); }
-    const copiedMap = await mapFiles(temporary); if (!same(copiedMap, fileMap)) fail("SOURCE_CHANGED", "source changed while the artifact was copied");
+    for (const file of inventory) { const target = path.join(temporary, ...file.relative.split("/")); await mkdir(path.dirname(target), { recursive: true }); await writeFile(target, file.content, { flag: "wx" }); }
     await writeFile(path.join(temporary, METADATA), `${stable(metadata(reference, fileMap))}\n`, { flag: "wx" });
     try { await rename(temporary, destination); }
     catch (error) {
-      const raced = await lstat(destination).catch(() => undefined);
-      if (!raced) throw error;
-      const validation = await revalidateRuntimeArtifact(destination, reference);
+      const raced = await lstat(destination).catch(() => undefined); if (!raced) throw error;
+      const validation = await revalidate(destination, reference, input.inventoryLimits);
       if (!validation.valid) fail("ARTIFACT_MISMATCH", "concurrent artifact destination does not exactly match");
-      await rm(temporary, { recursive: true });
-      return { directory: destination, reference, fileMap, reused: true };
+      await rm(temporary, { recursive: true }); return { directory: destination, reference, fileMap, reused: true };
     }
+    const validation = await revalidate(destination, reference, input.inventoryLimits);
+    if (!validation.valid) fail("ARTIFACT_MISMATCH", "published artifact destination does not exactly match");
     return { directory: destination, reference, fileMap, reused: false };
   } catch (error) { await rm(temporary, { recursive: true, force: true }); throw error; }
 }
 
-export async function validateRuntimeContext(input: { context: RuntimeContextV1; expectedLaunch: { launchKey: string; descriptorDigest: string }; expectedManifestKey: string; expectedRuntimeArtifact?: RuntimeSkillArtifactReferenceV4; currentBinding: RuntimeBinding; artifactDirectory?: string }): Promise<{ valid: boolean; diagnostics: RuntimeContractDiagnostic[] }> {
+export async function validateRuntimeContext(input: { context: RuntimeContextV1; expectedLaunch: { launchKey: string; descriptorDigest: string }; expectedManifestKey: string; expectedRuntimeArtifact?: RuntimeSkillArtifactReferenceV4; currentBinding: RuntimeBinding; artifactDirectory?: string; expectedPublishedArtifact?: PublishedRuntimeArtifactReference }): Promise<{ valid: boolean; diagnostics: RuntimeContractDiagnostic[] }> {
   const context = parseRuntimeContextV1(input.context); const current = parseBinding(input.currentBinding); const diagnostics: RuntimeContractDiagnostic[] = [];
   const add = (code: string, message: string, restartRequired = true): void => { diagnostics.push({ code, message, restartRequired }); };
   if (context.launchKey !== input.expectedLaunch.launchKey || context.launchDescriptor.digest !== input.expectedLaunch.descriptorDigest) add("LAUNCH_BINDING_CHANGED", "launch descriptor binding changed");
@@ -241,6 +323,9 @@ export async function validateRuntimeContext(input: { context: RuntimeContextV1;
   if (context.binding.projectId !== current.projectId) add("PROJECT_CHANGED", "project binding changed");
   if (context.binding.repositoryId !== current.repositoryId) add("REPOSITORY_CHANGED", "repository binding changed");
   if (context.binding.contentScope !== current.contentScope) add("CONTENT_SCOPE_CHANGED", "content-scope binding changed");
-  if (input.artifactDirectory !== undefined) diagnostics.push(...(await revalidateRuntimeArtifact(input.artifactDirectory, context.runtimeArtifact)).diagnostics);
+  if (input.artifactDirectory !== undefined) {
+    if (input.expectedPublishedArtifact === undefined) add("PUBLISHED_ARTIFACT_BINDING_MISSING", "published projection launch binding is required for revalidation");
+    else diagnostics.push(...(await revalidateRuntimeArtifact(input.artifactDirectory, input.expectedPublishedArtifact)).diagnostics);
+  }
   return { valid: diagnostics.length === 0, diagnostics };
 }

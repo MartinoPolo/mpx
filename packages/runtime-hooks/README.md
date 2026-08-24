@@ -23,8 +23,18 @@ No source content, machine credentials, sessions, or state is bundled.
   an executable plus argv, never shell text.
 - Pull-request context comes from explicit provider-neutral MPX assumptions. Provider
   CLI lookup and provider-specific URL extraction are deferred to adapters.
-- Dangerous-command and staged-secret size failures are fail-closed. Missing fallow,
-  audit runtime errors, and compact instruction read failures remain visible fail-open
-  outcomes, matching the maintained safety boundary.
+- Dangerous-command and staged-secret size failures are fail-closed. Recursive-delete
+  flags and targets must be statically constrained; unresolved expansion is blocked.
+  Payloads passed through `env`, `command`, `sh`/`bash`, `cmd`, PowerShell, and `eval`
+  are recursively classified through at most 8 wrapper levels. Wrapper input is bounded
+  to 32,768 characters. Opaque payloads, malformed wrapper syntax, and excess nesting
+  produce structured `OPAQUE_COMMAND_WRAPPER`, `MALFORMED_COMMAND_WRAPPER`, and
+  `WRAPPER_DEPTH_EXCEEDED` decisions. This is bounded tokenization, not a general shell
+  parser. Missing fallow, audit runtime errors, and compact instruction read failures
+  remain visible fail-open outcomes.
+- Runtime projections can import `dangerousCommandPolicyModuleSource`, persist that
+  string as an `.mjs` module, and import its named or default
+  `classifyDangerousCommand` export. The standalone source has no imports or workspace
+  dependencies and is generated from the same classifier factory used by this package.
 - Runtime-specific event names, exit codes, payload envelopes, notifications, automatic
   draft-PR creation, and other Phase G behavior are intentionally excluded.

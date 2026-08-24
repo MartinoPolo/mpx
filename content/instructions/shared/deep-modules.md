@@ -26,25 +26,25 @@ A module's value = functionality provided / interface complexity.
     └──────────────────┘
 ```
 
-## Deep Modul<configured-path>Unix File I/O
+## Deep Module: Unix File I/O
 
 Five functions (`open`, `read`, `write`, `lseek`, `close`) hide enormous complexity — buffering, caching, disk scheduling, file systems, permissions. The interface is tiny; the implementation is massive. That's deep.
 
-## Shallow Modul<configured-path>Pass-through Methods
+## Shallow Module: Pass-through Methods
 
 ```typescript
 // Shallow — adds nothing, just forwards
 class UserController {
-  getUser(i<configured-path>string) {
+  getUser(id: string) {
     return this.userService.getUser(id);
   }
-  createUser(dat<configured-path>UserData) {
+  createUser(data: UserData) {
     return this.userService.createUser(data);
   }
-  updateUser(i<configured-path>string, dat<configured-path>UserData) {
+  updateUser(id: string, data: UserData) {
     return this.userService.updateUser(id, data);
   }
-  deleteUser(i<configured-path>string) {
+  deleteUser(id: string) {
     return this.userService.deleteUser(id);
   }
 }
@@ -54,13 +54,15 @@ Each method does nothing but relay to another layer. The interface is as complex
 
 ## Design Questions
 
-When designing a module, as<configured-path>1. **Can I reduce the number of methods?** Combine related operations if they always happen together.
+When designing a module, ask:
+
+1. **Can I reduce the number of methods?** Combine related operations if they always happen together.
 2. **Can I simplify parameters?** Use defaults, derive values internally, accept fewer options.
 3. **Can I hide more complexity?** If callers must understand internals to use the interface, the abstraction leaks.
 4. **Does this layer add real logic?** If a class/function just delegates, consider removing it.
 
 ## Impact on Testing
 
-Deep modules need fewer tests relative to the functionality they provide — the small interface means fewer code paths to exercise. Shallow modules invert thi<configured-path>lots of surface area, little payoff per test.
+Deep modules need fewer tests relative to the functionality they provide — the small interface means fewer code paths to exercise. Shallow modules invert this: lots of surface area, little payoff per test.
 
 Prefer deep modules. Your tests (and callers) will thank you.

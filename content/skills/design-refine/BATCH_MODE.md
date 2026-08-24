@@ -5,7 +5,9 @@ unprocessed. Step numbers refer to [SKILL.md](SKILL.md).
 
 ## A. Discover
 
-Every direct subfolder of `designs/` where all three hol<configured-path>1. `variants/DECISION.md` exists
+Every direct subfolder of `designs/` where all three hold:
+
+1. `variants/DECISION.md` exists
 2. `SUMMARY.md` is absent
 3. `refined.html` is absent
 

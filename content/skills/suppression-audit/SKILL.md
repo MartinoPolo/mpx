@@ -29,31 +29,43 @@ Run `node ./scripts/detect-check-scripts.mjs` (optionally pass a project dir as 
 
 ### Step 2: Scan for All Suppressions
 
-Spawn an `Explore` sub-agent (breadt<configured-path>very thorough, no `model` param) to find every suppression comment in source files (exclude `node_modules`, `dist`, `.svelte-kit`, lock files). For each match, have it recor<configured-path>- File path and line number
+Spawn an `Explore` sub-agent (breadth: very thorough, no `model` param) to find every suppression comment in source files (exclude `node_modules`, `dist`, `.svelte-kit`, lock files). For each match, have it record:
+
+- File path and line number
 - Suppression type and rule name
 - Surrounding code context (3 lines before/after)
 
 ### Step 3: Scan Config Files
 
-Spawn an `Explore` sub-agent (breadt<configured-path>medium, no `model` param) to find and read all lint config files (`eslint.config.*`, `.eslintrc.*`, `.oxlintrc.*`, `oxlint.json`). Have it, for eac<configured-path>1. List every rule explicitly set to `"off"`, `"warn"`, or `0`
+Spawn an `Explore` sub-agent (breadth: medium, no `model` param) to find and read all lint config files (`eslint.config.*`, `.eslintrc.*`, `.oxlintrc.*`, `oxlint.json`). Have it, for each:
+
+1. List every rule explicitly set to `"off"`, `"warn"`, or `0`
 2. Check git history for recent changes (last 2 weeks): `git log --since="2 weeks ago" -p -- <config-file>`
 3. Flag any rule that was downgraded (error→warn) or removed recently
 
 ### Step 4: Evaluate Each Suppression
 
-For each suppression found in Steps 2-3, classify i<configured-path>**REMOVE** — suppression is unjustified, a straightforward fix exist<configured-path>- Rule violation is easy to fix (rename, restructure, add type)
+For each suppression found in Steps 2-3, classify it:
+
+**REMOVE** — suppression is unjustified, a straightforward fix exists:
+- Rule violation is easy to fix (rename, restructure, add type)
 - Suppression was added as a shortcut instead of fixing the issue
 - The suppressed rule no longer triggers (code changed since suppression was added)
 
-**KEEP** — suppression is justifie<configured-path>- Framework/library limitation requires it (e.g., Svelte a11y for intentionally non-standard interactions)
+**KEEP** — suppression is justified:
+- Framework/library limitation requires it (e.g., Svelte a11y for intentionally non-standard interactions)
 - Fix would require major refactoring disproportionate to the benefit
 - Rule is genuinely wrong for the context (e.g., `no-undef` disabled globally in TypeScript projects)
 - Test files where the suppressed pattern is the thing being tested
 
-**UPGRADE** — warning should be an erro<configured-path>- Config recently downgraded a rule from error to warn without clear reason
+**UPGRADE** — warning should be an error:
+- Config recently downgraded a rule from error to warn without clear reason
 - Rule removal weakens quality gates
 
-Log the evaluation as a table (printed to the user) and immediately proceed to fixe<configured-path>| # | File | Type | Rule | Verdict | Reason |
+Log the evaluation as a table (printed to the user) and immediately proceed to fixes:
+
+```
+| # | File | Type | Rule | Verdict | Reason |
 |---|------|------|------|---------|--------|
 ```
 
@@ -61,7 +73,9 @@ Log the evaluation as a table (printed to the user) and immediately proceed to f
 
 Automatically fix every suppression marked REMOVE or UPGRADE — no confirmation needed.
 
-For each fi<configured-path>1. Remove the suppression comment
+For each fix:
+
+1. Remove the suppression comment
 2. Fix the underlying code issue
 3. Run the fast check command (pre-commit tier) to catch regressions
 4. If the fix breaks something, revert and reclassify as KEEP with explanation
@@ -72,7 +86,7 @@ After all individual fixes pass, run the full check suite once.
 
 Use `mpx commit-push-pr` skill to commit all changes and create a PR. Include the evaluation table in the PR body so reviewers can see the reasoning for each decision.
 
-PR title forma<configured-path>chor<configured-path>audit and fix code quality suppressions`
+PR title format: `chore: audit and fix code quality suppressions`
 
 ## Edge Cases
 

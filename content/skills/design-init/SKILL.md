@@ -11,13 +11,15 @@ metadata:
 Derive an opinionated visual identity from what the app is, grill the user until it's settled,
 then write `designs/tokens.css` and `designs/DESIGN_SYSTEM.md`.
 
-Shared convention<configured-path>DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
+Shared conventions: [DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
 
 **Once per project.** A re-run overwrites the design system — confirm first.
 
 ## Step 1: Gather project context
 
-Read whatever exist<configured-path>- Project context/decision docs (`.mpx/CONTEXT.md`, `.mpx/DECISIONS.md`, `docs/`, `README.md`)
+Read whatever exists:
+
+- Project context/decision docs (`.mpx/CONTEXT.md`, `.mpx/DECISIONS.md`, `docs/`, `README.md`)
 - `package.json` — name, description, framework
 - The global stylesheet and `components.json` — see DESIGN_PIPELINE.md § Project discovery
 - Any existing UI, for what the project already looks like
@@ -45,7 +47,7 @@ Present as a 3–4 sentence vision statement, then the concrete values, each wit
 
 ## Step 3: Grill until settled
 
-Ask abou<configured-path>overall direction (too playful? too corporate?), light/dark/both, font overrides,
+Ask about: overall direction (too playful? too corporate?), light/dark/both, font overrides,
 brand colors that must be honoured, and anything the recommendation missed. Iterate to confirmation.
 
 ## Step 4: Reconcile with the existing theme
@@ -64,11 +66,11 @@ OKLCH colors for perceptual uniformity. Google Fonts `@import` at the top.
 ```css
 :root {
 	/* Typography */
-	--font-san<configured-path>'Font Name', system-ui, sans-serif;
-	--font-mon<configured-path>'Mono Font', ui-monospace, monospace;
+	--font-sans: 'Font Name', system-ui, sans-serif;
+	--font-mono: 'Mono Font', ui-monospace, monospace;
 
 	/* Colors */
-	--color-primar<configured-path>oklch(...);
+	--color-primary: oklch(...);
 	/* … full semantic set … */
 
 	/* Spacing scale, radii, shadows, motion */
@@ -82,7 +84,9 @@ OKLCH colors for perceptual uniformity. Google Fonts `@import` at the top.
 
 ## Step 6: Write `designs/DESIGN_SYSTEM.md`
 
-The reference the other three skills read. Cove<configured-path>- **Typography** — families with rationale, size scale, weights, heading letter-spacing
+The reference the other three skills read. Cover:
+
+- **Typography** — families with rationale, size scale, weights, heading letter-spacing
 - **Color** — every token with its value, usage guidance, contrast notes
 - **Spacing & layout** — the scale, when to use each step, grid/flex preferences, density rules
 - **Component patterns** — how to use the project's component library within this language,
@@ -91,13 +95,15 @@ The reference the other three skills read. Cove<configured-path>- **Typography**
 
 ## Step 7: Record decisions
 
-Append each settled decision to the project's decisions doc if one exist<configured-path>markdown
+Append each settled decision to the project's decisions doc if one exists:
+
+```markdown
 ### [Decision title]
 
-Decide<configured-path>date]
-Wha<configured-path>choice]
-Wh<configured-path>rationale tied to the app domain]
-Rejecte<configured-path>alternatives considered]
+Decided: [date]
+What: [choice]
+Why: [rationale tied to the app domain]
+Rejected: [alternatives considered]
 ```
 
 ## Step 8: Report

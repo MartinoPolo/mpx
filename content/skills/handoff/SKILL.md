@@ -18,7 +18,9 @@ Capture accumulated knowledge, context, and insights that would be lost when sta
 
 ### Step 1: Gather Context
 
-Review the current conversation to extrac<configured-path>- What was accomplished (progress)
+Review the current conversation to extract:
+
+- What was accomplished (progress)
 - Decisions made and their reasoning
 - Problems encountered and how they were solved
 - Dead ends discovered (what NOT to do)
@@ -27,7 +29,9 @@ Review the current conversation to extrac<configured-path>- What was accomplishe
 
 ### Step 2: Check Task List
 
-Use `TaskList` to see current task statu<configured-path>- Completed tasks
+Use `TaskList` to see current task status:
+
+- Completed tasks
 - In-progress tasks
 - Pending tasks
 
@@ -41,8 +45,8 @@ Use `TaskList` to see current task statu<configured-path>- Completed tasks
 ### Step 4: Create or Update HANDOFF.md
 
 1. Check if `HANDOFF.md` already exists in the project root
-2. If exist<configured-path>read it, merge previous context with current session context (preserve still-relevant items, update/replace stale ones)
-3. If no<configured-path>create new from scratch
+2. If exists: read it, merge previous context with current session context (preserve still-relevant items, update/replace stale ones)
+3. If not: create new from scratch
 
 Write `HANDOFF.md` to the **project root**.
 
@@ -53,17 +57,17 @@ Write as if briefing a developer who has zero context. Every section should cont
 ```markdown
 # Session Handoff
 
-Dat<configured-path>Today's date]
+Date: [Today's date]
 
 ## Progress This Session
 
-- [For each completed ite<configured-path>what was done and how]
+- [For each completed item: what was done and how]
 - [Include file paths, function names, specific changes]
 - [Not just "implemented X" — describe the approach taken]
 
 ## Key Decisions
 
-- [Each decisio<configured-path>what was decided, alternatives considered, why this choice]
+- [Each decision: what was decided, alternatives considered, why this choice]
 - [Include technical trade-offs and constraints that influenced the decision]
 
 ## Dead Ends & Mistakes
@@ -90,7 +94,7 @@ Dat<configured-path>Today's date]
 
 ## Working Memory
 
-- [Implicit knowledg<configured-path>"X depends on Y", "don't change Z because..."]
+- [Implicit knowledge: "X depends on Y", "don't change Z because..."]
 - [Patterns discovered, architectural constraints]
 - [Environment quirks, config gotchas, version-specific behavior]
 - [Relationships between components that aren't obvious from code]
@@ -98,10 +102,14 @@ Dat<configured-path>Today's date]
 
 ### Step 5: Confirm
 
-Show the user what was create<configured-path>> "Session handoff create<configured-path>>
+Show the user what was created:
+
+> "Session handoff created:
+>
 > - `HANDOFF.md` (project root)
 >
-> Capture<configured-path>>
+> Captured:
+>
 > - [x] items of progress
 > - [x] decisions
 > - [x] next steps"

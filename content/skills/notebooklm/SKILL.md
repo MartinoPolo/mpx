@@ -1,6 +1,6 @@
 ---
 name: notebooklm
-description: "Full programmatic API for Google NotebookL<configured-path>create notebooks, add sources, generate every artifact type, and download in multiple formats."
+description: "Full programmatic API for Google NotebookLM: create notebooks, add sources, generate every artifact type, and download in multiple formats."
 metadata:
   mpx:
     skillPacks: [work]
@@ -27,17 +27,17 @@ else
 fi
 ```
 
-> Full install matrix (extras, headless servers, contributor flow): [Installation guide on GitHub](http<configured-path>github.com/teng-lin/notebooklm-py/blob/main/docs/installation.md).
+> Full install matrix (extras, headless servers, contributor flow): [Installation guide on GitHub](https://github.com/teng-lin/notebooklm-py/blob/main/docs/installation.md).
 
 **From GitHub (use latest release tag, NOT main branch):**
 ```bash
 # Get the latest release tag (using curl)
-LATEST_TAG=$(curl -s http<configured-path>api.github.com/repos/teng-lin/notebooklm-py/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+LATEST_TAG=$(curl -s https://api.github.com/repos/teng-lin/notebooklm-py/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
 # Includes [browser] so the interactive `notebooklm login` flow works.
-pip install "notebooklm-py[browser] @ git+http<configured-path>github.com/teng-lin/notebooklm-py@<latest-release-tag>"
+pip install "notebooklm-py[browser] @ git+https://github.com/teng-lin/notebooklm-py@<latest-release-tag>"
 ```
 
-⚠️ **DO NOT install from main branch** (`pip install git+http<configured-path>github.com/teng-lin/notebooklm-py`). The main branch may contain unreleased/unstable changes. Always use PyPI or a specific release tag, unless you are testing unreleased features.
+⚠️ **DO NOT install from main branch** (`pip install git+https://github.com/teng-lin/notebooklm-py`). The main branch may contain unreleased/unstable changes. Always use PyPI or a specific release tag, unless you are testing unreleased features.
 
 **Skill install methods:**
 
@@ -52,7 +52,9 @@ notebooklm skill install
 
 ## Prerequisites
 
-**IMPORTANT:** Before using any command, you MUST authenticat<configured-path>bash
+**IMPORTANT:** Before using any command, you MUST authenticate:
+
+```bash
 notebooklm login          # Opens browser for Google OAuth
 notebooklm list           # Verify authentication works
 ```
@@ -61,10 +63,12 @@ If commands fail with authentication errors, re-run `notebooklm login`.
 
 ### CI/CD, Multiple Accounts, and Parallel Agents
 
-For automated environments, multiple accounts, or parallel agent workflow<configured-path>| Variable | Purpose |
+For automated environments, multiple accounts, or parallel agent workflows:
+
+| Variable | Purpose |
 |----------|---------|
-| `NOTEBOOKLM_HOME` | Custom config directory (defaul<configured-path>~/.notebooklm`) |
-| `NOTEBOOKLM_PROFILE` | Active profile name (defaul<configured-path>default`) |
+| `NOTEBOOKLM_HOME` | Custom config directory (default: `~/.notebooklm`) |
+| `NOTEBOOKLM_PROFILE` | Active profile name (default: `default`) |
 | `NOTEBOOKLM_AUTH_JSON` | Inline auth JSON - no file writes needed |
 
 **CI/CD setup:** Set `NOTEBOOKLM_AUTH_JSON` from a secret containing your `storage_state.json` contents.
@@ -76,7 +80,7 @@ For automated environments, multiple accounts, or parallel agent workflow<config
 **Solutions for parallel workflows:**
 1. **Always use explicit notebook ID** (recommended): Pass `-n <notebook_id>` (for `wait`/`download` commands) or `--notebook <notebook_id>` (for others) instead of relying on `use`
 2. **Per-agent isolation via profiles:** `export NOTEBOOKLM_PROFILE=agent-$ID` (each profile gets its own context file)
-3. **Per-agent isolation via home:** Set unique `NOTEBOOKLM_HOME` per agen<configured-path>export NOTEBOOKLM_HOME=/tmp/agent-$ID`
+3. **Per-agent isolation via home:** Set unique `NOTEBOOKLM_HOME` per agent: `export NOTEBOOKLM_HOME=/tmp/agent-$ID`
 4. **Use full UUIDs:** Avoid partial IDs in automation (they can become ambiguous)
 
 ## Agent Setup Verification
@@ -85,9 +89,9 @@ Before starting workflows, verify auth is in place. **Use `--test --json` (not b
 
 1. `notebooklm auth check --test --json` → require BOTH `"status": "ok"` AND `"checks.token_fetch": true`. Bare `"status": "ok"` (without `--test`) is a false-positive trap — a stale cookie file passes the parse check.
 2. `notebooklm list --json` → expect valid JSON (may be empty for new accounts).
-3. **If auth fails or is missing → run `notebooklm login` first.** This is the primary auth pat<configured-path>opens a browser, the user signs in to Google once, and the resulting `storage_state.json` is reused on every subsequent run. Works on any environment with a display.
+3. **If auth fails or is missing → run `notebooklm login` first.** This is the primary auth path: opens a browser, the user signs in to Google once, and the resulting `storage_state.json` is reused on every subsequent run. Works on any environment with a display.
    - For headless contexts where opening a browser is not feasible, use `notebooklm login --browser-cookies <browser>` instead — extracts the user's already-logged-in cookies from Chrome/Firefox/etc. (requires the `[cookies]` extra; rookiepy may not install on Python 3.13+). Use `chrome::<profile-name-or-directory>` to target one Chromium user-profile, or `firefox::<container-name>` / `firefox::none` to target one Firefox container.
-   - To survey signed-in Google accounts before picking on<configured-path>notebooklm auth inspect --browser <browser>` (read-only; pass `-v` to see which Chromium user-profile each account came from, or `--json` for tooling). Scoped forms such as `notebooklm auth inspect --browser 'chrome::Profile 1'` inspect only that browser profile.
+   - To survey signed-in Google accounts before picking one: `notebooklm auth inspect --browser <browser>` (read-only; pass `-v` to see which Chromium user-profile each account came from, or `--json` for tooling). Scoped forms such as `notebooklm auth inspect --browser 'chrome::Profile 1'` inspect only that browser profile.
    - Re-run step 1 after login to confirm.
 4. **If auth was working but cookies went stale** (Google rotated SIDTS, or you signed in fresh in the browser) **→ refresh the active profile in place instead of full re-login:**
    - `notebooklm auth refresh` — server-side SIDTS refresh against the existing `storage_state.json`. Cheap and silent; safe to run on a schedule (cron / launchd / systemd) at 15–20 min cadence to keep an unattended profile warm.
@@ -100,7 +104,8 @@ Before starting workflows, verify auth is in place. **Use `--test --json` (not b
 
 **Explicit:** User says "/notebooklm", "use notebooklm", or mentions the tool by name
 
-**Intent detection:** Recognize requests lik<configured-path>- "Create a podcast about [topic]"
+**Intent detection:** Recognize requests like:
+- "Create a podcast about [topic]"
 - "Summarize these URLs/documents"
 - "Generate a quiz from my research"
 - "Turn this into an audio overview"
@@ -170,9 +175,9 @@ Before starting workflows, verify auth is in place. **Use `--test --json` (not b
 | Create notebook | `notebooklm create "Title"` |
 | Set context | `notebooklm use <notebook_id>` |
 | Show context | `notebooklm status` |
-| Add URL source | `notebooklm source add "http<configured-path>..."` |
+| Add URL source | `notebooklm source add "https://..."` |
 | Add file | `notebooklm source add ./file.pdf` |
-| Add YouTube | `notebooklm source add "http<configured-path>youtube.com/..."` |
+| Add YouTube | `notebooklm source add "https://youtube.com/..."` |
 | List sources | `notebooklm source list` |
 | Delete source by ID | `notebooklm source delete <source_id>` |
 | Delete source by exact title | `notebooklm source delete-by-title "Exact Title"` |
@@ -200,7 +205,7 @@ Before starting workflows, verify auth is in place. **Use `--test --json` (not b
 | Generate podcast (specific sources) | `notebooklm generate audio -s src_id1 -s src_id2` |
 | Generate video | `notebooklm generate video "instructions"` |
 | Generate report | `notebooklm generate report --format briefing-doc` |
-| Generate report (append instructions) | `notebooklm generate report --format study-guide --append "Target audienc<configured-path>beginners"` |
+| Generate report (append instructions) | `notebooklm generate report --format study-guide --append "Target audience: beginners"` |
 | Generate quiz | `notebooklm generate quiz` |
 | Revise a slide | `notebooklm generate revise-slide "prompt" --artifact <id> --slide 0` |
 | Check artifact status | `notebooklm artifact list` |
@@ -231,25 +236,27 @@ Before starting workflows, verify auth is in place. **Use `--test --json` (not b
 | Health check | `notebooklm doctor` |
 | Health check (auto-fix) | `notebooklm doctor --fix` |
 
-**Parallel safety:** Use explicit notebook IDs in parallel workflows. Commands supporting `-n` shorthan<configured-path>artifact wait`, `source wait`, `research wait/status`, `download *`. Download commands also support `-a/--artifact`. Other commands use `--notebook`. For chat, use `-c <conversation_id>` to target a specific conversation.
+**Parallel safety:** Use explicit notebook IDs in parallel workflows. Commands supporting `-n` shorthand: `artifact wait`, `source wait`, `research wait/status`, `download *`. Download commands also support `-a/--artifact`. Other commands use `--notebook`. For chat, use `-c <conversation_id>` to target a specific conversation.
 
 **Partial IDs:** Use first 6+ characters of UUIDs. Must be unique prefix (fails if ambiguous). Works for ID-based commands such as `use`, `source delete`, and `wait`. For exact source-title deletion, use `source delete-by-title "Title"`. For automation, prefer full UUIDs to avoid ambiguity.
 
 ## Command Output Formats
 
-Commands with `--json` return structured data for parsin<configured-path>**Create notebook:**
+Commands with `--json` return structured data for parsing:
+
+**Create notebook:**
 ```bash
 $ notebooklm create "Research" --json
 {"notebook": {"id": "abc123de-...", "title": "Research", "created_at": null}}
-# parse wit<configured-path>jq -r .notebook.id
+# parse with: jq -r .notebook.id
 ```
 
 **Add source:**
 ```bash
-$ notebooklm source add "http<configured-path>example.com" --json
-{"source": {"id": "def456...", "title": "Example", "type": "SourceType.WEB_PAGE", "url": "http<configured-path>example.com"}}
-# parse wit<configured-path>jq -r .source.id
-# Not<configured-path>no `status` field on add — use `source list --json` or `source wait` to check processing state.
+$ notebooklm source add "https://example.com" --json
+{"source": {"id": "def456...", "title": "Example", "type": "SourceType.WEB_PAGE", "url": "https://example.com"}}
+# parse with: jq -r .source.id
+# Note: no `status` field on add — use `source list --json` or `source wait` to check processing state.
 ```
 
 **Generate artifact:**
@@ -271,10 +278,12 @@ $ notebooklm source fulltext <source_id> --json
 {"source_id": "...", "title": "...", "content": "Full indexed text...", "_type_code": null, "url": null, "char_count": 12345}
 ```
 
-**Understanding citations:** The `cited_text` in references is often a snippet or section header, not the full quoted passage. The `start_char`/`end_char` positions reference NotebookLM's internal chunked index, not the raw fulltext. Use `SourceFulltext.find_citation_context()` to locate citation<configured-path>python
+**Understanding citations:** The `cited_text` in references is often a snippet or section header, not the full quoted passage. The `start_char`/`end_char` positions reference NotebookLM's internal chunked index, not the raw fulltext. Use `SourceFulltext.find_citation_context()` to locate citations:
+```python
 fulltext = await client.sources.get_fulltext(notebook_id, ref.source_id)
 matches = fulltext.find_citation_context(ref.cited_text)  # Returns list[(context, position)]
-if matche<configured-path>context, pos = matches[0]  # First match; check len(matches) > 1 for duplicates
+if matches:
+    context, pos = matches[0]  # First match; check len(matches) > 1 for duplicates
 ```
 
 **Extract IDs:** Singular endpoints wrap their result in an envelope —
@@ -284,7 +293,8 @@ or `.task_id` (from `generate *`). The chat `--json` references list uses
 
 ## Generation Types
 
-All generate commands suppor<configured-path>- `-s, --source` to use specific source(s) instead of all sources
+All generate commands support:
+- `-s, --source` to use specific source(s) instead of all sources
 - `--language` to set output language (defaults to configured language or 'en')
 - `--json` for machine-readable output (returns `task_id` and `status`)
 - `--retry N` to automatically retry on rate limits with exponential backoff (supported on all subcommands **except** `mind-map`)
@@ -298,7 +308,7 @@ All generate commands suppor<configured-path>- `-s, --source` to use specific so
 | Slide Revision | `generate revise-slide "prompt" --artifact <id> --slide N` | `--wait`, `--notebook` | *(re-downloads parent deck)* |
 | Infographic | `generate infographic` | `--orientation [landscape\|portrait\|square]`, `--detail [concise\|standard\|detailed]`, `--style [auto\|sketch-note\|professional\|bento-grid\|editorial\|instructional\|bricks\|clay\|anime\|kawaii\|scientific]` | .png |
 | Report | `generate report` | `--format [briefing-doc\|study-guide\|blog-post\|custom]`, `--append "extra instructions"` (¹) | .md |
-| Mind Map | `generate mind-map` | `--kind [interactive\|note-backed]` (³) *(defaul<configured-path>note-backed; flips to interactive in v0.8.0)* | .json |
+| Mind Map | `generate mind-map` | `--kind [interactive\|note-backed]` (³) *(default: note-backed; flips to interactive in v0.8.0)* | .json |
 | Data Table | `generate data-table` | description required | .csv |
 | Quiz | `generate quiz` | `--difficulty [easy\|medium\|hard]`, `--quantity [fewer\|standard\|more]` | .json/.md/.html |
 | Flashcards | `generate flashcards` | `--difficulty [easy\|medium\|hard]`, `--quantity [fewer\|standard\|more]` | .json/.md/.html |
@@ -309,18 +319,22 @@ All generate commands suppor<configured-path>- `-s, --source` to use specific so
 
 ⁴ **Cinematic video (Veo 3).** `generate video --format cinematic` generates AI documentary footage via Veo 3; it **ignores `--style`**, takes ~30-40 min, and requires a Google AI Ultra subscription. Also exposed as the `generate cinematic-video` alias (which forces `--format cinematic` and a longer default timeout). Download with `download video` or the `download cinematic-video` alias.
 
-² **Portrait / vertical slide decks via prompt.** Slide-deck has no `--orientation` flag (unlike infographic). Treat portrait decks as skill-level prompt guidance, not a typed CLI/API contrac<configured-path>NotebookLM currently honors orientation cues written into the `DESCRIPTION` positional argument. Including phrases like `"9:16 portrait"`, `"vertical layout"`, `"portrait mobile format"`, or `"vertical 9:16 layout"` can make NotebookLM render each slide as a 9:16 portrait image. Empiricall<configured-path>- The `.pptx` canvas itself may stay 16:9, but each slide's embedded image can be rendered as 9:16 portrait — useful for vertical/mobile video material extracted via `python-pptx`.
+² **Portrait / vertical slide decks via prompt.** Slide-deck has no `--orientation` flag (unlike infographic). Treat portrait decks as skill-level prompt guidance, not a typed CLI/API contract: NotebookLM currently honors orientation cues written into the `DESCRIPTION` positional argument. Including phrases like `"9:16 portrait"`, `"vertical layout"`, `"portrait mobile format"`, or `"vertical 9:16 layout"` can make NotebookLM render each slide as a 9:16 portrait image. Empirically:
+
+- The `.pptx` canvas itself may stay 16:9, but each slide's embedded image can be rendered as 9:16 portrait — useful for vertical/mobile video material extracted via `python-pptx`.
 - Orientation is steered once at generation time. `generate revise-slide` edits content within an existing slide but does not change its orientation; if a slide falls back to landscape (occasional inconsistency), regenerate the whole deck rather than revising the single page.
 - Combine with an explicit page count in the prompt (e.g. `"Create exactly 8 pages, using a vertical 9:16 portrait layout"`) for the most predictable output.
 
 ```bash
-# Skill prompt hin<configured-path>ask NotebookLM to render each slide as a 9:16 portrait image
+# Skill prompt hint: ask NotebookLM to render each slide as a 9:16 portrait image
 notebooklm generate slide-deck "Create an 8-page deck in 9:16 portrait orientation for mobile viewing" --length default
 ```
 
 ## Features Beyond the Web UI
 
-These capabilities are available via CLI but not in NotebookLM's web interfac<configured-path>| Feature | Command | Description |
+These capabilities are available via CLI but not in NotebookLM's web interface:
+
+| Feature | Command | Description |
 |---------|---------|-------------|
 | **Batch downloads** | `download <type> --all` | Download all artifacts of a type at once |
 | **Quiz/Flashcard export** | `download quiz --format json` | Export as JSON, Markdown, or HTML (web UI only shows interactive view) |
@@ -338,10 +352,10 @@ These capabilities are available via CLI but not in NotebookLM's web interfac<co
 ### Research to Podcast (Interactive)
 **Time:** 5-10 minutes total
 
-1. `notebooklm create "Researc<configured-path>topic]"` — *if fail<configured-path>check auth with `notebooklm login`*
-2. `notebooklm source add` for each URL/document — *if one fail<configured-path>log warning, continue with others*
-3. Wait for source<configured-path>notebooklm source list --json` until all status=READY — *required before generation*
-4. `notebooklm generate audio "Focus on [specific angle]"` (confirm when asked) — *if rate limite<configured-path>wait 5 min, retry once*
+1. `notebooklm create "Research: [topic]"` — *if fails: check auth with `notebooklm login`*
+2. `notebooklm source add` for each URL/document — *if one fails: log warning, continue with others*
+3. Wait for sources: `notebooklm source list --json` until all status=READY — *required before generation*
+4. `notebooklm generate audio "Focus on [specific angle]"` (confirm when asked) — *if rate limited: wait 5 min, retry once*
 5. Note the artifact ID returned
 6. Check `notebooklm artifact list` later for status
 7. `notebooklm download audio ./podcast.mp3` when complete (confirm when asked)
@@ -354,11 +368,12 @@ When user wants full automation (generate and download when ready):
 1. Create notebook and add sources as usual
 2. Wait for sources to be ready (use `source wait` or check `source list --json`)
 3. Run `notebooklm generate audio "..." --json` → parse `task_id` from output
-4. **Spawn a background agent** using the Agent too<configured-path>python
+4. **Spawn a background agent** using the Agent tool:
+   ```python
    Agent(
      prompt="Wait for artifact {task_id} in notebook {notebook_id} to complete, then download.
-             Us<configured-path>notebooklm artifact wait {task_id} -n {notebook_id} --timeout 1200
-             The<configured-path>notebooklm download audio ./podcast.mp3 -a {task_id} -n {notebook_id}",
+             Use: notebooklm artifact wait {task_id} -n {notebook_id} --timeout 1200
+             Then: notebooklm download audio ./podcast.mp3 -a {task_id} -n {notebook_id}",
      subagent_type="general-purpose", model="appropriate runtime class"
    )
    ```
@@ -366,14 +381,14 @@ When user wants full automation (generate and download when ready):
 
 **Error handling in subagent:**
 - If `artifact wait` returns exit code 2 (timeout): Report timeout, suggest checking `artifact list`
-- If download fail<configured-path>Check if artifact status is COMPLETED first
+- If download fails: Check if artifact status is COMPLETED first
 
 **Benefits:** Non-blocking, user can do other work, automatic download on completion
 
 ### Document Analysis
 **Time:** 1-2 minutes
 
-1. `notebooklm create "Analysi<configured-path>project]"`
+1. `notebooklm create "Analysis: [project]"`
 2. `notebooklm source add ./doc.pdf` (or URLs)
 3. `notebooklm ask "Summarize the key points"`
 4. `notebooklm ask "What are the main arguments?"`
@@ -382,28 +397,33 @@ When user wants full automation (generate and download when ready):
 ### Bulk Import
 **Time:** Varies by source count
 
-1. `notebooklm create "Collectio<configured-path>name]"`
-2. Add multiple source<configured-path>bash
-   notebooklm source add "http<configured-path>url1.com"
-   notebooklm source add "http<configured-path>url2.com"
+1. `notebooklm create "Collection: [name]"`
+2. Add multiple sources:
+   ```bash
+   notebooklm source add "https://url1.com"
+   notebooklm source add "https://url2.com"
    notebooklm source add ./local-file.pdf
    ```
 3. `notebooklm source list` to verify
 
-**Source limits:** Varies by plan—Standar<configured-path>50, Plu<configured-path>100, Pr<configured-path>300, Ultr<configured-path>600 sources per notebook. See [NotebookLM plans](http<configured-path>support.google.com/notebooklm/answer/16213268) for details. The CLI does not enforce these limits; they are applied by your NotebookLM account.
+**Source limits:** Varies by plan—Standard: 50, Plus: 100, Pro: 300, Ultra: 600 sources per notebook. See [NotebookLM plans](https://support.google.com/notebooklm/answer/16213268) for details. The CLI does not enforce these limits; they are applied by your NotebookLM account.
 **Supported types:** PDFs, YouTube URLs, web URLs, Google Docs, text files, Markdown, Word docs, EPUB, audio files, video files, images
 
 ### Bulk Import with Source Waiting (Subagent Pattern)
 **Time:** Varies by source count
 
-When adding multiple sources and needing to wait for processing before chat/generatio<configured-path>1. Add sources with `--json` to capture IDs (parse with `jq -r .source.id`):
+When adding multiple sources and needing to wait for processing before chat/generation:
+
+1. Add sources with `--json` to capture IDs (parse with `jq -r .source.id`):
    ```bash
-   notebooklm source add "http<configured-path>url1.com" --json  # → {"source": {"id": "abc...", ...}}
-   notebooklm source add "http<configured-path>url2.com" --json  # → {"source": {"id": "def...", ...}}
+   notebooklm source add "https://url1.com" --json  # → {"source": {"id": "abc...", ...}}
+   notebooklm source add "https://url2.com" --json  # → {"source": {"id": "def...", ...}}
    ```
-2. **Spawn a background agent** to wait for all source<configured-path>Agent(
+2. **Spawn a background agent** to wait for all sources:
+   ```
+   Agent(
      prompt="Wait for sources {source_ids} in notebook {notebook_id} to be ready.
-             For eac<configured-path>notebooklm source wait {id} -n {notebook_id} --timeout 600
+             For each: notebooklm source wait {id} -n {notebook_id} --timeout 600
              Report when all ready or if any fail.",
      subagent_type="general-purpose", model="appropriate runtime class"
    )
@@ -416,14 +436,18 @@ When adding multiple sources and needing to wait for processing before chat/gene
 ### Deep Web Research (Subagent Pattern)
 **Time:** 15-30+ minutes, runs in background
 
-Deep research finds and analyzes web sources on a topi<configured-path>1. Create noteboo<configured-path>notebooklm create "Researc<configured-path>topic]"`
+Deep research finds and analyzes web sources on a topic:
+
+1. Create notebook: `notebooklm create "Research: [topic]"`
 2. Start deep research (non-blocking):
    ```bash
    notebooklm source add-research "topic query" --mode deep --no-wait
    ```
-3. **Spawn a background agent** to wait and impor<configured-path>Agent(
+3. **Spawn a background agent** to wait and import:
+   ```
+   Agent(
      prompt="Wait for research in notebook {notebook_id} to complete and import sources.
-             Us<configured-path>notebooklm research wait -n {notebook_id} --import-all --timeout 1800
+             Use: notebooklm research wait -n {notebook_id} --import-all --timeout 1800
              Report how many sources were imported.",
      subagent_type="general-purpose", model="appropriate runtime class"
    )
@@ -434,7 +458,7 @@ Deep research finds and analyzes web sources on a topi<configured-path>1. Create
 **Alternative (blocking):** For simple cases, omit `--no-wait`:
 ```bash
 notebooklm source add-research "topic" --mode deep --import-all
-# Blocks until research completes (deep mod<configured-path>15-30+ min)
+# Blocks until research completes (deep mode: 15-30+ min)
 ```
 
 **When to use each mode:**
@@ -448,16 +472,17 @@ notebooklm source add-research "topic" --mode deep --import-all
 ## Output Style
 
 **Progress updates:** Brief status for each step
-- "Creating notebook 'Researc<configured-path>AI'..."
-- "Adding sourc<configured-path>http<configured-path>example.com..."
-- "Starting audio generation... (task I<configured-path>abc123)"
+- "Creating notebook 'Research: AI'..."
+- "Adding source: https://example.com..."
+- "Starting audio generation... (task ID: abc123)"
 
 **Fire-and-forget for long operations:**
 - Start generation, return artifact ID immediately
 - Do NOT poll or wait in main conversation - generation takes 5-45 minutes (see timing table)
 - User checks status manually, OR use subagent with `artifact wait`
 
-**JSON output:** Use `--json` flag for machine-readable outpu<configured-path>bash
+**JSON output:** Use `--json` flag for machine-readable output:
+```bash
 notebooklm list --json
 notebooklm auth check --test --json   # use --test for network-validated auth (see § Agent Setup Verification)
 notebooklm source list --json
@@ -487,8 +512,8 @@ notebooklm artifact list --json
 ```
 
 **Status values:**
-- Source<configured-path>processing` → `ready` (or `error`)
-- Artifact<configured-path>pending` or `in_progress` → `completed` (or `unknown`)
+- Sources: `processing` → `ready` (or `error`)
+- Artifacts: `pending` or `in_progress` → `completed` (or `unknown`)
 
 ## Error Handling
 
@@ -511,7 +536,9 @@ notebooklm artifact list --json
 
 ## Exit Codes
 
-All commands use consistent exit code<configured-path>| Code | Meaning | Action |
+All commands use consistent exit codes:
+
+| Code | Meaning | Action |
 |------|---------|--------|
 | 0 | Success | Continue |
 | 1 | Error (not found, processing failed) | Check stderr, see Error Handling |
@@ -524,13 +551,15 @@ All commands use consistent exit code<configured-path>| Code | Meaning | Action 
 
 ## Long Prompts
 
-When a prompt or query exceeds shell command-line length limits, use `--prompt-file` to read it from a fil<configured-path>bash
+When a prompt or query exceeds shell command-line length limits, use `--prompt-file` to read it from a file:
+
+```bash
 notebooklm ask --prompt-file ./long_question.txt
 notebooklm generate report --prompt-file ./custom_report_prompt.txt
 notebooklm source add-research --prompt-file ./research_query.txt --mode deep
 ```
 
-`--prompt-file` is mutually exclusive with the positional text argument. The file is read as UTF-8 with trailing whitespace stripped. Supported o<configured-path>ask`, all `generate` subcommands (except `mind-map`), and `source add-research`.
+`--prompt-file` is mutually exclusive with the positional text argument. The file is read as UTF-8 with trailing whitespace stripped. Supported on: `ask`, all `generate` subcommands (except `mind-map`), and `source add-research`.
 
 > **Note:** `--prompt-file` reads a *prompt/query text file*, not a source document. To upload a file as a notebook source, use `source add ./file.pdf`.
 
@@ -538,21 +567,26 @@ notebooklm source add-research --prompt-file ./research_query.txt --mode deep
 
 **Rate limiting:** Audio, video, quiz, flashcards, infographic, and slide deck generation may fail due to Google's rate limits. This is an API limitation, not a bug.
 
-**Reliable operations:** These always wor<configured-path>- Notebooks (list, create, delete, rename)
+**Reliable operations:** These always work:
+- Notebooks (list, create, delete, rename)
 - Sources (add, list, delete)
 - Chat/queries
 - Mind-map, study-guide, report, data-table generation
 
-**Unreliable operations:** These may fail with rate limitin<configured-path>- Audio (podcast) generation
+**Unreliable operations:** These may fail with rate limiting:
+- Audio (podcast) generation
 - Video generation
 - Quiz and flashcard generation
 - Infographic and slide deck generation
 
-**Workaround:** If generation fail<configured-path>1. Check statu<configured-path>notebooklm artifact list`
+**Workaround:** If generation fails:
+1. Check status: `notebooklm artifact list`
 2. Retry after 5-10 minutes
 3. Use the NotebookLM web UI as fallback
 
-**Processing times vary significantly.** Use the subagent pattern for long operation<configured-path>| Operation | Typical time | Suggested timeout |
+**Processing times vary significantly.** Use the subagent pattern for long operations:
+
+| Operation | Typical time | Suggested timeout |
 |-----------|--------------|-------------------|
 | Source processing | 30s - 10 min | 600s |
 | Research (fast) | 30s - 2 min | 180s |
@@ -598,12 +632,14 @@ notebooklm language set en       # English (default)
 | `de` | Deutsch - German |
 | `pt_BR` | Português (Brasil) |
 
-**Override per command:** Use `--language` flag on generate command<configured-path>bash
+**Override per command:** Use `--language` flag on generate commands:
+```bash
 notebooklm generate audio --language ja   # Japanese podcast
 notebooklm generate video --language zh_Hans  # Chinese video
 ```
 
-**Offline mode:** Use `--local` flag to skip server syn<configured-path>bash
+**Offline mode:** Use `--local` flag to skip server sync:
+```bash
 notebooklm language set zh_Hans --local  # Save locally only
 notebooklm language get --local  # Read local config only
 ```

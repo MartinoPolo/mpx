@@ -12,7 +12,9 @@ Prevents hallucinated APIs by fetching up-to-date library documentation before a
 
 ### Step 1: Identify Library
 
-Extract library name from user's questio<configured-path>- "express middleware" → Express.js
+Extract library name from user's question:
+
+- "express middleware" → Express.js
 - "react hooks" → React
 - "tailwind dark mode" → Tailwind CSS
 
@@ -20,12 +22,14 @@ Extract library name from user's questio<configured-path>- "express middleware" 
 
 ```
 mcp__plugin_context7_context7__resolve-library-id({
-  libraryNam<configured-path>"express",
-  quer<configured-path>"express middleware routing"
+  libraryName: "express",
+  query: "express middleware routing"
 })
 ```
 
-Select best match b<configured-path>- Exact name match
+Select best match by:
+
+- Exact name match
 - High benchmark score
 - Official repository
 
@@ -33,23 +37,24 @@ Select best match b<configured-path>- Exact name match
 
 ```
 mcp__plugin_context7_context7__query-docs({
-  libraryI<configured-path>"/expressjs/express",
-  quer<configured-path>"middleware usage and configuration"
+  libraryId: "/expressjs/express",
+  query: "middleware usage and configuration"
 })
 ```
 
 **Query guidance:**
 
-- Be specifi<configured-path>"hooks usage examples", "routing configuration", "middleware setup"
-- Not vagu<configured-path>"how to use hooks"
+- Be specific: "hooks usage examples", "routing configuration", "middleware setup"
+- Not vague: "how to use hooks"
 
 ### Step 4: Check Version
 
-1. Read dependency fil<configured-path>- J<configured-path>package.json`
-   - Pytho<configured-path>requirements.txt`, `pyproject.toml`
-   - Rub<configured-path>Gemfile`
-   - G<configured-path>go.mod`
-   - Rus<configured-path>Cargo.toml`
+1. Read dependency file:
+   - JS: `package.json`
+   - Python: `requirements.txt`, `pyproject.toml`
+   - Ruby: `Gemfile`
+   - Go: `go.mod`
+   - Rust: `Cargo.toml`
 
 2. If version mismatch with docs, note it in response.
 
@@ -76,13 +81,15 @@ mcp__plugin_context7_context7__query-docs({
 
 ### Version Note
 
-- Your versio<configured-path>X.Y.Z
-- Lates<configured-path>A.B.C
+- Your version: X.Y.Z
+- Latest: A.B.C
 - [Upgrade recommendation if applicable]
 
 ## Quality Checklist
 
-Before respondin<configured-path>- [ ] Called `resolve-library-id`?
+Before responding:
+
+- [ ] Called `resolve-library-id`?
 - [ ] Called `query-docs`?
 - [ ] Checked user's version in dependency file?
 - [ ] All APIs exist in fetched docs?

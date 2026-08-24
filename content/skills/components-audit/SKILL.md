@@ -12,7 +12,7 @@ Find where the codebase hand-codes UI that the project's own design-system compo
 
 ## Parameters
 
-- `scan-path` (optional) — root to audit. Defaul<configured-path>repo `src/` (or repo root if no `src/`).
+- `scan-path` (optional) — root to audit. Default: repo `src/` (or repo root if no `src/`).
 - `autofix` — `autofix`/`autofix=true` forces the fix phase ON; `autofix=false` forces OFF; omitted → report only.
 
 ## Core Principle
@@ -25,17 +25,17 @@ Trust the component's built-in props (variants, sizes, icon slotting) instead of
 
 Discovery is generalized — no config assumed. Auto-detect, then read real APIs.
 
-1. **Locate the components folder(s).** Spawn an `Explore` sub-agent (breadt<configured-path>medium, no `model` param) to glob common roots under the scan path — `**/lib/components/**`, `**/components/**`, `**/ui/**` — and return the component folder paths. Strong signal<configured-path>a directory of single-purpose folders each with a `.svelte`/`.tsx` + an `index.ts` + a variants file.
+1. **Locate the components folder(s).** Spawn an `Explore` sub-agent (breadth: medium, no `model` param) to glob common roots under the scan path — `**/lib/components/**`, `**/components/**`, `**/ui/**` — and return the component folder paths. Strong signals: a directory of single-purpose folders each with a `.svelte`/`.tsx` + an `index.ts` + a variants file.
 2. **Detect the stack.** Check `package.json` and imports for `bits-ui`, `shadcn`, `radix-ui`, `cva`, `tailwind-variants` (`tv`). If the project is **shadcn-svelte / Bits UI**, treat `rules-per-project/shadcn-svelte.md` as the canonical anti-pattern source and feed its rules to the audit agents.
 3. **Read each base component's real prop API.** Open variant definitions (`*_variants.ts`, `cva()`/`tv()` configs, prop/type declarations) to learn actual `variant`/`intent`/`size` values and icon-slot conventions. Read prop names from the source rather than assuming them.
-4. **Build the inventory** — for each componen<configured-path>name, import path, available variants/sizes, and which native element(s) it replaces (`button`→`Button`, `input`→`Input`, calendar/date field→date picker, etc.).
+4. **Build the inventory** — for each component: name, import path, available variants/sizes, and which native element(s) it replaces (`button`→`Button`, `input`→`Input`, calendar/date field→date picker, etc.).
 5. **Record the exclusion set** — the component-implementation folder(s) themselves, plus generated/vendored files. These are always excluded from audit targets.
 
 The inventory string seeds every sub-agent prompt — agents must audit against the components that actually exist, not a generic list.
 
 ### Step 2: Fan-out audit (parallel sub-agents)
 
-See `../shared/EXPLORATION.md` for delegation policy. Spawn `Explore` sub-agents in parallel (breadt<configured-path>medium), **roughly one per base component or component group** (per user preference), each give<configured-path>the inventory, the exclusion set, and one axis checklist from [CHECKLISTS.md](CHECKLISTS.md). For large component sets, run the agents `run_in_backgroun<configured-path>true` and process findings as each returns.
+See `../shared/EXPLORATION.md` for delegation policy. Spawn `Explore` sub-agents in parallel (breadth: medium), **roughly one per base component or component group** (per user preference), each given: the inventory, the exclusion set, and one axis checklist from [CHECKLISTS.md](CHECKLISTS.md). For large component sets, run the agents `run_in_background: true` and process findings as each returns.
 
 Audit axes (see [CHECKLISTS.md](CHECKLISTS.md) for the concrete patterns per axis):
 
@@ -49,10 +49,12 @@ Every finding must be `{ axis, file, line, current code, suggested fix, confiden
 ### Step 3: Consolidate & report
 
 1. Merge findings, dedupe by `file:line`, drop anything inside the exclusion set, and apply the skip list (see below).
-2. All four axes are actionable. Split C into **C-clear** (unambiguou<configured-path>map a one-off onto an existing primitive, or add a well-defined variant + migrate call-sites preserving public API) and **C-judgment** (the proposed abstraction is debatable — leave as a recommendation).
+2. All four axes are actionable. Split C into **C-clear** (unambiguous: map a one-off onto an existing primitive, or add a well-defined variant + migrate call-sites preserving public API) and **C-judgment** (the proposed abstraction is debatable — leave as a recommendation).
 3. Write `COMPONENT-AUDIT.md` only if findings exist; otherwise report a clean result in conversation.
 
-Report shap<configured-path>markdown
+Report shape:
+
+```markdown
 ## Native element → component (A)
 - `path:line` — current → suggested fix
 
@@ -84,17 +86,18 @@ Run only when `autofix` is ON and actionable findings exist. Apply **A, B, D, an
 ## Output
 
 ```markdown
-Stac<configured-path>shadcn-svelte | Bits UI | custom | ...]
-Components folde<configured-path>path]
-Inventor<configured-path>N components]
+Stack: [shadcn-svelte | Bits UI | custom | ...]
+Components folder: [path]
+Inventory: [N components]
 
-Finding<configured-path>- A native→componen<configured-path>N]
-- B improper varian<configured-path>N]
-- C recommendation<configured-path>N]
-- D color bypas<configured-path>N]
+Findings:
+- A native→component: [N]
+- B improper variant: [N]
+- C recommendations: [N]
+- D color bypass: [N]
 
-Repor<configured-path>COMPONENT-AUDIT.md | none]
-Autofi<configured-path>applied A/B/D/C-clea<configured-path>N | report only | not requested]
-New variants adde<configured-path>list | none]
-Typechec<configured-path>clean | N new errors | not run]
+Report: [COMPONENT-AUDIT.md | none]
+Autofix: [applied A/B/D/C-clear: N | report only | not requested]
+New variants added: [list | none]
+Typecheck: [clean | N new errors | not run]
 ```

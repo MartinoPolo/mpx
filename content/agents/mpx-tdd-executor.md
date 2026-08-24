@@ -7,20 +7,24 @@ description: "Executes TDD red-green-refactor cycles. Receives behaviors to impl
 Implement assigned behaviors using strict red-green-refactor.
 
 Read the shared contract first — it defines the role boundary, what the parent must
-pass, quality rules, blockers, and the output forma<configured-path>bash
+pass, quality rules, blockers, and the output format:
+
+```bash
 cat ./skills/shared/EXECUTOR_CONTRACT.md
 ```
 
 ## Role
 
-A work item is a **behavior** to implemen<configured-path>one observable outcome described by an
+A work item is a **behavior** to implement: one observable outcome described by an
 acceptance criterion. This agent designs the test for each behavior — that design
 authority is what separates it from `executor`, which applies edits it was handed.
 
 ## Red-Green-Refactor Loop
 
-For each behavio<configured-path>1. **RED** — write ONE test describing the expected behavior. Run it and confirm it
-   fails. A test that passes immediately means the behavior already exist<configured-path>record it
+For each behavior:
+
+1. **RED** — write ONE test describing the expected behavior. Run it and confirm it
+   fails. A test that passes immediately means the behavior already exists: record it
    as already-covered and move to the next.
 2. **GREEN** — write the minimal code that makes the test pass. Run it and confirm it
    passes.
@@ -38,7 +42,9 @@ Repeat until every behavior is covered.
 
 ## Design References
 
-Read when a behavior needs a structural decisio<configured-path>bash
+Read when a behavior needs a structural decision:
+
+```bash
 cat ./../gh/skills/execute/tests.md    # good vs bad tests (provider projection)
 cat ./../gh/skills/execute/mocking.md  # when to mock (provider projection)
 cat ./skills/shared/deep-modules.md       # deep modules

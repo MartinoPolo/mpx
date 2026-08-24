@@ -1,4 +1,21 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const fsCalls = vi.hoisted(() => ({ watchedRoot: "", sourceReads: 0, sourceListings: 0 }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    readFile: actual.readFile,
+    open: async (file: any, ...args: any[]) => {
+      if (fsCalls.watchedRoot && path.dirname(String(file)) === fsCalls.watchedRoot) fsCalls.sourceReads += 1;
+      return (actual.open as any)(file, ...args);
+    },
+    opendir: async (directory: any, ...args: any[]) => {
+      if (fsCalls.watchedRoot && String(directory) === fsCalls.watchedRoot) fsCalls.sourceListings += 1;
+      return (actual.opendir as any)(directory, ...args);
+    },
+  };
+});
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -30,6 +47,7 @@ const decisions = [{
   sourceHash: "source",
 }];
 const binding = { projectId: "project-1", repositoryId: "repo-1", contentScope: "work" };
+const launchBinding = (launchKey = "launch") => ({ launchKey, descriptorDigest: "descriptor", runtimeArtifactKey: "skills", runtime: "pi" as const, manifestKey: "manifest" });
 
 describe("runtime-neutral v4 contracts", () => {
   it("shares one body-free, path-free manifest key across runtime projections", () => {
@@ -80,11 +98,11 @@ describe("immutable runtime artifact publication", () => {
   it("publishes a deterministic sorted file map atomically and exactly reuses it", async () => {
     const source = await root("mpx-publish-source-"); const artifactsRoot = await root("mpx-publish-dest-");
     await mkdir(path.join(source, "nested")); await writeFile(path.join(source, "z.txt"), "z"); await writeFile(path.join(source, "nested", "a.txt"), "a");
-    const first = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, runtime: "pi", manifestKey: "manifest" });
-    const second = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, runtime: "pi", manifestKey: "manifest" });
+    const first = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
+    const second = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
     expect(second).toEqual({ ...first, reused: true });
     expect(first.fileMap.map((entry) => entry.path)).toEqual(["nested/a.txt", "z.txt"]);
-    expect((await readdirNames(artifactsRoot))).toEqual([first.reference.artifactKey]);
+    expect((await readdirNames(artifactsRoot))).toEqual([first.reference.projectionKey]);
     await expect(revalidateRuntimeArtifact(first.directory, first.reference)).resolves.toMatchObject({ valid: true });
   });
 
@@ -92,23 +110,97 @@ describe("immutable runtime artifact publication", () => {
     const outside = await root("mpx-publish-outside-"); await writeFile(path.join(outside, "secret"), "secret");
     const source = await root("mpx-publish-source-"); const artifactsRoot = await root("mpx-publish-dest-");
     await symlink(path.join(outside, "secret"), path.join(source, "escape"), "file");
-    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, runtime: "pi", manifestKey: "manifest" })).rejects.toMatchObject({ code: "SOURCE_SYMLINK" });
+    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() })).rejects.toMatchObject({ code: "SOURCE_SYMLINK" });
 
     await rm(path.join(source, "escape")); await writeFile(path.join(source, "ok"), "ok");
-    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, runtime: "pi", manifestKey: "manifest" });
+    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
     await writeFile(path.join(published.directory, "ok"), "altered");
-    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, runtime: "pi", manifestKey: "manifest" })).rejects.toMatchObject({ code: "ARTIFACT_MISMATCH" });
+    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() })).rejects.toMatchObject({ code: "ARTIFACT_MISMATCH" });
     await expect(revalidateRuntimeArtifact(published.directory, published.reference)).resolves.toMatchObject({ valid: false });
+  });
+
+  it("binds projection identity to the full launch while keeping paths private", async () => {
+    const source = await root("mpx-launch-source-"); const artifactsRoot = await root("mpx-launch-dest-"); await writeFile(path.join(source, "same"), "bytes");
+    const first = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding("launch-a") });
+    const second = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding("launch-b") });
+    expect(first.reference.launchBinding).toEqual(launchBinding("launch-a"));
+    expect(first.reference.projectionKey).not.toBe(second.reference.projectionKey);
+    expect(first.directory).not.toBe(second.directory);
+    expect(JSON.stringify(first.reference)).not.toContain(source);
+  });
+
+  it("rejects reuse when stored launch metadata does not match", async () => {
+    const source = await root("mpx-reuse-source-"); const artifactsRoot = await root("mpx-reuse-dest-"); await writeFile(path.join(source, "file"), "value");
+    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
+    const metadataPath = path.join(published.directory, ".mpx-runtime-artifact.json");
+    const stored = JSON.parse(await readFile(metadataPath, "utf8")); stored.reference.launchBinding.launchKey = "wrong"; await writeFile(metadataPath, JSON.stringify(stored));
+    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() })).rejects.toMatchObject({ code: "ARTIFACT_MISMATCH" });
+  });
+
+  it.each([
+    ["MAX_FILE_COUNT", { maxFileCount: 1, maxFileBytes: 10, maxAggregateBytes: 10 }],
+    ["MAX_FILE_BYTES", { maxFileCount: 2, maxFileBytes: 0, maxAggregateBytes: 10 }],
+    ["MAX_AGGREGATE_BYTES", { maxFileCount: 2, maxFileBytes: 10, maxAggregateBytes: 1 }],
+  ])("enforces %s from lstat inventory before reading file contents", async (code, inventoryLimits) => {
+    const source = await root("mpx-limits-source-"); const artifactsRoot = await root("mpx-limits-dest-"); await writeFile(path.join(source, "a"), "a"); await writeFile(path.join(source, "b"), "b");
+    fsCalls.watchedRoot = source; fsCalls.sourceReads = 0;
+    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding(), inventoryLimits })).rejects.toMatchObject({ code });
+    expect(fsCalls.sourceReads).toBe(0);
+    fsCalls.watchedRoot = "";
+  });
+
+  it("creates one source inventory and reuses its bytes for hashing and copying", async () => {
+    const source = await root("mpx-inventory-source-"); const artifactsRoot = await root("mpx-inventory-dest-"); await writeFile(path.join(source, "file"), "value");
+    fsCalls.watchedRoot = source; fsCalls.sourceReads = 0; fsCalls.sourceListings = 0;
+    await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
+    expect({ reads: fsCalls.sourceReads, listings: fsCalls.sourceListings }).toEqual({ reads: 1, listings: 1 });
+    fsCalls.watchedRoot = "";
+  });
+
+  it.each([
+    ["MAX_DIRECTORY_COUNT", { maxDirectoryCount: 1, maxDepth: 4 }, ["a", "b"]],
+    ["MAX_DEPTH", { maxDirectoryCount: 4, maxDepth: 1 }, ["a", "a/b"]],
+  ])("enforces %s before descending through wide or deep trees", async (code, bounds, directories) => {
+    const source = await root("mpx-tree-limits-source-"); const artifactsRoot = await root("mpx-tree-limits-dest-");
+    for (const directory of directories) await mkdir(path.join(source, directory), { recursive: true });
+    await expect(publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding(), inventoryLimits: { maxFileCount: 1, maxFileBytes: 1, maxAggregateBytes: 1, ...bounds } })).rejects.toMatchObject({ code });
+  });
+
+  it("rejects oversized metadata before parsing or scanning artifact files", async () => {
+    const source = await root("mpx-metadata-large-source-"); const artifactsRoot = await root("mpx-metadata-large-dest-"); await writeFile(path.join(source, "file"), "value");
+    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
+    await writeFile(path.join(published.directory, ".mpx-runtime-artifact.json"), Buffer.alloc(4 * 1024 * 1024 + 1, 0x20));
+    fsCalls.watchedRoot = published.directory; fsCalls.sourceListings = 0;
+    await expect(revalidateRuntimeArtifact(published.directory, published.reference)).resolves.toMatchObject({ valid: false });
+    expect(fsCalls.sourceListings).toBe(0); fsCalls.watchedRoot = "";
+  });
+
+  it.each([
+    (stored: any) => { stored.extra = true; },
+    (stored: any) => { stored.reference.extra = true; },
+    (stored: any) => { stored.fileMap[0].extra = true; },
+    (stored: any) => { stored.fileMap.push({ ...stored.fileMap[0] }); },
+    (stored: any) => { stored.fileMap[0].path = "../escape"; },
+    (stored: any) => { stored.fileMap[0].sha256 = "not-a-hash"; },
+    (stored: any) => { stored.fileMap[0].bytes = -1; },
+  ])("strictly rejects malformed, duplicate, or unsafe metadata", async mutate => {
+    const source = await root("mpx-metadata-invalid-source-"); const artifactsRoot = await root("mpx-metadata-invalid-dest-"); await writeFile(path.join(source, "file"), "value");
+    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
+    const metadataPath = path.join(published.directory, ".mpx-runtime-artifact.json"); const stored = JSON.parse(await readFile(metadataPath, "utf8")); mutate(stored); await writeFile(metadataPath, JSON.stringify(stored));
+    fsCalls.watchedRoot = published.directory; fsCalls.sourceListings = 0;
+    await expect(revalidateRuntimeArtifact(published.directory, published.reference)).resolves.toMatchObject({ valid: false });
+    expect(fsCalls.sourceListings).toBe(0); fsCalls.watchedRoot = "";
   });
 });
 
 describe("runtime context validation", () => {
   it("detects altered launch, artifact, and file-map bindings", async () => {
     const source = await root("mpx-validation-source-"); const artifactsRoot = await root("mpx-validation-dest-"); await writeFile(path.join(source, "file"), "value");
-    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, runtime: "pi", manifestKey: "manifest" });
-    const context = createRuntimeContextV1({ launchKey: "launch", launchDescriptor: { reference: "launch.json", digest: "expected" }, manifestKey: "manifest", runtimeArtifact: published.reference, binding });
+    const published = await publishRuntimeArtifact({ sourceRoot: source, artifactsRoot, launchBinding: launchBinding() });
+    const runtimeArtifact = createRuntimeSkillArtifactReferenceV4({ runtime: "pi", manifestKey: "manifest", artifactKey: "skills", fileMapHash: "skill-map" });
+    const context = createRuntimeContextV1({ launchKey: "launch", launchDescriptor: { reference: "launch.json", digest: "expected" }, manifestKey: "manifest", runtimeArtifact, binding });
     await writeFile(path.join(published.directory, "file"), "changed");
-    const result = await validateRuntimeContext({ context, expectedLaunch: { launchKey: "other", descriptorDigest: "changed" }, expectedManifestKey: "other-manifest", currentBinding: binding, artifactDirectory: published.directory });
+    const result = await validateRuntimeContext({ context, expectedLaunch: { launchKey: "other", descriptorDigest: "changed" }, expectedManifestKey: "other-manifest", currentBinding: binding, artifactDirectory: published.directory, expectedPublishedArtifact: published.reference });
     expect(result.valid).toBe(false);
     expect(result.diagnostics.map((item) => item.code)).toEqual(expect.arrayContaining(["LAUNCH_BINDING_CHANGED", "MANIFEST_BINDING_CHANGED", "ARTIFACT_FILE_MAP_CHANGED"]));
   });

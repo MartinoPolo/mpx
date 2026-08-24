@@ -12,7 +12,7 @@ Create and verify links that survive Git and resolve everywhere on this Windows 
 
 **The one rule:** In the active runtime, create links with the **PowerShell tool** (`New-Item`). Git Bash `ln -s` copies the target instead of linking (`core.symlinks=false`), and `cmd.exe //c "mklink ..."` from the Bash tool fails with "syntax is incorrect" (quote mangling).
 
-If `the invocation input` supplies a link path and a targe<configured-path>detect the type (target is a directory → junction, a file → symlink) and run Step 3 directly. Otherwise treat this as the how-to reference below.
+If `the invocation input` supplies a link path and a target: detect the type (target is a directory → junction, a file → symlink) and run Step 3 directly. Otherwise treat this as the how-to reference below.
 
 ## Step 1: Pick the link type
 
@@ -25,7 +25,9 @@ If `the invocation input` supplies a link path and a targe<configured-path>detec
 
 ## Step 2: One-time git prerequisite
 
-Git for Windows defaults to `core.symlinks=false`, which rewrites real symlinks into plain text files on `checkout`/`clone`/`merge`. Enable once per machin<configured-path>bash
+Git for Windows defaults to `core.symlinks=false`, which rewrites real symlinks into plain text files on `checkout`/`clone`/`merge`. Enable once per machine:
+
+```bash
 git config --global core.symlinks true
 ```
 
@@ -43,11 +45,15 @@ File symlink (Developer Mode or elevated):
 New-Item -ItemType SymbolicLink -Path "<drive>:\link\path\file.md" -Target "<drive>:\repo\real\file.md"
 ```
 
-Make it idempotent — guard before creating so a re-run skips silentl<configured-path>powershell
+Make it idempotent — guard before creating so a re-run skips silently:
+
+```powershell
 if (-not (Test-Path "<drive>:\link\path\file.md")) { New-Item -ItemType SymbolicLink -Path "<drive>:\link\path\file.md" -Target "<drive>:\repo\real\file.md" }
 ```
 
-If a file symlink throws "You do not have sufficient privilege" (no Developer Mode), retry that single op elevated — accept the UAC promp<configured-path>powershell
+If a file symlink throws "You do not have sufficient privilege" (no Developer Mode), retry that single op elevated — accept the UAC prompt:
+
+```powershell
 $mk = "New-Item -ItemType SymbolicLink -Path '<drive>:\link\path\file.md' -Target '<drive>:\repo\real\file.md' | Out-Null"
 Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-Command',$mk
 ```
@@ -60,9 +66,11 @@ Get-ChildItem "<drive>:\link\path" | Format-Table Name, LinkType, Target -AutoSi
 
 - `LinkType` = `SymbolicLink` or `Junction` and `Target` = where it resolves → the link is real.
 - A plain file here (blank `LinkType`) means it was **copied, not linked** — delete it and recreate via the PowerShell tool.
-- In Git Bash, `ls -la "<configured-path>link/path"` shows `->` arrows for real links.
+- In Git Bash, `ls -la "C:/link/path"` shows `->` arrows for real links.
 
-Confirm the link resolves to real conten<configured-path>powershell
+Confirm the link resolves to real content:
+
+```powershell
 Test-Path "<drive>:\link\path\name"   # True → target reachable through the link
 ```
 

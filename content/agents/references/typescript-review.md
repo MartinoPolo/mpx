@@ -1,7 +1,7 @@
 # TypeScript Review Reference
 
 Judgment-based patterns not caught by linting or type-checking.
-Adapted from [awesome-skills/code-review-skill](http<configured-path>github.com/awesome-skills/code-review-skill).
+Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 
@@ -9,12 +9,12 @@ Adapted from [awesome-skills/code-review-skill](http<configured-path>github.com/
 
 ```typescript
 // ❌ Unsafe type assertion
-function getLength(valu<configured-path>string | string[]) {
+function getLength(value: string | string[]) {
   return (value as string[]).length; // crashes if string
 }
 
 // ✅ Type guard
-function getLength(valu<configured-path>string | string[]): number {
+function getLength(value: string | string[]): number {
   if (Array.isArray(value)) return value.length;
   return value.length;
 }
@@ -23,7 +23,7 @@ function getLength(valu<configured-path>string | string[]): number {
 interface Dog { bark(): void }
 interface Cat { meow(): void }
 
-function speak(anima<configured-path>Dog | Cat) {
+function speak(animal: Dog | Cat) {
   if ('bark' in animal) animal.bark();
   else animal.meow();
 }
@@ -33,10 +33,10 @@ function speak(anima<configured-path>Dog | Cat) {
 
 ```typescript
 // ❌ Type too wide — method is string
-const config = { endpoin<configured-path>'/api', metho<configured-path>'GET' };
+const config = { endpoint: '/api', method: 'GET' };
 
 // ✅ as const narrows to literal types
-const config = { endpoin<configured-path>'/api', metho<configured-path>'GET' } as const;
+const config = { endpoint: '/api', method: 'GET' } as const;
 // method is now 'GET', not string
 ```
 
@@ -45,10 +45,10 @@ const config = { endpoin<configured-path>'/api', metho<configured-path>'GET' } a
 ```typescript
 // ✅ Invalid states become unrepresentable
 type Result<T, E> =
-  | { succes<configured-path>true; dat<configured-path>T }
-  | { succes<configured-path>false; erro<configured-path>E };
+  | { success: true; data: T }
+  | { success: false; error: E };
 
-function handleResult(resul<configured-path>Result<User, Error>) {
+function handleResult(result: Result<User, Error>) {
   if (result.success) {
     console.log(result.data.name); // TS knows data exists
   } else {
@@ -61,12 +61,12 @@ function handleResult(resul<configured-path>Result<User, Error>) {
 
 ```typescript
 // ❌ No constraint — can't access properties
-function getProperty<T>(ob<configured-path>T, ke<configured-path>string) {
+function getProperty<T>(obj: T, key: string) {
   return obj[key]; // Error
 }
 
 // ✅ keyof constraint
-function getProperty<T, K extends keyof T>(ob<configured-path>T, ke<configured-path>K): T[K] {
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
   return obj[key];
 }
 ```
@@ -123,7 +123,7 @@ useEffect(() => {
 // ✅ AbortController cancels stale requests
 useEffect(() => {
   const controller = new AbortController();
-  fetch(`/api/search?q=${query}`, { signa<configured-path>controller.signal })
+  fetch(`/api/search?q=${query}`, { signal: controller.signal })
     .then(r => r.json())
     .then(setResults)
     .catch(e => { if (e.name !== 'AbortError') throw e; });
@@ -135,13 +135,13 @@ useEffect(() => {
 
 ```typescript
 // ❌ Mutates input array
-function processUsers(user<configured-path>User[]) {
+function processUsers(users: User[]) {
   users.sort((a, b) => a.name.localeCompare(b.name)); // mutates original
   return users;
 }
 
 // ✅ readonly prevents mutation, spread creates copy
-function processUsers(user<configured-path>readonly User[]): User[] {
+function processUsers(users: readonly User[]): User[] {
   return [...users].sort((a, b) => a.name.localeCompare(b.name));
 }
 ```

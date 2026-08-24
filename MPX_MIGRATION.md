@@ -1,6 +1,6 @@
 # MPX Unified System Migration
 
-**Status:** Sole authoritative active migration plan; Phases B–E implemented, runtime and container integration pending
+**Status:** Sole authoritative active migration plan; Phases B–F implemented, Phase F2 Docker isolation proof and later phases pending
 **Destination:** `C:/_MP_projects/mpx`  
 **Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates  
 **Canonical project manifest:** `mpxconfig.json`
@@ -1098,6 +1098,10 @@ This baseline is implemented; the tasks below record delivered scope and remain 
 **Gate:** identical issue contract tests pass across fake GitHub, GitLab, and KanbanFlow backends; unsupported capabilities fail structurally.
 
 ### Phase F — Docker-first launch integration, runtime unification, and four-state skill projection
+
+**Status: complete.** Spec, security, reliability, and performance reviews are clean, and the full Phase F tests and gates pass. Evidence includes launch-bound neutral manifests and Claude/Pi projections; the exact `full`, `name-only`, `explicit-only`, and `off` states with separate model/human discovery; alias and runtime execution with default Docker safely gated pending F2, no fallback, and explicit host approval; canonical content and provenance; shared policy, hooks, and status with live runtime parity; project skills; read-only routes with Claude MCP support and structured Pi incompatibility; launch audits; and source verification.
+
+Phase F2 isolation and authentication proof remains pending. Docker does not become the default until that gate passes, and Phase F2 or any later phase is not marked complete here.
 
 - Implement Docker-first launch resolution, identity-native runtime roots, Git/provider/SSH/MCP routing, mode/skill-policy/workspace/network/grant reporting, launch banners/audits, and immutable `launchKey` validation. Host filesystem execution is explicit elevation only.
 - Make account aliases delegate to the launch resolver while preserving fast personal/work selection and requiring relaunch for any rights change. From a known project directory, the aliases need no profile arguments beyond their built-in harness and identity selection.

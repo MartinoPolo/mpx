@@ -3,7 +3,7 @@
 The two artifacts `podcast` writes. Validated on a 33.5-minute Shadow DOM episode
 (2026-07-24).
 
-Division of labou<configured-path>the **brief** is the only material NotebookLM has — it knows nothing else
+Division of labour: the **brief** is the only material NotebookLM has — it knows nothing else
 about the topic or the listener. The **prompt** steers style, order and depth. A fact missing
 from the brief cannot appear in the episode; a fact present in the brief will be narrated as
 true.
@@ -22,7 +22,7 @@ true.
 
 ## Part 2: <the core API or mechanism>
 ...
-## Part <configured-path>In Your Own Code
+## Part N: In Your Own Code
 ```
 
 - 200-250 lines, 8-10 parts, ordered from primitive → API → edge cases → when to use it.
@@ -31,12 +31,16 @@ true.
   version numbers and measured figures.
 
 **Direct language.** No metaphors, analogies or figurative comparisons — they are what makes
-generated podcasts feel empty. Say the mechanis<configured-path>> Mode close<configured-path>the shadowRoot property returns null. Only the code that called attachShadow
+generated podcasts feel empty. Say the mechanism:
+
+> Mode closed: the shadowRoot property returns null. Only the code that called attachShadow
 > holds the reference. Closed mode is not a security boundary — devtools and various tricks
 > still reach it — it only signals intent.
 
 **Spell syntax out for text-to-speech.** The hosts read this aloud, so punctuation-heavy syntax
-becomes word<configured-path>| Written in the brief | Instead of |
+becomes words:
+
+| Written in the brief | Instead of |
 | ---------------------------------------- | ----------------- |
 | the colon host pseudo-class | `:host` |
 | double-colon part | `::part` |
@@ -44,15 +48,17 @@ becomes word<configured-path>| Written in the brief | Instead of |
 | the class svelte dash hash | `.svelte-<hash>` |
 | h1 through h6 | `h1`–`h6` |
 
-Plain identifiers stay as they ar<configured-path>attachShadow`, `ShadowRoot`, `adoptedStyleSheets`.
+Plain identifiers stay as they are: `attachShadow`, `ShadowRoot`, `adoptedStyleSheets`.
 
 **Contrast against what he already uses.** A part that compares the topic to the tool he
 reaches for daily is worth more than a part that defines it — for example shadow DOM's runtime
 two-way encapsulation against Svelte's compile-time class scoping.
 
-### The final par<configured-path>## Part <configured-path>In Your Own Code`
+### The final part: `## Part N: In Your Own Code`
 
-Built from the personalization sweep and nothing else. Per hi<configured-path>markdown
+Built from the personalization sweep and nothing else. Per hit:
+
+```markdown
 In <repo>, `src/lib/x.ts:214` calls attachShadow with mode open to <purpose>. The surrounding
 code re-queries the shadow root on every render, which is the outdated pattern — caching the
 reference removes a lookup per frame and makes the slotchange handler idempotent.
@@ -67,16 +73,20 @@ reference removes a lookup per frame and makes the slotchange handler idempotent
 
 ## 2. `<slug>-prompt.txt` — the customize instruction
 
-**Hard ca<configured-path>308 words / 2263 characters.** Count both before saving; trim a general topic
+**Hard cap: 308 words / 2263 characters.** Count both before saving; trim a general topic
 first, keeping the personalization topic.
 
-Fixed skeleton, in this orde<configured-path>1. **Format line** — `Generate a discussion-style podcast between two people about <topic>.`
+Fixed skeleton, in this order:
+
+1. **Format line** — `Generate a discussion-style podcast between two people about <topic>.`
 2. **Listener context** — 1-2 sentences, derived from the vault learning-system and assessment
-   note<configured-path>what he works with daily, what he already owns, what he has never used. This line is
+   notes: what he works with daily, what he already owns, what he has never used. This line is
    what makes the hosts skip the basics.
 3. **Tone** — one sentence, e.g. `Technical and conversational. Two experienced developers
    going deep. Be specific and precise.`
-4. **CRITICAL block** — verbati<configured-path>> CRITICA<configured-path>NO metaphors. NO analogies. NO figurative language. Use direct, literal,
+4. **CRITICAL block** — verbatim:
+
+   > CRITICAL: NO metaphors. NO analogies. NO figurative language. Use direct, literal,
    > technical terms. Name actual APIs and mechanisms — attachShadow, ShadowRoot, slots,
    > ElementInternals — not comparisons. Every minute must have substance. No filler, no
    > rhetorical questions, no restating.
@@ -94,17 +104,19 @@ senior frontend developer who works daily with Svelte and knows compile-time sty
 well, but has never used shadow DOM directly and wants to understand it as a platform
 primitive.
 
-Ton<configured-path>Technical and conversational. Two experienced developers going deep. Be specific and
+Tone: Technical and conversational. Two experienced developers going deep. Be specific and
 precise.
 
-CRITICA<configured-path>...
+CRITICAL: ...
 
-Cover these topics in order, spending proportional time based on complexit<configured-path>1. What shadow DOM i<configured-path>shadow host, shadow root, light DOM, encapsulation from document
+Cover these topics in order, spending proportional time based on complexity:
+
+1. What shadow DOM is: shadow host, shadow root, light DOM, encapsulation from document
    queries, user-agent shadow roots in built-in elements
 ...
-8. Where it already appears in your own cod<configured-path><repo> uses ..., <repo> does ...
+8. Where it already appears in your own code: <repo> uses ..., <repo> does ...
 
-Target duratio<configured-path>15 minutes.
+Target duration: 15 minutes.
 ```
 
 That listener-context sentence is exactly what Step 3 derives from the vault notes rather than

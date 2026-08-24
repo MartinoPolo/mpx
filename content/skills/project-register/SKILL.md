@@ -47,7 +47,7 @@ through an exported `.rayconfig`, and the export is a manual step in the Raycast
 nothing here can perform. Doing it last would mean finishing every other surface and then
 stalling, so it comes first.
 
-Tell the user, in these word<configured-path>**Raycast → `Ctrl+,` → Advanced → Export Settings & Data**,
+Tell the user, in these words: **Raycast → `Ctrl+,` → Advanced → Export Settings & Data**,
 passphrase of 8+ characters, saved to the Desktop.
 
 Then use `AskUserQuestion` to have them confirm the export exists and point at it. Find
@@ -68,7 +68,9 @@ literal text, not paths to search. Take the folder from `the invocation input`. 
 resolved against the machine roots `MPX_PROJECTS` then `MPX_WORK`; confirm the match when
 both contain it. Fail with the variable's name when neither resolves.
 
-Report what is already registered, so a re-run repairs rather than duplicate<configured-path>bash
+Report what is already registered, so a re-run repairs rather than duplicates:
+
+```bash
 node "./scripts/wt-profile.mjs" colors
 node "./scripts/peacock.mjs" used
 ls "<project>/.vscode/settings.json"
@@ -82,13 +84,15 @@ succeeds, the project already has a repo — skip to step 4.
 If it fails, read `./../init-repo/SKILL.md` in full and carry out its
 instructions yourself, in this project directory, right now — script, `.mpx/` structure,
 the visibility question, GitHub repo creation, `main`/`dev` branches, branch protection.
-It only genuinely needs you to stop onc<configured-path>**repo visibility** (private/public), via
+It only genuinely needs you to stop once: **repo visibility** (private/public), via
 `AskUserQuestion` as its own step 4 directs. Everything else — including the graceful
 403-on-branch-protection degradation for private repos on GitHub Free — proceeds without
 asking, so this step completes autonomously apart from that one question.
 
 Two deviations from `init-repo`'s instructions, both worth checking before you run its
-scrip<configured-path>- **Don't clobber real planning docs.** Its step 3 template-writes `.mpx/CONTEXT.md` and
+script:
+
+- **Don't clobber real planning docs.** Its step 3 template-writes `.mpx/CONTEXT.md` and
   `.mpx/DECISIONS.md` unconditionally. If the project already has real content there (a
   pre-scaffold planning phase, prior `mpx-grill` sessions, research written before the repo
   existed), leave those files alone and just commit them as-is — the templates are a
@@ -96,9 +100,10 @@ scrip<configured-path>- **Don't clobber real planning docs.** Its step 3 templat
   content.
 - **Point `.runtime/repository instructions` at real instructions, not the placeholder.** Its script always
   writes a generic bracketed template to `.runtime/repository instructions`. Once you know anything real
-  about the project (from `.mpx/`, from this conversation, from existing docs), replace i<configured-path>set `.runtime/repository instructions` to the single line `@AGENTS.md` and write the actual project
+  about the project (from `.mpx/`, from this conversation, from existing docs), replace it:
+  set `.runtime/repository instructions` to the single line `@AGENTS.md` and write the actual project
   instructions into `AGENTS.md` at the repo root — this mirrors the convention already used
-  by this user's other projects (see `Grovekeeper/AGENTS.md` for the shap<configured-path>a documentation
+  by this user's other projects (see `Grovekeeper/AGENTS.md` for the shape: a documentation
   pointer to `.mpx/`, stack, and commands once they exist). If the project has no stack yet
   (pure planning phase), say so plainly in `AGENTS.md` rather than inventing commands.
 
@@ -124,7 +129,9 @@ prints the folder. Render to the session scratchpad first, **show it to the user
 `Read`**, and copy it into that folder only once they accept it. `make-icon.py` refuses to
 overwrite an existing file, so a rejected draft is written under a new name.
 
-A glyph covers most project<configured-path>bash
+A glyph covers most projects:
+
+```bash
 python "./scripts/make-icon.py" --color '#0F766E' \
   --glyph 'π' --font cambriab.ttf --glyph-scale 0.78 --out '<scratchpad>/<project>.png'
 ```
@@ -132,7 +139,7 @@ python "./scripts/make-icon.py" --color '#0F766E' \
 When no character carries the meaning, write a motif file defining
 `draw_motif(draw, size, ink, plate)` — Pillow drawing calls on a plate already filled,
 with `size` the supersampled canvas — and pass `--motif <file>`. Keep the shape readable
-at 16p<configured-path>solid silhouettes, few parts, no thin outlines.
+at 16px: solid silhouettes, few parts, no thin outlines.
 
 ### Step 6: Add the Windows Terminal profile
 
@@ -155,7 +162,7 @@ mpx tooling, work repositories, a `remainingProfiles` catch-all, then admin shel
 GUID is placed explicitly. Use `AskUserQuestion` to ask which group the project belongs to
 (mpx tooling, work repositories, or leave it in the catch-all), then `Edit` the settings
 file to insert `{ "type": "profile", "profile": "<guid>" }` at the end of the chosen group.
-Two rules the menu depends o<configured-path>keep every GUID comment-free JSON (Windows Terminal rejects
+Two rules the menu depends on: keep every GUID comment-free JSON (Windows Terminal rejects
 trailing commas), and remember that the `ctrl+shift+<digit>` bindings target dropdown
 *positions* — inserting into a group above the work section shifts every number below it,
 so tell the user when the numbering moves.
@@ -168,7 +175,7 @@ node "./scripts/peacock.mjs" write '<project path>' '#RRGGBB'
 
 This merges into any existing `.vscode/settings.json` and writes **only** `peacock.color`,
 set to the same value as the tab, which is what makes the two windows match. One property is
-the single source of trut<configured-path>Peacock regenerates the activity bar, status bar, title bar and
+the single source of truth: Peacock regenerates the activity bar, status bar, title bar and
 badge colours itself the first time VS Code opens the folder. Any stale derived keys left in
 `workbench.colorCustomizations` by an earlier colour are cleared in the same write.
 
@@ -191,14 +198,16 @@ ULID rule, the alias records and the import wording; restating any of it here wo
 two drift apart.
 
 The usual family, with `<letter>` the project's initial and the bare word going to
-whichever member the user reaches for mos<configured-path>| Quicklink | `link` |
+whichever member the user reaches for most:
+
+| Quicklink | `link` |
 | --- | --- |
 | folder | the project path |
-| code | `fil<configured-path><project path>` + the VS Code `openWith` id |
+| code | `file:///<project path>` + the VS Code `openWith` id |
 | term | `wt -p "<profile name>"` — the name from step 6 |
 | tracked work / reviews / CI | links returned by the configured `mpx issue`, `mpx review`, and `mpx ci` capabilities |
 
-Registering several projects in one sitting is worth batchin<configured-path>collect every project's
+Registering several projects in one sitting is worth batching: collect every project's
 quicklinks first and hand them over together, so the user does one export/import
 round-trip instead of one per project.
 
@@ -216,9 +225,10 @@ drifts from) the query format.
 Do three edits, the first two inside the `# Projects` lens (the run of `### #<project>` sections
 between `### General` and the trailing `%%`-comment marker):
 
-1. **Add the project's section.** Duplicate an existing project block and swap three thing<configured-path>the heading `#tag`, the dashboard wikilink, and the `filter by function` tag. The heading is
+1. **Add the project's section.** Duplicate an existing project block and swap three things:
+   the heading `#tag`, the dashboard wikilink, and the `filter by function` tag. The heading is
    `### #<project> [[<Dashboard>|dashboard]]` (no inline count — headings carry no count).
-   Resolve `<Dashboard>` from the registry conventio<configured-path>a standalone repo project links to
+   Resolve `<Dashboard>` from the registry convention: a standalone repo project links to
    `[[<Project>Dashboard]]`; a MiniProjekty sub-project links to an anchor,
    `[[MiniProjektyDashboard#<Anchor>]]`. Ask with `AskUserQuestion` which of the two it is when
    it isn't obvious, and note plainly if the dashboard note doesn't exist yet — the link is a
@@ -226,7 +236,7 @@ between `### General` and the trailing `%%`-comment marker):
    first; on-hold ones last, and on-hold projects with no current work may be omitted entirely).
    Use `###`, never `##` — `#` is reserved for lenses, and a `##` between the two levels would
    make every following section fold as its child instead of as a peer.
-2. **Extend the registry list** so projectless tasks stop catching this new ta<configured-path>add the tag to
+2. **Extend the registry list** so projectless tasks stop catching this new tag: add the tag to
    the `reg` array in the `### General` block's `filter by function`.
 3. **Add the pill color** in `<vault>/.obsidian/snippets/tagColors.css`: mirror the project's
    VS Code Peacock color (the `peacock.color` you wrote in Step 7). Add a `--tag-<project>-*`
@@ -240,7 +250,9 @@ say so in the report.
 ### Step 11: Offer the remaining setup skills
 
 `init-repo` is no longer in this list — step 3 already ran it if the project needed it.
-Name the ones that still apply and let the user pick — neither runs unless chose<configured-path>- [`board-setup`](../board-setup/SKILL.md) — Obsidian board and its `BOARD.md` symlink
+Name the ones that still apply and let the user pick — neither runs unless chosen:
+
+- [`board-setup`](../board-setup/SKILL.md) — Obsidian board and its `BOARD.md` symlink
 - [`design-init`](../design-init/SKILL.md) — palette, fonts, `designs/tokens.css`
 
 If the user picks one, read its `SKILL.md` and carry out its steps yourself in this

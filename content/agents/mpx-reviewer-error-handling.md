@@ -2,7 +2,7 @@
 name: mpx-reviewer-error-handling
 description: "Read-only reviewer for error handling, reliability, and resilience."
 ---
-# Reviewe<configured-path>Error Handling
+# Reviewer: Error Handling
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
 

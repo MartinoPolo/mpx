@@ -2,7 +2,8 @@
 'use strict';
 
 // Bridge between a grilling session and the companion mobile voice app.
-// Sessions live outside any repo so one hub can list them across project<configured-path>MPX_VOICE_GRILL_ROOT when set, otherwise <home>/.mpx-voice-grill/sessions.
+// Sessions live outside any repo so one hub can list them across projects:
+// MPX_VOICE_GRILL_ROOT when set, otherwise <home>/.mpx-voice-grill/sessions.
 
 const fs = require('fs');
 const os = require('os');
@@ -48,7 +49,7 @@ function loadSessionMeta(sessionId) {
   if (!fs.existsSync(metaPath)) {
     fail(`Unknown session '${sessionId}' — no session.json under ${sessionDir(sessionId)}`);
   }
-  return { metaPath, met<configured-path>readJson(metaPath) };
+  return { metaPath, meta: readJson(metaPath) };
 }
 
 function parseArgs(argv) {
@@ -69,23 +70,23 @@ function commandInit(flags) {
   const project = flags['--project'];
   const topic = flags['--topic'];
   if (!project || !topic) {
-    fail('Usag<configured-path>grill-voice.js init --project <name> --topic <topic>');
+    fail('Usage: grill-voice.js init --project <name> --topic <topic>');
   }
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
   const sessionId = `${slugify(project)}--${slugify(topic)}--${stamp}`;
   const dir = sessionDir(sessionId);
-  fs.mkdirSync(path.join(dir, 'audio'), { recursiv<configured-path>true });
+  fs.mkdirSync(path.join(dir, 'audio'), { recursive: true });
   writeJson(path.join(dir, 'session.json'), {
-    schem<configured-path>1,
+    schema: 1,
     sessionId,
     project,
-    projectPat<configured-path>process.cwd(),
+    projectPath: process.cwd(),
     topic,
-    createdA<configured-path>now.toISOString(),
-    statu<configured-path>'evaluating',
-    currentRoun<configured-path>0,
+    createdAt: now.toISOString(),
+    status: 'evaluating',
+    currentRound: 0,
   });
   console.log(sessionId);
 }
@@ -93,7 +94,7 @@ function commandInit(flags) {
 function commandPublish(positional) {
   const [sessionId, roundFile] = positional;
   if (!sessionId || !roundFile) {
-    fail('Usag<configured-path>grill-voice.js publish <sessionId> <roundJsonFile>');
+    fail('Usage: grill-voice.js publish <sessionId> <roundJsonFile>');
   }
   const round = readJson(roundFile);
   if (round.sessionId !== sessionId) {
@@ -120,7 +121,7 @@ async function commandWait(positional, flags) {
   const [sessionId, roundText] = positional;
   const round = Number(roundText);
   if (!sessionId || !Number.isInteger(round)) {
-    fail('Usag<configured-path>grill-voice.js wait <sessionId> <round> [--timeout-seconds N]');
+    fail('Usage: grill-voice.js wait <sessionId> <round> [--timeout-seconds N]');
   }
   const timeoutSeconds = Number(flags['--timeout-seconds'] || DEFAULT_WAIT_TIMEOUT_SECONDS);
   const answersPath = path.join(sessionDir(sessionId), `round-${round}.answers.json`);
@@ -145,7 +146,7 @@ async function commandWait(positional, flags) {
 function commandComplete(positional) {
   const [sessionId] = positional;
   if (!sessionId) {
-    fail('Usag<configured-path>grill-voice.js complete <sessionId>');
+    fail('Usage: grill-voice.js complete <sessionId>');
   }
   const { metaPath, meta } = loadSessionMeta(sessionId);
   meta.status = 'completed';
@@ -161,7 +162,7 @@ async function main() {
   if (command === 'publish') return commandPublish(positional);
   if (command === 'wait') return commandWait(positional, flags);
   if (command === 'complete') return commandComplete(positional);
-  fail('Usag<configured-path>grill-voice.js <init|publish|wait|complete> ...');
+  fail('Usage: grill-voice.js <init|publish|wait|complete> ...');
 }
 
 main().catch((error) => fail(error.message));

@@ -14,18 +14,22 @@ layout instead of inventing one, and it is why a sheet comes back with exactly t
 the video had.
 
 **2. One numbered entry per item, describing what is visible.** This is the part that
-decides whether the image is usable. The entry describes *body geometry*, not coachin<configured-path>> Panel 1: A person in a Runner's Lunge, with one foot forward and the opposite hand on the
+decides whether the image is usable. The entry describes *body geometry*, not coaching:
+
+> Panel 1: A person in a Runner's Lunge, with one foot forward and the opposite hand on the
 > ground, reaching the other arm up to the sky.
 
 "One foot forward, opposite hand on the ground, other arm up" is drawable. "Keep your spine
 long and breathe into the stretch" is not — an image model given a coaching cue draws a
 person standing still. The extraction step therefore keeps the drawing instructions apart
-from the coaching tex<configured-path>the poses go in the prompt body, `formCue` goes in the restatement
+from the coaching text: the poses go in the prompt body, `formCue` goes in the restatement
 table below it.
 
 **A single drawn position is not enough.** An exercise travels, and one frozen figure cannot
 tell a Cossack Squat from a lateral lunge, or a bear crawl from a plank. Each entry therefore
-draws the movement twice with an arrow betwee<configured-path>> Panel 1 — Deep Squat Hold (1-2 minutes): two figures side by side, first a person standing
+draws the movement twice with an arrow between:
+
+> Panel 1 — Deep Squat Hold (1-2 minutes): two figures side by side, first a person standing
 > tall with feet shoulder-width apart and arms at their sides, then a person crouching in a
 > deep squat with hips dropped below the knees, heels flat on the floor, and palms pressed
 > together at the chest, with an arrow pointing straight down through the hips drawn between
@@ -40,10 +44,14 @@ word "arrow" is supplied by the template. Asked for an arrow directly, the model
 about half the time and a bare direction the rest ("downward vertically into a full squat"),
 and only one of those completes the sentence.
 
-**3. A style block.** Held constant across both working examples, and worth keeping constan<configured-path>> clean, flat vector illustration, minimalistic, with a plain white background, serving as a
+**3. A style block.** Held constant across both working examples, and worth keeping constant:
+
+> clean, flat vector illustration, minimalistic, with a plain white background, serving as a
 > step-by-step exercise guide
 
-and for the denser gri<configured-path>> modern, visually pleasing, flat vector art with a cohesive color palette
+and for the denser grid:
+
+> modern, visually pleasing, flat vector art with a cohesive color palette
 
 **4. The exact text, restated verbatim.** Both hand-written prompts end by repeating the
 source material in full. Without it the model paraphrases labels; with it, the labels on the
@@ -66,7 +74,7 @@ An amount reaches the prompt only when the video prescribed one; see
 A tile has no room for a second figure, so past the panel limit the end position carries the
 drawing and the arrow alone keeps the direction readable.
 
-The 5-exercise sheet rendered as one horizontal stri<configured-path>a title header, five bordered panels,
+The 5-exercise sheet rendered as one horizontal strip: a title header, five bordered panels,
 a numbered badge and name on each. The 35-item habit sheet rendered as a 5-column grid of
 icon tiles, each a small illustration over a short sentence. Same four parts, different
 density — the item count is what selects between them.
@@ -86,11 +94,11 @@ Kept verbatim. Rewrite a generated prompt toward these rather than away from the
 > deep side lunge with one leg straight and toes pointed up. The style should be clean, flat
 > vector illustration, minimalistic, with a plain white background, serving as a step-by-step
 > exercise guide. For your reference, here are the 5 exercises shown in the video if you want
-> to make any adjustments to the promp<configured-path>Runner's Lung<configured-path>Deep lunge with an upward thoracic
-> rotation. Deep Squa<configured-path>Holding a deep squat and gently shifting weight side to side.
-> Windshield Wiper<configured-path>Sitting with legs wide, dropping both knees to one side to rotate the hips
-> internally and externally. Cobra Flo<configured-path>Pressing the chest up from the floor into a spine
-> extension, followed by a deep fold. Cossack Squa<configured-path>A deep side lunge, stretching the
+> to make any adjustments to the prompt: Runner's Lunge: Deep lunge with an upward thoracic
+> rotation. Deep Squat: Holding a deep squat and gently shifting weight side to side.
+> Windshield Wipers: Sitting with legs wide, dropping both knees to one side to rotate the hips
+> internally and externally. Cobra Flow: Pressing the chest up from the floor into a spine
+> extension, followed by a deep fold. Cossack Squat: A deep side lunge, stretching the
 > adductors on the straight leg.
 
 ### Thirty-five items, icon grid
@@ -109,7 +117,7 @@ vocabulary for the other twenty-nine, which is cheaper than describing all of th
 
 ## The consistent-character sentence
 
-A fifth part joins the four above whenever the video has someone on scree<configured-path>one sentence
+A fifth part joins the four above whenever the video has someone on screen: one sentence
 describing the person to draw in every panel — build, hair, clothing colours, and the setting
 suggested with a few props. It is what makes the sheet recognisable as belonging to *this*
 video rather than to any workout, and it comes from the `performer` object the extraction

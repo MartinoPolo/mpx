@@ -15,13 +15,16 @@ included as its own stretch of conversation.
 
 Budget **150 words per minute**: 10 minutes ≈ 1500 words, 15 ≈ 2250, 25 ≈ 3750.
 
-Format — one turn per line, `Speake<configured-path>text`, exactly two speakers whose names match what you
-pass on the command lin<configured-path>Ale<configured-path>Shadow DOM is one of the three web component specifications, next to custom elements
-Sa<configured-path>And the encapsulation runs in both directions, which is the part people miss.
-Ale<configured-path>In your own dashboard repo, src/lib/panel.ts line 214 calls attachShadow with mode open.
+Format — one turn per line, `Speaker: text`, exactly two speakers whose names match what you
+pass on the command line:
+
+```
+Alex: Shadow DOM is one of the three web component specifications, next to custom elements
+Sam: And the encapsulation runs in both directions, which is the part people miss.
+Alex: In your own dashboard repo, src/lib/panel.ts line 214 calls attachShadow with mode open.
 ```
 
-Write it as real conversatio<configured-path>one host explains, the other pushes on the part that is
+Write it as real conversation: one host explains, the other pushes on the part that is
 actually subtle. Interruptions and follow-up questions are what make it listenable — filler
 agreement is what makes it hollow.
 
@@ -29,7 +32,9 @@ agreement is what makes it hollow.
 
 Run `scripts/gemini-tts-podcast.py` from this skill's own directory — reference files are read
 verbatim, so resolve that path yourself rather than expecting `.` to expand
-her<configured-path>bash
+here:
+
+```bash
 pip install -U google-genai   # first run only
 mkdir -p "$MPX_AI_GENERATED/_PODCASTS/<slug>"
 python <skill-dir>/scripts/gemini-tts-podcast.py \

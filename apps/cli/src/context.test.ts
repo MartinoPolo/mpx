@@ -170,6 +170,19 @@ it("binds native provider authentication to isolated safe route environments wit
   expect(process.env.MPX_PROVIDER_ROUTE).toBe(originalProcessRoute);
 });
 
+it("uses the exact launch-injected provider route instead of ambient or requested identity paths", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-provider-runtime-route-"));
+  roots.push(root);
+  const operationCwd = path.join(root, "project"), trustedDirectory = path.join(root, "trusted-bin"), injected = path.join(root, "runtime", "github-work");
+  await Promise.all([mkdir(operationCwd), mkdir(trustedDirectory), mkdir(injected, { recursive: true })]);
+  const executable = path.join(trustedDirectory, process.platform === "win32" ? "gh.EXE" : "gh");
+  await copyFile(process.execPath, executable);
+  const environment = { PATH: trustedDirectory, PATHEXT: ".EXE", APPDATA: path.join(root, "ambient"), GH_CONFIG_DIR: path.join(root, "other-identity"), MPX_RUNTIME_CONTEXT: "{}", MPX_RUNTIME_ROUTE_PROVIDER_GITHUB: injected };
+  const expression = "process.stdout.write(process.env.GH_CONFIG_DIR??'')";
+  const result = await new NodeProviderProcessExecutor(environment).execute({ argv: ["gh", "-e", expression], route: "github-personal", cwd: operationCwd });
+  expect(result.stdout).toBe(injected);
+});
+
 it.each([undefined, "../secret", "C:/private", "token-route", "route.pem"])("fails closed before executable resolution for unsafe provider route %s", async route => {
   const operationCwd = await mkdtemp(path.join(tmpdir(), "mpx-provider-route-reject-"));
   roots.push(operationCwd);

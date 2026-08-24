@@ -4,7 +4,9 @@ Concrete anti-pattern checklists fed to the per-component sub-agents. Pass the r
 
 ## Axis A — Native element → component
 
-Find native/hand-rolled markup that an inventory component replace<configured-path>1. `<button>` → `<Button>` (with the appropriate variant)
+Find native/hand-rolled markup that an inventory component replaces:
+
+1. `<button>` → `<Button>` (with the appropriate variant)
 2. `<input>` → `<Input>`
 3. `<select>` → `<Select>`
 4. `<textarea>` → `<Textarea>`
@@ -20,7 +22,9 @@ Only flag elements that have a real equivalent in the discovered inventory.
 
 ## Axis B — Improper component variant / prop usage
 
-The higher-value half — the component is used, but its variants are bypasse<configured-path>1. component used without the right variant prop — custom classes doing what a variant (`ghost`/`secondary`/`outline`/`link`) should
+The higher-value half — the component is used, but its variants are bypassed:
+
+1. component used without the right variant prop — custom classes doing what a variant (`ghost`/`secondary`/`outline`/`link`) should
 2. size applied via manual classes instead of the `size` prop
 3. icon-only controls missing `size="icon"` / `size="icon-sm"`
 4. icons inside a component with manual `size-*`/`class` instead of the icon-slot convention (e.g. `data-icon="inline-start"`)
@@ -28,7 +32,7 @@ The higher-value half — the component is used, but its variants are bypasse<co
 6. color overrides defeating an intent/variant — e.g. `intent="primary" class="bg-[oklch(...)] hover:bg-[...]"`, or `intent="link" class="text-blue-800"` overriding a themeable token
 7. wrong variant for the role (e.g. `outline` on an icon toggle that should be `ghost`)
 
-Fix patter<configured-path>remove the manual class, let the variant/prop own it.
+Fix pattern: remove the manual class, let the variant/prop own it.
 
 ## Axis C — Componentize / add-variant
 
@@ -40,7 +44,7 @@ Recurring detached-style patterns. Tag each finding **C-clear** (safe to auto-ap
 
 **C-clear** = the target component/variant is unambiguous and the change is mechanical (e.g. map a one-off onto an existing primitive, or add a clearly-named variant + migrate every call-site). **C-judgment** = the abstraction is debatable (is this really one variant? what should it be named?) — leave for the user.
 
-For eac<configured-path>report the pattern, occurrence count, call-sites, the proposed variant/component, and the C-clear/C-judgment tag. When adding a variant, edit the component's variants file and migrate all call-sites, preserving the public API.
+For each: report the pattern, occurrence count, call-sites, the proposed variant/component, and the C-clear/C-judgment tag. When adding a variant, edit the component's variants file and migrate all call-sites, preserving the public API.
 
 ## Axis D — Hardcoded theme-color bypass
 
@@ -48,7 +52,7 @@ Colors that won't follow the theme (the original dark-mode symptom):
 
 1. inline `style=` with hardcoded `oklch()` / `rgb()` / `#hex`
 2. hardcoded Tailwind palette colors (`bg-white`, `text-black`, `bg-gray-*`, `bg-slate-*`) instead of semantic tokens (`bg-background`, `text-foreground`, `bg-muted`, …)
-3. `<style>` blocks with `backgroun<configured-path>colo<configured-path>lacking a `:global(.dark)` / dark override
+3. `<style>` blocks with `background:`/`color:` lacking a `:global(.dark)` / dark override
 4. `:not(.dark)` selectors without a matching `.dark` rule
 
-Ski<configured-path>semantically-correct hardcoded colors — `text-white` on a filled primary button, decorative/brand colors that are intentionally theme-independent.
+Skip: semantically-correct hardcoded colors — `text-white` on a filled primary button, decorative/brand colors that are intentionally theme-independent.

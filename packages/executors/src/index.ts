@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { link, mkdir, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sha256Canonical } from "@mpx/core";
 import type { JsonValue } from "@mpx/core";
@@ -15,6 +15,17 @@ export class ExecutionError extends Error {
 function fail(code: string, message: string, details?: Readonly<Record<string, string | number | boolean | null>>): never { throw new ExecutionError(code, message, details); }
 
 export interface VerificationEvidence { readonly status: "verified" | "unverified" | "unavailable"; readonly verifier: string; readonly evidenceDigest: string }
+export function sameVerificationEvidence(left: unknown, right: unknown): boolean {
+  const valid = (value: unknown): value is VerificationEvidence => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    return Object.keys(record).sort().join(",") === "evidenceDigest,status,verifier"
+      && ["verified", "unverified", "unavailable"].includes(record.status as string)
+      && typeof record.verifier === "string" && /^[a-z0-9][a-z0-9._-]*$/u.test(record.verifier)
+      && typeof record.evidenceDigest === "string" && /^[a-f0-9]{64}$/u.test(record.evidenceDigest);
+  };
+  return valid(left) && valid(right) && left.status === right.status && left.verifier === right.verifier && left.evidenceDigest === right.evidenceDigest;
+}
 export interface ProcessRequest { readonly executable: string; readonly argv: readonly string[]; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number }
 export interface ProcessResult { readonly exitCode: number; readonly stdout: string; readonly stderr: string; readonly truncated: boolean }
 export interface ExecutorAdapter { readonly name: "docker" | "host"; verify(): Promise<VerificationEvidence>; execute(request: ProcessRequest): Promise<ProcessResult> }
@@ -67,7 +78,7 @@ export interface PrivateRuntimeLaunch {
   readonly nativeRuntimeRoot: string;
 }
 export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
-export interface RouteMaterializer { materialize(descriptor: LaunchDescriptor): Promise<Readonly<Record<string, string>>> }
+export interface RouteMaterializer { materialize(descriptor: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> }
 export interface LaunchAuditStartRecord {
   readonly schemaVersion: 1; readonly phase: "start"; readonly launchKey: string; readonly runtime: "claude" | "pi"; readonly executor: "docker" | "host";
   readonly identity: string; readonly identityDomain: string; readonly mode: string; readonly contentScope: string; readonly projectId: string | null; readonly repositoryId: string;
@@ -78,6 +89,7 @@ export interface LaunchAuditTerminalRecord {
 }
 export type LaunchAuditRecord = Readonly<LaunchAuditStartRecord | LaunchAuditTerminalRecord>;
 export interface LaunchAuditStore { start(record: LaunchAuditStartRecord): Promise<string>; terminal(attemptId: string, record: LaunchAuditTerminalRecord): Promise<void> }
+function pathWithin(root: string, candidate: string): boolean { const relative = path.relative(root, candidate); return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative)); }
 
 export class FileLaunchAuditStore implements LaunchAuditStore {
   constructor(readonly root: string) {}
@@ -91,13 +103,29 @@ export class FileLaunchAuditStore implements LaunchAuditStore {
     await this.#write(attemptId, "terminal", record);
   }
   async #write(attemptId: string, phase: "start" | "terminal", record: LaunchAuditRecord): Promise<void> {
-    const directory = path.join(this.root, "launch-audits", record.launchKey.slice(0, 2), record.launchKey);
-    await mkdir(directory, { recursive: true });
+    if (!path.isAbsolute(this.root)) throw Object.assign(new Error("Unsafe audit root."), { code: "AUDIT_PATH_INVALID" });
+    const rootStat = await lstat(this.root);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw Object.assign(new Error("Unsafe audit root."), { code: "AUDIT_PATH_INVALID" });
+    const canonicalRoot = await realpath(this.root);
+    let directory = this.root;
+    for (const segment of ["launch-audits", record.launchKey.slice(0, 2), record.launchKey]) {
+      directory = path.join(directory, segment);
+      await mkdir(directory).catch(error => { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; });
+      const stat = await lstat(directory);
+      const canonical = await realpath(directory);
+      if (stat.isSymbolicLink() || !stat.isDirectory() || !pathWithin(canonicalRoot, canonical)) throw Object.assign(new Error("Unsafe audit directory."), { code: "AUDIT_PATH_INVALID" });
+    }
     const target = path.join(directory, `${attemptId}.${phase}.json`);
     const temporary = path.join(directory, `.${attemptId}.${phase}.${randomUUID()}.tmp`);
     try {
       await writeFile(temporary, `${JSON.stringify(record)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+      const temporaryStat = await lstat(temporary);
+      if (temporaryStat.isSymbolicLink() || !temporaryStat.isFile() || !pathWithin(canonicalRoot, await realpath(temporary))) throw Object.assign(new Error("Unsafe audit temporary file."), { code: "AUDIT_PATH_INVALID" });
+      try { await lstat(target); throw Object.assign(new Error("Audit record already exists."), { code: "EEXIST" }); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       await link(temporary, target);
+      const targetStat = await lstat(target);
+      if (targetStat.isSymbolicLink() || !targetStat.isFile() || !pathWithin(canonicalRoot, await realpath(target))) throw Object.assign(new Error("Unsafe audit target."), { code: "AUDIT_PATH_INVALID" });
     } finally { await rm(temporary, { force: true }); }
   }
 }
@@ -118,17 +146,19 @@ export class ExecutionService {
     if (artifact.runtime !== descriptor.runtime) fail("RUNTIME_ARTIFACT_BINDING_INVALID", "The runtime artifact does not match the selected runtime.");
     if (input.expectedLaunchKey !== undefined && input.expectedLaunchKey !== descriptor.launchKey) fail("LAUNCH_RESTART_REQUIRED", "Launch rights or binding changed; create a new launch and restart.", { restartRequired: true });
     const privateEnvironment = validatePrivateLaunch(descriptor, input.privateLaunch);
+    const executor = this.dependencies.executors.get(descriptor.executor.name);
+    const verification = await executor.verify();
+    if (verification.status === "unavailable") fail("EXECUTOR_UNAVAILABLE", `Executor '${executor.name}' is unavailable.`, { executor: executor.name });
+    if (verification.status !== "verified" && this.dependencies.production !== false) fail("EXECUTOR_GATE_UNVERIFIED", `Executor '${executor.name}' has not been verified.`, { executor: executor.name });
+    if (!sameVerificationEvidence(verification, descriptor.executorVerification)) fail("LAUNCH_RESTART_REQUIRED", "Executor verification evidence does not match the launch descriptor.", { restartRequired: true });
+    if (descriptor.runtime === "pi" && descriptor.routes.mcp.allow.length > 0) fail("RUNTIME_CAPABILITY_UNSUPPORTED", "The Pi runtime has no supported native MCP client integration.", { runtime: "pi", capability: "mcp", remediation: "Use Claude for this MCP-enabled launch, or remove the MCP route selection." });
     if (descriptor.executor.name === "host") {
       if (!input.tty?.direct) fail("HOST_TTY_REQUIRED", "Host execution requires a direct TTY.");
       const nonce = input.hostApproval?.nonce ?? input.approvalNonce ?? "";
       this.#approvals.consume(this.hostApprovalRequest(input, nonce), input.hostApproval);
     }
-    const executor = this.dependencies.executors.get(descriptor.executor.name);
-    const verification = await executor.verify();
-    if (verification.status === "unavailable") fail("EXECUTOR_UNAVAILABLE", `Executor '${executor.name}' is unavailable.`, { executor: executor.name });
-    if (verification.status !== "verified" && this.dependencies.production !== false) fail("EXECUTOR_GATE_UNVERIFIED", `Executor '${executor.name}' has not been verified.`, { executor: executor.name });
     const runtime = this.dependencies.runtimes.get(descriptor.runtime);
-    const routes = validateRuntimeRoutes(descriptor, input.cwd, await this.dependencies.routes.materialize(descriptor));
+    const routes = validateRuntimeRoutes(descriptor, input.cwd, await this.dependencies.routes.materialize(descriptor, input.cwd));
     const audit = this.dependencies.audit;
     let attemptId: string | undefined;
     if (audit) {
@@ -138,7 +168,10 @@ export class ExecutionService {
     try {
       const prepared = await runtime.prepare({ descriptor, routes });
       if ((!path.win32.isAbsolute(prepared.executable) && !path.posix.isAbsolute(prepared.executable)) || prepared.argv.length > 256 || prepared.argv.some((argument) => argument.length > 8192)) fail("PROCESS_REQUEST_INVALID", "Runtime adapter produced an untrusted executable or unbounded argv.");
-      const result = await executor.execute({ executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), timeoutMs: 120_000, maxOutputBytes: 65_536 });
+      const request = { executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), maxOutputBytes: 65_536 };
+      const executionEvidence = await executor.verify();
+      if (!sameVerificationEvidence(executionEvidence, descriptor.executorVerification)) fail("LAUNCH_RESTART_REQUIRED", "Executor verification evidence changed before invocation.", { restartRequired: true });
+      const result = await executor.execute(request);
       if (audit && attemptId) {
         try { await audit.terminal(attemptId, launchAuditTerminal(descriptor, { result })); }
         catch { fail("AUDIT_TERMINAL_WRITE_FAILED", "The terminal launch audit could not be persisted unambiguously; the process was not retried."); }
@@ -252,6 +285,8 @@ function runtimeRouteEnvironment(routes: Readonly<Record<string, string>>): Read
       if (value.length > 4_000 || /["\r\n\0]/u.test(value)) fail("PRIVATE_ROUTE_PATH_INVALID", "The SSH route path cannot be safely passed to the native client.");
       assign("MPX_RUNTIME_ROUTE_SSH", value);
       assign("GIT_SSH_COMMAND", `ssh -F "${path.join(value, "config").replaceAll("\\", "/")}"`);
+    } else if (kind === "mcp") {
+      // MCP descriptors are consumed explicitly by supported runtime argv, never via ambient environment.
     } else {
       fail("PRIVATE_ROUTE_CONSUMER_UNAVAILABLE", "No concrete native consumer is available for a selected private route.");
     }
@@ -283,19 +318,6 @@ export function sanitizedEnvironment(source: Readonly<Record<string, string | un
   for (const [key, value] of Object.entries(source)) if (value !== undefined && (ENV_ALLOW.has(key) || /^MPX_(?:LAUNCH|CONTEXT|PROJECT|REPOSITORY|WORKSPACE|RUNTIME)_/u.test(key))) result[key] = value;
   for (const [key, value] of Object.entries(launch)) if (/^MPX_(?:LAUNCH|CONTEXT|PROJECT|REPOSITORY|WORKSPACE|RUNTIME)_/u.test(key)) result[key] = value;
   return Object.freeze(result);
-}
-
-export interface PrivateRouteStore { readonly stateRoot: string; readonly known: Readonly<Record<string, string>>; write(target: string, privateValue: string): Promise<void> }
-export async function materializePrivateRoutes(descriptorInput: LaunchDescriptor, store: PrivateRouteStore): Promise<Readonly<Record<string, string>>> {
-  const descriptor = parseLaunchDescriptorV2(descriptorInput);
-  const labels: Array<[string, string]> = [["git", descriptor.routes.gitAuthor], ...Object.entries(descriptor.routes.providers).map(([provider, label]): [string, string] => [`provider-${provider}`, label]), ...(descriptor.routes.ssh ? [["ssh", descriptor.routes.ssh] as [string, string]] : []), ...descriptor.routes.mcp.allow.map((label): [string, string] => ["mcp", label])];
-  const planned = labels.map(([kind, label]) => {
-    const privateValue = store.known[`${kind.startsWith("provider-") ? "provider" : kind}:${label}`];
-    if (privateValue === undefined) fail("PRIVATE_ROUTE_UNKNOWN", `Unknown ${kind} route label.`, { routeKind: kind });
-    return { key: `${kind}:${label}`, privateValue, target: path.join(store.stateRoot, "routes", kind, label) };
-  });
-  for (const item of planned) await store.write(item.target, item.privateValue);
-  return Object.freeze(Object.fromEntries(planned.map((item) => [item.key, item.target])));
 }
 
 export interface BoundedProcessRunner { run(request: Required<Pick<ProcessRequest, "executable" | "argv" | "cwd" | "environment" | "timeoutMs" | "maxOutputBytes">> & { readonly shell: false }): Promise<ProcessResult> }

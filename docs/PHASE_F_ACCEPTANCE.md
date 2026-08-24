@@ -1,16 +1,20 @@
 # Phase F acceptance status
 
-Phase F is **not marked complete**. This document defines the current integration slice and its verification boundary.
+Phase F is **complete**. The final Phase F gates pass, and the spec, security, reliability, and performance reviews are clean. This document records the completed integration slice and its verification boundary; Phase F2 and all later phases remain pending.
 
 ## Present in this slice
 
 - runnable Claude and Pi launch integration over immutable v2 descriptors and runtime-context v1;
-- one runtime-neutral resolved-skill manifest v4 with distinct immutable runtime projections;
-- exact four-state exposure behavior and separate model-versus-human discovery;
-- private native roots/routes kept out of public descriptors, output, banners, and audit projections;
-- alias expansion limited to runtime plus explicit identity;
-- Docker gate with no host fallback while F2 evidence is unavailable;
-- explicit direct-TTY host approval and restart-on-change semantics;
+- separate logical skill artifacts and launch-bound full published-projection references;
+- exact four-state exposure behavior, including policy-bound project skills and separate model-versus-human discovery;
+- exact executor-evidence recheck before spawn, hardened audit output paths, and restart-on-change semantics;
+- Claude guards at `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`, without claiming atomic native skill-read interposition;
+- Pi exact open-handle/body-hash checks and Claude live `StatusSnapshotV1` status refresh;
+- shared dangerous-command policy across adapters;
+- consumption of preprovisioned read-only private routes/MCP descriptors without creating, installing, copying, or migrating them; Claude MCP support is present, while Pi MCP compatibility remains structured unsupported; KanbanFlow authorization remains in the OS keyring;
+- interactive runtimes without an artificial 120-second lifetime, while finite probes remain bounded;
+- gated Docker execution with no host fallback while F2 evidence is unavailable;
+- explicit direct-TTY host approval; and
 - generated Pi-agent, active-identity/path, private-state, provenance, and lockfile validation.
 
 ## Required verification
@@ -31,4 +35,4 @@ git diff --check
 
 ## Explicit non-claims
 
-This slice does not establish F2 Docker/container isolation, Phase G session continuation, Phase I installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.
+This slice does not establish F2 Docker/container isolation, Phase G session continuation/resurrection, Phase I route/MCP provisioning or installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.

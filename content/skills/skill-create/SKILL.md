@@ -24,7 +24,9 @@ If the skill will spawn sub-agents, read
 
 ### Step 1: Fetch Guidelines
 
-Spawn a `runtime-code-guide` agent (subagent_typ<configured-path>runtime-code-guide`) with the promp<configured-path>> "What are the latest the active runtime guidelines for authoring custom skills (slash commands)? Include frontmatter fields, file structure, description rules, tool allowlists, size limits, and any best practices."
+Spawn a `runtime-code-guide` agent (subagent_type: `runtime-code-guide`) with the prompt:
+
+> "What are the latest the active runtime guidelines for authoring custom skills (slash commands)? Include frontmatter fields, file structure, description rules, tool allowlists, size limits, and any best practices."
 
 Store the returned guidelines for use in Step 4.
 
@@ -41,7 +43,10 @@ If the invocation input provided, use as initial skill name/description and ask 
 
 ### Step 3: Draft the Skill
 
-Create the skill directory and file<configured-path>skills/<skill-name>/
+Create the skill directory and files:
+
+```
+skills/<skill-name>/
 ├── SKILL.md           # Main instructions (required)
 ├── REFERENCE.md       # Detailed docs (if >200 lines or distinct domain)
 ├── EXAMPLES.md        # Usage examples (if needed)
@@ -55,28 +60,31 @@ Create the skill directory and file<configured-path>skills/<skill-name>/
 
 ```yaml
 ---
-nam<configured-path><skill-name>
-descriptio<configured-path>"<What it does, 1-2 sentences, third person>"
-when_to_us<configured-path>"<1-3 short trigger sentences>" # omit when not model-invocable
-argument-hin<configured-path>"[argument description]"
-disable-model-invocatio<configured-path>true # omit only if runtime must reach for this unprompted
-allowed-tool<configured-path><comma-separated tool list>
-metadat<configured-path>autho<configured-path>MartinoPolo
-  versio<configured-path>"0.1"
-  categor<configured-path><planning|execution|project-management|issue-management|git-workflow|code-quality|code-review|refactor|testing|design|setup|utility|obsidian>
+name: <skill-name>
+description: "<What it does, 1-2 sentences, third person>"
+when_to_use: "<1-3 short trigger sentences>" # omit when not model-invocable
+argument-hint: "[argument description]"
+disable-model-invocation: true # omit only if runtime must reach for this unprompted
+allowed-tools: <comma-separated tool list>
+metadata:
+  author: MartinoPolo
+  version: "0.1"
+  category: <planning|execution|project-management|issue-management|git-workflow|code-quality|code-review|refactor|testing|design|setup|utility|obsidian>
 ---
 ```
 
-Other valid frontmatter fields, used only when neede<configured-path>arguments`, `user-invocable`,
+Other valid frontmatter fields, used only when needed: `arguments`, `user-invocable`,
 `disallowed-tools`, `model`, `effort`, `context`, `agent`, `background`, `hooks`,
 `paths`, `shell`. `metadata` is this repo's own bookkeeping — the platform ignores it.
 
 **Description rules** — full rationale in
-[`../shared/AUTHORING.md`](../shared/AUTHORING.md) § Descriptions and discoverabilit<configured-path>- `description` is 1–2 sentences, third person, on what the skill does
+[`../shared/AUTHORING.md`](../shared/AUTHORING.md) § Descriptions and discoverability:
+
+- `description` is 1–2 sentences, third person, on what the skill does
 - `when_to_use` carries the triggers, in 1–3 short sentences
 - The two are concatenated and truncated together at 1,536 chars, so use case first
 - Both sit in **every session's context**. A skill you always invoke by name sets
-  `disable-model-invocatio<configured-path>true` and costs nothing.
+  `disable-model-invocation: true` and costs nothing.
 
 **Body structure:**
 
@@ -89,29 +97,29 @@ Other valid frontmatter fields, used only when neede<configured-path>arguments`,
 [`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL.md):
 
 - `allowed-tools` includes `Agent` if the skill spawns anything
-- Name the exact agent typ<configured-path>"Spawn `issue-analyzer` sub-agent". A spawn instruction
+- Name the exact agent type: "Spawn `issue-analyzer` sub-agent". A spawn instruction
   that names no type leaves tools and model to chance
 - Pass `model` **only** for types that declare none — `general-purpose`, `runtime`,
   `Plan`, `fork`. Omit it for every `mp-*` agent and for `Explore`
 - `effort` is not an `Agent` tool parameter, so a call site cannot set it. A spawn that
-  needs a specific effort must be a real `mp-*` agent with `effor<configured-path>in its frontmatter;
+  needs a specific effort must be a real `mp-*` agent with `effort:` in its frontmatter;
   otherwise nudge depth through the prompt text
-- Name a model only through a real `mode<configured-path>parameter — prose is measured at 0% obeyed
+- Name a model only through a real `model:` parameter — prose is measured at 0% obeyed
   and reads like an instruction while doing nothing
 - Delegate codebase searches to `Explore` with the breadth stated
   ([`../shared/EXPLORATION.md`](../shared/EXPLORATION.md))
 
 **Explicit tool references (mandatory):**
 
-- provider-specific CL<configured-path>specify exact `gh` command (e.g., `mpx issue create`, `mpx pr create`)
-- Bash command<configured-path>name the exact command/script
+- provider-specific CLI: specify exact `gh` command (e.g., `mpx issue create`, `mpx pr create`)
+- Bash commands: name the exact command/script
 - Use `mpx issue`, `mpx review`, and `mpx ci` capabilities for tracked work, reviews, and pipeline status
 
 **Size rules:**
 
 - SKILL.md must stay under **200 lines**
 - If exceeding 200 lines, split into reference files
-- Reference files are loaded on demand via markdown link<configured-path>details](REFERENCE.md)`
+- Reference files are loaded on demand via markdown links: `[details](REFERENCE.md)`
 
 #### When to Split Files
 
@@ -136,20 +144,27 @@ Compare the drafted skill against the guidelines fetched in Step 1:
 4. Check tool allowlists — any tools the guidelines recommend or discourage?
 5. Check size limits — does the draft respect current limits?
 
-For each mismatch foun<configured-path>- Fix it in the draft
+For each mismatch found:
+
+- Fix it in the draft
 - Record what was changed and why (guideline reference)
 
 If the guidelines suggest improvements beyond what this skill's conventions cover, note them as optional suggestions for the user.
 
 ### Step 5: Audit
 
-Run `mpx skill-audit` against the newly created skill to catch convention drif<configured-path>> Spawn a `general-purpose` sub-agent with `mode<configured-path>"appropriate runtime class"` and the promp<configured-path>> "Run `mpx skill-audit skills/<skill-name>/SKILL.md`"
+Run `mpx skill-audit` against the newly created skill to catch convention drift:
+
+> Spawn a `general-purpose` sub-agent with `model: "appropriate runtime class"` and the prompt:
+> "Run `mpx skill-audit skills/<skill-name>/SKILL.md`"
 
 Apply any auto-fixes. Note remaining issues for user review in Step 6.
 
 ### Step 6: Review with User
 
-Present the drafted skill and walk throug<configured-path>- **Guideline changes**: list any modifications made during validation (what changed, why, guideline reference)
+Present the drafted skill and walk through:
+
+- **Guideline changes**: list any modifications made during validation (what changed, why, guideline reference)
 - **Optional improvements**: suggestions from guidelines that go beyond current conventions
 - Does it cover the main use cases?
 - Any missing edge cases or workflows?
@@ -159,7 +174,9 @@ Ask the user for feedback. Iterate until approved.
 
 ### Review Checklist
 
-Before finalizing, verif<configured-path>- [ ] Description includes trigger phrases
+Before finalizing, verify:
+
+- [ ] Description includes trigger phrases
 - [ ] SKILL.md is under 200 lines
 - [ ] Information is time-independent (use relative terms, not dates/versions)
 - [ ] Consistent terminology throughout

@@ -14,7 +14,7 @@ context breaks the moment two agents run at once.
 
 ```bash
 # 1. Notebook — capture the id
-notebooklm create "Podcas<configured-path><Topic>" --json      # → .notebook.id
+notebooklm create "Podcast: <Topic>" --json      # → .notebook.id
 
 # 2. Brief as a source — capture the id
 notebooklm source add <slug>-resource.md --notebook <nb> --json   # → .source.id
@@ -22,7 +22,7 @@ notebooklm source add <slug>-resource.md --notebook <nb> --json   # → .source.
 # 3. Indexing must finish before generation
 notebooklm source wait <source_id> -n <nb> --timeout 600
 
-# 4. Optiona<configured-path>let NotebookLM add its own web research (fast mode, ~30s-2min)
+# 4. Optional: let NotebookLM add its own web research (fast mode, ~30s-2min)
 notebooklm source add-research "<topic> <specific angle>" --notebook <nb> --mode fast
 
 # 5. Kick off audio — capture the task id
@@ -34,13 +34,15 @@ notebooklm generate audio --prompt-file <slug>-prompt.txt \
 notebooklm download audio ./<slug>-raw.mp3 -a <task_id> -n <nb>
 ```
 
-Step 5 returns immediately with `statu<configured-path>pending`. Audio takes 10-20 minutes.
+Step 5 returns immediately with `status: pending`. Audio takes 10-20 minutes.
 
 ## Waiting without blocking
 
-Hand the wait to a background `general-purpose` sub-agent with `mode<configured-path>"appropriate runtime class"` — it declares
+Hand the wait to a background `general-purpose` sub-agent with `model: "appropriate runtime class"` — it declares
 no model of its own ([`../../shared/SUBAGENT_PROTOCOL.md`](../../shared/SUBAGENT_PROTOCOL.md)
-§ 1). Give it the notebook id, the task id, the output path, and this instructio<configured-path>> Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr
+§ 1). Give it the notebook id, the task id, the output path, and this instruction:
+
+> Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr
 > saying `Timeout after Ns`, means still rendering — re-check with
 > `notebooklm artifact list -n <nb> --json`, and when that artifact's `status` is `pending` or
 > `in_progress`, wait again. Treat it as failed only when `artifact list` reports an error
@@ -61,7 +63,7 @@ no model of its own ([`../../shared/SUBAGENT_PROTOCOL.md`](../../shared/SUBAGENT
 
 | Symptom | Cause | Action |
 | ------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
-| `auth check --test` gives `token_fetc<configured-path>false` | Google rotated the session cookies | `notebooklm auth refresh`; still failing → ask the user for one interactive `notebooklm login`, then re-check |
+| `auth check --test` gives `token_fetch: false` | Google rotated the session cookies | `notebooklm auth refresh`; still failing → ask the user for one interactive `notebooklm login`, then re-check |
 | `No result found for RPC ID` | Rate limiting | Wait 5-10 minutes, retry once |
 | `GENERATION_FAILED` | Google-side rate limit | `--retry 3` already backs off; on repeat failure switch backends |
 | Third generation of the day refused | Free tier allows 3 audio overviews per day | Offer [`GEMINI_TTS.md`](GEMINI_TTS.md) now, or tomorrow's quota |

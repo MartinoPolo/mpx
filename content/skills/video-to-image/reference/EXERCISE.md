@@ -7,7 +7,7 @@ the two verbatim examples — stays in [`PROMPT_STYLE.md`](PROMPT_STYLE.md).
 
 ## What the mode extracts
 
-Per exercis<configured-path>a `name`, an `amount`, a `startPose`, an `endPose`, a `movementDirection`, and a
+Per exercise: a `name`, an `amount`, a `startPose`, an `endPose`, a `movementDirection`, and a
 coaching `formCue`. Sections follow the video's own structure — warm-up, circuits, cool-down —
 and collapse to one section when the video has none.
 
@@ -17,7 +17,7 @@ and collapse to one section when the video has none.
 actually states it. A setup step, a demonstration of a mistake, or a "hold it as long as you
 like" has no amount, and the field comes back empty; the prompt then names the exercise alone,
 with no parentheses, and a sheet where nothing was prescribed drops the Amount column from its
-tables entirely. The schema leaves `amount` optional for that reaso<configured-path>a required string is
+tables entirely. The schema leaves `amount` optional for that reason: a required string is
 a string the model fills, and what it fills with is "1 set", "1 rep" or "as needed".
 
 **How long the exercise is demonstrated on screen is not an amount.** A clip that runs 45
@@ -47,7 +47,7 @@ the same shape covers holds and reps alike.
 
 Up to eight exercises render as numbered panels, each drawing the start and end positions
 with an arrow between them. Past eight the prompt switches to an icon grid, where a tile has
-no room for a second figur<configured-path>the end position carries the drawing and the arrow alone keeps
+no room for a second figure: the end position carries the drawing and the arrow alone keeps
 the direction readable at tile size.
 
 ## Checking an exercise prompt
@@ -59,7 +59,7 @@ the direction readable at tile size.
 - Every exercise carries a drawable start and end position, with no coaching verbs left in
   either, and both written in the third person — a stray "your" means coaching voice leaked
   into a drawing instruction
-- Each arrow clause reads as a sentenc<configured-path>"an arrow" followed by a path, never doubled
+- Each arrow clause reads as a sentence: "an arrow" followed by a path, never doubled
 - The exercise count in the opening sentence matches the number of panels
 - Panels are grouped into rows only when a section actually holds several exercises; a video
   that titles each movement separately needs no grouping line

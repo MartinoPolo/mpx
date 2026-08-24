@@ -20,7 +20,7 @@ by hand rather than an API call.
 
 | Input | Source | Default |
 | ---------- | ------------------------------------------------ | ---------------------------- |
-| Video URL | the first `http<configured-path>argument | required |
+| Video URL | the first `https://` argument | required |
 | Focus | prose left over after the URL and the flags | whole video |
 | Mode | `--mode`, or the user's answer | required — ask |
 | Output dir | `--out` | `MPX_AI_GENERATED/_VIDEO_SHEETS` |
@@ -65,7 +65,7 @@ is.
 ## Step 2: Check the key
 
 The script reads `GEMINI_API_KEY` and stops with a setup message when it is missing. That
-message points at <http<configured-path>aistudio.google.com/apikey>, where a key is free and needs no
+message points at <https://aistudio.google.com/apikey>, where a key is free and needs no
 billing account. Creating it is a one-time step the user does in the browser; once it is
 stored as a user environment variable, a **new** terminal picks it up — an already-open
 Windows Terminal window keeps the old environment until the whole window closes.
@@ -101,7 +101,9 @@ Add `--media-resolution low` for a video longer than about 30 minutes. Video cos
 video inside a single request. An 8-minute video measured 45k tokens and about 25 seconds at
 full resolution.
 
-The script prints one JSON line on succes<configured-path>json
+The script prints one JSON line on success:
+
+```json
 { "slug": "...", "folderName": "[Channel] Video Title", "title": "...", "videoTitle": "...", "channel": "...", "mode": "exercise", "itemCount": 12, "promptFile": ".../prompt.md", "promptTokenCount": 45033 }
 ```
 
@@ -116,18 +118,18 @@ one retry with a sharper focus instruction.
 
 **On failure.** The script explains which failure it hit. A 429 means the free tier's quota
 is spent — the daily video allowance is 8 hours, and the per-minute limits vary by account
-(<http<configured-path>aistudio.google.com/rate-limit>). Retry once for a per-minute limit; for anything
+(<https://aistudio.google.com/rate-limit>). Retry once for a per-minute limit; for anything
 that outlasts a retry, or a video Gemini cannot see because it is private or unlisted, take
 [`reference/FALLBACK.md`](reference/FALLBACK.md), which rebuilds the same table from
 `yt-dlp` subtitles and `ffmpeg` keyframes.
 
 ## Step 4: Check the prompt
 
-The prompt follows the shape that produced usable sheets in practic<configured-path>an opening sentence
+The prompt follows the shape that produced usable sheets in practice: an opening sentence
 naming the artifact and its item count, one numbered entry per item describing what is
 visible, the consistent-character sentence, a flat-vector style block, and the item tables
 restating the labels verbatim so they come back unparaphrased. Worked examples and the reasoning
-behind each par<configured-path>reference/PROMPT_STYLE.md`](reference/PROMPT_STYLE.md), whose closing
+behind each part: [`reference/PROMPT_STYLE.md`](reference/PROMPT_STYLE.md), whose closing
 checklist is what to check a prompt against. Exercise mode adds its own checks in
 [`reference/EXERCISE.md`](reference/EXERCISE.md).
 
@@ -136,13 +138,13 @@ the user cannot use. Up to eight items render as numbered panels; past that the 
 switches to an icon grid.
 
 Reword the prompt when the video needs it. Edit `prompt.md` in the run folder — it is the only
-copy. Keep the file free of anything the image model should not rea<configured-path>no mention of a source
+copy. Keep the file free of anything the image model should not read: no mention of a source
 video, no instructions addressed to the user.
 
 ## Step 5: Hand off to ChatGPT
 
-End the report with a `fil<configured-path>link to `prompt.md` and a plain link to
-<http<configured-path>chatgpt.com/>, and say the **whole file** — prompt and tables — is copied and pasted
+End the report with a `file:///` link to `prompt.md` and a plain link to
+<https://chatgpt.com/>, and say the **whole file** — prompt and tables — is copied and pasted
 by hand. Pasting the tables alongside the prompt produced a better image than the prompt
 alone, which is why the file holds nothing that should not be pasted. Do not open the
 browser and do not copy anything to the clipboard — the user opens the link when it suits
@@ -158,7 +160,7 @@ for the paid path that removes it.
 
 ## Step 6: Report
 
-- The run folder and `prompt.md` as clickable `fil<configured-path>links
+- The run folder and `prompt.md` as clickable `file:///` links
 - The video's own title and channel, the mode that ran, and the item count the table holds,
   plus the fact that the folder fell back to the slug whenever `videoTitle` came back empty
 - Which path ran — Gemini video ingestion or the yt-dlp fallback — and the model used
@@ -172,11 +174,11 @@ for the paid path that removes it.
   straight to the fallback path.
 - Free-tier video ingestion is capped at 8 hours of video per day; the per-minute and
   per-day request limits vary by account and are worth checking at
-  <http<configured-path>aistudio.google.com/rate-limit> when a 429 arrives early in a session.
-- Gemini's own image models are unavailable her<configured-path>gemini-3.1-flash-image` and
+  <https://aistudio.google.com/rate-limit> when a 429 arrives early in a session.
+- Gemini's own image models are unavailable here: `gemini-3.1-flash-image` and
   `gemini-2.5-flash-image` both answer 429 RESOURCE_EXHAUSTED on a free-tier key, which is
   what makes the ChatGPT hand-off the zero-cost route rather than a limitation of the design.
-- The paid alternative removes the manual past<configured-path>generating the image through the OpenAI API
+- The paid alternative removes the manual paste: generating the image through the OpenAI API
   costs roughly $0.05 for a medium image and would turn Step 5 into another script call. It
   needs API credit, which a ChatGPT Plus subscription does not include.
 - `yt-dlp` patterns for the fallback path came from the `youtube-playlist-downloader`

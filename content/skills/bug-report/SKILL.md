@@ -14,15 +14,17 @@ Resolve which tracker CLI and how to run each verb via
 
 ## Input Resolution
 
-- If `the invocation input` provide<configured-path>parse as bug description(s). Split on double newlines (`\n\n`) for multiple bugs — each block becomes a separate investigation.
-- If no argument<configured-path>ask user to describe the bug(s).
+- If `the invocation input` provided: parse as bug description(s). Split on double newlines (`\n\n`) for multiple bugs — each block becomes a separate investigation.
+- If no arguments: ask user to describe the bug(s).
 - Single bug = single investigation. Multiple bugs = parallel investigations.
 
 ## Process (per bug)
 
 ### Step 1: Capture Problem
 
-Parse bug description fo<configured-path>- **Actual behavior** — what happens now
+Parse bug description for:
+
+- **Actual behavior** — what happens now
 - **Expected behavior** — what should happen
 - **Reproduction steps** — how to trigger it
 
@@ -30,11 +32,14 @@ If critical info is missing (can't investigate without it), ask questions. Then 
 
 ### Step 2: Investigate
 
-Spawn `issue-analyzer` sub-agen<configured-path>> Explore this codebase to investigate a bug.
+Spawn `issue-analyzer` sub-agent:
+
+> Explore this codebase to investigate a bug.
 >
 > **Bug:** [parsed description]
 >
-> Your task<configured-path>>
+> Your tasks:
+>
 > 1. Find where the bug manifests in the codebase
 > 2. Trace the code path involved
 > 3. Identify the root cause (not just the symptom)
@@ -42,14 +47,16 @@ Spawn `issue-analyzer` sub-agen<configured-path>> Explore this codebase to inves
 >
 > Return your full analysis including root cause, affected modules, and code path description.
 
-For multiple bug<configured-path>spawn multiple `issue-analyzer` sub-agents in parallel.
+For multiple bugs: spawn multiple `issue-analyzer` sub-agents in parallel.
 
 ### Step 3: Design TDD Fix Plan
 
-Based on investigation results, design ordered RED-GREEN cycle<configured-path>- Each cycle is a **vertical slice**: RED (one test capturing broken/missing behavior) then GREEN (minimal code change to pass)
+Based on investigation results, design ordered RED-GREEN cycles:
+
+- Each cycle is a **vertical slice**: RED (one test capturing broken/missing behavior) then GREEN (minimal code change to pass)
 - Tests verify behavior through **public interfaces**, not implementation details
 - Each test should survive internal refactors
-- Final ste<configured-path>REFACTOR for cleanup after all cycles pass
+- Final step: REFACTOR for cleanup after all cycles pass
 
 ### Step 4: Log the issue/task
 
@@ -57,10 +64,12 @@ Ensure the tracker's `bug` type label exists (see
 [ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md) § Label mapping for how `bug` is represented in the
 resolved tracker).
 
-**Title format:** `bu<configured-path>concise description]`
+**Title format:** `bug: [concise description]`
 
 Log an issue/task in the tracker (verb + concrete CLI in ISSUE_TRACKER.md) with the `bug` label
-plus any area labels detected from codebase exploration, and this bod<configured-path>markdown
+plus any area labels detected from codebase exploration, and this body:
+
+```markdown
 ## Problem
 
 **Actual behavior:** [what happens]
@@ -94,7 +103,7 @@ plus any area labels detected from codebase exploration, and this bod<configured
 ### Step 5: Report
 
 - Print the issue/task reference (URL or number) and one-line root cause summary per bug
-- Multiple bug<configured-path>list all issue/task references with brief summary each
+- Multiple bugs: list all issue/task references with brief summary each
 
 ## Rules
 

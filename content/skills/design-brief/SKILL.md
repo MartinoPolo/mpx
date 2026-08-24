@@ -11,8 +11,8 @@ metadata:
 Produce a design brief complete enough that a designer — human or AI — can build a pixel-accurate
 mockup without asking a single question.
 
-Shared convention<configured-path>DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
-Brief structure and writing rule<configured-path>BRIEF_TEMPLATE.md](BRIEF_TEMPLATE.md).
+Shared conventions: [DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
+Brief structure and writing rules: [BRIEF_TEMPLATE.md](BRIEF_TEMPLATE.md).
 
 ## Philosophy
 
@@ -25,7 +25,9 @@ Brief structure and writing rule<configured-path>BRIEF_TEMPLATE.md](BRIEF_TEMPLA
 
 ## Step 1: Gather every requirement
 
-Before writing anythin<configured-path>1. **Issue tracker** — search the project's tracker for related issues/tasks, then read the hits
+Before writing anything:
+
+1. **Issue tracker** — search the project's tracker for related issues/tasks, then read the hits
    in full. Comments carrying human decisions rank highest. Resolve which tracker CLI and how to
    run each verb via [ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md).
 2. **Project docs** — context, decisions, and epic specs, wherever the project keeps them.
@@ -39,11 +41,13 @@ It skips repository instructions — restate what the search depends on inside t
 
 ## Step 2: Determine surrounding context
 
-The most important step. Establis<configured-path>**Where it lives** — page content, sidebar panel, split-pane region, tab content, modal/dialog,
+The most important step. Establish:
+
+**Where it lives** — page content, sidebar panel, split-pane region, tab content, modal/dialog,
 inline card, or layout chrome. Read the actual layout components to get real dimensions and real
 nav items rather than inventing them.
 
-**How much space it gets** — measure from the layout sourc<configured-path>sidebar width, panel split ratios,
+**How much space it gets** — measure from the layout source: sidebar width, panel split ratios,
 header heights. Record them as concrete percentages or pixels.
 
 **What is settled** — which surrounding elements are implemented or designed to final state (the
@@ -57,7 +61,7 @@ Discover the project's component directories (DESIGN_PIPELINE.md § Project disc
 every component relevant to the feature record its name, import path, real variants and props
 (read from the source, variants file, or story), and where it is used in this design.
 
-Be specifi<configured-path>"use `Button variant='ghost'` size='icon'", not "add a button".
+Be specific: "use `Button variant='ghost'` size='icon'", not "add a button".
 
 ## Step 4: Research missing primitives
 

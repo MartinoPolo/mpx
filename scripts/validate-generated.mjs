@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { lstat, open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,16 @@ const PRIVATE_STATE = /(?:^|\/)(?:\.env(?:\..+)?|[^/]*(?:credential|credentials|
 const ACTIVE_ROOT = /^(?:apps|content|packages|runtimes|scripts)\//u;
 const IMPORTED = new Set(["imported-rewritten", "imported-non-normative-history"]);
 const DISPOSITIONS = new Set([...IMPORTED, "deferred-inventory-only", "excluded"]);
+const CONFIGURED_PATH_MARKER = ["<configured", "path>"].join("-");
+const ACTIVE_COMPATIBILITY_DOCS = new Set([
+  "docs/LAUNCH.md",
+  "docs/RUNTIME_ADAPTERS.md",
+  "docs/PHASE_F_ACCEPTANCE.md",
+  "runtimes/claude/runtime-claude/COMPATIBILITY.md",
+]);
+// Text validation is intentionally bounded to 1 MiB per file.
+export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+export const FILE_READ_CONCURRENCY = 8;
 
 const diagnostic = (code, file, message) => ({ code, file, message });
 const digest = (value) => createHash("sha256").update(value).digest("hex");
@@ -38,8 +48,19 @@ export function validateFiles(files, options = {}) {
 
   for (const [rawFile, value] of files) {
     const file = normalized(rawFile);
-    if (isHistorical(file) || file.endsWith(".test.mjs") || !ACTIVE_ROOT.test(file)) continue;
     const text = Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
+    const markerExempt = isHistorical(file) || /(?:^|\/)(?:dist|node_modules)(?:\/|$)/u.test(file);
+    if (!markerExempt && text.includes(CONFIGURED_PATH_MARKER)) diagnostics.push(diagnostic("CONFIGURED_PATH_MARKER", file, "active content contains the configured-path corruption marker"));
+    if (ACTIVE_COMPATIBILITY_DOCS.has(file)) {
+      if (/PostToolUse[^\n]*(?:revalidat|integrity|checkpoint|guard)|(?:revalidat|integrity|checkpoint|guard)[^\n]*PostToolUse/iu.test(text)) {
+        diagnostics.push(diagnostic("STALE_CLAUDE_POST_TOOL_CHECKPOINT", file, "Claude integrity checkpoints do not include PostToolUse"));
+      }
+      const staleFullStatusClaim = text.split(/\r?\n/u).some((line) =>
+        !/(?:does|do) not|doesn't/iu.test(line)
+        && /(?:status(?:-line| adapter| command)?[^\n]*(?:revalidat|validat)[^\n]*(?:full|whole|entire) (?:published )?projection)|(?:(?:full|whole|entire) (?:published )?projection[^\n]*(?:revalidat|validat)[^\n]*status)/iu.test(line));
+      if (staleFullStatusClaim) diagnostics.push(diagnostic("STALE_CLAUDE_FULL_STATUS_REVALIDATION", file, "Claude status validates live StatusSnapshotV1, not the full projection"));
+    }
+    if (isHistorical(file) || file.endsWith(".test.mjs") || !ACTIVE_ROOT.test(file)) continue;
     if (/\/(?:mp|mp-gh|kf):[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("LEGACY_PUBLIC_IDENTITY", file, "active public identities must use /mpx:"));
     if (/\/mpx:mpx-[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("DOUBLED_MPX_IDENTITY", file, "canonical identities must not repeat the mpx prefix"));
     if (/(?:[A-Za-z]:[\\/](?:_MP_projects[\\/])?|\/(?:[A-Za-z][\\/])?_MP_projects[\\/])mpx-(?:claude-code|pi)(?:[\\/]|$)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_PATH", file, "active files must not embed absolute legacy source-repository paths"));
@@ -58,8 +79,7 @@ export async function validateProvenance({ rootFiles, manifest, roots, readSourc
   for (const [index, entry] of (manifest.entries ?? []).entries()) {
     const label = entry.destination ?? entry.source ?? `entry ${index}`;
     if (!DISPOSITIONS.has(entry.disposition)) diagnostics.push(diagnostic("PROVENANCE_DISPOSITION_INVALID", label, `unknown disposition '${entry.disposition}'`));
-    const claimsImport = IMPORTED.has(entry.disposition) || entry.destination !== null;
-    if (claimsImport) {
+    if (IMPORTED.has(entry.disposition)) {
       if (!/^[a-f0-9]{64}$/u.test(entry.originalSha256 ?? "") || !/^[a-f0-9]{64}$/u.test(entry.destinationSha256 ?? "")) {
         diagnostics.push(diagnostic("PROVENANCE_HASH_MISSING", label, "imported entries require source and destination SHA-256 values"));
       }
@@ -94,6 +114,20 @@ function parseProvenanceManifest(value, file = "docs/history/SOURCE_PROVENANCE.j
   return { manifest, diagnostics: [] };
 }
 
+export function validateCanonicalScriptSyntax(root, names) {
+  const diagnostics = [];
+  for (const rawName of names) {
+    const file = normalized(rawName);
+    if (!/^content\/.*\.(?:[cm]?js)$/iu.test(file)) continue;
+    const result = spawnSync(process.execPath, ["--check", path.join(root, file)], { cwd: root, encoding: "utf8" });
+    if (result.status !== 0) {
+      const detail = result.stderr?.trim() || result.stdout?.trim() || result.error?.message || "Node syntax check failed";
+      diagnostics.push(diagnostic("CANONICAL_SCRIPT_SYNTAX", file, detail));
+    }
+  }
+  return diagnostics;
+}
+
 export async function validateGeneratedRepository({ root, names, tracked, files, generatedPiDiagnostics = [], readSource, verifySources = false }) {
   const diagnostics = validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics });
   const provenanceFile = "docs/history/SOURCE_PROVENANCE.json";
@@ -109,14 +143,63 @@ export async function validateGeneratedRepository({ root, names, tracked, files,
   return diagnostics;
 }
 
-export async function repositoryFiles(root, names) {
+export async function repositoryFiles(root, names, options = {}) {
   const result = new Map();
+  const textualNames = names.filter((name) => TEXT.test(name));
+  const outcomes = new Array(textualNames.length);
+  const statPath = options.lstat ?? lstat;
+  const openFile = options.open ?? open;
+  const maxFileBytes = options.maxFileBytes ?? MAX_TEXT_FILE_BYTES;
+  const concurrency = Math.min(FILE_READ_CONCURRENCY, Math.max(1, Math.floor(options.concurrency ?? FILE_READ_CONCURRENCY)));
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < textualNames.length) {
+      const index = nextIndex++;
+      const name = textualNames[index];
+      const file = normalized(name);
+      let handle;
+      try {
+        const filePath = path.join(root, name);
+        handle = await openFile(filePath, "r");
+        const stats = await handle.stat();
+        if (!stats.isFile() || !Number.isSafeInteger(stats.size) || stats.size < 0) {
+          outcomes[index] = { error: diagnostic("FILE_READ_FAILED", file, "enumerated textual file is not a regular non-symlink file") };
+        } else if (stats.size > maxFileBytes) {
+          outcomes[index] = { error: diagnostic("FILE_TOO_LARGE", file, `enumerated textual file exceeds the ${maxFileBytes}-byte limit`) };
+        } else {
+          const value = Buffer.alloc(stats.size);
+          let offset = 0;
+          while (offset < value.length) {
+            const { bytesRead } = await handle.read(value, offset, value.length - offset, offset);
+            if (bytesRead === 0) throw new Error("file shrank during read");
+            offset += bytesRead;
+          }
+          const probe = Buffer.alloc(1);
+          if ((await handle.read(probe, 0, 1, stats.size)).bytesRead !== 0) throw new Error("file grew during read");
+          const pathStats = await statPath(filePath);
+          if (!pathStats.isFile() || pathStats.isSymbolicLink()
+            || String(pathStats.dev) !== String(stats.dev) || String(pathStats.ino) !== String(stats.ino)
+            || pathStats.size !== stats.size) throw new Error("file identity changed during read");
+          outcomes[index] = { file, value };
+        }
+      } catch {
+        outcomes[index] = { error: diagnostic("FILE_READ_FAILED", file, "enumerated textual file could not be read") };
+      } finally {
+        if (handle) {
+          try { await handle.close(); }
+          catch { outcomes[index] = { error: diagnostic("FILE_READ_FAILED", file, "enumerated textual file could not be read") }; }
+        }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, textualNames.length) }, () => worker()));
   const diagnostics = [];
-  await Promise.all(names.filter((name) => TEXT.test(name)).map(async (name) => {
-    try { result.set(normalized(name), await readFile(path.join(root, name))); }
-    catch { diagnostics.push(diagnostic("FILE_READ_FAILED", normalized(name), "enumerated textual file could not be read")); }
-  }));
-  diagnostics.sort((left, right) => left.file.localeCompare(right.file));
+  for (const outcome of outcomes) {
+    if (outcome.error) diagnostics.push(outcome.error);
+    else result.set(outcome.file, outcome.value);
+  }
   Object.defineProperty(result, "diagnostics", { value: Object.freeze(diagnostics), enumerable: false });
   return result;
 }
@@ -131,7 +214,7 @@ async function run() {
 
   const generated = spawnSync(process.execPath, [path.join(root, "runtimes/pi/runtime-pi/scripts/generate-agents.mjs"), "--check"], { cwd: root, encoding: "utf8" });
   const drift = generated.status === 0 ? [] : [generated.stderr.trim() || generated.stdout.trim() || "projection"];
-  const diagnostics = [...files.diagnostics, ...await validateGeneratedRepository({
+  const diagnostics = [...files.diagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
     root,
     names,
     tracked,

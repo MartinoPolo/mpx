@@ -12,7 +12,9 @@ Diagnose and resolve fallow code-quality failures. the invocation input
 
 ## Step 1: Identify the Failure
 
-Run the appropriate diagnostic command based on what faile<configured-path>- **Dead-code regression** (`check:fallow` failed): output already shows all issues with file:line and rule explanations
+Run the appropriate diagnostic command based on what failed:
+
+- **Dead-code regression** (`check:fallow` failed): output already shows all issues with file:line and rule explanations
 - **Audit failure** (fallow-gate hook blocked commit/push): `pnpm fallow:audit` for JSON details
 - **Need more detail**: re-run `pnpm check:fallow` — `--explain` includes rule descriptions and docs URLs
 
@@ -20,7 +22,9 @@ Parse the JSON output. Each issue has `path`, `line`, `name`, `severity`, and `a
 
 ## Step 2: Categorize Each Issue
 
-For each issue, determine the correct actio<configured-path>### Fix (default — remove the dead code)
+For each issue, determine the correct action:
+
+### Fix (default — remove the dead code)
 
 - Unused file → delete it
 - Unused export → remove the `export` keyword or delete the declaration
@@ -58,7 +62,9 @@ Commit the updated `fallow-baselines/dead-code-regression.json` alongside your c
 
 ## Step 4: Verify
 
-Re-run the original failing chec<configured-path>- `pnpm check:fallow` — must exit 0
+Re-run the original failing check:
+
+- `pnpm check:fallow` — must exit 0
 - `pnpm fallow:audit` — verdict must be `pass` or `warn`
 
 ## Rules

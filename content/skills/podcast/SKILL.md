@@ -12,9 +12,9 @@ Produce a walk-listenable MP3 that teaches a topic **through the listener's own 
 research the topic, sweep his repositories and notes, and write a fact-dense source brief;
 NotebookLM writes the dialogue and renders the audio from that brief. the invocation input
 
-Two artifacts drive everythin<configured-path>a `<slug>-resource.md` brief (the only facts the hosts will
+Two artifacts drive everything: a `<slug>-resource.md` brief (the only facts the hosts will
 ever know) and a `<slug>-prompt.txt` customize instruction (how they discuss it). Format
-rules for bot<configured-path>reference/BRIEF_FORMAT.md`](reference/BRIEF_FORMAT.md).
+rules for both: [`reference/BRIEF_FORMAT.md`](reference/BRIEF_FORMAT.md).
 
 ## Step 1: Parse the request
 
@@ -40,10 +40,10 @@ notebooklm auth check --test --json
 ```
 
 Proceed when `status` is `ok` **and** `checks.token_fetch` is `true`. Anything else means the
-cookies went stal<configured-path>run `notebooklm auth refresh`, and if that still fails ask the user to run
+cookies went stale: run `notebooklm auth refresh`, and if that still fails ask the user to run
 `notebooklm login` once, then re-check.
 
-When `notebooklm` is absent from PATH the shell predates the instal<configured-path>use
+When `notebooklm` is absent from PATH the shell predates the install: use
 `$LOCALAPPDATA\Python\pythoncore-3.14-64\Scripts\notebooklm.exe` for this run.
 
 ## Step 3: Research and personalization — one message, parallel
@@ -51,9 +51,11 @@ When `notebooklm` is absent from PATH the shell predates the instal<configured-p
 Send every spawn below in a **single message** so they run concurrently, and orchestrate them
 from this thread ([`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL.md) § 2).
 
-**Topic research.** The brief is built from gathered sources, so gather them firs<configured-path>- Library or framework topic → spawn `context7-docs-fetcher` with the library name and the
+**Topic research.** The brief is built from gathered sources, so gather them first:
+
+- Library or framework topic → spawn `context7-docs-fetcher` with the library name and the
   specific APIs to document. It declares its own model, so pass no `model`.
-- General topic → spawn `general-purpose` with `mode<configured-path>"appropriate runtime class"` to web-search and fetch the
+- General topic → spawn `general-purpose` with `model: "appropriate runtime class"` to web-search and fetch the
   authoritative primary sources (spec, MDN, official docs, the canonical blog post), asking
   for URL + the technical substance of each, current as of today.
 
@@ -70,12 +72,16 @@ own model, so pass no `model`
 | `MPX_WORK` | **only** when `--include-work` was passed |
 
 `Explore` skips repository instructions and is one-shot, so each delegation prompt carries everything it
-need<configured-path>the root to search, an instruction to resolve it at runtime with `env | grep '^MPX_'`
+needs: the root to search, an instruction to resolve it at runtime with `env | grep '^MPX_'`
 and to report an unset variable rather than guessing a path, the topic with its concrete
-API/keyword spellings, and this return shape per hi<configured-path>> repository · `file:line` · how the topic is used there · idiomatic, outdated, or a latent
+API/keyword spellings, and this return shape per hit:
+
+> repository · `file:line` · how the topic is used there · idiomatic, outdated, or a latent
 > bug · one line on what changing it would buy him
 
-**Listener profile.** Read these two directly — known paths are not exploratio<configured-path>- `$MPX_OBSIDIAN_VAULT\Programming\Webdev Fundamentals Learning System.md`
+**Listener profile.** Read these two directly — known paths are not exploration:
+
+- `$MPX_OBSIDIAN_VAULT\Programming\Webdev Fundamentals Learning System.md`
 - `$MPX_OBSIDIAN_VAULT\Programming\Webdev Fundamentals Assessment.md`
 
 They give his real level, priority map and known gaps. Derive the listener-context line of the
@@ -84,12 +90,14 @@ customize prompt from them, and skip the basics they show he already owns.
 ## Step 4: Write the two artifacts
 
 Read [`reference/BRIEF_FORMAT.md`](reference/BRIEF_FORMAT.md) and write both files into the
-scratchpad director<configured-path>- `<slug>-resource.md` — 200-250 lines, `## Part 1..N`, direct technical language, syntax
+scratchpad directory:
+
+- `<slug>-resource.md` — 200-250 lines, `## Part 1..N`, direct technical language, syntax
   spelled out for text-to-speech, every claim traceable to a gathered source.
 - `<slug>-prompt.txt` — the customize instruction, ≤308 words and ≤2263 characters. Count both
   before saving and trim until they fit.
 
-The sweep's evidence becomes the final `## Part <configured-path>In Your Own Code`, each claim tied to a real
+The sweep's evidence becomes the final `## Part N: In Your Own Code`, each claim tied to a real
 `file:line`, plus a matching numbered topic in the prompt so the hosts actually reach it. When
 a sweep returns nothing, drop that part and that topic — NotebookLM narrates whatever the brief
 says as fact, so the brief holds only what the sweep returned.
@@ -102,14 +110,16 @@ about 15 lines; describe work-repo patterns in prose instead of pasting propriet
 
 Follow [`reference/NOTEBOOKLM_FLOW.md`](reference/NOTEBOOKLM_FLOW.md): create notebook → add
 the brief as a source → wait → `generate audio --prompt-file <prompt> --format deep-dive
---length <length> --json` → background `general-purpose` waiter with `mode<configured-path>"appropriate runtime class"` →
-`download audio`. Full CLI surfac<configured-path>../notebooklm/SKILL.md`](../notebooklm/SKILL.md).
+--length <length> --json` → background `general-purpose` waiter with `model: "appropriate runtime class"` →
+`download audio`. Full CLI surface: [`../notebooklm/SKILL.md`](../notebooklm/SKILL.md).
 
-Length maps straight through, and the same choice sets the prompt's closing duration lin<configured-path>| Argument | `--length` | Prompt line | Measured |
+Length maps straight through, and the same choice sets the prompt's closing duration line:
+
+| Argument | `--length` | Prompt line | Measured |
 | --------- | ---------- | ------------------------------ | ---------------------------- |
-| `short` | `short` | `Target duratio<configured-path>10 minutes.` | — |
-| `default` | `default` | `Target duratio<configured-path>15 minutes.` | — |
-| `long` | `long` | `Target duratio<configured-path>25 minutes.` | 33.5 min from a 15-min line |
+| `short` | `short` | `Target duration: 10 minutes.` | — |
+| `default` | `default` | `Target duration: 15 minutes.` | — |
+| `long` | `long` | `Target duration: 25 minutes.` | 33.5 min from a 15-min line |
 
 Lengths are hints rather than contracts, and overshoot is acceptable.
 
@@ -122,7 +132,9 @@ See [`reference/GEMINI_TTS.md`](reference/GEMINI_TTS.md).
 ## Step 6: Post-process and deliver
 
 Every podcast gets its own folder, `$MPX_AI_GENERATED\_PODCASTS\<slug>\`. Re-encode to a
-phone-friendly bitrate straight into i<configured-path>bash
+phone-friendly bitrate straight into it:
+
+```bash
 mkdir -p "$MPX_AI_GENERATED/_PODCASTS/<slug>"
 ffmpeg -i <downloaded>.mp3 -codec:a libmp3lame -b:a 64k -ac 1 "$MPX_AI_GENERATED/_PODCASTS/<slug>/<slug>.mp3"
 ```
@@ -130,10 +142,12 @@ ffmpeg -i <downloaded>.mp3 -codec:a libmp3lame -b:a 64k -ac 1 "$MPX_AI_GENERATED
 64 kbps mono took a 33-minute episode from 62 MB to about 15 MB. Keep the original only when
 the re-encode lands within 20% of it; otherwise the re-encode is the deliverable.
 
-Write two companion files into that same folder, so the audio ships with what produced i<configured-path>- `script.txt` — the spoken script. Under Gemini TTS that is the dialogue you wrote; under
+Write two companion files into that same folder, so the audio ships with what produced it:
+
+- `script.txt` — the spoken script. Under Gemini TTS that is the dialogue you wrote; under
   NotebookLM, which writes its own dialogue, it is `<slug>-prompt.txt` (the customize
   instruction the hosts followed) so the folder still records what was asked for.
-- `sources.md` — the source list fed to NotebookL<configured-path>the research URLs gathered, the repository
+- `sources.md` — the source list fed to NotebookLM: the research URLs gathered, the repository
   and note `file:line` hits the sweep returned, and the roots skipped as unset.
 
 Intermediate work — the raw download, chunk WAVs, temp files — stays in the session scratchpad.
@@ -141,11 +155,11 @@ Only `<slug>.mp3`, `script.txt` and `sources.md` are promoted to the final folde
 
 ## Step 7: Report
 
-- MP3 path as a clickable `fil<configured-path>link, plus duration and size, and the per-slug folder
+- MP3 path as a clickable `file:///` link, plus duration and size, and the per-slug folder
   holding it alongside `script.txt` and `sources.md`
 - Which backend ran, and the resolved `--length`
 - Sources the research phase gathered (count and the primary ones)
-- Personalizatio<configured-path>repositories swept, hits found, `file:line` references that made the brief —
+- Personalization: repositories swept, hits found, `file:line` references that made the brief —
   or a plain statement that the topic appears nowhere in his code yet
 - Roots skipped because their variable was unset
 

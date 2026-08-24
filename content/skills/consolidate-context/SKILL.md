@@ -20,7 +20,9 @@ See `skills/shared/DOCUMENTATION_STRATEGY.md` for format details.
 
 ### Step 1: Read & Analyze
 
-Read the full file. Scan for each issue type and build a findings lis<configured-path>| Issue Type | What to Look For |
+Read the full file. Scan for each issue type and build a findings list:
+
+| Issue Type | What to Look For |
 |---|---|
 | **Duplicates** | Terms or features covering the same concept (keep the most current/complete version) |
 | **Superseded** | Content explicitly marked as superseded, replaced, or overridden by newer entries |
@@ -33,17 +35,19 @@ Read the full file. Scan for each issue type and build a findings lis<configured
 
 ### Step 2: Rewrite
 
-Apply all changes directly and automatically. Produce the consolidated fil<configured-path>- § Domain Languag<configured-path>one sentence max per definition, definition-list format (`**Term** — Definition.`)
-- § Core Feature<configured-path>index only (name + status + epic#), no implementation details
-- § Key Constraint<configured-path>concise bullets
-- § Flagged Ambiguitie<configured-path>resolved term conflicts with rationale
+Apply all changes directly and automatically. Produce the consolidated file:
+
+- § Domain Language: one sentence max per definition, definition-list format (`**Term** — Definition.`)
+- § Core Features: index only (name + status + epic#), no implementation details
+- § Key Constraints: concise bullets
+- § Flagged Ambiguities: resolved term conflicts with rationale
 - Target 250–300 lines total
 
 **Content rules:**
 - Remove implementation/deviation notes (belong in PRs or commit messages)
 - Fix inconsistent values (use the most recent/authoritative source)
 - Merge sections that were split by version history into unified topics
-- Keep full technical detail where it matter<configured-path>formulas, ranges, defaults
+- Keep full technical detail where it matters: formulas, ranges, defaults
 - Move any settled architectural decisions to DECISIONS.md instead
 
 ### Step 3: Write Result
@@ -52,7 +56,8 @@ Write the consolidated file to the original path (overwrite). Git history preser
 
 ## Report
 
-After writing, summariz<configured-path>- Line coun<configured-path>original vs. consolidated (and lines saved)
+After writing, summarize:
+- Line count: original vs. consolidated (and lines saved)
 - Items removed, merged, or rewritten (counts)
 - Inconsistencies fixed
 - Items moved to DECISIONS.md (if any)

@@ -18,7 +18,7 @@ Merge a target branch into the current branch. the invocation input
 
 If `the invocation input` provides a branch → use it.
 
-Otherwise, run `node ./scripts/detect-base-branch.js` to detect the target branch deterministically (priorit<configured-path>dev > develop > main > master`, checked against `origin/<branch>`; falls back to `main`).
+Otherwise, run `node ./scripts/detect-base-branch.js` to detect the target branch deterministically (priority: `dev > develop > main > master`, checked against `origin/<branch>`; falls back to `main`).
 
 Display the returned branch to the user.
 
@@ -30,7 +30,7 @@ Display the returned branch to the user.
 git status --porcelain
 ```
 
-If non-empty → ask use<configured-path>"Uncommitted changes detected. Stash before merging?"
+If non-empty → ask user: "Uncommitted changes detected. Stash before merging?"
 
 - "Stash and continue" → `git stash push -m "Auto-stash before merge"`
 - "Abort"
@@ -44,16 +44,18 @@ git rev-parse --verify origin/<current> 2>/dev/null
 
 If no tracking branch → skip to Step 3.
 
-Otherwis<configured-path>bash
+Otherwise:
+
+```bash
 git fetch origin <current>
 git rev-list --left-right --count HEAD...origin/<current>
 ```
 
-- **Behind only** → ask use<configured-path>"Current branch is N behind remote. Pull first?"
+- **Behind only** → ask user: "Current branch is N behind remote. Pull first?"
   - "Pull remote changes (Recommended)" → `git pull origin <current>`
   - "Continue anyway"
 - **Ahead only** → inform user, continue
-- **Diverged** → ask use<configured-path>"Branch diverged (N ahead, M behind). Pull first?"
+- **Diverged** → ask user: "Branch diverged (N ahead, M behind). Pull first?"
   - "Pull (Recommended)" → `git pull origin <current>`
   - "Continue anyway"
 - **In sync** → continue
@@ -75,12 +77,15 @@ git merge origin/<target>
 
 ### Step 5: Resolve Conflicts (if any)
 
-If conflicts occu<configured-path>1. List conflicted file<configured-path>git diff --name-only --diff-filter=U`
-2. For each conflicted fil<configured-path>a. Read the file (use Read tool)
+If conflicts occur:
+
+1. List conflicted files: `git diff --name-only --diff-filter=U`
+2. For each conflicted file:
+   a. Read the file (use Read tool)
    b. Analyze conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
    c. **Simple conflicts** (non-overlapping, clear intent) → resolve with Edit tool, then `git add <file>`
    d. **Complex conflicts** (overlapping logic, ambiguous) → show both sides to user, ask how to resolve
-3. After all resolve<configured-path>git commit` (accept default merge message)
+3. After all resolved: `git commit` (accept default merge message)
 4. If new conflicts appear → repeat from step 1
 
 ### Step 6: Push
@@ -91,7 +96,9 @@ If no remote tracking branch → skip push, inform user.
 
 ## Output
 
-After completion, displa<configured-path>- Target branch merged
+After completion, display:
+
+- Target branch merged
 - Number of incoming commits applied
 - Conflicts resolved (if any), with brief description
 - **Session Activity:** list agents dispatched (if any)

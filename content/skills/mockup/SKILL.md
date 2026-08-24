@@ -10,7 +10,8 @@ metadata:
 
 Generate self-contained HTML mockup(s) from a design brief, in the project's own design language.
 
-Shared conventions — folder layout, project discovery, mockup HTML rules, container contex<configured-path>DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
+Shared conventions — folder layout, project discovery, mockup HTML rules, container context:
+[DESIGN_PIPELINE.md](../shared/DESIGN_PIPELINE.md).
 
 ## Arguments
 
@@ -49,9 +50,11 @@ Output into `designs/<component-name>/variants/`.
 **N = 1** — write `variant-a.html` directly.
 
 **N > 1** — spawn N `ui-variant-generator` agents in parallel, one per variant. Omit `model`;
-the agent declares its own. Give each agen<configured-path>- **Style definition** — the project's design languag<configured-path>font families, palette tokens, spacing
+the agent declares its own. Give each agent:
+
+- **Style definition** — the project's design language: font families, palette tokens, spacing
   scale, radius, shadow and motion rules, all from `designs/DESIGN_SYSTEM.md` or the discovered
-  global stylesheet. Identical across variant<configured-path>the design system is fixed.
+  global stylesheet. Identical across variants: the design system is fixed.
 - **Variant angle** — what makes this one distinct. Vary layout structure, information density,
   hierarchy and emphasis, and progressive disclosure. Keep the angles far apart, e.g.
   `a` dense table-first, `b` airy card grid, `c` split master-detail.
@@ -65,10 +68,10 @@ the agent declares its own. Give each agen<configured-path>- **Style definition*
 
 ## Step 5: Open
 
-Open each variant by `fil<configured-path>URL through Chrome DevTools MCP when available. Leave the tabs
+Open each variant by `file:///` URL through Chrome DevTools MCP when available. Leave the tabs
 open side by side for comparison.
 
 ## Step 6: Report
 
-Each varian<configured-path>letter, one-line angle, file path. Close with the next command —
+Each variant: letter, one-line angle, file path. Close with the next command —
 `mpx design-refine <variant-letter> <requirements>` produces `refined.html` and `SUMMARY.md`.

@@ -10,7 +10,9 @@ metadata:
 
 Turn board notes into well-formed GitHub issues. the invocation input
 
-Firs<configured-path>1. Read `./../shared/BOARD_CONVENTION.md` now — board format, content→type classification, and the four-lane pipeline (state lives in the lane, not the checkbox).
+First:
+
+1. Read `./../shared/BOARD_CONVENTION.md` now — board format, content→type classification, and the four-lane pipeline (state lives in the lane, not the checkbox).
 2. Read `./../shared/GITHUB_ISSUE_TEMPLATE.md` now — issue bodies and labels follow it.
 
 ## Rules
@@ -32,7 +34,9 @@ Group bullets that describe the same fix into a single proposed issue. Check for
 
 ## Step 4: Draft each issue
 
-For each proposed issu<configured-path>- **Body** — follow the GITHUB_ISSUE_TEMPLATE structure (`## Description`, `## Requirements` as REQ-1..N, `## Acceptance Criteria`, `## Notes`). Reference the screenshots in `## Notes`.
+For each proposed issue:
+
+- **Body** — follow the GITHUB_ISSUE_TEMPLATE structure (`## Description`, `## Requirements` as REQ-1..N, `## Acceptance Criteria`, `## Notes`). Reference the screenshots in `## Notes`.
 - **Size** — estimate `size:S` (single file / few lines), `size:M` (multi-file, contained), or `size:L` (cross-cutting) from complexity.
 - **AFK vs HITL** — AFK when scope is clear; HITL when a requirement question is unanswered (add the `> **Unanswered questions:**` blockquote).
 - **Type** — infer from the note's content (per BOARD_CONVENTION): a defect → `bug`, a chore/audit/refactor → `task`, a new capability or improvement → `enhancement`. The note's position on the board carries no type information.
@@ -44,7 +48,9 @@ Present the full plan with `AskUserQuestion`: each board bullet → proposed iss
 
 ## Step 6: Create issues
 
-Create each confirmed issu<configured-path>bash
+Create each confirmed issue:
+
+```bash
 mpx issue create --title "<title>" --label "<type>,<AFK|HITL>,size:<X>,area:<..>" --assignee @me --body "$(cat <<'EOF'
 <body per GITHUB_ISSUE_TEMPLATE>
 EOF
@@ -61,4 +67,4 @@ If any HITL issues were created, offer to resolve them now by running `mpx-hitl`
 
 ## Report
 
-Lis<configured-path>created issues (number, title, labels, size), merged bullets, skipped duplicates (with the existing issue number), and any HITL issues awaiting resolution.
+List: created issues (number, title, labels, size), merged bullets, skipped duplicates (with the existing issue number), and any HITL issues awaiting resolution.

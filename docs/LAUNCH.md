@@ -1,6 +1,6 @@
 # MPX v2 launch
 
-`mpx launch claude|pi` resolves and executes the MPX v2 launch contract. Resolution produces a deeply immutable descriptor, a runtime-neutral resolved-skill manifest, and a runtime-specific immutable projection. Their hashes bind runtime, identity, project/repository/content scope, mode, skill policy, executor evidence, workspace, network policy, routes, approvals, and artifact bytes. A running process cannot widen that tuple: changed rights, bindings, executor evidence, or artifacts require a new launch and runtime restart (`LAUNCH_RESTART_REQUIRED`). `mpx launch current --json` reports only the validated process-bound hashes and binding.
+`mpx launch claude|pi` resolves and executes the MPX v2 launch contract. Resolution produces a deeply immutable descriptor, a runtime-neutral resolved-skill manifest, and a runtime-specific immutable published projection. The logical skill artifact and the launch-bound full published-projection reference are separate bindings. Their hashes bind runtime, identity, project/repository/content scope, mode, skill policy, executor evidence, workspace, network policy, routes, approvals, and artifact bytes. A running process cannot widen that tuple: changed rights, bindings, evidence, or artifacts require a new launch and runtime restart (`LAUNCH_RESTART_REQUIRED`). `mpx launch current --json` reports only validated process-bound hashes and binding.
 
 ## Selection and aliases
 
@@ -13,22 +13,24 @@ Identity is always explicit, including when supplied by a short alias. CWD class
 | `pi` | Pi | `personal` |
 | `piw` | Pi | `work` |
 
-Mode, skill policy, content scope, executor, workspace, and network policy still resolve through direct input, project default, longest matching content-scope default, then safe built-ins. Alias expansion does not add a preset, mode, policy, or grant.
+Mode, skill policy, content scope, executor, workspace, and network policy still resolve through direct input, project default, longest matching content-scope default, then safe built-ins. Alias expansion does not add a preset, mode, policy, or grant. Project skills are resolved under the same policy and immutable artifact bindings as canonical skills; project location alone grants nothing.
 
 ## Execution gates
 
-Docker is the safe default. The current production Docker adapter is deliberately **unverified pending F2** and launch fails with `EXECUTOR_GATE_UNVERIFIED`; there is no host fallback. This is not a claim of F2 container isolation.
+Docker is the safe default. The production Docker adapter is gated as **unverified pending F2** and launch fails with `EXECUTOR_GATE_UNVERIFIED`; there is no host fallback. This is not a claim of F2 container isolation.
 
-Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where required, a nonempty reason, the descriptor's trusted elevation approval, and a fresh confirmation from a direct TTY. JSON/noninteractive execution cannot approve host mode. Approval is exact, one-use, and launch-bound.
+Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where required, a nonempty reason, the descriptor's trusted elevation approval, and fresh confirmation from a direct TTY. JSON/noninteractive execution cannot approve host mode. Approval is exact, one-use, and launch-bound. Interactive runtime processes have no artificial 120-second lifetime; finite readiness and diagnostic probes remain bounded.
 
-Before spawning, MPX builds and revalidates the exact Claude or Pi projection and checks current executor evidence. Failed preconditions perform no projection or process side effect. Native account roots and materialized provider/Git/SSH/MCP routes remain private execution inputs: public descriptors, output envelopes, banners, and audit projections retain only safe labels, bindings, and digests.
+Before spawning, MPX builds and revalidates the exact runtime projection and performs an exact recheck of the selected executor evidence. Failed preconditions perform no projection or process side effect. Shared dangerous-command policy is applied consistently at runtime command boundaries.
 
-Claude revalidates the full projection at its earliest supported hook checkpoints (`SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`). These non-atomic compatibility checkpoints are not an atomic skill-load interceptor; self-modification between checkpoints cannot be claimed prevented.
+Phase F consumes preprovisioned read-only private routes and MCP descriptors. It does not create, install, copy, or migrate them; Phase I owns provisioning. KanbanFlow authorization comes from the OS keyring, not a route configuration path. Private provider/Git/SSH/MCP inputs remain private: public descriptors, envelopes, banners, and audit projections retain only safe labels, bindings, and digests.
+
+Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`. They are supported-boundary guards around an immutable copy, not an atomic native skill-load interceptor. Pi separately uses exact open-handle and body-hash checks.
 
 ## Runtime context, audit, and banner
 
-The child receives an immutable `MPX_RUNTIME_CONTEXT` containing descriptor, manifest, artifact, and binding hashes. Claude additionally receives only its selected `CLAUDE_CONFIG_DIR`; Pi receives only its selected `PI_CODING_AGENT_DIR`. Other identities' private roots are not propagated.
+The child receives immutable launch bindings including the logical artifact and full published-projection reference. Claude additionally receives only its selected `CLAUDE_CONFIG_DIR`; Pi receives only its selected `PI_CODING_AGENT_DIR`. Other identities' private roots are not propagated.
 
-Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime, executor, and a short launch key without private roots. Execution audit records are bounded safe projections of outcome and error code. These records do not authorize a later launch. Any policy or artifact change requires relaunch and process restart; in-process rights expansion is rejected.
+Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime, executor, and a short launch key without private roots. Audit output paths are hardened and records are bounded safe projections of outcome and error code. Records do not authorize a later launch. Any policy or artifact change requires relaunch and process restart; in-process rights expansion is rejected.
 
-Phase I provisions native private route data. Phase F only validates and consumes already-provisioned route directories; it never copies credentials. This surface does not claim F2 isolation, Phase G session resurrection, Phase I installation, or Phase J legacy retirement.
+This surface does not claim F2 isolation, Phase G session continuation/resurrection, Phase I provisioning or installation, or Phase J legacy retirement.

@@ -4,14 +4,18 @@ Single source of truth for commit conventions across the `mp` plugin. The **Comm
 
 The **Phases** section defines the delegation flow that the compound skills (`mpx commit-push`, `mpx commit-push-pr`, `mpx pr`) orchestrate; each of those states which phases it runs and its parameter deltas. `mpx commit` runs the Commit Conventions inline in the main agent (no delegation).
 
-## Phase <configured-path>Commit (and Optional Push) via `git-committer`
+## Phase A: Commit (and Optional Push) via `git-committer`
 
-The agent stages and words the commit per the **Commit Conventions** section below. Spawn `git-committer` sub-agent wit<configured-path>> pus<configured-path>true|false (per calling skill)
-> commit_hin<configured-path>the invocation input (user's description of what to commit, if any)
+The agent stages and words the commit per the **Commit Conventions** section below. Spawn `git-committer` sub-agent with:
+
+> push: true|false (per calling skill)
+> commit_hint: $the invocation input (user's description of what to commit, if any)
 
 ### Handle Result
 
-Parse the agent's JSON outpu<configured-path>- **OK** → continue to the next phase, or display results if this is the final phase
+Parse the agent's JSON output:
+
+- **OK** → continue to the next phase, or display results if this is the final phase
 - **SKIP** → report "Nothing to commit" (clean tree) or "Already up-to-date" (nothing to push)
 - **FAIL** → escalate (below)
 
@@ -21,7 +25,7 @@ Parse the agent's JSON outpu<configured-path>- **OK** → continue to the next p
 
 Up to 2 retry attempts. If still failing → report error to user and stop.
 
-## Phase <configured-path>Find Linked Issue
+## Phase B: Find Linked Issue
 
 **Fast-path:** First try `node ./scripts/extract-branch-issue.js`. If it returns a number, verify with `mpx issue view <N> --json title`. Only use agent fallback if no number extracted.
 
@@ -33,17 +37,19 @@ If agent fallback needed, spawn `issue-finder` sub-agent with repo, branch name,
 - **Candidates returned** → ask user which (if any) to link
 - **No match** → proceed without issue_number
 
-## Phase <configured-path>Create or Update PR via `pr-manager`
+## Phase C: Create or Update PR via `pr-manager`
 
-Spawn `pr-manager` sub-agent wit<configured-path>> issue_numbe<configured-path>(from Phase B, if found)
-> base_branc<configured-path>(from the invocation input if user specified, otherwise omit for auto-detection)
-> draf<configured-path>true (if `draft` in the invocation input)
-> description_hin<configured-path>the invocation input, or summary from the git-committer result if Phase A ran
+Spawn `pr-manager` sub-agent with:
+
+> issue_number: (from Phase B, if found)
+> base_branch: (from the invocation input if user specified, otherwise omit for auto-detection)
+> draft: true (if `draft` in the invocation input)
+> description_hint: $the invocation input, or summary from the git-committer result if Phase A ran
 
 ### Handle Result
 
 - **OK** → display PR URL, number, whether created or updated, base branch
-- **FAIL** → escalate exactly as in Phase <configured-path>diagnose (e.g., `mpx auth` problem, remote not set), fix, re-spawn with the same parameters, up to 2 retries, then report error to user and stop
+- **FAIL** → escalate exactly as in Phase A: diagnose (e.g., `mpx auth` problem, remote not set), fix, re-spawn with the same parameters, up to 2 retries, then report error to user and stop
 
 ### PR Rules
 
@@ -72,7 +78,7 @@ Authoritative spec for staging and wording a commit. Both consumers follow this 
 
 ### Type source of truth
 
-When `commitlint.config.js` exists in the repo, its `type-enum` is the authoritative list of allowed types — the `commit-msg` hook prints it when it rejects a message. Otherwise use the conventional default lis<configured-path>feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
+When `commitlint.config.js` exists in the repo, its `type-enum` is the authoritative list of allowed types — the `commit-msg` hook prints it when it rejects a message. Otherwise use the conventional default list: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
 
 ### Message format
 
@@ -81,16 +87,18 @@ When `commitlint.config.js` exists in the repo, its `type-enum` is the authorita
 
 <body>
 
-runtime-Sessio<configured-path><session url>
+runtime-Session: <session url>
 ```
 
 - **Subject** — conventional commit. Optional `(scope)` when one area is clearly the subject (`feat(button):`, `fix(icons):`). A `!` before the colon marks a breaking change (`feat!:`, `feat(api)!:`). Imperative mood ("Add feature", not "Added feature"), keep under ~72 characters.
-- **Body** — explain **why**, not wha<configured-path>the motivation or the problem it solves. Bullets when several distinct changes share the commit. Wrap ~72 cols, keep concise (≈10 lines). **Omit the body entirely** when the subject already says everything.
-- **`runtime-Sessio<configured-path>trailer** — append the session URL on AI-assisted commits (this repo's session-trailer convention). Keep other people's names and Gerrit-era trailers (`Topi<configured-path>, `Reviewed-b<configured-path>out.
+- **Body** — explain **why**, not what: the motivation or the problem it solves. Bullets when several distinct changes share the commit. Wrap ~72 cols, keep concise (≈10 lines). **Omit the body entirely** when the subject already says everything.
+- **`runtime-Session:` trailer** — append the session URL on AI-assisted commits (this repo's session-trailer convention). Keep other people's names and Gerrit-era trailers (`Topic:`, `Reviewed-by:`) out.
 - **Ticket reference** — tracker-neutral and parameter-driven. When a GitHub-coupled flow passes an `issue_ref` (e.g. `refs #42`, `fixes #42`), append it to the subject; when no `issue_ref` is passed it is simply absent. Never hardcode a tracker or invent a reference.
 
 ### Safety
 
-Stricter rules that always win over any looser conventio<configured-path>- **Stage explicit paths only** — never `git add -A` or `git add .`.
+Stricter rules that always win over any looser convention:
+
+- **Stage explicit paths only** — never `git add -A` or `git add .`.
 - **Never stage secrets** — `.env*`, `credentials.*`, `*secret*`, `*.key`, `*.pem`.
 - **No destructive git in this flow** — prefer a new commit over `--amend` (only amend when the user asks), and never `reset --hard`, rewrite history, or `--force` / force-push.

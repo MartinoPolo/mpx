@@ -6,7 +6,7 @@ mandatory unless marked optional.
 ```markdown
 # <Component Name> — Design Brief
 
-[One paragrap<configured-path>what it does, why it matters to the user, what problem it solves.]
+[One paragraph: what it does, why it matters to the user, what problem it solves.]
 
 **Source**: [epic #, issue #, or feature area]
 
@@ -60,7 +60,9 @@ state — reproduce faithfully — or still being designed.]
 
 ## 4. States
 
-Every state this component can be i<configured-path>| State | Visual Treatment | Trigger |
+Every state this component can be in:
+
+| State | Visual Treatment | Trigger |
 | ------------------------- | ---------------- | ------- |
 | Default | [description] | [when] |
 | Loading | [description] | [when] |
@@ -112,7 +114,7 @@ From `designs/tokens.css` (or the project's global stylesheet when no tokens fil
 
 - Font families in play
 - Specific tokens this component uses
-- Color semantic<configured-path>success/warning/danger/info
+- Color semantics: success/warning/danger/info
 - Which accent colors appear and why
 
 ---
@@ -133,7 +135,7 @@ From `designs/tokens.css` (or the project's global stylesheet when no tokens fil
 - Animation and transition choices
 - Visual emphasis approaches
 - Information hierarchy within the constraints
-- Aesthetic latitud<configured-path>shadows, borders, gradients
+- Aesthetic latitude: shadows, borders, gradients
 
 ---
 

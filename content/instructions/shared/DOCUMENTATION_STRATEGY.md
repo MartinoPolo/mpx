@@ -1,4 +1,4 @@
-# Documentation Strateg<configured-path>CONTEXT.md + DECISIONS.md
+# Documentation Strategy: CONTEXT.md + DECISIONS.md
 
 Two-document system for project documentation consumed by AI agent skills.
 
@@ -6,45 +6,53 @@ Two-document system for project documentation consumed by AI agent skills.
 
 ### `.mpx/CONTEXT.md` — What This Project Is
 
-Read-heavy. Every skill that needs project understanding reads this file. Targe<configured-path>**250–300 lines**.
+Read-heavy. Every skill that needs project understanding reads this file. Target: **250–300 lines**.
 
-Contain<configured-path>- **What This Is** — 3-sentence project summary
+Contains:
+
+- **What This Is** — 3-sentence project summary
 - **Domain Language** — One-line definitions using definition-list format (not tables)
 - **Relationships** — Entity cardinalities (1:N, N:1)
 - **Flagged Ambiguities** — Resolved term conflicts with rationale
-- **Core Features** — Index onl<configured-path>feature name + status + epic# + design file pointer. Detail lives in epic issues
+- **Core Features** — Index only: feature name + status + epic# + design file pointer. Detail lives in epic issues
 - **Key Constraints** — Settled facts about the system (SPA mode, single_instance, etc.)
 
-Does NOT contai<configured-path>implementation details, module maps, mermaid diagrams, tech stack minutiae, pixel specs.
+Does NOT contain: implementation details, module maps, mermaid diagrams, tech stack minutiae, pixel specs.
 
 ### `.mpx/DECISIONS.md` — Why We Chose What We Chose
 
-Write-heavy. Updated after grill sessions. Targe<configured-path>**200–300 lines**.
+Write-heavy. Updated after grill sessions. Target: **200–300 lines**.
 
-Contains settled architectural and design decisions with rationale. Each entr<configured-path>markdown
+Contains settled architectural and design decisions with rationale. Each entry:
+
+```markdown
 ### Decision title
 
-Decide<configured-path>YYYY-MM-DD
-Wha<configured-path>One sentence describing the choice.
-Wh<configured-path>One sentence explaining the rationale.
-Rejecte<configured-path>Brief list of alternatives considered and why they lost.
+Decided: YYYY-MM-DD
+What: One sentence describing the choice.
+Why: One sentence explaining the rationale.
+Rejected: Brief list of alternatives considered and why they lost.
 ```
 
-Does NOT contai<configured-path>requirements, vocabulary, implementation specs, or anything that changes frequently.
+Does NOT contain: requirements, vocabulary, implementation specs, or anything that changes frequently.
 
 ## Domain Language Format
 
-Use definition-list style, not table<configured-path>markdown
+Use definition-list style, not tables:
+
+```markdown
 ## Domain Language
 
-**Workspace** — Top-level containe<configured-path>one GitHub repo + one project folder + one window.
+**Workspace** — Top-level container: one GitHub repo + one project folder + one window.
 **Issue** — Atomic work unit. One GitHub issue, one worktree, one branch, one color.
 **Session** — One AI agent execution tied to an issue. Has transcript, cost, state.
 
 _Avoid_: "task" for Issue, "project" for Workspace, "run" for Session.
 ```
 
-Rule<configured-path>- One sentence max per definition
+Rules:
+
+- One sentence max per definition
 - Bold the term, em-dash, definition
 - Group `_Avoid_` lines after each cluster of related terms
 - No table headers, no columns, no "Aliases to Avoid" column
@@ -56,16 +64,18 @@ Rule<configured-path>- One sentence max per definition
 
 ### Single process, multi-window via single_instance
 
-Decide<configured-path>2026-04-28
-Wha<configured-path>One Tauri process, WebviewWindow per workspace.
-Wh<configured-path>Shared SQLite, IPC between windows, simpler auth.
-Rejecte<configured-path>Electron multi-process (too heavy), separate processes (IPC complexity).
+Decided: 2026-04-28
+What: One Tauri process, WebviewWindow per workspace.
+Why: Shared SQLite, IPC between windows, simpler auth.
+Rejected: Electron multi-process (too heavy), separate processes (IPC complexity).
 ```
 
-Rule<configured-path>- Group by domai<configured-path>Platform & Infrastructure, UI & Design, Data & State, Session & Providers
+Rules:
+
+- Group by domain: Platform & Infrastructure, UI & Design, Data & State, Session & Providers
 - 3–5 lines per entry (what/why/rejected)
 - Date is when the decision was made, not when it was written down
-- No "Statu<configured-path>Accepted" bureaucracy — everything in this file is accepted
+- No "Status: Accepted" bureaucracy — everything in this file is accepted
 - If a decision is reversed, delete the old entry and add the new one with a note
 
 ## Skill Responsibilities
@@ -93,7 +103,9 @@ When initializing a new project, only scaffold CONTEXT.md and DECISIONS.md.
 
 ## When to Split DECISIONS.md
 
-If the file exceeds ~500 lines, split by domain into a `decisions/` director<configured-path>- `decisions/platform.md`
+If the file exceeds ~500 lines, split by domain into a `decisions/` directory:
+
+- `decisions/platform.md`
 - `decisions/ui-design.md`
 - `decisions/data-state.md`
 - `decisions/session-providers.md`

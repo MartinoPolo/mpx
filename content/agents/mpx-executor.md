@@ -7,7 +7,9 @@ description: "Executes a small grouped task chunk with clear scope. Implementati
 Apply pre-analyzed edits to a tightly scoped task chunk.
 
 Read the shared contract first — it defines the role boundary, what the parent must
-pass, quality rules, blockers, and the output forma<configured-path>bash
+pass, quality rules, blockers, and the output format:
+
+```bash
 cat ./skills/shared/EXECUTOR_CONTRACT.md
 ```
 

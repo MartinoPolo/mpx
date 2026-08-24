@@ -1,7 +1,7 @@
 # React Review Reference
 
 Judgment-based patterns not caught by linting.
-Adapted from [awesome-skills/code-review-skill](http<configured-path>github.com/awesome-skills/code-review-skill).
+Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 
@@ -33,9 +33,9 @@ useEffect(() => {
 }, [query]);
 
 // ✅ Do it in the event handler
-const handleSearch = (<configured-path>string) => {
+const handleSearch = (q: string) => {
   setQuery(q);
-  analytics.track('search', { quer<configured-path>q });
+  analytics.track('search', { query: q });
 };
 ```
 
@@ -54,11 +54,11 @@ useEffect(() => {
 
 ```tsx
 // ❌ Over-optimization — constants don't need memoization
-const config = useMemo(() => ({ timeou<configured-path>5000 }), []);
+const config = useMemo(() => ({ timeout: 5000 }), []);
 const handleClick = useCallback(() => console.log('clicked'), []);
 
 // ✅ Simple values are fine without memoization
-const config = { timeou<configured-path>5000 };
+const config = { timeout: 5000 };
 const handleClick = () => console.log('clicked');
 
 // ✅ DO memoize when passing to React.memo children
@@ -87,10 +87,10 @@ function ChildComponent() { return <div>child</div>; }
 function GoodParent() { return <ChildComponent />; }
 
 // ❌ Inline objects/functions as props to memoized components
-<MemoizedComponent style={{ colo<configured-path>'red' }} onClick={() => {}} />
+<MemoizedComponent style={{ color: 'red' }} onClick={() => {}} />
 
 // ✅ Stable references
-const style = { colo<configured-path>'red' };
+const style = { color: 'red' };
 function Good() {
   const handleClick = useCallback(() => {}, []);
   return <MemoizedComponent style={style} onClick={handleClick} />;
@@ -156,17 +156,18 @@ async function Page() {
 ### useActionState — unified form state
 
 ```tsx
-// ❌ Scattered stat<configured-path>isPending + error + data as separate useState
-// ✅ useActionState unifies i<configured-path>const [state, formAction, isPending] = useActionState(
-  async (prevState, formDat<configured-path>FormData) => {
+// ❌ Scattered state: isPending + error + data as separate useState
+// ✅ useActionState unifies it:
+const [state, formAction, isPending] = useActionState(
+  async (prevState, formData: FormData) => {
     try {
       const result = await submitForm(formData);
-      return { succes<configured-path>true, dat<configured-path>result };
+      return { success: true, data: result };
     } catch (e) {
-      return { succes<configured-path>false, erro<configured-path>e.message };
+      return { success: false, error: e.message };
     }
   },
-  { succes<configured-path>false, dat<configured-path>null, erro<configured-path>null }
+  { success: false, data: null, error: null }
 );
 ```
 
@@ -191,7 +192,7 @@ function BadForm() {
 ```tsx
 const [optimisticLikes, addOptimisticLike] = useOptimistic(
   likes,
-  (current, incremen<configured-path>number) => current + increment
+  (current, increment: number) => current + increment
 );
 
 const handleLike = async () => {
@@ -207,13 +208,13 @@ const handleLike = async () => {
 ```tsx
 // ❌ Duplicated queryKey/queryFn across components and prefetches
 // ✅ Centralize with queryOptions
-const userQueryOptions = (userI<configured-path>string) =>
+const userQueryOptions = (userId: string) =>
   queryOptions({
-    queryKe<configured-path>'users', userId],
-    queryF<configured-path>() => fetchUser(userId),
+    queryKey: ['users', userId],
+    queryFn: () => fetchUser(userId),
   });
 
-// Reuse everywher<configured-path>useQuery(userQueryOptions(id)), prefetchQuery, getQueryData
+// Reuse everywhere: useQuery(userQueryOptions(id)), prefetchQuery, getQueryData
 ```
 
 ### Common pitfalls
@@ -221,12 +222,12 @@ const userQueryOptions = (userI<configured-path>string) =>
 ```tsx
 // ❌ staleTime defaults to 0 — refetches on every mount
 // ✅ Set meaningful staleTime
-useQuery({ queryKe<configured-path>'data'], queryF<configured-path>fetchData, staleTim<configured-path>60_000 });
+useQuery({ queryKey: ['data'], queryFn: fetchData, staleTime: 60_000 });
 
 // ❌ queryKey missing data-affecting params
-useQuery({ queryKe<configured-path>'items'], queryF<configured-path>() => fetchItems(filters) });
+useQuery({ queryKey: ['items'], queryFn: () => fetchItems(filters) });
 // ✅ Include all params in queryKey
-useQuery({ queryKe<configured-path>'items', filters], queryF<configured-path>() => fetchItems(filters) });
+useQuery({ queryKey: ['items', filters], queryFn: () => fetchItems(filters) });
 ```
 
 ### useSuspenseQuery constraints
@@ -250,8 +251,8 @@ function Parent({ userId }) {
 ### v5 state field changes
 
 ```tsx
-// isPendin<configured-path>no cached data (first load)
-// isFetchin<configured-path>request in flight (including background refresh)
-// isLoadin<configured-path>isPending && isFetching (first load in progress)
+// isPending: no cached data (first load)
+// isFetching: request in flight (including background refresh)
+// isLoading: isPending && isFetching (first load in progress)
 // Use isPending for "show spinner", not isLoading
 ```

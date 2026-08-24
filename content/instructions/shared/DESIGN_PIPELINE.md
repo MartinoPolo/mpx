@@ -40,8 +40,10 @@ Otherwise infer from the project's global stylesheet (`src/app.css`, `src/styles
 **Fonts and palette** — read them from the tokens file or the global stylesheet. Never carry a
 palette or font pairing over from another project.
 
-**Component directories** — discover, do not assume. In orde<configured-path>1. `components.json` → `aliases.ui` / `aliases.components` (shadcn projects)
-2. Glob for directories holding component file<configured-path>src/**/components/*/`, `app/components/*/`,
+**Component directories** — discover, do not assume. In order:
+
+1. `components.json` → `aliases.ui` / `aliases.components` (shadcn projects)
+2. Glob for directories holding component files: `src/**/components/*/`, `app/components/*/`,
    `lib/components/*/`
 3. Note which directory holds vendored primitives and which holds project-specific compositions
 
@@ -58,13 +60,15 @@ Use it for any framework or component-library API question rather than recalling
 
 ## Mockup HTML rules
 
-Every generated `.html` (variants and `refined.html`) mus<configured-path>- Link the tokens file rather than inlining it — `<link rel="stylesheet" href="../../tokens.css">`
+Every generated `.html` (variants and `refined.html`) must:
+
+- Link the tokens file rather than inlining it — `<link rel="stylesheet" href="../../tokens.css">`
   from `variants/`, `href="../tokens.css"` from the component folder. With no tokens file, inline
   the project's CSS custom properties in a `<style>` block.
 - Load the project's actual fonts (Google Fonts link plus system fallbacks).
 - Use the project's own utility and design-system classes throughout.
 - Keep `<style>` to component-specific layout — token *values* live in the tokens file.
-- Use realistic mock dat<configured-path>real-looking paths, plausible metrics, believable copy.
+- Use realistic mock data: real-looking paths, plausible metrics, believable copy.
 - Carry an eyebrow label at the top naming the variant and its angle
   (e.g. `VARIANT A — DENSE, DEVELOPER-FOCUSED`), styled with the project's eyebrow/overline class
   or a small uppercase letter-spaced rule.
@@ -72,7 +76,9 @@ Every generated `.html` (variants and `refined.html`) mus<configured-path>- Link
 
 ### Container context
 
-When the brief specifies surrounding context, reproduce i<configured-path>- Elements already in final state render at full fidelity and at their real proportions.
+When the brief specifies surrounding context, reproduce it:
+
+- Elements already in final state render at full fidelity and at their real proportions.
 - Elements still being designed render at reduced opacity as non-editable context.
 - The designed component fills only its own area — parent chrome (tab bars, panel borders,
   navigation) belongs to the parent and is never duplicated inside the component.
@@ -90,6 +96,6 @@ With no GitHub remote or no `gh`, skip the gating steps and say so in the report
 
 Design work runs on appropriate runtime class, always. Every agent these skills spawn is an `mp-*` agent declaring its
 own model and effort, so no call site passes `model`. Adding a `general-purpose` or `runtime` spawn
-would require `mode<configured-path>appropriate runtime class` — prefer a declaring agent, since the `Agent` tool has no `effort`
+would require `model: appropriate runtime class` — prefer a declaring agent, since the `Agent` tool has no `effort`
 parameter and generative design must not inherit a low session effort.
 See [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md) § 8.

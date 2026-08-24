@@ -11,11 +11,11 @@ const runtimeContext = createRuntimeContextV1({
 });
 
 it("creates a hermetic Pi invocation with launch-current-compatible runtime-context JSON", () => {
-  const plan = planPiInvocation({ executable: "C:/trusted/pi.cmd", extension: "C:/artifacts/pi-extension.js", theme: "green", accountRoot: "C:/native/pi/account-a", projectSkills: ["C:/artifacts/pi/project-skills/local"], immutableProjectionDirectory: "C:/artifacts/pi", runtimeContextFile: "C:/launch/context.json", runtimeContext, cwd: "C:/repo" });
+  const plan = planPiInvocation({ executable: "C:/trusted/pi.cmd", extension: "C:/artifacts/pi-extension.js", theme: "green", accountRoot: "C:/native/pi/account-a", immutableProjectionDirectory: "C:/artifacts/pi", runtimeContextFile: "C:/launch/context.json", runtimeContext, cwd: "C:/repo" });
   expect(plan).toEqual({
     executable: "C:/trusted/pi.cmd",
     cwd: "C:/repo",
-    args: ["--no-extensions", "--extension", "C:/artifacts/pi-extension.js", "--no-skills", "--skill", "C:/artifacts/pi/project-skills/local", "--theme", "green"],
+    args: ["--no-extensions", "--extension", "C:/artifacts/pi-extension.js", "--no-skills", "--theme", "green"],
     env: {
       PI_CODING_AGENT_DIR: "C:/native/pi/account-a",
       MPX_RUNTIME: "pi",
@@ -46,18 +46,7 @@ it("propagates the exact published projection reference as JSON", () => {
       files: Object.freeze([]),
       reused: false,
       revalidation: { directory: "C:/artifacts/pi", reference: runtimeContext.runtimeArtifact },
-      projectSkills: Object.freeze([]),
     },
   });
   expect(plan.env.MPX_RUNTIME_PROJECTION_REFERENCE).toBe(JSON.stringify(runtimeContext.runtimeArtifact));
-});
-
-it.each([
-  "C:/repo/.agents/xagents/local",
-  "C:/repo/.agents/skills/nested/local",
-  "C:/repo/.agents/skills/../local",
-  "C:/repo/.agents/skills/mpx-private",
-  "C:/other/.agents/skills/local",
-])("rejects malicious or out-of-root project skill path %s without filesystem access", (projectSkill) => {
-  expect(() => planPiInvocation({ executable: "C:/trusted/pi.cmd", extension: "C:/artifacts/pi-extension.js", theme: "green", accountRoot: "C:/native/pi/account-a", projectSkills: [projectSkill], immutableProjectionDirectory: "C:/artifacts/pi", runtimeContextFile: "C:/launch/context.json", runtimeContext, cwd: "C:/repo" })).toThrow(/project skill/i);
 });

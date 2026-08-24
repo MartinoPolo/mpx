@@ -1,6 +1,6 @@
 # macOS Commands
 
-> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat everything here as a starting poin<configured-path>dry-run each command, confirm paths exist, and prefer reporting over deleting until a run has proven itself.
+> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat everything here as a starting point: dry-run each command, confirm paths exist, and prefer reporting over deleting until a run has proven itself.
 
 Domain rules live in [DOMAINS.md](DOMAINS.md). The bundled `scripts/*.ps1` are Windows-only; on macOS the shell commands below replace them.
 
@@ -21,12 +21,14 @@ brew install ncdu                        # offer once, then fall back
 du -x -d 3 -g / 2>/dev/null | sort -rn | head -50   # -x stays on one filesystem
 ```
 
-`-x` is the macOS equivalent of the junction-safe rul<configured-path>it stops `du` from crossing into other mounts.
+`-x` is the macOS equivalent of the junction-safe rule: it stops `du` from crossing into other mounts.
 
 ## Deletion
 
-There is no Recycle Bin API on the command line. Two option<configured-path>bash
-# Reversibl<configured-path>move to the user Trash
+There is no Recycle Bin API on the command line. Two options:
+
+```bash
+# Reversible: move to the user Trash
 mv "<path>" ~/.Trash/
 
 # Quarantine, mirroring the Windows behaviour
@@ -47,7 +49,7 @@ brew cleanup -s
 rm -rf ~/Library/Caches/ms-playwright/<superseded-build>
 ```
 
-Cache root<configured-path>~/Library/Caches`, `~/.npm`, `~/.cache`, `~/.gradle/caches`, `~/Library/Developer/Xcode/DerivedData`, `~/Library/Developer/CoreSimulator/Devices`.
+Cache roots: `~/Library/Caches`, `~/.npm`, `~/.cache`, `~/.gradle/caches`, `~/Library/Developer/Xcode/DerivedData`, `~/Library/Developer/CoreSimulator/Devices`.
 
 Xcode DerivedData and unused simulator runtimes are usually the largest single win on a Mac.
 
@@ -78,7 +80,7 @@ ls /Applications
 mdls -name kMDItemLastUsedDate "/Applications/<App>.app"   # usage signal
 ```
 
-Leftovers after an app is remove<configured-path>~/Library/Application Support`, `~/Library/Preferences`, `~/Library/Caches`, `~/Library/Logs`, `~/Library/Containers`.
+Leftovers after an app is removed: `~/Library/Application Support`, `~/Library/Preferences`, `~/Library/Caches`, `~/Library/Logs`, `~/Library/Containers`.
 
 Dragging an app to the Trash leaves all of those behind — that is the macOS equivalent of the orphaned-AppData sweep.
 
@@ -116,7 +118,7 @@ sudo tmutil deletelocalsnapshots <date>
 sudo rm -rf /Library/Caches/*
 ```
 
-Local Time Machine snapshots are the macOS analogue of shadow copie<configured-path>removing them removes rollback ability. Collect these into one `sudo` script rather than prompting repeatedly.
+Local Time Machine snapshots are the macOS analogue of shadow copies: removing them removes rollback ability. Collect these into one `sudo` script rather than prompting repeatedly.
 
 ## Visual review
 

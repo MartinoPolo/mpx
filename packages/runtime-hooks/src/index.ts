@@ -8,7 +8,6 @@ export class RuntimeHookError extends Error {
 }
 
 const MAX_COMMAND = 32_768;
-const GENERATED_DIRECTORIES = new Set(["node_modules", "dist", "build", "out", ".next", ".svelte-kit", ".nuxt", "coverage", ".cache", "tmp", ".turbo", ".parcel-cache", ".output", "__pycache__", ".pytest_cache", ".mypy_cache", "target"]);
 function block(code: string, reason: string, command?: string): HookDecision {
   return { action: "block", code, message: command === undefined ? reason : `Blocked: ${reason}.\nRun manually only after review: ${command.trim()}` };
 }
@@ -17,40 +16,221 @@ function boundedCommand(command: string): HookDecision | undefined {
   if (command.length > MAX_COMMAND) return block("INPUT_TOO_LARGE", `command exceeds ${MAX_COMMAND} characters`);
   return undefined;
 }
-function unquote(token: string): string { return token.replace(/^["']|["']$/g, ""); }
 
-/** Pure command classification. Adapters decide how a block is presented to a runtime. */
-export function classifyDangerousCommand(command: string): HookDecision {
-  const invalid = boundedCommand(command); if (invalid) return invalid;
-  const value = command.trim();
-  for (const match of value.matchAll(/(?:^|[;&|()]|\s)rm\s+([^;&|\n]+)/g)) {
-    const tokens = (match[1] ?? "").trim().split(/\s+/);
-    const hasRecursive = tokens.some((token) => /^-[A-Za-z]*r[A-Za-z]*$/.test(token) || token === "--recursive");
-    const hasForce = tokens.some((token) => /^-[A-Za-z]*f[A-Za-z]*$/.test(token) || token === "--force");
-    if (hasRecursive && hasForce) {
+/**
+ * The sole dangerous-command rule implementation and data. Its emitted function is
+ * also used to construct the dependency-free ESM projection below.
+ */
+function createDangerousCommandClassifier(): (command: unknown) => HookDecision {
+  const maxCommand = 32_768;
+  const generatedDirectories = new Set(["node_modules", "dist", "build", "out", ".next", ".svelte-kit", ".nuxt", "coverage", ".cache", "tmp", ".turbo", ".parcel-cache", ".output", "__pycache__", ".pytest_cache", ".mypy_cache", "target"]);
+  const blocked = (code: string, reason: string, command?: string): HookDecision => ({ action: "block", code, message: command === undefined ? reason : `Blocked: ${reason}.\nRun manually only after review: ${command.trim()}` });
+  type ParsedToken = { value: string; dynamic: boolean; quoted: boolean };
+  const parseCommand = (input: string): { segments: ParsedToken[][]; malformed: boolean } => {
+    const segments: ParsedToken[][] = [];
+    let tokens: ParsedToken[] = [];
+    let value = "";
+    let dynamic = false;
+    let quoted = false;
+    let started = false;
+    let quote = "";
+    let malformed = false;
+    const finishToken = (): void => {
+      if (started) tokens.push({ value, dynamic, quoted });
+      value = ""; dynamic = false; quoted = false; started = false;
+    };
+    const finishSegment = (): void => {
+      finishToken();
+      if (tokens.length > 0) segments.push(tokens);
+      tokens = [];
+    };
+    for (let index = 0; index < input.length; index++) {
+      const character = input[index] ?? "";
+      if (quote === "'") {
+        if (character === "'") quote = "";
+        else value += character;
+        started = true; quoted = true;
+        continue;
+      }
+      if (quote === '"' && character === "'") { value += character; started = true; quoted = true; continue; }
+      if (character === "\\" && index + 1 < input.length) {
+        const next = input[index + 1] ?? "";
+        const escaped = quote === '"' ? ['"', "\\", "$", "`", "\n", "\r"].includes(next) : /[\s"'\\$`;&|()]/u.test(next);
+        if (quote === '"' && next === '"' && index + 2 === input.length) value += character;
+        else if (escaped) value += input[++index] ?? "";
+        else value += character;
+        started = true;
+        continue;
+      }
+      if (character === "'") { quote = character; started = true; quoted = true; continue; }
+      if (character === '"') { quote = quote === character ? "" : character; started = true; quoted = true; continue; }
+      if (character === "`" || (character === "$" && ["(", "{"].includes(input[index + 1] ?? "")) || (character === "$" && /[A-Za-z_0-9@*#?$!-]/u.test(input[index + 1] ?? ""))) {
+        dynamic = true; started = true;
+        if (character === "`" || input[index + 1] === "(" || input[index + 1] === "{") {
+          const closer = character === "`" ? "`" : input[index + 1] === "(" ? ")" : "}";
+          let depth = closer === ")" ? 0 : 1;
+          value += character;
+          if (character !== "`") { value += input[++index] ?? ""; depth = 1; }
+          let closed = false;
+          while (++index < input.length) {
+            const nested = input[index] ?? ""; value += nested;
+            if (closer === ")" && nested === "(") depth++;
+            if (nested === closer && (--depth === 0 || closer === "`")) { closed = true; break; }
+          }
+          if (!closed) malformed = true;
+        } else {
+          value += character;
+          while (/[A-Za-z_0-9]/u.test(input[index + 1] ?? "")) value += input[++index];
+        }
+        continue;
+      }
+      if (!quote && (character === "\n" || character === "\r" || ";&|()".includes(character))) finishSegment();
+      else if (!quote && /\s/u.test(character)) finishToken();
+      else { value += character; started = true; }
+    }
+    if (quote) malformed = true;
+    finishSegment();
+    return { segments, malformed };
+  };
+  const basename = (token: string): string => token.replace(/\\/g, "/").replace(/\/+$/u, "").split("/").pop()?.toLowerCase() ?? "";
+  const prefixes = new Set(["!", "if", "then", "elif", "else", "while", "until", "do", "time", "{"]);
+  const executableIndex = (tokens: ParsedToken[]): number => tokens.findIndex((token) => !prefixes.has(token.value) && !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(token.value));
+  const classify = (command: unknown, wrapperDepth = 0): HookDecision => {
+    if (typeof command !== "string") return blocked("INVALID_INPUT", "command must be a string");
+    if (command.length > maxCommand) return blocked("INPUT_TOO_LARGE", `command exceeds ${maxCommand} characters`);
+    const value = command.trim();
+    const parsed = parseCommand(value);
+    const wrapperNames = new Set(["sh", "sh.exe", "bash", "bash.exe", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe", "eval"]);
+    const isEnvSplitStringOption = (token: string): boolean => {
+      if (/^-[iv0]*S/u.test(token)) return true;
+      const longOption = token.split("=", 1)[0] ?? "";
+      return longOption.length > 2 && longOption.startsWith("--") && "--split-string".startsWith(longOption);
+    };
+    const resolveExecutable = (segment: ParsedToken[]): { index: number; name: string; envSplitString: boolean } => {
+      let index = executableIndex(segment);
+      let name = index < 0 ? "" : basename(segment[index]?.value ?? "");
+      let envSplitString = false;
+      while (name === "env" || name === "command") {
+        const launcher = name;
+        index++;
+        while (index < segment.length) {
+          const token = segment[index]?.value ?? "";
+          if (token === "--") { index++; break; }
+          if (launcher === "env" && isEnvSplitStringOption(token)) { envSplitString = true; index++; continue; }
+          if (launcher === "env" && ["-u", "--unset", "-C", "--chdir"].includes(token)) { index += 2; continue; }
+          if (token.startsWith("-") || (launcher === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(token))) { index++; continue; }
+          break;
+        }
+        name = index >= segment.length ? "" : basename(segment[index]?.value ?? "");
+      }
+      return { index, name, envSplitString };
+    };
+    if (parsed.segments.some((segment) => resolveExecutable(segment).envSplitString)) return blocked("OPAQUE_ENV_SPLIT_STRING", "GNU env split-string commands cannot be statically inspected", command);
+    const containsWrapper = parsed.segments.some((segment) => wrapperNames.has(resolveExecutable(segment).name));
+    if (parsed.malformed && containsWrapper) return blocked("MALFORMED_COMMAND_WRAPPER", "command wrapper syntax is malformed", command);
+    if (wrapperDepth > 0 && parsed.segments.some((segment) => { const resolved = resolveExecutable(segment); return resolved.index >= 0 && Boolean(segment[resolved.index]?.dynamic); })) return blocked("OPAQUE_COMMAND_WRAPPER", "cannot statically inspect a dynamic command wrapper payload", command);
+    for (const segment of parsed.segments) {
+      const resolved = resolveExecutable(segment);
+      const { index, name } = resolved;
+      if (!wrapperNames.has(name)) continue;
+      let payloadIndex = index + 1;
+      if (name !== "eval") {
+        let commandOptionIndex = -1;
+        for (let optionIndex = payloadIndex; optionIndex < segment.length; optionIndex++) {
+          const option = segment[optionIndex]?.value.toLowerCase() ?? "";
+          const commandOption = name === "cmd" || name === "cmd.exe"
+            ? option === "/c"
+            : name.startsWith("power") || name.startsWith("pwsh")
+              ? option === "-command" || option === "-c"
+              : option === "-c" || /^-[a-z]*c[a-z]*$/u.test(option);
+          if (commandOption) { commandOptionIndex = optionIndex; break; }
+          if (!(option.startsWith("-") || option.startsWith("/"))) break;
+        }
+        if (commandOptionIndex < 0) continue;
+        payloadIndex = commandOptionIndex + 1;
+      }
+      if (payloadIndex >= segment.length) return blocked("MALFORMED_COMMAND_WRAPPER", "command wrapper is malformed because its payload is missing", command);
+      const payloadTokens = segment.slice(payloadIndex);
+      if (payloadTokens.some((token) => token.dynamic)) return blocked("OPAQUE_COMMAND_WRAPPER", "cannot statically inspect a dynamic command wrapper payload", command);
+      if (wrapperDepth >= 8) return blocked("WRAPPER_DEPTH_EXCEEDED", "command wrapper nesting exceeds the bounded depth of 8", command);
+      const nested = classify(payloadTokens.map((token) => token.value).join(" "), wrapperDepth + 1);
+      if (nested.action === "block") return nested;
+    }
+    for (const segment of parsed.segments) {
+      const resolved = resolveExecutable(segment);
+      if (resolved.index < 0) continue;
+      const arguments_ = segment.slice(resolved.index + 1);
+      if (resolved.name === "rm") {
+        const hasRecursive = arguments_.some((token) => /^-[A-Za-z]*r[A-Za-z]*$/u.test(token.value) || token.value === "--recursive");
+        const hasForce = arguments_.some((token) => /^-[A-Za-z]*f[A-Za-z]*$/u.test(token.value) || token.value === "--force");
+        const dynamicOption = arguments_.some((token) => token.dynamic && (!token.quoted || token.value.startsWith("-")));
+        let separator = false;
+        const targets = arguments_.filter((token) => { if (token.value === "--") { separator = true; return false; } return separator || !token.value.startsWith("-"); });
+        if (dynamicOption || (hasRecursive && hasForce && targets.some((token) => token.dynamic))) return blocked("DANGEROUS_RECURSIVE_DELETE", "recursive-delete safety cannot be statically established", command);
+        if (!hasRecursive || !hasForce) continue;
+        if (targets.length === 0) return blocked("DANGEROUS_RECURSIVE_DELETE", "recursive forced deletion has no constrained target", command);
+        for (const target of targets) {
+          const normalized = target.value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/u, "");
+          const absolute = normalized.startsWith("/") || /^[A-Za-z]:\//u.test(normalized);
+          const broad = normalized === "" || ["~", ".", "..", "*"].includes(normalized) || normalized.startsWith("./*") || /^~[^/]*(?:\/|$)/u.test(normalized) || normalized.startsWith("../") || absolute;
+          const single = !normalized.includes("/");
+          if (broad || (single && !generatedDirectories.has(normalized))) return blocked("DANGEROUS_RECURSIVE_DELETE", "broad recursive deletion is not allowed", command);
+        }
+      }
+      if (resolved.name === "remove-item") {
+        const recursive = arguments_.some((token) => ["-r", "-recurse"].includes(token.value.toLowerCase()));
+        const force = arguments_.some((token) => token.value.toLowerCase() === "-force");
+        if (!recursive || !force) continue;
+        const targets = arguments_.filter((token) => !token.value.startsWith("-"));
+        if (targets.length === 0 || targets.some((token) => token.dynamic)) return blocked("DANGEROUS_RECURSIVE_DELETE", "recursive-delete safety cannot be statically established", command);
+        for (const target of targets) {
+          const normalized = target.value.replace(/\\/g, "/").replace(/\/+$/u, "");
+          const broad = normalized === "" || ["/", "~", ".", "..", "*"].includes(normalized) || /^[A-Za-z]:\/?$/u.test(normalized) || normalized.startsWith("../") || normalized.startsWith("~/");
+          if (broad) return blocked("WINDOWS_RECURSIVE_DELETE", "broad PowerShell recursive deletion is not allowed", command);
+        }
+      }
+      const lowerArguments = arguments_.map((token) => token.value.toLowerCase());
+      if (resolved.name === "rmdir" && lowerArguments.includes("/s")) return blocked("WINDOWS_RECURSIVE_DELETE", "Windows recursive deletion is not allowed", command);
+      if (resolved.name === "del" && ["/f", "/q", "/s"].every((option) => lowerArguments.includes(option))) return blocked("WINDOWS_RECURSIVE_DELETE", "Windows forced recursive deletion is not allowed", command);
+    }
+    for (const segment of parsed.segments) {
+      const resolved = resolveExecutable(segment);
+      if (resolved.index < 0 || !segment[resolved.index]?.dynamic) continue;
+      const arguments_ = segment.slice(resolved.index + 1).map((token) => token.value);
+      const hasRecursive = arguments_.some((token) => /^-[A-Za-z]*r[A-Za-z]*$/u.test(token) || token === "--recursive");
+      const hasForce = arguments_.some((token) => /^-[A-Za-z]*f[A-Za-z]*$/u.test(token) || token === "--force");
+      if (!hasRecursive || !hasForce) continue;
       let separator = false;
-      const targets = tokens.filter((token) => { if (token === "--") { separator = true; return false; } return separator || !token.startsWith("-"); }).map(unquote);
-      if (targets.length === 0) return block("DANGEROUS_RECURSIVE_DELETE", "recursive forced deletion has no constrained target", command);
+      const targets = arguments_.filter((token) => { if (token === "--") { separator = true; return false; } return separator || !token.startsWith("-"); });
       for (const target of targets) {
-        const normalized = target.replace(/[\\/]+$/u, "");
-        const broad = normalized === "" || ["/", "~", ".", "..", "*"].includes(target) || target.startsWith("~/") || target.startsWith("../") || path.win32.isAbsolute(target) || path.posix.isAbsolute(target);
-        const single = !target.includes("/") && !target.includes("\\");
-        if (broad || (single && !GENERATED_DIRECTORIES.has(target))) return block("DANGEROUS_RECURSIVE_DELETE", "broad recursive deletion is not allowed", command);
+        const normalized = target.replace(/\\/g, "/").replace(/\/+$/u, "").replace(/\/+/g, "/");
+        const absolute = normalized.startsWith("/") || /^[A-Za-z]:\//u.test(normalized);
+        const broad = normalized === "" || ["~", ".", "..", "*", "$HOME", "${HOME}", "$PWD", "${PWD}"].includes(normalized) || normalized.startsWith("./*") || /^~[^/]*(?:\/|$)/u.test(normalized) || normalized.startsWith("../") || /^\$(?:\{(?:HOME|PWD)\}|(?:HOME|PWD))(?:\/|$)/u.test(normalized) || absolute;
+        if (broad) return blocked("DANGEROUS_RECURSIVE_DELETE", "broad recursive deletion is not allowed", command);
       }
     }
-  }
-  if (/\brmdir\s+\/s\b/i.test(value)) return block("WINDOWS_RECURSIVE_DELETE", "Windows recursive deletion is not allowed", command);
-  if (/\bdel\b(?=[^\n]*\/f)(?=[^\n]*\/q)(?=[^\n]*\/s)/i.test(value)) return block("WINDOWS_RECURSIVE_DELETE", "Windows forced recursive deletion is not allowed", command);
-  if (/\bchmod\s+(?:-R\s+)?(?:777|000)\s+[\/~.]/.test(value)) return block("DANGEROUS_PERMISSIONS", "broad permission destruction is not allowed", command);
-  if (/\bmkfs(?:\.[\w-]+)?\b/.test(value)) return block("DISK_FORMAT", "filesystem formatting is not allowed", command);
-  if (/\bdd\b(?=[^\n]*\bif=\/dev\/(?:zero|random|urandom)\b)(?=[^\n]*\bof=\/dev\/)/.test(value) || />\s*\/dev\/(?:sd[a-z]|nvme\d)/.test(value)) return block("DEVICE_OVERWRITE", "device overwrite is not allowed", command);
-  if (/:\(\)\s*\{.*:\|:.*\}/.test(value)) return block("FORK_BOMB", "fork bombs are not allowed", command);
-  if (/\b(?:DROP\s+(?:TABLE|DATABASE)|TRUNCATE\s+TABLE)\b/i.test(value)) return block("DESTRUCTIVE_SQL", "destructive SQL is not allowed", command);
-  if (/\bgit\s+push\b(?=[^\n;&|]*(?:-f\b|--force\b))(?![^\n;&|]*--force-with-lease\b)[^\n;&|]*(?:(?:origin|upstream)\s+)?(?:main|master)\b/.test(value)) return block("PROTECTED_FORCE_PUSH", "force push to a protected branch is not allowed", command);
-  if (/\bgit\s+clean\s+-(?=[A-Za-z]*f)(?=[A-Za-z]*d)(?=[A-Za-z]*x)[A-Za-z]+/.test(value)) return block("DESTRUCTIVE_GIT_CLEAN", "git clean of ignored files is not allowed", command);
-  if (/\bsetx\b[^\n]*\bPATH\b/i.test(value) || /SetEnvironmentVariable\s*\(\s*["']PATH["']/i.test(value) || /\breg\s+add\b[^\n]*\\Environment\b(?=[^\n]*\bPATH\b)/i.test(value)) return block("PERSISTENT_PATH_CHANGE", "persistent PATH modification is not allowed", command);
-  return { action: "allow" };
+    if (/\bchmod\s+(?:-R\s+)?(?:777|000)\s+[\/~.]/.test(value)) return blocked("DANGEROUS_PERMISSIONS", "broad permission destruction is not allowed", command);
+    if (/\bmkfs(?:\.[\w-]+)?\b/.test(value)) return blocked("DISK_FORMAT", "filesystem formatting is not allowed", command);
+    if (/\bdd\b(?=[^\n]*\bif=\/dev\/(?:zero|random|urandom)\b)(?=[^\n]*\bof=\/dev\/)/.test(value) || />\s*\/dev\/(?:sd[a-z]|nvme\d)/.test(value)) return blocked("DEVICE_OVERWRITE", "device overwrite is not allowed", command);
+    if (/:\(\)\s*\{.*:\|:.*\}/.test(value)) return blocked("FORK_BOMB", "fork bombs are not allowed", command);
+    if (/\b(?:DROP\s+(?:TABLE|DATABASE)|TRUNCATE\s+TABLE)\b/i.test(value)) return blocked("DESTRUCTIVE_SQL", "destructive SQL is not allowed", command);
+    if (/\bgit\s+push\b(?=[^\n;&|]*(?:-f\b|--force\b))(?![^\n;&|]*--force-with-lease\b)[^\n;&|]*(?:(?:origin|upstream)\s+)?(?:main|master)\b/.test(value)) return blocked("PROTECTED_FORCE_PUSH", "force push to a protected branch is not allowed", command);
+    if (/\bgit\s+clean\s+-(?=[A-Za-z]*f)(?=[A-Za-z]*d)(?=[A-Za-z]*x)[A-Za-z]+/.test(value)) return blocked("DESTRUCTIVE_GIT_CLEAN", "git clean of ignored files is not allowed", command);
+    if (/\bsetx\b[^\n]*\bPATH\b/i.test(value) || /SetEnvironmentVariable\s*\(\s*["']PATH["']/i.test(value) || /\breg\s+add\b[^\n]*\\Environment\b(?=[^\n]*\bPATH\b)/i.test(value)) return blocked("PERSISTENT_PATH_CHANGE", "persistent PATH modification is not allowed", command);
+    return { action: "allow" };
+  };
+  return (command: unknown): HookDecision => classify(command);
 }
+
+/** Pure command classification. Adapters decide how a block is presented to a runtime. */
+export const classifyDangerousCommand = createDangerousCommandClassifier();
+
+/** Dependency-free ESM source for immutable runtime projections. */
+export const dangerousCommandPolicyModuleSource = [
+  `const createDangerousCommandClassifier = ${createDangerousCommandClassifier.toString()};`,
+  "export const classifyDangerousCommand = createDangerousCommandClassifier();",
+  "export default classifyDangerousCommand;",
+].join("\n");
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export interface PackagePolicyDecision extends HookDecision { readonly replacement?: string; readonly warnings: readonly string[] }

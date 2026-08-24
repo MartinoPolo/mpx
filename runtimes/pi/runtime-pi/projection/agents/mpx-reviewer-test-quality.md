@@ -5,7 +5,7 @@ model: openai-codex/gpt-5.6-luna
 tools: read,grep,find,ls,bash
 
 ---
-# Reviewe<configured-path>Test Quality
+# Reviewer: Test Quality
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
 
@@ -34,7 +34,7 @@ For each test file in scope, also read the corresponding source file to understa
 
 ## Mocking Rules
 
-Mock at system boundaries only. Decision rul<configured-path>"Can I swap this dependency in production for a different provider?" If yes → mock. If no → test the real thing.
+Mock at system boundaries only. Decision rule: "Can I swap this dependency in production for a different provider?" If yes → mock. If no → test the real thing.
 
 ## Correctness Checks
 

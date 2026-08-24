@@ -18,8 +18,12 @@ This skill accepts no arguments. Ignore argument-based filtering and follow dete
 node ./scripts/detect-check-scripts.mjs
 ```
 
-Handle all outputs explicitl<configured-path>- `NO_PROJECT=true`: report "No package.json found" and stop.
-- `PM_UNKNOWN=true`: ask user which package manager to use (`npm`, `pnpm`, `yarn`, `bun`), then re-ru<configured-path>bash
+Handle all outputs explicitly:
+
+- `NO_PROJECT=true`: report "No package.json found" and stop.
+- `PM_UNKNOWN=true`: ask user which package manager to use (`npm`, `pnpm`, `yarn`, `bun`), then re-run:
+
+```bash
 node ./scripts/detect-check-scripts.mjs . <chosen_pm>
 ```
 
@@ -38,8 +42,10 @@ If no runnable script keys are present after `PM=...`, report "No scripts detect
 
 ## Step 2: Build Run Plan (No Arguments)
 
-Per scop<configured-path>- If `CHECK_ALL` exist<configured-path>run `CHECK_ALL`, then `BUILD` (if present).
-- If `CHECK_ALL` does not exis<configured-path>run detected `TYPECHECK`, `LINT`, `FORMAT`, then `BUILD`.
+Per scope:
+
+- If `CHECK_ALL` exists: run `CHECK_ALL`, then `BUILD` (if present).
+- If `CHECK_ALL` does not exist: run detected `TYPECHECK`, `LINT`, `FORMAT`, then `BUILD`.
 
 Run exactly what the detector output specifies, regardless of any user arguments.
 
@@ -47,8 +53,8 @@ Run exactly what the detector output specifies, regardless of any user arguments
 
 Run planned commands in deterministic order.
 
-- `CHECK_ALL` mod<configured-path>CHECK_ALL` -> `BUILD`
-- Individual mod<configured-path>TYPECHECK` -> `LINT` -> `FORMAT` -> `BUILD`
+- `CHECK_ALL` mode: `CHECK_ALL` -> `BUILD`
+- Individual mode: `TYPECHECK` -> `LINT` -> `FORMAT` -> `BUILD`
 
 For monorepo keys, run from `*_DIR`:
 
@@ -60,9 +66,13 @@ Run sequentially. Stop at first failing command, fix it, then continue.
 
 ## Step 4: Fix Errors
 
-If a check fail<configured-path>1. Parse failing files and diagnostics from command output.
+If a check fails:
+
+1. Parse failing files and diagnostics from command output.
 2. Read relevant files and identify root cause.
-3. TDD-first when practica<configured-path>- If there is a clear behavioral bug and test setup exists, add/update a focused failing test first (red).
+3. TDD-first when practical:
+
+- If there is a clear behavioral bug and test setup exists, add/update a focused failing test first (red).
 - Implement minimal fix (green).
 - Refactor only if needed.
 
@@ -76,14 +86,19 @@ Continue through remaining planned commands. Each command has its own 3-iteratio
 
 ## Step 6: Report Results
 
-Summarize status for each attempted command/scop<configured-path>- `Passed`: passed immediately
+Summarize status for each attempted command/scope:
+
+- `Passed`: passed immediately
 - `Fixed`: failed initially, passed after fixes
 - `Failed`: still failing after 3 iterations
 - `Skipped`: not detected for that scope or superseded by `CHECK_ALL`
 
 Report in execution order. Include scope (`root` or package prefix) and command used.
 
-Recommended tabl<configured-path>Scope | Command | Status | Notes
+Recommended table:
+
+```
+Scope | Command | Status | Notes
 ```
 
 ## Troubleshooting
@@ -98,6 +113,6 @@ Recommended tabl<configured-path>Scope | Command | Status | Notes
 ## Rules
 
 - Fix underlying issues rather than suppressing (`@ts-ignore`, `eslint-disable`)
-- Keep tests truthfu<configured-path>assertions must verify real passing behavior
+- Keep tests truthful: assertions must verify real passing behavior
 - If a fix needs architectural changes outside check-fix scope, report a blocker
 - For monorepos, report failing scopes explicitly

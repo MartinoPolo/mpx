@@ -1,12 +1,15 @@
 import { execFile as execFileCallback } from "node:child_process";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, readdir, rename, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
-import { createRuntimeSkillArtifact, loadSkillBody } from "@mpx/skills";
+import { createRuntimeContextV1, revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
+import { createRuntimeSkillArtifact, inventoryProjectSkills, loadSkillBody, resolveManifest } from "@mpx/skills";
 import { buildClaudePlugin } from "../../../claude/runtime-claude/src/index.js";
 import { buildPiProjection, createPiRuntimeProjection, planPiInvocation, renderPiStatusLine } from "../src/index.js";
 import { fixture } from "./fixture.js";
@@ -14,9 +17,13 @@ import { fixture } from "./fixture.js";
 const execFile = promisify(execFileCallback);
 const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;
+const originalStatusSnapshotFile = process.env.MPX_STATUS_SNAPSHOT_FILE;
 afterEach(() => {
   if (originalRuntimeContext === undefined) delete process.env.MPX_RUNTIME_CONTEXT; else process.env.MPX_RUNTIME_CONTEXT = originalRuntimeContext;
   if (originalProjectionReference === undefined) delete process.env.MPX_RUNTIME_PROJECTION_REFERENCE; else process.env.MPX_RUNTIME_PROJECTION_REFERENCE = originalProjectionReference;
+  if (originalStatusSnapshotFile === undefined) delete process.env.MPX_STATUS_SNAPSHOT_FILE; else process.env.MPX_STATUS_SNAPSHOT_FILE = originalStatusSnapshotFile;
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
 });
 
 describe("production Pi projection", () => {
@@ -39,6 +46,91 @@ describe("production Pi projection", () => {
     expect(projected.content[0]!.text).toBe(canonical.wrappedBody);
     expect(projected.details.provenance).toEqual(canonical.provenance);
     expect({ body: canonical.body, contentHash: canonical.provenance.contentHash, sourcePath: canonical.provenance.sourcePath }).toEqual({ body: claude.body, contentHash: claude.provenance.contentHash, sourcePath: claude.provenance.sourcePath });
+  });
+
+  it("loads an exact project body through the generated extension without native Pi skills", async () => {
+    const f = await fixture();
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "pi-project-skill-"));
+    const directory = path.join(projectRoot, ".agents", "skills", "local");
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "SKILL.md"), "---\nname: local\ndescription: Local project skill\nmetadata:\n  mpx:\n    projectExposure: full\n---\nEXACT PROJECT BODY\n");
+    const projectCatalog = (await inventoryProjectSkills(projectRoot, f.catalog)).skills;
+    const catalog = [...f.catalog, ...projectCatalog];
+    const manifest = resolveManifest(catalog, { repositoryId: "repo", projectId: "p", contentScope: "scope", enabledPacks: ["core"], identity: "id", skillPolicy: "policy", skillPolicyConfig: { skillExposure: { default: "full" } } });
+    const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: "pi" });
+    const context = createRuntimeContextV1({ ...f.context, manifestKey: manifest.manifestKey, runtimeArtifact: artifact.reference, binding: manifest.binding });
+    const projection = await buildPiProjection({ ...f, catalog, manifest, artifact, context, currentBinding: manifest.binding, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-project-projection-")) });
+    const plan = planPiInvocation({ executable: "C:/trusted/pi.exe", accountRoot: "C:/native/pi", cwd: "C:/repo", runtimeContext: context, projection });
+    expect(plan.args).not.toContain("--skill");
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const module = await import(pathToFileURL(projection.extension).href);
+    let loadTool: { execute(id: string, params: { identity: string }): Promise<{ content: Array<{ text: string }> }> } | undefined;
+    await module.activate({ registerCommand() {}, registerTool(tool: { name: string; execute(id: string, params: { identity: string }): Promise<{ content: Array<{ text: string }> }> }) { if (tool.name === "mpx_model_load") loadTool = tool; } });
+    expect((await loadTool!.execute("load", { identity: "local" })).content[0]!.text).toContain("EXACT PROJECT BODY");
+  });
+
+  it("rejects a project skill pathname swap between validation and publication", async () => {
+    const f = await fixture();
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "pi-project-path-swap-"));
+    const directory = path.join(projectRoot, ".agents", "skills", "local");
+    const source = path.join(directory, "SKILL.md");
+    const trusted = "---\nname: local\ndescription: Local project skill\nmetadata:\n  mpx:\n    projectExposure: full\n---\nSAFE PROJECT BODY\n";
+    const replacement = trusted.replace("SAFE", "EVIL");
+    await mkdir(directory, { recursive: true });
+    await writeFile(source, trusted);
+    const projectCatalog = (await inventoryProjectSkills(projectRoot, f.catalog)).skills;
+    const catalog = [...f.catalog, ...projectCatalog];
+    const manifest = resolveManifest(catalog, { repositoryId: "repo", projectId: "p", contentScope: "scope", enabledPacks: ["core"], identity: "id", skillPolicy: "policy", skillPolicyConfig: { skillExposure: { default: "full" } } });
+    const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: "pi" });
+    const context = createRuntimeContextV1({ ...f.context, manifestKey: manifest.manifestKey, runtimeArtifact: artifact.reference, binding: manifest.binding });
+    const replacementFile = path.join(projectRoot, "replacement.md");
+    await writeFile(replacementFile, replacement);
+    const originalReadFile = fs.promises.readFile;
+    let swapped = false;
+    vi.spyOn(fs.promises, "readFile").mockImplementation(async (...args: Parameters<typeof fs.promises.readFile>) => {
+      const bytes = await originalReadFile(...args);
+      if (!swapped && path.resolve(String(args[0])) === path.resolve(source)) {
+        swapped = true;
+        await rename(source, `${source}.validated`);
+        await rename(replacementFile, source);
+      }
+      return bytes as never;
+    });
+    syncBuiltinESMExports();
+
+    await expect(buildPiProjection({ ...f, catalog, manifest, artifact, context, currentBinding: manifest.binding, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-project-path-swap-output-")) })).rejects.toThrow();
+    expect(swapped).toBe(true);
+  });
+
+  it("rejects a same-size project skill replacement between validation and publication", async () => {
+    const f = await fixture();
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "pi-project-content-swap-"));
+    const directory = path.join(projectRoot, ".agents", "skills", "local");
+    const source = path.join(directory, "SKILL.md");
+    const trusted = "---\nname: local\ndescription: Local project skill\nmetadata:\n  mpx:\n    projectExposure: full\n---\nSAFE PROJECT BODY\n";
+    const replacement = trusted.replace("SAFE", "EVIL");
+    await mkdir(directory, { recursive: true });
+    await writeFile(source, trusted);
+    const projectCatalog = (await inventoryProjectSkills(projectRoot, f.catalog)).skills;
+    const catalog = [...f.catalog, ...projectCatalog];
+    const manifest = resolveManifest(catalog, { repositoryId: "repo", projectId: "p", contentScope: "scope", enabledPacks: ["core"], identity: "id", skillPolicy: "policy", skillPolicyConfig: { skillExposure: { default: "full" } } });
+    const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: "pi" });
+    const context = createRuntimeContextV1({ ...f.context, manifestKey: manifest.manifestKey, runtimeArtifact: artifact.reference, binding: manifest.binding });
+    const originalReadFile = fs.promises.readFile;
+    let replaced = false;
+    vi.spyOn(fs.promises, "readFile").mockImplementation(async (...args: Parameters<typeof fs.promises.readFile>) => {
+      const bytes = await originalReadFile(...args);
+      if (!replaced && path.resolve(String(args[0])) === path.resolve(source)) {
+        replaced = true;
+        await writeFile(source, replacement);
+      }
+      return bytes as never;
+    });
+    syncBuiltinESMExports();
+
+    await expect(buildPiProjection({ ...f, catalog, manifest, artifact, context, currentBinding: manifest.binding, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-project-content-swap-output-")) })).rejects.toThrow();
+    expect(replaced).toBe(true);
   });
 
   it("publishes an immutable deterministic self-contained policy projection", async () => {
@@ -64,9 +156,25 @@ describe("production Pi projection", () => {
     const serialized = JSON.stringify(descriptor);
     expect(serialized).not.toContain(f.canonicalRoot);
     expect(serialized).not.toMatch(/credential|session|nativeSkillAliases/iu);
-    expect(await readFile(first.extension, "utf8")).not.toContain(f.canonicalRoot);
+    const extensionSource = await readFile(first.extension, "utf8");
+    expect(extensionSource).not.toContain(f.canonicalRoot);
+    expect(extensionSource).not.toMatch(/regularFile|boundMetadata|\breadFile\b|\breaddir\b/u);
+    expect(await readFile(path.join(first.directory, "skills", "full", "body.md"))).toEqual(await readFile(path.join(f.canonicalRoot, "full", "SKILL.md")));
     expect((await readdir(path.join(first.directory, "skills"))).sort()).toEqual(["explicit", "full", "named"]);
     expect(await readFile(path.join(first.directory, "status", "status-snapshot.json"), "utf8")).toBe(`${JSON.stringify(f.statusSnapshot, null, 2)}\n`);
+  });
+
+  it("accepts a canonical published file map with hyphenated agent names", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-hyphenated-map-")) });
+    const metadata = JSON.parse(await readFile(path.join(projection.directory, ".mpx-runtime-artifact.json"), "utf8")) as { fileMap: Array<{ path: string }> };
+    const paths = metadata.fileMap.map((entry) => entry.path);
+    expect(paths.indexOf("agents/mpx-check-fixer.md")).toBeLessThan(paths.indexOf("agents/mpx-checker.md"));
+
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const module = await import(pathToFileURL(projection.extension).href);
+    await expect(module.activate({ registerCommand() {} })).resolves.toBeUndefined();
   });
 
   it("copies canonical support assets and binds their bytes into full projection revalidation", async () => {
@@ -119,6 +227,286 @@ describe("production Pi projection", () => {
     await module.activate(pi);
     await events.get("session_start")![0]!({}, { ui: { setStatus: (_key: string, text: string) => { piStatus = text; } } });
     expect(piStatus).toBe((await execFile(process.execPath, [path.join(claudeOutput, "status", "status-line.mjs")])).stdout);
+  });
+
+  it("bounds agent-start stats, reads, and hashes below full session validation", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-instrumentation-")) });
+    const openSpy = vi.spyOn(fs.promises, "open");
+    const lstatSpy = vi.spyOn(fs.promises, "lstat");
+    const hashSpy = vi.spyOn(crypto, "createHash");
+    syncBuiltinESMExports();
+    const module = await import(`${pathToFileURL(projection.extension).href}?instrumented=${Date.now()}`);
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+    openSpy.mockClear(); lstatSpy.mockClear(); hashSpy.mockClear();
+    await events.get("before_agent_start")!({ systemPrompt: "BASE" });
+    const hot = { opens: openSpy.mock.calls.length, stats: lstatSpy.mock.calls.length, hashes: hashSpy.mock.calls.length };
+    openSpy.mockClear(); lstatSpy.mockClear(); hashSpy.mockClear();
+    await events.get("session_start")!({}, { ui: { setStatus() {} } });
+    const full = { opens: openSpy.mock.calls.length, stats: lstatSpy.mock.calls.length, hashes: hashSpy.mock.calls.length };
+    expect(hot).toEqual({ opens: 2, stats: 4, hashes: 2 });
+    expect(full.opens).toBeGreaterThan(hot.opens);
+    expect(full.stats).toBeGreaterThan(hot.stats);
+    expect(full.hashes).toBeGreaterThan(hot.hashes);
+    openSpy.mockRestore(); lstatSpy.mockRestore(); hashSpy.mockRestore(); syncBuiltinESMExports();
+  });
+
+  it("keeps discovery and agent-start cheap while selected skill load catches support tamper", async () => {
+    const f = await fixture();
+    await writeFile(path.join(f.canonicalRoot, "full", "guide.txt"), "trusted\n");
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-costs-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    const tools = new Map<string, { execute(id: string, params: unknown): Promise<unknown> }>();
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool(tool: { name: string; execute(id: string, params: unknown): Promise<unknown> }) { tools.set(tool.name, tool); }, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+    await writeFile(path.join(projection.directory, "skills", "full", "guide.txt"), "altered\n");
+    await expect(tools.get("mpx_model_search")!.execute("search", { query: "full" })).resolves.toBeDefined();
+    await expect(events.get("before_agent_start")!({ systemPrompt: "BASE" })).resolves.toBeDefined();
+    await expect(tools.get("mpx_model_load")!.execute("load", { identity: "full" })).rejects.toThrow("RESTART_REQUIRED");
+    await expect(events.get("session_start")!({}, { ui: { setStatus() {} } })).rejects.toThrow("RESTART_REQUIRED");
+  });
+
+  it("rejects same-size pathname replacement of a selected skill body", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-swap-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    let load: { execute(id: string, params: unknown): Promise<unknown> } | undefined;
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool(tool: { name: string; execute(id: string, params: unknown): Promise<unknown> }) { if (tool.name === "mpx_model_load") load = tool; } });
+    const body = path.join(projection.directory, "skills", "full", "body.md");
+    const original = await readFile(body);
+    await rename(body, `${body}.old`);
+    await writeFile(body, Buffer.alloc(original.length, 88));
+    await expect(load!.execute("load", { identity: "full" })).rejects.toThrow("RESTART_REQUIRED");
+  });
+
+  it("rejects pathname replacement of a selected skill body after opening its handle", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-open-swap-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    let load: { execute(id: string, params: unknown): Promise<unknown> } | undefined;
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool(tool: { name: string; execute(id: string, params: unknown): Promise<unknown> }) { if (tool.name === "mpx_model_load") load = tool; } });
+    const body = path.join(projection.directory, "skills", "full", "body.md");
+    const original = await readFile(body);
+    const replacement = `${body}.replacement`;
+    await writeFile(replacement, original);
+    const probe = await open(body, "r");
+    const bodyStat = await probe.stat();
+    const fileHandlePrototype = Object.getPrototypeOf(probe) as { read: (...args: unknown[]) => Promise<unknown> };
+    await probe.close();
+    const originalRead = fileHandlePrototype.read;
+    let replaced = false;
+    vi.spyOn(fileHandlePrototype, "read").mockImplementation(async function (this: { stat(): Promise<{ dev: number | bigint; ino: number | bigint }> }, ...args: unknown[]) {
+      const openedStat = await this.stat();
+      if (!replaced && openedStat.dev === bodyStat.dev && openedStat.ino === bodyStat.ino) {
+        replaced = true;
+        await rename(body, `${body}.old`);
+        await rename(replacement, body);
+      }
+      return originalRead.apply(this, args);
+    });
+
+    await expect(load!.execute("load", { identity: "full" })).rejects.toThrow("RESTART_REQUIRED: SKILL_BODY_INVALID");
+    expect(replaced).toBe(true);
+  });
+
+  it("rejects same-size in-place mutation of a selected skill body", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-mutation-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    let load: { execute(id: string, params: unknown): Promise<unknown> } | undefined;
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool(tool: { name: string; execute(id: string, params: unknown): Promise<unknown> }) { if (tool.name === "mpx_model_load") load = tool; } });
+    const body = path.join(projection.directory, "skills", "full", "body.md");
+    const original = await readFile(body);
+    await writeFile(body, Buffer.alloc(original.length, 89));
+    await expect(load!.execute("load", { identity: "full" })).rejects.toThrow("RESTART_REQUIRED");
+  });
+
+  it("rejects bounded-metadata violations before projection traversal", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-bounds-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const metadataFile = path.join(projection.directory, ".mpx-runtime-artifact.json");
+    const metadata = JSON.parse(await readFile(metadataFile, "utf8")) as { schemaVersion: number; reference: unknown; fileMap: unknown[] };
+    metadata.fileMap = Array.from({ length: 10_001 }, (_, index) => ({ path: `overflow/${index}`, sha256: "0".repeat(64), bytes: 0 }));
+    await writeFile(metadataFile, JSON.stringify(metadata));
+    await expect(module.activate({ registerCommand() {} })).rejects.toThrow("RESTART_REQUIRED: ARTIFACT_BINDING_CHANGED");
+  });
+
+  it("rejects unsafe, duplicate, over-depth, and over-aggregate file maps", async () => {
+    const cases: Array<{ name: string; fileMap: unknown[] }> = [
+      { name: "unsafe", fileMap: [{ path: "../escape", sha256: "0".repeat(64), bytes: 0 }] },
+      { name: "duplicate", fileMap: [{ path: "same", sha256: "0".repeat(64), bytes: 0 }, { path: "same", sha256: "0".repeat(64), bytes: 0 }] },
+      { name: "depth", fileMap: [{ path: `${"directory/".repeat(64)}file`, sha256: "0".repeat(64), bytes: 0 }] },
+      { name: "aggregate", fileMap: Array.from({ length: 17 }, (_, index) => ({ path: `large/${index}`, sha256: "0".repeat(64), bytes: 16 * 1024 * 1024 })) },
+    ];
+    for (const candidate of cases) {
+      const f = await fixture();
+      const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), `pi-${candidate.name}-`)) });
+      const module = await import(pathToFileURL(projection.extension).href);
+      process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+      process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+      const metadataFile = path.join(projection.directory, ".mpx-runtime-artifact.json");
+      const metadata = JSON.parse(await readFile(metadataFile, "utf8")) as { fileMap: unknown[] };
+      metadata.fileMap = candidate.fileMap;
+      await writeFile(metadataFile, JSON.stringify(metadata));
+      await expect(module.activate({ registerCommand() {} }), candidate.name).rejects.toThrow("RESTART_REQUIRED: ARTIFACT_BINDING_CHANGED");
+    }
+  });
+
+  it("rejects unexpected projection entries immediately, including deep directory trees", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-tree-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await mkdir(path.join(projection.directory, "unexpected", ...Array.from({ length: 70 }, (_, index) => `d${index}`)), { recursive: true });
+    await expect(module.activate({ registerCommand() {} })).rejects.toThrow("RESTART_REQUIRED: ARTIFACT_FILE_MAP_CHANGED");
+  });
+
+  it("rejects replacement of an external status snapshot after opening its handle", async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-status-replacement-"));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const liveStatus = path.join(artifactsRoot, "external-status.json");
+    const snapshotBytes = JSON.stringify(f.statusSnapshot);
+    const replacementBytes = snapshotBytes.replace('"schemaVersion":1', '"schemaVersion":2');
+    expect(Buffer.byteLength(replacementBytes)).toBe(Buffer.byteLength(snapshotBytes));
+    expect(replacementBytes).not.toBe(snapshotBytes);
+    const replacementFile = path.join(artifactsRoot, "external-status-replacement.json");
+    await writeFile(liveStatus, snapshotBytes);
+    await writeFile(replacementFile, replacementBytes);
+    process.env.MPX_STATUS_SNAPSHOT_FILE = liveStatus;
+    const originalOpen = fs.promises.open;
+    let replaced = false;
+    vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof fs.promises.open>) => {
+      const handle = await originalOpen(...args);
+      if (!replaced && path.resolve(String(args[0])) === path.resolve(liveStatus)) {
+        replaced = true;
+        await rename(liveStatus, `${liveStatus}.replaced`);
+        await rename(replacementFile, liveStatus);
+      }
+      return handle as never;
+    });
+    syncBuiltinESMExports();
+    const module = await import(`${pathToFileURL(projection.extension).href}?status-replacement=${Date.now()}`);
+    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+
+    await expect(events.get("session_start")!({}, { ui: { setStatus() {} } })).rejects.toThrow("RESTART_REQUIRED: STATUS_SNAPSHOT_INVALID");
+    expect(replaced).toBe(true);
+  });
+
+  it("accepts an identical external status snapshot replacement after opening its handle", async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-status-identical-replacement-"));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const liveStatus = path.join(artifactsRoot, "external-status.json");
+    const replacementFile = path.join(artifactsRoot, "external-status-replacement.json");
+    const snapshotBytes = JSON.stringify(f.statusSnapshot);
+    await writeFile(liveStatus, snapshotBytes);
+    await writeFile(replacementFile, snapshotBytes);
+    process.env.MPX_STATUS_SNAPSHOT_FILE = liveStatus;
+    const originalOpen = fs.promises.open;
+    let replaced = false;
+    vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof fs.promises.open>) => {
+      const handle = await originalOpen(...args);
+      if (!replaced && path.resolve(String(args[0])) === path.resolve(liveStatus)) {
+        replaced = true;
+        await rename(liveStatus, `${liveStatus}.replaced`);
+        await rename(replacementFile, liveStatus);
+      }
+      return handle as never;
+    });
+    syncBuiltinESMExports();
+    const module = await import(`${pathToFileURL(projection.extension).href}?identical-status-replacement=${Date.now()}`);
+    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+    const statusCalls: string[] = [];
+
+    await expect(events.get("session_start")!({}, { ui: { setStatus: (_key: string, text: string) => statusCalls.push(text) } })).resolves.toBeUndefined();
+    expect(replaced).toBe(true);
+    expect(statusCalls).toEqual([renderPiStatusLine(f.statusSnapshot, { launchBanner: f.launchBanner })]);
+  });
+
+  it("drains an in-flight status refresh without updating UI after shutdown", async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-status-shutdown-"));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const module = await import(pathToFileURL(projection.extension).href);
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const liveStatus = path.join(artifactsRoot, "live-status.json");
+    await writeFile(liveStatus, JSON.stringify(f.statusSnapshot));
+    process.env.MPX_STATUS_SNAPSHOT_FILE = liveStatus;
+    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+
+    const probe = await open(liveStatus, "r");
+    const statusStat = await probe.stat();
+    const fileHandlePrototype = Object.getPrototypeOf(probe) as { read: (...args: unknown[]) => Promise<unknown> };
+    await probe.close();
+    const originalRead = fileHandlePrototype.read;
+    let releaseRead!: () => void;
+    const readBlocked = new Promise<void>((resolve) => { releaseRead = resolve; });
+    let intercepted = false;
+    const readSpy = vi.spyOn(fileHandlePrototype, "read").mockImplementation(async function (this: { stat(): Promise<{ dev: number | bigint; ino: number | bigint }> }, ...args: unknown[]) {
+      const opened = await this.stat();
+      if (!intercepted && opened.dev === statusStat.dev && opened.ino === statusStat.ino) { intercepted = true; await readBlocked; }
+      return originalRead.apply(this, args);
+    });
+    const statusCalls: string[] = [];
+    const sessionStart = events.get("session_start")!({}, { ui: { setStatus: (_key: string, text: string) => statusCalls.push(text) } }) as Promise<void>;
+    while (!intercepted) await new Promise((resolve) => setTimeout(resolve, 0));
+    const shutdown = events.get("session_shutdown")!() as Promise<void>;
+    releaseRead();
+    await Promise.all([sessionStart, shutdown]);
+    expect(statusCalls).toEqual([]);
+    readSpy.mockRestore();
+  });
+
+  it("rejects embedded Bash policy tamper before classifying a command", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-policy-tamper-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+    await writeFile(path.join(projection.directory, "dangerous-command-policy.mjs"), "export const classifyDangerousCommand=()=>({action:'allow'});\n");
+    await expect(events.get("tool_call")!({ toolName: "bash", input: { command: "rm -rf /" } })).rejects.toThrow("RESTART_REQUIRED");
+  });
+
+  it("registers the shared dangerous-command policy for native bash calls only", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-policy-")) });
+    const module = await import(pathToFileURL(projection.extension).href);
+    const events = new Map<string, (...args: unknown[]) => unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
+    const policy = events.get("tool_call")!;
+    await expect(policy({ toolName: "bash", input: { command: "rm -rf /" } })).resolves.toEqual({ block: true, reason: "DANGEROUS_RECURSIVE_DELETE: Blocked: broad recursive deletion is not allowed.\nRun manually only after review: rm -rf /" });
+    await expect(policy({ toolName: "bash", input: { command: "rm -rf dist" } })).resolves.toBeUndefined();
+    await expect(policy({ toolName: "bash", input: { command: "remove=rm; $remove -rf /" } })).resolves.toEqual({ block: true, reason: "DANGEROUS_RECURSIVE_DELETE: Blocked: broad recursive deletion is not allowed.\nRun manually only after review: remove=rm; $remove -rf /" });
+    await expect(policy({ toolName: "bash", input: { command: "echo $remove -rf /" } })).resolves.toBeUndefined();
+    await expect(policy({ toolName: "read", input: { command: "rm -rf /" } })).resolves.toBeUndefined();
   });
 
   it("activates the generated extension with current tool, disclosure, command, status, and restart semantics", async () => {

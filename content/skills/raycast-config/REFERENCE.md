@@ -8,10 +8,10 @@ Everything here was recovered from Raycast for Windows' own backend bundle
 ```
 file     = gzip(JSON envelope)
 envelope = { exportedAt, appVersion, osName, osVersion, osArch,
-             schemaVersion, dat<configured-path><hex>, encryption?: { iv, salt, authTag } }
+             schemaVersion, data: <hex>, encryption?: { iv, salt, authTag } }
 data     = hex( aes-256-gcm( gzip(JSON payload) ) )   password set
          = hex( gzip(JSON payload) )                  no password
-key      = crypto.scrypt(password, salt, 32)          Node default<configured-path>N=16384, r=8, p=1
+key      = crypto.scrypt(password, salt, 32)          Node defaults: N=16384, r=8, p=1
 ```
 
 `iv`, `salt` and `authTag` are each 16 bytes, hex-encoded. Accepted `schemaVersion`
@@ -52,12 +52,16 @@ folder.
 }
 ```
 
-A sibling `openWithPlatforms` array repeats the binding per platfor<configured-path>{ id, windows?, macos?, ios? }`. Write all three when setting `openWith`.
+A sibling `openWithPlatforms` array repeats the binding per platform:
+`{ id, windows?, macos?, ios? }`. Write all three when setting `openWith`.
 
 ## Ids — where a rebuild goes wrong
 
 The importer validates `id` as a **real ULID**, not a 26-character string. A ULID-shaped
-id that violates the alphabet fails the whole category wit<configured-path>not a valid ULID string on QuickLinkCreate.id
+id that violates the alphabet fails the whole category with:
+
+```
+not a valid ULID string on QuickLinkCreate.id
 ```
 
 The alphabet is Crockford base32 — `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, with **`I`, `L`,
@@ -82,7 +86,9 @@ which checks this, before handing anything back.
 
 ## Alias and hotkey record
 
-Aliases live in `settings.commands[]`, **not** on the quicklin<configured-path>jsonc
+Aliases live in `settings.commands[]`, **not** on the quicklink:
+
+```jsonc
 {
   "id": "c:r:quicklinks::*::quicklink::=::<quicklink id>",
   "extensionId": "e:r:quicklinks",
@@ -99,7 +105,9 @@ This is why a quicklinks-only JSON import cannot carry aliases — that command 
 
 ## Import semantics — the part that matters
 
-From the quicklinks importe<configured-path>js
+From the quicklinks importer:
+
+```js
 for (let id of existingIds) importedIds.has(id) || await deleteOne(id);
 ```
 
@@ -116,7 +124,7 @@ for (let id of existingIds) importedIds.has(id) || await deleteOne(id);
 
 `/Applications/<uuid>` ids come from Raycast's own app index. They are UUIDv5 in shape
 but derive from something other than the executable path — probing every standard
-namespace against known ids produced no match. Treat them as opaqu<configured-path>**copy an id from an
+namespace against known ids produced no match. Treat them as opaque: **copy an id from an
 existing quicklink that opens the same application** rather than constructing one. To
 bind an application never used before, have the user set `openWith` once in the Raycast
 UI, re-export, and read the new id out of the config.
@@ -127,26 +135,26 @@ UI, re-export, and read the new id out of the config.
    cross-project view, `<letter>issues` for one project. Aliases beat fuzzy matching, so
    the most-used member of a family earns the bare word.
 2. **Name reads `<project> <thing> (<keywords>)`, project first.** Matching ignores word
-   order, so this is for the ey<configured-path>everything for one project clusters as it is typed.
+   order, so this is for the eye: everything for one project clusters as it is typed.
 3. **Every member of a family carries the family keyword.** Every meeting link contains
    `zoom`; every port link contains `localhost`, the port number, and what runs there.
 4. **A second language goes in the alias, not the name.** An alias in the user's other
    language makes an English-named entry reachable without bloating the name.
 5. **`openWith` is copied, never invented** — see above.
 
-Suggested per-project famil<configured-path>repo`, `prs` (or `mrs`), `issues`, `dash`, `folder`,
+Suggested per-project family: `repo`, `prs` (or `mrs`), `issues`, `dash`, `folder`,
 `code`, `term`, plus `dev` / `sb` for running servers.
 
 ## Link forms that work on Windows
 
 | Target | `link` |
 | --- | --- |
-| Web | `http<configured-path>…` |
+| Web | `https://…` |
 | Folder or file | `<drive>:\path\to\thing` |
-| File, opened with a chosen app | `fil<configured-path><configured-path>path` + `openWith` |
-| Obsidian note | `obsidia<configured-path>open?vault=<vault>&file=<url-encoded path within vault>` |
-| VS Code folder | `fil<configured-path><configured-path>path` + the VS Code `openWith` id |
+| File, opened with a chosen app | `file:///C:/path` + `openWith` |
+| Obsidian note | `obsidian://open?vault=<vault>&file=<url-encoded path within vault>` |
+| VS Code folder | `file:///C:/path` + the VS Code `openWith` id |
 | Terminal profile | `wt -p "<profile name>"` + the Windows Terminal `openWith` id |
-| Parameterised | `http<configured-path>…/{argument name="query"}` |
+| Parameterised | `https://…/{argument name="query"}` |
 
 Placeholders also cover clipboard, selected text, date and calculator results.

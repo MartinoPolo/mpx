@@ -17,7 +17,10 @@ on the provenance repository and does not project credentials, sessions, trust, 
 
 Pi has no equivalent projection here for session resurrection (Phase G), F2 host
 replacement, installer/account symlink mutation, credential copying, or nested subagent
-orchestration by default. Account profiles are native-account-root selection data only.
+orchestration by default. Pi also has no documented native MCP client/configuration flag;
+MCP-selected launches fail with structured `RUNTIME_CAPABILITY_UNSUPPORTED` before
+projection, runtime preparation, or process execution. Account profiles are
+native-account-root selection data only.
 
 The published `extension.mjs` is a deterministic executable adapter for policy-scoped
 commands and model search. It is not a bundled copy of the vendored subagent TypeScript;

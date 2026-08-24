@@ -2,7 +2,9 @@
 
 ## Dependency Categories
 
-When assessing a candidate for deepening, classify its dependencie<configured-path>### 1. In-process
+When assessing a candidate for deepening, classify its dependencies:
+
+### 1. In-process
 
 Pure computation, in-memory state, no I/O. Always deepenable — just merge the modules and test directly.
 
@@ -14,7 +16,7 @@ Dependencies that have local test stand-ins (e.g., PGLite for Postgres, in-memor
 
 Your own services across a network boundary (microservices, internal APIs). Define a port (interface) at the module boundary. The deep module owns the logic; the transport is injected. Tests use an in-memory adapter. Production uses the real HTTP/gRPC/queue adapter.
 
-Recommendation shap<configured-path>"Define a shared interface (port), implement an HTTP adapter for production and an in-memory adapter for testing, so the logic can be tested as one deep module even though it's deployed across a network boundary."
+Recommendation shape: "Define a shared interface (port), implement an HTTP adapter for production and an in-memory adapter for testing, so the logic can be tested as one deep module even though it's deployed across a network boundary."
 
 ### 4. True external (Mock)
 
@@ -22,7 +24,7 @@ Third-party services (Stripe, Twilio, etc.) you don't control. Mock at the bound
 
 ## Testing Strategy
 
-The core principl<configured-path>**replace, don't layer.**
+The core principle: **replace, don't layer.**
 
 - Old unit tests on shallow modules are waste once boundary tests exist — delete them
 - Write new tests at the deepened module's interface boundary
@@ -35,19 +37,25 @@ The core principl<configured-path>**replace, don't layer.**
 
 ## Problem
 
-Describe the architectural frictio<configured-path>- Which modules are shallow and tightly coupled
+Describe the architectural friction:
+
+- Which modules are shallow and tightly coupled
 - What integration risk exists in the seams between them
 - Why this makes the codebase harder to navigate and maintain
 
 ## Proposed Interface
 
-The chosen interface desig<configured-path>- Interface signature (types, methods, params)
+The chosen interface design:
+
+- Interface signature (types, methods, params)
 - Usage example showing how callers use it
 - What complexity it hides internally
 
 ## Dependency Strategy
 
-Which category applies and how dependencies are handle<configured-path>- **In-process**: merged directly
+Which category applies and how dependencies are handled:
+
+- **In-process**: merged directly
 - **Local-substitutable**: tested with [specific stand-in]
 - **Ports & adapters**: port definition, production adapter, test adapter
 - **Mock**: mock boundary for external services
@@ -60,7 +68,9 @@ Which category applies and how dependencies are handle<configured-path>- **In-pr
 
 ## Implementation Recommendations
 
-Durable architectural guidance that is NOT coupled to current file path<configured-path>- What the module should own (responsibilities)
+Durable architectural guidance that is NOT coupled to current file paths:
+
+- What the module should own (responsibilities)
 - What it should hide (implementation details)
 - What it should expose (the interface contract)
 - How callers should migrate to the new interface

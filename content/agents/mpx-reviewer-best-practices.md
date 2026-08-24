@@ -2,7 +2,7 @@
 name: mpx-reviewer-best-practices
 description: "Read-only reviewer for language/framework best practices and conventions."
 ---
-# Reviewe<configured-path>Best Practices
+# Reviewer: Best Practices
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
 

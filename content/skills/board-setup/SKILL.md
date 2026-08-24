@@ -24,7 +24,9 @@ Run the setup script with the resolved paths (PowerShell tool):
 & "$HOME\.runtime\skills\board-setup\scripts\link-board.ps1" -Repo "<repo>" -Vault "<vault>" -Project "<project>"
 ```
 
-The script is idempotent an<configured-path>- enables `git core.symlinks` globally so Windows preserves real symlinks;
+The script is idempotent and:
+
+- enables `git core.symlinks` globally so Windows preserves real symlinks;
 - creates `<vault>\Boards\<project>.md` with the four-lane skeleton (`# To Process`, `# Ready to implement`, `# Manual testing`, `# Archive`) **only if it does not already exist** (never clobbers existing notes);
 - creates the `.mpx/board-files` junction → `<vault>\Files` (no admin) and the `.mpx/BOARD.md` file symlink → the board;
 - appends `.mpx/BOARD.md` and `.mpx/board-files/` to `.gitignore`.
@@ -35,4 +37,4 @@ Without Windows Developer Mode the direct symlink call fails; the script then re
 
 Confirm the script printed both links. If it still warned that the `.mpx/BOARD.md` symlink could not be created (elevation declined, or the UAC prompt wasn't accepted), the junction and board file are already in place — only the file symlink needs the extra privilege. Re-run the script and accept the UAC prompt, or enable Windows Developer Mode (Settings › Privacy & security › For developers) and re-run.
 
-Report the board path, both link paths, and the next ste<configured-path>**open the board in Obsidian, paste any bug/task/feature notes with screenshots under `# To Process` (no need to sort by type), then run `mpx-board-to-issues` or `mpx-batch-execute`.**
+Report the board path, both link paths, and the next step: **open the board in Obsidian, paste any bug/task/feature notes with screenshots under `# To Process` (no need to sort by type), then run `mpx-board-to-issues` or `mpx-batch-execute`.**
