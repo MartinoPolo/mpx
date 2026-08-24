@@ -1,0 +1,135 @@
+# Prompt style that actually renders
+
+Both prompts below were written by hand, pasted into ChatGPT, and produced sheets worth
+keeping. `composeImagePrompt` reproduces their shape; this file is the reason it has that
+shape, and the reference to check a hand-edited prompt against.
+
+## The four parts
+
+Every prompt that worked has the same four parts in the same order.
+
+**1. One sentence naming the artifact and its item count.** "A clean, 5-panel fitness
+infographic showing a daily mobility routine." The count is what makes the model commit to a
+layout instead of inventing one, and it is why a sheet comes back with exactly the exercises
+the video had.
+
+**2. One numbered entry per item, describing what is visible.** This is the part that
+decides whether the image is usable. The entry describes *body geometry*, not coachin<configured-path>> Panel 1: A person in a Runner's Lunge, with one foot forward and the opposite hand on the
+> ground, reaching the other arm up to the sky.
+
+"One foot forward, opposite hand on the ground, other arm up" is drawable. "Keep your spine
+long and breathe into the stretch" is not — an image model given a coaching cue draws a
+person standing still. The extraction step therefore keeps the drawing instructions apart
+from the coaching tex<configured-path>the poses go in the prompt body, `formCue` goes in the restatement
+table below it.
+
+**A single drawn position is not enough.** An exercise travels, and one frozen figure cannot
+tell a Cossack Squat from a lateral lunge, or a bear crawl from a plank. Each entry therefore
+draws the movement twice with an arrow betwee<configured-path>> Panel 1 — Deep Squat Hold (1-2 minutes): two figures side by side, first a person standing
+> tall with feet shoulder-width apart and arms at their sides, then a person crouching in a
+> deep squat with hips dropped below the knees, heels flat on the floor, and palms pressed
+> together at the chest, with an arrow pointing straight down through the hips drawn between
+> them to show the direction of the movement.
+
+That comes from three extracted fields — `startPose`, `endPose` and `movementDirection`. A
+static hold uses the entry position as its start and the held position as its end, so the
+same shape covers holds and reps alike.
+
+`movementDirection` carries the path only ("pointing straight down through the hips"); the
+word "arrow" is supplied by the template. Asked for an arrow directly, the model returns one
+about half the time and a bare direction the rest ("downward vertically into a full squat"),
+and only one of those completes the sentence.
+
+**3. A style block.** Held constant across both working examples, and worth keeping constan<configured-path>> clean, flat vector illustration, minimalistic, with a plain white background, serving as a
+> step-by-step exercise guide
+
+and for the denser gri<configured-path>> modern, visually pleasing, flat vector art with a cohesive color palette
+
+**4. The exact text, restated verbatim.** Both hand-written prompts end by repeating the
+source material in full. Without it the model paraphrases labels; with it, the labels on the
+sheet match the source. `prompt.md` carries that restatement as one markdown table per section
+rather than a trailing paragraph — pasting the tables alongside the prompt produced a visibly
+better image than the prompt alone, because the exact names, amounts and cues stay legible to
+the model. Restating costs nothing and is the difference between a decorative poster and one
+that can be trained from.
+
+## Layout follows item count
+
+| Items | Shape | Figures per item | Per-item text |
+| ------- | ------------------------------------------- | ------------------------ | ---------------------------------------- |
+| Up to 8 | A single row or two rows of numbered panels | Two, plus the arrow | Full name, plus an amount only if stated |
+| Over 8 | A grid of small icon tiles | One, the end position | 2-5 words |
+
+An amount reaches the prompt only when the video prescribed one; see
+[`EXERCISE.md`](EXERCISE.md) for why an invented amount is worse than none.
+
+A tile has no room for a second figure, so past the panel limit the end position carries the
+drawing and the arrow alone keeps the direction readable.
+
+The 5-exercise sheet rendered as one horizontal stri<configured-path>a title header, five bordered panels,
+a numbered badge and name on each. The 35-item habit sheet rendered as a 5-column grid of
+icon tiles, each a small illustration over a short sentence. Same four parts, different
+density — the item count is what selects between them.
+
+## The two working prompts
+
+Kept verbatim. Rewrite a generated prompt toward these rather than away from them.
+
+### Five exercises, panel strip
+
+> A clean, 5-panel fitness infographic showing a daily mobility routine. Panel 1: A person in
+> a Runner's Lunge, with one foot forward and the opposite hand on the ground, reaching the
+> other arm up to the sky. Panel 2: A person in a Deep Squat, with hands clasped in front of
+> their chest. Panel 3: A person doing Windshield Wipers, sitting on the floor with knees bent
+> and dropped to one side. Panel 4: A person doing a Cobra Flow, lying on their stomach with
+> their chest lifted and arms supporting them. Panel 5: A person doing a Cossack Squat, in a
+> deep side lunge with one leg straight and toes pointed up. The style should be clean, flat
+> vector illustration, minimalistic, with a plain white background, serving as a step-by-step
+> exercise guide. For your reference, here are the 5 exercises shown in the video if you want
+> to make any adjustments to the promp<configured-path>Runner's Lung<configured-path>Deep lunge with an upward thoracic
+> rotation. Deep Squa<configured-path>Holding a deep squat and gently shifting weight side to side.
+> Windshield Wiper<configured-path>Sitting with legs wide, dropping both knees to one side to rotate the hips
+> internally and externally. Cobra Flo<configured-path>Pressing the chest up from the floor into a spine
+> extension, followed by a deep fold. Cossack Squa<configured-path>A deep side lunge, stretching the
+> adductors on the straight leg.
+
+### Thirty-five items, icon grid
+
+> A highly organized, health infographic displaying dozens of mini-habits for longevity and
+> wellness. Each item features a minimalist, colorful icon representing a specific health habit
+> (like a bed for sleep, a sun for morning light, a dumbbell for exercise, an apple for whole
+> foods, a crossed-out phone for no screens, and a water drop for hydration) paired with a very
+> short 2-5 word sentence underneath it. The overall style should be modern, visually pleasing,
+> flat vector art with a cohesive color palette.
+
+followed by "these are the exact points:" and all 35 sentences in full.
+
+Note the parenthesised icon suggestions. Naming six concrete icons taught the model the
+vocabulary for the other twenty-nine, which is cheaper than describing all of them.
+
+## The consistent-character sentence
+
+A fifth part joins the four above whenever the video has someone on scree<configured-path>one sentence
+describing the person to draw in every panel — build, hair, clothing colours, and the setting
+suggested with a few props. It is what makes the sheet recognisable as belonging to *this*
+video rather than to any workout, and it comes from the `performer` object the extraction
+step fills. A video with nobody on screen returns an empty `performer` and the sentence is
+simply left out.
+
+## Checking a generated prompt
+
+- Every item in the table appears by name
+- Every item carries a drawable description, written in the third person and free of
+  explanatory or coaching verbs — a stray "your" means instructional voice leaked into a
+  drawing instruction
+- The item count appears in the opening sentence and matches the number of entries
+- The consistent-character sentence names only traits the video actually shows
+- Panels are grouped into rows only when a section actually holds several items; a video that
+  titles each item separately needs no grouping line
+- The style block survived any editing
+- The restatement tables are still under the prompt, one per section, lead-in printed once
+- Nothing in the file mentions a video, a source or what the user does with the image — the
+  whole file is pasted, so anything in it is something the image model reads
+
+Exercise mode adds its own checks — the two positions and the arrow clause — in
+[`EXERCISE.md`](EXERCISE.md).

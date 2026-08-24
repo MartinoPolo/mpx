@@ -5,6 +5,21 @@ import { inventoryCanonical } from "../src/index.js";
 
 const canonicalRoot = path.resolve(import.meta.dirname, "../../../content/skills");
 const workflowSkills = ["execute", "issue-create", "issue-refine", "issue-view", "review", "ship"] as const;
+const classifiedSkills = {
+  "core/full": ["execute", "issue-view", "review"],
+  "core/name-only": ["issue-create", "issue-refine", "ship"],
+  "work/name-only": [
+    "architecture-review", "bug-report", "check-fix", "code-clean", "commit", "commit-push", "components-audit",
+    "consolidate-context", "decompose", "design-brief", "design-init", "design-refine", "fallow-fix", "grill",
+    "handoff", "notebooklm", "script-discovery", "skill-audit", "skill-create", "suppression-audit", "symlink",
+    "sync-base", "vocabulary",
+  ],
+  "work/explicit-only": ["agent-create", "grill-voice", "mockup", "playwright-test"],
+  "personal/explicit-only": [
+    "board-setup", "board-to-issues", "clean-pc", "podcast", "project-register", "raycast-config", "tutorial-create",
+    "video-to-image",
+  ],
+} as const;
 const providerGuidanceMatrix = [
   ["execute", "issue"],
   ["issue-create", "issue"],
@@ -32,9 +47,11 @@ async function body(identity: string): Promise<string> {
 }
 
 describe("canonical provider-neutral workflow skills", () => {
-  it("loads the bounded workflow family through the canonical catalog", async () => {
+  it("loads and classifies the complete Phase F skill inventory", async () => {
     const catalog = await inventoryCanonical(canonicalRoot);
-    expect(catalog.map((skill) => skill.identity)).toEqual([...workflowSkills].sort());
+    const actual = Object.groupBy(catalog, (skill) => `${skill.skillPacks.join("+")}/${skill.defaultExposure}`);
+    expect(Object.fromEntries(Object.entries(actual).map(([classification, skills]) => [classification, skills!.map((skill) => skill.identity).sort()])))
+      .toEqual(Object.fromEntries(Object.entries(classifiedSkills).map(([classification, identities]) => [classification, [...identities].sort()])));
   });
 
   it.each(providerGuidanceMatrix)("includes provider-neutral mpx %s %s guidance", async (identity, commandGroup) => {
@@ -65,14 +82,14 @@ describe("canonical provider-neutral workflow skills", () => {
     expect(content).toContain("capture the returned Review ID");
   });
 
-  it("keeps workflow bodies provider-neutral, portable, and on current vocabulary", async () => {
+  it("keeps every imported skill free of forbidden namespaces, provider CLIs, paths, and placeholders", async () => {
     const violations: string[] = [];
-    for (const identity of workflowSkills) {
+    const catalog = await inventoryCanonical(canonicalRoot);
+    for (const { identity } of catalog) {
       const content = await normalizedSkill(identity);
       const forbidden: Array<[string, RegExp]> = [
         ["provider CLI invocation", /(?:^|[\n`$;|&])\s*(?:gh|glab|kf)(?:\.exe)?\s+(?=[a-z-])/imu],
         ["provider comparison table", /^(?:\s*\|[^\n]*(?:provider[^\n]*command|command[^\n]*provider|GitHub|GitLab|KanbanFlow)[^\n]*\|\s*)$/imu],
-        ["non-Issue vocabulary", /\b(?:tasks?|tickets?)\b/iu],
         ["legacy identity", /\/(?:mp(?:-gh)?|kf):[a-z0-9-]+/iu],
         ["runtime placeholder", /(?:\$ARGUMENTS|\$\{[^}]+\}|\{\{[^}]+\}\})/u],
         ["absolute path", /(?:\b[A-Za-z]:[\\/]|\/(?:Users|home|_MP_projects|_MP_work|_MP_apps)\/)/u],

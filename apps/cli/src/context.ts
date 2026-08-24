@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MpxError } from "@mpx/core";
@@ -13,6 +13,9 @@ import { BUILTIN_PROVIDERS, ProviderRegistry, ProviderService, providerRegistry,
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/windows";
 import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
+import { parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
+import { FileLaunchAuditStore, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
+import type { LaunchExecutionContext } from "./launch-execution.js";
 
 export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild" | "captureReleaseIdentity" | "releaseLinkedAfterRemoval" | "resolveOrphan">;
 export interface CliWorktreeService {
@@ -34,7 +37,7 @@ export interface CliRepositorySelectorResolver {
   resolve(request: { root: string; remote: string }): Promise<string>;
 }
 
-export interface CliContext {
+export interface CliContext extends LaunchExecutionContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
   accessFile?: (file: string) => Promise<void>;
@@ -51,7 +54,6 @@ export interface CliContext {
   /** Application-owned trusted extensions; never populated from project configuration. */
   trustedProviderComposition?: Readonly<{ descriptors: readonly ProviderDescriptor[]; adapters: readonly ProviderAdapter[] }>;
 }
-export const defaultContext: CliContext = { env: process.env };
 
 const builtInProviderExecutables = new Set(["gh", "glab", "kf"]);
 const providerProcessTimeoutMilliseconds = 120_000;
@@ -246,6 +248,91 @@ export async function providerService(context: CliContext, config: ProjectConfig
   return new ProviderService(configuredProviderRegistry(context), adapters);
 }
 
+function privateRouteError(code: "PRIVATE_ROUTE_LABEL_INVALID" | "PRIVATE_ROUTE_UNAVAILABLE", message: string): MpxError {
+  return new MpxError({ code, message, retryable: false });
+}
+function safeOpaqueRouteLabel(value: string): boolean {
+  return value === value.normalize("NFC") && value !== "." && value !== ".." && /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,63})$/u.test(value) && !value.endsWith(".") && !value.includes("..");
+}
+function privateRouteSelections(descriptor: LaunchDescriptor): readonly { key: string; kind: string; label: string }[] {
+  const selections = [
+    { key: `git:${descriptor.routes.gitAuthor}`, kind: "git", label: descriptor.routes.gitAuthor },
+    ...Object.entries(descriptor.routes.providers).map(([provider, label]) => ({ key: `provider-${provider}:${label}`, kind: `provider-${provider}`, label })),
+    ...(descriptor.routes.ssh ? [{ key: `ssh:${descriptor.routes.ssh}`, kind: "ssh", label: descriptor.routes.ssh }] : []),
+    ...descriptor.routes.mcp.allow.map(label => ({ key: `mcp:${label}`, kind: "mcp", label })),
+  ];
+  const ambiguous = new Set<string>();
+  for (const selection of selections) {
+    if (!safeOpaqueRouteLabel(selection.label) || !/^(?:git|ssh|mcp|provider-[a-z0-9][a-z0-9-]{0,31})$/u.test(selection.kind)) throw privateRouteError("PRIVATE_ROUTE_LABEL_INVALID", "A selected private route label is invalid.");
+    const folded = `${selection.kind}:${selection.label.toLowerCase()}`;
+    if (ambiguous.has(folded)) throw privateRouteError("PRIVATE_ROUTE_LABEL_INVALID", "Selected private route labels are ambiguous.");
+    ambiguous.add(folded);
+  }
+  return selections;
+}
+function routeWithin(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+async function validatePrivateRouteData(root: string): Promise<void> {
+  let fileCount = 0, totalBytes = 0;
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const candidate = path.join(directory, entry.name), candidateStat = await lstat(candidate);
+      if (candidateStat.isSymbolicLink() || !routeWithin(root, await realpath(candidate))) throw new Error("route data link or escape");
+      if (candidateStat.isDirectory()) await visit(candidate);
+      else if (candidateStat.isFile()) {
+        fileCount += 1; totalBytes += candidateStat.size;
+        if (fileCount > 256 || totalBytes > 8 * 1024 * 1024) throw new Error("route data exceeds bounds");
+      } else throw new Error("route data special file");
+    }
+  };
+  await visit(root);
+}
+
+export class NodePrivateRouteMaterializer implements RouteMaterializer {
+  constructor(readonly root: string) {}
+  async materialize(descriptorInput: LaunchDescriptor): Promise<Readonly<Record<string, string>>> {
+    const selections = privateRouteSelections(descriptorInput);
+    let descriptor: LaunchDescriptor;
+    try { descriptor = parseLaunchDescriptorV2(descriptorInput); }
+    catch { throw privateRouteError("PRIVATE_ROUTE_UNAVAILABLE", "Private route binding validation failed."); }
+    try {
+      if (!path.isAbsolute(this.root)) throw new Error("state root");
+      const rootStat = await lstat(this.root);
+      if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw new Error("state root shape");
+      const canonicalRoot = await realpath(this.root);
+      const materialized: Record<string, string> = {};
+      for (const selection of selections) {
+        const directory = path.join(canonicalRoot, "private-routes", descriptor.identity.name, descriptor.runtime, selection.kind, selection.label);
+        const bindingFile = path.join(directory, "binding.json");
+        const data = path.join(directory, "data");
+        const [directoryStat, bindingStat, dataStat] = await Promise.all([lstat(directory), lstat(bindingFile), lstat(data)]);
+        if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory() || bindingStat.isSymbolicLink() || !bindingStat.isFile() || bindingStat.size > 16_384 || dataStat.isSymbolicLink() || !dataStat.isDirectory()) throw new Error("route shape");
+        const canonicalData = await realpath(data);
+        if (!routeWithin(canonicalRoot, canonicalData)) throw new Error("route escape");
+        await validatePrivateRouteData(canonicalData);
+        const binding = JSON.parse(await readFile(bindingFile, "utf8")) as unknown;
+        const expected = { schemaVersion: 1, runtime: descriptor.runtime, identity: descriptor.identity, kind: selection.kind, label: selection.label };
+        if (JSON.stringify(binding) !== JSON.stringify(expected)) throw new Error("route binding");
+        materialized[selection.key] = canonicalData;
+      }
+      return Object.freeze(materialized);
+    } catch { throw privateRouteError("PRIVATE_ROUTE_UNAVAILABLE", "A selected private route is missing, malformed, or not bound to this launch."); }
+  }
+}
+
+class EnvironmentRouteMaterializer implements RouteMaterializer {
+  constructor(readonly environment: NodeJS.ProcessEnv) {}
+  materialize(descriptor: LaunchDescriptor): Promise<Readonly<Record<string, string>>> { return new NodePrivateRouteMaterializer(stateRoot({ env: this.environment })).materialize(descriptor); }
+}
+class EnvironmentLaunchAuditStore implements LaunchAuditStore {
+  constructor(readonly environment: NodeJS.ProcessEnv) {}
+  #store(): FileLaunchAuditStore { return new FileLaunchAuditStore(stateRoot({ env: this.environment })); }
+  start(record: LaunchAuditStartRecord): Promise<string> { return this.#store().start(record); }
+  terminal(attemptId: string, record: LaunchAuditTerminalRecord): Promise<void> { return this.#store().terminal(attemptId, record); }
+}
+
 export function stateRoot(context: CliContext): string {
   const localAppData = context.env.LOCALAPPDATA;
   if (!localAppData || !path.isAbsolute(localAppData)) throw new MpxError({
@@ -255,6 +342,8 @@ export function stateRoot(context: CliContext): string {
   });
   return path.join(localAppData, "mpx");
 }
+
+export const defaultContext: CliContext = { env: process.env, launchRoutes: new EnvironmentRouteMaterializer(process.env), launchAudit: new EnvironmentLaunchAuditStore(process.env) };
 
 export function ports(context: CliContext): CliPortService {
   if (context.portService) return context.portService;
@@ -445,7 +534,7 @@ export function worktrees(context: CliContext, operationCwd = process.cwd()): Cl
         try { cancellation=await preparation.cancel(key); }
         catch (error) {
           const current=await foundation.state.load(key);
-          if (current) { current.preparationStatus="unknown"; current.status="unknown"; current.failure={phase:"preparation",code:"PREPARATION_UNKNOWN",message:error instanceof Error?error.message:String(error)}; current.updatedAt=Date.now(); await foundation.state.writeAtomic(key,current); }
+          if (current) { current.preparationStatus="unknown"; current.status="unknown"; current.failure={phase:"preparation",code:"PREPARATION_UNKNOWN",message:"Preparation cancellation could not be verified."}; current.updatedAt=Date.now(); await foundation.state.writeAtomic(key,current); }
           throw error;
         }
         bound.state.preparationStatus=cancellation.status;
@@ -471,18 +560,9 @@ async function exists(candidate: string): Promise<boolean> {
   try { await access(candidate); return true; } catch { return false; }
 }
 
-/** Locate only the repository-owned canonical catalog; callers may inject a fixture root. */
-export async function catalogPath(context: CliContext, cwd: string): Promise<string> {
+/** Locate only the application-owned canonical catalog; callers may inject a trusted fixture root. */
+export async function catalogPath(context: CliContext, _cwd: string): Promise<string> {
   if (context.catalogRoot) return context.catalogRoot;
-  let directory = path.resolve(cwd);
-  for (;;) {
-    const candidate = path.join(directory, "content", "skills");
-    if (await exists(candidate)) return candidate;
-    const parent = path.dirname(directory);
-    if (parent === directory) break;
-    directory = parent;
-  }
-  // The package is normally two levels below the repository root.
   const packaged = fileURLToPath(new URL("../../../content/skills", import.meta.url));
   if (await exists(packaged)) return packaged;
   throw new Error("Canonical skill catalog was not found.");

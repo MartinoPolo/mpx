@@ -50,10 +50,12 @@ function diagnostic(code: string, severity: StatusDiagnosticSeverity, message: s
   return { code, severity, message, serviceId };
 }
 function errorCode(error: unknown): string {
-  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "PORT_RESOLUTION_FAILED";
+  const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "PORT_RESOLUTION_FAILED";
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(code) ? code : "PORT_RESOLUTION_FAILED";
 }
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : "The port lease could not be resolved.";
+  const message = error instanceof Error ? error.message : "The port lease could not be resolved.";
+  return message.replace(/[\0-\x1F\x7F-\x9F]+/gu, " ").trim().slice(0, 1_024);
 }
 function classify(error: unknown): Resolution {
   const code = errorCode(error);

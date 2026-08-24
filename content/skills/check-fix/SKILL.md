@@ -1,0 +1,103 @@
+---
+name: check-fix
+description: "Detects the project's check scripts, runs them, and fixes what fails."
+metadata:
+  mpx:
+    skillPacks: [work]
+    defaultExposure: name-only
+---
+# Check & Fix
+
+Deterministic check execution and fix loop based on `detect-check-scripts.mjs`.
+
+This skill accepts no arguments. Ignore argument-based filtering and follow detector output only.
+
+## Step 1: Detect Available Checks
+
+```bash
+node ./scripts/detect-check-scripts.mjs
+```
+
+Handle all outputs explicitl<configured-path>- `NO_PROJECT=true`: report "No package.json found" and stop.
+- `PM_UNKNOWN=true`: ask user which package manager to use (`npm`, `pnpm`, `yarn`, `bun`), then re-ru<configured-path>bash
+node ./scripts/detect-check-scripts.mjs . <chosen_pm>
+```
+
+- `PM=<pm>`: continue with detected scripts.
+- `MONOREPO=true`: expect package-prefixed keys too (for example `packages_ui_CHECK_ALL=...`).
+
+Possible script keys per scope (root or prefixed package):
+
+- `<prefix>CHECK_ALL`, `<prefix>CHECK_ALL_DIR`
+- `<prefix>TYPECHECK`, `<prefix>TYPECHECK_DIR`
+- `<prefix>LINT`, `<prefix>LINT_DIR`
+- `<prefix>FORMAT`, `<prefix>FORMAT_DIR`
+- `<prefix>BUILD`, `<prefix>BUILD_DIR`
+
+If no runnable script keys are present after `PM=...`, report "No scripts detected" and stop.
+
+## Step 2: Build Run Plan (No Arguments)
+
+Per scop<configured-path>- If `CHECK_ALL` exist<configured-path>run `CHECK_ALL`, then `BUILD` (if present).
+- If `CHECK_ALL` does not exis<configured-path>run detected `TYPECHECK`, `LINT`, `FORMAT`, then `BUILD`.
+
+Run exactly what the detector output specifies, regardless of any user arguments.
+
+## Step 3: Run Checks
+
+Run planned commands in deterministic order.
+
+- `CHECK_ALL` mod<configured-path>CHECK_ALL` -> `BUILD`
+- Individual mod<configured-path>TYPECHECK` -> `LINT` -> `FORMAT` -> `BUILD`
+
+For monorepo keys, run from `*_DIR`:
+
+```bash
+cd <DIR> && <COMMAND>
+```
+
+Run sequentially. Stop at first failing command, fix it, then continue.
+
+## Step 4: Fix Errors
+
+If a check fail<configured-path>1. Parse failing files and diagnostics from command output.
+2. Read relevant files and identify root cause.
+3. TDD-first when practica<configured-path>- If there is a clear behavioral bug and test setup exists, add/update a focused failing test first (red).
+- Implement minimal fix (green).
+- Refactor only if needed.
+
+4. Re-run the failed command.
+
+Repeat up to **3 iterations** per failed command. If still failing, mark as `Failed` and continue.
+
+## Step 5: Continue Remaining Checks
+
+Continue through remaining planned commands. Each command has its own 3-iteration fix budget.
+
+## Step 6: Report Results
+
+Summarize status for each attempted command/scop<configured-path>- `Passed`: passed immediately
+- `Fixed`: failed initially, passed after fixes
+- `Failed`: still failing after 3 iterations
+- `Skipped`: not detected for that scope or superseded by `CHECK_ALL`
+
+Report in execution order. Include scope (`root` or package prefix) and command used.
+
+Recommended tabl<configured-path>Scope | Command | Status | Notes
+```
+
+## Troubleshooting
+
+| Problem                            | Action                                                             |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| `NO_PROJECT=true`                  | Run from a folder containing `package.json`                        |
+| `PM_UNKNOWN=true`                  | Ask user for package manager and re-run detector with arg 2        |
+| `PM=...` but no script keys        | Report "No scripts detected" and stop                              |
+| Prefix keys present (`apps_api_*`) | Treat each prefix as its own scope; run with corresponding `*_DIR` |
+
+## Rules
+
+- Fix underlying issues rather than suppressing (`@ts-ignore`, `eslint-disable`)
+- Keep tests truthfu<configured-path>assertions must verify real passing behavior
+- If a fix needs architectural changes outside check-fix scope, report a blocker
+- For monorepos, report failing scopes explicitly

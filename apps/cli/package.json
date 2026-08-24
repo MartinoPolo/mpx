@@ -13,7 +13,11 @@
   "dependencies": {
     "@mpx/core": "workspace:*",
     "@mpx/config": "workspace:*",
+    "@mpx/executors": "workspace:*",
     "@mpx/launch": "workspace:*",
+    "@mpx/runtime-claude": "workspace:*",
+    "@mpx/runtime-contracts": "workspace:*",
+    "@mpx/runtime-pi": "workspace:*",
     "@mpx/provider-github": "workspace:*",
     "@mpx/provider-gitlab": "workspace:*",
     "@mpx/provider-kanbanflow": "workspace:*",

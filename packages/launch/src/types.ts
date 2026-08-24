@@ -6,6 +6,11 @@ export interface LaunchGrant { readonly access: GrantAccess; readonly resource: 
 export interface GrantApproval extends LaunchGrant { readonly reason: string; readonly approvalKey: string }
 export interface ElevationApproval { readonly reason: string; readonly approvalKey: string }
 export interface HostApproval { readonly reason: string; readonly approvalKey: string }
+export interface ExecutorVerificationEvidence {
+  readonly status: "verified" | "unverified" | "unavailable";
+  readonly verifier: string;
+  readonly evidenceDigest: string;
+}
 export type LaunchProvenance = "explicit" | "user-project" | "user-scope" | "built-in";
 export type DockerAvailability = "available" | "unavailable" | "unverified";
 export type ShortLaunchAlias = "cc" | "ccw" | "pi" | "piw";
@@ -48,6 +53,8 @@ export interface ResolveLaunchInput extends ResolveLaunchSelectionInput {
   readonly skillArtifact: SkillArtifactInput;
   readonly selectedNativeRuntimeRoot: string;
   readonly projectId?: string;
+  readonly repositoryId?: string;
+  readonly executorVerification?: Readonly<ExecutorVerificationEvidence>;
   readonly policyInputs: JsonValue;
 }
 export type EffectiveExecutor =
@@ -69,14 +76,16 @@ export type EffectiveExecutor =
     };
 
 export interface LaunchDescriptor {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly launchKey: string;
   readonly nativeRuntimeRootDigest: string;
   readonly runtime: Runtime;
+  readonly binding: { readonly projectId: string | null; readonly repositoryId: string };
   readonly identity: { readonly name: string; readonly domain: string };
   readonly mode: string;
   readonly skillPolicy: string;
   readonly executor: EffectiveExecutor & { readonly availability?: DockerAvailability };
+  readonly executorVerification: Readonly<ExecutorVerificationEvidence>;
   readonly workspace: WorkspaceStrategy;
   readonly networkPolicy: { readonly name: string; readonly declaration: Readonly<NetworkPolicyConfig> };
   readonly preset: string | null;

@@ -222,8 +222,8 @@ describe("cli",()=>{
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
     expect(await run(["--json","--cwd",cwd,"skill","list","--identity","work","--runtime","pi","--skill-policy","clean"],io,{env,catalogRoot})).toBe(0);
     const text=io.out[0]!, data=JSON.parse(text).data;
-    expect(data).toMatchObject({artifact:{schemaVersion:3,identity:"work",skillPolicy:"clean",runtime:"pi",contentScope:"work"},skills:[{identity:"review",exposure:"explicit-only"}]});
-    expect(data.artifact.effectivePolicyHash).toMatch(/^[a-f0-9]{64}$/u);
+    expect(data).toMatchObject({artifact:{schemaVersion:4,identity:"work",skillPolicy:"clean",runtime:"pi",contentScope:"work",manifestKey:expect.stringMatching(/^[a-f0-9]{64}$/u)},manifest:{schemaVersion:4,binding:{repositoryId:"sample/app"}},skills:[{identity:"review",exposure:"explicit-only"}]});
+    expect(data.artifact.artifactKey).toMatch(/^[a-f0-9]{64}$/u);
     expect(text).not.toContain("C:/native");
   });
 
@@ -244,7 +244,7 @@ describe("cli",()=>{
     expect(clean.skills[0].exposure).toBe("explicit-only");
     expect(developer.skills[0].exposure).toBe("name-only");
     expect(clean.artifact.artifactKey).not.toBe(developer.artifact.artifactKey);
-    expect(clean.artifact.effectivePolicyHash).not.toBe(developer.artifact.effectivePolicyHash);
+    expect(clean.artifact.manifestKey).not.toBe(developer.artifact.manifestKey);
   });
 
   it("constructs an identity-bound non-project skill artifact for a known cross-domain assistant cwd",async()=>{
@@ -345,7 +345,7 @@ describe("cli",()=>{
     expect(await run(["--json","--cwd",cwd,"launch","explain","--runtime","pi","--identity","work","--mode","project","--skill-policy","clean","--executor","docker"],io,{env,catalogRoot})).toBe(0);
     const text=io.out[0]!, body=JSON.parse(text);
     expect(io.err).toEqual([]); expect(io.out).toHaveLength(1);
-    expect(body).toEqual({apiVersion:1,ok:true,data:expect.objectContaining({schemaVersion:1,runtime:"pi",identity:{name:"work",domain:"work"},mode:"project",skillPolicy:"clean",executor:expect.objectContaining({name:"docker",effectiveEnforcement:"mount-enforced"}),intendedPolicy:expect.objectContaining({resources:{"selected-project":"read-write"}}),skillArtifact:expect.objectContaining({artifactKey:expect.stringMatching(/^[a-f0-9]{64}$/),runtime:"pi",identity:"work",skillPolicy:"clean",contentScope:"work",projectId:"sample/app",catalogHash:expect.stringMatching(/^[a-f0-9]{64}$/),effectivePolicyHash:expect.stringMatching(/^[a-f0-9]{64}$/)})}),warnings:[]});
+    expect(body).toEqual({apiVersion:1,ok:true,data:expect.objectContaining({schemaVersion:2,launchKey:expect.stringMatching(/^[a-f0-9]{64}$/),runtime:"pi",identity:{name:"work",domain:"work"},binding:{projectId:"sample/app",repositoryId:"sample/app"},mode:"project",skillPolicy:"clean",executor:expect.objectContaining({name:"docker",effectiveEnforcement:"mount-enforced"}),executorVerification:expect.objectContaining({status:"unverified"}),intendedPolicy:expect.objectContaining({resources:{"selected-project":"read-write"}}),skillArtifact:expect.objectContaining({artifactKey:expect.stringMatching(/^[a-f0-9]{64}$/),runtime:"pi",identity:"work",skillPolicy:"clean",contentScope:"work",projectId:"sample/app",catalogHash:expect.stringMatching(/^[a-f0-9]{64}$/),effectivePolicyHash:expect.stringMatching(/^[a-f0-9]{64}$/)})}),warnings:[]});
     expect(text).not.toContain("runtimeRoots"); expect(text).not.toContain("C:/native");
   });
 
@@ -436,14 +436,14 @@ describe("cli",()=>{
     const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
     expect(await run(["--json","--cwd",cwd,"skill","search","review","--identity","work","--runtime","pi","--skill-policy","clean","--artifact-key","stale"],io,{env,catalogRoot})).toBe(1);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"STALE_ARTIFACT",message:"runtime search requires the current exact launch-bound artifact"}});
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"STALE_ARTIFACT",message:"runtime operation requires the current exact v4 artifact"}});
   });
 
   it("resolves runnable launch syntax before returning an actionable non-spawning Docker gate",async()=>{
     const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
-    expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot})).toBe(1);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"LAUNCH_EXECUTION_DEFERRED",remediation:expect.stringContaining("Docker")}});
+    expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot,launchRoutes:{materialize:async()=>({})}})).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"EXECUTOR_GATE_UNVERIFIED",details:{executor:"docker"}}});
   });
 
   it("doctor reports a missing managed main reservation without allocating",async()=>{

@@ -18,12 +18,15 @@ import {
   type ProjectConfig,
   type UserConfig,
 } from "@mpx/config";
-import { errorEnvelope, MpxError, sha256Canonical, successEnvelope, type Diagnostic, type JsonValue } from "@mpx/core";
-import { resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput } from "@mpx/launch";
+import { createSkillArtifactReference, errorEnvelope, MpxError, sha256Canonical, successEnvelope, type Diagnostic, type JsonValue } from "@mpx/core";
+import { resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
+import { ExecutionError, sanitizeHostReason } from "@mpx/executors";
 import { probeProvider, type ProviderRegistry } from "@mpx/providers";
+import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
-import { explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
+import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
 import { catalogPath, configuredProviderRegistry, defaultContext, executeInternalPreparationWorker, NodeProviderProcessExecutor, ports, providerService, status, worktrees, type CliContext } from "./context.js";
+import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
@@ -31,6 +34,7 @@ interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: numb
 class UsageError extends Error {}
 const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|issue|review|ci|status|ports|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
 
+const shortLaunchAliases = new Set<ShortLaunchAlias>(["cc", "ccw", "pi", "piw"]);
 function parse(argv: readonly string[]): Parsed {
   const words: string[] = [], options = new Map<string,string|boolean|string[]>();
   for (let i=0;i<argv.length;i++) {
@@ -44,7 +48,8 @@ function parse(argv: readonly string[]): Parsed {
       else options.set(name!,value);
     } else throw new UsageError(`Unknown option: --${name}`);
   }
-  return { command:words, cwd:path.resolve(String(options.get("cwd")??process.cwd())), json:options.get("json")===true, options };
+  const command = words.length === 1 && shortLaunchAliases.has(words[0] as ShortLaunchAlias) ? ["launch", words[0]!] : words;
+  return { command, cwd:path.resolve(String(options.get("cwd")??process.cwd())), json:options.get("json")===true, options };
 }
 function safeErrnoCode(error:unknown):string{
   const code=typeof error==="object" && error!==null && "code" in error ? (error as {code?:unknown}).code : undefined;
@@ -105,7 +110,7 @@ async function knownCwdClassification(cwd:string, user:UserConfig):Promise<{doma
 
 function resolveOptions(
   user:UserConfig,
-  binding:{identity:string;skillPolicy:string;runtime:"claude"|"pi";contentScope:string;projectId?:string},
+  binding:{identity:string;skillPolicy:string;contentScope:string;repositoryId:string;projectId?:string},
 ):ResolveOptions {
   const configuredScope=user.contentScopes[binding.contentScope];
   if (!configuredScope) throw new MpxError({code:"CONTENT_SCOPE_UNKNOWN",message:`Unknown content scope '${binding.contentScope}'.`});
@@ -115,7 +120,7 @@ function resolveOptions(
   const contentScopeExposure=configuredScope.skillExposure ?? {};
   const projectExposure=projectOverride?.skillExposure;
   return {
-    runtime:binding.runtime,
+    repositoryId:binding.repositoryId,
     contentScope:binding.contentScope,
     ...(binding.projectId ? {projectId:binding.projectId} : {}),
     enabledPacks:resolveEffectiveSkillPacks({
@@ -214,11 +219,22 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     return {data,warnings};
   }
   if (group==="launch" && action==="resolve") throw new UsageError("launch resolve was replaced by 'mpx launch explain'");
-  if (group==="launch" && (action==="explain" || action==="claude" || action==="pi")) {
+  if (group==="launch" && action==="current") {
+    if(args.length) throw new UsageError("launch current accepts no arguments");
+    return {data:currentLaunchTuple(context.env),warnings};
+  }
+  if (group==="runtime" && (action==="claude" || action==="pi")) {
+    if(args.length) throw new UsageError(`runtime ${action} accepts no arguments`);
+    const tuple=currentLaunchTuple(context.env), bound=JSON.parse(context.env.MPX_RUNTIME_CONTEXT!) as {runtimeArtifact?:{runtime?:string}};
+    if(bound.runtimeArtifact?.runtime!==action) throw new MpxError({code:"RUNTIME_CONTEXT_MISMATCH",message:"The process-bound runtime does not match the requested runtime entry.",remediation:"Relaunch and restart the runtime process."});
+    return {data:tuple,warnings};
+  }
+  if (group==="launch" && (action==="explain" || action==="claude" || action==="pi" || shortLaunchAliases.has(action as ShortLaunchAlias))) {
     if (args.length) throw new UsageError(`launch ${action} accepts no positional arguments`);
+    const alias=shortLaunchAliases.has(action as ShortLaunchAlias)?action as ShortLaunchAlias:undefined;
     const user=await requiredUserConfig(context);
     const found=await discoverProjectConfig(parsed.cwd);
-    const projectId=found?.config.project.id;
+    const projectId=found?.config.project.id, repositoryId=projectId??"unbound/runtime";
     const stringOption=(name:string):string|undefined=>{const value=parsed.options.get(name);return typeof value==="string"?value:undefined;};
     const runtimeOption=action==="claude"||action==="pi" ? action : stringOption("runtime");
     if (runtimeOption!==undefined && runtimeOption!=="claude" && runtimeOption!=="pi") throw new MpxError({code:"RUNTIME_INVALID",message:"Runtime must be 'claude' or 'pi'."});
@@ -227,8 +243,8 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const executorOption=stringOption("executor"), workspaceOption=stringOption("workspace"), networkPolicyOption=stringOption("network-policy");
     if (executorOption!==undefined && executorOption!=="host" && executorOption!=="docker") throw new MpxError({code:"EXECUTOR_UNAVAILABLE",message:`Executor '${executorOption}' is unavailable.`});
     if (workspaceOption!==undefined && workspaceOption!=="clone" && workspaceOption!=="host-worktree" && workspaceOption!=="direct") throw new MpxError({code:"WORKSPACE_INVALID",message:`Workspace strategy '${workspaceOption}' is invalid.`});
-    const common=(runtime:"claude"|"pi",identity:string):ResolveLaunchSelectionInput=>({
-      userConfig:user,runtime,cwd:parsed.cwd,identity,
+    const common=(runtime?:"claude"|"pi",identity?:string):ResolveLaunchSelectionInput=>({
+      userConfig:user,cwd:parsed.cwd,...(runtime?{runtime}:{}),...(identity?{identity}:{}),...(alias?{alias}:{}),
       ...(modeOption?{mode:modeOption}:{}), ...(skillPolicyOption?{skillPolicy:skillPolicyOption}:{}),
       ...(contentScopeOption?{contentScope:contentScopeOption}:{}),
       ...(executorOption==="host"||executorOption==="docker"?{executor:executorOption}:{}),
@@ -250,8 +266,8 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       }
       return {data:{schemaVersion:1,identity:null,runtime:runtimeOption??null,candidates},warnings};
     }
-    if (!identityOption) throw new MpxError({code:"IDENTITY_REQUIRED",message:"Launch identity must be supplied explicitly."});
-    const runtime=runtimeOption ?? "pi";
+    if (!identityOption && !alias) throw new MpxError({code:"IDENTITY_REQUIRED",message:"Launch identity must be supplied explicitly."});
+    const runtime=runtimeOption ?? (alias?undefined:"pi");
     const launchInput=common(runtime,identityOption);
     const selection=await resolveLaunchSelection(launchInput);
     if (action==="explain" && runtimeOption===undefined) {
@@ -261,23 +277,37 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       });
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
     }
-    const opts=resolveOptions(user,{identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,runtime:selection.runtime,contentScope:selection.contentScope.name,...(projectId ? {projectId} : {})});
-    const catalog=await inventoryCanonical(await catalogPath(context,parsed.cwd));
-    const manifest=resolveManifest(catalog,opts);
+    const opts=resolveOptions(user,{identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,repositoryId,...(projectId ? {projectId} : {})});
+    const canonicalRoot=await catalogPath(context,parsed.cwd), catalog=await inventoryCanonical(canonicalRoot);
+    const projectInventory=found ? await inventoryProjectSkills(found.root,catalog) : {skills:[],diagnostics:[]};
+    if(projectInventory.diagnostics.length) throw new SkillCatalogError(projectInventory.diagnostics);
+    const projectSkills=projectInventory.skills;
+    const manifest=resolveManifest(catalog,opts), artifact=createRuntimeSkillArtifact(manifest,catalog,{runtime:selection.runtime});
+    const scope=user.contentScopes[selection.contentScope.name]!, projectOverride=projectId?user.projects?.[projectId]:undefined;
+    const skillArtifact=createSkillArtifactReference({runtime:selection.runtime,identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,projectId:projectId??null,catalogHash:sha256Canonical(catalog.map(skill=>({identity:skill.identity,contentHash:skill.contentHash})) as unknown as JsonValue),enabledPacks:resolveEffectiveSkillPacks({contentScopeSkillPacks:scope.skillPacks,projectSkillPacks:projectOverride?.skillPacks,skillPolicySkillPacks:selection.skillPolicy.declaration.skillPacks}),skillPolicyConfig:selection.skillPolicy.declaration as unknown as JsonValue,contentScopeExposure:(scope.skillExposure??{}) as unknown as JsonValue,projectExposure:(projectOverride?.skillExposure??null) as unknown as JsonValue});
+    const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(context,selection.executor), tty=context.launchTty??directProcessTty();
+    let hostApproval:{reason:string;approvalKey:string}|undefined;
+    if(selection.executor==="host" && action!=="explain") {
+      if(parsed.json || !tty.direct) throw new MpxError({code:"HOST_TTY_REQUIRED",message:"Host approval requires a current direct interactive TTY.",remediation:"Run the explicit host launch interactively, or use Docker."});
+      if(!reasonOption?.trim()) throw new MpxError({code:"HOST_REASON_REQUIRED",message:"Host execution requires a nonempty reason."});
+      if(!await tty.confirm(`Approve elevated host compatibility execution — ${sanitizeHostReason(reasonOption)}`)) throw new MpxError({code:"HOST_APPROVAL_DENIED",message:"Host execution was not approved."});
+      hostApproval={reason:reasonOption,approvalKey:sha256Canonical({cwd:parsed.cwd,runtime:selection.runtime,identity:selection.identity.name,reason:reasonOption} as unknown as JsonValue)};
+    }
     const grantOptions=parsed.options.get("grant");
     const descriptor=await resolveLaunch({
-      ...launchInput, ...(Array.isArray(grantOptions)?{grants:grantOptions}:{}), ...(reasonOption?{reason:reasonOption}:{}),
-      skillArtifact:manifest.artifactReference,
-      selectedNativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],
-      ...(projectId ? {projectId} : {}),
-      policyInputs:{schemaVersion:1,mode:{name:selection.mode.name,declaration:selection.mode.declaration},skillPolicy:{name:selection.skillPolicy.name,effectivePolicyHash:manifest.effectivePolicyHash}},
+      ...launchInput, ...(Array.isArray(grantOptions)?{grants:grantOptions}:{}), ...(reasonOption?{reason:reasonOption}:{}), ...(hostApproval?{hostApproval}:{}),
+      skillArtifact,selectedNativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],...(projectId ? {projectId} : {}),repositoryId,
+      dockerAvailability:evidence.status==="verified"?"available":evidence.status==="unavailable"?"unavailable":"unverified",executorVerification:evidence,
+      policyInputs:{schemaVersion:1,manifestKey:manifest.manifestKey,skillArtifactKey:skillArtifact.artifactKey},
     });
-    if (action!=="explain") throw new MpxError({
-      code:"LAUNCH_EXECUTION_DEFERRED",
-      message:"Launch resolved successfully, but B2 does not spawn a harness.",
-      remediation:"Pass the Docker sandbox and authentication gate in the runtime phase; MPX will never fall back to host execution.",
-    });
-    return {data:serializeLaunchPublic(descriptor),warnings};
+    if(action==="explain") return {data:serializeLaunchPublic(descriptor),warnings};
+    const appData=context.env.APPDATA;
+    if(!appData) throw new MpxError({code:"USER_CONFIG_ROOT_MISSING",message:"APPDATA is required to publish immutable runtime projections."});
+    const statusSnapshot = found
+      ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
+      : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
+    await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,...(found?{projectRoot:found.root}:{}),environment:context.env,context,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(projectSkills.length?{projectSkills}:{})});
+    return {data:null,warnings,silent:true};
   }
   if (group === "worktree" && ["create","remove","list","select","status","prepare","cancel","reconcile"].includes(action ?? "")) {
     const service=worktrees(context, parsed.cwd);
@@ -458,28 +488,28 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const found=await discoverProjectConfig(parsed.cwd);
     const cwdClassification=await knownCwdClassification(parsed.cwd,user);
     const contentScopeOption=parsed.options.get("content-scope");
-    const projectId=found?.config.project.id;
-    const opts=resolveOptions(user,{identity:identityOption,skillPolicy:skillPolicyOption,runtime:runtimeOption,contentScope:typeof contentScopeOption==="string"?contentScopeOption:cwdClassification.contentScope,...(projectId ? {projectId} : {})});
-    const manifest=resolveManifest(catalog,opts);
-    const artifact={schemaVersion:manifest.schemaVersion,artifactKey:manifest.artifactKey,identity:manifest.identity,skillPolicy:manifest.skillPolicy,effectivePolicyHash:manifest.effectivePolicyHash,runtime:manifest.runtime,contentScope:manifest.contentScope,projectId:manifest.artifactReference.projectId};
+    const projectId=found?.config.project.id, contentScope=typeof contentScopeOption==="string"?contentScopeOption:cwdClassification.contentScope;
+    const opts=resolveOptions(user,{identity:identityOption,skillPolicy:skillPolicyOption,contentScope,repositoryId:projectId??"unbound/runtime",...(projectId ? {projectId} : {})});
+    const manifest=resolveManifest(catalog,opts), runtimeArtifact=createRuntimeSkillArtifact(manifest,catalog,{runtime:runtimeOption});
+    const artifact={...runtimeArtifact.reference,identity:identityOption,skillPolicy:skillPolicyOption,contentScope,projectId:projectId??null};
     if (action==="list") {
       if (args.length) throw new UsageError("skill list accepts no arguments");
-      const exposure=new Map(manifest.entries.map((entry)=>[entry.identity,entry.exposure]));
-      data={artifact,skills:humanListSkills(manifest).map((skill)=>({...skill,exposure:exposure.get(skill.identity)}))};
+      const exposure=new Map(runtimeArtifact.entries.map((entry)=>[entry.identity,entry.exposure]));
+      data={artifact,manifest:{schemaVersion:manifest.schemaVersion,manifestKey:manifest.manifestKey,binding:manifest.binding},skills:humanListSkills(runtimeArtifact).map((skill)=>({...skill,exposure:exposure.get(skill.identity)}))};
       return { data, warnings };
     }
     const identity=args[0]; if (!identity) throw new UsageError(`skill ${action} requires ${action==="search"?"a query":action==="complete"?"a prefix":"an id"}`);
-    if (action==="complete") return {data:{artifact,completions:humanCompleteSkills(manifest,args.join(" "))},warnings};
+    if (action==="complete") return {data:{artifact,completions:humanCompleteSkills(runtimeArtifact,args.join(" "))},warnings};
     const skill=catalog.find((item:{identity:string})=>item.identity===identity);
-    const entry=manifest.entries.find((item)=>item.identity===identity);
-    if (action==="show") { const detail=humanSkillDetail(manifest,catalog,identity); if(!detail || !skill || !entry) throw new MpxError({code:"SKILL_NOT_FOUND",message:`Skill '${identity}' was not found in the launch-bound artifact.`}); return { data:{artifact,skill:{...detail,skillPacks:skill.skillPacks,exposure:entry.exposure}}, warnings }; }
+    const entry=runtimeArtifact.entries.find((item)=>item.identity===identity);
+    if (action==="show") { const detail=humanSkillDetail(runtimeArtifact,catalog,identity); if(!detail || !skill || !entry) throw new MpxError({code:"SKILL_NOT_FOUND",message:`Skill '${identity}' was not found in the launch-bound artifact.`}); return { data:{artifact,skill:{...detail,skillPacks:skill.skillPacks,exposure:entry.exposure}}, warnings }; }
     if (action==="explain") { if(!skill) throw new MpxError({code:"SKILL_NOT_FOUND",message:`Skill '${identity}' was not found.`}); return { data:{artifact,skill:explainSkill(skill,opts)}, warnings }; }
     const limit=Number(parsed.options.get("limit")??20);
     if (!Number.isInteger(limit)) throw new UsageError("--limit must be an integer");
     const requestedArtifact=parsed.options.get("artifact-key");
     data = typeof requestedArtifact==="string"
-      ? searchSkills(manifest,catalog,args.join(" "),{limit,runtime:true,artifactKey:requestedArtifact})
-      : humanSearchSkills(manifest,catalog,args.join(" "),{limit});
+      ? searchSkills(runtimeArtifact,catalog,args.join(" "),{limit,runtime:true,artifactKey:requestedArtifact})
+      : humanSearchSkills(runtimeArtifact,catalog,args.join(" "),{limit});
     return { data:{artifact,results:data}, warnings };
   }
   throw new UsageError(usage);
@@ -495,6 +525,8 @@ export async function run(argv:string[]=process.argv.slice(2), io:CliIo=processI
       ? new MpxError({ code: "USAGE_ERROR", message: error.message })
       : error instanceof MpxError
         ? error
+        : error instanceof ExecutionError
+          ? executionMpxError(error)
         : skillDiagnostic
           ? new MpxError({ code: skillDiagnostic.code, message: sanitizePublicMessage(skillDiagnostic.message) })
           : error instanceof StrictJsonError

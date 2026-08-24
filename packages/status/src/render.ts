@@ -1,13 +1,65 @@
-import type { StatusSnapshotV1 } from "./provider.js";
+import type { PortResolutionState, StatusSnapshotV1 } from "./provider.js";
+import { parseStatusSnapshotV1 } from "./snapshot.js";
+
+export type PortSegmentMarker = "" | "*" | "!" | "?";
+
+export interface PortSegmentService {
+  readonly id: string;
+  readonly port: number | null;
+  readonly listening: boolean;
+  readonly conflict: "none" | "external" | "unknown";
+  readonly marker: PortSegmentMarker;
+}
+
+export interface PortSegmentData {
+  readonly resolution: PortResolutionState;
+  readonly services: readonly PortSegmentService[];
+}
+
+function markerFor(service: StatusSnapshotV1["services"][number]): PortSegmentMarker {
+  if (service.conflict === "external") return "!";
+  if (service.conflict === "unknown") return "?";
+  return service.listening ? "*" : "";
+}
+
+/** Creates stable, runtime-neutral current-worktree port data. */
+export function normalizePortSegment(snapshot: StatusSnapshotV1): PortSegmentData {
+  return {
+    resolution: snapshot.portResolution,
+    services: [...snapshot.services]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((service) => ({
+        id: service.id,
+        port: service.port,
+        listening: service.listening,
+        conflict: service.conflict,
+        marker: markerFor(service),
+      })),
+  };
+}
+
+/** Applies the shared plain-text representation; runtimes may style the result around this API. */
+export function formatPortSegment(segment: PortSegmentData): string {
+  if (segment.resolution !== "valid") return `ports ${segment.resolution}`;
+  if (segment.services.length === 0) return "ports none";
+  return `ports ${segment.services.map((service) => `${service.id}:${service.port ?? "?"}${service.marker}`).join(" ")}`;
+}
 
 export function renderPortSegment(snapshot: StatusSnapshotV1): string {
-  if (snapshot.portResolution !== "valid") return `ports ${snapshot.portResolution}`;
-  if (snapshot.services.length === 0) return "ports none";
-  const services = [...snapshot.services].sort((a, b) => a.id.localeCompare(b.id));
-  return `ports ${services.map((service) => {
-    const suffix = service.conflict === "external" ? "!" : service.conflict === "unknown" ? "?" : service.listening ? "*" : "";
-    return `${service.id}:${service.port ?? "?"}${suffix}`;
-  }).join(" ")}`;
+  return formatPortSegment(normalizePortSegment(snapshot));
 }
-export function renderClaudeFixture(snapshot: StatusSnapshotV1): string { return renderPortSegment(snapshot); }
-export function renderPiFixture(snapshot: StatusSnapshotV1): string { return renderPortSegment(snapshot); }
+
+/** Validated Claude adapter entrypoint. Surrounding status-line UI remains runtime-specific. */
+export function renderClaudePortSegment(value: unknown): string {
+  return renderPortSegment(parseStatusSnapshotV1(value));
+}
+
+/** Validated Pi adapter entrypoint. Surrounding footer UI remains runtime-specific. */
+export function renderPiPortSegment(value: unknown): string {
+  return renderPortSegment(parseStatusSnapshotV1(value));
+}
+
+/** @deprecated Use renderClaudePortSegment. */
+export function renderClaudeFixture(value: unknown): string { return renderClaudePortSegment(value); }
+/** @deprecated Use renderPiPortSegment. */
+export function renderPiFixture(value: unknown): string { return renderPiPortSegment(value); }

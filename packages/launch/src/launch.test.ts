@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UserConfig } from "@mpx/config";
 import { createSkillArtifactReference, type SkillArtifactFacts } from "@mpx/core";
-import { parseGrant, resolveLaunch, resolveLaunchAlias, resolveLaunchSelection, serializeLaunchAudit, serializeLaunchPublic } from "./index.js";
+import { parseGrant, parseLaunchDescriptorV2, resolveLaunch, resolveLaunchAlias, resolveLaunchSelection, serializeLaunchAudit, serializeLaunchPublic } from "./index.js";
 import type { ResolveLaunchInput } from "./index.js";
 
 const realpathFailures = new Map<string, string>();
@@ -91,6 +91,15 @@ afterEach(() => {
 });
 
 describe("launch resolution", () => {
+  it("creates and strictly parses schema v2 while recomputing its immutable launch key", async () => {
+    const descriptor = await resolveLaunch({ ...base, identity: "personal", repositoryId: "sample/repository", executorVerification: { status: "verified", verifier: "docker-probe", evidenceDigest: hash("e") } });
+    expect(descriptor).toMatchObject({ schemaVersion: 2, binding: { projectId: "sample/app", repositoryId: "sample/repository" }, executorVerification: { status: "verified" } });
+    expect(parseLaunchDescriptorV2(structuredClone(descriptor))).toEqual(descriptor);
+    expect(() => parseLaunchDescriptorV2({ ...descriptor, launchKey: hash("f") })).toThrow(expect.objectContaining({ code: "LAUNCH_KEY_MISMATCH" }));
+    expect(() => parseLaunchDescriptorV2({ ...descriptor, privateRoute: "C:/private/auth" })).toThrow(expect.objectContaining({ code: "LAUNCH_DESCRIPTOR_UNKNOWN_FIELD" }));
+    expect(Object.isFrozen(parseLaunchDescriptorV2(structuredClone(descriptor)))).toBe(true);
+  });
+
   it("requires a runtime and rejects a skill artifact declared for another runtime", async () => {
     const { runtime: _runtime, ...withoutRuntime } = base;
     await expect(resolveLaunch({ ...withoutRuntime, identity: "personal" } as ResolveLaunchInput)).rejects.toMatchObject({ code: "RUNTIME_REQUIRED" });

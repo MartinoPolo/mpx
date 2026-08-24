@@ -1,13 +1,15 @@
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, copyFile, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createNodeWorktreeIncludeDependencies, deriveLifecycleKey, deriveWorktreePath, planWorktreeIncludes } from "@mpx/worktrees";
 import type { PreparationPlan, ProjectConfig } from "@mpx/config";
 import type { ProviderProcessRequest } from "@mpx/providers";
 import { afterEach, expect, it, vi } from "vitest";
-import { classifyProviderProcessResult, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
+import { catalogPath, classifyProviderProcessResult, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
 
 const exec = promisify(execFile);
 
@@ -84,6 +86,19 @@ async function currentIncludeApproval(fixture: Awaited<ReturnType<typeof include
   }, createNodeWorktreeIncludeDependencies());
   return plan.approval;
 }
+
+it("selects only the packaged trusted catalog instead of a malicious cwd ancestor", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-catalog-ancestor-"));
+  roots.push(root);
+  const maliciousRoot = path.join(root, "malicious");
+  const nested = path.join(maliciousRoot, "packages", "app");
+  await mkdir(path.join(maliciousRoot, "content", "skills"), { recursive: true });
+  await mkdir(nested, { recursive: true });
+  await writeFile(path.join(maliciousRoot, "content", "skills", "shadow.txt"), "shadowed");
+
+  const packaged = fileURLToPath(new URL("../../../content/skills", import.meta.url));
+  await expect(catalogPath({ env: {} }, nested)).resolves.toBe(packaged);
+});
 
 it("binds production GitHub and GitLab adapters to the resolved project root", async () => {
   const requests: ProviderProcessRequest[] = [];
@@ -375,6 +390,30 @@ it("copies only the exactly approved untracked file with spaces before ports and
   await expect(exists(path.join(fixture.destinationRoot, "local data", "tracked.txt"))).resolves.toBe(false);
   await expect(exists(path.join(fixture.destinationRoot, "unapproved.txt"))).resolves.toBe(false);
   expect(fixture.effects).toEqual(["ports-after-copy", "preparation-after-ports"]);
+}, 15_000);
+
+it("persists only a sanitized cancellation failure message in durable state", async () => {
+  const fixture = await includeLifecycleFixture("cancel-sanitized");
+  const key = deriveLifecycleKey(path.join(fixture.mainRoot, ".git"), fixture.request.branch);
+  await expect(fixture.service.create(fixture.request)).rejects.toMatchObject({ code: "WORKTREE_INCLUDE_APPROVAL_REQUIRED" });
+  await fixture.service.create({ ...fixture.request, includeApproval: await currentIncludeApproval(fixture) });
+  const appData = { LOCALAPPDATA: fixture.stateRoot };
+  const service = worktrees({
+    env: appData,
+    portService: fixture.portService,
+    preparationRuntimeFactory: () => ({
+      run: async () => ({ status: "ready" }),
+      retry: async () => ({ status: "ready" }),
+      cancel: async () => { throw new Error("token=abc123 path=C:/secret/worktree"); },
+      reconcile: async () => ({ status: "ready" }),
+    }),
+  } as never, fixture.mainRoot);
+  await expect(service.cancel({ cwd: fixture.mainRoot, key })).rejects.toThrow(/token=abc123/);
+  const statePath = path.join(fixture.stateRoot, "mpx", "worktrees", "lifecycle", `${createHash("sha256").update(key).digest("hex")}.json`);
+  const persisted = JSON.parse(await readFile(statePath, "utf8")) as { failure?: { message?: string } };
+  expect(persisted.failure?.message).toBe("Preparation cancellation could not be verified.");
+  expect(JSON.stringify(persisted)).not.toContain("abc123");
+  expect(JSON.stringify(persisted)).not.toContain("C:/secret/worktree");
 }, 15_000);
 
 it("rejects a worker handshake for a different persisted run", () => {

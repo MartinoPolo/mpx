@@ -177,6 +177,7 @@ export async function resolveLaunchSelection(input: ResolveLaunchSelectionInput)
 }
 
 export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDescriptor> {
+  if (input.repositoryId !== undefined && !projectIdPattern.test(input.repositoryId)) fail("REPOSITORY_ID_INVALID", "Repository id must be a canonical owner/repository id.");
   const selection = await resolveLaunchSelection(input);
   validateSkillArtifact(input.skillArtifact);
   if (input.skillArtifact.runtime !== selection.runtime) fail("SKILL_ARTIFACT_RUNTIME_MISMATCH", "Skill artifact runtime does not match the launch runtime.");
@@ -266,6 +267,12 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
   const mcpAllow = [...(identity.mcpSharing?.allow ?? [])].sort().map((route) => routeLabel(route, "MCP route"));
 
   const dockerAvailability = input.dockerAvailability ?? "unverified";
+  const executorVerification = input.executorVerification ?? {
+    status: executor === "docker" ? dockerAvailability : "unverified",
+    verifier: "not-verified",
+    evidenceDigest: sha256Canonical({ executor, status: executor === "docker" ? dockerAvailability : "unverified" }),
+  };
+  if (!executorVerification.verifier.trim() || !sha256Pattern.test(executorVerification.evidenceDigest)) fail("EXECUTOR_EVIDENCE_INVALID", "Executor verification evidence must name its verifier and contain a SHA-256 evidence digest.");
   const diagnostics = executor === "docker" && dockerAvailability !== "available" ? [{
     code: dockerAvailability === "unavailable" ? "DOCKER_UNAVAILABLE" : "DOCKER_AVAILABILITY_UNVERIFIED",
     severity: "warning" as const,
@@ -275,13 +282,15 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
   }] : [];
 
   const tuple = {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     nativeRuntimeRootDigest,
     runtime: selection.runtime,
+    binding: { projectId: input.projectId ?? null, repositoryId: input.repositoryId ?? input.projectId ?? "unbound" },
     identity: { name: identityName, domain: identity.domain },
     mode,
     skillPolicy,
     executor: { ...effectiveExecutor(executor), ...(executor === "docker" ? { availability: dockerAvailability } : {}) },
+    executorVerification: structuredClone(executorVerification),
     workspace,
     networkPolicy: { name: selection.networkPolicy.name, declaration: structuredClone(selection.networkPolicy.declaration) },
     preset: selection.preset,

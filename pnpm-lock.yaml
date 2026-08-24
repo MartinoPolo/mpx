@@ -26,6 +26,9 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mpx/executors':
+        specifier: workspace:*
+        version: link:../../packages/executors
       '@mpx/launch':
         specifier: workspace:*
         version: link:../../packages/launch
@@ -44,6 +47,15 @@ importers:
       '@mpx/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@mpx/runtime-claude':
+        specifier: workspace:*
+        version: link:../../runtimes/claude/runtime-claude
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../packages/runtime-contracts
+      '@mpx/runtime-pi':
+        specifier: workspace:*
+        version: link:../../runtimes/pi/runtime-pi
       '@mpx/skills':
         specifier: workspace:*
         version: link:../../packages/skills
@@ -77,6 +89,28 @@ importers:
         version: 8.20.0
 
   packages/core:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/executors:
+    dependencies:
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
+      '@mpx/launch':
+        specifier: workspace:*
+        version: link:../launch
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -184,6 +218,30 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)
 
+  packages/runtime-contracts:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/runtime-hooks:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
   packages/skills:
     dependencies:
       '@mpx/config':
@@ -192,6 +250,9 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../core
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -252,6 +313,56 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  runtimes/claude/runtime-claude:
+    dependencies:
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-contracts
+      '@mpx/runtime-hooks':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-hooks
+      '@mpx/skills':
+        specifier: workspace:*
+        version: link:../../../packages/skills
+      '@mpx/status':
+        specifier: workspace:*
+        version: link:../../../packages/status
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  runtimes/pi/runtime-pi:
+    dependencies:
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-contracts
+      '@mpx/runtime-hooks':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-hooks
+      '@mpx/skills':
+        specifier: workspace:*
+        version: link:../../../packages/skills
+      '@mpx/status':
+        specifier: workspace:*
+        version: link:../../../packages/status
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

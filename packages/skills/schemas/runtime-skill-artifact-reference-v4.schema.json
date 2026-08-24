@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mpx.local/schemas/runtime-skill-artifact-reference-v4.schema.json",
+  "title": "RuntimeSkillArtifactReferenceV4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runtime", "manifestKey", "artifactKey", "fileMapHash"],
+  "properties": {
+    "schemaVersion": { "const": 4 },
+    "runtime": { "enum": ["claude", "pi"] },
+    "manifestKey": { "type": "string", "minLength": 1 },
+    "artifactKey": { "type": "string", "minLength": 1 },
+    "fileMapHash": { "type": "string", "minLength": 1 }
+  }
+}
