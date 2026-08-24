@@ -74,7 +74,7 @@ function expandSource(source, roots) {
   return source.replace(/^\$\{([A-Z0-9_]+)\}/u, (_, name) => roots[name] ?? `\${${name}}`);
 }
 
-export async function validateProvenance({ rootFiles, manifest, roots, readSource, verifySources = false }) {
+export async function validateProvenance({ rootFiles, manifest, roots, readSource, verifySources = false, destinationAttributes }) {
   const diagnostics = [];
   for (const [index, entry] of (manifest.entries ?? []).entries()) {
     const label = entry.destination ?? entry.source ?? `entry ${index}`;
@@ -83,9 +83,21 @@ export async function validateProvenance({ rootFiles, manifest, roots, readSourc
       if (!/^[a-f0-9]{64}$/u.test(entry.originalSha256 ?? "") || !/^[a-f0-9]{64}$/u.test(entry.destinationSha256 ?? "")) {
         diagnostics.push(diagnostic("PROVENANCE_HASH_MISSING", label, "imported entries require source and destination SHA-256 values"));
       }
-      const destination = entry.destination ? rootFiles.get(normalized(entry.destination)) : undefined;
+      const destinationName = entry.destination ? normalized(entry.destination) : undefined;
+      const destination = destinationName ? rootFiles.get(destinationName) : undefined;
       if (destination === undefined) diagnostics.push(diagnostic("PROVENANCE_DESTINATION_MISSING", label, "provenance destination is absent"));
-      else if (digest(destination) !== entry.destinationSha256) diagnostics.push(diagnostic("PROVENANCE_DESTINATION_HASH_MISMATCH", label, "destination no longer matches its recorded SHA-256"));
+      else {
+        if (destinationAttributes && TEXT.test(destinationName)) {
+          const attributes = destinationAttributes.get(destinationName);
+          if (!attributes || !["auto", "set"].includes(attributes.text) || attributes.eol !== "lf") {
+            diagnostics.push(diagnostic("PROVENANCE_DESTINATION_ATTRIBUTE_MISSING", label, "provenance-managed text requires repository Git attributes enforcing LF"));
+          }
+          if (Buffer.from(destination).includes(Buffer.from("\r\n"))) {
+            diagnostics.push(diagnostic("PROVENANCE_DESTINATION_NOT_LF", label, "provenance-managed text contains CRLF bytes"));
+          }
+        }
+        if (digest(destination) !== entry.destinationSha256) diagnostics.push(diagnostic("PROVENANCE_DESTINATION_HASH_MISMATCH", label, "destination no longer matches its recorded SHA-256"));
+      }
       if (verifySources) {
         const sourcePath = expandSource(entry.source ?? "", roots);
         const source = await readSource(sourcePath);
@@ -128,7 +140,7 @@ export function validateCanonicalScriptSyntax(root, names) {
   return diagnostics;
 }
 
-export async function validateGeneratedRepository({ root, names, tracked, files, generatedPiDiagnostics = [], readSource, verifySources = false }) {
+export async function validateGeneratedRepository({ root, names, tracked, files, generatedPiDiagnostics = [], readSource, verifySources = false, destinationAttributes }) {
   const diagnostics = validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics });
   const provenanceFile = "docs/history/SOURCE_PROVENANCE.json";
   const parsed = parseProvenanceManifest(files.get(provenanceFile), provenanceFile);
@@ -139,8 +151,25 @@ export async function validateGeneratedRepository({ root, names, tracked, files,
     roots: Object.fromEntries(Object.keys(parsed.manifest.symbolicRoots ?? {}).map((name) => [name, process.env[name]])),
     readSource,
     verifySources,
+    destinationAttributes,
   }));
   return diagnostics;
+}
+
+function repositoryAttributes(root, names) {
+  const output = execFileSync("git", ["-c", "core.attributesFile=", "check-attr", "-z", "--stdin", "text", "eol"], {
+    cwd: root,
+    env: { ...process.env, GIT_ATTR_NOSYSTEM: "1" },
+    input: `${names.join("\0")}\0`,
+  }).toString("utf8").split("\0");
+  const result = new Map();
+  for (let index = 0; index + 2 < output.length; index += 3) {
+    const [file, attribute, value] = output.slice(index, index + 3);
+    const attributes = result.get(file) ?? {};
+    attributes[attribute] = value;
+    result.set(file, attributes);
+  }
+  return result;
 }
 
 export async function repositoryFiles(root, names, options = {}) {
@@ -222,6 +251,7 @@ async function run() {
     generatedPiDiagnostics: drift,
     readSource: async (source) => { try { return await readFile(source); } catch { return undefined; } },
     verifySources,
+    destinationAttributes: repositoryAttributes(root, names),
   })];
 
   const parsed = parseProvenanceManifest(files.get("docs/history/SOURCE_PROVENANCE.json"));

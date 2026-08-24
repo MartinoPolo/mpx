@@ -306,6 +306,28 @@ describe("generated repository validation", () => {
     expect(messages(diagnostics)).toEqual(["PROVENANCE_DESTINATION_HASH_MISMATCH"]);
   });
 
+  it("rejects CRLF bytes in a provenance-managed text destination even when its hash matches", async () => {
+    const destination = Buffer.from("checkout\r\nbytes\r\n");
+    const diagnostics = await validateProvenance({
+      rootFiles: new Map([["content/a.txt", destination]]),
+      manifest: { entries: [{ source: "source", destination: "content/a.txt", originalSha256: sha("source"), destinationSha256: sha(destination), disposition: "imported-rewritten" }] },
+      roots: {}, readSource: async () => undefined,
+      destinationAttributes: new Map([["content/a.txt", { text: "auto", eol: "lf" }]]),
+    });
+    expect(messages(diagnostics)).toEqual(["PROVENANCE_DESTINATION_NOT_LF"]);
+  });
+
+  it("requires LF Git attribute coverage for every provenance-managed text destination", async () => {
+    const destination = Buffer.from("canonical\n");
+    const diagnostics = await validateProvenance({
+      rootFiles: new Map([["content/a.txt", destination]]),
+      manifest: { entries: [{ source: "source", destination: "content/a.txt", originalSha256: sha("source"), destinationSha256: sha(destination), disposition: "imported-rewritten" }] },
+      roots: {}, readSource: async () => undefined,
+      destinationAttributes: new Map(),
+    });
+    expect(messages(diagnostics)).toEqual(["PROVENANCE_DESTINATION_ATTRIBUTE_MISSING"]);
+  });
+
   it("requires imported dispositions to provide a destination and both hashes", async () => {
     const diagnostics = await validateProvenance({
       rootFiles: new Map(),

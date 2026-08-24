@@ -1,0 +1,9 @@
+# Provenance-managed canonical text must have checkout-stable bytes.
+/content/** text=auto eol=lf
+/docs/history/*.md text eol=lf
+/docs/history/*.json text eol=lf
+
+# Validators and generated text projections must observe the same bytes.
+/scripts/validate-generated.mjs text eol=lf
+/scripts/validate-generated.test.mjs text eol=lf
+/runtimes/pi/runtime-pi/projection/** text=auto eol=lf
