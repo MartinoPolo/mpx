@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "scope": "reviewed-public-hook-only",
+  "contentIncluded": false,
+  "entries": [
+    {
+      "source": "~/.codex/hooks/compact-context.js",
+      "sha256": "7c66b56f1936691b8fb8b2d4fe8267e411a8b818ee5feddf0855a17e9529e85d",
+      "disposition": "canonicalized",
+      "destination": "@mpx/runtime-hooks",
+      "evidence": [
+        "detectProjectEnvironment",
+        "buildCompactContext",
+        "mergeCompactionInstructions"
+      ],
+      "runtimeDependency": false
+    }
+  ]
+}

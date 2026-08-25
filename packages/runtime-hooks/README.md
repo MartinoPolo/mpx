@@ -36,5 +36,32 @@ No source content, machine credentials, sessions, or state is bundled.
   string as an `.mjs` module, and import its named or default
   `classifyDangerousCommand` export. The standalone source has no imports or workspace
   dependencies and is generated from the same classifier factory used by this package.
-- Runtime-specific event names, exit codes, payload envelopes, notifications, automatic
-  draft-PR creation, and other Phase G behavior are intentionally excluded.
+- Adapters normalize harness events to semantic contracts. Guard observations are
+  resolved in fixed policy order, so differing Claude/Pi event timing cannot alter the
+  result. Dangerous-command infrastructure failure is fail-closed; package, pre-commit,
+  Fallow, post-command, formatting, context, compaction, and notification infrastructure
+  failures are visible or silent fail-open according to their source behavior.
+- Runtime-specific event names, exit codes, payload envelopes, process spawning, and
+  automatic draft-review creation remain adapter responsibilities.
+
+## Behavior matrix
+
+| Behavior | Shared contract | Failure disposition |
+| --- | --- | --- |
+| Package manager | `evaluatePackagePolicy` | Wrong manager blocks; capability warnings allow |
+| Dangerous command | `classifyDangerousCommand` | Classification/input/infrastructure uncertainty blocks |
+| Pre-commit and secrets | `evaluatePreCommit` | Secret or check failure blocks; discovery failure is adapter-visible fail-open |
+| Fallow | `evaluateFallowGate` | Audit fail/old version blocks; unavailable/runtime error warns and allows |
+| Post-write quality | `planFileQuality` | Returns argv plans; adapter runs best-effort |
+| Post-command context | `extractPostCommandContext` | Missing/invalid assumptions produce no context |
+| Session context | `buildMachineContext`, `planSessionContext` | Missing roots produce no context |
+| Compaction | `planCompactionInjection` | Uses runtime default when canonical injection is unavailable |
+| Notification | `planNotification` | Top-level Windows turns use background flash/beep; delivery failure is ignored |
+
+## Adapter gaps
+
+Claude and Pi still need thin wiring to gather staged diffs and package metadata, execute
+check and quality argv plans, turn provider results into post-command assumptions, map
+native lifecycle events to `turn-settled` and `before-next-model-turn`, perform native
+compaction calls, and deliver the Windows notification capability. No adapter may import
+the old source checkouts or `~/.codex`.

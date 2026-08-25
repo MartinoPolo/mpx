@@ -232,13 +232,58 @@ export const dangerousCommandPolicyModuleSource = [
   "export default classifyDangerousCommand;",
 ].join("\n");
 
+export type GuardPolicy = "package-manager" | "pre-commit" | "dangerous-command" | "fallow";
+export interface GuardObservation {
+  readonly policy: GuardPolicy;
+  readonly decision?: HookDecision & { readonly warning?: string; readonly warnings?: readonly string[] };
+  readonly infrastructureFailure?: string;
+}
+export interface GuardResolution extends HookDecision { readonly warnings: readonly string[] }
+const GUARD_ORDER: readonly GuardPolicy[] = ["package-manager", "pre-commit", "dangerous-command", "fallow"];
+const FAIL_CLOSED_GUARDS = new Set<GuardPolicy>(["dangerous-command"]);
+
+/** Resolve independent hook observations deterministically, regardless of harness event order. */
+export function resolveGuardObservations(observations: readonly GuardObservation[]): GuardResolution {
+  const sorted = [...observations].sort((left, right) => GUARD_ORDER.indexOf(left.policy) - GUARD_ORDER.indexOf(right.policy));
+  const warnings: string[] = [];
+  let firstBlock: HookDecision | undefined;
+  for (const observation of sorted) {
+    if (observation.infrastructureFailure) {
+      if (FAIL_CLOSED_GUARDS.has(observation.policy) && !firstBlock) firstBlock = block("GUARD_INFRASTRUCTURE_FAILURE", `${observation.policy}: ${observation.infrastructureFailure}`);
+      else if (!FAIL_CLOSED_GUARDS.has(observation.policy)) warnings.push(`${observation.policy}: ${observation.infrastructureFailure}; skipped (fail-open).`);
+      continue;
+    }
+    const decision = observation.decision;
+    if (!decision) continue;
+    if (decision.warning) warnings.push(decision.warning);
+    if (decision.warnings) warnings.push(...decision.warnings);
+    if (decision.action === "block" && !firstBlock) firstBlock = decision;
+  }
+  return firstBlock ? { ...firstBlock, warnings } : { action: "allow", warnings };
+}
+
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export interface PackagePolicyDecision extends HookDecision { readonly replacement?: string; readonly warnings: readonly string[] }
+function commandListExecutables(command: string): string[] {
+  const segments: string[] = [];
+  let segment = ""; let quote = ""; let escaped = false;
+  for (const character of command) {
+    if (escaped) { segment += character; escaped = false; continue; }
+    if (character === "\\") { segment += character; escaped = true; continue; }
+    if (quote) { segment += character; if (character === quote) quote = ""; continue; }
+    if (character === "'" || character === '"') { segment += character; quote = character; continue; }
+    if (";|&()\n\r".includes(character)) { if (segment.trim()) segments.push(segment.trim()); segment = ""; continue; }
+    segment += character;
+  }
+  if (segment.trim()) segments.push(segment.trim());
+  return segments.map((item) => item.split(/\s+/u)[0]?.toLowerCase() ?? "").filter(Boolean);
+}
 export function evaluatePackagePolicy(command: string, manager: PackageManager | null): PackagePolicyDecision {
   const invalid = boundedCommand(command); if (invalid) return { ...invalid, warnings: [] };
   const warnings: string[] = [];
-  const primary = command.trim().split(/\s+/u)[0] ?? "";
-  if (manager && (["npm", "pnpm", "yarn", "bun"] as string[]).includes(primary) && primary !== manager) return { action: "block", code: "WRONG_PACKAGE_MANAGER", message: `This project uses ${manager}; use it instead of ${primary}.`, replacement: manager, warnings };
+  const packageManagers = new Set(["npm", "pnpm", "yarn", "bun"]);
+  const wrong = commandListExecutables(command).find((executable) => packageManagers.has(executable) && executable !== manager);
+  if (manager && wrong) return { action: "block", code: "WRONG_PACKAGE_MANAGER", message: `This project uses ${manager}; use it instead of ${wrong}.`, replacement: manager, warnings };
   if (manager === "bun" && /(?:^|\s)npx\s/.test(command)) return { action: "block", code: "WRONG_PACKAGE_RUNNER", message: "This project uses bunx instead of npx.", replacement: "bunx", warnings };
   if (manager && /(?:^|[;&|]\s*|\s)npx\s+tsc(?:\s|$)/.test(command)) return { action: "block", code: "DIRECT_TSC", message: `Use '${manager} run typecheck' or the project's check script.`, replacement: `${manager} run typecheck`, warnings };
   // Pipeline commands use these tools for stream processing rather than as a
@@ -281,6 +326,38 @@ export function selectPreCommitCheck(input: { readonly toolchain: Toolchain; rea
   const names = input.toolchain === "vite-plus" ? ["check:all", "check-all"] : [];
   names.push(...(input.framework === "svelte" ? ["check", "typecheck", "type-check"] : ["typecheck", "type-check", "check", "check:types", "tsc"]));
   return names.find((name) => Boolean(input.scripts[name])) ?? null;
+}
+
+export interface PreCommitCheckPlan {
+  readonly executable: PackageManager;
+  readonly args: readonly ["run", string];
+  readonly timeoutMilliseconds: 120_000;
+  readonly failure: "block";
+  readonly outputTailLines: 50;
+}
+export type PreCommitDecision =
+  | { readonly action: "allow"; readonly warnings: readonly string[]; readonly check?: PreCommitCheckPlan }
+  | { readonly action: "block"; readonly code: "STAGED_SECRET"; readonly message: string; readonly warnings: readonly string[]; readonly findings: readonly SecretFinding[] };
+export function evaluatePreCommit(input: {
+  readonly command: string;
+  readonly packageManager: PackageManager | null;
+  readonly toolchain: Toolchain;
+  readonly framework: Framework;
+  readonly scripts: Readonly<Record<string, string>>;
+  readonly staged: readonly { readonly file: string; readonly diff: string }[];
+}): PreCommitDecision {
+  if (!/(?:^|[\s;&|()])git\s+commit(?:\s|$)/u.test(input.command)) return { action: "allow", warnings: [] };
+  const findings = input.staged.flatMap(({ file, diff }) => shouldScanStagedFile(file) ? scanAddedSecrets(diff, file) : []);
+  if (findings.length > 0) return { action: "block", code: "STAGED_SECRET", message: "Remove staged secrets before committing.", warnings: [], findings };
+  const message = extractCommitMessage(input.command);
+  const warnings = message ? [...validateCommitFormat(message).warnings] : [];
+  const script = selectPreCommitCheck(input);
+  if (!script) return { action: "allow", warnings };
+  return {
+    action: "allow",
+    warnings,
+    check: { executable: input.packageManager ?? "npm", args: ["run", script], timeoutMilliseconds: 120_000, failure: "block", outputTailLines: 50 },
+  };
 }
 
 export interface FallowGateInput { readonly command: string; readonly minimumVersion: string; readonly runner?: { readonly description: string; readonly version: string }; readonly audit?: { readonly status: number; readonly stdout: string; readonly stderr: string } }
@@ -339,6 +416,45 @@ export function detectProjectEnvironment(startDirectory: string): ProjectEnviron
   const runners: Record<PackageManager, readonly string[]> = { bun: ["bunx"], pnpm: ["pnpm", "exec"], yarn: ["yarn", "exec"], npm: ["npx"] };
   return { packageManager, runner: packageManager ? runners[packageManager] : ["npx"], toolchain, framework, python };
 }
+export type NotificationPlan =
+  | { readonly action: "none" }
+  | { readonly action: "flash-beep"; readonly delivery: "background"; readonly failure: "ignore" };
+
+/** Adapters normalize Claude Stop and Pi agent-settled events to turn-settled. */
+export function planNotification(input: { readonly event: "turn-settled"; readonly platform: NodeJS.Platform; readonly sessionRole: "top-level" | "child" }): NotificationPlan {
+  return input.platform === "win32" && input.sessionRole === "top-level"
+    ? { action: "flash-beep", delivery: "background", failure: "ignore" }
+    : { action: "none" };
+}
+
+const MACHINE_ROOTS = [
+  ["MPX_PROJECTS", "personal projects"],
+  ["MPX_WORK", "work repositories"],
+  ["MPX_CLONED", "cloned OSS repositories"],
+  ["MPX_APPS", "local apps"],
+  ["MPX_ONEDRIVE", "OneDrive root"],
+  ["MPX_AI_GENERATED", "AI-generated assets (skill deliverables)"],
+  ["MPX_OBSIDIAN_VAULT", "Obsidian vault"],
+] as const;
+
+/** Privacy-safe machine context. Only documented non-secret MPX root variables are surfaced. */
+export function buildMachineContext(environment: Readonly<Record<string, string | undefined>>): string[] {
+  const roots = MACHINE_ROOTS.flatMap(([name, label]) => {
+    const value = environment[name]?.trim();
+    return value ? [`- ${name} = ${value} - ${label}`] : [];
+  });
+  return roots.length === 0 ? [] : [
+    "Machine roots (from MPX_* env vars; use these instead of guessing paths):",
+    ...roots,
+    "Paths outside the working directory should be resolved from these variables.",
+  ];
+}
+
+export function planSessionContext(environment: Readonly<Record<string, string | undefined>>): { readonly delivery: "before-next-model-turn"; readonly context: string } | null {
+  const context = buildMachineContext(environment).join("\n");
+  return context ? { delivery: "before-next-model-turn", context } : null;
+}
+
 export function buildCompactContext(environment: ProjectEnvironment): string[] {
   const lines: string[] = []; const pm = environment.packageManager;
   if (pm) { lines.push(`This project uses ${pm}. Use '${pm}' for all package commands.`); lines.push(`Do not use another package manager unless '${pm}' is that tool.`); }
@@ -348,6 +464,27 @@ export function buildCompactContext(environment: ProjectEnvironment): string[] {
   if (environment.python) lines.push("Python project detected. Use ruff when configured.");
   lines.push("Git workflow: use conventional commit subjects: type(scope): description.", "Code quality: fix type and lint issues rather than suppressing them.", "Safety: dangerous destructive commands are blocked by policy."); return lines;
 }
+export type CompactionInjectionPlan =
+  | { readonly action: "default"; readonly failure: "use-runtime-default"; readonly postCompactContext: string }
+  | { readonly action: "inject"; readonly failure: "use-runtime-default"; readonly instructions: string; readonly postCompactContext: string };
+export function planCompactionInjection(input: { readonly manualInstructions?: string | null; readonly canonicalInstructions: string; readonly environment: ProjectEnvironment }): CompactionInjectionPlan {
+  const postCompactContext = buildCompactContext(input.environment).join("\n");
+  const instructions = mergeCompactionInstructions(input.manualInstructions, input.canonicalInstructions);
+  return instructions
+    ? { action: "inject", failure: "use-runtime-default", instructions, postCompactContext }
+    : { action: "default", failure: "use-runtime-default", postCompactContext };
+}
+
+/** Canonical compaction policy is required; manual runtime text keeps priority. */
+export function mergeCompactionInstructions(manual: string | null | undefined, canonical: string, maxCharacters = 65_536): string | null {
+  const shared = canonical.trim();
+  if (!shared || shared.length > maxCharacters) return null;
+  const runtime = manual?.trim();
+  if (!runtime) return shared;
+  const available = maxCharacters - shared.length - 2;
+  return available <= 0 ? shared : `${runtime.slice(0, available)}\n\n${shared}`;
+}
+
 export function readCompactInstructions(sourcePaths: readonly string[], maxBytes = 65_536): string {
   if (sourcePaths.length > 32 || maxBytes < 1 || maxBytes > 1_048_576) return "";
   for (const source of sourcePaths) { let fd: number | undefined; try { fd = openSync(source, "r"); const stat = fstatSync(fd); if (!stat.isFile() || stat.size > maxBytes) continue; const text = readFileSync(fd, "utf8").trim(); if (text) return text; } catch { /* compaction must fail open */ } finally { if (fd !== undefined) closeSync(fd); } }
