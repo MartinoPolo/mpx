@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRuntimeCapabilityManifestV1 } from "@mpx/runtime-contracts";
-import { activateRuntimeToolGateway, GatewayError, type GatewayExecutor, type ProviderAdapter, type RuntimeToolCache } from "../src/index.js";
+import { activateRuntimeToolGateway, createLaunchBoundRuntimeTools, GatewayError, type GatewayExecutor, type ProviderAdapter, type RuntimeToolCache } from "../src/index.js";
 
 const sha = (c: string) => c.repeat(64);
 function manifest(identity = "personal") {
@@ -14,6 +14,25 @@ function provider(id = "free", options: Partial<ProviderAdapter> = {}): Provider
   return { id, route: "web:personal", destination: "search.example.test", paidCredits: 0, fallbackOnly: false, async search(input) { return { results: [{ title: input.query, url: "https://public.example.test", snippet: "found" }] }; }, async fetch(input, network) { const response = await network.request({ url: input.url, method: "GET", headers: { authorization: "leak", "x-safe": "yes" } }); return { content: response.body }; }, ...options };
 }
 const activate = (options: Record<string, unknown> = {}) => activateRuntimeToolGateway({ capability: manifest(), executor: executor(), mcpRoutes: { docs: { kind: "process", executable: "C:/trusted/mcp.exe", argv: [] } }, providers: [provider()], ...options });
+
+describe("launch-bound runtime tool projection", () => {
+  it("exposes only manifest-authorized aggregates and returns stable diagnostics for pre-selection gaps", async () => {
+    const capability = manifest();
+    const tools = createLaunchBoundRuntimeTools({ capability, gateway: activate() });
+    expect(tools.available).toEqual(["fetch_content", "get_search_content", "mcp", "source_check", "web_search"]);
+    expect(tools.diagnostics).toEqual([]);
+
+    const withoutMcp = structuredClone(capability);
+    withoutMcp.tools = withoutMcp.tools.filter((tool) => tool.name !== "mcp");
+    withoutMcp.routes = withoutMcp.routes.filter((route) => route !== "mcp:docs");
+    delete (withoutMcp as { manifestKey?: string }).manifestKey;
+    const selected = createRuntimeCapabilityManifestV1(withoutMcp);
+    const projected = createLaunchBoundRuntimeTools({ capability: selected, gateway: {} as never });
+    expect(projected.available).not.toContain("mcp");
+    expect(projected.diagnostics).toContainEqual({ code: "RUNTIME_TOOL_UNSUPPORTED", tool: "mcp", phase: "pre-selection" });
+    await expect(projected.tools.mcp({ serverId: "docs", method: "tools/list", params: null })).rejects.toMatchObject({ code: "RUNTIME_TOOL_UNSUPPORTED" });
+  });
+});
 
 describe("immutable MCP gateway", () => {
   it("admits only launch-allowlisted privately materialized MCP server IDs", async () => {

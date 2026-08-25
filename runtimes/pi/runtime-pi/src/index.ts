@@ -37,6 +37,7 @@ export * from "./dev-services.js";
 export * from "./hooks-wiring.js";
 export * from "./subagent-bridge.js";
 export * from "./event-coordination.js";
+export * from "./runtime-tools.js";
 
 export interface PiExtensionAPI {
   registerCommand(name: string, specification: { description?: string; handler(args: string): Promise<void> }): void;
@@ -151,7 +152,8 @@ export function createPiProjection() {
     adapters: ["compact", "guard", "auto-title", "fullscreen", "events", "footer"] as const,
     subagents: { enabled: true, nestedOrchestration: true, fleetView: true, provenance: "projection/imported provenance only: vendor/subagents/VENDORED.md" },
     accountProfiles: { kind: "projection-only", mutation: "unsupported" },
-    unsupported: ["mcp/shared gateway pending", "web/shared gateway pending", "agent-resurrect/session G", "F2 host replacement", "installer/account symlinks", "credential projection"],
+    runtimeTools: { aggregates: ["mcp", "web_search", "fetch_content", "get_search_content", "source_check", "dev_server"], selection: "launch-bound" },
+    unsupported: ["agent-resurrect/session G", "F2 host replacement", "installer/account symlinks", "credential projection"],
   } as const;
 }
 export interface PiProjectionBuildInput {
@@ -396,7 +398,7 @@ interface AgentMetadata { modelClass: AgentModelClass; thinking: "low" | "medium
 interface AgentCatalog { schemaVersion: 1; agents: Record<string, AgentMetadata> }
 export interface GeneratePiAgentsInput { source: string; output: string; check?: boolean }
 const piModels: Record<AgentModelClass, string> = { sol: "openai-codex/gpt-5.6-sol", terra: "openai-codex/gpt-5.6-terra", luna: "openai-codex/gpt-5.6-luna" };
-const piTools: Record<AgentCapability, string[]> = { read: ["read"], search: ["grep", "find", "ls"], shell: ["bash"], write: ["edit", "write"], browser: [], context: [], web: [] };
+const piTools: Record<AgentCapability, string[]> = { read: ["read"], search: ["grep", "find", "ls"], shell: ["bash"], write: ["edit", "write"], browser: ["mcp"], context: ["mcp"], web: ["web_search", "fetch_content", "get_search_content", "source_check"] };
 function projectedAgentName(identity: string): string { return identity === "mpx-explorer" ? "Explore" : identity; }
 function expandAgentNesting(selectors: readonly string[], identities: readonly string[]): string[] {
   const expanded = selectors.flatMap((selector) => {

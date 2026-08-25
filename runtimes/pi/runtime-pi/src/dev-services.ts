@@ -1,4 +1,4 @@
-import type { ExecutorKind, StartRequest } from "@mpx/dev-services";
+import { createDevServerToolAdapter, createSystemRuntime, DevServiceManager, type DevServerToolAdapter, type ExecutorKind, type RuntimeAdapter, type StartRequest } from "@mpx/dev-services";
 
 export interface DevServerLaunchBinding { readonly launchKey: string; readonly worktree: string; readonly ports: readonly number[]; readonly executor: ExecutorKind }
 export interface DevServerStartInput { readonly launchKey: string; readonly id: string; readonly executable: string; readonly args: readonly string[]; readonly cwd: string }
@@ -8,6 +8,19 @@ export interface DevServerDependencies {
   publish(event: Readonly<Record<string, unknown>>): void;
 }
 export interface LaunchBoundDevServer { start(input: DevServerStartInput): Promise<unknown>; cleanup(): Promise<void> }
+export interface PiDevServerCapabilityInput extends DevServerLaunchBinding { readonly runtimeAdapter?: RuntimeAdapter; readonly publish?: (event: Readonly<Record<string, unknown>>) => void }
+export interface PiDevServerCapability { readonly tool: DevServerToolAdapter; readonly manager: DevServiceManager; readonly shutdown: () => Promise<void> }
+/** Creates an isolated launch-owned dev_server tool. Docker requires an explicitly selected Docker adapter. */
+export function createPiDevServerCapability(input: PiDevServerCapabilityInput): PiDevServerCapability {
+  if (!/^[a-f0-9]{64}$/u.test(input.launchKey)) throw new Error("DEV_SERVER_BINDING_INVALID: dev_server requires the exact launch key");
+  const adapter = input.runtimeAdapter ?? (input.executor === "host" ? createSystemRuntime() : undefined);
+  if (!adapter) throw new Error("DOCKER_ADAPTER_REQUIRED: Docker dev_server cannot fall back to host");
+  if (adapter.kind !== input.executor) throw new Error("EXECUTOR_MISMATCH: dev_server adapter differs from the selected executor");
+  const manager = new DevServiceManager(adapter, event => input.publish?.(Object.freeze({ ...event, launchKey: input.launchKey })));
+  const tool = createDevServerToolAdapter(manager, { launchKey: input.launchKey, executor: input.executor, cwd: input.worktree, assignment: { worktreeRoot: input.worktree, ports: Object.freeze([...input.ports]) } });
+  const shutdown = async () => { await manager.shutdown(); input.publish?.(Object.freeze({ type: "dev-server:shutdown", launchKey: input.launchKey })); };
+  return Object.freeze({ tool, manager, shutdown });
+}
 
 /** Binds every service operation to the immutable launch assignment. Executor errors are propagated; Docker never falls back to host. */
 export function createLaunchBoundDevServer(binding: DevServerLaunchBinding, dependencies: DevServerDependencies): LaunchBoundDevServer {

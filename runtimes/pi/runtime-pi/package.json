@@ -15,6 +15,7 @@
     "@mpx/dev-services": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/runtime-hooks": "workspace:*",
+    "@mpx/runtime-tools": "workspace:*",
     "@mpx/subagents": "workspace:*",
     "@mpx/skills": "workspace:*",
     "@mpx/status": "workspace:*"

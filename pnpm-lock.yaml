@@ -392,6 +392,9 @@ importers:
       '@mpx/runtime-hooks':
         specifier: workspace:*
         version: link:../../../packages/runtime-hooks
+      '@mpx/runtime-tools':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-tools
       '@mpx/skills':
         specifier: workspace:*
         version: link:../../../packages/skills
@@ -420,6 +423,9 @@ importers:
       '@mpx/runtime-hooks':
         specifier: workspace:*
         version: link:../../../packages/runtime-hooks
+      '@mpx/runtime-tools':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-tools
       '@mpx/skills':
         specifier: workspace:*
         version: link:../../../packages/skills
