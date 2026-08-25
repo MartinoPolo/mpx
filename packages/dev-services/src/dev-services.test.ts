@@ -1,7 +1,10 @@
 import { EventEmitter } from "node:events";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { DevServiceManager, RollingLogBuffer, assertExecutorBoundary, createDevServerToolAdapter, validateStartRequest, type ManagedProcess, type RuntimeAdapter } from "./index.js";
+import { DevServiceManager, DurableDevServiceManager, RollingLogBuffer, assertExecutorBoundary, createDevServerToolAdapter, systemSpawnInvocation, validateStartRequest, type ManagedProcess, type RuntimeAdapter } from "./index.js";
 
 class Child extends EventEmitter implements ManagedProcess {
   stdout=new PassThrough(); stderr=new PassThrough(); fingerprint="started:100"; closed:Promise<{code:number|null;signal:string|null}>; resolve!: (v:{code:number|null;signal:string|null})=>void;
@@ -17,9 +20,13 @@ class Runtime implements RuntimeAdapter {
   inspect=async(pid:number)=>({pid,fingerprint:this.children.find(c=>c.pid===pid)?.fingerprint??"other"});
   stop=async(c:ManagedProcess)=>{this.stopped.push(c.pid);(c as Child).exit(null,"SIGTERM")};
 }
-const request={id:"web",command:"npm run dev",cwd:"C:/repo",ports:[4100,4101],assignment:{worktreeRoot:"C:/repo",ports:[4100,4101]},executor:"host" as const};
+const request={id:"web",executable:"npm",args:["run","dev"],cwd:"C:/repo",ports:[4100,4101],assignment:{worktreeRoot:"C:/repo",ports:[4100,4101]},executor:"host" as const};
 
 describe("managed development services",()=>{
+  it("spawns an executable and argv directly without shell interpolation",()=>{
+    expect(systemSpawnInvocation("npm",["run","dev; touch owned"],"linux")).toEqual({file:"npm",args:["run","dev; touch owned"],detached:true});
+    expect(systemSpawnInvocation("npm",["run","dev & calc"],"win32")).toEqual({file:"npm",args:["run","dev & calc"],detached:false});
+  });
   it("fails closed rather than executing host runtime for a Docker launch",()=>expect(()=>assertExecutorBoundary("docker","host")).toThrow(/Docker executor/));
   it("rejects ports not assigned to the exact worktree",()=>expect(()=>validateStartRequest({...request,ports:[4100,9999]})).toThrow(/assigned/));
   it("rejects malicious ids and cwd escapes",()=>{
@@ -51,8 +58,25 @@ describe("managed development services",()=>{
   });
   it("exposes an isolated launch-bound dev_server adapter without weakening executor or port binding",async()=>{
     const runtime=new Runtime();runtime.probes.set(4100,[true]);const manager=new DevServiceManager(runtime),tool=createDevServerToolAdapter(manager,{launchKey:"a".repeat(64),executor:"host",cwd:"C:/repo",assignment:{worktreeRoot:"C:/repo",ports:[4100]}});
-    expect(tool.name).toBe("dev_server");await tool.execute({action:"start",id:"web",command:"npm run dev",ports:[4100]});expect(manager.status("web")).toMatchObject({ports:[4100]});
-    await expect(tool.execute({action:"start",id:"evil",command:"x",ports:[9999]})).rejects.toThrow(/assigned/);
+    expect(tool.name).toBe("dev_server");await tool.execute({action:"start",id:"web",executable:"npm",args:["run","dev"],ports:[4100]});expect(manager.status("web")).toMatchObject({ports:[4100]});
+    await expect(tool.execute({action:"start",id:"evil",executable:"npm",args:["run","dev"],ports:[9999]})).rejects.toThrow(/assigned/);
+  });
+  it("shares durable lifecycle state across manager instances",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-state-")),runtime=new Runtime();
+    await new DurableDevServiceManager(runtime,root).start({...request,ports:[],assignment:{...request.assignment,ports:[]}});
+    expect(await new DurableDevServiceManager(runtime,root).status("web")).toMatchObject({id:"web",state:"ready",pid:100,fingerprint:"started:100"});
+  });
+  it("reconciles stale durable process identity and bounds durable logs",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-stale-")),runtime=new Runtime();
+    await new DurableDevServiceManager(runtime,root).start({...request,ports:[],assignment:{...request.assignment,ports:[]}});runtime.children[0]!.fingerprint="reused";
+    await writeFile(path.join(root,"web.log"),`${"old\n".repeat(600)}latest\n`);
+    const next=new DurableDevServiceManager(runtime,root);expect(await next.status("web")).toMatchObject({state:"crashed",pid:null,lastError:expect.stringContaining("fingerprint")});
+    const logs=await next.logs("web",{maxLines:2,maxCharacters:20});expect(logs).toContain("latest");expect(logs.length).toBeLessThanOrEqual(20);
+  });
+  it("turns readiness probe rejection into a crashed diagnostic",async()=>{
+    const runtime=new Runtime();runtime.probe=async()=>{throw new Error("probe exploded")};
+    const manager=new DevServiceManager(runtime);await manager.start({...request,ports:[4100],assignment:{...request.assignment,ports:[4100]}});await new Promise(r=>setImmediate(r));
+    expect(await manager.status("web")).toMatchObject({state:"crashed",lastError:"Readiness probe failed: probe exploded"});
   });
   it("rolling logs retain UTF-8 boundaries and latest carriage-return frame",()=>{const logs=new RollingLogBuffer({maxCharacters:20});logs.beginRun(1);logs.write("stdout",Buffer.from("old\rnew\n"));expect(logs.present()).toBe("new")});
 });

@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { DevServiceManager, ExecutorKind, PortAssignment } from "./index.js";
-export interface DevServerToolInput {readonly action:"start"|"status"|"logs"|"restart"|"stop";readonly id?:string;readonly command?:string;readonly cwd?:string;readonly ports?:readonly number[];readonly lines?:number}
+export interface DevServerToolInput {readonly action:"start"|"status"|"logs"|"restart"|"stop";readonly id?:string;readonly executable?:string;readonly args?:readonly string[];readonly cwd?:string;readonly ports?:readonly number[];readonly lines?:number}
 export interface DevServerToolBinding {readonly launchKey:string;readonly executor:ExecutorKind;readonly cwd:string;readonly assignment:PortAssignment}
 export interface DevServerToolAdapter {readonly name:"dev_server";readonly launchKey:string;readonly description:string;execute(input:DevServerToolInput):Promise<unknown>}
 function required(value:string|undefined,name:string):string {if(!value?.trim())throw new Error(`${name} is required for this action.`);return value.trim()}
@@ -13,6 +13,6 @@ export function createDevServerToolAdapter(manager:DevServiceManager,binding:Dev
     if(input.action==="restart")return manager.restart(id);
     if(input.action==="stop")return manager.stop(id);
     if(input.action!=="start")throw new Error("Unsupported dev_server action.");
-    return manager.start({id,command:required(input.command,"command"),cwd:path.resolve(input.cwd??binding.cwd),ports:input.ports??[],assignment:binding.assignment,executor:binding.executor});
+    return manager.start({id,executable:required(input.executable,"executable"),args:input.args??[],cwd:path.resolve(input.cwd??binding.cwd),ports:input.ports??[],assignment:binding.assignment,executor:binding.executor});
   }});
 }

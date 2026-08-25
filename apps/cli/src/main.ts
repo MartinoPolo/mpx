@@ -189,10 +189,15 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   if (group==="dev") {
     if (!action || !["start","status","logs","restart","stop"].includes(action) || args.length) throw new UsageError("dev requires one of: start, status, logs, restart, stop");
     const found=await project(parsed), id=stringOption(parsed,"id"), rawLines=stringOption(parsed,"lines");
+    if(action!=="status"&&id===undefined)throw new UsageError(`--id is required for dev ${action}`);
     const lines=rawLines===undefined?undefined:Number(rawLines); if(lines!==undefined&&(!Number.isInteger(lines)||lines<1||lines>500))throw new UsageError("--lines must be an integer from 1 through 500");
+    if(lines!==undefined&&action!=="logs")throw new UsageError("--lines is valid only for dev logs");
     let executor:"host"|"docker"="host";
     if(context.env.MPX_RUNTIME_CONTEXT!==undefined){const selected=context.env.MPX_RUNTIME_EXECUTOR;if(selected!=="host"&&selected!=="docker")throw new MpxError({code:"DEV_EXECUTOR_BINDING_REQUIRED",message:"Launch-bound development services require an exact executor binding and never fall back to host."});executor=selected;}
-    data=await executeDevCommand({action,...(id?{id}:{}),cwd:parsed.cwd,config:found.config,projectRoot:found.root,portService:ports(context) as never,service:context.devService??defaultDevService(),executor,...(lines===undefined?{}:{lines})});
+    const service=context.devService??(executor==="docker"?undefined:defaultDevService(context.env,found.root));
+    if(!service||(executor==="docker"&&service.runtimeKind!=="docker"))throw new MpxError({code:"DEV_EXECUTOR_UNSUPPORTED",message:"Docker development services require an injected matching Docker runtime adapter; host fallback is forbidden."});
+    if(service.runtimeKind!==undefined&&service.runtimeKind!==executor)throw new MpxError({code:"DEV_EXECUTOR_BINDING_REQUIRED",message:"The development-service adapter does not match the selected executor."});
+    data=await executeDevCommand({action,...(id?{id}:{}),cwd:parsed.cwd,config:found.config,projectRoot:found.root,...(action==="start"?{portService:ports(context) as never}:{}),service,executor,...(lines===undefined?{}:{lines})});
     return {data,warnings};
   }
   if (["issue","review","ci"].includes(group)) {

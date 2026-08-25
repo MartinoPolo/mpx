@@ -1,13 +1,15 @@
 # @mpx/dev-services
 
-Provider-neutral managed development-service domain for host or executor-specific runtime adapters.
+Provider-neutral managed development-service lifecycle support.
 
-The package owns lifecycle state, bounded terminal-safe logs, all-port readiness, immutable PID fingerprints, reconciliation, process-tree stop, and `dev-services:changed` events. `createDevServerToolAdapter` exposes the launch-bound `dev_server` contract without depending on Claude or Pi packages.
+Host processes are started as a validated executable plus argument vector without a command shell. Ownership is bound to the exact root PID and OS start fingerprint; stop targets the owned process tree only. Readiness failures become durable crashed diagnostics, and terminal-safe log reads are bounded.
+
+The CLI uses private state below `%LOCALAPPDATA%/mpx/dev-services`, keyed by canonical checkout root. This allows status, logs, restart, and stop to reconcile a service started by an earlier CLI process. Missing and fingerprint-mismatched processes are recorded as crashed and are never terminated.
 
 ## Remaining runtime wiring
 
-Runtime index files are intentionally untouched. During immutable Pi projection assembly, the runtime-specific extension must create an executor-matching `RuntimeAdapter`, construct `DevServiceManager`, bind `createDevServerToolAdapter` with the launch key, selected executor, exact worktree root, and assigned ports, register the returned contract as `dev_server`, forward `dev-services:changed` to Pi events, and call `shutdown()` on session shutdown. A Docker launch must supply a Docker runtime adapter; `createSystemRuntime()` identifies itself as host and is rejected.
+Runtime projection assembly must inject an executor-matching adapter when exposing `dev_server`. Docker remains unavailable until a Docker `RuntimeAdapter` is supplied; Docker selection never constructs or falls back to the host adapter. Runtime wiring must forward `dev-services:changed` events and bind the immutable launch key, exact worktree root, and assigned ports.
 
-## Windows
+## Process model
 
-The host adapter starts a foreground command via hidden `cmd.exe /d /s /c` and uses `taskkill.exe /PID <pid> /T /F` only after exact in-memory fingerprint verification. Commands that daemonize or escape the spawned tree are unsupported. The current CLI adapter is process-scoped: cross-invocation durable supervision and recovery after the owning CLI process exits require the installation/runtime supervisor wiring above.
+Services are foreground programs owned through their spawned process tree. Package scripts that daemonize, re-parent, or otherwise escape that tree are unsupported.
