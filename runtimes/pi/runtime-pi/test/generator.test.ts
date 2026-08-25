@@ -17,3 +17,15 @@ it("generates runtime metadata, the Explore alias, and detects exact catalog dri
   await expect(readFile(path.join(output, "mpx-stale.md"), "utf8")).rejects.toThrow();
   await expect(readFile(path.join(output, "notes.md"), "utf8")).resolves.toBe("unrelated");
 });
+
+it("expands approved nesting patterns to concrete canonical identities", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "pi-agent-nesting-")); const source = path.join(root, "source"); const output = path.join(root, "out");
+  await import("node:fs/promises").then(x => x.mkdir(source));
+  const metadata = { modelClass: "terra", thinking: "low", capabilities: ["read"], nesting: [], outputSchema: "text" };
+  for (const identity of ["mpx-parent", "mpx-reviewer-a", "mpx-reviewer-b"]) await writeFile(path.join(source, `${identity}.md`), `---\nname: ${identity}\ndescription: ${identity}\n---\nBody\n`);
+  await writeFile(path.join(source, "metadata.json"), JSON.stringify({ schemaVersion: 1, agents: { "mpx-parent": { ...metadata, nesting: ["mpx-reviewer-*"] }, "mpx-reviewer-a": metadata, "mpx-reviewer-b": metadata } }));
+  await generatePiAgents({ source, output });
+  const projected = await readFile(path.join(output, "mpx-parent.md"), "utf8");
+  expect(projected).toContain("allowed_subagents: mpx-reviewer-a,mpx-reviewer-b");
+  expect(projected).not.toContain("*");
+});

@@ -5,7 +5,7 @@ model: openai-codex/gpt-5.6-sol
 thinking: high
 tools: read,grep,find,ls,bash
 output_schema: bounded-json
-allowed_subagents: mpx-checker,mpx-reviewer-*,mpx-executor,mpx-chrome-devtools-tester
+allowed_subagents: mpx-checker,mpx-reviewer-best-practices,mpx-reviewer-code-quality,mpx-reviewer-error-handling,mpx-reviewer-performance,mpx-reviewer-security,mpx-reviewer-spec-alignment,mpx-reviewer-test-quality,mpx-executor,mpx-chrome-devtools-tester
 
 ---
 # Check Fixer Agent

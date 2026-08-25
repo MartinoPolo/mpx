@@ -398,6 +398,16 @@ export interface GeneratePiAgentsInput { source: string; output: string; check?:
 const piModels: Record<AgentModelClass, string> = { sol: "openai-codex/gpt-5.6-sol", terra: "openai-codex/gpt-5.6-terra", luna: "openai-codex/gpt-5.6-luna" };
 const piTools: Record<AgentCapability, string[]> = { read: ["read"], search: ["grep", "find", "ls"], shell: ["bash"], write: ["edit", "write"], browser: [], context: [], web: [] };
 function projectedAgentName(identity: string): string { return identity === "mpx-explorer" ? "Explore" : identity; }
+function expandAgentNesting(selectors: readonly string[], identities: readonly string[]): string[] {
+  const expanded = selectors.flatMap((selector) => {
+    const matches = selector.includes("*")
+      ? identities.filter((identity) => new RegExp(`^${selector.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join(".*")}$`, "u").test(identity))
+      : identities.filter((identity) => identity === selector);
+    if (matches.length === 0) throw new Error(`agent nesting selector '${selector}' does not resolve to a canonical identity`);
+    return matches;
+  });
+  return [...new Set(expanded)];
+}
 function adaptAgent(source: string, identity: string, metadata: AgentMetadata): string {
   const normalized = source.replaceAll("\r\n", "\n");
   const marker = normalized.indexOf("\n---\n", 4);
@@ -428,7 +438,7 @@ export async function generatePiAgents(input: GeneratePiAgentsInput): Promise<{ 
   if (input.check) drift.push(...extras); else for (const extra of extras) { await rm(path.join(input.output, extra)); changed.push(extra); }
   for (const name of names) {
     const identity = name.slice(0, -3), outputName = `${projectedAgentName(identity)}.md`;
-    const expected = adaptAgent(await readFile(path.join(input.source, name), "utf8"), identity, catalog.agents[identity]!);
+    const metadata = catalog.agents[identity]!; const expected = adaptAgent(await readFile(path.join(input.source, name), "utf8"), identity, { ...metadata, nesting: expandAgentNesting(metadata.nesting, identities) });
     const target = path.join(input.output, outputName); const actual = await readFile(target, "utf8").catch(() => undefined);
     if (actual === expected) continue;
     if (input.check) drift.push(outputName); else { await writeFile(target, expected); changed.push(outputName); }

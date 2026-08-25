@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ChildLaunchAuthorityV1 } from "@mpx/runtime-contracts";
 import { SubagentLifecycle } from "./lifecycle.js";
 import type { AgentLaunchRequest, AgentRunner } from "./contracts.js";
+import type { StrictWorktreeIsolation } from "./isolation.js";
 
 const authority = { identity: { name: "personal" }, nesting: { depth: 1, maxDepth: 2 } } as ChildLaunchAuthorityV1;
 function request(id: string, extra: Partial<AgentLaunchRequest> = {}): AgentLaunchRequest { return { id, type: "reviewer", identity: "personal", description: id, prompt: "work", join: "background", model: { provider: "openai", model: "gpt" }, nesting: { depth: 1, maxDepth: 2, parentAgentId: null, rootAgentId: "root" }, authority, ...extra }; }
@@ -18,4 +19,32 @@ describe("subagent lifecycle", () => {
   it("gates schedule creation on an explicit user request", () => { const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" } }); expect(() => life.schedule({ id: "daily", explicitUserRequest: false, launch: request("scheduled"), nextRunAt: 1 })).toThrow(/SUBAGENT_SCHEDULE_EXPLICIT_REQUIRED/); });
   it("restores schedules on resume and preserves them on shutdown", async () => { const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" }, now: () => 10 }); life.restoreSchedules([{ id: "daily", explicitUserRequest: true, launch: request("scheduled"), nextRunAt: 5, intervalMs: 10, enabled: true, runCount: 0 }]); await life.processDue(); const saved = await life.shutdown(); expect(saved[0]).toMatchObject({ runCount: 1, nextRunAt: 20, enabled: true }); });
   it("delivers an unread background completion notification", async () => { const notify = vi.fn(); const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" }, notify }); await life.launch(request("a")); await new Promise(resolve => setTimeout(resolve, 0)); expect(notify).toHaveBeenCalledWith({ agents: [expect.objectContaining({ id: "a", status: "completed" })], partial: false }); });
+  it("cleans up an isolated worktree when the runner fails", async () => {
+    const cleanup = vi.fn(async () => {}); const isolation = { create: vi.fn(async () => ({ cwd: "C:/repo.wt/a", sourceCwd: "C:/repo" })), cleanup } as unknown as StrictWorktreeIsolation;
+    const life = new SubagentLifecycle({ concurrency: 1, isolation, runner: { run: async () => { throw new Error("runner failed"); } } });
+    await life.launch(request("a", { isolation: { cwd: "C:/repo", branch: "agent-a" } }));
+    await expect(life.get_subagent_result("a")).rejects.toThrow("runner failed");
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+  it("preserves the runner failure and deterministically appends a cleanup failure", async () => {
+    const isolation = { create: vi.fn(async () => ({ cwd: "C:/repo.wt/a", sourceCwd: "C:/repo" })), cleanup: vi.fn(async () => { throw new Error("retained changes"); }) } as unknown as StrictWorktreeIsolation;
+    const life = new SubagentLifecycle({ concurrency: 1, isolation, runner: { run: async () => { throw new Error("runner failed"); } } });
+    await life.launch(request("a", { isolation: { cwd: "C:/repo", branch: "agent-a" } }));
+    await expect(life.get_subagent_result("a")).rejects.toThrow("runner failed (cleanup also failed: retained changes)");
+  });
+  it("cleans up an isolated worktree after cancellation aborts the runner", async () => {
+    const cleanup = vi.fn(async () => {}); const isolation = { create: vi.fn(async () => ({ cwd: "C:/repo.wt/a", sourceCwd: "C:/repo" })), cleanup } as unknown as StrictWorktreeIsolation;
+    const life = new SubagentLifecycle({ concurrency: 1, isolation, runner: { run: async (_request, context) => new Promise((_resolve, reject) => context.signal.addEventListener("abort", () => reject(context.signal.reason), { once: true })) } });
+    await life.launch(request("a", { isolation: { cwd: "C:/repo", branch: "agent-a" } })); life.cancel("a");
+    await expect(life.get_subagent_result("a")).rejects.toThrow("Cancelled");
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+  it("reports retained changed-worktree cleanup without retrying removal", async () => {
+    const cleanup = vi.fn(async () => { throw new Error("SUBAGENT_ISOLATION_CLEANUP_FAILED: Durable worktree cleanup ended in 'retained'."); });
+    const isolation = { create: vi.fn(async () => ({ cwd: "C:/repo.wt/a", sourceCwd: "C:/repo" })), cleanup } as unknown as StrictWorktreeIsolation;
+    const life = new SubagentLifecycle({ concurrency: 1, isolation, runner: { run: async () => "done" } });
+    await life.launch(request("a", { isolation: { cwd: "C:/repo", branch: "agent-a" } }));
+    await expect(life.get_subagent_result("a")).rejects.toThrow("SUBAGENT_ISOLATION_CLEANUP_FAILED");
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
 });

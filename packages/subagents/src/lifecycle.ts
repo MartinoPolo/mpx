@@ -87,13 +87,20 @@ export class SubagentLifecycle {
   }
   private pump(): void { while (!this.stopped && this.running < this.options.concurrency && this.queue.length) { const id = this.queue.shift()!; const item = this.records.get(id)!; this.running++; void this.execute(item); } }
   private async execute(item: Internal): Promise<void> {
-    item.agent = Object.freeze({ ...item.agent, status: "running", startedAt: this.now() }); let cwd = item.request.isolation?.cwd ?? "."; let isolated: Awaited<ReturnType<StrictWorktreeIsolation["create"]>> | undefined;
+    item.agent = Object.freeze({ ...item.agent, status: "running", startedAt: this.now() }); let cwd = item.request.isolation?.cwd ?? "."; let isolated: Awaited<ReturnType<StrictWorktreeIsolation["create"]>> | undefined; let result = ""; let primaryError: string | undefined;
     try {
       if (item.request.isolation) { if (!this.options.isolation) fail("SUBAGENT_ISOLATION_UNAVAILABLE", "Strict worktree isolation is unavailable."); isolated = await this.options.isolation.create(item.request.isolation); cwd = isolated.cwd; }
-      const result = await this.options.runner.run(item.request, { cwd, signal: item.abort.signal, steer: item.steer });
-      if (isolated) await this.options.isolation!.cleanup(isolated); this.finish(item, { result });
-    } catch (error) { this.finish(item, { error: error instanceof Error ? error.message : String(error) }); }
-    finally { item.steer.close(); this.running--; this.pump(); }
+      result = await this.options.runner.run(item.request, { cwd, signal: item.abort.signal, steer: item.steer });
+    } catch (error) { primaryError = error instanceof Error ? error.message : String(error); }
+    finally {
+      try {
+        let cleanupError: string | undefined;
+        if (isolated) try { await this.options.isolation!.cleanup(isolated); }
+        catch (error) { cleanupError = error instanceof Error ? error.message : String(error); }
+        const error = primaryError === undefined ? cleanupError : cleanupError === undefined ? primaryError : `${primaryError} (cleanup also failed: ${cleanupError})`;
+        this.finish(item, error === undefined ? { result } : { error });
+      } finally { item.steer.close(); this.running--; this.pump(); }
+    }
   }
   private finish(item: Internal, outcome: { result?: string; error?: string }): void {
     if (item.agent.status === "completed" || item.agent.status === "failed") return;
