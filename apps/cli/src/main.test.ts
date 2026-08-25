@@ -56,6 +56,15 @@ async function configuredLaunchEnv(cwd:string, options:{classifiedRoot?:string;i
 }
 
 describe("cli",()=>{
+  it("wires mpx dev lifecycle actions through the provider-neutral service",async()=>{
+    const cwd=await fixture(managed("sample/app",4100)), io=captureIo();
+    const calls:unknown[]=[];
+    const devService={start:async(request:unknown)=>{calls.push(request);return {id:"app",state:"starting"}},status:(id?:string)=>id?{id,state:"ready"}:[{id:"app",state:"ready"}],logs:()=>"bounded",restart:async()=>({id:"app",state:"starting"}),stop:async()=>({id:"app",state:"stopped"})};
+    const portService={resolve:async()=>({lease:{worktreePath:cwd,services:{app:4100}}})} as never;
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],io,{env:{},portService,devService} as never)).toBe(0);
+    expect(calls[0]).toMatchObject({id:"app",cwd:path.resolve(cwd),ports:[4100],assignment:{worktreeRoot:path.resolve(cwd),ports:[4100]},executor:"host"});
+  });
+
   it("emits exactly one JSON document",async()=>{
     const cwd=await fixture(valid), io=captureIo();
     expect(await run(["--json","--cwd",cwd,"config","validate"],io,{env:{}})).toBe(0);

@@ -28,11 +28,12 @@ import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanLis
 import { catalogPath, configuredProviderRegistry, defaultContext, executeInternalPreparationWorker, NodeProviderProcessExecutor, ports, providerService, status, worktrees, type CliContext } from "./context.js";
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
+import { defaultDevService, executeDevCommand } from "./dev-command.js";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
 class UsageError extends Error {}
-const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|issue|review|ci|status|ports|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
+const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
 
 const shortLaunchAliases = new Set<ShortLaunchAlias>(["cc", "ccw", "pi", "piw"]);
 function parse(argv: readonly string[]): Parsed {
@@ -42,7 +43,7 @@ function parse(argv: readonly string[]): Parsed {
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
     if (["json","rebuild","confirm","machine","cancel"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","template","slug","author","issue","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state"].includes(name!)) {
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","template","slug","author","issue","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state"].includes(name!)) {
       const value=inline ?? argv[++i]; if (!value || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (name==="grant") options.set(name,[...((options.get(name) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
@@ -183,6 +184,15 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       if (!value) throw new MpxError({code:`${group.replace("-","_").toUpperCase()}_UNKNOWN`,message:`Unknown ${group} '${name}'.`});
       data={schemaVersion:1,kind:group,item:projectPublic(name,value)};
     }
+    return {data,warnings};
+  }
+  if (group==="dev") {
+    if (!action || !["start","status","logs","restart","stop"].includes(action) || args.length) throw new UsageError("dev requires one of: start, status, logs, restart, stop");
+    const found=await project(parsed), id=stringOption(parsed,"id"), rawLines=stringOption(parsed,"lines");
+    const lines=rawLines===undefined?undefined:Number(rawLines); if(lines!==undefined&&(!Number.isInteger(lines)||lines<1||lines>500))throw new UsageError("--lines must be an integer from 1 through 500");
+    let executor:"host"|"docker"="host";
+    if(context.env.MPX_RUNTIME_CONTEXT!==undefined){const selected=context.env.MPX_RUNTIME_EXECUTOR;if(selected!=="host"&&selected!=="docker")throw new MpxError({code:"DEV_EXECUTOR_BINDING_REQUIRED",message:"Launch-bound development services require an exact executor binding and never fall back to host."});executor=selected;}
+    data=await executeDevCommand({action,...(id?{id}:{}),cwd:parsed.cwd,config:found.config,projectRoot:found.root,portService:ports(context) as never,service:context.devService??defaultDevService(),executor,...(lines===undefined?{}:{lines})});
     return {data,warnings};
   }
   if (["issue","review","ci"].includes(group)) {

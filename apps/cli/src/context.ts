@@ -16,6 +16,7 @@ import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
 import { FileLaunchAuditStore, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
 import type { LaunchExecutionContext } from "./launch-execution.js";
+import type { CliDevService } from "./dev-command.js";
 
 export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild" | "captureReleaseIdentity" | "releaseLinkedAfterRemoval" | "resolveOrphan">;
 export interface CliWorktreeService {
@@ -49,6 +50,7 @@ export interface CliContext extends LaunchExecutionContext {
   worktreeServiceFactory?: (stateRoot: string, portService: CliPortService, operationCwd: string) => CliWorktreeService;
   preparationRuntimeFactory?: (stateRoot: string, environment: NodeJS.ProcessEnv) => CliPreparationRuntime;
   providerService?: CliProviderService;
+  devService?: CliDevService;
   providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
   /** Application-owned trusted extensions; never populated from project configuration. */

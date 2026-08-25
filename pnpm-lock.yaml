@@ -26,6 +26,9 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mpx/dev-services':
+        specifier: workspace:*
+        version: link:../../packages/dev-services
       '@mpx/executors':
         specifier: workspace:*
         version: link:../../packages/executors
@@ -89,6 +92,22 @@ importers:
         version: 8.20.0
 
   packages/core:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/dev-services:
+    dependencies:
+      '@mpx/windows':
+        specifier: workspace:*
+        version: link:../windows
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

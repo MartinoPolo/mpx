@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@mpx/core": "workspace:*",
+    "@mpx/dev-services": "workspace:*",
     "@mpx/config": "workspace:*",
     "@mpx/executors": "workspace:*",
     "@mpx/launch": "workspace:*",
