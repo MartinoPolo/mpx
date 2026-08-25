@@ -90,6 +90,14 @@ describe("generated repository validation", () => {
     expect(messages(validateFiles(files("content/skills/demo/SKILL.md", "C:\\_MP_projects\\mpx-claude-code\\plugins")))).toContain("LEGACY_SOURCE_PATH");
   });
 
+  it.each([
+    "import '../../../mpx-pi/extensions/footer.ts'",
+    "readFile('~/.codex/skills/review.md')",
+    "require('mpx-claude-code/plugins/mp')",
+  ])("rejects active dependencies on a legacy runtime root: %s", dependency => {
+    expect(messages(validateFiles(files("runtimes/pi/runtime-pi/src/dependency.ts", dependency)))).toContain("LEGACY_SOURCE_DEPENDENCY");
+  });
+
   it("rejects Claude placeholders in canonical content but permits generated Claude adapter variables", () => {
     expect(messages(validateFiles(new Map([
       ["content/skills/demo/SKILL.md", "${CLAUDE_PLUGIN_ROOT}"],

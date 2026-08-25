@@ -10,9 +10,11 @@
     "build": "pnpm -r build",
     "check": "pnpm -r check",
     "test": "pnpm run build && pnpm run test:integration && pnpm -r test",
-    "test:integration": "vitest run scripts/validate-generated.test.mjs",
+    "test:integration": "vitest run scripts/validate-generated.test.mjs scripts/convergence-manifest.test.mjs",
     "typecheck": "pnpm -r build && pnpm -r typecheck",
     "baseline:capture": "node scripts/capture-migration-baseline.mjs",
+    "convergence:generate": "node scripts/generate-convergence-manifest.mjs",
+    "convergence:verify": "node scripts/generate-convergence-manifest.mjs --check",
     "validate:generated": "node scripts/validate-generated.mjs"
   },
   "devDependencies": {

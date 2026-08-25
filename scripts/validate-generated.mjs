@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { lstat, open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildConvergenceManifest, compareConvergenceManifests, validateConvergenceManifest } from "./convergence-manifest.mjs";
 
 const TEXT = /\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)$/iu;
 const LOCKFILE = /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|pnpm-lock\.yaml)$/iu;
@@ -64,6 +65,7 @@ export function validateFiles(files, options = {}) {
     if (/\/(?:mp|mp-gh|kf):[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("LEGACY_PUBLIC_IDENTITY", file, "active public identities must use /mpx:"));
     if (/\/mpx:mpx-[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("DOUBLED_MPX_IDENTITY", file, "canonical identities must not repeat the mpx prefix"));
     if (/(?:[A-Za-z]:[\\/](?:_MP_projects[\\/])?|\/(?:[A-Za-z][\\/])?_MP_projects[\\/])mpx-(?:claude-code|pi)(?:[\\/]|$)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_PATH", file, "active files must not embed absolute legacy source-repository paths"));
+    if (/(?:import|from|require|readFile|open)[^\n]{0,160}(?:['"`](?:\.\.\/)+(?:mpx-(?:claude-code|pi))\/|['"`](?:~\/)?\.codex\/|['"`](?:mpx-(?:claude-code|pi))\/)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_DEPENDENCY", file, "active files must not import or read legacy runtime roots"));
     if (file.startsWith("content/") && /\$\{?CLAUDE_[A-Z0-9_]+\}?/u.test(text) && !permitsClaudeVariable(file)) diagnostics.push(diagnostic("CLAUDE_PLACEHOLDER", file, "canonical content must be runtime-neutral"));
     if (file.startsWith("runtimes/") && /(?:status-map\.json|mp\.config\.json|legacy[-_. ]?(?:status|config))/iu.test(text)) diagnostics.push(diagnostic("LEGACY_RUNTIME_READER", file, "active runtimes must consume current contracts only"));
   }
@@ -243,7 +245,21 @@ async function run() {
 
   const generated = spawnSync(process.execPath, [path.join(root, "runtimes/pi/runtime-pi/scripts/generate-agents.mjs"), "--check"], { cwd: root, encoding: "utf8" });
   const drift = generated.status === 0 ? [] : [generated.stderr.trim() || generated.stdout.trim() || "projection"];
-  const diagnostics = [...files.diagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
+  const convergenceName = "docs/history/CONVERGENCE_MANIFEST.json";
+  let convergence;
+  const convergenceDiagnostics = [];
+  try { convergence = JSON.parse(files.get(convergenceName)?.toString("utf8") ?? ""); }
+  catch { convergenceDiagnostics.push(diagnostic("CONVERGENCE_MANIFEST_INVALID", convergenceName, "committed convergence manifest is missing or invalid JSON")); }
+  if (convergence) convergenceDiagnostics.push(...validateConvergenceManifest(convergence));
+  if (verifySources && convergence && process.env.MPX_PROJECTS) {
+    const current = await buildConvergenceManifest({ sources: [
+      { id: "claude", root: path.join(process.env.MPX_PROJECTS, "mpx-claude-code"), symbolicRoot: "${MPX_PROJECTS}/mpx-claude-code" },
+      { id: "pi", root: path.join(process.env.MPX_PROJECTS, "mpx-pi"), symbolicRoot: "${MPX_PROJECTS}/mpx-pi" },
+    ] });
+    convergenceDiagnostics.push(...compareConvergenceManifests(convergence, current));
+  }
+
+  const diagnostics = [...files.diagnostics, ...convergenceDiagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
     root,
     names,
     tracked,
@@ -258,7 +274,7 @@ async function run() {
   if (diagnostics.length) {
     for (const item of diagnostics) console.error(`${item.code}: ${item.file}: ${item.message}`);
     process.exitCode = 1;
-  } else console.log(`Validated ${files.size} active/generated files and ${parsed.manifest.entries.length} provenance entries.`);
+  } else console.log(`Validated ${files.size} active/generated files, ${parsed.manifest.entries.length} provenance entries, and ${convergence.entries.length} convergence entries.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await run();
