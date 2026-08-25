@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Architecture Review
 
 Explore a codebase like an AI would, surface architectural friction, discover opportunities for improving testability, and propose module-deepening refactors as RFCs logged in the project's tracker. Resolve which tracker CLI and how to run each verb via [`shared/ISSUE_TRACKER.md`](../shared/ISSUE_TRACKER.md).
@@ -14,8 +15,8 @@ A **deep module** (John Ousterhout, "A Philosophy of Software Design") has a sma
 
 Before starting:
 
-1. Read `./../shared/deep-modules.md` now — deep vs shallow module evaluation.
-2. Read `./../shared/interface-design.md` now — interface design rules for testability.
+1. Read `../shared/deep-modules.md` now — deep vs shallow module evaluation.
+2. Read `../shared/interface-design.md` now — interface design rules for testability.
 3. Read `./REFERENCE.md` now — dependency categories and the issue template.
 
 ## Process
@@ -45,6 +46,8 @@ Ask the user which candidate to explore next — interfaces come later, in Step 
 
 ### 3. User picks a candidate
 
+**Gate:** Continue only when the user has unambiguously selected one candidate.
+
 ### 4. Frame the problem space
 
 Before spawning sub-agents, write a user-facing explanation of the problem space for the chosen candidate:
@@ -57,7 +60,7 @@ Show this to the user, then immediately proceed to Step 5. The user reads and th
 
 ### 5. Design multiple interfaces
 
-Spawn 3+ `general-purpose` sub-agents in parallel with `model: "appropriate runtime class"`. Each must produce a **radically different** interface for the deepened module. Tell each to reason through the trade-offs before committing to a shape.
+Spawn 3+ `general-purpose` sub-agents in parallel with the advanced model class. Each must produce a **radically different** interface for the deepened module. Tell each to reason through the trade-offs before committing to a shape.
 
 Prompt each sub-agent with a separate technical brief (file paths, coupling details, dependency category, what's being hidden). This brief is independent of the user-facing explanation in Step 4. Give each agent a different design constraint:
 
@@ -79,6 +82,8 @@ Present designs sequentially, then compare them in prose.
 After comparing, give your own recommendation: which design you think is strongest and why. If elements from different designs would combine well, propose a hybrid. Be opinionated — the user wants a strong read, not just a menu.
 
 ### 6. User picks an interface (or accepts recommendation)
+
+**Gate:** Continue only when the user has explicitly accepted the final interface shape and its trade-offs.
 
 ### 7. Log the refactor RFC
 

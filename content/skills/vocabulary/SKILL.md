@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Vocabulary
 
 ### Process
@@ -67,7 +68,7 @@ If updating: merge new terms into existing structure, update changed definitions
 
 **Step 6: Summary**
 
-- Output inline: number of terms added, updated, and unchanged
+- Output inline: number of terms added, updated, and unchanged; reconcile these counts with the final file
 - List any unresolved ambiguities for future discussion
 
 ### Rules

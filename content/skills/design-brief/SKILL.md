@@ -1,11 +1,12 @@
 ---
 name: design-brief
-description: "Writes a standalone design brief for a UI component — surrounding context, exhaustive requirements and states, and a component reuse map — then gates dependent tracker issues/tasks with a Design needed label."
+description: "Writes a standalone design brief for a UI component — surrounding context, exhaustive requirements and states, and a component reuse map — then gates dependent tracker issues/tasks with a Design needed label. Use for a design brief, design spec, component spec, or UI spec."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Design Brief Creation
 
 Produce a design brief complete enough that a designer — human or AI — can build a pixel-accurate
@@ -65,7 +66,7 @@ Be specific: "use `Button variant='ghost'` size='icon'", not "add a button".
 
 ## Step 4: Research missing primitives
 
-For a needed pattern the inventory lacks, spawn `context7-docs-fetcher` against the project's
+For a needed pattern the inventory lacks, spawn `mp-context7-docs-fetcher` against the project's
 component library. List the result under *Components to Adopt* with the reason nothing existing
 suffices. Installation is deferred to `mpx design-refine`.
 

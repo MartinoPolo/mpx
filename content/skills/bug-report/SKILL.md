@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Bug Report
 
 Investigate bug root cause, design TDD fix plan, log an issue/task in the project's tracker.
@@ -32,7 +33,7 @@ If critical info is missing (can't investigate without it), ask questions. Then 
 
 ### Step 2: Investigate
 
-Spawn `issue-analyzer` sub-agent:
+Spawn `mp-issue-analyzer` sub-agent:
 
 > Explore this codebase to investigate a bug.
 >
@@ -47,7 +48,7 @@ Spawn `issue-analyzer` sub-agent:
 >
 > Return your full analysis including root cause, affected modules, and code path description.
 
-For multiple bugs: spawn multiple `issue-analyzer` sub-agents in parallel.
+For multiple bugs: spawn multiple `mp-issue-analyzer` sub-agents in parallel.
 
 ### Step 3: Design TDD Fix Plan
 

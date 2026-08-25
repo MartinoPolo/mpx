@@ -1,11 +1,12 @@
 ---
 name: mockup
-description: "Generates self-contained HTML variant mockups from a design brief, one by default or N in parallel, and opens them for comparison."
+description: "Generates self-contained HTML variant mockups from a design brief, one by default or N in parallel, and opens them for comparison. Use when asked to create a mockup, mock up a component, visualize a design, or produce design variants."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # Design Mockup Generation
 
 Generate self-contained HTML mockup(s) from a design brief, in the project's own design language.
@@ -40,7 +41,7 @@ Auto-detect → the folder under `designs/` that has a brief and no `variants/va
 ## Step 3: Discover reusable components
 
 Scan the project's component directories and read real props and variants from source, variants
-files, or stories. For a pattern nothing covers, spawn `context7-docs-fetcher` against the
+files, or stories. For a pattern nothing covers, spawn `mp-context7-docs-fetcher` against the
 project's component library — note it and defer installation to `mpx design-refine`.
 
 ## Step 4: Generate
@@ -49,7 +50,7 @@ Output into `designs/<component-name>/variants/`.
 
 **N = 1** — write `variant-a.html` directly.
 
-**N > 1** — spawn N `ui-variant-generator` agents in parallel, one per variant. Omit `model`;
+**N > 1** — spawn N `mp-ui-variant-generator` agents in parallel, one per variant. Omit `model`;
 the agent declares its own. Give each agent:
 
 - **Style definition** — the project's design language: font families, palette tokens, spacing

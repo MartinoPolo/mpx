@@ -1,12 +1,13 @@
 ---
 name: symlink
-description: "Creates and verifies Windows symlinks and directory junctions through PowerShell New-Item."
+description: "Creates and verifies Windows symlinks and directory junctions through PowerShell New-Item. Any symlink or junction work on Windows. Git Bash ln -s and cmd mklink silently create the wrong thing here."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
-# Windows Symlinks & Junctions (the active runtime)
+
+# Windows Symlinks & Junctions
 
 Create and verify links that survive Git and resolve everywhere on this Windows machine.
 
@@ -36,32 +37,32 @@ git config --global core.symlinks true
 Directory junction (no admin):
 
 ```powershell
-New-Item -ItemType Junction -Path "<drive>:\link\path\name" -Target "<drive>:\repo\real\dir"
+New-Item -ItemType Junction -Path "C:\link\path\name" -Target "C:\repo\real\dir"
 ```
 
 File symlink (Developer Mode or elevated):
 
 ```powershell
-New-Item -ItemType SymbolicLink -Path "<drive>:\link\path\file.md" -Target "<drive>:\repo\real\file.md"
+New-Item -ItemType SymbolicLink -Path "C:\link\path\file.md" -Target "C:\repo\real\file.md"
 ```
 
 Make it idempotent — guard before creating so a re-run skips silently:
 
 ```powershell
-if (-not (Test-Path "<drive>:\link\path\file.md")) { New-Item -ItemType SymbolicLink -Path "<drive>:\link\path\file.md" -Target "<drive>:\repo\real\file.md" }
+if (-not (Test-Path "C:\link\path\file.md")) { New-Item -ItemType SymbolicLink -Path "C:\link\path\file.md" -Target "C:\repo\real\file.md" }
 ```
 
 If a file symlink throws "You do not have sufficient privilege" (no Developer Mode), retry that single op elevated — accept the UAC prompt:
 
 ```powershell
-$mk = "New-Item -ItemType SymbolicLink -Path '<drive>:\link\path\file.md' -Target '<drive>:\repo\real\file.md' | Out-Null"
+$mk = "New-Item -ItemType SymbolicLink -Path 'C:\link\path\file.md' -Target 'C:\repo\real\file.md' | Out-Null"
 Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-Command',$mk
 ```
 
 ## Step 4: Verify
 
 ```powershell
-Get-ChildItem "<drive>:\link\path" | Format-Table Name, LinkType, Target -AutoSize
+Get-ChildItem "C:\link\path" | Format-Table Name, LinkType, Target -AutoSize
 ```
 
 - `LinkType` = `SymbolicLink` or `Junction` and `Target` = where it resolves → the link is real.
@@ -71,14 +72,14 @@ Get-ChildItem "<drive>:\link\path" | Format-Table Name, LinkType, Target -AutoSi
 Confirm the link resolves to real content:
 
 ```powershell
-Test-Path "<drive>:\link\path\name"   # True → target reachable through the link
+Test-Path "C:\link\path\name"   # True → target reachable through the link
 ```
 
 ## Removing links
 
-- **Directory junction:** `(Get-Item "<drive>:\link\path\name").Delete()` — removes the link only. Never `Remove-Item -Recurse` on a junction; PowerShell 5.1 can follow it and delete the target's contents.
-- **File symlink:** `Remove-Item "<drive>:\link\path\file.md"` (or Git Bash `rm`).
+- **Directory junction:** `(Get-Item "C:\link\path\name").Delete()` — removes the link only. Never `Remove-Item -Recurse` on a junction; PowerShell 5.1 can follow it and delete the target's contents.
+- **File symlink:** `Remove-Item "C:\link\path\file.md"` (or Git Bash `rm`).
 
 ## Full reference
 
-`WINDOWS-SETUP.md` (repo root) covers the whole `~/.runtime` link set, running multiple accounts side-by-side, per-project framework rules, and a troubleshooting table.
+`WINDOWS-SETUP.md` (repo root) covers the whole runtime configuration link set, running multiple accounts side-by-side, per-project framework rules, and a troubleshooting table.

@@ -33,7 +33,7 @@ with `status: awaiting_answers` is ready to be answered.
   "schema": 1,
   "sessionId": "myapp--authentication--20260808-1430",
   "project": "myapp",
-  "projectPath": "<drive>:\\path\\to\\repo",
+  "projectPath": "C:\\path\\to\\repo",
   "topic": "authentication",
   "createdAt": "2026-08-08T14:30:00.000Z",
   "status": "awaiting_answers",

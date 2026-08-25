@@ -1,11 +1,12 @@
 ---
 name: design-refine
-description: "Applies refinement requirements to a chosen mockup variant, producing refined.html and SUMMARY.md, updating the brief, and unblocking the tracker issues/tasks that were gated on the design."
+description: "Applies refinement requirements to a chosen mockup variant, producing refined.html and SUMMARY.md, updating the brief, and unblocking the tracker issues/tasks that were gated on the design. Use when asked to refine a design, accept or select a variant, polish a mockup, or refine all pending designs."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Design Refinement
 
 Apply refinement requirements to a chosen variant. Produces `refined.html` and `SUMMARY.md`,
@@ -44,7 +45,7 @@ directories, read real props and variants from source, and note the gaps.
 
 For each gap:
 
-1. Spawn `context7-docs-fetcher` against the project's component library.
+1. Spawn `mp-context7-docs-fetcher` against the project's component library.
 2. Install with the detected package manager. shadcn projects:
    `<pm-exec> shadcn@latest add <name> --yes --overwrite` — `pnpm dlx`, `npx`, `yarn dlx`, or
    `bunx` per DESIGN_PIPELINE.md § Project discovery, and `shadcn-svelte@latest` on Svelte.
