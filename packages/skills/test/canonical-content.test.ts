@@ -15,7 +15,7 @@ const classifiedSkills = {
     "handoff", "notebooklm", "script-discovery", "skill-audit", "skill-create", "suppression-audit", "symlink",
     "sync-base", "vocabulary",
   ],
-  "work/explicit-only": ["agent-create", "grill-voice", "mockup", "playwright-test"],
+  "work/explicit-only": ["agent-create", "continue", "grill-voice", "harvest-decisions", "mockup", "playwright-test"],
   "personal/explicit-only": [
     "board-setup", "board-to-issues", "clean-pc", "podcast", "project-register", "raycast-config", "tutorial-create",
     "video-to-image",
