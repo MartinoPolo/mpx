@@ -1,6 +1,6 @@
 # MPX Unified System Migration
 
-**Status:** Sole authoritative active migration plan; Phases B–F implemented, Phase F2 Docker isolation proof and later phases pending
+**Status:** Sole authoritative active migration plan; Phases B–E implemented, Phase F1 baseline captured but semantic-convergence gate still open, Phase F2 Docker isolation proof and later phases pending
 **Destination:** `C:/_MP_projects/mpx`  
 **Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates  
 **Canonical project manifest:** `mpxconfig.json`
