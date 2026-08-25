@@ -79,7 +79,7 @@ export interface AgentDetails {
   activity?: string;
   /** Current spinner frame index (for animated running indicator). */
   spinnerFrame?: number;
-  /** Short model name if different from parent (e.g. "haiku", "sonnet"). */
+  /** Actual resolved model ID (e.g. "gpt-5.6-sol"). */
   modelName?: string;
   /** Notable config tags (e.g. ["thinking: high", "isolated"]). */
   tags?: string[];
@@ -136,9 +136,9 @@ export function formatSessionTokens(
   return `${tokenStr} (${annot.join(" · ")})`;
 }
 
-/** Format turn count with optional max limit: "↻5≤30" or "↻5". */
+/** VENDOR EDIT (mpx-pi): Use font-safe turn labels with an optional maximum. */
 export function formatTurns(turnCount: number, maxTurns?: number | null): string {
-  return maxTurns != null ? `↻${turnCount}≤${maxTurns}` : `↻${turnCount}`;
+  return maxTurns != null ? `turn ${turnCount}/${maxTurns}` : `turn ${turnCount}`;
 }
 
 /** Format milliseconds as human-readable duration. */
@@ -184,10 +184,9 @@ export function buildInvocationTags(
  * spending and at what effort - the two facts the Claude sub-agent panel puts
  * first and the ones that decide what a parallel fan-out costs.
  *
- * `invocation.modelName` is set only when the agent's model differs from the
- * parent session's, so an inherited model draws no cell at all: a blank there
- * means "same model as the main session", which is the honest reading and
- * costs the widget no plumbing to the parent context.
+ * `invocation.modelName` is the actual resolved model for every spawn path,
+ * including agents that inherit the main session model. The widget therefore
+ * never requires the user to infer a running agent's model from parent state.
  */
 export function buildModelThinkingCells(
   invocation: AgentInvocation | undefined,
@@ -269,8 +268,8 @@ export class AgentWidget {
    *   - `background`: drop only agents *known* to be foreground
    *     (`isBackground === false`); keep everything else — background, queued,
    *     scheduled, or RPC-spawned (`undefined`). Keying off the `isBackground`
-   *     record flag rather than the UI-only `invocation` snapshot (which only the
-   *     Agent-tool path sets), and excluding rather than allow-listing, means
+   *     record flag rather than invocation display metadata, and excluding rather
+   *     than allow-listing, means
    *     only proven-foreground runs drop out — nothing else silently vanishes.
    *   - `all`: every agent.
    */

@@ -13,6 +13,9 @@ import { isAbsolute } from "node:path";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
+import { getAgentConfig } from "./agent-types.js";
+import { withResolvedModelName } from "./invocation-config.js";
+import { resolveEffectiveModel } from "./model-resolver.js";
 import type { AgentInvocation, AgentRecord, IsolationMode, SubagentType, ThinkingLevel } from "./types.js";
 import { addUsage } from "./usage.js";
 import { cleanupWorktree, createWorktree, pruneWorktrees, } from "./worktree.js";
@@ -20,6 +23,8 @@ import { cleanupWorktree, createWorktree, pruneWorktrees, } from "./worktree.js"
 export type OnAgentComplete = (record: AgentRecord) => void;
 export type OnAgentStart = (record: AgentRecord) => void;
 export type OnAgentCompact = (record: AgentRecord, info: CompactionInfo) => void;
+// VENDOR EDIT (mpx-pi): let notification batching observe queued-agent cancellation.
+export type OnQueuedAgentCancel = (record: AgentRecord) => void;
 export type CompactionInfo = { reason: "manual" | "threshold" | "overflow"; tokensBefore: number };
 
 /** Default max concurrent background agents. */
@@ -127,6 +132,8 @@ export class AgentManager {
   private onComplete?: OnAgentComplete;
   private onStart?: OnAgentStart;
   private onCompact?: OnAgentCompact;
+  // VENDOR EDIT (mpx-pi): paired with OnQueuedAgentCancel above.
+  private onQueuedCancel?: OnQueuedAgentCancel;
   private maxConcurrent: number;
   /** Base repos worktrees were created from — so dispose() can prune them all,
    *  not just the parent repo (caller-supplied cwd can target other repos). */
@@ -142,10 +149,13 @@ export class AgentManager {
     maxConcurrent = DEFAULT_MAX_CONCURRENT,
     onStart?: OnAgentStart,
     onCompact?: OnAgentCompact,
+    // VENDOR EDIT (mpx-pi): notify the gate when a queued background agent disappears.
+    onQueuedCancel?: OnQueuedAgentCancel,
   ) {
     this.onComplete = onComplete;
     this.onStart = onStart;
     this.onCompact = onCompact;
+    this.onQueuedCancel = onQueuedCancel;
     this.maxConcurrent = maxConcurrent;
     // Cleanup completed agents after 10 minutes (but keep sessions for resume)
     this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
@@ -179,6 +189,11 @@ export class AgentManager {
     // can fix and retry; the RPC layer converts throws into error envelopes.
     assertValidSpawnCwd(options.cwd);
 
+    const effectiveModel = resolveEffectiveModel(
+      options.model, ctx.model, ctx.modelRegistry, getAgentConfig(type)?.model,
+    );
+    options = { ...options, model: effectiveModel };
+
     const id = randomUUID().slice(0, 17);
     const abortController = new AbortController();
     const record: AgentRecord = {
@@ -197,7 +212,9 @@ export class AgentManager {
       // only filter excludes only explicit `false`, so undefined agents — which
       // have no inline surface — stay visible instead of vanishing.
       isBackground: options.isBackground,
-      invocation: options.invocation,
+      // VENDOR EDIT (mpx-pi): Every spawn path records the model it will
+      // actually run, including inherited, scheduled, nested, and RPC agents.
+      invocation: withResolvedModelName(options.invocation, effectiveModel),
       depth: options.depth ?? 1,
       parentAgentId: options.parentAgentId,
       maxSubagentDepth: options.maxSubagentDepth,
@@ -583,6 +600,8 @@ export class AgentManager {
       this.queue = this.queue.filter(q => q.id !== id);
       record.status = "stopped";
       record.completedAt = Date.now();
+      // VENDOR EDIT (mpx-pi): queued agents never enter the normal completion callback.
+      this.onQueuedCancel?.(record);
       return true;
     }
 
@@ -639,6 +658,8 @@ export class AgentManager {
       if (record) {
         record.status = "stopped";
         record.completedAt = Date.now();
+        // VENDOR EDIT (mpx-pi): queued agents never enter the normal completion callback.
+        this.onQueuedCancel?.(record);
         count++;
       }
     }

@@ -28,11 +28,14 @@ const STRAGGLER_TIMEOUT = 15_000;
 export class GroupJoinManager {
   private groups = new Map<string, AgentGroup>();
   private agentToGroup = new Map<string, string>();
+  // VENDOR EDIT (mpx-pi): explicit fields keep Node's strip-types test runner compatible.
+  private deliverCb: DeliveryCallback;
+  private groupTimeout: number;
 
-  constructor(
-    private deliverCb: DeliveryCallback,
-    private groupTimeout = DEFAULT_TIMEOUT,
-  ) {}
+  constructor(deliverCb: DeliveryCallback, groupTimeout = DEFAULT_TIMEOUT) {
+    this.deliverCb = deliverCb;
+    this.groupTimeout = groupTimeout;
+  }
 
   /** Register a group of agent IDs that should be joined. */
   registerGroup(groupId: string, agentIds: string[]): void {
@@ -80,6 +83,29 @@ export class GroupJoinManager {
     }
 
     return 'held';
+  }
+
+  /** VENDOR EDIT (mpx-pi): remove a canceled agent without delivering its record. */
+  cancelAgent(agentId: string): void {
+    const groupId = this.agentToGroup.get(agentId);
+    if (!groupId) return;
+
+    const group = this.groups.get(groupId);
+    this.agentToGroup.delete(agentId);
+    if (!group || group.delivered) return;
+
+    group.agentIds.delete(agentId);
+    group.completedRecords.delete(agentId);
+
+    if (group.agentIds.size === 0) {
+      if (group.timeoutHandle) clearTimeout(group.timeoutHandle);
+      this.cleanupGroup(groupId);
+      return;
+    }
+
+    if (group.completedRecords.size >= group.agentIds.size) {
+      this.deliver(group, false);
+    }
   }
 
   private onTimeout(group: AgentGroup): void {

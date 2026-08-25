@@ -54,6 +54,45 @@ test("flushes all unread completions with one turn trigger", () => {
   ]);
 });
 
+test("waits for active background agents before continuing a settled parent", () => {
+  const delivered: Array<{ id: string; triggerTurn: boolean }> = [];
+  const gate = new ParentRunNotificationGate();
+  const record = { id: "agent-1", resultConsumed: false };
+
+  gate.onParentAgentStart();
+  gate.onBackgroundAgentsActiveChanged(true);
+  gate.scheduleIndividual(record, (unread, triggerTurn) => {
+    delivered.push({ id: unread.id, triggerTurn });
+  });
+  gate.onParentAgentSettled();
+  assert.deepEqual(delivered, []);
+
+  gate.onBackgroundAgentsActiveChanged(false);
+  assert.deepEqual(delivered, [{ id: "agent-1", triggerTurn: true }]);
+});
+
+test("batches idle background completions into one continuation", () => {
+  const delivered: Array<{ id: string; triggerTurn: boolean }> = [];
+  const gate = new ParentRunNotificationGate();
+  const firstRecord = { id: "agent-1", resultConsumed: false };
+  const secondRecord = { id: "agent-2", resultConsumed: false };
+
+  gate.onBackgroundAgentsActiveChanged(true);
+  gate.scheduleIndividual(firstRecord, (unread, triggerTurn) => {
+    delivered.push({ id: unread.id, triggerTurn });
+  });
+  gate.scheduleIndividual(secondRecord, (unread, triggerTurn) => {
+    delivered.push({ id: unread.id, triggerTurn });
+  });
+  assert.deepEqual(delivered, []);
+
+  gate.onBackgroundAgentsActiveChanged(false);
+  assert.deepEqual(delivered, [
+    { id: "agent-1", triggerTurn: false },
+    { id: "agent-2", triggerTurn: true },
+  ]);
+});
+
 test("re-checks mutable consumption state when a grouped completion is flushed", () => {
   const delivered: string[][] = [];
   const records = [

@@ -27,6 +27,7 @@ export function registerParentRunNotificationGate(
 export class ParentRunNotificationGate {
   private readonly pendingNotifications = new Map<string, PendingNotification>();
   private parentRunActive = false;
+  private backgroundAgentsActive = false;
   private disposed = false;
 
   scheduleIndividual<T extends ConsumableNotification>(
@@ -66,15 +67,13 @@ export class ParentRunNotificationGate {
     if (this.disposed) return;
 
     this.parentRunActive = false;
-    const unreadNotifications = [...this.pendingNotifications.values()].filter(
-      (notification) => notification.isUnread(),
-    );
-    this.pendingNotifications.clear();
-    // Earlier messages enter context without starting a run; the final message
-    // starts one continuation that can process the entire completion batch.
-    for (const [index, notification] of unreadNotifications.entries()) {
-      this.deliver(notification, index === unreadNotifications.length - 1);
-    }
+    this.flushIfReady();
+  }
+
+  onBackgroundAgentsActiveChanged(active: boolean): void {
+    if (this.disposed) return;
+    this.backgroundAgentsActive = active;
+    this.flushIfReady();
   }
 
   dispose(): void {
@@ -85,13 +84,20 @@ export class ParentRunNotificationGate {
   private schedule(key: string, notification: PendingNotification): void {
     if (this.disposed) return;
 
-    this.pendingNotifications.delete(key);
-    if (this.parentRunActive) {
-      this.pendingNotifications.set(key, notification);
-      return;
-    }
+    this.pendingNotifications.set(key, notification);
+    this.flushIfReady();
+  }
 
-    if (notification.isUnread()) this.deliver(notification, true);
+  private flushIfReady(): void {
+    if (this.parentRunActive || this.backgroundAgentsActive) return;
+
+    const unreadNotifications = [...this.pendingNotifications.values()].filter(
+      (notification) => notification.isUnread(),
+    );
+    this.pendingNotifications.clear();
+    for (const [index, notification] of unreadNotifications.entries()) {
+      this.deliver(notification, index === unreadNotifications.length - 1);
+    }
   }
 
   private deliver(notification: PendingNotification, triggerTurn: boolean): void {
