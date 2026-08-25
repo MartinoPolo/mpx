@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildConvergenceManifest, compareConvergenceManifests, validateConvergenceManifest } from "./convergence-manifest.mjs";
 
-const TEXT = /\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)$/iu;
+const TEXT = /(?:\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)|(?:^|\/)LICENSE)$/iu;
 const LOCKFILE = /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|pnpm-lock\.yaml)$/iu;
 const PRIVATE_STATE = /(?:^|\/)(?:\.env(?:\..+)?|[^/]*(?:credential|credentials|session|runtime-state)[^/]*)$/iu;
 const ACTIVE_ROOT = /^(?:apps|content|packages|runtimes|scripts)\//u;
@@ -171,6 +171,24 @@ export function validateCanonicalScriptSyntax(root, names) {
   return diagnostics;
 }
 
+export function validateConvergenceArtifacts(manifest, files) {
+  const diagnostics = [];
+  for (const entry of manifest?.entries ?? []) {
+    if (!["canonicalized", "Claude-specific", "Pi-specific", "externalized"].includes(entry.disposition)) continue;
+    if (!files.has(entry.destination)) {
+      diagnostics.push(diagnostic("CONVERGENCE_DESTINATION_MISSING", `${entry.source}:${entry.path}`, `destination is absent: ${entry.destination}`));
+      continue;
+    }
+    for (const evidence of entry.evidence ?? []) {
+      if (!["behavior-test", "generated-artifact"].includes(evidence.kind)) continue;
+      const artifact = files.get(evidence.reference);
+      if (artifact === undefined) diagnostics.push(diagnostic("CONVERGENCE_ARTIFACT_MISSING", `${entry.source}:${entry.path}`, `evidence artifact is absent: ${evidence.reference}`));
+      else if (digest(artifact) !== evidence.sha256) diagnostics.push(diagnostic("CONVERGENCE_ARTIFACT_HASH_MISMATCH", `${entry.source}:${entry.path}`, `evidence artifact hash does not match: ${evidence.reference}`));
+    }
+  }
+  return diagnostics;
+}
+
 export async function validateGeneratedRepository({ root, names, tracked, files, generatedPiDiagnostics = [], readSource, verifySources = false, destinationAttributes }) {
   const diagnostics = [
     ...validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics }),
@@ -282,7 +300,7 @@ async function run() {
   const convergenceDiagnostics = [];
   try { convergence = JSON.parse(files.get(convergenceName)?.toString("utf8") ?? ""); }
   catch { convergenceDiagnostics.push(diagnostic("CONVERGENCE_MANIFEST_INVALID", convergenceName, "committed convergence manifest is missing or invalid JSON")); }
-  if (convergence) convergenceDiagnostics.push(...validateConvergenceManifest(convergence));
+  if (convergence) convergenceDiagnostics.push(...validateConvergenceManifest(convergence), ...validateConvergenceArtifacts(convergence, files));
   if (verifySources && convergence && process.env.MPX_PROJECTS) {
     const current = await buildConvergenceManifest({ sources: [
       { id: "claude", root: path.join(process.env.MPX_PROJECTS, "mpx-claude-code"), symbolicRoot: "${MPX_PROJECTS}/mpx-claude-code" },

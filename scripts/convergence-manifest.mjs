@@ -221,6 +221,7 @@ export function validateConvergenceManifest(manifest, options = {}) {
     if (entry.disposition === "unclassified" || !ACTIVE_DISPOSITIONS.has(entry.disposition)) add("CONVERGENCE_UNCLASSIFIED", file, "active input has no accepted disposition");
     const needsDestination = ["canonicalized", "Claude-specific", "Pi-specific", "externalized"].includes(entry.disposition);
     if (typeof entry.adaptation !== "string" || entry.adaptation.length === 0 || (needsDestination && (typeof entry.destination !== "string" || SYNTHETIC_DESTINATION.test(entry.destination)))) add("CONVERGENCE_DECISION_INCOMPLETE", file, "completed classification requires a real destination and adaptation facts");
+    if (entry.disposition === "retired" && (typeof entry.reason !== "string" || entry.reason.length === 0 || entry.destination !== null || entry.activeReader !== null)) add("CONVERGENCE_RETIREMENT_INCOMPLETE", file, "retirement requires a reason, null destination, and explicit null active reader");
     if (needsDestination && !entry.evidence.some(item => COMPLETION_EVIDENCE_KINDS.has(item?.kind))) add("CONVERGENCE_COMPLETION_EVIDENCE_MISSING", file, "completed active input requires behavior-test or generated-artifact evidence");
   }
   return diagnostics;
@@ -228,18 +229,23 @@ export function validateConvergenceManifest(manifest, options = {}) {
 
 function comparableEntry(entry) {
   return JSON.stringify({
+    kind: entry.kind,
     state: entry.state,
     sha256: entry.sha256,
     headSha256: entry.headSha256 ?? null,
-    completion: entry.completion,
-    disposition: entry.disposition,
-    plannedDisposition: entry.plannedDisposition ?? null,
-    plannedDestination: entry.plannedDestination ?? null,
-    destination: entry.destination,
-    adaptation: entry.adaptation,
-    reason: entry.reason ?? null,
-    evidence: entry.evidence,
+    traversal: entry.traversal ?? null,
   });
+}
+
+export function mergeReviewedDecisions(generated, reviewed) {
+  const prior = new Map((reviewed?.entries ?? []).map(entry => [`${entry.source}:${entry.path}`, entry]));
+  return {
+    ...generated,
+    entries: generated.entries.map(entry => {
+      const previous = prior.get(`${entry.source}:${entry.path}`);
+      return previous && comparableEntry(previous) === comparableEntry(entry) ? previous : entry;
+    }),
+  };
 }
 
 export function compareConvergenceManifests(expected, actual) {

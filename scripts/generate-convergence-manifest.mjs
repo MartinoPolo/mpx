@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildConvergenceManifest, compareConvergenceManifests, validateConvergenceManifest } from "./convergence-manifest.mjs";
+import { buildConvergenceManifest, compareConvergenceManifests, mergeReviewedDecisions, validateConvergenceManifest } from "./convergence-manifest.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const projects = process.env.MPX_PROJECTS;
@@ -26,6 +26,9 @@ if (process.argv.includes("--check")) {
     process.exitCode = 1;
   } else console.log(`Verified ${generated.entries.length} convergence entries across ${generated.sources.length} sources.`);
 } else {
-  await writeFile(target, `${JSON.stringify(generated, null, 2)}\n`);
-  console.log(`Wrote ${generated.entries.length} convergence entries to ${path.relative(repositoryRoot, target)}.`);
+  let committed;
+  try { committed = JSON.parse(await readFile(target, "utf8")); } catch { committed = null; }
+  const reconciled = mergeReviewedDecisions(generated, committed);
+  await writeFile(target, `${JSON.stringify(reconciled, null, 2)}\n`);
+  console.log(`Wrote ${reconciled.entries.length} convergence entries to ${path.relative(repositoryRoot, target)} while preserving unchanged reviewed decisions.`);
 }

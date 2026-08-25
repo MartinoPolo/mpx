@@ -7,6 +7,7 @@ import {
   buildConvergenceManifest,
   classifySourcePath,
   compareConvergenceManifests,
+  mergeReviewedDecisions,
   validateConvergenceManifest,
 } from "./convergence-manifest.mjs";
 
@@ -116,6 +117,15 @@ describe("Phase F1 convergence manifest", () => {
     ]));
   });
 
+  it("requires finalized retirement reasons and an explicit absence of active readers", () => {
+    const hash = "b".repeat(64);
+    const snapshot = { schemaVersion: 1, kind: "source-snapshot", sourceSnapshot: { source: "pi", path: "old.ts", sha256: hash }, sha256: hash, reference: "pi:old.ts@commit", verification: "captured" };
+    const base = { schemaVersion: 2, sources: [{ id: "pi", symbolicRoot: "${MPX_PROJECTS}/mpx-pi", commit: "a".repeat(40), dirty: false }] };
+    const entry = { source: "pi", path: "old.ts", state: "tracked", sha256: hash, completion: "completed", disposition: "retired", destination: null, adaptation: "removed", evidence: [snapshot] };
+    expect(validateConvergenceManifest({ ...base, entries: [entry] }).map(item => item.code)).toContain("CONVERGENCE_RETIREMENT_INCOMPLETE");
+    expect(validateConvergenceManifest({ ...base, entries: [{ ...entry, reason: "superseded", activeReader: null }] })).toEqual([]);
+  });
+
   it("rejects unclassified active inputs and classifications without evidence", () => {
     const hash = "b".repeat(64);
     const base = { schemaVersion: 2, sources: [{ id: "pi", symbolicRoot: "${MPX_PROJECTS}/mpx-pi", commit: "a".repeat(40), dirty: false }], entries: [] };
@@ -123,6 +133,40 @@ describe("Phase F1 convergence manifest", () => {
     expect(validateConvergenceManifest({ ...base, entries: [{ source: "pi", path: "a.ts", state: "tracked", sha256: hash, completion: "completed", disposition: "unclassified", destination: null, adaptation: "none", evidence: [snapshot] }] }).map(item => item.code)).toContain("CONVERGENCE_UNCLASSIFIED");
     expect(validateConvergenceManifest({ ...base, entries: [{ source: "pi", path: "a.ts", state: "tracked", sha256: hash, completion: "completed", disposition: "Pi-specific", destination: "runtimes/pi/a.ts", adaptation: "adapter", evidence: [] }] }).map(item => item.code)).toContain("CONVERGENCE_EVIDENCE_MISSING");
     expect(validateConvergenceManifest({ ...base, entries: [{ source: "pi", path: "a.ts", state: "tracked", sha256: hash, completion: "completed", disposition: "Pi-specific", destination: null, adaptation: "adapter", evidence: [snapshot] }] }).map(item => item.code)).toContain("CONVERGENCE_DECISION_INCOMPLETE");
+  });
+
+  it("preserves reviewed decisions when regenerating an unchanged source snapshot", async () => {
+    const root = await fixture();
+    try {
+      const captured = await buildConvergenceManifest({ sources: [{ id: "pi", root, symbolicRoot: "${MPX_PROJECTS}/mpx-pi" }] });
+      const reviewed = structuredClone(captured);
+      const entry = reviewed.entries.find(item => item.disposition !== "excluded");
+      Object.assign(entry, { completion: "completed", disposition: "retired", destination: null, adaptation: "removed", reason: "superseded", activeReader: null });
+      delete entry.plannedDisposition;
+      delete entry.plannedDestination;
+      expect(mergeReviewedDecisions(captured, reviewed).entries.find(item => item.path === entry.path)).toMatchObject({ completion: "completed", disposition: "retired", reason: "superseded" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("compares source snapshots without treating reviewed decisions as source drift", async () => {
+    const root = await fixture();
+    try {
+      const captured = await buildConvergenceManifest({ sources: [{ id: "pi", root, symbolicRoot: "${MPX_PROJECTS}/mpx-pi" }] });
+      const reviewed = structuredClone(captured);
+      const entry = reviewed.entries.find(item => item.disposition !== "excluded");
+      entry.completion = "completed";
+      entry.disposition = "retired";
+      entry.destination = null;
+      entry.adaptation = "superseded-by-canonical-runtime";
+      entry.reason = "no-active-reader";
+      delete entry.plannedDisposition;
+      delete entry.plannedDestination;
+      expect(compareConvergenceManifests(reviewed, captured)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("detects source commit, status, path, and content drift", async () => {

@@ -1,22 +1,34 @@
 # Phase F1 convergence manifest
 
-`docs/history/CONVERGENCE_MANIFEST.json` is the versioned Phase F1 baseline inventory. It snapshots both maintained repositories from `${MPX_PROJECTS}` without storing absolute machine paths or file contents. The baseline is captured; the semantic-convergence gate is intentionally **not yet complete**.
+`docs/history/CONVERGENCE_MANIFEST.json` is the completed, versioned Phase F1 inventory of both maintained source repositories under `${MPX_PROJECTS}`. It records paths, Git state, and hashes without storing absolute machine paths or private account/session content.
+
+## Gate result
+
+The semantic-convergence gate is complete for the captured snapshot:
+
+- 415 active inputs reviewed and completed
+- 249 `canonicalized`
+- 18 `Claude-specific`
+- 53 `Pi-specific`
+- 4 `externalized`
+- 91 `retired`
+- 9 private/generated/dependency inputs explicitly `excluded`
+
+Every non-retired completed input names an existing destination and has source-snapshot-bound behavior-test or generated-artifact evidence whose hash is checked against the repository file. Every retirement records its reason, a null destination, and an explicit null active reader. There are no provisional `_convergence`/`convergence` destinations, planned entries, or unclassified active inputs.
 
 ## Commands
 
-- `pnpm convergence:generate` traverses both source roots and rewrites the committed baseline.
-- `pnpm convergence:verify` is the migration-safe snapshot command: it traverses both roots and fails on malformed baseline data or commit, dirty-state, path, state, or content drift. It does not claim semantic completion.
-- `pnpm validate:generated` is the Phase F1 completion gate. It currently fails for planned active entries and will pass only after they have completed dispositions, real destinations where required, and behavior-test or generated-artifact evidence. It also rejects active dependencies on the old roots.
-- `pnpm validate:generated -- --verify-sources` additionally verifies the live source snapshot and the earlier selected-file provenance.
+- `pnpm convergence:generate` traverses both source roots, refreshes source facts, and preserves reviewed decisions for unchanged snapshots.
+- `pnpm convergence:verify` traverses both roots and fails on malformed baseline data or commit, dirty-state, path, state, or content drift. Reviewed disposition metadata is deliberately not treated as source drift.
+- `pnpm validate:generated` validates semantic completion, destination/evidence existence and hashes, retirement facts, legacy-name/import boundaries, provenance hashes, canonical script syntax, and generated Pi-agent drift.
+- `pnpm validate:generated -- --verify-sources` additionally verifies the live source snapshot and selected-file provenance.
 
-The generator requires `MPX_PROJECTS`; it never guesses machine roots. Hashes are SHA-256 values over current bytes (or a symlink target marker). Modified and deleted tracked files also record their `HEAD` hash. No source content is copied.
+The Pi-agent drift check imports its source generator directly, so `validate:generated` does not depend on a prior package build.
 
 ## Classification boundary
 
-Every active traversed file has an explicit `completion` state. Baseline entries are `planned`, retain `disposition: "unclassified"`, and record a `plannedDisposition` plus `plannedDestination`; excluded roots use `completion: "excluded"`. Names under `_convergence` or `convergence` are planning namespaces only and can never satisfy the completion gate. A completed active entry must use `canonicalized`, `Claude-specific`, `Pi-specific`, `externalized`, or `retired`, must identify a real destination when its disposition requires one, and must carry behavior-test or generated-artifact evidence.
+Accepted reviewed dispositions are `canonicalized`, `Claude-specific`, `Pi-specific`, `externalized`, and `retired`. Canonicalized content preserves intent while removing provider/runtime coupling. Runtime-specific entries identify the current adapter/projection implementation. Externalized entries point to maintained historical or operational documentation. Retired entries are repository metadata, media, deprecated code, or legacy convenience surfaces with no active MPX reader.
 
-Evidence objects use their own schema version and a closed set of kinds. Every object binds to the exact source ID, path, and snapshot hash and includes a hash, reference, and verification result. A source-snapshot hash proves only baseline capture; it is not canonicalization or behavior evidence.
+Evidence objects use a closed schema and bind to the exact source ID, path, and captured source hash. `source-snapshot` evidence proves capture only. Completion requires a hash-matched `behavior-test` or `generated-artifact`; validation resolves the evidence reference in this repository and verifies its bytes.
 
-Traversal prunes only explicitly named classes: Git administration, dependency stores, generated build/test/cache/worktree output, native private account/session state, and known accidental artifacts. Each pruned path remains as an entry with an explicit reason. Maintained trees such as skills, extensions, configuration, editor settings, CI, installers, docs, and root manifests are classified rather than blanket-excluded.
-
-Private account/session files are classified by path before hashing and are never opened. The manifest contains neither credentials nor private session content.
+Traversal prunes only explicitly named classes: Git administration, dependency stores, generated build/test/cache/worktree output, native private account/session state, and known accidental artifacts. Private paths are classified before hashing and are never opened.

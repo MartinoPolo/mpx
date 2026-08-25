@@ -7,12 +7,12 @@
   "sources": [
     {
       "path": "${MPX_PROJECTS}/mpx-claude-code",
-      "commit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "dirty": true
+      "commit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "dirty": false
     },
     {
       "path": "${MPX_PROJECTS}/mpx-pi",
-      "commit": "4d5a9a36ae7f1a48509d627ef1fdd0429cb15fe2",
+      "commit": "9807adb547c64ecedf0091aec20e82627842da33",
       "dirty": true
     },
     {
@@ -25,1172 +25,1757 @@
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-agent-create/SKILL.md",
       "destination": "content/skills/agent-create/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "c6c1cc0e5b32481099ed9ec3c56159de24f3a3552b5d7c87356be5c42aa0b9dd",
-      "destinationSha256": "030174d34c80c0ef908a26057c458033def5bb0e1a136ec19cb23608a507d9a5",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "38035879c5ebc22a993554de1ffbe1d6fc30c4cd284363a57485ed6693c3ab65",
+      "destinationSha256": "1a455bbb8f667867dff2854fdd57697820672a39bf648c253a285c24fc735f28",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "1a455bbb8f667867dff2854fdd57697820672a39bf648c253a285c24fc735f28",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-architecture-review/REFERENCE.md",
       "destination": "content/skills/architecture-review/REFERENCE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "dd47bb0359f8e09db95d393c6b9f8c77430af37826d939557edc2abef59cddbb",
       "destinationSha256": "dd47bb0359f8e09db95d393c6b9f8c77430af37826d939557edc2abef59cddbb",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "dd47bb0359f8e09db95d393c6b9f8c77430af37826d939557edc2abef59cddbb",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-architecture-review/SKILL.md",
       "destination": "content/skills/architecture-review/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "85ecb5430bad9f520ef0bdb57a34343a87b53cfbfc4dc2cc7302003b8203ab18",
-      "destinationSha256": "2ad6de84bce8a70af441e0b5f63df544e7ff4bdea441d6e4e5b9336e19c6c918",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "cddfaf40c0e37a03d4015017996b786782871ab5bc274d369eb4c3fb00c11153",
+      "destinationSha256": "86ef6b1673833dc74a9f56d802bb6254c1b306f95ada00d59ddeaaa898d1295c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "86ef6b1673833dc74a9f56d802bb6254c1b306f95ada00d59ddeaaa898d1295c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-bug-report/SKILL.md",
       "destination": "content/skills/bug-report/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "ff1f229c62cbc41daefe4cc15b980267a84843358484b66d1210be7d8497f5c1",
-      "destinationSha256": "b6201ba88b8b4200a1106d200293fbcd7300dd2ceb5c8254cd40b3eab8aeb496",
+      "destinationSha256": "5cdf430f91b42ddcc2138087f6a282915244c71ecf6dca0e58646dac579cac7e",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5cdf430f91b42ddcc2138087f6a282915244c71ecf6dca0e58646dac579cac7e",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-check-fix/SKILL.md",
       "destination": "content/skills/check-fix/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "35cf47c96322f4d449b0f227cfe55bde1004487bf7ae46c49d2c09c668872fe4",
-      "destinationSha256": "c385a2c8d05dc86703858fa2fcf7c5af7b6ddc2a1b44a0877aa8e189438b69fa",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "2cbd9b379b22973b9e2813aa097f08d77d35a9c43873a010545204ad10e1720d",
+      "destinationSha256": "542af148fe1da08680dda1f8bded8e2b94aee2d3f8b5cec6dbd33a1014727d77",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "542af148fe1da08680dda1f8bded8e2b94aee2d3f8b5cec6dbd33a1014727d77",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-code-clean/SKILL.md",
       "destination": "content/skills/code-clean/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "5f8127f655082374b5560cc2b7945ba5faa2c65eb579ebb073e9f5b93280c41a",
-      "destinationSha256": "0ea4e49fb490aabba8f9c83c1ffdd2352ced2f83027462934754c076bf5e0508",
+      "destinationSha256": "1476d38bb72c9701f971c6f1497599341e98f1bfdc8e593f48aceb004edc77ae",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "1476d38bb72c9701f971c6f1497599341e98f1bfdc8e593f48aceb004edc77ae",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-commit/SKILL.md",
       "destination": "content/skills/commit/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "84a16d32503885f291738b4648f9582d5d94d034a195a163cb9d8862f86d06ad",
-      "destinationSha256": "4410090ae13761e95ccbdc33b8f2bf9ab286167ed2303c9279654835e547cd60",
+      "destinationSha256": "9816d6a59c70bb93b4bbe6882701812b78cab2cdb385dff5bcd9be4f41b74c6c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "9816d6a59c70bb93b4bbe6882701812b78cab2cdb385dff5bcd9be4f41b74c6c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-commit-push/SKILL.md",
       "destination": "content/skills/commit-push/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "ec0a63a1597964f359c5bdbea1b2a30ded8b4134e232b7602b2c12d7d571d2a5",
-      "destinationSha256": "cff48313c18e4e8bbe16c1fb3c55506b62638aaffa4d10e94fa3e0ab9b26edd6",
+      "destinationSha256": "92936d56fee2eae2a323f088d58abcec277bbefbb24a2b529161e6dbe3db1950",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "92936d56fee2eae2a323f088d58abcec277bbefbb24a2b529161e6dbe3db1950",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-components-audit/CHECKLISTS.md",
       "destination": "content/skills/components-audit/CHECKLISTS.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "0de5af6f5db176818b4d8b5871221a20e6ee3c6f56e16adb632e1f91db629fbf",
       "destinationSha256": "0de5af6f5db176818b4d8b5871221a20e6ee3c6f56e16adb632e1f91db629fbf",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "0de5af6f5db176818b4d8b5871221a20e6ee3c6f56e16adb632e1f91db629fbf",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-components-audit/SKILL.md",
       "destination": "content/skills/components-audit/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "b5ab8dfa39a4eb0bc2c6d95d3a45dbd3666d5a34b31ce70e0323d64ab9c83c78",
-      "destinationSha256": "11fd798ec08c5a40f20ceaa43f92df4ba28fb157a08e4e096c05ae726e08c4ed",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "0ae8b17aa82c86f60367dd0bae91d6d3c0b6547ddfe988dcfdc61b97ad985b34",
+      "destinationSha256": "72dc3b44e1896e9dde5eea017bdae35c42ca64779f1224803b97d7718cd7b18b",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "72dc3b44e1896e9dde5eea017bdae35c42ca64779f1224803b97d7718cd7b18b",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-consolidate-context/SKILL.md",
       "destination": "content/skills/consolidate-context/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "db715ed133fd9afbe46a2dbe8c2b588a8cf7f505618e339b0b20fbc6342e79d1",
-      "destinationSha256": "9975d0eb082547965f5c70087421e2f5ccd576c36365b2027f14e343233fcf9f",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "8da0407f248730bd21e32ef79711bb03d120128910cf4010f4373e038c52016d",
+      "destinationSha256": "d5ecd02f0abee6d15594837fa269986fbf0bdedf55ebd313da9f29953cbaa382",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "d5ecd02f0abee6d15594837fa269986fbf0bdedf55ebd313da9f29953cbaa382",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-decompose/SKILL.md",
       "destination": "content/skills/decompose/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "a37d10faaac765b615daed094bd51ad430b09b80a0c15ae609614ea2e4d80003",
-      "destinationSha256": "6b61bc49cdc62c9982a994dd48202e6b5393dc9f64307d41d73d2767935ee9c5",
+      "destinationSha256": "b41066ab21100f51b23bb08b4d5ff0b777ae0ef36092098a7e6b8e6f5b7c4510",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b41066ab21100f51b23bb08b4d5ff0b777ae0ef36092098a7e6b8e6f5b7c4510",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-design-brief/BRIEF_TEMPLATE.md",
       "destination": "content/skills/design-brief/BRIEF_TEMPLATE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "fc6faf486dfc605ecde1e97c95be71d0e8b7de842935954806f77b8e774f56fe",
       "destinationSha256": "fc6faf486dfc605ecde1e97c95be71d0e8b7de842935954806f77b8e774f56fe",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "fc6faf486dfc605ecde1e97c95be71d0e8b7de842935954806f77b8e774f56fe",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-design-brief/SKILL.md",
       "destination": "content/skills/design-brief/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "4234293244790887cac301605b477e8d1ac4fa30a47e26976633ab733292931e",
-      "destinationSha256": "9d98e95e039c11fc9996b07f73fa1a4d4fb03fa19cb7b3dd3a45963f05a62556",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "0076dfd91c51beb966325c8112809e35eba2c8bde4b3e6befc6353ff5a98fb9f",
+      "destinationSha256": "1b52d04509b91769403acbdeebf6cce5688a91902dd844d4267c4ccb529355ce",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "1b52d04509b91769403acbdeebf6cce5688a91902dd844d4267c4ccb529355ce",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-design-init/SKILL.md",
       "destination": "content/skills/design-init/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "b8585dc96a9c3144273ba8fe2bbffb63312cffdc543938d5262ac5bb6643e5e4",
-      "destinationSha256": "82fe3dbc80aa9385e676ca2ea0babb01901d9699cd1696c52c00cc34fb6bc4d5",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "15375dd7db5bd62e9be088bf88b14a3e3331827cd66adfb4db28d7807b4558c5",
+      "destinationSha256": "34d6c653328840dde0a868bbf58a95af1fc6a28fc3a766ddccec41d69c607071",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "34d6c653328840dde0a868bbf58a95af1fc6a28fc3a766ddccec41d69c607071",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-design-refine/BATCH_MODE.md",
       "destination": "content/skills/design-refine/BATCH_MODE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "5d00e13adb6e2964e8a616b5d9ed158bf47bfe38034323614d4c11cbddbfb382",
       "destinationSha256": "778e501bf79eda1db2bff71713013e434d032e7f04282f15cc4727de608240b0",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "778e501bf79eda1db2bff71713013e434d032e7f04282f15cc4727de608240b0",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-design-refine/SKILL.md",
       "destination": "content/skills/design-refine/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "98241e61341724269073f15c392900beaa054473dd5388642b952b8dc9fffc36",
-      "destinationSha256": "2f248704080f3f5079a682737b02cbb4177f4aa668282437dfab7ad74929e46f",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "ab6e37601405e0b37f9afb62f9bad3e5f4d0a1257a2fe404addedbbe64ee85c1",
+      "destinationSha256": "fe61033caeac25e3cfcb71766b3d16ba772aeebcb7244691d435915fae628efb",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "fe61033caeac25e3cfcb71766b3d16ba772aeebcb7244691d435915fae628efb",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-fallow-fix/SKILL.md",
       "destination": "content/skills/fallow-fix/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "6312110fc8dcdc75e4750b7ae3e0fa5da21acf4d6ce2a79688315de5c646f64a",
-      "destinationSha256": "403b6b60e54c8cb01d5f1c3729d66aeb09c9ad3f3d03cd96b87b40bdd45fa5dc",
+      "destinationSha256": "b53655b2a557f64f8aa7bdecdf538cdcd82e5efb827db698fbe912c978ce608a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b53655b2a557f64f8aa7bdecdf538cdcd82e5efb827db698fbe912c978ce608a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-grill/SKILL.md",
       "destination": "content/skills/grill/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "351809af9b10e5e461d7cfee6e0d32dfa1e94cfb95cf686b1c3e39972d2b5dbc",
-      "destinationSha256": "2991145e0f0720c63ca597de92b1cb998539991e5814e4e34375b8d7a37333b1",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "2b1165bbc8d4f97279c84eb0aaff5e1b941740868800028e539b6b3df6dbeb7d",
+      "destinationSha256": "3e761408e006cbc393925b25c6cd04b9800f3a35255550f61c1b41c1c14a8a7f",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "3e761408e006cbc393925b25c6cd04b9800f3a35255550f61c1b41c1c14a8a7f",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-grill-voice/CONTRACT.md",
       "destination": "content/skills/grill-voice/CONTRACT.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "83bc1b4b23c01c299c5cfbd41f1fe4bf0f23f4e7c1bd6571d2f79e07f927229c",
-      "destinationSha256": "be44207f07af143d0383bbdefff8dc665b8ab5f4c952017419e94d9c72f03396",
+      "destinationSha256": "6f2675ac48d083a5b7d2df855226dcd85d38d8800e07c47dae5cfba15cf2e80c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "6f2675ac48d083a5b7d2df855226dcd85d38d8800e07c47dae5cfba15cf2e80c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-grill-voice/SKILL.md",
       "destination": "content/skills/grill-voice/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "8de2f8edf987e9d6891191ceed351a47dad5de97f5fc45c92623637ec7b1f4eb",
-      "destinationSha256": "dec8d8f54533be9a5125790dec8956202a5648922cefd95e6d6636aa26fd91a3",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "f8e692bf9534183dc2b759a1aaf36644a5e65f661b5df05534ce40891b0bfe4f",
+      "destinationSha256": "3ac4e5733318b8b2175698d73451748577fa13e40f46536ce9444d1b64d3c8c7",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "3ac4e5733318b8b2175698d73451748577fa13e40f46536ce9444d1b64d3c8c7",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-grill-voice/scripts/grill-voice.js",
       "destination": "content/skills/grill-voice/scripts/grill-voice.js",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "65b7bf9d3095888e925324d6b279a4f82c10fb8622810c9275a61349ba6d4694",
       "destinationSha256": "65b7bf9d3095888e925324d6b279a4f82c10fb8622810c9275a61349ba6d4694",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "65b7bf9d3095888e925324d6b279a4f82c10fb8622810c9275a61349ba6d4694",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-handoff/SKILL.md",
       "destination": "content/skills/handoff/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "0b458741f7fddad9ff1f25ac26445f0baa52d14b1b52cc4a5f86945767efadeb",
-      "destinationSha256": "dcc459e3332fdf78b9548af55d16832c59a26975c86bfbe6741c3b1631d8aee7",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "ba978040c89314e00f53088b30f97bc73da773656be46f0b22afff4100cb2949",
+      "destinationSha256": "5aae4a8594b9aa4d0ec895c23e3c1d3adcc581d78832f75543de54bc8710ea67",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5aae4a8594b9aa4d0ec895c23e3c1d3adcc581d78832f75543de54bc8710ea67",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-mockup/SKILL.md",
       "destination": "content/skills/mockup/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "cc738289278086baed64e1657419213bb83aba3276c90fb8744e4e6cf2ac37b5",
-      "destinationSha256": "6f4fd9ccadb99218aeefcdad9d5ca9dec4655e992145532da03bd4f38d1931a7",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "6b5f9d69be34bdd29f3c733de67c74e608446ef0844993fc2be0c0a91947878a",
+      "destinationSha256": "5850f5c9878ec9c5b13b732b6909929baa13138ccfbc764dc998bc089461143f",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5850f5c9878ec9c5b13b732b6909929baa13138ccfbc764dc998bc089461143f",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-playwright-test/SKILL.md",
       "destination": "content/skills/playwright-test/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "6370dbdf5e82168904e42384437378ed408d477f47c14d078c43b48c000350d4",
-      "destinationSha256": "43c60537b22ccc665d41be064e84b9d3399f53657255903b60f99c1bf9ea1c46",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "5ca6d0ecb740ee3f443196b2096378ad608b3c1924c083033076e9b05b8b930f",
+      "destinationSha256": "88a57bd1c9a00301c47db68b9e6f29a87fed7ee6478dbb36656bbdcd3ecea94c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "88a57bd1c9a00301c47db68b9e6f29a87fed7ee6478dbb36656bbdcd3ecea94c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-script-discovery/SKILL.md",
       "destination": "content/skills/script-discovery/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "373d0fae098f91bfe06420440a36775b5a5a6a92d1b98e57171ee98a7ebcc414",
-      "destinationSha256": "570c762dfe2fc61eec0de5e97a8905be5d2dca9b3e890b41adfbd678dedbbd7f",
+      "destinationSha256": "d4fe8782c7a2139c2e93353e9e170029e8501ff4ee89fb0284e4f32128473cfc",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "d4fe8782c7a2139c2e93353e9e170029e8501ff4ee89fb0284e4f32128473cfc",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-skill-audit/SKILL.md",
       "destination": "content/skills/skill-audit/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "39f93fd52fe4c1f5f9b4ac5e454d415f9c684d19620764afcff2cb01eccc4792",
-      "destinationSha256": "b3c124ec8126352e0878b4dafa213bee4a9c84e5ed4098428f20acc0c5381cc6",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "e7e85d6b65f64becd4a194ce56eb20232c3a922d4ad4e9c00979c589f513a2ee",
+      "destinationSha256": "db644c2717c0cf4a6b7518b8bee07baa2f7b177962cc5738e037cf7bce39a3ad",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "db644c2717c0cf4a6b7518b8bee07baa2f7b177962cc5738e037cf7bce39a3ad",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-skill-create/SKILL.md",
       "destination": "content/skills/skill-create/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "7766a6c84753ff060038ceaf17b442c46179d2b2eb644d5957d9cbace495f145",
-      "destinationSha256": "508c69f01aec862062c4c14c7a28f4aef00c900301edd9510c3850ae8a20572f",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "13eb05114791f038740a72236fa193a02a2b2802f8454c203215335e56693867",
+      "destinationSha256": "429913f9e8ba46cbc0b865e8fef9d4b48c82d1fa9ad431c5274299536e4da682",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "429913f9e8ba46cbc0b865e8fef9d4b48c82d1fa9ad431c5274299536e4da682",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-suppression-audit/SKILL.md",
       "destination": "content/skills/suppression-audit/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "f7da6969d9f6f0c111591a69df624948190daa814a7c897326215b23a31548a3",
-      "destinationSha256": "5b060f5860e91cb58d2487fcdd65c3fe7bbaa342b33275ef3f63532a6e6f25fc",
+      "destinationSha256": "7345e84ab8604bda4dd90504be5df789979e356e53a9f49b80bd3ad1b6ffde2e",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "7345e84ab8604bda4dd90504be5df789979e356e53a9f49b80bd3ad1b6ffde2e",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-symlink/SKILL.md",
       "destination": "content/skills/symlink/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "43adab70b0bf3ddd5b795d039c8a82c4c2014496803ee8be643fbc4129adb859",
-      "destinationSha256": "dbf2671b631a4ee3e62188907bb49224a0133680d524d3ea3407e7acf49a0306",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "f9d780f97c9b078f4bcc85e17d23924888c4dc9895ee716c7b8eee6779ec73ae",
+      "destinationSha256": "cda68abcebcafc7a9d15503a3ccb9fc9e2fcd589cef516ad49fee2654d682754",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "cda68abcebcafc7a9d15503a3ccb9fc9e2fcd589cef516ad49fee2654d682754",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-sync-base/SKILL.md",
       "destination": "content/skills/sync-base/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "351a55454d36961c473caba6acd56cf3307d62ce7b6d4acdc4e1f91655196023",
-      "destinationSha256": "74762ef771c3fa8bdb856e5f4ef1667ea94d1cc1810ff94ffc403e8078ce2b58",
+      "destinationSha256": "82aaf4d8799f7db9a2631a9988c412ae341df2d2e8dca79f7c7ea6d367957704",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "82aaf4d8799f7db9a2631a9988c412ae341df2d2e8dca79f7c7ea6d367957704",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/mp-vocabulary/SKILL.md",
       "destination": "content/skills/vocabulary/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "65f88328509b69551ea4426ba4bd9a1602bda1f264d5f77953d6dff3fc00a12d",
-      "destinationSha256": "b23c433dfb91b129682511d35029709edf9f6927b2aabf7ef51ba9ad91c27b3d",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "187045c6a1f43ea9df6a6ae0c346319d6a9bca43ff143bd3c183452a2f14bf06",
+      "destinationSha256": "0faf1d7ae77d6a14714ed3134b6e84bbd114ecec0a4546c0e34a9ff128ced1e0",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "0faf1d7ae77d6a14714ed3134b6e84bbd114ecec0a4546c0e34a9ff128ced1e0",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/notebooklm/SKILL.md",
       "destination": "content/skills/notebooklm/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "9e84c4de7159caaa1c65f2f40afb9d85ee1b7851e04f27ef337c4ce297ce70e9",
-      "destinationSha256": "d592e9c2d7c0e071d3bc32e3a5e3d61ae440e1c56637d044e506fed395f8141f",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "29a74f426b1d0c18e00a6352e89ce48b15755975a06a1400ab112587bb39d890",
+      "destinationSha256": "db0c6cd74afe743a79e666b6661aef95bf23766c63c0ea7e13d273055df5a226",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "db0c6cd74afe743a79e666b6661aef95bf23766c63c0ea7e13d273055df5a226",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-board-setup/SKILL.md",
       "destination": "content/skills/board-setup/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "370501ce610f331eaf5d5c56f1216bb2c3b1327e6dcdc512c165cf243421c66d",
-      "destinationSha256": "9e3d6ee77322c8a66b24c540bd76dbba3515fea002856bf921fb4e2b508d5780",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "aabb51997e6e2b227600eca38650af6fddb3f6fddc9fc92426ad981fa9b31107",
+      "destinationSha256": "a315fd4a548351dcea9c98a8f2091e57bcaefdffa0e13587813fe73dfdaf9ce2",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "a315fd4a548351dcea9c98a8f2091e57bcaefdffa0e13587813fe73dfdaf9ce2",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-board-setup/scripts/link-board.ps1",
       "destination": "content/skills/board-setup/scripts/link-board.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "7f40b16cd5cdcdb007eaba56e4b82316458dad5476504a31a613ac5971c2c566",
       "destinationSha256": "7f40b16cd5cdcdb007eaba56e4b82316458dad5476504a31a613ac5971c2c566",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "7f40b16cd5cdcdb007eaba56e4b82316458dad5476504a31a613ac5971c2c566",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-board-to-issues/SKILL.md",
       "destination": "content/skills/board-to-issues/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "297c15e7049324011d6831f37ec403c6051c81dba9e729b336cca107df670c28",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "5ec97aa70ae1cb28dbfb8ac59836c9d11869c0d6d4f26ea703867d7e89b66eb4",
       "destinationSha256": "c65da7756f2c2872c150dfdb437b875e5adedfc206f35b2e692bb4ac0825839d",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "c65da7756f2c2872c150dfdb437b875e5adedfc206f35b2e692bb4ac0825839d",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/DOMAINS.md",
       "destination": "content/skills/clean-pc/DOMAINS.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "874d552cfce9628d59e682acac5c72aee6cd617aaa1c8f59fbc79b5ba2be8581",
       "destinationSha256": "9d95b4b55800be692b49eb8953dc329c8537a16ef3bf61a7e3a7391f48591c0e",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "9d95b4b55800be692b49eb8953dc329c8537a16ef3bf61a7e3a7391f48591c0e",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/LINUX.md",
       "destination": "content/skills/clean-pc/LINUX.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "e8642197d6560b1602997a79de7ad0f55009079b2d7936ee70df85c358d95463",
       "destinationSha256": "e8642197d6560b1602997a79de7ad0f55009079b2d7936ee70df85c358d95463",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "e8642197d6560b1602997a79de7ad0f55009079b2d7936ee70df85c358d95463",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/MACOS.md",
       "destination": "content/skills/clean-pc/MACOS.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "2bf4c766764398279d560f9997c62b3f197bbbf6f98892f5d01fca5bc1df4c03",
       "destinationSha256": "9dc9a800bb87fc394af6cb26e28d5a485b4b1ed33866326c6a2d1767373d75f9",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "9dc9a800bb87fc394af6cb26e28d5a485b4b1ed33866326c6a2d1767373d75f9",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/SKILL.md",
       "destination": "content/skills/clean-pc/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "bdb3c2e0f16a6a19a259148bb2b7a2fb8c8a51a0e67743e650a7fcdfec51d4d6",
-      "destinationSha256": "8fa2c5df3eb89fddfec171c4c6ffec1ad3b509245e506fb7a97c13931768ac0e",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "8ded059bef755345aa4c7160432bb1c5343b71446a18d0f50bcc7a5b500902e8",
+      "destinationSha256": "11e1042a702d828a60fcf03c73366af16a9e91a5a0caee73477f0747a3ba64c2",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "11e1042a702d828a60fcf03c73366af16a9e91a5a0caee73477f0747a3ba64c2",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/WINDOWS.md",
       "destination": "content/skills/clean-pc/WINDOWS.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "002ffd7b67803056421d704dd004bace92ad7da6ea017a61fb436145848e925f",
       "destinationSha256": "b79d48565082b4c97501238b12d3838ac26f886eab0c749837d99d580639173f",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b79d48565082b4c97501238b12d3838ac26f886eab0c749837d99d580639173f",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Find-BuildArtifacts.ps1",
       "destination": "content/skills/clean-pc/scripts/Find-BuildArtifacts.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "337f3d8101b73ad3dd4911d971965c139d66e59722333599d9dda0cff08cb0ff",
       "destinationSha256": "337f3d8101b73ad3dd4911d971965c139d66e59722333599d9dda0cff08cb0ff",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "337f3d8101b73ad3dd4911d971965c139d66e59722333599d9dda0cff08cb0ff",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Find-Duplicates.ps1",
       "destination": "content/skills/clean-pc/scripts/Find-Duplicates.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "7d912d1326b7b2dd413f59d12caff321234fe0bbd13bc13252998e5c71948d9c",
       "destinationSha256": "5ea181c720240a48f32be10210831522c302f1a7f8d03783e947f68d77f393f2",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5ea181c720240a48f32be10210831522c302f1a7f8d03783e947f68d77f393f2",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Find-EmptyItems.ps1",
       "destination": "content/skills/clean-pc/scripts/Find-EmptyItems.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "69195da477c9a770aaab38c7bb9a5571ec44b1fbe0d9dd0ce2320cab681a173a",
       "destinationSha256": "69195da477c9a770aaab38c7bb9a5571ec44b1fbe0d9dd0ce2320cab681a173a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "69195da477c9a770aaab38c7bb9a5571ec44b1fbe0d9dd0ce2320cab681a173a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Find-Screenshots.ps1",
       "destination": "content/skills/clean-pc/scripts/Find-Screenshots.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "8603ac1aec7eeb2d3360fb9a560b0df638d9348e604c6ae6689adacf6656b76f",
       "destinationSha256": "8603ac1aec7eeb2d3360fb9a560b0df638d9348e604c6ae6689adacf6656b76f",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "8603ac1aec7eeb2d3360fb9a560b0df638d9348e604c6ae6689adacf6656b76f",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Get-InstalledApps.ps1",
       "destination": "content/skills/clean-pc/scripts/Get-InstalledApps.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "116943d0ab3d116fb39a8bb04a29eea3f66643972a3c407531e4a7214c5c1b89",
       "destinationSha256": "ebafe253546ae653b3f4a9a28dc12ca1558ba73155e20c95431c925bd63aa3b5",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "ebafe253546ae653b3f4a9a28dc12ca1558ba73155e20c95431c925bd63aa3b5",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Invoke-Removal.ps1",
       "destination": "content/skills/clean-pc/scripts/Invoke-Removal.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "acb77d4b9ca07db61b20916fa86a293b23e2203835c001e4727480f939c3bd1c",
       "destinationSha256": "acb77d4b9ca07db61b20916fa86a293b23e2203835c001e4727480f939c3bd1c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "acb77d4b9ca07db61b20916fa86a293b23e2203835c001e4727480f939c3bd1c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/New-VisualStaging.ps1",
       "destination": "content/skills/clean-pc/scripts/New-VisualStaging.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "78e71f21afb7bc396b9781a012dcc25d7bd4a9d0186eb01474167abf67697cc1",
       "destinationSha256": "78e71f21afb7bc396b9781a012dcc25d7bd4a9d0186eb01474167abf67697cc1",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "78e71f21afb7bc396b9781a012dcc25d7bd4a9d0186eb01474167abf67697cc1",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/Scan-FolderMap.ps1",
       "destination": "content/skills/clean-pc/scripts/Scan-FolderMap.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "873d79f871aa614a67d8679182d36ddcf9c38e3d64dbc6c28971d23e6e33a71d",
       "destinationSha256": "80be7620b052391d8e4cf7f4b8abaa86fde9a1a3f63b0794fa8e647c11c9572f",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "80be7620b052391d8e4cf7f4b8abaa86fde9a1a3f63b0794fa8e647c11c9572f",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-clean-pc/scripts/_Common.ps1",
       "destination": "content/skills/clean-pc/scripts/_Common.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "8fe60555ac3096cc5e2f0dcac94b32157e74bf0f1d9381b5e22512e4f23c0a29",
       "destinationSha256": "0cab63ec77879bc8fdcdf6775239dc42809789392ed89575da99e0b13c32cdac",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "0cab63ec77879bc8fdcdf6775239dc42809789392ed89575da99e0b13c32cdac",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-podcast/SKILL.md",
       "destination": "content/skills/podcast/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "fcb18fd738d41770e48f4bad938d298423c302895b49100b620eea234e4c2d14",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "f3407a608d196fa43f31bb423bada0838cb53ad27191ae6c4991abaec0552bad",
       "destinationSha256": "cbe1ebf1ae6febe971af41968cedb722cc1b03dca3169f166612540509dca320",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "cbe1ebf1ae6febe971af41968cedb722cc1b03dca3169f166612540509dca320",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-podcast/reference/BRIEF_FORMAT.md",
       "destination": "content/skills/podcast/reference/BRIEF_FORMAT.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "61d30292744b9832f8e32879fe2ba71933b4f8612deb2c978198b14d02393a6b",
       "destinationSha256": "2da78ea102b3a1e8d63c525e61fe8be7b123ebe8b560b1c5236823f7d0515a6b",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "2da78ea102b3a1e8d63c525e61fe8be7b123ebe8b560b1c5236823f7d0515a6b",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-podcast/reference/GEMINI_TTS.md",
       "destination": "content/skills/podcast/reference/GEMINI_TTS.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "9be07802d283b5f64c0c164856be947f21a7fbe70f8d384e66f6baecf8eb628c",
       "destinationSha256": "5bbc688a3445fcc6357d2b87412433644136ca5992bb31ea40759b930399c2b4",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5bbc688a3445fcc6357d2b87412433644136ca5992bb31ea40759b930399c2b4",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-podcast/reference/NOTEBOOKLM_FLOW.md",
       "destination": "content/skills/podcast/reference/NOTEBOOKLM_FLOW.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "9820c82efa71b16d92ffa82ffdf048e2e38620c1bd092338a5a73877d76ef1aa",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "154dc81658b35d00f3dbe8c677b729e9c5c009aad81894b52ba3afc2f3c5495a",
       "destinationSha256": "45e183d54f28e9d0a29cac13b4c137a98663864ef41a078bc9f393d751dec7d5",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "45e183d54f28e9d0a29cac13b4c137a98663864ef41a078bc9f393d751dec7d5",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-podcast/scripts/gemini-tts-podcast.py",
       "destination": "content/skills/podcast/scripts/gemini-tts-podcast.py",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "ee7ca604f3b238db64c44ff8eb9f3578ac5a237627e6080662c29031e9054d9e",
-      "destinationSha256": "ee7ca604f3b238db64c44ff8eb9f3578ac5a237627e6080662c29031e9054d9e",
+      "destinationSha256": "81d33781c123331044942ba68ac638ce0874667bfcfebe6e9cc5cc8b2b799709",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "81d33781c123331044942ba68ac638ce0874667bfcfebe6e9cc5cc8b2b799709",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-project-register/SKILL.md",
       "destination": "content/skills/project-register/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "f3429a16717822a4c8fb5d3c9a0089af49c568fb87c13640fd9b54dfcc6c440d",
-      "destinationSha256": "22845933224741697acd7deab99ad33327e2af79de9962d3d77c8a4f5f094d06",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "d6a1ae42658d1d9ebf40df061d94c66dd114988d993f7cbb04669e702675ae45",
+      "destinationSha256": "8a60c76d8bea10739a37753f29fddc4dfd075e6471fcded1b7f7e6072886d0e9",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "8a60c76d8bea10739a37753f29fddc4dfd075e6471fcded1b7f7e6072886d0e9",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-project-register/scripts/make-icon.py",
       "destination": "content/skills/project-register/scripts/make-icon.py",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "e68ffd84eb7629a6e411f96fbd30a10732d438c5728b4d324ce44dd2e33811b9",
       "destinationSha256": "e68ffd84eb7629a6e411f96fbd30a10732d438c5728b4d324ce44dd2e33811b9",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "e68ffd84eb7629a6e411f96fbd30a10732d438c5728b4d324ce44dd2e33811b9",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-project-register/scripts/peacock.mjs",
       "destination": "content/skills/project-register/scripts/peacock.mjs",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "78b173139b0b281479cec8bae1ef0fbd914627d21199bcc24d02682a2ae0eea2",
       "destinationSha256": "78b173139b0b281479cec8bae1ef0fbd914627d21199bcc24d02682a2ae0eea2",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "78b173139b0b281479cec8bae1ef0fbd914627d21199bcc24d02682a2ae0eea2",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-project-register/scripts/wt-profile.mjs",
       "destination": "content/skills/project-register/scripts/wt-profile.mjs",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "2bd6a0fbcddb5622a3f1c51c902d2fcf1d282f878c43691746c574d691064fd3",
       "destinationSha256": "2bd6a0fbcddb5622a3f1c51c902d2fcf1d282f878c43691746c574d691064fd3",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "2bd6a0fbcddb5622a3f1c51c902d2fcf1d282f878c43691746c574d691064fd3",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-raycast-config/REFERENCE.md",
       "destination": "content/skills/raycast-config/REFERENCE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "5ffeff5a2a1aff1d58b18b73c37b04376e533e183bd5ba861fe482dc2d557338",
       "destinationSha256": "a7b9458bf6346fd221ba1afb475ef7badd3fee32356ad19d1e915196f66c627c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "a7b9458bf6346fd221ba1afb475ef7badd3fee32356ad19d1e915196f66c627c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-raycast-config/SKILL.md",
       "destination": "content/skills/raycast-config/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "ffb596cfd8ca0f9b2ae36291ca30d5076303920437b61b8e188e4e0cefb4fba7",
-      "destinationSha256": "ff519254bca12666e28b731ff181f41a6e93cfcbbb6acd550aa10ff8a67ccd79",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "e4cab73c95e5c6286a380c349cf7732cb0339df5ff4053c644509800717cc671",
+      "destinationSha256": "b2fc721308e1c3244f019687d6ff63497d3eb55f7139ef1ce98f64f778deded6",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b2fc721308e1c3244f019687d6ff63497d3eb55f7139ef1ce98f64f778deded6",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-raycast-config/scripts/audit.mjs",
       "destination": "content/skills/raycast-config/scripts/audit.mjs",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "f20999bfb3d67d93ed2134413bce247cc0db45d7db53db707087fc9271741666",
       "destinationSha256": "f20999bfb3d67d93ed2134413bce247cc0db45d7db53db707087fc9271741666",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "f20999bfb3d67d93ed2134413bce247cc0db45d7db53db707087fc9271741666",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-raycast-config/scripts/passphrase.ps1",
       "destination": "content/skills/raycast-config/scripts/passphrase.ps1",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
       "destinationSha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-raycast-config/scripts/rayconfig.mjs",
       "destination": "content/skills/raycast-config/scripts/rayconfig.mjs",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "a901ec1845d79773dd68cc6845abc70b1f6e4800234f53c67a7779d72b695d50",
       "destinationSha256": "a901ec1845d79773dd68cc6845abc70b1f6e4800234f53c67a7779d72b695d50",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "a901ec1845d79773dd68cc6845abc70b1f6e4800234f53c67a7779d72b695d50",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/package.json",
       "destination": "content/skills/tutorial-create/package.json",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "cee70e58b4dacffa0b461007325ea4bcb40a87bd6f9eb821efa5e131b70a8289",
       "destinationSha256": "099a0784268104fb74a6b370767ce599b8b7a7d235e88389aee00ef04d4f977d",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "099a0784268104fb74a6b370767ce599b8b7a7d235e88389aee00ef04d4f977d",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/SKILL.md",
       "destination": "content/skills/tutorial-create/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "7a595f71806b41049d0984165e2e34971f5cb44f0b90450f96b6678bf759a59c",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "efce8feae9ff72f519aac56f9af82044cea5f14161653b9382e8c4a42591f283",
       "destinationSha256": "6646ba775e38c9665551d6edb058688cd969d0df16af1530b2a63fdf0aed5b20",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "6646ba775e38c9665551d6edb058688cd969d0df16af1530b2a63fdf0aed5b20",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/TEMPLATE.html",
       "destination": "content/skills/tutorial-create/TEMPLATE.html",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "0bed7061ce963a953de3595752932b3235473ff8151d5f22110f8c86ecd67431",
       "destinationSha256": "0bed7061ce963a953de3595752932b3235473ff8151d5f22110f8c86ecd67431",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "0bed7061ce963a953de3595752932b3235473ff8151d5f22110f8c86ecd67431",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/reference/approved-mockup.html",
       "destination": "content/skills/tutorial-create/reference/approved-mockup.html",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "75dd78ea1b5a0b32abccefa6810462413cf0585ecf389b10f0331edc71111e6e",
       "destinationSha256": "75dd78ea1b5a0b32abccefa6810462413cf0585ecf389b10f0331edc71111e6e",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "75dd78ea1b5a0b32abccefa6810462413cf0585ecf389b10f0331edc71111e6e",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/reference/CHANNELS.md",
       "destination": "content/skills/tutorial-create/reference/CHANNELS.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "d3f052cc59aee8698341676733249ff447506424940bff1f030a8c4f3d11a1b5",
       "destinationSha256": "d3f052cc59aee8698341676733249ff447506424940bff1f030a8c4f3d11a1b5",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "d3f052cc59aee8698341676733249ff447506424940bff1f030a8c4f3d11a1b5",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/reference/SOURCE_FORMAT.md",
       "destination": "content/skills/tutorial-create/reference/SOURCE_FORMAT.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "e2b97a3cccf131c90b33c19c693f4bdf8b631c2a42c03768eee4c2342cfdbe56",
-      "destinationSha256": "f832eccbe344481bcb68b497555d7b792aaf8132b0419a2bd8dfba5194f2343d",
+      "destinationSha256": "dbdcccdfbe22aaf77033044e43fd29471f087f7982a49f1ccbb8b82d1411754a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "dbdcccdfbe22aaf77033044e43fd29471f087f7982a49f1ccbb8b82d1411754a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-tutorial-create/scripts/compile.js",
       "destination": "content/skills/tutorial-create/scripts/compile.js",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "120c9e83e0c743643690ec5325ea78c928a988ecfaddd2b2f80b4fcdd489b589",
-      "destinationSha256": "38c957062fbb9a7947ec67a462ffb62df4e7e9b12114e258f1dd203fb5a661ae",
+      "destinationSha256": "87ab805dcbe0c97c688004a7bd95c6d47f9477552bcc05317e3351ace6ec2403",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "87ab805dcbe0c97c688004a7bd95c6d47f9477552bcc05317e3351ace6ec2403",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/SKILL.md",
       "destination": "content/skills/video-to-image/SKILL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "72b849fbbe54aab17aa6ba9683482433f2e5227897962700043be31c2dc8e255",
-      "destinationSha256": "398ab36ce087609d40be156102e4adf39a67188d6ec2a272993817a39aba0f47",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "8e24268f116221a9c6b0c2119239dfba94f5c03a3c4e8a6380d194d445065577",
+      "destinationSha256": "ec4ca509d5c133fad44c9a16044372a68453253c8643d0f6751c38004e5b365e",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "ec4ca509d5c133fad44c9a16044372a68453253c8643d0f6751c38004e5b365e",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/reference/EXERCISE.md",
       "destination": "content/skills/video-to-image/reference/EXERCISE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "e8f2d563fa961e9ce60211af7cfaffe2512278fdcd17e63f3237e70db6fc60be",
       "destinationSha256": "e8f2d563fa961e9ce60211af7cfaffe2512278fdcd17e63f3237e70db6fc60be",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "e8f2d563fa961e9ce60211af7cfaffe2512278fdcd17e63f3237e70db6fc60be",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/reference/FALLBACK.md",
       "destination": "content/skills/video-to-image/reference/FALLBACK.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "b2a498c611de6dce66a3720d13f70baa79fb312fb145df4c3af8a7051bf1392a",
       "destinationSha256": "a0056f23c2bd60f1aff2d90cccbed36e4f19f8ed7904ed43989684a8482a7a52",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "a0056f23c2bd60f1aff2d90cccbed36e4f19f8ed7904ed43989684a8482a7a52",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/reference/PROMPT_STYLE.md",
       "destination": "content/skills/video-to-image/reference/PROMPT_STYLE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "24aeb6d0a0b2303004a7bda51bdd6df3a8ffc5d1a397328ce976929fc7a8521b",
       "destinationSha256": "24aeb6d0a0b2303004a7bda51bdd6df3a8ffc5d1a397328ce976929fc7a8521b",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "24aeb6d0a0b2303004a7bda51bdd6df3a8ffc5d1a397328ce976929fc7a8521b",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/scripts/video-to-sheet.mjs",
       "destination": "content/skills/video-to-image/scripts/video-to-sheet.mjs",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "b5e64c0ee34dfcd7db3637596d6510d0cc31835999c6cdacf3622187c6dd1c93",
-      "destinationSha256": "b5e64c0ee34dfcd7db3637596d6510d0cc31835999c6cdacf3622187c6dd1c93",
+      "destinationSha256": "94e534179b44b76d32bba6487deb85591ae37607d8835c670f72e155a3b6ba35",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "94e534179b44b76d32bba6487deb85591ae37607d8835c670f72e155a3b6ba35",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/scripts/lib/compose.mjs",
       "destination": "content/skills/video-to-image/scripts/lib/compose.mjs",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "9d1ecfa0d3de7fd0d307c0e9c7e95f1c7575b97b54cd5584d186cecbc9ef738a",
       "destinationSha256": "9d1ecfa0d3de7fd0d307c0e9c7e95f1c7575b97b54cd5584d186cecbc9ef738a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "9d1ecfa0d3de7fd0d307c0e9c7e95f1c7575b97b54cd5584d186cecbc9ef738a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/mp-video-to-image/__tests__/compose.test.ts",
       "destination": "content/skills/video-to-image/__tests__/compose.test.ts",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "d56be11d7e82c202e77c7d24c4c8b38db00b1bf9d1017948a41086d4ea320f57",
       "destinationSha256": "d56be11d7e82c202e77c7d24c4c8b38db00b1bf9d1017948a41086d4ea320f57",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "d56be11d7e82c202e77c7d24c4c8b38db00b1bf9d1017948a41086d4ea320f57",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/AUTHORING.md",
       "destination": "content/instructions/shared/AUTHORING.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
-      "originalSha256": "c0404493ab1a6c64796cecd423f769bac85778e4b4209b9ec233963910fd4f6f",
-      "destinationSha256": "bd233237a3df596c604a93ebcbfe8c1e358eb2bd9409fba3b56066fca69e5420",
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
+      "originalSha256": "2f121f16d884251b5d30039ccdc935d45f45a220fb6c3aef2e3705d9f288d57c",
+      "destinationSha256": "71769ccca4ee5ebf5a451c6739d9b6eb44af4e036037536261b556262c1e1bd2",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "71769ccca4ee5ebf5a451c6739d9b6eb44af4e036037536261b556262c1e1bd2",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/BOARD_CONVENTION.md",
       "destination": "content/instructions/shared/BOARD_CONVENTION.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "e6745af5eed534b6a0b86e9a8c008da5f6f9180ac8d7afad1e33ad5be6f3305d",
-      "destinationSha256": "b4299136a66862ee558e9fcc5b1b47bbb323e209b2b1e55ef244a426ab6cfcf6",
+      "destinationSha256": "add40bae5165d459235fc712e77e1f0279c5ee85efece9adae10726cf620a6ed",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "add40bae5165d459235fc712e77e1f0279c5ee85efece9adae10726cf620a6ed",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/deep-modules.md",
       "destination": "content/instructions/shared/deep-modules.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "b1b4879e7bfed27267e5d41af82b0566ff84e96a4614ab9e6b22745bbd57aa43",
       "destinationSha256": "b1b4879e7bfed27267e5d41af82b0566ff84e96a4614ab9e6b22745bbd57aa43",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b1b4879e7bfed27267e5d41af82b0566ff84e96a4614ab9e6b22745bbd57aa43",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/DESIGN_PIPELINE.md",
       "destination": "content/instructions/shared/DESIGN_PIPELINE.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "18e9790e1e53f35baa8a3b57e026d27e630cb8b54251c96327620470922b3a01",
-      "destinationSha256": "10035a7fff4ca854031ab44dc7e60982ea141e3700cc3b62e9d55cccfc12a611",
+      "destinationSha256": "6915453c083adcfa0c2e629fa257b835971665e950c6825d2c567ffb4a8974b3",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "6915453c083adcfa0c2e629fa257b835971665e950c6825d2c567ffb4a8974b3",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/DOCUMENTATION_STRATEGY.md",
       "destination": "content/instructions/shared/DOCUMENTATION_STRATEGY.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "6f0bcaf8b329e8ae8b75a4ddaceee78280f4ff23c2907b2ffd4d6041402c5bad",
-      "destinationSha256": "92204cccd5692622787b5ad332ffbe44a6d2ed9c7c5e99a3c1f92f90ed9e2b59",
+      "destinationSha256": "e9433e8366ec538c369eed2ca5102741873847364fefd48a149a5e335f66c384",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "e9433e8366ec538c369eed2ca5102741873847364fefd48a149a5e335f66c384",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/EXECUTOR_CONTRACT.md",
       "destination": "content/instructions/shared/EXECUTOR_CONTRACT.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "f54637ab376a07fe618e3d9cea756312322076e39004325f1ff304de40e059e2",
-      "destinationSha256": "dc9ee64a36941f39f6dfb85be9f5a4d40991c9c1cc3bad019c66a13626ae36e0",
+      "destinationSha256": "b2db86300ce36d8eb9897679bda2552e6edbb4130f3311c6039696ec3df3653d",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b2db86300ce36d8eb9897679bda2552e6edbb4130f3311c6039696ec3df3653d",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/EXPLORATION.md",
       "destination": "content/instructions/shared/EXPLORATION.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "ab4fc9115d08c6a257236c633d16fbe9553d8565ca5a3fdd95640cba28b1562e",
-      "destinationSha256": "da88274f582e3496da64dd773db7a08af47c92d6c747d120c7271fa309df40cb",
+      "destinationSha256": "a1103b0d7af31ed2dd208c68802a003222f7e87ce0de210aa61aec58daa21ca6",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "a1103b0d7af31ed2dd208c68802a003222f7e87ce0de210aa61aec58daa21ca6",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/GIT_COMMIT_WORKFLOW.md",
       "destination": "content/instructions/shared/GIT_COMMIT_WORKFLOW.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "1faf1a2a24d07f59598ede1ae0a94875ca9bd692fbc412012011d8604bc099ec",
-      "destinationSha256": "f0d6f3295a6ead2e16bf67d4ba8dadb4fe3639476e151be3f708df0615545f78",
+      "destinationSha256": "942b160a4ff8fcef6be19fab14cc7eeac47c416e0196655df346ea8602bb98be",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "942b160a4ff8fcef6be19fab14cc7eeac47c416e0196655df346ea8602bb98be",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/interface-design.md",
       "destination": "content/instructions/shared/interface-design.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "02f56bb3348682e7812090ce63a9cc82b82642185d8471f046366708a720fa82",
       "destinationSha256": "02f56bb3348682e7812090ce63a9cc82b82642185d8471f046366708a720fa82",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "02f56bb3348682e7812090ce63a9cc82b82642185d8471f046366708a720fa82",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/ISSUE_TRACKER.md",
       "destination": "content/instructions/shared/ISSUE_TRACKER.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "9799c26561e2909785d46c4a89c6b84658832d86859ea7250474d345edcf4301",
-      "destinationSha256": "36f98fa5fa4c3ee14e4e092267fd589c9c088d8b729929aec060bf4abf165de0",
+      "destinationSha256": "a5cb91c609634f172df86503c6c62b5182e1f09406fb123b9645774f193b6bdb",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "a5cb91c609634f172df86503c6c62b5182e1f09406fb123b9645774f193b6bdb",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/PLAYWRIGHT_TESTING.md",
       "destination": "content/instructions/shared/PLAYWRIGHT_TESTING.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "d6cbb3f8b6d2693535af8458684367cbcc95aa8bda8c2551a4545bd8cec66e65",
-      "destinationSha256": "0dad9b8f9191fbd46831f887303995df323b84b7cdb307ade0f12cc249eea265",
+      "destinationSha256": "9b26fc14275d8ea98c57de1ae967ad7fd7a5c1dc6e87a8d1fb6d2cb95e7bd7de",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "9b26fc14275d8ea98c57de1ae967ad7fd7a5c1dc6e87a8d1fb6d2cb95e7bd7de",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/REVIEWER_PROTOCOL.md",
       "destination": "content/instructions/shared/REVIEWER_PROTOCOL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "ac244ef36773d52f878045798f75557f5aee75eed807d602af4af935aac318da",
-      "destinationSha256": "3ec653419fa040a23d51626b6715e5363b16be6a703032a36f178fdd32b8dac3",
+      "destinationSha256": "62f28a8a00c85666305fbde09998184da5be04f75371241abf66b6182943e915",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "62f28a8a00c85666305fbde09998184da5be04f75371241abf66b6182943e915",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/skills/shared/SUBAGENT_PROTOCOL.md",
       "destination": "content/instructions/shared/SUBAGENT_PROTOCOL.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "a8e86660f363b533d9405035847a384bf2312242133e2e410accd965d857190a",
-      "destinationSha256": "e17b51c00a06527a8b7b01abf81248dbd9d9800505a23a255f36fc29bc9f595f",
+      "destinationSha256": "ff28eb2e57cd091dfc8998e85025702c5ddff8156b9013a821be20b095b2d6fb",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "ff28eb2e57cd091dfc8998e85025702c5ddff8156b9013a821be20b095b2d6fb",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/instructions/COMPACT.md",
       "destination": "content/instructions/COMPACT.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "9b14bafe13261baaca5cfffb64ddb1f32e7b370125daef2c1b23a499ce986d3a",
       "destinationSha256": "9b14bafe13261baaca5cfffb64ddb1f32e7b370125daef2c1b23a499ce986d3a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "9b14bafe13261baaca5cfffb64ddb1f32e7b370125daef2c1b23a499ce986d3a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/output-styles/mp-terse.md",
       "destination": "content/output-styles/mpx-terse.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "bd7e5ec863196dd217a865ac4bdb586fbfcc64a785b54738803f2372f1ca0831",
       "destinationSha256": "94748d22612792c36149b8d4b9aa5cf4e3ea432fef0373956f5d338ffc5e8913",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "94748d22612792c36149b8d4b9aa5cf4e3ea432fef0373956f5d338ffc5e8913",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/Explore.md",
       "destination": "content/agents/mpx-explorer.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "15a24616377039f0d367f24168981a78ed59f816e3649d4dfdbebd37a6c10d82",
-      "destinationSha256": "453962571c084a01b8103668b67ed8ffdadd3ec9e0aa31ead2b448e639e47153",
+      "destinationSha256": "db0d81d79f6ac08fbd5155a7a20f7df50367fd7bf2cd514fa22e0acfd4dc2cbb",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "db0d81d79f6ac08fbd5155a7a20f7df50367fd7bf2cd514fa22e0acfd4dc2cbb",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-check-fixer.md",
       "destination": "content/agents/mpx-check-fixer.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "23697020dd5cfcbbec2383f39e735d2cce8c33396a400e10e54732f2c0fca4c8",
       "destinationSha256": "3a7304870a573e00e249b5f21957e6ecebfe67bdc06283baf10e19cf3b0d5f4a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "3a7304870a573e00e249b5f21957e6ecebfe67bdc06283baf10e19cf3b0d5f4a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-checker.md",
       "destination": "content/agents/mpx-checker.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "fa65dc92c37d67dfab452a6db592eb62c133989e0c6201f8974e580002d0b92c",
       "destinationSha256": "48c08c3906e69cc533332f3261c8490d241c90a334c8b505945c2bf5291c3ea2",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "48c08c3906e69cc533332f3261c8490d241c90a334c8b505945c2bf5291c3ea2",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-chrome-devtools-tester.md",
       "destination": "content/agents/mpx-chrome-devtools-tester.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "78a5eaae0d01a1a6746f256c888bec1a4d673fbc9aa7708b361d8780efe422be",
       "destinationSha256": "1d32dc6f3b1842d3038e5e16b67d4c518b995ff2987be1f5e71a3c5344c52221",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "1d32dc6f3b1842d3038e5e16b67d4c518b995ff2987be1f5e71a3c5344c52221",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-context7-docs-fetcher.md",
       "destination": "content/agents/mpx-context7-docs-fetcher.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "61a4ba6add3772c9407c74465ca88a3dc1b4729cf5daa291eb748915dd20d580",
       "destinationSha256": "1324bdb5a89d723cace524c2ce7647acd7df2c5ce0025f075c78a077768e6725",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "1324bdb5a89d723cace524c2ce7647acd7df2c5ce0025f075c78a077768e6725",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-executor.md",
       "destination": "content/agents/mpx-executor.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "60382b24b61ab4df4242961c54bfa9cb06f8b3f9e1cc145190dd411239b5f63e",
       "destinationSha256": "39b558d8793b846a30350932bba883096b9155519ade51094209a3c9be33887a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "39b558d8793b846a30350932bba883096b9155519ade51094209a3c9be33887a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-git-committer.md",
       "destination": "content/agents/mpx-git-committer.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "fc1ad392129502f0cea5c72fbbe774b78382b109cee50a885b9805826e9f601f",
       "destinationSha256": "bf47d9412bccb7d3a772a112a3d708507d98e1c578ff9aac0042f2df1c83fc52",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "bf47d9412bccb7d3a772a112a3d708507d98e1c578ff9aac0042f2df1c83fc52",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-issue-analyzer.md",
       "destination": "content/agents/mpx-issue-analyzer.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "f258920dd82a484867801ec2ce73e3a176f8d3bb767a312bb13a3c02d0241421",
       "destinationSha256": "b0956d89701dc40177d932e66d7110cef44339297043655e3b476eeeb83632ae",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "b0956d89701dc40177d932e66d7110cef44339297043655e3b476eeeb83632ae",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-best-practices.md",
       "destination": "content/agents/mpx-reviewer-best-practices.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "df9ba7b6c81c6e51a0a7d8a5e725abd57ca7c86120d582dec3a07bb3c5354765",
       "destinationSha256": "5f4b097ff811f77716655005057ac69c4fa547083ad86c20a9c8f0e65f10f8a9",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5f4b097ff811f77716655005057ac69c4fa547083ad86c20a9c8f0e65f10f8a9",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-code-quality.md",
       "destination": "content/agents/mpx-reviewer-code-quality.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "682fb37eb0b382c9b1b4a1e1de0b99ce485a254a8849de1e3820d634497e5b87",
       "destinationSha256": "8daf38f31704a9d0dc4d2c1fbbd193db1e11aecabb50fd60a62a293a93020a9a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "8daf38f31704a9d0dc4d2c1fbbd193db1e11aecabb50fd60a62a293a93020a9a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-error-handling.md",
       "destination": "content/agents/mpx-reviewer-error-handling.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "7201e39e8543d9fcaca6d1de28e92e697a2bb29dc0df97e7a7af0a22b93acda0",
       "destinationSha256": "27f3ac47d8b4171e2039c11251faed94371ca3bc167c46dc7f75821abaf4af3a",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "27f3ac47d8b4171e2039c11251faed94371ca3bc167c46dc7f75821abaf4af3a",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-performance.md",
       "destination": "content/agents/mpx-reviewer-performance.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "d57c1b7f800b0ed815694ff1cc75c8f70e254722837adec72063eb1e892babf9",
       "destinationSha256": "f43ca249805776fbbaa570953633e45ccae5925c8cc702f4a5efc95f80001d77",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "f43ca249805776fbbaa570953633e45ccae5925c8cc702f4a5efc95f80001d77",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-security.md",
       "destination": "content/agents/mpx-reviewer-security.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "4acd3811ca64461206710b3fafe44efd2dc851000b778a3df792fec7180a6e01",
       "destinationSha256": "03d471525e6da8860cd9a3245bbd45a4a03b1ad164726c228216dd508b9cfe8b",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "03d471525e6da8860cd9a3245bbd45a4a03b1ad164726c228216dd508b9cfe8b",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-spec-alignment.md",
       "destination": "content/agents/mpx-reviewer-spec-alignment.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "16b89b409e01d8b87e305579100627308d07c8e8d1e7a84fadc5e0dffcdfc8f2",
       "destinationSha256": "c7f2ed3587c8ec3f6093608f11bfd48197601ad600bff370f503f0f7b0da1a7c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "c7f2ed3587c8ec3f6093608f11bfd48197601ad600bff370f503f0f7b0da1a7c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-reviewer-test-quality.md",
       "destination": "content/agents/mpx-reviewer-test-quality.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "ef5ac9f7ae1806e9a4174b95823d02941a7406f30c371043d16b9c9937aa69c5",
       "destinationSha256": "f055ea2bb8931aaddf098fc51fd6d5d66aadadf2c9e2224b8a663f4cd7d3cdab",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "f055ea2bb8931aaddf098fc51fd6d5d66aadadf2c9e2224b8a663f4cd7d3cdab",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-scanner-architecture.md",
       "destination": "content/agents/mpx-scanner-architecture.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "de8d1cb4c5cc28d4b516c30f05b547416af5292e7675bcd9979980a2229c8167",
       "destinationSha256": "fa756654f9c0a8785b790b58405a88d5bdf08e7b98becc0e5a4dffa0dada2972",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "fa756654f9c0a8785b790b58405a88d5bdf08e7b98becc0e5a4dffa0dada2972",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-tdd-executor.md",
       "destination": "content/agents/mpx-tdd-executor.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "8e24cf0e072b9d81009ea665f3ce691ff15a5a923f0d4bdebab084462e28625a",
       "destinationSha256": "5f6447c4d1a1f1d266ef4d67e158ae851a40ad8caa1de668c5033f170b090f88",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5f6447c4d1a1f1d266ef4d67e158ae851a40ad8caa1de668c5033f170b090f88",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/mp-ui-variant-generator.md",
       "destination": "content/agents/mpx-ui-variant-generator.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "00316fe5da0e30621faa8604f296471f7c8e5c577538c984f876cb4315e7a3af",
       "destinationSha256": "00b704041c0e2dd2636b315858df668b330819fb58e6e83af8ff446b822ffc53",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "00b704041c0e2dd2636b315858df668b330819fb58e6e83af8ff446b822ffc53",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/references/python-review.md",
       "destination": "content/agents/references/python-review.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "c77e7511f30424c040c2f1e025d6a78acfe6f359298be103dda42f7a360e555b",
       "destinationSha256": "c77e7511f30424c040c2f1e025d6a78acfe6f359298be103dda42f7a360e555b",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "c77e7511f30424c040c2f1e025d6a78acfe6f359298be103dda42f7a360e555b",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/references/react-review.md",
       "destination": "content/agents/references/react-review.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "08fc1ae94e74ef5898619d29b3c405216d723017632cc7198d1a56fc3435bb1c",
       "destinationSha256": "08fc1ae94e74ef5898619d29b3c405216d723017632cc7198d1a56fc3435bb1c",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "08fc1ae94e74ef5898619d29b3c405216d723017632cc7198d1a56fc3435bb1c",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/references/rust-review.md",
       "destination": "content/agents/references/rust-review.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "dc3117a0625830902f679c91888dec79f5f595d0c8b971b695a6aff292d50f90",
       "destinationSha256": "dc3117a0625830902f679c91888dec79f5f595d0c8b971b695a6aff292d50f90",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "dc3117a0625830902f679c91888dec79f5f595d0c8b971b695a6aff292d50f90",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/references/svelte-review.md",
       "destination": "content/agents/references/svelte-review.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "60494b482762a65ee7000ae843b3bd3c2e689b5d56c15f9fe25cf3a6216bde30",
       "destinationSha256": "60494b482762a65ee7000ae843b3bd3c2e689b5d56c15f9fe25cf3a6216bde30",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "60494b482762a65ee7000ae843b3bd3c2e689b5d56c15f9fe25cf3a6216bde30",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/plugins/mp/agents/references/typescript-review.md",
       "destination": "content/agents/references/typescript-review.md",
-      "sourceCommit": "af7c4cc818140b5f4dafc4d45097c2260b1684b9",
-      "sourceDirty": true,
+      "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+      "sourceDirty": false,
       "originalSha256": "69e97e966e5801ec116e6d3c52cca3d39a9219da5c6f4ac933530d5d3f47f9cc",
       "destinationSha256": "69e97e966e5801ec116e6d3c52cca3d39a9219da5c6f4ac933530d5d3f47f9cc",
       "disposition": "imported-rewritten",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "69e97e966e5801ec116e6d3c52cca3d39a9219da5c6f4ac933530d5d3f47f9cc",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-pi/PI_MIGRATION.md",
       "destination": "docs/history/PI_MIGRATION.md",
-      "sourceCommit": "4d5a9a36ae7f1a48509d627ef1fdd0429cb15fe2",
+      "sourceCommit": "9807adb547c64ecedf0091aec20e82627842da33",
       "sourceDirty": true,
       "originalSha256": "822ea188102768cc3c88f19af86adc748b48bcbb87db23a83afb9e0f6568e2ff",
       "destinationSha256": "5b5f7937e1cfc43f33b4c3e4553cd3f088365089d21162a64f6433e447ea02d7",
       "disposition": "imported-non-normative-history",
-      "license": "repository license; provenance retained"
+      "license": "repository license; provenance retained",
+      "evidence": {
+        "kind": "destination-hash",
+        "sha256": "5b5f7937e1cfc43f33b4c3e4553cd3f088365089d21162a64f6433e447ea02d7",
+        "verification": "pnpm run validate:generated -- --verify-sources"
+      }
     },
     {
       "source": "${MPX_PROJECTS}/mpx-claude-code/local/skills/sentry-cli",
