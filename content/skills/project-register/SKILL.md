@@ -15,7 +15,7 @@ This registers a project that already exists on disk. If it has no git repo yet,
 initializes one automatically — see that step for what it covers and where it still stops
 to ask.
 
-Skills referenced below (`init-repo`, `raycast-config`, `board-setup`) are
+Skills referenced below (`repository-setup`, `raycast-config`, `board-setup`) are
 read-and-follow, per the global "Cross-skill references" rule in `instructions/AGENTS.md`.
 
 Scripts live in `./scripts/`:
@@ -78,37 +78,10 @@ ls "<project>/.vscode/settings.json"
 
 ### Step 3: Initialize the repo if needed
 
-Check `git -C "<project>" rev-parse --git-dir` (or `Test-Path <project>/.git`). If it
-succeeds, the project already has a repo — skip to step 4.
-
-If it fails, read `./../init-repo/SKILL.md` in full and carry out its
-instructions yourself, in this project directory, right now — script, `.mpx/` structure,
-the visibility question, GitHub repo creation, `main`/`dev` branches, branch protection.
-It only genuinely needs you to stop once: **repo visibility** (private/public), via
-`AskUserQuestion` as its own step 4 directs. Everything else — including the graceful
-403-on-branch-protection degradation for private repos on GitHub Free — proceeds without
-asking, so this step completes autonomously apart from that one question.
-
-Two deviations from `init-repo`'s instructions, both worth checking before you run its
-script:
-
-- **Don't clobber real planning docs.** Its step 3 template-writes `.mpx/CONTEXT.md` and
-  `.mpx/DECISIONS.md` unconditionally. If the project already has real content there (a
-  pre-scaffold planning phase, prior `mpx-grill` sessions, research written before the repo
-  existed), leave those files alone and just commit them as-is — the templates are a
-  starting point for projects that have nothing yet, not a format to impose over real
-  content.
-- **Point `.runtime/repository instructions` at real instructions, not the placeholder.** Its script always
-  writes a generic bracketed template to `.runtime/repository instructions`. Once you know anything real
-  about the project (from `.mpx/`, from this conversation, from existing docs), replace it:
-  set `.runtime/repository instructions` to the single line `@AGENTS.md` and write the actual project
-  instructions into `AGENTS.md` at the repo root — this mirrors the convention already used
-  by this user's other projects (see `Grovekeeper/AGENTS.md` for the shape: a documentation
-  pointer to `.mpx/`, stack, and commands once they exist). If the project has no stack yet
-  (pure planning phase), say so plainly in `AGENTS.md` rather than inventing commands.
-
-Report what `init-repo` created (or that it was skipped because a repo already existed)
-in the same closing table as the rest of this skill's report.
+Check `git -C "<project>" rev-parse --git-dir`. When the project has no repository, read
+[REPOSITORY_INIT.md](REPOSITORY_INIT.md) and follow that branch. It invokes the canonical
+`repository-setup` skill and preserves its confirmation gates. When the check succeeds,
+preserve the existing repository and continue.
 
 ### Step 4: Choose the colour
 
@@ -213,43 +186,14 @@ round-trip instead of one per project.
 
 ### Step 10: Register the project in the Obsidian task overview
 
-The vault's `Tasks.md` (at `MPX_OBSIDIAN_VAULT`, resolve it from the environment) aggregates
-Tier-1 quick todos from daily notes into several top-level `#` **lenses** over one task pool.
-One of them, `# Projects`, holds a **foldable, tag-colored `###` section per project**. A newly
-registered project should get its own section there so its daily-note tasks surface. The
-convention — tag roles, the project→dashboard registry, the heading-level rule, and the exact
-block shape — is documented in `<vault>/task-system.md`; **read it first**, and treat the
-existing project blocks in `Tasks.md` as the copy source so this skill never restates (and
-drifts from) the query format.
-
-Do three edits, the first two inside the `# Projects` lens (the run of `### #<project>` sections
-between `### General` and the trailing `%%`-comment marker):
-
-1. **Add the project's section.** Duplicate an existing project block and swap three things:
-   the heading `#tag`, the dashboard wikilink, and the `filter by function` tag. The heading is
-   `### #<project> [[<Dashboard>|dashboard]]` (no inline count — headings carry no count).
-   Resolve `<Dashboard>` from the registry convention: a standalone repo project links to
-   `[[<Project>Dashboard]]`; a MiniProjekty sub-project links to an anchor,
-   `[[MiniProjektyDashboard#<Anchor>]]`. Ask with `AskUserQuestion` which of the two it is when
-   it isn't obvious, and note plainly if the dashboard note doesn't exist yet — the link is a
-   forward reference until it does. Place the new section among the others (active projects
-   first; on-hold ones last, and on-hold projects with no current work may be omitted entirely).
-   Use `###`, never `##` — `#` is reserved for lenses, and a `##` between the two levels would
-   make every following section fold as its child instead of as a peer.
-2. **Extend the registry list** so projectless tasks stop catching this new tag: add the tag to
-   the `reg` array in the `### General` block's `filter by function`.
-3. **Add the pill color** in `<vault>/.obsidian/snippets/tagColors.css`: mirror the project's
-   VS Code Peacock color (the `peacock.color` you wrote in Step 7). Add a `--tag-<project>-*`
-   variable trio and the matching `a.tag[href=…]` + `cm-hashtag` rules, following the existing
-   project-tag entries. This is what colors the `### #<project>` heading pill.
-
-Use the project's lowercase folder name as the tag unless the user already tags that project
-differently in their daily notes. Skip this step only if the user keeps no such vault, and
-say so in the report.
+Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user
+uses, read [OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch.
+Do not infer or reconstruct the vault root from a home or sync-directory path. When the
+variable is unavailable or the user keeps no such vault, skip this surface and record why.
 
 ### Step 11: Offer the remaining setup skills
 
-`init-repo` is no longer in this list — step 3 already ran it if the project needed it.
+`repository-setup` is no longer in this list — step 3 already ran it if the project needed it.
 Name the ones that still apply and let the user pick — neither runs unless chosen:
 
 - [`board-setup`](../board-setup/SKILL.md) — Obsidian board and its `BOARD.md` symlink

@@ -223,4 +223,4 @@ Compiled to inline SVG in two theme variants (light `neutral`, dark `dark`) — 
 node scripts/compile.js path/to/<slug>.source.md [--out <dir>]
 ```
 
-Writes `<slug>.html` beside the source (or to `--out`) and regenerates `$MPX_AI_GENERATED/_TUTORIALS/index.html`.
+Writes `<slug>.html` beside the source (or to `--out`) and regenerates `$MPX_AI_GENERATED/_TUTORIALS/index.html`. The source and any `--out` directory must remain inside that configured tutorials root.
