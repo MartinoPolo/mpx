@@ -10,12 +10,15 @@ const classifiedSkills = {
   "core/full": ["execute", "issue-view", "review"],
   "core/name-only": ["issue-create", "issue-refine", "ship"],
   "work/name-only": [
-    "architecture-review", "bug-report", "check-fix", "code-clean", "commit", "commit-push", "components-audit",
-    "consolidate-context", "decompose", "design-brief", "design-init", "design-refine", "fallow-fix", "grill",
-    "handoff", "notebooklm", "script-discovery", "skill-audit", "skill-create", "suppression-audit", "symlink",
-    "sync-base", "vocabulary",
+    "architecture-review", "bug-report", "check-fix", "code-clean", "commit", "commit-push", "commit-push-review",
+    "components-audit", "consolidate-context", "decompose", "design-brief", "design-init", "design-refine", "fallow-fix",
+    "grill", "handoff", "notebooklm", "review-publish", "script-discovery", "skill-audit", "skill-create",
+    "suppression-audit", "symlink", "sync-base", "vocabulary",
   ],
-  "work/explicit-only": ["agent-create", "continue", "grill-voice", "harvest-decisions", "mockup", "playwright-test"],
+  "work/explicit-only": [
+    "agent-create", "batch-execute", "continue", "epic-create", "epic-decompose", "epic-review", "grill-voice",
+    "harvest-decisions", "hitl", "mockup", "playwright-test", "repository-setup", "setup-react-native", "setup-sveltekit",
+  ],
   "personal/explicit-only": [
     "board-setup", "board-to-issues", "clean-pc", "podcast", "project-register", "raycast-config", "tutorial-create",
     "video-to-image",

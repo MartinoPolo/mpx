@@ -1,15 +1,15 @@
 ---
 name: ship
-description: Deliver a verified change through provider-neutral Review and CI gates
-triggers: publishing or preparing a verified change for integration
+description: Deliver verified work through commit, provider-neutral Review, CI, and authorized merge
+triggers: shipping or merging completed work end to end
 metadata:
   mpx:
     skillPacks: [core]
     defaultExposure: name-only
 ---
-# Ship a Change
+# Ship
 
-Deliver an already implemented change without bypassing repository, Review, CI, or authorization gates.
+The main agent orchestrates bounded results and never bypasses Review or CI gates.
 
 ## Launch identity
 
@@ -17,18 +17,16 @@ Deliver an already implemented change without bypassing repository, Review, CI, 
 
 ## Workflow
 
-1. Inspect `git status`, the complete diff, branch relationship, and recent commits. Preserve unrelated existing changes.
-2. Run the repository-prescribed verification. Stop when required checks fail or evidence is incomplete.
-3. Create a focused commit only when authorized. Use ordinary `git` for commit and push because these are version-control operations.
-4. There is no implicit Review or CI discovery. Use a trusted known ID, or run `mpx review create --title <title> --body <body> --source-branch <source-branch> --target-branch <target-branch> --identity <launch-identity> --json` and capture the returned Review ID.
-5. Run `mpx review view --id <review-id> --identity <launch-identity> --json` to inspect that Review. Use `mpx review update --id <review-id> --title <title> --body <body> --identity <launch-identity> --json` when an update is required.
-6. Run `mpx ci status --id <review-or-pipeline-id> --identity <launch-identity> --json` or `mpx ci watch --id <review-or-pipeline-id> --identity <launch-identity> --json`. Use `mpx ci logs --run-id <run-id> --identity <launch-identity> --json` for failed check details and `mpx ci retry --run-id <run-id> --identity <launch-identity> --json` only when a retry is justified and authorized.
-7. Run `mpx review ready --id <review-id> --identity <launch-identity> --json` only when the change is no longer a draft and all readiness requirements are met.
-8. Run `mpx review merge --id <review-id> --identity <launch-identity> --json` only when the MPX Review operation, repository policy, and explicit authority all permit it. Never substitute a direct provider command.
-9. Report the commit, push result, Review state, CI state, and any remaining human action. Do not claim delivery beyond the last confirmed response.
+1. Inspect status, branch/upstream, full diff, and commits. Determine which steps are already confirmed. Preserve unrelated changes and sync the base through ordinary `git` only when authorized.
+2. Run repository-prescribed checks. Delegate a focused conventional commit/push to `mp-git-committer`; retry bounded failures twice and stop if unresolved.
+3. Use a trusted explicit Review ID if supplied. It remains immutable for the run: never replace it from branch or provider discovery. Inspect with `mpx review view --id <review-id> --identity <launch-identity> --json`. If title, body, or target needs correction, use `mpx review update --id <review-id> --title <title> --body <body> --identity <launch-identity> --json`.
+4. Otherwise create through `mpx review create --title <title> --body <body> --source-branch <source-branch> --target-branch <target-branch> --identity <launch-identity> --json`, and capture the returned Review ID as the explicit immutable ID. There is no implicit Review or CI discovery.
+5. Check once with `mpx ci status --id <review-or-pipeline-id> --identity <launch-identity> --json`, then run `mpx ci watch --id <review-or-pipeline-id> --identity <launch-identity> --json` while pending. Never merge while pending or failed. If no checks are confirmed, state that absence and require policy/authority before continuing.
+6. For failure details run `mpx ci logs --run-id <run-id> --identity <launch-identity> --json`. Delegate diagnosis/fixes, commit and push, and use `mpx ci retry --run-id <run-id> --identity <launch-identity> --json` only for an authorized justified retry. Repeat the CI fix loop at most three times, then stop blocked.
+7. When checks are green and readiness requirements hold, run `mpx review ready --id <review-id> --identity <launch-identity> --json`. Merge only with explicit authority via `mpx review merge --id <review-id> --identity <launch-identity> --json`, using a method permitted by repository policy. Do not use an automatic merge as the CI gate.
+8. Confirm merged state with `mpx review view --id <review-id> --identity <launch-identity> --json`, post an optional summary via `mpx review comment --id <review-id> --identity <launch-identity> --json`, then sync the main worktree safely.
+9. Report sync, commit, Review ID/URL, CI results and retry count, merge confirmation, Issue/board writeback, and remaining manual handoffs.
 
-## Unsupported capability
+## Errors
 
-After any MPX Review or CI command, if the JSON response has `ok: false` and `error.code: CAPABILITY_UNSUPPORTED`, stop that provider operation. Preserve confirmed git and provider results, report the unsupported capability and any structured remediation, and identify the remaining action. Do not invoke or suggest a direct provider command as a fallback.
-
-For every other structured provider error, report the code and actionable message, then stop the affected delivery step.
+For `CAPABILITY_UNSUPPORTED`, stop the affected Review/CI action, preserve confirmed git and provider results, and return structured remediation. Never fall back to a provider CLI. Other structured errors stop that gate without claiming delivery.

@@ -1,6 +1,6 @@
 ---
 name: issue-create
-description: Create a clear provider-neutral Issue from confirmed intent
+description: Create a clear provider-neutral Issue, optionally linked to an Epic
 triggers: creating or recording an Issue
 metadata:
   mpx:
@@ -9,7 +9,7 @@ metadata:
 ---
 # Create an Issue
 
-Create one well-scoped Issue without selecting or addressing a provider directly.
+Use [the canonical template](../epic-decompose/ISSUE_TEMPLATE.md) to create one well-scoped Issue.
 
 ## Launch identity
 
@@ -17,14 +17,15 @@ Create one well-scoped Issue without selecting or addressing a provider directly
 
 ## Workflow
 
-1. Confirm the title, problem, desired outcome, acceptance criteria, and relevant constraints. Ask only for missing information that changes the result.
-2. Keep implementation details out unless they are confirmed constraints. Use the public term Issue.
-3. Run `mpx issue create --identity <launch-identity> --json` with the confirmed fields.
-4. Read the structured response. Report the created Issue identifier and canonical URL when present.
-5. Do not claim creation unless the response confirms success.
+1. Parse the confirmed summary, details, and optional explicit Epic ID. Ask only for missing information that changes the result.
+2. If no Epic is supplied, list candidates with `mpx issue list --identity <launch-identity> --json` and propose the best match; do not silently attach one. Fetch an approved Epic with `mpx issue view --identity <launch-identity> --json` and retain requirements, milestone, and sibling relationships.
+3. Explore relevant code and classify HITL versus AFK. Use `design needed` only for meaningful new visual workflows.
+4. Build the body from the template: durable Description, mapped Requirements, independently testable Acceptance Criteria, optional relationships and notes, and unanswered questions only for HITL.
+5. Ensure labels through `mpx tool invoke --capability issue.labels.ensure --identity <launch-identity> --json`.
+6. Run `mpx issue create --identity <launch-identity> --json` with confirmed fields, assignment, labels, and supported milestone. Capture the immutable Issue ID and canonical URL.
+7. For an approved Epic, request `mpx tool invoke --capability issue.sub-issue --identity <launch-identity> --json`. If supported, confirm the native link; otherwise preserve the created Issue and provide manual handoff.
+8. Report ID, URL, title, labels, Epic link status, and blocking relationships.
 
-## Unsupported capability
+## Capability handling
 
-If the JSON response has `ok: false` and `error.code: CAPABILITY_UNSUPPORTED`, stop the create operation. Report the unsupported capability and any structured remediation. Do not invoke or suggest a direct provider command as a fallback.
-
-For every other structured error, report the code and actionable message, then stop rather than guessing that the Issue exists.
+GitHub may support native sub-issues and templates; request those launch-bound capabilities. GitLab or another provider may return `CAPABILITY_UNSUPPORTED`; report structured remediation and never emulate or invoke a provider CLI. Other structured errors stop the affected operation. Do not claim creation or linking without a successful response.

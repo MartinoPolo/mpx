@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { readFile, readdir, stat } from "node:fs/promises";
+import path from "node:path";
+import { inventoryCanonical } from "../src/index.js";
+import providerCases from "./fixtures/content-batch-c5/provider-cases.json" with { type: "json" };
+
+const root = path.resolve(import.meta.dirname, "../../../content/skills");
+const identities = ["batch-execute", "commit-push-review", "epic-review", "execute", "hitl", "repository-setup", "issue-create", "review-publish", "setup-react-native", "setup-sveltekit", "ship", "epic-create", "epic-decompose"];
+async function files(identity: string) {
+  const directory = path.join(root, identity);
+  return (await readdir(directory, { recursive: true, withFileTypes: true })).filter(entry => entry.isFile()).map(entry => path.join(entry.parentPath, entry.name));
+}
+async function skill(identity: string) { return readFile(path.join(root, identity, "SKILL.md"), "utf8"); }
+
+describe("Batch C5 canonical workflows", () => {
+  it("catalogs every mapped identity and retains all source support documents", async () => {
+    const catalog = new Map((await inventoryCanonical(root)).map(entry => [entry.identity, entry]));
+    for (const identity of identities) expect(catalog.has(identity), identity).toBe(true);
+    expect(await files("execute")).toEqual(expect.arrayContaining([expect.stringMatching(/CLOSE_OUT\.md$/u), expect.stringMatching(/mocking\.md$/u), expect.stringMatching(/tests\.md$/u)]));
+    expect(await files("epic-review")).toHaveLength(4);
+    await expect(stat(path.join(root, "epic-decompose", "ISSUE_TEMPLATE.md"))).resolves.toBeDefined();
+    await expect(stat(path.join(root, "setup-react-native", "PLATFORM_REFERENCE.md"))).resolves.toBeDefined();
+  });
+
+  it("preserves execution, HITL, review, CI, board, and manual gates", async () => {
+    const content = await Promise.all(identities.map(skill)).then(values => values.join("\n"));
+    for (const phrase of ["sequential", "HITL gate", "test", "review loop", "ci watch", "ci retry", "Manual testing", "structured remediation", "privacy", "platform"]) expect(content, phrase).toContain(phrase);
+  });
+
+  it("documents GitHub, GitLab, and unsupported provider capability branches", async () => {
+    for (const example of providerCases) {
+      const content = await skill(example.skill);
+      for (const phrase of example.required) expect(content, `${example.provider}: ${phrase}`).toContain(phrase);
+    }
+  });
+
+  it("uses launch-bound MPX capabilities without direct provider CLI invocations", async () => {
+    const violations: string[] = [];
+    for (const identity of identities) for (const file of await files(identity)) {
+      const content = await readFile(file, "utf8");
+      if (/(?:^|[\n`$;|&])\s*(?:gh|glab|bb|az)(?:\.exe)?\s+(?=[a-z-])/imu.test(content)) violations.push(path.relative(root, file));
+      for (const command of content.matchAll(/\bmpx\s+(?:issue|review|ci)\s+[^\n`]+/gu)) expect(command[0], `${identity}: ${command[0]}`).toContain("--identity <launch-identity>");
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps launch identity and Review IDs immutable and closes support references", async () => {
+    const content = await Promise.all(identities.map(skill)).then(values => values.join("\n"));
+    expect(content).toContain("immutable identity selected when MPX launched");
+    expect(content).toContain("never infer or substitute one");
+    expect(content).toContain("explicit Review ID");
+    expect(content).toContain("never replace it from branch or provider discovery");
+    const missing: string[] = [];
+    for (const identity of identities) for (const file of await files(identity)) {
+      if (!file.endsWith(".md")) continue;
+      const markdown = await readFile(file, "utf8");
+      for (const match of markdown.matchAll(/\[[^\]]*\]\((?!https?:|#)([^)#]+)(?:#[^)]+)?\)/gu)) {
+        try { await stat(path.resolve(path.dirname(file), match[1]!)); } catch { missing.push(`${path.relative(root, file)} -> ${match[1]}`); }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+});
