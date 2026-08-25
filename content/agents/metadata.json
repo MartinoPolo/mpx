@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "agents": {
+    "mpx-check-fixer": {
+      "modelClass": "sol",
+      "thinking": "high",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [
+        "mpx-checker",
+        "mpx-reviewer-*",
+        "mpx-executor",
+        "mpx-chrome-devtools-tester"
+      ],
+      "outputSchema": "bounded-json"
+    },
+    "mpx-checker": {
+      "modelClass": "luna",
+      "thinking": "low",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "check-report"
+    },
+    "mpx-chrome-devtools-tester": {
+      "modelClass": "sol",
+      "thinking": "high",
+      "capabilities": [
+        "read",
+        "search",
+        "shell",
+        "browser"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-ci-fixer": {
+      "modelClass": "sol",
+      "thinking": "high",
+      "capabilities": [
+        "read",
+        "search",
+        "shell",
+        "write"
+      ],
+      "nesting": [
+        "mpx-executor",
+        "mpx-checker",
+        "mpx-git-committer"
+      ],
+      "outputSchema": "bounded-json"
+    },
+    "mpx-context7-docs-fetcher": {
+      "modelClass": "luna",
+      "thinking": "low",
+      "capabilities": [
+        "read",
+        "context"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    },
+    "mpx-executor": {
+      "modelClass": "sol",
+      "thinking": "low",
+      "capabilities": [
+        "read",
+        "search",
+        "shell",
+        "write"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    },
+    "mpx-explorer": {
+      "modelClass": "terra",
+      "thinking": "low",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    },
+    "mpx-git-committer": {
+      "modelClass": "luna",
+      "thinking": "low",
+      "capabilities": [
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "bounded-json"
+    },
+    "mpx-issue-analyzer": {
+      "modelClass": "sol",
+      "thinking": "high",
+      "capabilities": [
+        "read",
+        "search",
+        "shell",
+        "web"
+      ],
+      "nesting": [],
+      "outputSchema": "plan"
+    },
+    "mpx-issue-finder": {
+      "modelClass": "terra",
+      "thinking": "low",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    },
+    "mpx-review-manager": {
+      "modelClass": "terra",
+      "thinking": "low",
+      "capabilities": [
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "bounded-json"
+    },
+    "mpx-reviewer-best-practices": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-reviewer-code-quality": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-reviewer-error-handling": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-reviewer-performance": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-reviewer-security": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-reviewer-spec-alignment": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-reviewer-test-quality": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-scanner-architecture": {
+      "modelClass": "terra",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "findings"
+    },
+    "mpx-tdd-executor": {
+      "modelClass": "sol",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell",
+        "write"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    },
+    "mpx-ui-variant-generator": {
+      "modelClass": "sol",
+      "thinking": "medium",
+      "capabilities": [
+        "read",
+        "search",
+        "shell",
+        "write"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    },
+    "mpx-unresolved-issue-tracker": {
+      "modelClass": "terra",
+      "thinking": "low",
+      "capabilities": [
+        "read",
+        "search",
+        "shell"
+      ],
+      "nesting": [],
+      "outputSchema": "text"
+    }
+  }
+}

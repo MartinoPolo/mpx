@@ -148,7 +148,10 @@ describe("production Pi projection", () => {
       "extension.mjs", "runtime-context.json", "projection.json", "settings.json", "keybindings.json", "status/status-snapshot.json",
       "themes/green.json", "themes/amber.json", "vendor/subagents/VENDORED.md", "vendor/subagents/LICENSE",
     ]));
-    expect(first.files.some((file) => file.startsWith("agents/mpx-") && file.endsWith(".md"))).toBe(true);
+    const projectedAgents = first.files.filter((file) => file.startsWith("agents/") && file.endsWith(".md"));
+    expect(projectedAgents).toHaveLength(22);
+    expect(projectedAgents.filter((file) => file === "agents/Explore.md")).toHaveLength(1);
+    expect(projectedAgents).not.toContain("agents/mpx-explorer.md");
     expect(first.files).not.toEqual(expect.arrayContaining([expect.stringMatching(/(?:^|\/)SKILL\.md$|(?:^|\/)pnpm-lock\.yaml$/u)]));
 
     const descriptor = JSON.parse(await readFile(path.join(first.directory, "projection.json"), "utf8")) as Record<string, unknown>;
@@ -216,6 +219,7 @@ describe("production Pi projection", () => {
     const projection = await buildPiProjection({ ...f, artifactsRoot });
     const agentsRoot = await mkdtemp(path.join(tmpdir(), "claude-agents-"));
     await writeFile(path.join(agentsRoot, "mpx-checker.md"), "---\nname: mpx-checker\ndescription: Check things\n---\nAGENT BODY\n");
+    await writeFile(path.join(agentsRoot, "metadata.json"), JSON.stringify({ schemaVersion: 1, agents: { "mpx-checker": { modelClass: "luna", thinking: "low", capabilities: ["read", "search", "shell"], nesting: [], outputSchema: "check-report" } } }));
     const claudeOutput = path.join(await mkdtemp(path.join(tmpdir(), "claude-projection-")), "plugin");
     await buildClaudePlugin({ manifest: f.manifest, artifact: createRuntimeSkillArtifact(f.manifest, f.catalog, { runtime: "claude" }), catalog: f.catalog, canonical: f.canonicalRoot, agents: agentsRoot, outputRoot: claudeOutput, statusSnapshot: f.statusSnapshot, launchBanner: f.launchBanner, runtimeContext: f.context });
     const module = await import(pathToFileURL(projection.extension).href);

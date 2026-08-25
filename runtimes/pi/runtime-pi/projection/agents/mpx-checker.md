@@ -2,7 +2,9 @@
 name: mpx-checker
 description: "Executes provided check commands and reports failures. No fixing."
 model: openai-codex/gpt-5.6-luna
+thinking: low
 tools: read,grep,find,ls,bash
+output_schema: check-report
 
 ---
 # Checker Agent

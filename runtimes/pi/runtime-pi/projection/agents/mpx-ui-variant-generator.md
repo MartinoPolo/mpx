@@ -2,7 +2,9 @@
 name: mpx-ui-variant-generator
 description: "Generates a single UI variant in a specific design style. Receives style definition, functional requirements, framework, and output folder. Spawned in parallel by the mockup skill."
 model: openai-codex/gpt-5.6-sol
+thinking: medium
 tools: read,grep,find,ls,bash,edit,write
+output_schema: text
 
 ---
 # UI Variant Generator
