@@ -14,9 +14,9 @@ describe("subagent vendor provenance", () => {
       expect(content.toString("utf8"), relative).not.toMatch(/[A-Za-z]:[\\/]_MP_(?:projects|work|github_cloned|apps)/iu);
     }
   });
-  it("remains inert in the Pi runtime adapter", async () => {
-    const runtimeSource = await readFile(path.resolve(import.meta.dirname, "../src/index.ts"), "utf8");
-    expect(runtimeSource).not.toMatch(/(?:from\s+|import\s*\()\s*["'][^"']*vendor[\\/]subagents/u);
+  it("is projected as reviewed source while activation uses the provider-neutral bridge", async () => {
+    const bridgeSource = await readFile(path.resolve(import.meta.dirname, "../src/subagent-bridge.ts"), "utf8");
+    expect(bridgeSource).toContain('from "@mpx/subagents"');
     expect(await readdir(root)).toContain("LICENSE");
   });
 });

@@ -411,6 +411,9 @@ importers:
 
   runtimes/pi/runtime-pi:
     dependencies:
+      '@mpx/dev-services':
+        specifier: workspace:*
+        version: link:../../../packages/dev-services
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../../../packages/runtime-contracts
@@ -423,6 +426,9 @@ importers:
       '@mpx/status':
         specifier: workspace:*
         version: link:../../../packages/status
+      '@mpx/subagents':
+        specifier: workspace:*
+        version: link:../../../packages/subagents
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

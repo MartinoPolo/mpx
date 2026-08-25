@@ -3,7 +3,7 @@ name: mpx-chrome-devtools-tester
 description: "Exploratory browser click-through, console/network inspection, and performance audits via chrome-devtools MCP. Returns evidence-based findings."
 model: openai-codex/gpt-5.6-sol
 thinking: high
-tools: read,grep,find,ls,bash,ext:mcp
+tools: read,grep,find,ls,bash
 output_schema: findings
 
 ---

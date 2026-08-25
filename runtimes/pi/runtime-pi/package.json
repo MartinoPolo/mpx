@@ -12,8 +12,10 @@
     "generate": "node scripts/generate-agents.mjs"
   },
   "dependencies": {
+    "@mpx/dev-services": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/runtime-hooks": "workspace:*",
+    "@mpx/subagents": "workspace:*",
     "@mpx/skills": "workspace:*",
     "@mpx/status": "workspace:*"
   },

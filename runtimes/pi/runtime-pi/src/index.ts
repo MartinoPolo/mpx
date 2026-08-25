@@ -25,7 +25,18 @@ import {
   type ResolvedManifest,
   type RuntimeSkillArtifact,
 } from "@mpx/skills";
-import { parseStatusSnapshotV1, renderPiPortSegment, type StatusSnapshotV1 } from "@mpx/status";
+import { parseRuntimeStatusEnvelopeV1, parseStatusSnapshotV1, renderPiPortSegment, type RuntimeStatusEnvelopeV1, type StatusSnapshotV1 } from "@mpx/status";
+import { createPiRuntimeProfileV1, profileSettings } from "./profile.js";
+import { renderPiRuntimeStatus } from "./runtime-status.js";
+import { PI_CAPABILITY_IDS } from "./runtime-capabilities.js";
+
+export * from "./profile.js";
+export * from "./runtime-capabilities.js";
+export * from "./runtime-status.js";
+export * from "./dev-services.js";
+export * from "./hooks-wiring.js";
+export * from "./subagent-bridge.js";
+export * from "./event-coordination.js";
 
 export interface PiExtensionAPI {
   registerCommand(name: string, specification: { description?: string; handler(args: string): Promise<void> }): void;
@@ -103,13 +114,13 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
 
 export interface PiProjectionRevalidation { readonly directory: string; readonly reference: PublishedRuntimeArtifactReference }
 export interface PiPublishedProjection {
-  readonly directory: string; readonly extension: string; readonly runtimeContextFile: string; readonly theme: "green";
+  readonly directory: string; readonly extension: string; readonly runtimeContextFile: string; readonly theme: "dark";
   readonly artifactKey: string; readonly reference: PublishedRuntimeArtifactReference; readonly files: readonly string[];
   readonly reused: boolean; readonly revalidation: PiProjectionRevalidation;
 }
 export interface PiInvocationInput {
   executable: string; accountRoot: string; cwd: string; runtimeContext: RuntimeContextV1; immutableProjectionDirectory?: string; statusSnapshotPath?: string;
-  extension?: string; theme?: "green" | "amber"; runtimeContextFile?: string; projection?: PiPublishedProjection; projectionReference?: PublishedRuntimeArtifactReference;
+  extension?: string; theme?: "dark" | "green" | "amber"; runtimeContextFile?: string; projection?: PiPublishedProjection; projectionReference?: PublishedRuntimeArtifactReference;
 }
 export interface PiInvocationPlan { executable: string; cwd: string; args: string[]; env: Record<string, string> }
 function absolute(value: string, label: string): string {
@@ -130,20 +141,17 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
   };
 }
 
-export const piSettings = {
-  compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 }, terminal: { showTerminalProgress: true },
-  tuiMode: "fullscreen", fullscreenScrollbar: "always", theme: "green", enableSkillCommands: false,
-  steeringMode: "all", followUpMode: "all", treeFilterMode: "no-tools", doubleEscapeAction: "tree", defaultProjectTrust: "ask",
-} as const;
-export const piKeybindings = { "app.model.select": "alt+p", "tui.altScreen.pageUp": [], "tui.altScreen.pageDown": [], "tui.altScreen.halfPageUp": "pageUp", "tui.altScreen.halfPageDown": "pageDown" } as const;
+export const piProfile = createPiRuntimeProfileV1(PI_CAPABILITY_IDS);
+export const piSettings = profileSettings(piProfile);
+export const piKeybindings = piProfile.keybindings;
 export function createPiProjection() {
   return {
-    settings: piSettings, keybindings: piKeybindings,
-    themes: [{ name: "green", status: "active" }, { name: "amber", status: "retained" }] as const,
-    adapters: ["compact", "guard", "auto-title", "fullscreen", "footer"] as const,
-    subagents: { enabled: false, nestedOrchestration: false, fleetView: false, provenance: "projection/imported provenance only: vendor/subagents/VENDORED.md" },
+    profile: piProfile, settings: piSettings, keybindings: piKeybindings,
+    themes: [{ name: "dark", status: "active" }, { name: "green", status: "identity-canvas" }, { name: "amber", status: "identity-canvas" }] as const,
+    adapters: ["compact", "guard", "auto-title", "fullscreen", "events", "footer"] as const,
+    subagents: { enabled: true, nestedOrchestration: true, fleetView: true, provenance: "projection/imported provenance only: vendor/subagents/VENDORED.md" },
     accountProfiles: { kind: "projection-only", mutation: "unsupported" },
-    unsupported: ["agent-resurrect/session G", "F2 host replacement", "installer/account symlinks", "credential projection"],
+    unsupported: ["mcp/shared gateway pending", "web/shared gateway pending", "agent-resurrect/session G", "F2 host replacement", "installer/account symlinks", "credential projection"],
   } as const;
 }
 export interface PiProjectionBuildInput {
@@ -156,6 +164,7 @@ export interface PiProjectionBuildInput {
   readonly currentBinding: RuntimeBinding;
   readonly artifactsRoot: string;
   readonly statusSnapshot: StatusSnapshotV1;
+  readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
   readonly launchBanner: string;
   readonly assetsRoot?: string;
   readonly vendorProvenanceFile?: string;
@@ -181,7 +190,7 @@ async function emit(root: string, relative: string, content: string | Uint8Array
   await writeFile(target, content, { encoding: "utf8", flag: "wx" });
 }
 function piExtensionSource(descriptor: {
-  manifestKey: string; artifactKey: string; launchBanner: string; statusSnapshot: string; commandAllowlist: string[]; modelSearchAllowlist: string[];
+  manifestKey: string; artifactKey: string; launchBanner: string; runtimeStatusLine: string; commandAllowlist: string[]; modelSearchAllowlist: string[];
   entries: Array<{ identity: string; publicName: string; exposure: "full" | "name-only" | "explicit-only" | "off"; contentHash: string; sourcePath: string; commandDescription?: string; canonicalDescription?: string; canonicalTriggers?: string }>;
 }): string {
   const data = JSON.stringify(descriptor);
@@ -217,7 +226,7 @@ function piExtensionSource(descriptor: {
     'async function readStatusBytes(file) { let handle;try{handle=await open(file,"r");const opened=await handle.stat({bigint:true}),named=await lstat(file,{bigint:true});if(!opened.isFile()||!named.isFile()||named.isSymbolicLink()||opened.size>BigInt(MAX_STATUS_BYTES)||named.size>BigInt(MAX_STATUS_BYTES))restart("STATUS_SNAPSHOT_INVALID");const size=Number(opened.size),bytes=Buffer.alloc(size);let offset=0;while(offset<size){const read=await handle.read(bytes,offset,size-offset,offset);if(read.bytesRead===0)restart("STATUS_SNAPSHOT_INVALID");offset+=read.bytesRead;}if((await handle.read(Buffer.alloc(1),0,1,size)).bytesRead!==0)restart("STATUS_SNAPSHOT_INVALID");return bytes;}catch{restart("STATUS_SNAPSHOT_INVALID");}finally{await handle?.close().catch(()=>{});} }',
     'async function readStatusSnapshot(file) { const opened=await readStatusBytes(file),named=await readStatusBytes(file);if(!opened.equals(named))restart("STATUS_SNAPSHOT_INVALID");let value;try{value=JSON.parse(named.toString("utf8"));}catch{restart("STATUS_SNAPSHOT_INVALID");}return parseStatus(value); }',
     'function ports(x) { if (x.portResolution !== "valid") return `ports ${x.portResolution}`; if (!x.services.length) return "ports none"; return "ports " + [...x.services].sort((a,b) => a.id.localeCompare(b.id)).map((s) => `${s.id}:${s.port ?? "?"}${s.conflict === "external" ? "!" : s.conflict === "unknown" ? "?" : s.listening ? "*" : ""}`).join(" "); }',
-    'let statusRefresh, statusGeneration=0, statusStopped=true; async function refreshStatus(ctx,generation) { if(statusRefresh)return statusRefresh; const refresh=(async()=>{const file=process.env.MPX_STATUS_SNAPSHOT_FILE??path.join(root,projection.statusSnapshot);const snapshot=await readStatusSnapshot(file);if(statusStopped||generation!==statusGeneration)return;ctx.ui.setStatus("mpx",`${projection.launchBanner} | ${ports(snapshot)}`);})();const tracked=refresh.finally(()=>{if(statusRefresh===tracked)statusRefresh=undefined;});statusRefresh=tracked;return tracked; }',
+    'let statusRefresh, statusGeneration=0, statusStopped=true; async function refreshStatus(ctx,generation) { if(statusRefresh)return statusRefresh; const refresh=Promise.resolve().then(()=>{if(statusStopped||generation!==statusGeneration)return;ctx.ui.setStatus("mpx",projection.runtimeStatusLine);});const tracked=refresh.finally(()=>{if(statusRefresh===tracked)statusRefresh=undefined;});statusRefresh=tracked;return tracked; }',
     'async function body(identity, invocation) { await ensureSkill(identity); const entry = projection.entries.find((item) => item.identity === identity); if (!entry) restart("RUNTIME_ARTIFACT_TAMPERED"); const file = path.join(root, "skills", identity, "body.md"); let handle; try { handle = await open(file, "r"); const stat = await handle.stat(); if (!stat.isFile() || stat.size > MAX_FILE_BYTES) restart("SKILL_BODY_INVALID"); const resolved = await realpath(file).catch(() => restart("SKILL_BODY_INVALID")); const namedStat = await lstat(file).catch(() => restart("SKILL_BODY_INVALID")); if (!within(root, resolved) || !namedStat.isFile() || namedStat.isSymbolicLink() || namedStat.dev !== stat.dev || namedStat.ino !== stat.ino || namedStat.size !== stat.size) restart("ARTIFACT_ESCAPE"); const bytes = Buffer.alloc(stat.size); let offset = 0; while (offset < bytes.length) { const read = await handle.read(bytes, offset, bytes.length - offset, offset); if (read.bytesRead === 0) restart("SKILL_BODY_INVALID"); offset += read.bytesRead; } if ((await handle.read(Buffer.alloc(1), 0, 1, stat.size)).bytesRead !== 0) restart("SKILL_BODY_INVALID"); const finalStat = await handle.stat(), finalNamedStat = await lstat(file); if (!finalStat.isFile() || finalStat.isSymbolicLink() || !finalNamedStat.isFile() || finalNamedStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalNamedStat.dev !== stat.dev || finalNamedStat.ino !== stat.ino || finalStat.size !== stat.size || finalNamedStat.size !== stat.size || finalStat.mtimeMs !== stat.mtimeMs || finalStat.ctimeMs !== stat.ctimeMs || finalNamedStat.mtimeMs !== namedStat.mtimeMs || finalNamedStat.ctimeMs !== namedStat.ctimeMs || digest(bytes) !== entry.contentHash) restart("SKILL_BODY_INVALID"); const body = parseProjectedBody(bytes); const contentHash = entry.contentHash; return { identity, body, wrappedBody: `<!-- mpx-skill identity=${identity} origin=${invocation} runtime=pi artifact=${projection.artifactKey} hash=${contentHash} -->\n${body}<!-- /mpx-skill -->`, provenance: { artifactKey: projection.artifactKey, contentHash, invocation, runtime: "pi", sourcePath: entry.sourcePath } }; } catch { restart("SKILL_BODY_INVALID"); } finally { await handle?.close().catch(() => {}); } }',
     'function parseProjectedBody(bytes) { const text = bytes.toString("utf8").replaceAll("\\r\\n", "\\n"); if (!text.startsWith("---\\n")) restart("SKILL_BODY_INVALID"); const end = text.indexOf("\\n---\\n", 4); if (end < 0) restart("SKILL_BODY_INVALID"); return text.slice(end + 5); }',
     'function modelEntries() { return projection.entries.filter((entry) => projection.modelSearchAllowlist.includes(entry.identity)); }',
@@ -260,8 +269,16 @@ async function copyGeneratedAssets(staging: string, assetsRoot: string, provenan
     const content = await regularText(file, "Pi theme");
     await emit(staging, `themes/${theme}.json`, `${JSON.stringify(JSON.parse(content), null, 2)}\n`);
   }
-  await emit(staging, "vendor/subagents/VENDORED.md", (await regularText(provenanceFile, "vendor provenance")).replaceAll("\r\n", "\n"));
-  await emit(staging, "vendor/subagents/LICENSE", (await regularText(path.join(path.dirname(provenanceFile), "LICENSE"), "vendor license")).replaceAll("\r\n", "\n"));
+  const vendorRoot = await realDirectoryRoot(path.dirname(provenanceFile), "Pi subagent vendor root");
+  async function copyVendor(directory: string, relative = ""): Promise<void> {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+      const source = path.join(directory, entry.name); const child = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await copyVendor(source, child);
+      else if (entry.isFile() && /^(?:.*\.ts|LICENSE|VENDORED\.md|SHA256SUMS)$/u.test(entry.name)) await emit(staging, `vendor/subagents/${child}`, (await regularText(source, "vendored subagent source")).replaceAll("\r\n", "\n"));
+      else if (entry.isSymbolicLink()) throw new Error("Pi subagent vendor may not contain symlinks");
+    }
+  }
+  await copyVendor(vendorRoot);
 }
 async function validatedSkillBytes(skill: CatalogSkill, loaded: LoadedSkillBody): Promise<Buffer> {
   let handle;
@@ -306,7 +323,7 @@ function freezeProjection(published: PublishedRuntimeArtifact): PiPublishedProje
   const reference = Object.freeze({ ...published.reference });
   const directory = path.resolve(published.directory);
   return Object.freeze({
-    directory, extension: path.join(directory, "extension.mjs"), runtimeContextFile: path.join(directory, "runtime-context.json"), theme: "green" as const,
+    directory, extension: path.join(directory, "extension.mjs"), runtimeContextFile: path.join(directory, "runtime-context.json"), theme: "dark" as const,
     artifactKey: reference.launchBinding.runtimeArtifactKey, reference, files: Object.freeze(published.fileMap.map((file) => file.path)), reused: published.reused,
     revalidation: Object.freeze({ directory, reference }),
   });
@@ -316,6 +333,10 @@ export async function buildPiProjection(input: PiProjectionBuildInput): Promise<
   const manifest = parseResolvedSkillManifestV4(input.manifest);
   const context = parseRuntimeContextV1(input.context);
   const statusSnapshot = parseStatusSnapshotV1(input.statusSnapshot);
+  const unavailable = { state: "unavailable" as const, observedAt: null, errorCode: null };
+  const fallbackStatus: RuntimeStatusEnvelopeV1 = { schemaVersion: 1, generatedAt: "2000-01-01T00:00:00.000Z", binding: { launchKey: context.launchKey, runtimeId: "pi", repositoryId: context.binding.repositoryId }, harness: { kind: "pi", version: null, surface: "footer" }, identity: { freshness: unavailable, profile: null, label: null }, session: { freshness: unavailable, elapsedMs: null, turns: null }, model: { freshness: unavailable, modelId: null, label: null, contextUsedTokens: null, contextLimitTokens: null }, location: { freshness: unavailable, label: null }, repository: { freshness: unavailable, name: null, branch: null, dirty: null, ahead: null, behind: null }, usage: { freshness: unavailable, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, totalTokens: null }, cost: { freshness: unavailable, currency: "USD", amountMicros: null }, providerUsage: { freshness: unavailable, provider: null, used: null, limit: null, unit: null, resetAt: null }, compactions: { freshness: unavailable, count: null, lastAt: null }, subagents: { freshness: unavailable, active: null, completed: null, failed: null }, development: { freshness: unavailable, services: statusSnapshot.services.map(service => ({ id: service.id, state: service.conflict !== "none" ? "conflict" : service.listening ? "listening" : "stopped", port: service.port })) }, actions: { freshness: unavailable, items: [] } };
+  const runtimeStatusEnvelope = parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope ?? fallbackStatus);
+  if (runtimeStatusEnvelope.binding.launchKey !== context.launchKey || runtimeStatusEnvelope.binding.repositoryId !== context.binding.repositoryId || runtimeStatusEnvelope.harness.kind !== "pi") throw new Error("Pi runtime status envelope belongs to another launch");
   verifyRuntimeSkillArtifact(input.artifact, manifest, input.catalog, { runtime: "pi" });
   if (input.artifact.schemaVersion !== 4 || input.artifact.runtime !== "pi" || input.artifact.manifestKey !== manifest.manifestKey || input.artifact.reference.artifactKey !== context.runtimeArtifact.artifactKey) throw new Error("Pi projection requires its exact v4 Pi artifact and runtime context");
   const validation = await validateRuntimeContext({ context, expectedLaunch: input.expectedLaunch, expectedManifestKey: manifest.manifestKey, expectedRuntimeArtifact: input.artifact.reference, currentBinding: input.currentBinding });
@@ -334,15 +355,17 @@ export async function buildPiProjection(input: PiProjectionBuildInput): Promise<
   }
   const commandAllowlist = input.artifact.entries.filter((entry) => entry.permissions.humanInvocation).map((entry) => entry.publicName.slice(1)).sort();
   const modelSearchAllowlist = input.artifact.entries.filter((entry) => entry.permissions.modelInvocation).map((entry) => entry.identity).sort();
-  const descriptor = { schemaVersion: 1, runtime: "pi", manifestKey: manifest.manifestKey, runtimeArtifact: input.artifact.reference, runtimeContext: "runtime-context.json", extension: "extension.mjs", commandAllowlist, modelSearchAllowlist, settings: "settings.json", keybindings: "keybindings.json", themes: ["green", "amber"], agents: "agents", vendorProvenance: "vendor/subagents/VENDORED.md", statusSnapshot: "status/status-snapshot.json", entries };
+  const descriptor = { schemaVersion: 1, runtime: "pi", manifestKey: manifest.manifestKey, runtimeArtifact: input.artifact.reference, runtimeContext: "runtime-context.json", extension: "extension.mjs", commandAllowlist, modelSearchAllowlist, settings: "settings.json", keybindings: "keybindings.json", themes: ["green", "amber"], agents: "agents", vendorProvenance: "vendor/subagents/VENDORED.md", runtimeStatusEnvelope: "status/runtime-status-envelope-v1.json", entries };
   await mkdir(input.artifactsRoot, { recursive: true });
   const staging = await mkdtemp(path.join(input.artifactsRoot, ".pi-build-"));
   try {
     await emit(staging, "projection.json", jsonFile(descriptor));
     await emit(staging, "runtime-context.json", jsonFile(context));
-    await emit(staging, "extension.mjs", piExtensionSource({ manifestKey: manifest.manifestKey, artifactKey: input.artifact.reference.artifactKey, launchBanner: input.launchBanner, statusSnapshot: "status/status-snapshot.json", commandAllowlist, modelSearchAllowlist, entries }));
+    const runtimeStatusLine = renderPiRuntimeStatus(runtimeStatusEnvelope, "wide");
+    await emit(staging, "extension.mjs", piExtensionSource({ manifestKey: manifest.manifestKey, artifactKey: input.artifact.reference.artifactKey, launchBanner: input.launchBanner, runtimeStatusLine, commandAllowlist, modelSearchAllowlist, entries }));
     await emit(staging, "dangerous-command-policy.mjs", `${dangerousCommandPolicyModuleSource}\n`);
     await emit(staging, "status/status-snapshot.json", jsonFile(statusSnapshot));
+    await emit(staging, "status/runtime-status-envelope-v1.json", jsonFile(runtimeStatusEnvelope));
     await emit(staging, "settings.json", jsonFile(piSettings));
     await emit(staging, "keybindings.json", jsonFile(piKeybindings));
     for (const [identity, body] of bodies) {
@@ -373,7 +396,7 @@ interface AgentMetadata { modelClass: AgentModelClass; thinking: "low" | "medium
 interface AgentCatalog { schemaVersion: 1; agents: Record<string, AgentMetadata> }
 export interface GeneratePiAgentsInput { source: string; output: string; check?: boolean }
 const piModels: Record<AgentModelClass, string> = { sol: "openai-codex/gpt-5.6-sol", terra: "openai-codex/gpt-5.6-terra", luna: "openai-codex/gpt-5.6-luna" };
-const piTools: Record<AgentCapability, string[]> = { read: ["read"], search: ["grep", "find", "ls"], shell: ["bash"], write: ["edit", "write"], browser: ["ext:mcp"], context: ["ext:mcp"], web: ["ext:mcp"] };
+const piTools: Record<AgentCapability, string[]> = { read: ["read"], search: ["grep", "find", "ls"], shell: ["bash"], write: ["edit", "write"], browser: [], context: [], web: [] };
 function projectedAgentName(identity: string): string { return identity === "mpx-explorer" ? "Explore" : identity; }
 function adaptAgent(source: string, identity: string, metadata: AgentMetadata): string {
   const normalized = source.replaceAll("\r\n", "\n");

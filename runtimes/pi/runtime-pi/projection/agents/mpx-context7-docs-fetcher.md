@@ -3,7 +3,7 @@ name: mpx-context7-docs-fetcher
 description: "Fetches up-to-date library documentation via Context7 MCP. Use for library API questions, framework best practices, package-specific patterns."
 model: openai-codex/gpt-5.6-luna
 thinking: low
-tools: read,ext:mcp
+tools: read
 output_schema: text
 
 ---

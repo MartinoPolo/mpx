@@ -3,7 +3,7 @@ name: mpx-issue-analyzer
 description: "Analyzes issues and codebase exploration results to create fix plans. Use after gathering issue data and codebase context."
 model: openai-codex/gpt-5.6-sol
 thinking: high
-tools: read,grep,find,ls,bash,ext:mcp
+tools: read,grep,find,ls,bash
 output_schema: plan
 
 ---
