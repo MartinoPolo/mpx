@@ -20,15 +20,16 @@ import {
   type ProcessRequest,
   type ProcessResult,
   type RuntimeAdapter,
+  type RuntimeLaunchBinding,
   type VerificationEvidence,
   sameVerificationEvidence,
 } from "@mpx/executors";
 import type { LaunchDescriptor } from "@mpx/launch";
-import { createRuntimeContextV1, parseRuntimeContextV1, revalidateRuntimeArtifact, type PublishedRuntimeArtifactReference, type RuntimeProjectionLaunchBinding, type RuntimeContextV1 } from "@mpx/runtime-contracts";
+import { createRuntimeCapabilityManifestV1, createRuntimeContextV1, parseRuntimeContextV1, revalidateRuntimeArtifact, validateRuntimeCapabilityBinding, type PublishedRuntimeArtifactReference, type RuntimeCapabilityManifestV1, type RuntimeProjectionLaunchBinding, type RuntimeContextV1, type ToolAuthorityV1 } from "@mpx/runtime-contracts";
 import { createClaudeInvocationPlan, publishClaudeProjection } from "@mpx/runtime-claude";
-import { buildPiProjection, planPiInvocation } from "@mpx/runtime-pi";
+import { buildPiProjection, createPiRuntimeProfileV1, PI_CAPABILITY_IDS, planPiInvocation, type PiRuntimeProfileV1 } from "@mpx/runtime-pi";
 import type { CatalogSkill, ResolvedManifest, RuntimeSkillArtifact } from "@mpx/skills";
-import { parseStatusSnapshotV1, readStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
+import { composeRuntimeStatusEnvelopeV1, parseRuntimeStatusEnvelopeV1, parseStatusSnapshotV1, readStatusSnapshotV1, type RuntimeStatusEnvelopeV1, type StatusSnapshotV1 } from "@mpx/status";
 
 export interface LaunchProjection {
   readonly directory: string;
@@ -48,6 +49,10 @@ export interface LaunchProjectionBuildInput {
   readonly artifactsRoot: string;
   readonly runtimeContext: RuntimeContextV1;
   readonly statusSnapshot: StatusSnapshotV1;
+  readonly runtimeStatusEnvelope: RuntimeStatusEnvelopeV1;
+  readonly runtimeCapabilityManifest: RuntimeCapabilityManifestV1;
+  readonly runtimeLaunchBinding: RuntimeLaunchBinding;
+  readonly piRuntimeProfile?: PiRuntimeProfileV1;
   readonly launchBanner: string;
   readonly artifactRevalidator?: typeof revalidateRuntimeArtifact;
 }
@@ -67,7 +72,7 @@ export interface LaunchStatusSnapshotMaterializer {
 export interface LaunchExecutionContext {
   launchExecutorAdapters?: readonly ExecutorAdapter[];
   launchRuntimeAdapters?: readonly RuntimeAdapter[];
-  launchRoutes?: { materialize(descriptor: LaunchDescriptor): Promise<Readonly<Record<string, string>>> };
+  launchRoutes?: { materialize(descriptor: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> };
   launchAudit?: LaunchAuditStore;
   launchTty?: DirectTty;
   launchExpectedKey?: string;
@@ -75,6 +80,7 @@ export interface LaunchExecutionContext {
   launchProjectionValidator?: (input:{runtime:"claude"|"pi";directory:string;reference:PublishedRuntimeArtifactReference})=>Promise<void>;
   launchProjectionArtifactRevalidator?: typeof revalidateRuntimeArtifact;
   launchExecutableResolver?: (input:{runtime:"claude"|"pi";candidate:string;cwd:string;environment:NodeJS.ProcessEnv})=>Promise<{executable:string;argvPrefix:readonly string[]}>;
+  launchRuntimeWiringFactory?: (input: { descriptor: LaunchDescriptor; artifact: RuntimeSkillArtifact; snapshot: StatusSnapshotV1; cwd: string }) => RuntimeLaunchWiring;
   launchStatusSnapshotMaterializer?: LaunchStatusSnapshotMaterializer;
   launchStatusSnapshotReader?: (file: string, signal?: AbortSignal) => Promise<StatusSnapshotV1>;
   launchStatusRefreshClock?: { schedule(callback: () => Promise<void>, intervalMs: number): () => void };
@@ -269,9 +275,76 @@ async function resolveTrustedRuntimeExecutable(input: { runtime: "claude" | "pi"
   if (input.resolver) return input.resolver({ runtime: input.runtime, candidate, cwd: input.cwd, environment: input.environment });
   return locateTrustedExecutable({ candidates: [candidate], projectRoot: input.cwd, trustedRoots: absoluteRoots(input.environment), nodeExecutable: process.execPath, inspect: inspectExecutable });
 }
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+const CLAUDE_MODEL_TOOLS = Object.freeze(["Agent", "Bash", "Edit", "Glob", "Grep", "Read", "Skill", "Task", "WebFetch", "WebSearch", "Write", "dev_server"]);
+const PI_MODEL_TOOLS = Object.freeze(["Agent", "bash", "dev_server", "edit", "find", "get_subagent_result", "grep", "ls", "mpx_model_load", "mpx_model_search", "read", "steer_subagent", "write"]);
+function authority(name: string, executor: "docker" | "host", routes: readonly string[]): ToolAuthorityV1 {
+  return Object.freeze({ schemaVersion: 1, name, executors: Object.freeze([executor]), routes: Object.freeze([...routes]), network: Object.freeze({ mode: "deny-all" as const, destinations: Object.freeze([]) }), paidCredits: Object.freeze({ allowed: false, maxCredits: 0 }), input: Object.freeze({ maxBytes: 1024 * 1024 }), output: Object.freeze({ maxBytes: 1024 * 1024 }), timeout: Object.freeze({ maxMs: 120_000 }), cache: Object.freeze({ mode: "disabled" as const, maxBytes: 0 }) });
+}
+export interface RuntimeLaunchWiring {
+  readonly capability: RuntimeCapabilityManifestV1;
+  readonly status: RuntimeStatusEnvelopeV1;
+  readonly launchBinding: RuntimeLaunchBinding;
+  readonly piProfile?: PiRuntimeProfileV1;
+}
+export function validateRuntimeLaunchWiring(descriptor: LaunchDescriptor, snapshotInput: StatusSnapshotV1, wiring: RuntimeLaunchWiring): RuntimeLaunchWiring {
+  try {
+    const snapshot = parseStatusSnapshotV1(snapshotInput), status = parseRuntimeStatusEnvelopeV1(wiring.status);
+    validateRuntimeCapabilityBinding(wiring.capability, { manifestKey: wiring.capability.manifestKey, launchKey: descriptor.launchKey, runtime: descriptor.runtime, identity: { ...descriptor.identity, nativeRuntimeRootDigest: descriptor.nativeRuntimeRootDigest }, binding: { ...descriptor.binding, contentScope: descriptor.contentScope.name }, executor: descriptor.executor.name });
+    const expectedPorts = [...new Set(snapshot.services.flatMap(service => service.port === null ? [] : [service.port]))].sort((left, right) => left - right);
+    const expectedWorktree = snapshot.worktree.path ?? snapshot.project.cwd;
+    if (status.binding.launchKey !== descriptor.launchKey || status.binding.runtimeId !== descriptor.runtime || status.binding.repositoryId !== descriptor.binding.repositoryId || status.harness.kind !== descriptor.runtime
+      || wiring.launchBinding.launchKey !== descriptor.launchKey || wiring.launchBinding.runtime !== descriptor.runtime || wiring.launchBinding.executor !== descriptor.executor.name
+      || wiring.launchBinding.identity.name !== descriptor.identity.name || wiring.launchBinding.identity.domain !== descriptor.identity.domain
+      || path.resolve(wiring.launchBinding.worktreeRoot) !== path.resolve(expectedWorktree) || JSON.stringify(wiring.launchBinding.assignedPorts) !== JSON.stringify(expectedPorts)) throw new Error("stale runtime wiring");
+    const required = descriptor.runtime === "pi" ? PI_MODEL_TOOLS : [...CLAUDE_MODEL_TOOLS, ...descriptor.routes.mcp.allow.map(label => `mcp:${label}`)];
+    const admitted = new Set(wiring.capability.tools.map(tool => tool.name));
+    if (required.some(tool => !admitted.has(tool))) throw new Error("missing tool authority");
+    return wiring;
+  } catch {
+    throw new MpxError({ code: "LAUNCH_RESTART_REQUIRED", message: "Runtime capability or status bindings changed before invocation.", remediation: "Resolve a new launch and restart the runtime process." });
+  }
+}
+function runtimeWiring(descriptor: LaunchDescriptor, artifact: RuntimeSkillArtifact, snapshotInput: StatusSnapshotV1, cwd: string): RuntimeLaunchWiring {
+  const snapshot = parseStatusSnapshotV1(snapshotInput);
+  const routes = Object.freeze([`git:${descriptor.routes.gitAuthor}`, ...Object.entries(descriptor.routes.providers).map(([provider, label]) => `provider-${provider}:${label}`), ...(descriptor.routes.ssh ? [`ssh:${descriptor.routes.ssh}`] : []), ...descriptor.routes.mcp.allow.map(label => `mcp:${label}`)].sort());
+  const modelTools = descriptor.runtime === "pi" ? PI_MODEL_TOOLS : Object.freeze([...CLAUDE_MODEL_TOOLS, ...descriptor.routes.mcp.allow.map(label => `mcp:${label}`)]);
+  const worktreeRoot = snapshot.worktree.path ?? cwd;
+  const assignedPorts = Object.freeze([...new Set(snapshot.services.flatMap(service => service.port === null ? [] : [service.port]))].sort((left, right) => left - right));
+  const piProfile = descriptor.runtime === "pi" ? createPiRuntimeProfileV1(PI_CAPABILITY_IDS) : undefined;
+  const capability = createRuntimeCapabilityManifestV1({
+    runtime: descriptor.runtime, launchKey: descriptor.launchKey, identity: { ...descriptor.identity, nativeRuntimeRootDigest: descriptor.nativeRuntimeRootDigest },
+    binding: { ...descriptor.binding, contentScope: descriptor.contentScope.name }, executor: descriptor.executor.name,
+    tools: modelTools.map(name => authority(name, descriptor.executor.name, name.startsWith("mcp:") ? routes.filter(route => route.startsWith("mcp:")) : [])), routes,
+    resources: [...new Set([...Object.keys(descriptor.intendedPolicy.resources), ...descriptor.grants.map(grant => grant.resource)])],
+    mounts: [`worktree:${sha256Canonical((path.resolve(worktreeRoot).replaceAll("\\", "/")) as unknown as JsonValue)}`], destinations: [],
+    skills: artifact.entries.filter(entry => entry.permissions.modelInvocation).map(entry => entry.identity),
+    models: piProfile ? piProfile.models : ["haiku", "opus", "sonnet"], nesting: { depth: 0, maxDepth: 2 },
+  });
+  const observedAt = new Date().toISOString();
+  const freshness = Object.freeze({ state: "current" as const, observedAt, errorCode: null });
+  const unavailable = Object.freeze({ state: "unavailable" as const, observedAt: null, errorCode: null });
+  const binding = Object.freeze({ launchKey: descriptor.launchKey, runtimeId: descriptor.runtime, repositoryId: descriptor.binding.repositoryId });
+  const status = composeRuntimeStatusEnvelopeV1({ generatedAt: observedAt, binding, harness: descriptor.runtime === "claude" ? { kind: "claude", version: null, surface: "statusline" } : { kind: "pi", version: null, surface: "footer" }, contributions: [{ source: "launch", binding, groups: {
+    identity: { freshness, profile: descriptor.identity.name === "personal" || descriptor.identity.name === "work" ? descriptor.identity.name : null, label: descriptor.identity.name === "personal" ? "Personal" : descriptor.identity.name === "work" ? "Work" : null },
+    location: { freshness, label: snapshot.worktree.role ?? "project" },
+    development: { freshness, services: snapshot.services.map(service => ({ id: service.id, state: service.conflict !== "none" ? "conflict" : service.listening ? "listening" : "stopped", port: service.port })) },
+    actions: { freshness: unavailable, items: [] },
+  } }] });
+  const launchBinding = deepFreeze({ launchKey: descriptor.launchKey, runtime: descriptor.runtime, identity: { ...descriptor.identity }, worktreeRoot, assignedPorts: [...assignedPorts], executor: descriptor.executor.name });
+  return validateRuntimeLaunchWiring(descriptor, snapshot, deepFreeze({ capability, status: parseRuntimeStatusEnvelopeV1(status), launchBinding, ...(piProfile ? { piProfile } : {}) }));
+}
+
 async function buildProductionProjection(input:LaunchProjectionBuildInput):Promise<LaunchProjection> {
-  if(input.descriptor.runtime==="pi") return buildPiProjection({manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonicalRoot:input.canonicalRoot,context:input.runtimeContext,expectedLaunch:{launchKey:input.descriptor.launchKey,descriptorDigest:input.runtimeContext.launchDescriptor.digest},currentBinding:input.manifest.binding,artifactsRoot:input.artifactsRoot,statusSnapshot:input.statusSnapshot,launchBanner:input.launchBanner,...(input.artifactRevalidator?{artifactRevalidator:input.artifactRevalidator}:{})});
-  return publishClaudeProjection({manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonical:input.canonicalRoot,agents:input.agentsRoot,artifactsRoot:input.artifactsRoot,statusSnapshot:input.statusSnapshot,launchBanner:input.launchBanner,runtimeContext:input.runtimeContext,...(input.artifactRevalidator?{artifactRevalidator:input.artifactRevalidator}:{})});
+  if(input.descriptor.runtime==="pi") return buildPiProjection({manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonicalRoot:input.canonicalRoot,context:input.runtimeContext,expectedLaunch:{launchKey:input.descriptor.launchKey,descriptorDigest:input.runtimeContext.launchDescriptor.digest},currentBinding:input.manifest.binding,artifactsRoot:input.artifactsRoot,statusSnapshot:input.statusSnapshot,runtimeStatusEnvelope:input.runtimeStatusEnvelope,launchBanner:input.launchBanner,...(input.artifactRevalidator?{artifactRevalidator:input.artifactRevalidator}:{})});
+  return publishClaudeProjection({manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonical:input.canonicalRoot,agents:input.agentsRoot,artifactsRoot:input.artifactsRoot,statusSnapshot:input.statusSnapshot,runtimeStatusEnvelope:input.runtimeStatusEnvelope,launchBanner:input.launchBanner,runtimeContext:input.runtimeContext,...(input.artifactRevalidator?{artifactRevalidator:input.artifactRevalidator}:{})});
 }
 function productionRuntimeAdapters(input:{descriptor:LaunchDescriptor;cwd:string;environment:NodeJS.ProcessEnv;nativeRuntimeRoot:string;stateRoot:string;projectionInput:Omit<LaunchProjectionBuildInput,"statusSnapshot"|"launchBanner">;launchBanner:string;statusSnapshot:(signal?:AbortSignal)=>Promise<StatusSnapshotV1>;bindStatusPath:(value:string|undefined)=>void;statusMaterializer?:LaunchStatusSnapshotMaterializer;trustedExecutable?:TrustedRuntimeExecutable;builder?:LaunchExecutionContext["launchProjectionBuilder"];validator?:LaunchExecutionContext["launchProjectionValidator"]}):RuntimeAdapter[] {
   const projection=async(runtime:"claude"|"pi")=>{
@@ -291,14 +364,14 @@ function productionRuntimeAdapters(input:{descriptor:LaunchDescriptor;cwd:string
     }
     return {built,statusSnapshotPath};
   };
-  if (input.descriptor.runtime === "claude") return [{runtime:"claude",prepare:async({routes})=>{
+  if (input.descriptor.runtime === "claude") return [{runtime:"claude",modelTriggerableTools:CLAUDE_MODEL_TOOLS,prepare:async({routes})=>{
     if (!input.trustedExecutable) throw new ExecutionError("TRUSTED_EXECUTABLE_NOT_FOUND", "No trusted absolute runtime executable or Node entry was found.");
     const projectionResult=await projection("claude"),built=projectionResult.built,pluginDirectory=built.pluginDirectory??built.directory;
     const mcpConfigPaths=input.descriptor.routes.mcp.allow.map(label=>routes[`mcp:${label}`]!);
     const plan=createClaudeInvocationPlan({executable:input.trustedExecutable.executable,pluginDirectory,accountRoot:input.nativeRuntimeRoot,runtimeContext:input.projectionInput.runtimeContext,projectionReference:built.reference,environment:input.environment,...(mcpConfigPaths.length?{mcpConfigPaths}:{}),...(projectionResult.statusSnapshotPath?{statusSnapshotPath:projectionResult.statusSnapshotPath}:{})});
     return {executable:plan.executable,argv:[...input.trustedExecutable.argvPrefix,...plan.args],environment:plan.env};
   }}];
-  return [{runtime:"pi",prepare:async()=>{
+  return [{runtime:"pi",modelTriggerableTools:PI_MODEL_TOOLS,prepare:async()=>{
     if (!input.trustedExecutable) throw new ExecutionError("TRUSTED_EXECUTABLE_NOT_FOUND", "No trusted absolute runtime executable or Node entry was found.");
     const projectionResult=await projection("pi"),built=projectionResult.built;
     if(!built.extension||!built.runtimeContextFile) throw new MpxError({code:"RUNTIME_PROJECTION_INVALID",message:"The Pi projection is incomplete."});
@@ -334,10 +407,15 @@ export async function executeResolvedLaunch(input: {
   if(!sameVerificationEvidence(currentEvidence,input.descriptor.executorVerification)) throw new ExecutionError("LAUNCH_RESTART_REQUIRED","Executor verification evidence changed before invocation.",{restartRequired:true});
   if (input.context.launchExpectedKey !== undefined && input.context.launchExpectedKey !== input.descriptor.launchKey) throw new ExecutionError("LAUNCH_RESTART_REQUIRED", "Launch rights or binding changed; create a new launch and restart.", { restartRequired: true });
   if (!input.context.launchRoutes) throw new ExecutionError("PRIVATE_ROUTE_MATERIALIZER_REQUIRED", "Trusted private-route materialization is required before launch.");
+  if (currentEvidence.status === "unavailable") throw new ExecutionError("EXECUTOR_UNAVAILABLE", `Executor '${adapter.name}' is unavailable.`, { executor: adapter.name });
+  if (currentEvidence.status !== "verified") throw new ExecutionError("EXECUTOR_GATE_UNVERIFIED", `Executor '${adapter.name}' has not been verified.`, { executor: adapter.name });
   const trustedExecutable = input.context.launchRuntimeAdapters || currentEvidence.status !== "verified"
     ? undefined
     : await resolveTrustedRuntimeExecutable({ runtime: input.descriptor.runtime, cwd: input.cwd, environment: input.environment, resolver: input.context.launchExecutableResolver });
-  const projectionInput={descriptor:input.descriptor,manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonicalRoot:input.canonicalRoot,agentsRoot:input.agentsRoot,artifactsRoot:input.artifactsRoot,runtimeContext,...(input.context.launchProjectionArtifactRevalidator?{artifactRevalidator:input.context.launchProjectionArtifactRevalidator}:{})};
+  const materializedRoutes = await input.context.launchRoutes.materialize(input.descriptor, input.cwd);
+  const initialSnapshot = parseStatusSnapshotV1(await input.statusSnapshot());
+  const wiring = validateRuntimeLaunchWiring(input.descriptor, initialSnapshot, input.context.launchRuntimeWiringFactory?.({ descriptor: input.descriptor, artifact: input.artifact, snapshot: initialSnapshot, cwd: input.cwd }) ?? runtimeWiring(input.descriptor, input.artifact, initialSnapshot, input.cwd));
+  const projectionInput={descriptor:input.descriptor,manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonicalRoot:input.canonicalRoot,agentsRoot:input.agentsRoot,artifactsRoot:input.artifactsRoot,runtimeContext,runtimeStatusEnvelope:wiring.status,runtimeCapabilityManifest:wiring.capability,runtimeLaunchBinding:wiring.launchBinding,...(wiring.piProfile?{piRuntimeProfile:wiring.piProfile}:{}),...(input.context.launchProjectionArtifactRevalidator?{artifactRevalidator:input.context.launchProjectionArtifactRevalidator}:{})};
   let boundStatusPath:string|undefined;
   const processAdapter:ExecutorAdapter=input.context.launchRuntimeAdapters ? adapter : {name:adapter.name,verify:()=>adapter.verify(),execute:async request=>{
     let stopped=false, containmentExpired=false, pending:Promise<void>|undefined;
@@ -383,9 +461,9 @@ export async function executeResolvedLaunch(input: {
       }
     }
   }};
-  const selected = registries(input.context,input.descriptor,productionRuntimeAdapters({descriptor:input.descriptor,cwd:input.cwd,environment:input.environment,nativeRuntimeRoot:input.nativeRuntimeRoot,stateRoot:input.stateRoot,projectionInput,launchBanner:compactLaunchBanner(input.descriptor),statusSnapshot:input.statusSnapshot,bindStatusPath:value=>{boundStatusPath=value;},...(input.context.launchStatusSnapshotMaterializer?{statusMaterializer:input.context.launchStatusSnapshotMaterializer}:{}),...(trustedExecutable ? { trustedExecutable } : {}),...(input.context.launchProjectionBuilder?{builder:input.context.launchProjectionBuilder}:{}),...(input.context.launchProjectionValidator?{validator:input.context.launchProjectionValidator}:{})}),processAdapter);
+  const selected = registries(input.context,input.descriptor,productionRuntimeAdapters({descriptor:input.descriptor,cwd:input.cwd,environment:input.environment,nativeRuntimeRoot:input.nativeRuntimeRoot,stateRoot:input.stateRoot,projectionInput,launchBanner:compactLaunchBanner(input.descriptor),statusSnapshot:async()=>initialSnapshot,bindStatusPath:value=>{boundStatusPath=value;},...(input.context.launchStatusSnapshotMaterializer?{statusMaterializer:input.context.launchStatusSnapshotMaterializer}:{}),...(trustedExecutable ? { trustedExecutable } : {}),...(input.context.launchProjectionBuilder?{builder:input.context.launchProjectionBuilder}:{}),...(input.context.launchProjectionValidator?{validator:input.context.launchProjectionValidator}:{})}),processAdapter);
   const approvals = new HostApprovalStore();
-  const service = new ExecutionService({ ...selected, routes: input.context.launchRoutes, ...(input.context.launchAudit ? { audit: input.context.launchAudit } : {}), approvals });
+  const service = new ExecutionService({ ...selected, routes: { materialize: async () => materializedRoutes }, ...(input.context.launchAudit ? { audit: input.context.launchAudit } : {}), approvals });
   let hostApproval;
   const tty = input.tty;
   const environment=Object.fromEntries(Object.entries(input.environment).filter((entry):entry is [string,string]=>entry[1]!==undefined));
@@ -394,7 +472,7 @@ export async function executeResolvedLaunch(input: {
     const nonce = sha256Canonical({ launchKey: input.descriptor.launchKey, runtimeContext } as unknown as JsonValue);
     hostApproval = await approvals.approve(service.hostApprovalRequest({ descriptor: input.descriptor, cwd: input.cwd, environment, ...(input.context.launchExpectedKey ? { expectedLaunchKey: input.context.launchExpectedKey } : {}) }, nonce), tty);
   }
-  return service.execute({ descriptor: input.descriptor, artifact: input.artifact.reference, cwd: input.cwd, environment: { ...environment, MPX_RUNTIME_CONTEXT: JSON.stringify(runtimeContext) }, privateLaunch: { launchKey: input.descriptor.launchKey, runtime: input.descriptor.runtime, identity: input.descriptor.identity, nativeRuntimeRoot: input.nativeRuntimeRoot }, ...(input.context.launchExpectedKey ? { expectedLaunchKey: input.context.launchExpectedKey } : {}), ...(hostApproval ? { hostApproval, tty } : {}) });
+  return service.execute({ descriptor: input.descriptor, artifact: input.artifact.reference, capability: wiring.capability, runtimeStatusEnvelope: wiring.status, runtimeLaunchBinding: wiring.launchBinding, cwd: input.cwd, environment: { ...environment, MPX_RUNTIME_CONTEXT: JSON.stringify(runtimeContext) }, privateLaunch: { launchKey: input.descriptor.launchKey, runtime: input.descriptor.runtime, identity: input.descriptor.identity, nativeRuntimeRoot: input.nativeRuntimeRoot }, ...(input.context.launchExpectedKey ? { expectedLaunchKey: input.context.launchExpectedKey } : {}), ...(hostApproval ? { hostApproval, tty } : {}) });
 }
 
 export function executionMpxError(error: ExecutionError): MpxError {

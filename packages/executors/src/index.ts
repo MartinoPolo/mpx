@@ -34,8 +34,20 @@ export class ExecutorRegistry {
   register(adapter: ExecutorAdapter): void { this.#adapters.set(adapter.name, adapter); }
   get(name: string): ExecutorAdapter { return this.#adapters.get(name) ?? fail("EXECUTOR_UNAVAILABLE", `Executor '${name}' is unavailable.`, { executor: name }); }
 }
-export interface RuntimePreparation { readonly executable: string; readonly argv: readonly string[]; readonly environment: Readonly<Record<string, string>> }
-export interface RuntimeAdapter { readonly runtime: "claude" | "pi"; prepare(input: { descriptor: LaunchDescriptor; routes: Readonly<Record<string, string>> }): Promise<RuntimePreparation> }
+export interface RuntimeLaunchBinding {
+  readonly launchKey: string;
+  readonly runtime: "claude" | "pi";
+  readonly identity: LaunchDescriptor["identity"];
+  readonly worktreeRoot: string;
+  readonly assignedPorts: readonly number[];
+  readonly executor: "docker" | "host";
+}
+export interface RuntimePreparation { readonly executable: string; readonly argv: readonly string[]; readonly environment: Readonly<Record<string, string>>; readonly shutdown?: () => Promise<void> }
+export interface RuntimeAdapter {
+  readonly runtime: "claude" | "pi";
+  readonly modelTriggerableTools?: readonly string[];
+  prepare(input: { descriptor: LaunchDescriptor; routes: Readonly<Record<string, string>>; capability?: RuntimeCapabilityManifestV1; statusEnvelope?: unknown; launchBinding?: RuntimeLaunchBinding }): Promise<RuntimePreparation>;
+}
 export class RuntimeAdapterRegistry {
   readonly #adapters = new Map<string, RuntimeAdapter>();
   register(adapter: RuntimeAdapter): void { this.#adapters.set(adapter.runtime, adapter); }
@@ -77,7 +89,7 @@ export interface PrivateRuntimeLaunch {
   readonly identity: LaunchDescriptor["identity"];
   readonly nativeRuntimeRoot: string;
 }
-export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly capability?: RuntimeCapabilityManifestV1; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
+export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly capability?: RuntimeCapabilityManifestV1; readonly runtimeStatusEnvelope?: unknown; readonly runtimeLaunchBinding?: RuntimeLaunchBinding; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
 export interface RouteMaterializer { materialize(descriptor: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> }
 export interface LaunchAuditStartRecord {
   readonly schemaVersion: 1; readonly phase: "start"; readonly launchKey: string; readonly runtime: "claude" | "pi"; readonly executor: "docker" | "host";
@@ -167,6 +179,11 @@ export class ExecutionService {
       this.#approvals.consume(this.hostApprovalRequest(input, nonce), input.hostApproval);
     }
     const runtime = this.dependencies.runtimes.get(descriptor.runtime);
+    if (runtime.modelTriggerableTools?.length) {
+      if (!input.capability) fail("RUNTIME_CAPABILITY_REQUIRED", "Model-triggerable runtime tools require immutable launch capability authority.");
+      const admitted = new Set(input.capability.tools.map(tool => tool.name));
+      if (runtime.modelTriggerableTools.some(tool => !admitted.has(tool))) fail("RUNTIME_CAPABILITY_INVALID", "Every model-triggerable runtime tool requires explicit capability admission.");
+    }
     const routes = validateRuntimeRoutes(descriptor, input.cwd, await this.dependencies.routes.materialize(descriptor, input.cwd));
     const audit = this.dependencies.audit;
     let attemptId: string | undefined;
@@ -175,12 +192,15 @@ export class ExecutionService {
       catch { fail("AUDIT_START_WRITE_FAILED", "The immutable launch attempt audit could not be persisted."); }
     }
     try {
-      const prepared = await runtime.prepare({ descriptor, routes });
-      if ((!path.win32.isAbsolute(prepared.executable) && !path.posix.isAbsolute(prepared.executable)) || prepared.argv.length > 256 || prepared.argv.some((argument) => argument.length > 8192)) fail("PROCESS_REQUEST_INVALID", "Runtime adapter produced an untrusted executable or unbounded argv.");
-      const request = { executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), maxOutputBytes: 65_536 };
-      const executionEvidence = await executor.verify();
-      if (!sameVerificationEvidence(executionEvidence, descriptor.executorVerification)) fail("LAUNCH_RESTART_REQUIRED", "Executor verification evidence changed before invocation.", { restartRequired: true });
-      const result = await executor.execute(request);
+      const prepared = await runtime.prepare({ descriptor, routes, ...(input.capability ? { capability: input.capability } : {}), ...(input.runtimeStatusEnvelope ? { statusEnvelope: input.runtimeStatusEnvelope } : {}), ...(input.runtimeLaunchBinding ? { launchBinding: input.runtimeLaunchBinding } : {}) });
+      let result: ProcessResult;
+      try {
+        if ((!path.win32.isAbsolute(prepared.executable) && !path.posix.isAbsolute(prepared.executable)) || prepared.argv.length > 256 || prepared.argv.some((argument) => argument.length > 8192)) fail("PROCESS_REQUEST_INVALID", "Runtime adapter produced an untrusted executable or unbounded argv.");
+        const request = { executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), maxOutputBytes: 65_536 };
+        const executionEvidence = await executor.verify();
+        if (!sameVerificationEvidence(executionEvidence, descriptor.executorVerification)) fail("LAUNCH_RESTART_REQUIRED", "Executor verification evidence changed before invocation.", { restartRequired: true });
+        result = await executor.execute(request);
+      } finally { await prepared.shutdown?.(); }
       if (audit && attemptId) {
         try { await audit.terminal(attemptId, launchAuditTerminal(descriptor, { result })); }
         catch { fail("AUDIT_TERMINAL_WRITE_FAILED", "The terminal launch audit could not be persisted unambiguously; the process was not retried."); }

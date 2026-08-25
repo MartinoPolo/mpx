@@ -61,7 +61,7 @@ function textAt(value: unknown, path: string, max = 128): string {
   return value;
 }
 function nullableTextAt(value: unknown, path: string, max = 128): string | null { return value === null ? null : textAt(value, path, max); }
-function idAt(value: unknown, path: string): string { const id = textAt(value, path, 128); if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(id)) fail(path, "a bounded identifier"); return id; }
+function idAt(value: unknown, path: string): string { const id = textAt(value, path, 128); if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u.test(id)) fail(path, "a bounded identifier"); return id; }
 function nullableIdAt(value: unknown, path: string): string | null { return value === null ? null : idAt(value, path); }
 function enumAt<T extends string>(value: unknown, path: string, allowed: readonly T[]): T { if (typeof value !== "string" || !allowed.includes(value as T)) fail(path, `one of ${allowed.join(", ")}`); return value as T; }
 function boolNullAt(value: unknown, path: string): boolean | null { if (value !== null && typeof value !== "boolean") fail(path, "a boolean or null"); return value as boolean | null; }

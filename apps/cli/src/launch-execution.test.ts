@@ -45,7 +45,7 @@ function materializeRoutes(descriptor: { routes: { gitAuthor: string; providers:
 function verifiedExecution() {
   const execute = vi.fn(async (_request:Parameters<ExecutorAdapter["execute"]>[0]) => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }));
   const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute };
-  const prepare = vi.fn(async (_input: Parameters<RuntimeAdapter["prepare"]>[0]) => ({ executable: "C:/trusted/pi.exe", argv: [], environment: {} }));
+  const prepare = vi.fn<RuntimeAdapter["prepare"]>(async (_input) => ({ executable: "C:/trusted/pi.exe", argv: [], environment: {} }));
   const pi: RuntimeAdapter = { runtime: "pi", prepare };
   const claude: RuntimeAdapter = { runtime: "claude", prepare };
   const context:LaunchExecutionContext={ launchExecutorAdapters: [executor], launchRuntimeAdapters: [pi, claude], launchRoutes: { materialize: async (descriptor) => materializeRoutes(descriptor) } };
@@ -385,6 +385,41 @@ describe("Phase F launch execution", () => {
       if (extra) expect(JSON.parse(io.out[0]!)).toMatchObject({ error: { code: "LAUNCH_RESTART_REQUIRED" } });
       expect(fake.execute).toHaveBeenCalledTimes(extra ? 0 : 1);
     }
+  });
+
+  it.each([
+    ["claude", "personal"], ["claude", "work"], ["pi", "personal"], ["pi", "work"],
+  ] as const)("binds %s/%s runtime authority, status, worktree, ports, and lifecycle to launch execution", async (runtime, identity) => {
+    const fixture = await launchFixture(), fake = verifiedExecution(), io = captureIo();
+    const snapshot = { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "wt-bound", path: fixture.cwd, role: "linked" as const, branch: "feat/runtime" }, portResolution: "valid" as const, services: [{ id: "web", mode: "managed" as const, scope: "checkout" as const, protocol: "http" as const, port: 4310, listening: true, conflict: "none" as const, pid: 7 }], diagnostics: [] };
+    const shutdown = vi.fn(async () => undefined);
+    fake.prepare.mockResolvedValueOnce({ executable: `C:/trusted/${runtime}.exe`, argv: [], environment: {}, shutdown });
+    expect(await run(["--cwd", fixture.cwd, "launch", runtime, "--identity", identity], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...fake.context, statusProvider: { snapshot: async () => snapshot } })).toBe(0);
+    const prepared = fake.prepare.mock.calls[0]![0];
+    expect(prepared.capability).toMatchObject({ runtime, launchKey: prepared.descriptor.launchKey, identity: { name: identity }, executor: "docker", binding: { repositoryId: prepared.descriptor.binding.repositoryId } });
+    expect(prepared.capability!.tools.length).toBeGreaterThan(0);
+    expect(prepared.capability!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(runtime === "pi" ? ["Agent", "dev_server", "mpx_model_search", "mpx_model_load"] : ["Agent", "Bash", "dev_server"]));
+    expect(prepared.statusEnvelope).toMatchObject({ binding: { launchKey: prepared.descriptor.launchKey, runtimeId: runtime, repositoryId: prepared.descriptor.binding.repositoryId }, identity: { profile: identity }, development: { services: [{ id: "web", port: 4310 }] } });
+    expect(prepared.launchBinding).toEqual({ launchKey: prepared.descriptor.launchKey, runtime, identity: prepared.descriptor.identity, worktreeRoot: fixture.cwd, assignedPorts: [4310], executor: "docker" });
+    expect(Object.isFrozen(prepared.capability)).toBe(true);
+    expect(Object.isFrozen(prepared.statusEnvelope)).toBe(true);
+    expect(Object.isFrozen(prepared.launchBinding)).toBe(true);
+    expect(shutdown).toHaveBeenCalledOnce();
+  });
+
+  it.each(["capability", "status"] as const)("rejects a stale or tampered runtime %s before adapter or process side effects", async tampered => {
+    const fixture = await launchFixture(), first = verifiedExecution(), firstIo = captureIo();
+    const snapshot = { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "wt-bound", path: fixture.cwd, role: "linked" as const, branch: "feat/runtime" }, portResolution: "valid" as const, services: [{ id: "web", mode: "managed" as const, scope: "checkout" as const, protocol: "http" as const, port: 4310, listening: true, conflict: "none" as const, pid: 7 }], diagnostics: [] };
+    expect(await run(["--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], firstIo, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...first.context, statusProvider: { snapshot: async () => snapshot } })).toBe(0);
+    const prepared = first.prepare.mock.calls[0]![0], wiring = { capability: prepared.capability!, status: prepared.statusEnvelope!, launchBinding: prepared.launchBinding! };
+    const stale = tampered === "capability"
+      ? { ...wiring, capability: { ...wiring.capability, tools: wiring.capability.tools.slice(1) } }
+      : { ...wiring, status: { ...(wiring.status as Record<string, unknown>), binding: { launchKey: prepared.descriptor.launchKey, runtimeId: "pi", repositoryId: "other/repository" } } };
+    const second = verifiedExecution(), io = captureIo();
+    expect(await run(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...second.context, statusProvider: { snapshot: async () => snapshot }, launchRuntimeWiringFactory: () => stale as never })).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ error: { code: "LAUNCH_RESTART_REQUIRED" } });
+    expect(second.prepare).not.toHaveBeenCalled();
+    expect(second.execute).not.toHaveBeenCalled();
   });
 
   it.each([
