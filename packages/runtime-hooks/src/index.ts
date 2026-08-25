@@ -490,3 +490,75 @@ export function readCompactInstructions(sourcePaths: readonly string[], maxBytes
   for (const source of sourcePaths) { let fd: number | undefined; try { fd = openSync(source, "r"); const stat = fstatSync(fd); if (!stat.isFile() || stat.size > maxBytes) continue; const text = readFileSync(fd, "utf8").trim(); if (text) return text; } catch { /* compaction must fail open */ } finally { if (fd !== undefined) closeSync(fd); } }
   return "";
 }
+
+export interface ClaudeHookInput {
+  readonly hook_event_name: "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PreCompact" | "Notification" | "Stop";
+  readonly tool_name?: string;
+  readonly tool_input?: Readonly<Record<string, unknown>>;
+  readonly tool_response?: Readonly<Record<string, unknown>>;
+  readonly notification_type?: string;
+  readonly message?: string;
+}
+export interface ClaudeHookAdapterContext {
+  readonly environment?: ProjectEnvironment;
+  readonly machineContext?: string;
+  readonly sessionContext?: string;
+  readonly compactInstructions?: string;
+  readonly configs?: readonly string[];
+  readonly staged?: readonly { readonly file: string; readonly diff: string }[];
+  readonly scripts?: Readonly<Record<string, string>>;
+  readonly preCommit?: { readonly check: string; readonly exitCode: number; readonly output?: string };
+  readonly fallow?: FallowGateInput;
+  readonly pullRequest?: "exists" | "missing" | "unknown";
+}
+export interface ClaudeHookAdapterResult {
+  readonly decision: "allow" | "deny";
+  readonly code?: string;
+  readonly message?: string;
+  readonly additionalContext?: string;
+  readonly notification?: string;
+  readonly quality?: readonly QualityInvocation[];
+  readonly evaluated: readonly string[];
+}
+function commandFrom(input: ClaudeHookInput): string { const value = input.tool_input?.command; return typeof value === "string" ? value : ""; }
+function contextResult(evaluated: string[], lines: readonly (string | undefined | null)[]): ClaudeHookAdapterResult {
+  const additionalContext = lines.filter((line): line is string => Boolean(line?.trim())).join("\n");
+  return { decision: "allow", ...(additionalContext ? { additionalContext } : {}), evaluated };
+}
+/**
+ * Pure Claude event adapter. The runtime shell gathers bounded observations and
+ * executes returned argv; policy semantics and ordering stay provider-neutral.
+ */
+export function adaptClaudeHookEvent(input: ClaudeHookInput, context: ClaudeHookAdapterContext = {}): ClaudeHookAdapterResult {
+  const environment = context.environment ?? { packageManager: null, runner: ["npx"], toolchain: "classic", framework: null, python: false };
+  if (input.hook_event_name === "SessionStart") return contextResult(["machine-context", "session-context", "project-context"], [context.machineContext, context.sessionContext, buildCompactContext(environment).join("\n")]);
+  if (input.hook_event_name === "PreCompact") return contextResult(["compaction-injection"], [context.compactInstructions, buildCompactContext(environment).join("\n")]);
+  if (input.hook_event_name === "Notification" || input.hook_event_name === "Stop") return { decision: "allow", notification: (input.message?.trim() || "Claude requires attention").slice(0, 1024), evaluated: ["notification"] };
+  if (input.hook_event_name === "PostToolUse" && ["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(input.tool_name ?? "")) {
+    const candidate = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
+    if (typeof candidate !== "string") return { decision: "allow", evaluated: ["post-write-quality"] };
+    try { return { decision: "allow", quality: planFileQuality({ relativeFile: candidate, toolchain: environment.toolchain, runner: environment.runner as readonly [string, ...string[]], configs: context.configs ?? [] }), evaluated: ["post-write-quality"] }; }
+    catch (error) { return { decision: "deny", code: error instanceof RuntimeHookError ? error.code : "QUALITY_PLAN_FAILED", message: error instanceof Error ? error.message : String(error), evaluated: ["post-write-quality"] }; }
+  }
+  if ((input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostToolUseFailure") && input.tool_name === "Bash") {
+    const command = commandFrom(input), response = input.tool_response ?? {}, exitCode = typeof response.exit_code === "number" ? response.exit_code : input.hook_event_name === "PostToolUse" ? 0 : 1;
+    const assumption: PostCommandAssumption | undefined = /\bgit\s+push\b/u.test(command) ? { operation: "git-push", exitCode, pullRequest: context.pullRequest ?? "unknown" } : /\b(?:npm|pnpm|yarn|bun)\s+(?:install|add)\b/u.test(command) ? { operation: "package-install", exitCode, ...(typeof response.stderr === "string" ? { stderr: response.stderr } : {}) } : undefined;
+    return contextResult(["post-command-context"], [assumption ? extractPostCommandContext(assumption) : null]);
+  }
+  if (input.hook_event_name !== "PreToolUse" || input.tool_name !== "Bash") return { decision: "allow", evaluated: [] };
+  const command = commandFrom(input), evaluated: string[] = [];
+  evaluated.push("package-manager"); const packageDecision = evaluatePackagePolicy(command, environment.packageManager);
+  if (packageDecision.action === "block") return { decision: "deny", ...(packageDecision.code ? { code: packageDecision.code } : {}), ...(packageDecision.message ? { message: packageDecision.message } : {}), evaluated };
+  evaluated.push("pre-commit");
+  let preCommit: PreCommitDecision;
+  try { preCommit = evaluatePreCommit({ command, packageManager: environment.packageManager, toolchain: environment.toolchain, framework: environment.framework, scripts: context.scripts ?? {}, staged: context.staged ?? [] }); }
+  catch (error) { return { decision: "deny", code: error instanceof RuntimeHookError ? error.code : "PRE_COMMIT_FAILED", message: error instanceof Error ? error.message : String(error), evaluated }; }
+  if (preCommit.action === "block") return { decision: "deny", code: preCommit.code, message: preCommit.message, evaluated };
+  if (context.preCommit?.exitCode) return { decision: "deny", code: "PRE_COMMIT_CHECK_FAILED", message: `${context.preCommit.check} failed before commit.${context.preCommit.output ? `\n${context.preCommit.output.slice(-8192)}` : ""}`, evaluated };
+  evaluated.push("dangerous-command"); const danger = classifyDangerousCommand(command);
+  if (danger.action === "block") return { decision: "deny", ...(danger.code ? { code: danger.code } : {}), ...(danger.message ? { message: danger.message } : {}), evaluated };
+  evaluated.push("fallow"); const fallow = evaluateFallowGate(context.fallow ?? { command, minimumVersion: "2.46.0" });
+  if (fallow.action === "block") return { decision: "deny", ...(fallow.code ? { code: fallow.code } : {}), ...(fallow.message ? { message: fallow.message } : {}), evaluated };
+  const warnings = [...packageDecision.warnings, ...preCommit.warnings, fallow.warning].filter((item): item is string => Boolean(item));
+  return { decision: "allow", ...(warnings.length ? { additionalContext: warnings.join("\n") } : {}), evaluated };
+}

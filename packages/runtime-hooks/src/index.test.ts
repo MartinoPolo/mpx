@@ -1,6 +1,7 @@
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   buildCompactContext,
@@ -23,6 +24,7 @@ import {
   scanAddedSecrets,
   selectPreCommitCheck,
   validateCommitFormat,
+  adaptClaudeHookEvent,
 } from "./index.js";
 
 function project(files: Record<string, string> = {}): string {
@@ -267,7 +269,7 @@ describe("notification planning", () => {
 
 describe("CODEX mirror disposition", () => {
   it("inventories only the reviewed non-private hook without private contents or an absolute home path", () => {
-    const inventory = readFileSync(path.resolve(process.cwd(), "../../docs/inventory/codex-mirror-disposition.json"), "utf8");
+    const inventory = readFileSync(fileURLToPath(new URL("../../../docs/inventory/codex-mirror-disposition.json", import.meta.url)), "utf8");
     expect(inventory).not.toContain("C:/Users/");
     expect(inventory).not.toMatch(/auth\.json|sessions|credentials|history|database|cache/i);
     expect(JSON.parse(inventory)).toMatchObject({ entries: [{ source: "~/.codex/hooks/compact-context.js", disposition: "canonicalized", destination: "@mpx/runtime-hooks" }] });
@@ -317,5 +319,27 @@ describe("compact instructions and context", () => {
     const env = detectProjectEnvironment(path.join(root, "packages/app"));
     expect(env).toMatchObject({ packageManager: "pnpm", toolchain: "biome", framework: "svelte", python: true });
     expect(buildCompactContext(env).join("\n")).toContain("Use 'pnpm' for all package commands.");
+  });
+});
+
+
+describe("Claude hook adapter", () => {
+  it("runs blocking Bash policies in safety order and stops at the first denial", () => {
+    const result = adaptClaudeHookEvent({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm install && git commit -m \"WIP\"" } }, {
+      environment: { packageManager: "pnpm", runner: ["pnpm", "exec"], toolchain: "classic", framework: null, python: false },
+      staged: [{ file: "src/config.ts", diff: "+api_key='1234567890'" }],
+      preCommit: { check: "typecheck", exitCode: 1 },
+      fallow: { command: "git commit", minimumVersion: "2.46.0" },
+    });
+    expect(result).toMatchObject({ decision: "deny", code: "WRONG_PACKAGE_MANAGER", evaluated: ["package-manager"] });
+  });
+
+  it("maps session, write, command, compact, and notification policies to native Claude events", () => {
+    const context = { environment: { packageManager: "pnpm" as const, runner: ["pnpm", "exec"] as const, toolchain: "biome" as const, framework: null, python: false }, machineContext: "Machine: work", sessionContext: "Session: launch", compactInstructions: "Keep binding.", configs: ["biome.json"] };
+    expect(adaptClaudeHookEvent({ hook_event_name: "SessionStart" }, context)).toMatchObject({ additionalContext: expect.stringContaining("Machine: work"), evaluated: ["machine-context", "session-context", "project-context"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: "src/a.ts" } }, context)).toMatchObject({ quality: [{ executable: "pnpm", args: ["exec", "biome", "format", "--write", "src/a.ts"], reportFailure: false }, { executable: "pnpm", args: ["exec", "biome", "lint", "--fix", "src/a.ts"], reportFailure: true }], evaluated: ["post-write-quality"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "pnpm install" }, tool_response: { exit_code: 0, stderr: "3 vulnerabilities" } }, context)).toMatchObject({ additionalContext: expect.stringContaining("vulnerabilities"), evaluated: ["post-command-context"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "PreCompact" }, context)).toMatchObject({ additionalContext: expect.stringContaining("Keep binding."), evaluated: ["compaction-injection"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "Notification", notification_type: "permission_prompt", message: "Approval needed" }, context)).toMatchObject({ notification: "Approval needed", evaluated: ["notification"] });
   });
 });

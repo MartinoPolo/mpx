@@ -383,6 +383,9 @@ importers:
 
   runtimes/claude/runtime-claude:
     dependencies:
+      '@mpx/dev-services':
+        specifier: workspace:*
+        version: link:../../../packages/dev-services
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../../../packages/runtime-contracts

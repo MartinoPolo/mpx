@@ -6,8 +6,8 @@ export type RuntimeStatusHarnessV1 =
   | { kind: "pi"; version: string | null; surface: "footer" };
 interface Group { freshness: RuntimeStatusFreshnessV1 }
 export interface RuntimeIdentityStatusV1 extends Group { profile: "personal" | "work" | null; label: string | null }
-export interface RuntimeSessionStatusV1 extends Group { elapsedMs: number | null; turns: number | null }
-export interface RuntimeModelStatusV1 extends Group { modelId: string | null; label: string | null; contextUsedTokens: number | null; contextLimitTokens: number | null }
+export interface RuntimeSessionStatusV1 extends Group { elapsedMs: number | null; turns: number | null; title?: string | null }
+export interface RuntimeModelStatusV1 extends Group { modelId: string | null; label: string | null; contextUsedTokens: number | null; contextLimitTokens: number | null; effort?: "low" | "medium" | "high" | "max" | null }
 export interface RuntimeLocationStatusV1 extends Group { label: string | null }
 export interface RuntimeRepositoryStatusV1 extends Group { name: string | null; branch: string | null; dirty: boolean | null; ahead: number | null; behind: number | null }
 export interface RuntimeUsageStatusV1 extends Group { inputTokens: number | null; outputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; totalTokens: number | null }
@@ -17,7 +17,7 @@ export interface RuntimeCompactionStatusV1 extends Group { count: number | null;
 export interface RuntimeSubagentStatusV1 extends Group { active: number | null; completed: number | null; failed: number | null }
 export interface RuntimeDevelopmentServiceV1 { id: string; state: "listening" | "stopped" | "conflict" | "unknown"; port: number | null }
 export interface RuntimeDevelopmentStatusV1 extends Group { services: RuntimeDevelopmentServiceV1[] }
-export type RuntimeStatusActionIdV1 = "refresh" | "show-usage" | "open-repository";
+export type RuntimeStatusActionIdV1 = "refresh" | "show-usage" | "open-repository" | "show-tasks" | "open-review" | "show-ci";
 export interface RuntimeStatusActionV1 { id: RuntimeStatusActionIdV1; enabled: boolean; narrowLabel: string; wideLabel: string }
 export interface RuntimeActionsStatusV1 extends Group { items: RuntimeStatusActionV1[] }
 
@@ -45,13 +45,14 @@ export class RuntimeStatusEnvelopeValidationError extends Error {
   constructor(message: string) { super(`Invalid runtime status envelope: ${message}.`); this.name = "RuntimeStatusEnvelopeValidationError"; }
 }
 function fail(path: string, expected: string): never { throw new RuntimeStatusEnvelopeValidationError(`${path} must be ${expected}`); }
-function objectAt(value: unknown, path: string, keys: readonly string[]): Record<string, unknown> {
+function objectAtWithOptional(value: unknown, path: string, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail(path, "an object");
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, unknown>, keys = [...required, ...optional];
   for (const key of Object.keys(record)) if (!keys.includes(key)) fail(`${path}.${key}`, "a recognized privacy-safe field");
-  for (const key of keys) if (!Object.hasOwn(record, key)) fail(`${path}.${key}`, "present");
+  for (const key of required) if (!Object.hasOwn(record, key)) fail(`${path}.${key}`, "present");
   return record;
 }
+function objectAt(value: unknown, path: string, keys: readonly string[]): Record<string, unknown> { return objectAtWithOptional(value, path, keys); }
 const CONTROL = /[\0-\x1f\x7f-\x9f]/u;
 const PRIVATE_VALUE = /(?:[A-Za-z]:[\\/]|(?:^|\s)\/(?:Users|home|root)\/|\bBearer\s+\S{8}|\b(?:sk|ghp|github_pat)-?[A-Za-z0-9_]{8,}|-----BEGIN [A-Z ]+PRIVATE KEY-----)/iu;
 function textAt(value: unknown, path: string, max = 128): string {
@@ -96,8 +97,8 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   const root = objectAt(value, "runtime status envelope", keys);
   if (root.schemaVersion !== 1) fail("schemaVersion", "the supported version 1");
   const [identity, identityFreshness] = baseGroup(root.identity, "identity", ["profile", "label"]);
-  const [session, sessionFreshness] = baseGroup(root.session, "session", ["elapsedMs", "turns"]);
-  const [model, modelFreshness] = baseGroup(root.model, "model", ["modelId", "label", "contextUsedTokens", "contextLimitTokens"]);
+  const session = objectAtWithOptional(root.session, "session", ["freshness", "elapsedMs", "turns"], ["title"]), sessionFreshness = freshnessAt(session.freshness, "session.freshness");
+  const model = objectAtWithOptional(root.model, "model", ["freshness", "modelId", "label", "contextUsedTokens", "contextLimitTokens"], ["effort"]), modelFreshness = freshnessAt(model.freshness, "model.freshness");
   const [location, locationFreshness] = baseGroup(root.location, "location", ["label"]);
   const [repository, repositoryFreshness] = baseGroup(root.repository, "repository", ["name", "branch", "dirty", "ahead", "behind"]);
   const [usage, usageFreshness] = baseGroup(root.usage, "usage", ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens"]);
@@ -111,7 +112,7 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   const services = development.services.map((item, index): RuntimeDevelopmentServiceV1 => { const p = `development.services[${index}]`; const r = objectAt(item, p, ["id", "state", "port"]); const port = integerNullAt(r.port, `${p}.port`, 65535); if (port === 0) fail(`${p}.port`, "null or an integer from 1 through 65535"); return { id: idAt(r.id, `${p}.id`), state: enumAt(r.state, `${p}.state`, ["listening", "stopped", "conflict", "unknown"] as const), port }; });
   if (new Set(services.map(({ id }) => id)).size !== services.length) fail("development.services", "unique by id");
   if (!Array.isArray(actions.items) || actions.items.length > 8) fail("actions.items", "an array of at most 8 semantic actions");
-  const items = actions.items.map((item, index): RuntimeStatusActionV1 => { const p = `actions.items[${index}]`; const r = objectAt(item, p, ["id", "enabled", "narrowLabel", "wideLabel"]); if (typeof r.enabled !== "boolean") fail(`${p}.enabled`, "a boolean"); return { id: enumAt(r.id, `${p}.id`, ["refresh", "show-usage", "open-repository"] as const), enabled: r.enabled, narrowLabel: textAt(r.narrowLabel, `${p}.narrowLabel`, 4), wideLabel: textAt(r.wideLabel, `${p}.wideLabel`, 32) }; });
+  const items = actions.items.map((item, index): RuntimeStatusActionV1 => { const p = `actions.items[${index}]`; const r = objectAt(item, p, ["id", "enabled", "narrowLabel", "wideLabel"]); if (typeof r.enabled !== "boolean") fail(`${p}.enabled`, "a boolean"); return { id: enumAt(r.id, `${p}.id`, ["refresh", "show-usage", "open-repository", "show-tasks", "open-review", "show-ci"] as const), enabled: r.enabled, narrowLabel: textAt(r.narrowLabel, `${p}.narrowLabel`, 4), wideLabel: textAt(r.wideLabel, `${p}.wideLabel`, 32) }; });
   if (new Set(items.map(({ id }) => id)).size !== items.length) fail("actions.items", "unique by semantic action id");
   const profile = identity.profile === null ? null : enumAt(identity.profile, "identity.profile", ["personal", "work"] as const);
   const currency = enumAt(cost.currency, "cost.currency", ["USD"] as const);
@@ -119,8 +120,8 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   return {
     schemaVersion: 1, generatedAt: timestampAt(root.generatedAt, "generatedAt"), binding: bindingAt(root.binding), harness: harnessAt(root.harness),
     identity: { freshness: identityFreshness, profile, label: nullableTextAt(identity.label, "identity.label", 64) },
-    session: { freshness: sessionFreshness, elapsedMs: integerNullAt(session.elapsedMs, "session.elapsedMs"), turns: integerNullAt(session.turns, "session.turns", 1_000_000) },
-    model: { freshness: modelFreshness, modelId: nullableIdAt(model.modelId, "model.modelId"), label: nullableTextAt(model.label, "model.label", 64), contextUsedTokens: integerNullAt(model.contextUsedTokens, "model.contextUsedTokens"), contextLimitTokens: integerNullAt(model.contextLimitTokens, "model.contextLimitTokens") },
+    session: { freshness: sessionFreshness, elapsedMs: integerNullAt(session.elapsedMs, "session.elapsedMs"), turns: integerNullAt(session.turns, "session.turns", 1_000_000), ...(Object.hasOwn(session, "title") ? { title: nullableTextAt(session.title, "session.title", 128) } : {}) },
+    model: { freshness: modelFreshness, modelId: nullableIdAt(model.modelId, "model.modelId"), label: nullableTextAt(model.label, "model.label", 64), contextUsedTokens: integerNullAt(model.contextUsedTokens, "model.contextUsedTokens"), contextLimitTokens: integerNullAt(model.contextLimitTokens, "model.contextLimitTokens"), ...(Object.hasOwn(model, "effort") ? { effort: model.effort === null ? null : enumAt(model.effort, "model.effort", ["low", "medium", "high", "max"] as const) } : {}) },
     location: { freshness: locationFreshness, label: nullableTextAt(location.label, "location.label", 128) },
     repository: { freshness: repositoryFreshness, name: nullableTextAt(repository.name, "repository.name", 128), branch: nullableTextAt(repository.branch, "repository.branch", 256), dirty: boolNullAt(repository.dirty, "repository.dirty"), ahead: integerNullAt(repository.ahead, "repository.ahead", 1_000_000), behind: integerNullAt(repository.behind, "repository.behind", 1_000_000) },
     usage: { freshness: usageFreshness, inputTokens: integerNullAt(usage.inputTokens, "usage.inputTokens"), outputTokens: integerNullAt(usage.outputTokens, "usage.outputTokens"), cacheReadTokens: integerNullAt(usage.cacheReadTokens, "usage.cacheReadTokens"), cacheWriteTokens: integerNullAt(usage.cacheWriteTokens, "usage.cacheWriteTokens"), totalTokens: integerNullAt(usage.totalTokens, "usage.totalTokens") },
@@ -140,8 +141,8 @@ export function parseRuntimeStatusEnvelopeV1Json(text: string): RuntimeStatusEnv
 
 export interface RuntimeStatusCapabilitiesV1 { schemaVersion: 1; harness: "claude" | "pi"; surface: "statusline" | "footer"; widths: readonly ["narrow", "wide"]; semanticActions: readonly RuntimeStatusActionIdV1[] }
 const CAPABILITIES = {
-  claude: Object.freeze({ schemaVersion: 1 as const, harness: "claude" as const, surface: "statusline" as const, widths: Object.freeze(["narrow", "wide"] as const), semanticActions: Object.freeze(["refresh", "show-usage", "open-repository"] as const) }),
-  pi: Object.freeze({ schemaVersion: 1 as const, harness: "pi" as const, surface: "footer" as const, widths: Object.freeze(["narrow", "wide"] as const), semanticActions: Object.freeze(["refresh", "show-usage", "open-repository"] as const) }),
+  claude: Object.freeze({ schemaVersion: 1 as const, harness: "claude" as const, surface: "statusline" as const, widths: Object.freeze(["narrow", "wide"] as const), semanticActions: Object.freeze(["refresh", "show-usage", "open-repository", "show-tasks", "open-review", "show-ci"] as const) }),
+  pi: Object.freeze({ schemaVersion: 1 as const, harness: "pi" as const, surface: "footer" as const, widths: Object.freeze(["narrow", "wide"] as const), semanticActions: Object.freeze(["refresh", "show-usage", "open-repository", "show-tasks", "open-review", "show-ci"] as const) }),
 };
 export function getRuntimeStatusCapabilitiesV1(harness: "claude" | "pi"): RuntimeStatusCapabilitiesV1 { return CAPABILITIES[harness]; }
 
