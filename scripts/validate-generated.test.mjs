@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { repositoryFiles, validateCanonicalScriptSyntax, validateFiles, validateGeneratedRepository, validateProvenance } from "./validate-generated.mjs";
+import { repositoryFiles, validateCanonicalScriptSyntax, validateFiles, validateGeneratedRepository, validateProvenance, validateSharedInstructionLinks } from "./validate-generated.mjs";
 
 const sha = (text) => createHash("sha256").update(text).digest("hex");
 const messages = (diagnostics) => diagnostics.map((item) => item.code);
@@ -13,6 +13,47 @@ function files(path, content) {
 }
 
 describe("generated repository validation", () => {
+  it("rejects broken relative links in shared instructions", () => {
+    const diagnostics = validateSharedInstructionLinks(new Map([
+      ["content/instructions/shared/A.md", "See [missing](MISSING.md)."],
+      ["content/instructions/shared/B.md", "See [present](A.md#section)."],
+    ]));
+    expect(diagnostics).toEqual([
+      expect.objectContaining({ code: "SHARED_INSTRUCTION_LINK_MISSING", file: "content/instructions/shared/A.md" }),
+    ]);
+  });
+
+  it("keeps the canonical shared-instruction inventory complete", async () => {
+    const root = path.resolve(import.meta.dirname, "../content/instructions/shared");
+    expect(new Set(await readdir(root))).toEqual(new Set([
+      "AUTHORING.md", "BOARD_CONVENTION.md", "deep-modules.md", "DESIGN_PIPELINE.md",
+      "DOCUMENTATION_STRATEGY.md", "EXECUTOR_CONTRACT.md", "EXPLORATION.md",
+      "GIT_COMMIT_WORKFLOW.md", "interface-design.md", "ISSUE_TRACKER.md",
+      "PLAYWRIGHT_TESTING.md", "PROJECT_DOC_TEMPLATES.md", "REVIEWER_PROTOCOL.md",
+      "SENTRY.md", "SUBAGENT_PROTOCOL.md", "WRITING_FOR_AGENTS.md",
+    ]));
+  });
+
+  it("keeps current shared-instruction relative links closed", async () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    const directory = path.join(root, "content/instructions/shared");
+    const names = await readdir(directory);
+    const current = new Map(await Promise.all(names.map(async name => [
+      `content/instructions/shared/${name}`,
+      await readFile(path.join(directory, name), "utf8"),
+    ])));
+    expect(validateSharedInstructionLinks(current)).toEqual([]);
+  });
+
+  it.each([
+    "Run `gh issue view 42`.",
+    "Read `plugins/mp/skills/shared/AUTHORING.md`.",
+    "Resolve `${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs`.",
+  ])("rejects forbidden legacy CLI, path, or placeholder in shared instructions: %s", content => {
+    expect(messages(validateFiles(files("content/instructions/shared/LEGACY.md", content))))
+      .toContain("SHARED_INSTRUCTION_LEGACY_REFERENCE");
+  });
+
   it("detects a malformed canonical support script at a newly nested path", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "mpx-canonical-script-"));
     const relative = "content/skills/example/scripts/new/nested support/broken file.mjs";

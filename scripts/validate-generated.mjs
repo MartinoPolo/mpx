@@ -67,7 +67,36 @@ export function validateFiles(files, options = {}) {
     if (/(?:[A-Za-z]:[\\/](?:_MP_projects[\\/])?|\/(?:[A-Za-z][\\/])?_MP_projects[\\/])mpx-(?:claude-code|pi)(?:[\\/]|$)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_PATH", file, "active files must not embed absolute legacy source-repository paths"));
     if (/(?:import|from|require|readFile|open)[^\n]{0,160}(?:['"`](?:\.\.\/)+(?:mpx-(?:claude-code|pi))\/|['"`](?:~\/)?\.codex\/|['"`](?:mpx-(?:claude-code|pi))\/)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_DEPENDENCY", file, "active files must not import or read legacy runtime roots"));
     if (file.startsWith("content/") && /\$\{?CLAUDE_[A-Z0-9_]+\}?/u.test(text) && !permitsClaudeVariable(file)) diagnostics.push(diagnostic("CLAUDE_PLACEHOLDER", file, "canonical content must be runtime-neutral"));
+    if (file.startsWith("content/instructions/shared/") && (
+      /`(?:gh|glab|kf)\s+(?:issue|pr|mr|label|task|comment|auth)\b/iu.test(text)
+      || /(?:^|[\s`'"(])(?:plugins\/mp|mpx-(?:claude-code|pi)\/|~\/\.(?:claude|codex)\/)/imu.test(text)
+      || /\$\{?CLAUDE_[A-Z0-9_]+\}?/u.test(text)
+    )) diagnostics.push(diagnostic("SHARED_INSTRUCTION_LEGACY_REFERENCE", file, "shared instructions must use MPX contracts and runtime-neutral paths and placeholders"));
     if (file.startsWith("runtimes/") && /(?:status-map\.json|mp\.config\.json|legacy[-_. ]?(?:status|config))/iu.test(text)) diagnostics.push(diagnostic("LEGACY_RUNTIME_READER", file, "active runtimes must consume current contracts only"));
+  }
+  return diagnostics;
+}
+
+export function validateSharedInstructionLinks(files) {
+  const diagnostics = [];
+  const sharedRoot = "content/instructions/shared/";
+  const names = new Set([...files.keys()].map(normalized));
+  for (const [rawFile, value] of files) {
+    const file = normalized(rawFile);
+    if (!file.startsWith(sharedRoot) || !file.endsWith(".md")) continue;
+    const text = Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
+    for (const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
+      const href = match[1].trim().split(/\s+/u, 1)[0].replace(/^<|>$/gu, "");
+      if (!href || href.startsWith("#") || /^[a-z][a-z0-9+.-]*:/iu.test(href)) continue;
+      let target;
+      try { target = decodeURIComponent(href.split("#", 1)[0]); }
+      catch {
+        diagnostics.push(diagnostic("SHARED_INSTRUCTION_LINK_MISSING", file, `relative link target is invalid: ${href}`));
+        continue;
+      }
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
+      if (!names.has(resolved)) diagnostics.push(diagnostic("SHARED_INSTRUCTION_LINK_MISSING", file, `relative link target is absent: ${href}`));
+    }
   }
   return diagnostics;
 }
@@ -143,7 +172,10 @@ export function validateCanonicalScriptSyntax(root, names) {
 }
 
 export async function validateGeneratedRepository({ root, names, tracked, files, generatedPiDiagnostics = [], readSource, verifySources = false, destinationAttributes }) {
-  const diagnostics = validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics });
+  const diagnostics = [
+    ...validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics }),
+    ...validateSharedInstructionLinks(files),
+  ];
   const provenanceFile = "docs/history/SOURCE_PROVENANCE.json";
   const parsed = parseProvenanceManifest(files.get(provenanceFile), provenanceFile);
   diagnostics.push(...parsed.diagnostics);

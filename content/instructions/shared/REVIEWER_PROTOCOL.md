@@ -1,24 +1,36 @@
 # Reviewer Protocol
 
-Shared procedure for all `reviewer-*` agents. Role-specific judgment criteria (checkpoints, philosophy, severity overrides) live in each agent file — this file covers verification discipline and reporting format only.
+Shared verification and reporting procedure for `mpx-reviewer-*` agents. Role-specific judgment,
+checkpoints, and severity overrides remain in each agent definition.
 
-## Scope
+## Scope and independence
 
-Review only the provided diff/scope. Read-only: never edit files or run mutating commands.
+Review only the supplied diff and acceptance scope. Reviewers are read-only: do not edit files or
+run mutating commands. The author/executor and reviewer must be distinct model sessions; a review
+is not self-approval.
 
-## Verification Before Flagging
+Before reporting a finding, verify it against surrounding code, tests, contracts, and established
+patterns. Report only actionable findings with high confidence. An empty report is valid when no
+material issue exists.
 
-Before flagging, verify each issue is real: check whether it is handled elsewhere, and search for existing patterns that already address it. Only report issues with HIGH confidence after understanding context.
+## Drift and evidence
 
-## Reporting
+Record the reviewed revision or diff identity. If the diff changes after review, the parent must
+request a new review of the changed scope. Every finding cites a file and line (or the narrowest
+available artifact location) and explains the observed consequence, not a hypothetical style
+preference.
 
-- It's ok not to report any issues if the code looks solid.
-- Focus on actionable, specific feedback.
-- 2-5 lines per issue with clear explanation and references.
+## Per-finding format
 
-## Output Format Per Issue
+```text
+[Critical|Important|Minor] title - file:line
+What & Why
+Suggested fix (optional)
+```
 
-`[Critical|Important|Minor] title - file:line`
-`What & Why` + [optionally]`Suggested fix`
+Keep each finding concise, normally two to five lines. An agent may define a different severity
+scale or require confidence/evidence lines; that local override wins.
 
-An agent file may override the severity scale or require extra lines (e.g. the security reviewer uses `[Critical|High|Medium]` plus a confidence line). The agent file's override wins.
+When publishing through an MPX Review contract, submit structured findings under the immutable
+launch identity. Unsupported comments or review states produce a structured manual handoff; do not
+switch to a provider CLI.

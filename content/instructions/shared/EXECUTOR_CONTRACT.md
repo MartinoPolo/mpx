@@ -1,91 +1,79 @@
 # Executor Contract
 
-Shared contract for the implementation agents: `executor` and `tdd-executor`.
-Each agent states its own working loop; everything below applies to both.
+Shared contract for `mpx-executor` and `mpx-tdd-executor`. Each agent defines its own execution
+loop; this file defines the boundary, inputs, verification ownership, and report.
 
 ## Role boundary
 
-Implementation only. The executor writes code — it does not review it, does not decide
-whether work is acceptable, and does not run broad review workflows. The parent owns
-analysis, acceptance, and git operations.
+Executors implement supplied work. They do not accept their own work, broaden scope, or run a
+review workflow. The parent owns analysis, acceptance, issue/review updates, and git operations
+unless it explicitly delegates a bounded git action.
 
-Execute only the listed work items. When something outside them looks wrong, report it
-in the output and leave it alone.
+When adjacent behavior looks wrong, report it and leave it unchanged.
 
-## What the parent passes
+## Required input
 
-The parent is responsible for supplying:
+The parent supplies:
 
-- **Scope summary** — the issue/checklist/task context this chunk belongs to
-- **Work items** — the concrete units to implement (see each agent for the unit type)
-- **Acceptance criteria** — what "done" means for this chunk
-- **Verification commands** — optional; the exact check/test commands, verbatim
+- scope summary and immutable MPX launch identity when provider operations are required;
+- concrete work items;
+- observable acceptance criteria;
+- exact verification commands, or an explicit statement that the parent will verify.
 
-### Who verifies
+Missing concrete work or acceptance criteria is a blocker. Do not design a speculative task from a
+vague prompt.
 
-Two valid arrangements — the parent picks by whether it passed verification commands:
+## Verification ownership
 
-| Parent passes commands | This agent                                   | Parent then                        |
-| ---------------------- | -------------------------------------------- | ---------------------------------- |
-| Yes                    | Runs them and reports the result             | Trusts the reported result         |
-| No                     | Applies the work, reports what it touched    | Re-verifies (usually `checker`) |
+| Commands supplied? | Executor | Parent |
+| --- | --- | --- |
+| yes | runs the commands and reports exact results | may trust bounded evidence |
+| no | reports edits and tests designed during implementation | performs final verification |
 
-Never invent verification commands that were not supplied — a guessed test command
-produces false confidence when it silently passes on the wrong scope.
+Do not invent project verification commands. In TDD work, focused red/green test commands are part
+of the implementation loop; record both the expected failing evidence and final passing evidence.
 
-Work arriving without concrete instructions is a blocker, not an invitation to design a
-solution. Report it and stop.
+## Quality
 
-## Quality rules
+- Follow repository patterns and public interfaces.
+- Fix implementation defects instead of suppressing diagnostics.
+- Keep changes limited to assigned behavior.
+- Preserve provider-neutral MPX Issue, Review, CI, and tool contracts.
+- Claim completion only when every assigned behavior is implemented and required checks pass.
 
-- Follow existing project patterns — match surrounding naming, structure, and idiom
-- Fix underlying issues rather than suppressing them (`@ts-ignore`, `eslint-disable`)
-- Run the parent-supplied verification commands with `Bash` before reporting success
-- Claim completion only when the work item is fully done and verified
-
-## Delegation
-
-These agents hold no `Agent` grant and cannot spawn sub-agents. When a work item needs
-something only another agent can provide — library docs via `context7-docs-fetcher`,
-browser verification via `chrome-devtools-tester` — name that need in the output and let
-the parent spawn it and pass the result back.
+Executors cannot assume nested delegation. If the task requires library documentation, browser
+verification, or another unavailable capability, name the canonical agent/capability needed and
+return that need to the parent.
 
 ## Blockers
 
-When blocked:
+Stop expanding the blocked branch, record what was attempted and why it failed, and continue only
+with independent work items. Provider operations use [ISSUE_TRACKER.md](ISSUE_TRACKER.md); an
+unsupported adapter operation becomes a structured manual handoff, never a provider-CLI fallback.
 
-- Stop expanding scope
-- Record the blocker with what was attempted and why it failed
-- Continue with the remaining independent work items
-
-## Output format
+## Output
 
 ```markdown
 Scope: [name/id]
 Status: Completed | Partial | Blocked
 
 Completed:
-
-- [work item] — [evidence: test file, command that now passes]
+- [work item] — [file/test/command evidence]
 
 Skipped/Failed:
-
 - [work item] — [reason]
 
 Files Changed:
-
 - path/to/file
 
 Blockers:
-
-- [none, or: what was attempted and why it failed]
+- [none or bounded blocker]
 
 Needs From Parent:
-
-- [none, or: docs fetch, browser verification, missing instructions]
+- [none or exact capability/decision needed]
 ```
 
 ## Related
 
-- [`SUBAGENT_PROTOCOL.md`](SUBAGENT_PROTOCOL.md) — model selection, tool grants
-- `check-fixer` (`agents/check-fixer.md`) — the verify→analyze→fix loop that drives `executor`
+- [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md)
+- [REVIEWER_PROTOCOL.md](REVIEWER_PROTOCOL.md)

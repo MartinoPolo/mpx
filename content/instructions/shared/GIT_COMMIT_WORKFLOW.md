@@ -1,104 +1,69 @@
 # Git Commit Workflow
 
-Single source of truth for commit conventions across the `mp` plugin. The **Commit Conventions** section below is authoritative for how commits are staged and worded — the inline `mpx commit` skill and the `git-committer` agent both follow it verbatim and neither restates its rules.
+Single source of truth for staging, commit wording, optional push, linked MPX Issue discovery, and
+MPX Review creation.
 
-The **Phases** section defines the delegation flow that the compound skills (`mpx commit-push`, `mpx commit-push-pr`, `mpx pr`) orchestrate; each of those states which phases it runs and its parameter deltas. `mpx commit` runs the Commit Conventions inline in the main agent (no delegation).
+## Phase A: commit and optional push
 
-## Phase A: Commit (and Optional Push) via `git-committer`
+Spawn `mpx-git-committer` with a bounded `push` boolean and optional commit hint. Parse its
+structured result:
 
-The agent stages and words the commit per the **Commit Conventions** section below. Spawn `git-committer` sub-agent with:
+- `OK`: continue or report the commit;
+- `SKIP`: report a clean tree or already-up-to-date remote;
+- `FAIL`: the parent diagnoses the exact failure and may retry the same bounded request twice.
 
-> push: true|false (per calling skill)
-> commit_hint: $the invocation input (user's description of what to commit, if any)
+Do not delegate failure diagnosis back to the committer.
 
-### Handle Result
+## Phase B: linked issue
 
-Parse the agent's JSON output:
+Extract an issue identity from the branch using the repository's configured extraction command, if
+one exists. Verify a candidate with
+`mpx issue view --identity <launch-identity> --json --id <issue-id>`. If extraction finds nothing,
+spawn `mpx-issue-analyzer` or the configured bounded issue finder with branch name, commits, and a
+diff summary.
 
-- **OK** → continue to the next phase, or display results if this is the final phase
-- **SKIP** → report "Nothing to commit" (clean tree) or "Already up-to-date" (nothing to push)
-- **FAIL** → escalate (below)
+A high-confidence match continues automatically. Present multiple candidates to the user. Continue
+without an issue when none matches; never invent a reference.
 
-### Escalation (on FAIL only)
+## Phase C: create or update review
 
-**Handle at main-agent level — do not delegate the fix to a sub-agent.** Read the error from the committer's output. Diagnose and fix the issue (e.g., pre-commit hook failure, staging error, push rejection). Once fixed, re-spawn `git-committer` with the same parameters.
+Use `mpx review create` or `mpx review update` with `--identity <launch-identity> --json`, explicit
+source/target branches, optional issue ID, draft state, and description hint. Capture the returned
+review ID and URL from structured output. Unsupported review creation or fields produce a manual
+handoff under [ISSUE_TRACKER.md](ISSUE_TRACKER.md); do not call a provider CLI.
 
-Up to 2 retry attempts. If still failing → report error to user and stop.
+On operational failure, the parent may diagnose authentication, remote, or target-branch problems
+and retry twice. Existing reviews are updated only when an explicit review ID was returned or
+supplied; there is no implicit provider discovery.
 
-## Phase B: Find Linked Issue
+## Commit conventions
 
-**Fast-path:** First try `node ./scripts/extract-branch-issue.js`. If it returns a number, verify with `mpx issue view <N> --json title`. Only use agent fallback if no number extracted.
+1. Inspect `git status --short` and staged/unstaged diffs.
+2. Stage explicit paths for one logical change. Split unrelated work.
+3. Select a lowercase conventional type from the diff. Repository commit policy is authoritative;
+   otherwise use `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
+   or `revert`.
+4. Compose the message in a temporary file and commit with `git commit -F <file>`.
+5. Report hash, subject, and `git show --stat --oneline HEAD` evidence.
 
-If agent fallback needed, spawn `issue-finder` sub-agent with repo, branch name, commit messages, and diff summary.
-
-**Based on result:**
-
-- **High confidence match** → pass issue_number to Phase C
-- **Candidates returned** → ask user which (if any) to link
-- **No match** → proceed without issue_number
-
-## Phase C: Create or Update PR via `pr-manager`
-
-Spawn `pr-manager` sub-agent with:
-
-> issue_number: (from Phase B, if found)
-> base_branch: (from the invocation input if user specified, otherwise omit for auto-detection)
-> draft: true (if `draft` in the invocation input)
-> description_hint: $the invocation input, or summary from the git-committer result if Phase A ran
-
-### Handle Result
-
-- **OK** → display PR URL, number, whether created or updated, base branch
-- **FAIL** → escalate exactly as in Phase A: diagnose (e.g., `mpx auth` problem, remote not set), fix, re-spawn with the same parameters, up to 2 retries, then report error to user and stop
-
-### PR Rules
-
-PR title and body format governed by the provider projection's `pr-manager` agent. Git/PR conventions enforced by hooks (pre-commit-gate, dangerous-command-guard).
-
-### Troubleshooting
-
-| Problem                 | Solution                                                          |
-| ----------------------- | ----------------------------------------------------------------- |
-| "PR creation fails"     | Check `mpx auth status`, verify remote exists with `git remote -v` |
-| "No commits to push"    | Ensure working tree has staged/unstaged changes                   |
-| "Base branch not found" | Specify base explicitly as a skill argument (e.g. `main`)         |
-| "PR already exists"     | Existing PR is updated automatically — this is expected           |
-
-## Commit Conventions
-
-Authoritative spec for staging and wording a commit. Both consumers follow this section as-is; conventions are also validated by hooks (pre-commit-gate, dangerous-command-guard).
-
-### Procedure
-
-1. **Inspect** — `git status --short` and `git diff` (staged + unstaged). Understand what actually changed before wording anything. Clean tree → nothing to commit; report and stop.
-2. **Stage one logical change** — `git add <explicit paths>` for the files that belong to the work under way. Split unrelated changes into separate commits. Staging is bounded by **Safety** below.
-3. **Pick the type from the diff**, not from the branch name. Lowercase, one of the authoritative type list (see **Type source of truth**).
-4. **Compose the message in a temp file**, then `git commit -F <tempfile>`. Composing to a file avoids the multi-line shell-quoting fragility of inline `-m`. Use the format below.
-5. **Verify & report** — commit hash, subject line, and files-changed summary (`git show --stat --oneline HEAD`).
-
-### Type source of truth
-
-When `commitlint.config.js` exists in the repo, its `type-enum` is the authoritative list of allowed types — the `commit-msg` hook prints it when it rejects a message. Otherwise use the conventional default list: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
-
-### Message format
-
-```
+```text
 <type>[(scope)][!]: <imperative subject>
 
-<body>
+<body explaining why, when needed>
 
-runtime-Session: <session url>
+MPX-Session: <session-reference>
 ```
 
-- **Subject** — conventional commit. Optional `(scope)` when one area is clearly the subject (`feat(button):`, `fix(icons):`). A `!` before the colon marks a breaking change (`feat!:`, `feat(api)!:`). Imperative mood ("Add feature", not "Added feature"), keep under ~72 characters.
-- **Body** — explain **why**, not what: the motivation or the problem it solves. Bullets when several distinct changes share the commit. Wrap ~72 cols, keep concise (≈10 lines). **Omit the body entirely** when the subject already says everything.
-- **`runtime-Session:` trailer** — append the session URL on AI-assisted commits (this repo's session-trailer convention). Keep other people's names and Gerrit-era trailers (`Topic:`, `Reviewed-by:`) out.
-- **Ticket reference** — tracker-neutral and parameter-driven. When a GitHub-coupled flow passes an `issue_ref` (e.g. `refs #42`, `fixes #42`), append it to the subject; when no `issue_ref` is passed it is simply absent. Never hardcode a tracker or invent a reference.
+Keep the subject concise and imperative. Use `!` only for a breaking change. Omit a body that adds
+nothing; otherwise explain motivation rather than restating the diff. Add the `MPX-Session` trailer
+only when the runtime supplies an approved non-secret session reference.
 
-### Safety
+Issue references are tracker-neutral and parameter-driven. Append only a verified `issue_ref`
+provided by the workflow.
 
-Stricter rules that always win over any looser convention:
+## Safety
 
-- **Stage explicit paths only** — never `git add -A` or `git add .`.
-- **Never stage secrets** — `.env*`, `credentials.*`, `*secret*`, `*.key`, `*.pem`.
-- **No destructive git in this flow** — prefer a new commit over `--amend` (only amend when the user asks), and never `reset --hard`, rewrite history, or `--force` / force-push.
+- Stage explicit paths; never stage the entire tree implicitly.
+- Never stage environment files, credentials, secrets, private keys, or certificates.
+- Prefer a new commit. Amend only on explicit request.
+- Do not hard reset, rewrite history, or force-push in this workflow.

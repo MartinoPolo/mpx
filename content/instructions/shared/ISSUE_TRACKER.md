@@ -1,32 +1,44 @@
-# Issue Tracker Capabilities
+# MPX Issue, Review, and CI Contracts
 
-Skills use provider-neutral MPX capabilities. They do not detect a hosting provider or invoke a
-provider CLI directly. The immutable launch identity selects the configured adapter.
+Canonical skills use provider-neutral MPX contracts. They do not detect hosting providers or invoke
+provider CLIs. The immutable launch identity selects an approved adapter and account.
 
-## Required identity
+## Identity
 
-Pass `--identity <launch-identity>` and `--json` on every operation. Use the immutable identity
-selected when MPX launched. If the launch identity is unavailable, stop and ask the user rather
-than inferring an account or repository from local remotes.
+Pass `--identity <launch-identity>` and `--json` on every operation. Reuse the identity selected at
+launch; never infer an account or repository from remotes. If identity is unavailable or ambiguous,
+stop and ask the user.
 
 ## Capabilities
 
-| Intent | Provider-neutral capability |
+| Intent | Contract |
 | --- | --- |
-| Create a tracked work item | `mpx issue create --identity <launch-identity> --json` with title, body, and semantic labels |
-| Read a tracked work item | `mpx issue view --identity <launch-identity> --json` with an explicit issue ID |
-| Update or comment on work | `mpx issue update --identity <launch-identity> --json` with an explicit issue ID and requested changes |
-| Open a code review | `mpx review create --identity <launch-identity> --json` with title, body, source branch, and target branch |
-| Read or update a review | `mpx review view --identity <launch-identity> --json` or `mpx review update --identity <launch-identity> --json`, each with an explicit review ID |
-| Inspect pipeline status | `mpx ci status --identity <launch-identity> --json` with an explicit review or pipeline ID |
+| Create work | `mpx issue create --identity <launch-identity> --json` with title, body, semantic labels |
+| Read work | `mpx issue view --identity <launch-identity> --json --id <issue-id>` |
+| Update/comment | `mpx issue update --identity <launch-identity> --json --id <issue-id>` |
+| Open review | `mpx review create --identity <launch-identity> --json` with source and target branches |
+| Read review | `mpx review view --identity <launch-identity> --json --id <review-id>` |
+| Update review | `mpx review update --identity <launch-identity> --json --id <review-id>` |
+| Inspect CI | `mpx ci status --identity <launch-identity> --json` with explicit review or pipeline ID |
 
-Use the structured response to capture returned IDs. There is no implicit issue, review, or CI
-discovery. If a capability reports that an operation or field is unsupported by the configured
-adapter, report that limitation and ask the user how to proceed.
+Use structured response IDs for every later operation. There is no implicit issue, review, or CI
+discovery. Preserve schema/version fields and fail closed on an unknown response version.
+
+## Unsupported operations
+
+Adapters may not support every field or operation. Preserve the structured error and return a
+manual handoff containing:
+
+- launch identity (opaque ID only, no credentials);
+- requested capability and target ID;
+- unsupported field/operation code;
+- safe remaining steps and the user decision needed.
+
+Do not fall back to provider CLIs, copy tokens between tools, silently omit fields, or reinterpret an
+unsupported operation.
 
 ## Semantic labels
 
-Treat labels as semantic requests such as `bug`, `refactor`, `task`, `Design needed`, `HITL`, or
-`AFK`. Submit them through the issue capability and let the configured adapter map or reject them.
-Do not create, reinterpret, or silently omit an unsupported label. Report the structured error and
-ask the user whether to continue without it.
+Submit labels as semantic requests such as `bug`, `task`, `enhancement`, `Design needed`, `HITL`, or
+`AFK`. The adapter maps or rejects them. Do not create provider-native labels, reinterpret them, or
+silently continue without a rejected label. Ask whether to proceed without it.
