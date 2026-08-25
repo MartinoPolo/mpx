@@ -5,7 +5,7 @@ import { sha256Canonical } from "@mpx/core";
 import type { JsonValue } from "@mpx/core";
 import { parseLaunchDescriptorV2 } from "@mpx/launch";
 import type { LaunchDescriptor } from "@mpx/launch";
-import { parseRuntimeSkillArtifactReferenceV4, type RuntimeSkillArtifactReferenceV4 } from "@mpx/runtime-contracts";
+import { parseRuntimeSkillArtifactReferenceV4, validateRuntimeCapabilityBinding, type RuntimeCapabilityManifestV1, type RuntimeSkillArtifactReferenceV4 } from "@mpx/runtime-contracts";
 
 export class ExecutionError extends Error {
   readonly name = "ExecutionError";
@@ -77,7 +77,7 @@ export interface PrivateRuntimeLaunch {
   readonly identity: LaunchDescriptor["identity"];
   readonly nativeRuntimeRoot: string;
 }
-export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
+export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly capability?: RuntimeCapabilityManifestV1; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
 export interface RouteMaterializer { materialize(descriptor: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> }
 export interface LaunchAuditStartRecord {
   readonly schemaVersion: 1; readonly phase: "start"; readonly launchKey: string; readonly runtime: "claude" | "pi"; readonly executor: "docker" | "host";
@@ -140,6 +140,15 @@ export class ExecutionService {
   }
   async execute(input: ExecuteInput): Promise<ProcessResult> {
     const descriptor = parseLaunchDescriptorV2(input.descriptor);
+    if (input.capability !== undefined) {
+      try {
+        validateRuntimeCapabilityBinding(input.capability, {
+          manifestKey: input.capability.manifestKey, launchKey: descriptor.launchKey, runtime: descriptor.runtime,
+          identity: { ...descriptor.identity, nativeRuntimeRootDigest: descriptor.nativeRuntimeRootDigest },
+          binding: { ...descriptor.binding, contentScope: descriptor.contentScope.name }, executor: descriptor.executor.name,
+        });
+      } catch { fail("RUNTIME_CAPABILITY_INVALID", "Execution requires capability authority bound exactly to the current launch."); }
+    }
     let artifact: RuntimeSkillArtifactReferenceV4;
     try { artifact = parseRuntimeSkillArtifactReferenceV4(input.artifact); }
     catch { return fail("RUNTIME_ARTIFACT_BINDING_INVALID", "Execution requires an exact valid v4 runtime artifact reference."); }

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { sha256Canonical } from "@mpx/core";
 import type { JsonValue } from "@mpx/core";
 import type { LaunchDescriptor } from "@mpx/launch";
+import { createRuntimeCapabilityManifestV1 } from "@mpx/runtime-contracts";
 import type { ProcessRequest } from "./index.js";
 import { ExecutorRegistry, ExecutionService, FileLaunchAuditStore, HostApprovalStore, RuntimeAdapterRegistry, compactLaunchBanner, createLaunchExecutionAudit, invokeBoundedProcess, locateTrustedExecutable, sanitizedEnvironment, sanitizeHostReason, type LaunchAuditRecord, type LaunchAuditStore } from "./index.js";
 
@@ -55,6 +56,24 @@ function service(verification: "verified" | "unverified" | "unavailable", effect
 }
 
 describe("execution gates", () => {
+  it("admits an exactly launch-bound runtime capability and rejects stale authority before side effects", async () => {
+    const effects: string[] = [];
+    const selected = descriptor();
+    const capability = createRuntimeCapabilityManifestV1({
+      runtime: selected.runtime, launchKey: selected.launchKey, identity: { ...selected.identity, nativeRuntimeRootDigest: selected.nativeRuntimeRootDigest },
+      binding: { ...selected.binding, contentScope: selected.contentScope.name }, executor: selected.executor.name, tools: [], routes: [], resources: [], mounts: [], destinations: [], skills: [], models: [], nesting: { depth: 0, maxDepth: 0 },
+    });
+    const executors = new ExecutorRegistry();
+    executors.register({ name: "docker", verify: async () => { effects.push("verify"); return selected.executorVerification; }, execute: async () => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }) });
+    const runtimes = new RuntimeAdapterRegistry();
+    runtimes.register({ runtime: "pi", prepare: async () => ({ executable: "C:/trusted/pi.exe", argv: [], environment: {} }) });
+    const execution = new ExecutionService({ executors, runtimes, routes: { materialize: async value => routesFor(value) } });
+    await expect(execution.execute({ artifact: artifactReference(), descriptor: selected, capability, cwd: "C:/project", environment: {} })).resolves.toMatchObject({ exitCode: 0 });
+    effects.length = 0;
+    await expect(execution.execute({ artifact: artifactReference(), descriptor: selected, capability: { ...capability, launchKey: hash("f") }, cwd: "C:/project", environment: {} })).rejects.toMatchObject({ code: "RUNTIME_CAPABILITY_INVALID" });
+    expect(effects).toEqual([]);
+  });
+
   it("executes verified fake Docker through routes, runtime adapter, and executor without an interactive timeout", async () => {
     const effects: string[] = [];
     const executors = new ExecutorRegistry();

@@ -329,3 +329,5 @@ export async function validateRuntimeContext(input: { context: RuntimeContextV1;
   }
   return { valid: diagnostics.length === 0, diagnostics };
 }
+
+export * from "./capabilities.js";
