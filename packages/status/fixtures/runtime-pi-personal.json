@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2025-06-01T12:00:00.000Z",
+  "binding": {
+    "launchKey": "pi-personal-launch",
+    "runtimeId": "pi-runtime",
+    "repositoryId": "personal-repo"
+  },
+  "harness": {
+    "kind": "pi",
+    "version": "1.0.0",
+    "surface": "footer"
+  },
+  "identity": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "profile": "personal",
+    "label": "Personal"
+  },
+  "session": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "elapsedMs": 60000,
+    "turns": 4
+  },
+  "model": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "modelId": "gpt-5",
+    "label": "GPT-5",
+    "contextUsedTokens": 1200,
+    "contextLimitTokens": 200000
+  },
+  "location": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "label": "mpx"
+  },
+  "repository": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "name": "mpx",
+    "branch": "main",
+    "dirty": false,
+    "ahead": 0,
+    "behind": 0
+  },
+  "usage": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "inputTokens": 500,
+    "outputTokens": 300,
+    "cacheReadTokens": 200,
+    "cacheWriteTokens": 0,
+    "totalTokens": 1000
+  },
+  "cost": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "currency": "USD",
+    "amountMicros": 25000
+  },
+  "providerUsage": {
+    "freshness": {
+      "state": "unavailable",
+      "observedAt": null,
+      "errorCode": null
+    },
+    "provider": null,
+    "used": null,
+    "limit": null,
+    "unit": null,
+    "resetAt": null
+  },
+  "compactions": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "count": 0,
+    "lastAt": null
+  },
+  "subagents": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "active": 0,
+    "completed": 1,
+    "failed": 0
+  },
+  "development": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "services": []
+  },
+  "actions": {
+    "freshness": {
+      "state": "current",
+      "observedAt": "2025-06-01T12:00:00.000Z",
+      "errorCode": null
+    },
+    "items": [
+      {
+        "id": "refresh",
+        "enabled": true,
+        "narrowLabel": "↻",
+        "wideLabel": "Refresh status"
+      }
+    ]
+  }
+}
