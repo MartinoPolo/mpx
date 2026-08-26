@@ -21,7 +21,7 @@ import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxEx
 import type { LaunchExecutionContext } from "./launch-execution.js";
 import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
-import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type ConversationBranchService, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
+import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
 import { InstallerService, NodeReceiptStore, NodeRunnerFileVerifier } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
@@ -84,6 +84,9 @@ export interface CliContext extends LaunchExecutionContext {
   accountAuthVerifier?: AccountAuthVerifier;
   sessionResumeExecutor?: (plan: ResumePlanV1) => Promise<unknown>;
   sessionBranchService?: ConversationBranchService;
+  /** Argv-only process transports. No command strings or shell execution are accepted. */
+  sessionBranchRuntimeAdapter?: BranchArgvExecutionAdapter;
+  sessionBranchTerminalAdapter?: BranchArgvExecutionAdapter;
   /** Application-owned F2 proof/state adapter. It plans admission before any resume side effect. */
   sessionDockerResumeAdmission?: (plan: ResumePlanV1) => Promise<F2SandboxSessionResumeAdmission>;
   scheduledCaptureAuthority?: { inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>> };

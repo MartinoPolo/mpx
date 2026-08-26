@@ -16,6 +16,7 @@ export interface SessionCommandContext {
   readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
   readonly executeResume?: (plan: ResumePlanV1) => Promise<unknown>;
   readonly branchService?: Pick<ConversationBranchService, "plan" | "apply">;
+  readonly terminalExecutable?: string;
   /** Installed scheduler observation only; granting authority remains a Phase I responsibility. */
   readonly scheduledCaptureAuthority?: { inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>> };
 }
@@ -250,19 +251,18 @@ export async function executeSessionCommand(input: SessionCommandInput, context:
       schemaVersion: 1,
       parent: { runtimeQualifiedId: parent.runtimeQualifiedId, nativeSessionRef: parent.nativeSessionRef },
       child: { runtimeQualifiedId: childId, runtime: parent.runtime },
-      launchIdentity: { identity: parent.identity, rootDigest: binding.recordedRootDigest, mode: parent.launch.mode, executor: parent.launch.executor.kind },
+      launchIdentity: { identity: parent.identity, rootDigest: binding.recordedRootDigest, nativeBindingRef: binding.ref, mode: parent.launch.mode, executor: parent.launch.executor.kind },
       workspace: {
         selection: selected as "default" | "isolated" | "shared", intent: intent as "read" | "modify", cwd: parent.location.cwd,
         projectRef: parent.location.project, repositoryRef: parent.location.repository,
         worktreeRef: parent.location.worktree, branch,
-        ...(text(input, "native-root") ? { selectedNativeRoot: text(input, "native-root")! } : {}),
       },
       files: {
         sharing: selected === "shared" ? "shared" : "isolated",
         collisionDisclosure: selected === "shared" ? ["concurrent changes share the current checkout"] : ["repository history and configured external services may still collide"],
         duplicateWriterRiskAcknowledged: input.options.get("acknowledge-shared-risk") === true,
       },
-      terminal: terminalEnabled ? { enabled: true, ...(text(input, "terminal-executable") ? { executable: text(input, "terminal-executable")! } : {}), title: text(input, "terminal-title") ?? `MPX ${childId}` } : { enabled: false },
+      terminal: terminalEnabled ? { enabled: true, ...(context.terminalExecutable ? { executable: context.terminalExecutable } : {}), title: text(input, "terminal-title") ?? `MPX ${childId}` } : { enabled: false },
     };
     const plan = await context.branchService.plan(request), confirmation = confirmationOption(input);
     if (!confirmation || input.options.get("dry-run") === true) return { data: plan, warnings: [] };

@@ -19,7 +19,7 @@ import {
   type UserConfig,
 } from "@mpx/config";
 import { createSkillArtifactReference, errorEnvelope, MpxError, sha256Canonical, successEnvelope, type Diagnostic, type JsonValue } from "@mpx/core";
-import { resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
+import { canonicalNativeRootDigest, resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
 import { ExecutionError, namedSbxPolicies, sanitizeHostReason } from "@mpx/executors";
 import { probeProvider, type ProviderRegistry } from "@mpx/providers";
 import { LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local";
@@ -35,7 +35,7 @@ import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionM
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
 import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
-import { BranchLeaseStore, ConversationBranchService, RootAttestationService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
+import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
@@ -50,7 +50,7 @@ function parse(argv: readonly string[]): Parsed {
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
     if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version","intent","native-root","terminal-executable","terminal-title"].includes(name!)) {
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version","intent","terminal-title"].includes(name!)) {
       const value=inline ?? argv[++i]; if (value===undefined || (value.length===0 && name!=="body") || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
@@ -326,7 +326,24 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
           if (typeof created.worktreePath !== "string" || !path.isAbsolute(created.worktreePath)) throw new SessionError("SESSION_BRANCH_WORKTREE_CREATE_FAILED", "The worktree service did not return a canonical worktree path.");
           return { cwd: created.worktreePath, worktreeRef: workspace.branch };
         },
+        removeIsolatedWorktree: async workspace => { await lifecycle.remove({ cwd: parsed.cwd, worktreePath: workspace.cwd }); },
+        validateNativeBinding: async plan => {
+          const configured = user.identities[plan.launchIdentity.identity.name];
+          if (!configured || configured.domain !== plan.launchIdentity.identity.domain) throw new SessionError("SESSION_BRANCH_IDENTITY_MISMATCH", "The branch identity is no longer configured.");
+          const binding = await sessionStore.readNativeBinding(plan.launchIdentity.nativeBindingRef);
+          const root = configured.runtimeRoots[plan.child.runtime];
+          if (binding.ref !== plan.launchIdentity.nativeBindingRef || binding.runtime !== plan.child.runtime || binding.identity.domain !== plan.launchIdentity.identity.domain || binding.identity.name !== plan.launchIdentity.identity.name || binding.recordedRootDigest !== plan.launchIdentity.rootDigest || canonicalNativeRootDigest(root) !== binding.recordedRootDigest) throw new SessionError("SESSION_BRANCH_NATIVE_BINDING_MISMATCH", "The recorded session binding no longer matches the configured identity root.");
+          if (plan.child.runtime === "pi") {
+            const attestation = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+            await attestation.verify(plan.launchIdentity.identity, root, binding.accountBindingRef ?? undefined);
+            await (context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) })).verify(root);
+          }
+          return root;
+        },
         adapters: { claude: runtimeAdapter("claude"), pi: runtimeAdapter("pi") },
+        ...(context.sessionBranchRuntimeAdapter ? { runtime: context.sessionBranchRuntimeAdapter } : {}),
+        ...(context.sessionBranchTerminalAdapter ? { terminal: context.sessionBranchTerminalAdapter } : {}),
+        lineage: new BranchLineageStore(path.join(stateRoot(context), "sessions", "v1", "private", "branch-lineage")),
         admitExecutor: async launch => launch.executor === "host" || context.env.MPX_RUNTIME_EXECUTOR === "docker",
       }, new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases")));
     }
@@ -342,6 +359,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       resumeDependencies: context.sessionResumeDependencies ?? productionSessionResumeDependencies(user, sessionStore, context.nativeAccountBindingVerifier ?? account?.verifier, context.env),
       executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
       ...(branchService ? { branchService } : {}),
+      ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ? { terminalExecutable: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE } : {}),
       ...(context.scheduledCaptureAuthority ? { scheduledCaptureAuthority: context.scheduledCaptureAuthority } : {}),
     });
     return { data: result.data, warnings: [...result.warnings] };

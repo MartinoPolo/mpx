@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveConversationWorkspaceSelection } from "@mpx/worktrees";
 import type { NativeSessionRefV1, RuntimeName } from "@mpx/runtime-contracts";
@@ -16,6 +16,7 @@ export interface BranchRequestV1 {
   readonly launchIdentity: {
     readonly identity: IdentityV1;
     readonly rootDigest: string;
+    readonly nativeBindingRef: string;
     readonly mode: string;
     readonly executor: "host" | "docker";
   };
@@ -27,7 +28,6 @@ export interface BranchRequestV1 {
     readonly repositoryRef: string | null;
     readonly worktreeRef: string | null;
     readonly branch: string | null;
-    readonly selectedNativeRoot?: string;
   };
   readonly files: {
     readonly sharing: "isolated" | "shared";
@@ -72,10 +72,42 @@ export interface ConversationBranchPlanV1 {
 export interface BranchRuntimeAdapter {
   plan(parent: BranchNativeIdentityV1, cwd: string, selectedRoot?: string): NativeBranchInvocation | Promise<NativeBranchInvocation>;
 }
+export interface BranchLifecycleEvent {
+  readonly runtimeQualifiedId: string;
+  readonly nativeSessionRef: NativeSessionRefV1;
+}
+export interface BranchChildProcess {
+  /** Resolves only from the runtime lifecycle event, never from a guessed native ID. */
+  readonly lifecycle: Promise<BranchLifecycleEvent>;
+  readonly exited: Promise<unknown>;
+}
+export interface BranchArgvExecutionAdapter { launch(plan: NativeBranchInvocation | TerminalTabPlan): Promise<BranchChildProcess> }
+export interface BranchLineagePendingV1 {
+  readonly pendingRuntimeQualifiedId: string;
+  readonly parentRuntimeQualifiedId: string;
+  readonly identity: IdentityV1;
+  readonly nativeBindingRef: string;
+  readonly cwd: string;
+  readonly worktreeRef: string | null;
+  readonly sharing: "isolated" | "shared";
+  readonly collisionDisclosure: readonly string[];
+  readonly writerLease: { readonly owner: string; readonly workspaceDigest: string } | null;
+}
+export interface BranchLineagePersistence {
+  savePending(value: BranchLineagePendingV1): Promise<void>;
+  finalize(pendingRuntimeQualifiedId: string, event: BranchLifecycleEvent): Promise<void>;
+  fail(pendingRuntimeQualifiedId: string): Promise<void>;
+}
 export interface ConversationBranchDependencies {
   inspectWorkspace(input: BranchRequestV1["workspace"]): Promise<{ readonly exists: boolean; readonly collisionDisclosure: readonly string[] }>;
   createIsolatedWorktree(input: ConversationBranchPlanV1["workspace"]): Promise<{ readonly cwd: string; readonly worktreeRef: string }>;
+  removeIsolatedWorktree?(workspace: { readonly cwd: string; readonly worktreeRef: string | null }): Promise<void>;
   readonly adapters: Readonly<Record<RuntimeName, BranchRuntimeAdapter>>;
+  /** Revalidates recorded binding, identity root digest, and auth before any side effect. */
+  validateNativeBinding?(plan: ConversationBranchPlanV1): Promise<string | undefined>;
+  readonly runtime?: BranchArgvExecutionAdapter;
+  readonly terminal?: BranchArgvExecutionAdapter;
+  readonly lineage?: BranchLineagePersistence;
   admitExecutor?(input: BranchRequestV1["launchIdentity"]): Promise<boolean>;
 }
 
@@ -97,7 +129,6 @@ function validateRequest(input: BranchRequestV1): void {
   if (!input.parent.runtimeQualifiedId.startsWith(`${input.child.runtime}:`) || !input.child.runtimeQualifiedId.startsWith(`${input.child.runtime}:`))
     throw new SessionError("SESSION_BRANCH_RUNTIME_MISMATCH", "parent and child native IDs must be qualified by the selected runtime");
   absolute(input.workspace.cwd, "workspace.cwd");
-  if (input.workspace.selectedNativeRoot !== undefined) absolute(input.workspace.selectedNativeRoot, "workspace.selectedNativeRoot");
 }
 
 export class ConversationBranchService {
@@ -112,8 +143,6 @@ export class ConversationBranchService {
     const policy = resolveConversationWorkspaceSelection({ selection: input.workspace.selection, intent: input.workspace.intent, riskAcknowledged: input.files.duplicateWriterRiskAcknowledged });
     if (input.files.sharing !== policy.sharing && input.workspace.selection !== "default")
       throw new SessionError("SESSION_BRANCH_DISCLOSURE_MISMATCH", "File sharing disclosure differs from the selected workspace");
-    if (input.child.runtime === "pi" && !input.workspace.selectedNativeRoot)
-      throw new SessionError("SESSION_BRANCH_PI_ROOT_REQUIRED", "Pi branching requires the explicitly selected native root");
     const collisionDisclosure = [...new Set([...input.files.collisionDisclosure, ...inspected.collisionDisclosure])].sort();
     const unsigned = {
       schemaVersion: 1 as const,
@@ -135,31 +164,111 @@ export class ConversationBranchService {
     readonly terminal: TerminalTabPlan | null;
     readonly workspace: { readonly cwd: string; readonly worktreeRef: string | null };
     readonly writerLease: BranchWriterLease | null;
+    readonly child?: BranchLifecycleEvent;
   }> {
     const { confirmationDigest: ignored, ...unsigned } = plan;
     void ignored;
     if (plan.confirmationDigest !== confirmationDigest || stableDigest(unsigned) !== confirmationDigest)
       throw new SessionError("SESSION_BRANCH_CONFIRMATION_MISMATCH", "branch plan confirmation digest does not match");
+    // Binding/auth validation deliberately precedes worktree, lease, terminal, and process effects.
+    const validatedRoot = await this.dependencies.validateNativeBinding?.(plan);
+    if (this.dependencies.lineage && !this.dependencies.runtime) throw new SessionError("SESSION_BRANCH_RUNTIME_UNAVAILABLE", "Native branch execution is unavailable");
+    if (plan.terminal.enabled && this.dependencies.lineage && !this.dependencies.terminal) throw new SessionError("SESSION_BRANCH_TERMINAL_UNAVAILABLE", "Windows Terminal execution is unavailable");
     let workspace = { cwd: plan.workspace.cwd, worktreeRef: plan.workspace.worktreeRef };
-    if (plan.workspace.provision === "new-worktree") workspace = await this.dependencies.createIsolatedWorktree(plan.workspace);
-    let writerLease: BranchWriterLease | null = null;
+    let createdWorktree = false, writerLease: BranchWriterLease | null = null, launched = false;
     try {
+      if (plan.workspace.provision === "new-worktree") { workspace = await this.dependencies.createIsolatedWorktree(plan.workspace); createdWorktree = true; }
       if (plan.workspace.intent === "modify") {
         if (!this.leases) throw new SessionError("SESSION_BRANCH_LEASE_UNAVAILABLE", "duplicate-writer prevention is unavailable");
         writerLease = await this.leases.acquire(workspace.cwd, plan.child.runtimeQualifiedId);
       }
-      const invocation = await this.dependencies.adapters[plan.child.runtime].plan(plan.parent, workspace.cwd, plan.workspace.selectedNativeRoot);
-      return { schemaVersion: 1, kind: "session-branch-apply", invocation, terminal: planWindowsTerminalTab(plan.terminal, invocation), workspace, writerLease };
+      const invocation = await this.dependencies.adapters[plan.child.runtime].plan(plan.parent, workspace.cwd, validatedRoot);
+      const terminal = planWindowsTerminalTab(plan.terminal, invocation);
+      if (!this.dependencies.runtime || !this.dependencies.lineage) return { schemaVersion: 1, kind: "session-branch-apply", invocation, terminal, workspace, writerLease };
+      const pending: BranchLineagePendingV1 = {
+        pendingRuntimeQualifiedId: plan.child.runtimeQualifiedId,
+        parentRuntimeQualifiedId: plan.parent.runtimeQualifiedId,
+        identity: plan.launchIdentity.identity,
+        nativeBindingRef: plan.launchIdentity.nativeBindingRef,
+        cwd: workspace.cwd,
+        worktreeRef: workspace.worktreeRef,
+        sharing: plan.workspace.sharing,
+        collisionDisclosure: plan.workspace.collisionDisclosure,
+        writerLease: writerLease && { owner: writerLease.owner, workspaceDigest: writerLease.workspaceDigest },
+      };
+      await this.dependencies.lineage.savePending(pending);
+      const executor = terminal ? this.dependencies.terminal : this.dependencies.runtime;
+      if (!executor) throw new SessionError("SESSION_BRANCH_TERMINAL_UNAVAILABLE", "Windows Terminal execution is unavailable");
+      const childProcess = await executor.launch(terminal ?? invocation); launched = true;
+      const child = await childProcess.lifecycle;
+      if (!child.runtimeQualifiedId.startsWith(`${plan.child.runtime}:`)) throw new SessionError("SESSION_BRANCH_LIFECYCLE_MISMATCH", "Child lifecycle event has the wrong runtime");
+      await this.dependencies.lineage.finalize(plan.child.runtimeQualifiedId, child);
+      void childProcess.exited.finally(() => writerLease?.release()).catch(() => undefined);
+      return { schemaVersion: 1, kind: "session-branch-apply", invocation, terminal, workspace, writerLease, child };
     } catch (error) {
+      try { await this.dependencies.lineage?.fail(plan.child.runtimeQualifiedId); } catch { /* preserve the launch failure */ }
       await writerLease?.release();
+      try { if (createdWorktree && !launched) await this.dependencies.removeIsolatedWorktree?.(workspace); } catch { /* preserve the launch failure */ }
       throw error;
     }
+  }
+}
+
+export interface BranchLineageRecordV1 extends BranchLineagePendingV1 {
+  readonly schemaVersion: 1;
+  readonly status: "pending" | "active" | "failed";
+  readonly actual: BranchLifecycleEvent | null;
+}
+/** Durable, atomic branch lineage state. The pending key remains stable when the native child ID arrives. */
+export class BranchLineageStore implements BranchLineagePersistence {
+  constructor(private readonly root: string) {}
+  private file(pendingId: string): string { safeText(pendingId, "lineage.pendingId", 512); return path.join(this.root, `${Buffer.from(pendingId).toString("base64url")}.json`); }
+  private async atomic(file: string, value: BranchLineageRecordV1): Promise<void> {
+    await mkdir(this.root, { recursive: true });
+    const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(temporary, `${JSON.stringify(value)}\n`, { flag: "wx", mode: 0o600 });
+    try { await rename(temporary, file); } catch (error) { await rm(temporary, { force: true }); throw error; }
+  }
+  async savePending(value: BranchLineagePendingV1): Promise<void> {
+    absolute(value.cwd, "lineage.cwd"); safeText(value.nativeBindingRef, "lineage.nativeBindingRef", 512);
+    await this.atomic(this.file(value.pendingRuntimeQualifiedId), { schemaVersion: 1, ...value, collisionDisclosure: [...value.collisionDisclosure], status: "pending", actual: null });
+  }
+  async read(pendingId: string): Promise<BranchLineageRecordV1> {
+    const value = JSON.parse(await readFile(this.file(pendingId), "utf8")) as BranchLineageRecordV1;
+    if (value.schemaVersion !== 1 || value.pendingRuntimeQualifiedId !== pendingId || !["pending", "active", "failed"].includes(value.status)) throw new SessionError("SESSION_BRANCH_LINEAGE_INVALID", "branch lineage state is invalid");
+    return value;
+  }
+  async finalize(pendingId: string, event: BranchLifecycleEvent): Promise<void> {
+    const current = await this.read(pendingId);
+    if (current.status !== "pending" || current.actual !== null) throw new SessionError("SESSION_BRANCH_LINEAGE_CONFLICT", "branch lineage was already finalized");
+    safeText(event.runtimeQualifiedId, "lineage.actualId", 512);
+    await this.atomic(this.file(pendingId), { ...current, status: "active", actual: event });
+  }
+  async fail(pendingId: string): Promise<void> {
+    try { const current = await this.read(pendingId); if (current.status === "pending") await this.atomic(this.file(pendingId), { ...current, status: "failed" }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   }
 }
 
 export interface BranchWriterLease { readonly owner: string; readonly workspaceDigest: string; release(): Promise<void> }
 export class BranchLeaseStore {
   constructor(private readonly root: string) {}
+  private lease(owner: string, workspaceDigest: string, token: string): BranchWriterLease {
+    const directory = path.join(this.root, `${workspaceDigest}.writer`);
+    return { owner, workspaceDigest, release: async () => {
+      try { const current = JSON.parse(await readFile(path.join(directory, "owner.json"), "utf8")) as { token?: unknown; owner?: unknown }; if (current.token === token && current.owner === owner) await rm(directory, { recursive: true, force: true }); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    } };
+  }
+  async restore(workspaceDigest: string, owner: string): Promise<BranchWriterLease> {
+    if (!/^[a-f0-9]{64}$/u.test(workspaceDigest)) throw new SessionError("SESSION_BRANCH_LEASE_INVALID", "writer lease digest is invalid");
+    safeText(owner, "lease.owner", 512);
+    try {
+      const current = JSON.parse(await readFile(path.join(this.root, `${workspaceDigest}.writer`, "owner.json"), "utf8")) as { token?: unknown; owner?: unknown };
+      if (current.owner !== owner || typeof current.token !== "string") throw new Error();
+      return this.lease(owner, workspaceDigest, current.token);
+    } catch { throw new SessionError("SESSION_BRANCH_LEASE_NOT_FOUND", "durable writer lease was not found"); }
+  }
   async acquire(workspace: string, owner: string): Promise<BranchWriterLease> {
     absolute(workspace, "lease.workspace"); safeText(owner, "lease.owner", 512);
     const workspaceDigest = stableDigest({ workspace: path.normalize(workspace).toLowerCase() }), directory = path.join(this.root, `${workspaceDigest}.writer`), token = randomUUID();
@@ -171,10 +280,7 @@ export class BranchLeaseStore {
     }
     try { await writeFile(path.join(directory, "owner.json"), JSON.stringify({ owner, token }), { flag: "wx" }); }
     catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
-    return { owner, workspaceDigest, release: async () => {
-      try { const current = JSON.parse(await readFile(path.join(directory, "owner.json"), "utf8")) as { token?: unknown }; if (current.token === token) await rm(directory, { recursive: true, force: true }); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    } };
+    return this.lease(owner, workspaceDigest, token);
   }
 }
 

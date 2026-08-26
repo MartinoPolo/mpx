@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BranchLeaseStore,
   ConversationBranchService,
+  BranchLineageStore,
   SessionError,
   createClaudeBranchAdapter,
   createPiBranchAdapter,
@@ -17,7 +18,7 @@ const base: BranchRequestV1 = {
   schemaVersion: 1,
   parent: { runtimeQualifiedId: "claude:parent id", nativeSessionRef: { kind: "native-id", value: "parent id" } },
   child: { runtimeQualifiedId: "claude:new", runtime: "claude" },
-  launchIdentity: { identity: { domain: "personal", name: "me" }, rootDigest: digest, mode: "interactive", executor: "host" },
+  launchIdentity: { identity: { domain: "personal", name: "me" }, rootDigest: digest, nativeBindingRef: "binding", mode: "interactive", executor: "host" },
   workspace: { selection: "isolated", intent: "modify", cwd: "C:/repo with spaces", projectRef: "project", repositoryRef: "repo", worktreeRef: null, branch: "mpx/session-child" },
   files: { sharing: "isolated", collisionDisclosure: ["same repository history"], duplicateWriterRiskAcknowledged: false },
   terminal: { enabled: false },
@@ -40,8 +41,8 @@ describe("conversation branching", () => {
   });
 
   it("preserves a work identity and immutable launch root/mode/executor in the child plan", async () => {
-    const plan = await new ConversationBranchService(dependencies()).plan({ ...base, launchIdentity: { identity: { domain: "work", name: "employee" }, rootDigest: "b".repeat(64), mode: "locked-down", executor: "host" } });
-    expect(plan.launchIdentity).toEqual({ identity: { domain: "work", name: "employee" }, rootDigest: "b".repeat(64), mode: "locked-down", executor: "host" });
+    const plan = await new ConversationBranchService(dependencies()).plan({ ...base, launchIdentity: { identity: { domain: "work", name: "employee" }, rootDigest: "b".repeat(64), nativeBindingRef: "work-binding", mode: "locked-down", executor: "host" } });
+    expect(plan.launchIdentity).toEqual({ identity: { domain: "work", name: "employee" }, rootDigest: "b".repeat(64), nativeBindingRef: "work-binding", mode: "locked-down", executor: "host" });
   });
 
   it("rejects a missing or deleted repository/worktree during read-only planning", async () => {
@@ -72,6 +73,13 @@ describe("conversation branching", () => {
     await expect(leases.acquire("C:/shared repo", "pi:two")).resolves.toBeDefined();
   });
 
+  it("can restore and release a durable writer lease after controller restart", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-")), firstStore = new BranchLeaseStore(root), first = await firstStore.acquire("C:/shared repo", "claude:child");
+    const restored = await new BranchLeaseStore(root).restore(first.workspaceDigest, "claude:child");
+    await restored.release();
+    await expect(firstStore.acquire("C:/shared repo", "pi:next")).resolves.toBeDefined();
+  });
+
   it("uses Claude's native fork/resume argv without copying transcripts", () => {
     expect(createClaudeBranchAdapter("C:/Program Files/Claude/claude.exe").plan(base.parent, "C:/repo & work")).toEqual({ executable: "C:/Program Files/Claude/claude.exe", argv: ["--resume", "parent id", "--fork-session"], cwd: "C:/repo & work", nativeTarget: "runtime-created" });
   });
@@ -87,5 +95,54 @@ describe("conversation branching", () => {
   it("emits an optional Windows Terminal tab as executable and argv with no shell text", () => {
     expect(planWindowsTerminalTab({ enabled: true, executable: "C:/Program Files/WindowsApps/wt.exe", cwd: "C:/repo & work", title: "child; title" }, { executable: "C:/Program Files/Pi/pi.exe", argv: ["--fork", "C:/pi root/a.jsonl"], cwd: "C:/repo & work", nativeTarget: "runtime-created" })).toEqual({ executable: "C:/Program Files/WindowsApps/wt.exe", argv: ["new-tab", "--title", "child; title", "--startingDirectory", "C:/repo & work", "--", "C:/Program Files/Pi/pi.exe", "--fork", "C:/pi root/a.jsonl"], cwd: "C:/repo & work" });
     expect(planWindowsTerminalTab({ enabled: false }, { executable: "x", argv: [], cwd: "C:/repo", nativeTarget: "runtime-created" })).toBeNull();
+  });
+
+  it("restores finalized parent-child lineage and workspace disclosure after a process restart", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-lineage-")), first = new BranchLineageStore(root);
+    await first.savePending({ pendingRuntimeQualifiedId: "pi:pending", parentRuntimeQualifiedId: "pi:parent", identity: { domain: "work", name: "me" }, nativeBindingRef: "binding", cwd: "C:/shared", worktreeRef: null, sharing: "shared", collisionDisclosure: ["concurrent changes share the current checkout"], writerLease: { owner: "pi:pending", workspaceDigest: digest } });
+    await first.finalize("pi:pending", { runtimeQualifiedId: "pi:actual", nativeSessionRef: { kind: "root-relative-file", value: "sessions/actual.jsonl" } });
+    await expect(new BranchLineageStore(root).read("pi:pending")).resolves.toMatchObject({ status: "active", parentRuntimeQualifiedId: "pi:parent", actual: { runtimeQualifiedId: "pi:actual" }, sharing: "shared", collisionDisclosure: ["concurrent changes share the current checkout"] });
+  });
+
+  it("performs binding/auth preflight before worktree, lease, terminal, or runtime side effects", async () => {
+    const deps = dependencies(), failure = new SessionError("ACCOUNT_AUTH_UNAVAILABLE", "OAuth unavailable"), runtime = { launch: vi.fn() }, terminal = { launch: vi.fn() };
+    const service = new ConversationBranchService({ ...deps, validateNativeBinding: vi.fn(async () => { throw failure; }), runtime, terminal, lineage: { savePending: vi.fn(), finalize: vi.fn(), fail: vi.fn() } }, new BranchLeaseStore(await mkdtemp(path.join(tmpdir(), "mpx-branch-"))));
+    const plan = await service.plan(base);
+    await expect(service.apply(plan, plan.confirmationDigest)).rejects.toBe(failure);
+    expect(deps.createIsolatedWorktree).not.toHaveBeenCalled(); expect(runtime.launch).not.toHaveBeenCalled(); expect(terminal.launch).not.toHaveBeenCalled();
+  });
+
+  it("cleans a new worktree and releases its durable writer lease when native launch fails", async () => {
+    const deps = dependencies(), leases = new BranchLeaseStore(await mkdtemp(path.join(tmpdir(), "mpx-branch-"))), remove = vi.fn(async () => undefined);
+    const service = new ConversationBranchService({ ...deps, removeIsolatedWorktree: remove, validateNativeBinding: vi.fn(async () => undefined), runtime: { launch: vi.fn(async () => { throw new Error("spawn failed"); }) }, lineage: { savePending: vi.fn(), finalize: vi.fn(), fail: vi.fn() } }, leases);
+    const plan = await service.plan(base);
+    await expect(service.apply(plan, plan.confirmationDigest)).rejects.toThrow("spawn failed");
+    expect(remove).toHaveBeenCalledWith({ cwd: "C:/repo.worktrees/mpx/session-child", worktreeRef: "wt-child" });
+    await expect(leases.acquire("C:/repo.worktrees/mpx/session-child", "claude:retry")).resolves.toBeDefined();
+  });
+
+  it("launches the optional terminal plan only through the terminal argv adapter", async () => {
+    const deps = dependencies(), runtime = { launch: vi.fn() }, terminal = { launch: vi.fn(async () => ({ lifecycle: Promise.resolve({ runtimeQualifiedId: "claude:actual", nativeSessionRef: { kind: "native-id" as const, value: "actual" } }), exited: Promise.resolve() })) };
+    const service = new ConversationBranchService({ ...deps, validateNativeBinding: vi.fn(async () => undefined), runtime, terminal, lineage: { savePending: vi.fn(), finalize: vi.fn(), fail: vi.fn() } }, new BranchLeaseStore(await mkdtemp(path.join(tmpdir(), "mpx-branch-"))));
+    const plan = await service.plan({ ...base, terminal: { enabled: true, executable: "C:/Program Files/WindowsApps/wt.exe", title: "child & safe" } });
+    await service.apply(plan, plan.confirmationDigest);
+    expect(runtime.launch).not.toHaveBeenCalled();
+    expect(terminal.launch).toHaveBeenCalledWith(expect.objectContaining({ executable: "C:/Program Files/WindowsApps/wt.exe", argv: ["new-tab", "--title", "child & safe", "--startingDirectory", "C:/repo.worktrees/mpx/session-child", "--", "C:/Program Files/Claude/claude.exe", "--resume", "parent id", "--fork-session"] }));
+  });
+
+  it("after confirmation launches through the argv adapter and atomically finalizes pending lineage from its lifecycle event", async () => {
+    const deps = dependencies(), exited = Promise.resolve();
+    const launch = vi.fn(async () => ({
+      lifecycle: Promise.resolve({ runtimeQualifiedId: "claude:actual-child", nativeSessionRef: { kind: "native-id" as const, value: "actual-child" } }),
+      exited,
+    }));
+    const savePending = vi.fn(async () => undefined), finalize = vi.fn(async () => undefined);
+    const service = new ConversationBranchService({ ...deps, validateNativeBinding: vi.fn(async () => undefined), runtime: { launch }, lineage: { savePending, finalize, fail: vi.fn() } }, new BranchLeaseStore(await mkdtemp(path.join(tmpdir(), "mpx-branch-"))));
+    const plan = await service.plan(base);
+    const applied = await service.apply(plan, plan.confirmationDigest);
+    expect(launch).toHaveBeenCalledWith({ executable: "C:/Program Files/Claude/claude.exe", argv: ["--resume", "parent id", "--fork-session"], cwd: "C:/repo.worktrees/mpx/session-child", nativeTarget: "runtime-created" });
+    expect(savePending).toHaveBeenCalledWith(expect.objectContaining({ pendingRuntimeQualifiedId: base.child.runtimeQualifiedId, sharing: "isolated", parentRuntimeQualifiedId: base.parent.runtimeQualifiedId }));
+    expect(finalize).toHaveBeenCalledWith(base.child.runtimeQualifiedId, { runtimeQualifiedId: "claude:actual-child", nativeSessionRef: { kind: "native-id", value: "actual-child" } });
+    expect(applied.child).toEqual({ runtimeQualifiedId: "claude:actual-child", nativeSessionRef: { kind: "native-id", value: "actual-child" } });
   });
 });
