@@ -1,6 +1,6 @@
 # MPX Unified System Migration
 
-**Status:** Sole authoritative active migration plan; Phases B–F1 and the Phase F2 host-Pi/sandbox-executor split implemented, live sbx attestation and later phases pending
+**Status:** Sole authoritative active migration plan; Phases B–F1 and G–I are implemented, the F2 host-Pi/sandbox-executor contracts and proof foundation are implemented with live standalone-sbx attestation pending, and Phase J tooling is implemented but live observation/cutover/rollback gates remain pending
 **Destination:** `C:/_MP_projects/mpx`  
 **Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates  
 **Canonical project manifest:** `mpxconfig.json`
@@ -1101,7 +1101,7 @@ This baseline is implemented; the tasks below record delivered scope and remain 
 
 **Status: complete.** Spec, security, reliability, and performance reviews are clean, and the full Phase F tests and gates pass. Evidence includes launch-bound neutral manifests and Claude/Pi projections; the exact `full`, `name-only`, `explicit-only`, and `off` states with separate model/human discovery; alias and runtime execution with default Docker safely gated pending F2, no fallback, and explicit host approval; canonical content and provenance; shared policy, hooks, and status with live runtime parity; project skills; read-only routes with Claude MCP support and structured Pi incompatibility; launch audits; and source verification.
 
-Phase F2 isolation and authentication proof remains pending. Docker does not become the default until that gate passes, and Phase F2 or any later phase is not marked complete here.
+The Phase F2 host-Pi/sandbox-executor split, contracts, diagnostics, and proof foundation are implemented. The pinned live standalone-sbx attestation remains pending; Docker does not become the default until that live gate passes.
 
 - Implement Docker-first launch resolution, identity-native runtime roots, Git/provider/SSH/MCP routing, mode/skill-policy/workspace/network/grant reporting, launch banners/audits, and immutable `launchKey` validation. Host filesystem execution is explicit elevation only.
 - Make account aliases delegate to the launch resolver while preserving fast personal/work selection and requiring relaunch for any rights change. From a known project directory, the aliases need no profile arguments beyond their built-in harness and identity selection.
@@ -1128,6 +1128,8 @@ For Pi, do not claim proxy-managed OAuth through a third-party kit: Docker curre
 
 ### Phase G — Sessions
 
+**Status: implemented.** Provider-neutral session persistence, discovery, lifecycle coordination, native identity/account binding, unfinished/inbox state, and fail-closed resume are covered by the Phase G acceptance evidence; live F2 admission remains independently gated.
+
 - Import session schemas/scanners/resume planning.
 - Add unfinished state and inbox.
 - Persist identity, mode, executor, resolved grants, skill artifact key, and `launchKey` without copying native credentials or prompt content.
@@ -1138,6 +1140,8 @@ For Pi, do not claim proxy-managed OAuth through a third-party kit: Docker curre
 **Gate:** active discovery, mark unfinished, restart, inbox persistence, and resume into the correct identity/mode/executor for both runtimes; personal/work native history remains isolated and rollback leaves old saves usable.
 
 ### Phase H — Project and template rollout
+
+**Status: implemented.** The expanded Phase H fixture matrix and acceptance evidence cover shared, coupled, checkout-scoped, external, and test-consumer rollout behavior without asserting unperformed machine cutover.
 
 Parallelize independent repository adaptations:
 
@@ -1153,6 +1157,8 @@ Do not include React Native.
 
 ### Phase I — Installation and system registration
 
+**Status: implemented.** Transactional installation, native Windows resource stores, four-route registration, external-integration planning, clean/existing-machine simulations, verification, and rollback are complete while legacy activation remains recoverable and enabled.
+
 - Install new CLI and user config; detect standalone `sbx` independently from Docker Desktop and report unsupported, legacy-only, unauthenticated, or client/daemon-mismatch states without making Docker a required dependency.
 - Register Claude plugin and Pi runtime.
 - Replace shell blocks with one managed launcher block that preserves `cc`/`ccd`/`ccw`/`ccwd` and `pi`/`piw` identity shortcuts.
@@ -1163,6 +1169,8 @@ Do not include React Native.
 **Gate:** `mpx install verify`, every identity/harness routing matrix, and the external integration checklist pass with old system still recoverable.
 
 ### Phase J — Cutover and retirement
+
+**Status: tooling implemented; live gates pending.** Reconciliation, complete parity reporting, privacy-safe installed-runtime access audit, legacy-disabled acceptance assertion/fixture, gated exact-marker cutover planning, confirmation digest, immutable 30-day snapshot contract, and temporary automated rollback drill are implemented. No real legacy activation, native state, repository, or remote is changed. See `docs/PHASE_J_RECONCILIATION.md` and the explicit non-empty exception gate in `docs/phase-j-exceptions.json`.
 
 - Observe normal use through a deliberate validation period.
 - Confirm no old path/config/namespace is accessed.

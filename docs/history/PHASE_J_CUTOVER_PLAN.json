@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "kind": "mpx-phase-j-cutover-plan",
+  "nonDestructive": true,
+  "gatePassed": false,
+  "actions": [
+    {
+      "kind": "remove-owned-marker-block",
+      "path": "${USERPROFILE}/.bashrc",
+      "startMarker": "# >>> mpx-ports >>>",
+      "endMarker": "# <<< mpx-ports <<<",
+      "exactOwnedMatch": true,
+      "eligible": false
+    },
+    {
+      "kind": "remove-owned-marker-block",
+      "path": "${USERPROFILE}/.bashrc",
+      "startMarker": "# >>> mpx-worktrees >>>",
+      "endMarker": "# <<< mpx-worktrees <<<",
+      "exactOwnedMatch": true,
+      "eligible": false
+    },
+    {
+      "kind": "remove-owned-marker-block",
+      "path": "${MPX_ONEDRIVE}/Dokumenty/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
+      "startMarker": "# >>> mpx-ports >>>",
+      "endMarker": "# <<< mpx-ports <<<",
+      "exactOwnedMatch": true,
+      "eligible": false
+    },
+    {
+      "kind": "remove-owned-marker-block",
+      "path": "${MPX_ONEDRIVE}/Dokumenty/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
+      "startMarker": "# >>> mpx-worktrees >>>",
+      "endMarker": "# <<< mpx-worktrees <<<",
+      "exactOwnedMatch": true,
+      "eligible": false
+    }
+  ],
+  "manualOnly": [
+    {
+      "kind": "archive",
+      "targets": [
+        "${MPX_PROJECTS}/mpx-pi",
+        "${MPX_PROJECTS}/mpx-claude-code"
+      ],
+      "requires": "complete provenance, zero runtime references, and human provider action"
+    },
+    {
+      "kind": "rename",
+      "targets": [
+        "${MPX_PROJECTS}/mpx-pi",
+        "${MPX_PROJECTS}/mpx-claude-code"
+      ],
+      "requires": "human filesystem action after rollback window"
+    },
+    {
+      "kind": "remotes",
+      "targets": [
+        "legacy repository remotes and redirects"
+      ],
+      "requires": "human provider and Git action"
+    }
+  ],
+  "prohibitions": [
+    "delete-native-state",
+    "disable-live-legacy",
+    "archive-repository",
+    "change-remotes"
+  ],
+  "confirmationDigest": "51532e107b1fac059a26bf0516ef098e119773007abb9a6befd616f9def5ed00"
+}

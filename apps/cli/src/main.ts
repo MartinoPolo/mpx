@@ -38,11 +38,12 @@ import { defaultDevService, executeDevCommand } from "./dev-command.js";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
 import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
 import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, SessionService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
+import { executeMigrationCommand } from "./migration.js";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
 class UsageError extends Error {}
-const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|view rebuild|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
+const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|migration reconcile|report|rollback-drill|cutover-plan|view rebuild|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
 
 const shortLaunchAliases = new Set<ShortLaunchAlias>(["cc", "ccw", "pi", "piw"]);
 function parse(argv: readonly string[]): Parsed {
@@ -51,7 +52,7 @@ function parse(argv: readonly string[]): Parsed {
     const word=argv[i]!;
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
-    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab"].includes(name!)) options.set(name!,true);
+    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab","legacy-disabled"].includes(name!)) options.set(name!,true);
     else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","intent","plan","transaction","terminal-title"].includes(name!)) {
       const value=inline ?? argv[++i]; if (value===undefined || (value.length===0 && name!=="body") || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
@@ -294,6 +295,10 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   const [group,action,...args]=parsed.command;
   if (!group) throw new UsageError(usage);
   if (parsed.options.get("rebuild") === true && (group !== "ports" || action !== "reconcile")) throw new UsageError("--rebuild is valid only for ports reconcile");
+  if (group==="migration") {
+    if (!action || !["reconcile","report","rollback-drill","cutover-plan"].includes(action) || args.length) throw new UsageError(usage);
+    return {data:await executeMigrationCommand({action,repoRoot:parsed.cwd,env:context.env,legacyDisabled:parsed.options.get("legacy-disabled")===true}),warnings:[]};
+  }
   if (parsed.options.get("confirm") === true && (group !== "init" || action !== undefined)) throw new UsageError("--confirm is valid only for init");
   let data: unknown;
   let warnings: Diagnostic[] = [];
