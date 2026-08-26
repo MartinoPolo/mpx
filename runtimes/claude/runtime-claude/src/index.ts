@@ -1,10 +1,11 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { enumerateSkillDirectory, loadSkillBody, verifyRuntimeSkillArtifact, type CatalogSkill, type ResolvedManifest, type RuntimeSkillArtifact } from "@mpx/skills";
-import { parseResolvedSkillManifestV4, parseRuntimeContextV1, publishRuntimeArtifact, validateRuntimeContext, RuntimeContractError, type PublishedRuntimeArtifactReference, type RuntimeContextV1, type RuntimeContractDiagnostic } from "@mpx/runtime-contracts";
+import { parseResolvedSkillManifestV4, parseRuntimeCapabilityManifestV1, parseRuntimeContextV1, publishRuntimeArtifact, validateRuntimeContext, RuntimeContractError, type PublishedRuntimeArtifactReference, type RuntimeContextV1, type RuntimeContractDiagnostic } from "@mpx/runtime-contracts";
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource, evaluatePackagePolicy, type PackageManager } from "@mpx/runtime-hooks";
 import { createRuntimeStatusRefreshController, parseRuntimeStatusEnvelopeV1, parseStatusSnapshotV1, renderClaudePortSegment, type RuntimeStatusBindingV1, type RuntimeStatusEnvelopeReader, type RuntimeStatusEnvelopeV1, type StatusSnapshotV1 } from "@mpx/status";
 import { createDevServerToolAdapter, createSystemRuntime, DevServiceManager, type DevServerToolAdapter, type ExecutorKind, type RuntimeAdapter as DevServiceRuntimeAdapter } from "@mpx/dev-services";
+import { registerClaudeRuntimeTools, type ClaudeRuntimeToolRegistrationInput } from "./runtime-tools.js";
 export * from "./runtime-tools.js";
 
 export class ClaudeRuntimeError extends Error { constructor(readonly code:string,message:string){super(`${code}: ${message}`);this.name="ClaudeRuntimeError";} }
@@ -198,6 +199,27 @@ export function createClaudeDevServerCapability(input:ClaudeDevServerCapabilityI
  if(!/^[a-f0-9]{64}$/u.test(input.launchKey))throw new ClaudeRuntimeError("DEV_SERVER_BINDING_INVALID","dev_server requires the exact launch key");
  const adapter=input.runtimeAdapter??(input.executor==="host"?createSystemRuntime():undefined);if(!adapter)throw new ClaudeRuntimeError("DOCKER_ADAPTER_REQUIRED","Docker dev_server requires a Docker runtime adapter; host fallback is forbidden");if(adapter.kind!==input.executor)throw new ClaudeRuntimeError("EXECUTOR_MISMATCH","dev_server runtime adapter does not match the selected executor");
  const manager=new DevServiceManager(adapter,event=>input.publish?.(Object.freeze({...event,launchKey:input.launchKey}))),tool=createDevServerToolAdapter(manager,{launchKey:input.launchKey,executor:input.executor,cwd:input.worktreeRoot,assignment:{worktreeRoot:input.worktreeRoot,ports:Object.freeze([...input.assignedPorts])}});const shutdown=async()=>{await manager.shutdown();input.publish?.(Object.freeze({type:"dev-server:shutdown",launchKey:input.launchKey}));};return Object.freeze({tool,manager,shutdown});
+}
+export interface ClaudePluginRuntimeActivationInput extends Omit<ClaudeRuntimeToolRegistrationInput,"devServer"|"shutdown"> {
+ readonly devServer: Omit<ClaudeDevServerCapabilityInput,"launchKey"|"publish">;
+ readonly status: { readonly reader:RuntimeStatusEnvelopeReader; readonly binding:RuntimeStatusBindingV1; readonly initial?:RuntimeStatusEnvelopeV1 };
+}
+export interface ClaudePluginRuntimeActivation {
+ readonly tools:ReturnType<typeof registerClaudeRuntimeTools>;
+ readonly devServer:ClaudeDevServerCapability;
+ readonly status:ClaudeRuntimeStatusProducer;
+ readonly shutdown:()=>Promise<void>;
+}
+/** Activates all mutable launch-owned Claude services behind the immutable generated plugin surface. */
+export function activateClaudePluginRuntime(input:ClaudePluginRuntimeActivationInput):ClaudePluginRuntimeActivation {
+ const capability=parseRuntimeCapabilityManifestV1(input.capability);
+ const devServer=createClaudeDevServerCapability({...input.devServer,launchKey:capability.launchKey,publish:input.publish});
+ const status=createClaudeRuntimeStatusProducer(input.status.reader,input.status.binding,input.status.initial);
+ let stopped=false;
+ const stopOwned=async()=>{status.abort();await devServer.shutdown();};
+ const tools=registerClaudeRuntimeTools({...input,devServer:devServer.tool,shutdown:stopOwned});
+ const shutdown=async()=>{if(stopped)return;stopped=true;await tools.shutdown();};
+ return Object.freeze({tools,devServer,status,shutdown});
 }
 export function diagnoseLegacyNamespaceConflicts(pluginNames:readonly string[]):RuntimeContractDiagnostic[]{const conflicts=pluginNames.filter(x=>x==="mp"||x==="mp-gh"||x.startsWith("mp:")||x.startsWith("mp-gh:"));if(conflicts.length)throw new ClaudeRuntimeError("LEGACY_NAMESPACE_CONFLICT",`legacy Claude namespace conflicts with mpx: ${conflicts.sort().join(", ")}`);return [];}
 export interface ClaudeInvocationInput {readonly executable:string;readonly pluginDirectory?:string;readonly projection?:ClaudePublishedProjection;readonly accountRoot:string;readonly runtimeContext:unknown;readonly projectionReference?:PublishedRuntimeArtifactReference;readonly statusSnapshotPath?:string;readonly runtimeStatusEnvelopePath?:string;readonly packageManager?:PackageManager|null;readonly sessionContext?:string;readonly compactInstructions?:string;readonly preCommitCheck?:string;readonly fallowExecutable?:string;readonly gatewayMcpConfigPath?:string;readonly mcpConfigPaths?:readonly string[];readonly environment:Readonly<Record<string,string|undefined>>;readonly legacyPluginNames?:readonly string[]}
