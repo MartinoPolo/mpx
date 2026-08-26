@@ -19,6 +19,16 @@ describe("subagent lifecycle", () => {
   it("gates schedule creation on an explicit user request", () => { const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" } }); expect(() => life.schedule({ id: "daily", explicitUserRequest: false, launch: request("scheduled"), nextRunAt: 1 })).toThrow(/SUBAGENT_SCHEDULE_EXPLICIT_REQUIRED/); });
   it("restores schedules on resume and preserves them on shutdown", async () => { const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" }, now: () => 10 }); life.restoreSchedules([{ id: "daily", explicitUserRequest: true, launch: request("scheduled"), nextRunAt: 5, intervalMs: 10, enabled: true, runCount: 0 }]); await life.processDue(); const saved = await life.shutdown(); expect(saved[0]).toMatchObject({ runCount: 1, nextRunAt: 20, enabled: true }); });
   it("delivers an unread background completion notification", async () => { const notify = vi.fn(); const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" }, notify }); await life.launch(request("a")); await new Promise(resolve => setTimeout(resolve, 0)); expect(notify).toHaveBeenCalledWith({ agents: [expect.objectContaining({ id: "a", status: "completed" })], partial: false }); });
+  it("contains and deterministically reports rejected notification callbacks without changing the lifecycle result", async () => {
+    const report = vi.fn(); const life = new SubagentLifecycle({ concurrency: 1, runner: { run: async () => "done" }, notify: async () => { throw new Error("transport down"); }, onNotificationError: report });
+    await life.launch(request("a")); await new Promise(resolve => setTimeout(resolve, 0));
+    await expect(life.get_subagent_result("a")).resolves.toBe("done");expect(report).toHaveBeenCalledWith(expect.objectContaining({message:"transport down"}),expect.objectContaining({agents:[expect.objectContaining({id:"a"})]}),1);
+  });
+  it("marks a group delivered only after a bounded notification retry succeeds", async () => {
+    const d=deferredRunner(),report=vi.fn(),notify=vi.fn().mockRejectedValueOnce(new Error("transient")).mockResolvedValue(undefined);
+    const life=new SubagentLifecycle({concurrency:1,runner:d.runner,notify,onNotificationError:report,notificationRetries:1});await life.launch(request("a",{join:"group",groupId:"g"}));life.registerGroup("g",["a"]);d.gates.get("a")!("done");
+    await new Promise(resolve=>setTimeout(resolve,0));expect(notify).toHaveBeenCalledTimes(2);expect(report).toHaveBeenCalledTimes(1);await expect(life.get_subagent_result("a")).resolves.toBe("done");
+  });
   it("cleans up an isolated worktree when the runner fails", async () => {
     const cleanup = vi.fn(async () => {}); const isolation = { create: vi.fn(async () => ({ cwd: "C:/repo.wt/a", sourceCwd: "C:/repo" })), cleanup } as unknown as StrictWorktreeIsolation;
     const life = new SubagentLifecycle({ concurrency: 1, isolation, runner: { run: async () => { throw new Error("runner failed"); } } });

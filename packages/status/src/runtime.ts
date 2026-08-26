@@ -176,8 +176,11 @@ export function createRuntimeStatusRefreshController(reader: RuntimeStatusEnvelo
   const timeoutMs = options.timeoutMs ?? 1_000; if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw new RangeError("timeoutMs must be from 1 through 60000");
   let value = options.initial === undefined ? undefined : parseRuntimeStatusEnvelopeV1(options.initial); let pending: Promise<void> | undefined; let active: AbortController | undefined;
   const refresh = (): Promise<void> => {
-    if (pending) return pending; active = new AbortController(); const timer = setTimeout(() => active?.abort(new Error("Runtime status refresh timed out")), timeoutMs); timer.unref?.();
-    pending = reader.read(active.signal).then((next) => { value = parseRuntimeStatusEnvelopeV1(next); }).catch(() => { if (value) value = staleEnvelope(value); }).finally(() => { clearTimeout(timer); active = undefined; pending = undefined; }); return pending;
+    if (pending) return pending;
+    const controller = new AbortController(); active = controller; let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => { const error = new Error("Runtime status refresh timed out"); controller.abort(error); reject(error); }, timeoutMs); timer.unref?.(); });
+    let read: Promise<void>; try { read = reader.read(controller.signal).then(next => { value = parseRuntimeStatusEnvelopeV1(next); }); } catch (error) { read = Promise.reject(error); }
+    pending = Promise.race([read, timeout]).catch(() => { if (value) value = staleEnvelope(value); }).finally(() => { clearTimeout(timer); if (active === controller) active = undefined; pending = undefined; }); return pending;
   };
   return { current: () => value, refresh, abort() { active?.abort(); } };
 }

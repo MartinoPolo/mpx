@@ -14,13 +14,15 @@ class SteeringChannel implements AsyncIterable<string> {
   } }; }
 }
 interface Internal { request: AgentLaunchRequest; agent: Agent; abort: AbortController; steer: SteeringChannel; promise: Promise<void>; resolve: () => void }
-interface Group { ids: Set<string>; delivered: boolean }
+interface Group { ids: Set<string>; notification: "idle" | "pending" | "delivered" | "failed" }
 export interface SubagentLifecycleOptions {
   readonly concurrency: number;
   readonly runner: AgentRunner;
   readonly isolation?: StrictWorktreeIsolation;
   readonly now?: () => number;
-  readonly notify?: (notification: CompletionNotification) => void;
+  readonly notify?: (notification: CompletionNotification) => void | Promise<void>;
+  readonly notificationRetries?: number;
+  readonly onNotificationError?: (error: Error, notification: CompletionNotification, attempt: number) => void;
 }
 
 /** Provider-neutral state machine for foreground, background, grouped and async child runs. */
@@ -29,6 +31,7 @@ export class SubagentLifecycle {
   private running = 0; private stopped = false; private readonly now: () => number;
   constructor(private readonly options: SubagentLifecycleOptions) {
     if (!Number.isSafeInteger(options.concurrency) || options.concurrency < 1) fail("SUBAGENT_CONCURRENCY_INVALID", "Concurrency must be a positive safe integer.");
+    if (options.notificationRetries !== undefined && (!Number.isSafeInteger(options.notificationRetries) || options.notificationRetries < 0 || options.notificationRetries > 10)) fail("SUBAGENT_NOTIFICATION_RETRIES_INVALID", "Notification retries must be from zero through ten.");
     this.now = options.now ?? Date.now;
   }
   async launch(request: AgentLaunchRequest): Promise<Agent> {
@@ -57,7 +60,7 @@ export class SubagentLifecycle {
   }
   registerGroup(groupId: string, ids: readonly string[]): void {
     if (!ids.length) fail("SUBAGENT_GROUP_EMPTY", "A group requires members.");
-    const group = { ids: new Set(ids), delivered: false }; this.groups.set(groupId, group);
+    const group: Group = { ids: new Set(ids), notification: "idle" }; this.groups.set(groupId, group);
     for (const id of ids) { const item = this.records.get(id); if (!item || item.request.groupId !== groupId) fail("SUBAGENT_GROUP_MISMATCH", "Group members must be launched with the same group id."); }
     this.maybeNotifyGroup(groupId);
   }
@@ -105,12 +108,19 @@ export class SubagentLifecycle {
   private finish(item: Internal, outcome: { result?: string; error?: string }): void {
     if (item.agent.status === "completed" || item.agent.status === "failed") return;
     item.agent = Object.freeze({ ...item.agent, status: outcome.error === undefined ? "completed" : "failed", completedAt: this.now(), ...(outcome.result === undefined ? {} : { result: outcome.result }), ...(outcome.error === undefined ? {} : { error: outcome.error }) }); item.resolve();
-    if (item.request.groupId) this.maybeNotifyGroup(item.request.groupId); else if (!item.agent.resultConsumed && item.request.join !== "foreground") this.options.notify?.({ agents: [item.agent], partial: false });
+    if (item.request.groupId) this.maybeNotifyGroup(item.request.groupId); else if (!item.agent.resultConsumed && item.request.join !== "foreground") void this.deliverNotification({ agents: [item.agent], partial: false });
+  }
+  private async deliverNotification(notification: CompletionNotification): Promise<boolean> {
+    if (!this.options.notify) return true;
+    const attempts=(this.options.notificationRetries??0)+1;
+    for(let attempt=1;attempt<=attempts;attempt++)try{await this.options.notify(notification);return true}catch(reason){const error=reason instanceof Error?reason:new Error(String(reason));try{this.options.onNotificationError?.(error,notification,attempt)}catch{/* Error reporting must not corrupt lifecycle completion. */}}
+    return false;
   }
   private maybeNotifyGroup(groupId: string): void {
-    const group = this.groups.get(groupId); if (!group || group.delivered) return;
+    const group = this.groups.get(groupId); if (!group || group.notification !== "idle") return;
     const terminal = [...group.ids].map(id => this.records.get(id)?.agent).filter((agent): agent is Agent => agent !== undefined && (agent.status === "completed" || agent.status === "failed"));
-    if (terminal.length !== group.ids.size) return; group.delivered = true;
-    const unread = terminal.filter(agent => !agent.resultConsumed); if (unread.length) this.options.notify?.({ agents: unread, partial: false });
+    if (terminal.length !== group.ids.size) return;
+    const unread = terminal.filter(agent => !agent.resultConsumed); if (!unread.length){group.notification="delivered";return}
+    group.notification="pending";void this.deliverNotification({agents:unread,partial:false}).then(delivered=>{group.notification=delivered?"delivered":"failed";});
   }
 }

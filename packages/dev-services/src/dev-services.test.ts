@@ -1,10 +1,10 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { DevServiceManager, DurableDevServiceManager, RollingLogBuffer, assertExecutorBoundary, createDevServerToolAdapter, systemSpawnInvocation, validateStartRequest, type ManagedProcess, type RuntimeAdapter } from "./index.js";
+import { DevServiceManager, DurableDevServiceManager, RollingLogBuffer, assertExecutorBoundary, createDevServerToolAdapter, createSystemRuntime, systemSpawnInvocation, validateStartRequest, type ManagedProcess, type RuntimeAdapter } from "./index.js";
 
 class Child extends EventEmitter implements ManagedProcess {
   stdout=new PassThrough(); stderr=new PassThrough(); fingerprint="started:100"; closed:Promise<{code:number|null;signal:string|null}>; resolve!: (v:{code:number|null;signal:string|null})=>void;
@@ -77,6 +77,22 @@ describe("managed development services",()=>{
     const runtime=new Runtime();runtime.probe=async()=>{throw new Error("probe exploded")};
     const manager=new DevServiceManager(runtime);await manager.start({...request,ports:[4100],assignment:{...request.assignment,ports:[4100]}});await new Promise(r=>setImmediate(r));
     expect(await manager.status("web")).toMatchObject({state:"crashed",lastError:"Readiness probe failed: probe exploded"});
+  });
+  it("does not let an in-flight durable readiness probe overwrite an exited child",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-race-")),runtime=new Runtime();let finishProbe!: (ready:boolean)=>void;
+    runtime.probe=async()=>new Promise<boolean>(resolve=>{finishProbe=resolve});
+    const manager=new DurableDevServiceManager(runtime,root);await manager.start({...request,ports:[4100],assignment:{...request.assignment,ports:[4100]}});
+    await new Promise(r=>setImmediate(r));runtime.children[0]!.exit(9,null);await new Promise(r=>setImmediate(r));finishProbe(true);await new Promise(r=>setImmediate(r));
+    expect(await manager.status("web")).toMatchObject({state:"crashed",pid:null,exitCode:9,readyAt:null});
+  });
+  it.skipIf(process.platform!=="win32"&&process.platform!=="linux")("reloads and safely controls an exact disposable OS child across managers (unsupported: durable process fingerprints require Windows or Linux)",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-os-"));const first=new DurableDevServiceManager(createSystemRuntime(),root);let pid:number|undefined;
+    try {
+      const started=await first.start({...request,executable:"node",args:["-e","console.log('durable-ready');setInterval(()=>{},1000)"],cwd:root,ports:[],assignment:{worktreeRoot:root,ports:[]}});pid=started.pid??undefined;
+      const fresh=new DurableDevServiceManager(createSystemRuntime(),root);expect(await fresh.status("web")).toMatchObject({state:"ready",pid,fingerprint:started.fingerprint});
+      for(let i=0;i<20&&!(await fresh.logs("web")).includes("durable-ready");i++)await new Promise(r=>setTimeout(r,25));
+      expect(await fresh.logs("web")).toContain("durable-ready");expect(await fresh.stop("web")).toMatchObject({state:"stopped",pid:null});expect(await fresh.reconcile()).toEqual([expect.objectContaining({state:"stopped",pid:null})]);
+    } finally { if(pid)try{process.kill(pid,"SIGKILL")}catch{} await rm(root,{recursive:true,force:true}); }
   });
   it("rolling logs retain UTF-8 boundaries and latest carriage-return frame",()=>{const logs=new RollingLogBuffer({maxCharacters:20});logs.beginRun(1);logs.write("stdout",Buffer.from("old\rnew\n"));expect(logs.present()).toBe("new")});
 });

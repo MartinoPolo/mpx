@@ -11989,7 +11989,7 @@
             "path": "extensions/dev-server-pane.ps1",
             "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12028,7 +12028,7 @@
             "path": "extensions/dev-server-pane.ts",
             "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12066,7 +12066,7 @@
             "path": "extensions/dev-server/contract.ts",
             "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12104,7 +12104,7 @@
             "path": "extensions/dev-server/footer-format.test.ts",
             "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12142,7 +12142,7 @@
             "path": "extensions/dev-server/footer-format.ts",
             "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12180,7 +12180,7 @@
             "path": "extensions/dev-server/footer-lifecycle.test.ts",
             "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12218,7 +12218,7 @@
             "path": "extensions/dev-server/index.test.ts",
             "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12256,7 +12256,7 @@
             "path": "extensions/dev-server/index.ts",
             "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12294,7 +12294,7 @@
             "path": "extensions/dev-server/log-buffer.test.ts",
             "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12332,7 +12332,7 @@
             "path": "extensions/dev-server/log-buffer.ts",
             "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12370,7 +12370,7 @@
             "path": "extensions/dev-server/manager.test.ts",
             "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12408,7 +12408,7 @@
             "path": "extensions/dev-server/manager.ts",
             "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12446,7 +12446,7 @@
             "path": "extensions/dev-server/package.json",
             "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12484,7 +12484,7 @@
             "path": "extensions/dev-server/system-runtime.test.ts",
             "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12522,7 +12522,7 @@
             "path": "extensions/dev-server/system-runtime.ts",
             "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715"
           },
-          "sha256": "e867d7e11da2ce7e8e5d8a788defe38f9e2acae2001d9ba85a79aad48b9a21e8",
+          "sha256": "2c8a745016652597218426fda1b9311f96336747e59be146f5ae7cfc7ff3ba51",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -14311,7 +14311,7 @@
             "path": "extensions/terminal-progress/index.test.ts",
             "sha256": "df3651ad9fb5c20c1559443d7717eab7af4169b0f5f7f5c5c06d2b5a7d89cd89"
           },
-          "sha256": "bdb6fcda07ba578e43acfd13b26e69fffcdea8f11d5358b8648ac6fba1170f95",
+          "sha256": "603c970dac088be42edcd9f73bb858747bd2f2a0e8223884d7bf16838bba425f",
           "reference": "packages/status/src/runtime.test.ts",
           "verification": "passed"
         }
@@ -14349,7 +14349,7 @@
             "path": "extensions/terminal-progress/index.ts",
             "sha256": "0cf62463adbd9d27fd9a9253d99593ee26f7afa2cd595cd5d29f1361cade59af"
           },
-          "sha256": "bdb6fcda07ba578e43acfd13b26e69fffcdea8f11d5358b8648ac6fba1170f95",
+          "sha256": "603c970dac088be42edcd9f73bb858747bd2f2a0e8223884d7bf16838bba425f",
           "reference": "packages/status/src/runtime.test.ts",
           "verification": "passed"
         }
@@ -14387,7 +14387,7 @@
             "path": "extensions/terminal-progress/package.json",
             "sha256": "ce952aff878b752cb6e8c65126f4464a54711ee875e33d3e16e0bfc700caea3f"
           },
-          "sha256": "bdb6fcda07ba578e43acfd13b26e69fffcdea8f11d5358b8648ac6fba1170f95",
+          "sha256": "603c970dac088be42edcd9f73bb858747bd2f2a0e8223884d7bf16838bba425f",
           "reference": "packages/status/src/runtime.test.ts",
           "verification": "passed"
         }
@@ -14425,7 +14425,7 @@
             "path": "extensions/terminal-progress/state.ts",
             "sha256": "dba1e4d4c19553175740c4a862949480a4dbed9668e348fb73404cb63982a310"
           },
-          "sha256": "bdb6fcda07ba578e43acfd13b26e69fffcdea8f11d5358b8648ac6fba1170f95",
+          "sha256": "603c970dac088be42edcd9f73bb858747bd2f2a0e8223884d7bf16838bba425f",
           "reference": "packages/status/src/runtime.test.ts",
           "verification": "passed"
         }
@@ -14463,7 +14463,7 @@
             "path": "extensions/terminal-progress/terminal-progress.test.ts",
             "sha256": "80d846aeb9777044f66093e8392fa450cf8dfe9e29d4cf6fdea8b2c0d9799092"
           },
-          "sha256": "bdb6fcda07ba578e43acfd13b26e69fffcdea8f11d5358b8648ac6fba1170f95",
+          "sha256": "603c970dac088be42edcd9f73bb858747bd2f2a0e8223884d7bf16838bba425f",
           "reference": "packages/status/src/runtime.test.ts",
           "verification": "passed"
         }

@@ -114,6 +114,17 @@ describe("runtime status refresh and projection", () => {
     controller.abort();
   });
 
+  it("times out a noncooperative reader, clears single-flight state, and permits a later refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = []; let calls = 0;
+      const controller = createRuntimeStatusRefreshController({ read: async signal => { signals.push(signal); calls++; if (calls === 1) return new Promise<never>(() => {}); return envelope(); } }, { initial: envelope(), timeoutMs: 50 });
+      const hung = controller.refresh(); await vi.advanceTimersByTimeAsync(50); await expect(hung).resolves.toBeUndefined();
+      expect(signals[0]?.aborted).toBe(true); expect(controller.current()?.identity.freshness.state).toBe("stale");
+      await expect(controller.refresh()).resolves.toBeUndefined(); expect(calls).toBe(2); expect(controller.current()?.identity.freshness.state).toBe("current");
+    } finally { vi.useRealTimers(); }
+  });
+
   it("exposes harness capabilities and only width-safe semantic actions", () => {
     expect(getRuntimeStatusCapabilitiesV1("claude").surface).toBe("statusline");
     expect(getRuntimeStatusCapabilitiesV1("pi").surface).toBe("footer");
