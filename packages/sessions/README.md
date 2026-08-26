@@ -10,7 +10,7 @@ Native limits are deliberate: Claude uses the supported `--resume <id> --fork-se
 
 Private, partitioned session records and lifecycle ingestion for MPX.
 
-Production discovery is identity- and runtime-root-bound. Each configured `(domain, identity, runtime, native root digest)` receives a distinct native binding; roots are never inferred from the current directory or shared across identities. Claude discovery runs the trusted absolute `MPX_CLAUDE_EXECUTABLE` with `CLAUDE_CONFIG_DIR` and direct `agents --json` arguments. Pi discovery is lifecycle-owned: validated MPX lifecycle events create and update records. Reading a legacy Pi `agent-resurrect` registry is supported only as an explicit, confirmation-bound one-time import, never as continuous production discovery.
+Production discovery is identity- and runtime-root-bound. Each configured `(domain, identity, runtime, native root digest)` receives a distinct native binding; roots are never inferred from the current directory or shared across identities. Claude discovery runs the trusted absolute `MPX_CLAUDE_EXECUTABLE` with `CLAUDE_CONFIG_DIR` and direct `agents --json` arguments. Pi discovery combines validated lifecycle events with the maintained v2 active registry under the exact configured, enrolled account root. It performs no home scan and admits only contained regular session files whose live process has the exact recorded start fingerprint; foreign-root and stale/reused process entries are denied. Other legacy Pi saves remain explicit, confirmation-bound one-time imports.
 
 ## User-authored handoff and completion
 

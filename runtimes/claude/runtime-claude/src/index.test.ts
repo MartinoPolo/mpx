@@ -78,15 +78,23 @@ it("adapts native Claude status data into the launch-bound envelope and renders 
     { id: "open-review", enabled: true, narrowLabel: "PR", wideLabel: "Review #42" },
     { id: "show-ci", enabled: true, narrowLabel: "CI", wideLabel: "CI passing" },
   );
+  const capturedAt = "2025-06-01T12:10:00.000Z";
+  const cachedActions = structuredClone(base.actions), cachedDevelopment = structuredClone(base.development), cachedProviderUsage = structuredClone(base.providerUsage);
   const adapted = adaptClaudeNativeStatus(base, {
     title: "Runtime wiring", effort: "high",
     model: { id: "claude-opus", display_name: "Opus" },
     cost: { total_cost_usd: 1.25, total_duration_ms: 90000 },
     context_window: { total_input_tokens: 2000, total_output_tokens: 500, context_window_size: 200000 },
-  });
+  }, { capturedAt });
   expect(adapted.binding).toEqual(base.binding);
-  expect(adapted.session).toMatchObject({ title: "Runtime wiring", elapsedMs: 90000 });
-  expect(adapted.model).toMatchObject({ modelId: "claude-opus", label: "Opus", effort: "high", contextUsedTokens: 2500, contextLimitTokens: 200000 });
+  expect(adapted.generatedAt).toBe(capturedAt);
+  expect(adapted.session).toMatchObject({ title: "Runtime wiring", elapsedMs: 90000, source: "native", state: "current", capturedAt, freshUntil: "2025-06-01T12:11:00.000Z" });
+  expect(adapted.model).toMatchObject({ modelId: "claude-opus", label: "Opus", effort: "high", contextUsedTokens: 2500, contextLimitTokens: 200000, source: "native", capturedAt });
+  expect(adapted.usage).toMatchObject({ inputTokens: 2000, outputTokens: 500, totalTokens: 2500, source: "native", capturedAt });
+  expect(adapted.cost).toMatchObject({ amountMicros: 1250000, source: "native", capturedAt });
+  expect(adapted.actions).toEqual({ ...cachedActions, state: "stale" });
+  expect(adapted.development).toEqual({ ...cachedDevelopment, state: "stale" });
+  expect(adapted.providerUsage).toEqual({ ...cachedProviderUsage, state: "stale" });
   const line = renderClaudeStatusLine(adapted, { launchBanner: "[mpx claude/host abcdef]", width: "wide" });
   for (const text of ["Personal", "Runtime wiring", "Opus/high", "2.5k/200k", "$1.25", "anthropic", "mpx/mpx@main", "compact:0", "agents:0/1", "Task panel", "Review #42", "CI passing"]) expect(line).toContain(text);
 });
@@ -105,10 +113,22 @@ it("projects only the launch-bound RuntimeStatusEnvelopeV1 when supplied", async
   const runtimeStatusEnvelope = JSON.parse(await readFile(new URL("../../../../packages/status/fixtures/runtime-claude-personal.json", import.meta.url), "utf8"));
   runtimeStatusEnvelope.binding.launchKey = f.runtimeContext.launchKey;
   runtimeStatusEnvelope.binding.repositoryId = f.runtimeContext.binding.repositoryId;
+  runtimeStatusEnvelope.development.services = [{ id: "api", port: 4100, state: "listening" }];
+  runtimeStatusEnvelope.actions.items = [{ id: "open-review", enabled: true, narrowLabel: "PR", wideLabel: "Open review" }];
   await buildClaudePlugin({ ...f, runtimeStatusEnvelope, outputRoot: out });
   const files = await tree(out);
   expect(files).toHaveProperty("status/runtime-status-envelope.json");
   expect(files).not.toHaveProperty("status/status-snapshot.json");
-  const result = await runNode([path.join(out, "status", "status-line.mjs")], { ...process.env, MPX_RUNTIME_CONTEXT: JSON.stringify(f.runtimeContext) });
-  expect(result).toMatchObject({ code: 0, stderr: "", stdout: expect.stringContaining("Personal") });
+  const statusLine = path.join(out, "status", "status-line.mjs"), environment = { ...process.env, MPX_RUNTIME_CONTEXT: JSON.stringify(f.runtimeContext) };
+  const first = await runNode([statusLine], environment, JSON.stringify({ title: "First run", model: { display_name: "Opus" }, cost: { total_cost_usd: 1.5 }, context_window: { total_input_tokens: 2000, total_output_tokens: 500 } }));
+  expect(first).toMatchObject({ code: 0, stderr: "", stdout: expect.stringContaining("First run") });
+  for (const preserved of ["Personal", "Opus", "2.5k", "$1.50", "api:4100*", "Open review"]) expect(first.stdout).toContain(preserved);
+  const restarted = await runNode([statusLine], environment, JSON.stringify({ title: "Restarted", model: { display_name: "Sonnet" }, context_window: { total_input_tokens: 100, total_output_tokens: 20 } }));
+  expect(restarted.stdout).toContain("Restarted");
+  expect(restarted.stdout).toContain("Sonnet");
+  expect(restarted.stdout).not.toContain("First run");
+  const source = await readFile(statusLine, "utf8");
+  expect(source).toContain("function adaptClaudeNativeStatus");
+  expect(source).toContain('source:"native"');
+  expect(source).not.toContain("observedAt=x.generatedAt");
 });

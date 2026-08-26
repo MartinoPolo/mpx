@@ -21,7 +21,7 @@ import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxEx
 import type { LaunchExecutionContext } from "./launch-execution.js";
 import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
-import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
+import { ClaudeActiveScanner, PiV2ActiveRegistryScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ProcessInspector, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
 import { InstallerService, NodeReceiptStore, NodeRunnerFileVerifier } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
@@ -490,8 +490,19 @@ export function productionSessionResumeDependencies(user: import("@mpx/config").
   });
 }
 
-export async function productionSessionDiscoveries(user: import("@mpx/config").UserConfig, store: SessionStore, environment: NodeJS.ProcessEnv, accountResolver?: NativeAccountBindingResolver): Promise<readonly { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]> {
+export interface ProductionSessionDiscoveryOptions {
+  readonly piProcessInspector?: ProcessInspector;
+  readonly clock?: () => number;
+}
+
+export async function productionSessionDiscoveries(user: import("@mpx/config").UserConfig, store: SessionStore, environment: NodeJS.ProcessEnv, accountResolver?: NativeAccountBindingResolver, options: ProductionSessionDiscoveryOptions = {}): Promise<readonly { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]> {
   const existing = await store.listNativeBindings();
+  const piProcessInspector = options.piProcessInspector ?? { inspect: async (pid: number) => {
+    try {
+      const inspected = await new WindowsProcessCapabilities().inspect(pid);
+      return inspected ? { startFingerprint: inspected.startFingerprint } : null;
+    } catch { return null; }
+  } };
   const result: { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[] = [];
   for (const [name, configured] of Object.entries(user.identities).sort(([a], [b]) => a.localeCompare(b))) {
     const identity = { domain: configured.domain, name };
@@ -503,20 +514,27 @@ export async function productionSessionDiscoveries(user: import("@mpx/config").U
       if(tupleBindings.length>1)throw new MpxError({code:"SESSION_NATIVE_BINDING_DUPLICATE",message:"Multiple native binding records claim the same identity, runtime, and root."});
       const prior=existing.find(binding=>binding.ref===ref)??tupleBindings[0];
       if (prior && (prior.identity.domain !== identity.domain || prior.identity.name !== identity.name || prior.runtime !== runtime || prior.recordedRootDigest !== recordedRootDigest)) throw new MpxError({ code: "SESSION_BINDING_MISMATCH", message: "A stable native binding reference is inconsistent with its exact identity, runtime, or root." });
-      if (!prior) {
-        const timestamp = new Date().toISOString();
-        await store.saveNativeBinding({ schemaVersion: 1, ref, identity, runtime, recordedRootDigest, accountBindingRef: await accountResolver?.resolve(identity, runtime, root) ?? null, createdAt: timestamp, updatedAt: timestamp });
-      } else if (accountResolver) {
-        const accountBindingRef = await accountResolver.resolve(identity, runtime, root);
-        if (accountBindingRef !== prior.accountBindingRef) await store.saveNativeBinding({ ...prior, accountBindingRef, updatedAt: new Date().toISOString() });
+      const resolvedAccountBindingRef = accountResolver ? await accountResolver.resolve(identity, runtime, root) : prior?.accountBindingRef ?? null;
+      const timestamp = new Date().toISOString();
+      const binding = prior
+        ? (resolvedAccountBindingRef === prior.accountBindingRef ? prior : { ...prior, accountBindingRef: resolvedAccountBindingRef, updatedAt: timestamp })
+        : { schemaVersion: 1 as const, ref, identity, runtime, recordedRootDigest, accountBindingRef: resolvedAccountBindingRef, createdAt: timestamp, updatedAt: timestamp };
+      if (!prior || binding !== prior) await store.saveNativeBinding(binding);
+      if (runtime === "pi") {
+        // Active Pi discovery is admitted only for an enrolled, exact configured root.
+        // The scanner receives that root directly; it never infers or scans a home directory.
+        if (binding.accountBindingRef !== null) result.push({
+          scanner: new PiV2ActiveRegistryScanner(root, path.join(root, "agent-resurrect", "active-sessions"), piProcessInspector, { ...(options.clock ? { clock: options.clock } : {}), missingDirectory: "available-empty" }),
+          context: { identity, nativeBindingRef: binding.ref, runtime },
+        });
+        continue;
       }
-      if (runtime === "pi") continue;
       const scanner: RuntimeDiscovery = new ClaudeActiveScanner(async command => {
             const executable = environment.MPX_CLAUDE_EXECUTABLE;
             if (!executable || !path.isAbsolute(executable) || command.join("\0") !== "claude\0agents\0--json") return { available: false, exitCode: 1, stdout: "" };
             return new Promise(resolve => execFile(executable, ["agents", "--json"], { env: { ...environment, CLAUDE_CONFIG_DIR: root }, shell: false, windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => resolve({ available: !error, exitCode: typeof (error as { code?: unknown } | null)?.code === "number" ? (error as { code: number }).code : error ? 1 : 0, stdout, stderr })));
           });
-      result.push({ scanner, context: { identity, nativeBindingRef: prior?.ref ?? ref, runtime } });
+      result.push({ scanner, context: { identity, nativeBindingRef: binding.ref, runtime } });
     }
   }
   return result;
