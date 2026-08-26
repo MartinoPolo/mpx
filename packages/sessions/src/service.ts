@@ -15,6 +15,7 @@ import {
   stableDigest,
   type IdentityV1,
   type SessionCaptureV1,
+  type SessionDispositionObservationV1,
   type SessionLiveness,
   type SessionRecordV1,
   type WorkflowStatus,
@@ -127,6 +128,79 @@ export class SessionService {
         "session abbreviation is ambiguous",
       );
     return abbreviated[0]!;
+  }
+  private async disposition(
+    operation: "handoff" | "completion",
+    query: string,
+    input: Readonly<{
+      identity: IdentityV1;
+      runtime?: RuntimeName;
+      summary: string;
+      nextAction: string;
+      disposition: "paused" | "unfinished" | "completed";
+    }>,
+  ): Promise<SessionDispositionObservationV1> {
+    const records = await this.list({ identity: input.identity, ...(input.runtime ? { runtime: input.runtime } : {}) });
+    const matches = records.filter(record =>
+        record.recordId === query || record.runtimeQualifiedId === query ||
+        record.recordId.startsWith(query) || record.runtimeQualifiedId.startsWith(query));
+      if (matches.length === 0) {
+        const outside = (await this.list()).some(record => record.recordId === query || record.runtimeQualifiedId === query || record.recordId.startsWith(query) || record.runtimeQualifiedId.startsWith(query));
+        throw new SessionError(outside ? "SESSION_IDENTITY_MISMATCH" : "SESSION_NOT_FOUND", outside ? "session belongs to a different identity or runtime" : "session was not found");
+      }
+      if (matches.length > 1) throw new SessionError("SESSION_AMBIGUOUS", "session abbreviation is ambiguous");
+      const found = matches[0]!;
+      const eventId = stableDigest({
+        operation,
+        recordId: found.recordId,
+        identity: found.identity,
+        runtime: found.runtime,
+        summary: input.summary,
+        nextAction: input.nextAction,
+        disposition: input.disposition,
+      });
+    return this.store.transaction(found.identity, found.runtime, registry => {
+        const current = registry.records.find(record => record.recordId === found.recordId);
+        if (!current) throw new SessionError("SESSION_NOT_FOUND", "session disappeared during disposition transaction");
+        if (current.workflow.observationId === eventId && current.workflow.operation === operation && current.workflow.dispositionAt) {
+          return { registry, result: {
+            schemaVersion: 1 as const, kind: "session-disposition" as const, eventId, operation,
+            disposition: input.disposition, occurredAt: current.workflow.dispositionAt,
+            identity: current.identity, runtime: current.runtime, record: current,
+          } };
+        }
+        const changedAt = this.clock();
+        const changed = parseSessionRecordV1({
+          ...current,
+          workflow: {
+            ...current.workflow,
+            status: input.disposition,
+            inbox: input.disposition === "unfinished",
+            summary: input.summary,
+            nextAction: input.nextAction,
+            dispositionAt: changedAt,
+            handedOffAt: operation === "handoff" ? changedAt : current.workflow.handedOffAt,
+            completedAt: operation === "completion" && input.disposition === "completed" ? changedAt : current.workflow.completedAt,
+            observationId: eventId,
+            operation,
+          },
+          timestamps: { ...current.timestamps, updatedAt: changedAt },
+        });
+        return {
+          registry: { ...registry, records: registry.records.map(record => record.recordId === changed.recordId ? changed : record) },
+          result: {
+            schemaVersion: 1 as const, kind: "session-disposition" as const, eventId, operation,
+            disposition: input.disposition, occurredAt: changedAt,
+            identity: changed.identity, runtime: changed.runtime, record: changed,
+          },
+        };
+    });
+  }
+  async handoff(query: string, input: Readonly<{ identity: IdentityV1; runtime?: RuntimeName; summary: string; nextAction: string; disposition: "paused" | "unfinished" }>): Promise<SessionDispositionObservationV1> {
+    return this.disposition("handoff", query, input);
+  }
+  async complete(query: string, input: Readonly<{ identity: IdentityV1; runtime?: RuntimeName; summary: string; nextAction: string; disposition: "paused" | "unfinished" | "completed" }>): Promise<SessionDispositionObservationV1> {
+    return this.disposition("completion", query, input);
   }
   async mark(
     query: string,
@@ -491,6 +565,9 @@ export class SessionService {
                   : "unknown",
             lifecycleState:
               record.liveness === "inactive" ? "shutdown" : record.liveness,
+            workflowStatus: record.workflow.status,
+            inbox: record.workflow.inbox,
+            dispositionAt: record.workflow.dispositionAt ?? null,
             capturedAt:
               record.runtime === "pi" && !processVerified.has(observationKey)
                 ? (lifecycleFactTimes.get(observationKey) ??
@@ -528,6 +605,9 @@ export class SessionService {
                 : "unknown",
           lifecycleState:
             record.liveness === "inactive" ? "shutdown" : record.liveness,
+          workflowStatus: record.workflow.status,
+          inbox: record.workflow.inbox,
+          dispositionAt: record.workflow.dispositionAt ?? null,
           capturedAt: processVerified.has(observationKey)
             ? capturedAt
             : (lifecycleFactTimes.get(observationKey) ??

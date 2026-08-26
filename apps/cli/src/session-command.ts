@@ -27,6 +27,16 @@ const repeated = (input: SessionCommandInput, name: string): string[] => {
   return Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
 };
 const usage = (message: string): never => { throw new SessionError("SESSION_USAGE_ERROR", message); };
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/u;
+function requiredSafeText(input: SessionCommandInput, name: string): string {
+  const candidate = text(input, name);
+  if (candidate === undefined) throw new SessionError("SESSION_USAGE_ERROR", `--${name} is required`);
+  const value: string = candidate;
+  if (value.length === 0) usage(`--${name} is required`);
+  if (value.length > 512) usage(`--${name} must be at most 512 characters`);
+  if (CONTROL.test(value) || value !== value.normalize("NFC")) usage(`--${name} contains invalid characters`);
+  return value;
+}
 async function consumePending(context: SessionCommandContext, service: SessionService): Promise<number> {
   const consumer = new LifecycleEventDirectoryConsumer(context.store, service);
   let consumed = 0;
@@ -70,9 +80,9 @@ function mapping(values: readonly string[], label: string): Map<string, string> 
 
 export async function executeSessionCommand(input: SessionCommandInput, context: SessionCommandContext): Promise<SessionCommandResult> {
   const service = new SessionService(context.store, undefined, context.processInspector);
-  if (!input.action || !["list", "show", "save", "resume", "mark", "inbox", "reconcile"].includes(input.action)) usage("session requires list, show, save, resume, mark, inbox, or reconcile");
-  const action = input.action as "list" | "show" | "save" | "resume" | "mark" | "inbox" | "reconcile";
-  const read = ["list", "show", "save", "inbox"].includes(action);
+  if (!input.action || !["list", "show", "save", "resume", "mark", "handoff", "complete", "completion", "inbox", "reconcile"].includes(input.action)) usage("session requires list, show, save, resume, mark, handoff, complete, inbox, or reconcile");
+  const action = input.action as "list" | "show" | "save" | "resume" | "mark" | "handoff" | "complete" | "completion" | "inbox" | "reconcile";
+  const read = ["list", "show", "save", "handoff", "complete", "completion", "inbox"].includes(action);
   if (read) await consumePending(context, service);
   if (action === "list") {
     if (input.args.length) usage("session list accepts no positional arguments");
@@ -82,6 +92,28 @@ export async function executeSessionCommand(input: SessionCommandInput, context:
   if (action === "show") {
     if (input.args.length !== 1) usage("session show requires one id");
     return { data: { schemaVersion: 1, kind: "session-show", record: await service.show(input.args[0]!) }, warnings: [] };
+  }
+  if (action === "handoff" || action === "complete" || action === "completion") {
+    if (input.args.length !== 1) usage(`session ${action} requires one id`);
+    const identityCandidate = text(input, "identity");
+    if (identityCandidate === undefined || identityCandidate.length === 0) throw new SessionError("SESSION_USAGE_ERROR", `session ${action} requires --identity`);
+    const identityName: string = identityCandidate;
+    const runtime = text(input, "runtime");
+    if (runtime !== undefined && runtime !== "claude" && runtime !== "pi") usage("--runtime must be claude or pi");
+    const disposition = text(input, "disposition");
+    const allowed = action === "handoff" ? ["paused", "unfinished"] : ["paused", "unfinished", "completed"];
+    if (!disposition || !allowed.includes(disposition)) usage(`--disposition must be ${allowed.join(", ")}`);
+    const request = {
+      identity: await context.resolveIdentity(identityName),
+      ...(runtime ? { runtime: runtime as "claude" | "pi" } : {}),
+      summary: requiredSafeText(input, "summary"),
+      nextAction: requiredSafeText(input, "next-action"),
+      disposition: disposition as "paused" | "unfinished" | "completed",
+    };
+    const observation = action === "handoff"
+      ? await service.handoff(input.args[0]!, { ...request, disposition: request.disposition as "paused" | "unfinished" })
+      : await service.complete(input.args[0]!, request);
+    return { data: observation, warnings: [] };
   }
   if (action === "mark") {
     if (input.args.length !== 2) usage("session mark requires <id> <status>");

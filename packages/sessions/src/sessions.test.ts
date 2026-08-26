@@ -846,7 +846,7 @@ it("reconcile scopes observations to context identity and deduplicates scanners"
     { scanner, context },
   ]);
   expect(observations).toHaveLength(1);
-  expect(observations[0]?.identityRef).toBe("corp/a:dev%2Fone");
+  expect(observations[0]).toMatchObject({ identityRef: "corp/a:dev%2Fone", workflowStatus: "paused", inbox: false, dispositionAt: null });
 });
 
 it("emits lifecycle-only Pi observations without duplicating Claude scanner observations", async () => {
@@ -1215,4 +1215,72 @@ it("maps an absolute Pi legacy session file through an explicit planning-only ro
     value: "sessions/pi.jsonl",
   });
   expect(JSON.stringify(plan)).not.toContain(nativeRoot.replaceAll("\\", "\\\\"));
+});
+
+it("durably applies idempotent handoff and completion dispositions without crossing identity partitions", async () => {
+  const root = await temporary();
+  const store = new SessionStore(root);
+  const first = new SessionService(store, () => instant);
+  await first.save(record({ workflow: { ...record().workflow, status: "completed", inbox: false } }));
+
+  const handedOff = await first.handoff("record-abc", {
+    identity,
+    summary: "Tests are green",
+    nextAction: "Open the review",
+    disposition: "unfinished",
+  });
+  expect(handedOff).toMatchObject({
+    schemaVersion: 1,
+    kind: "session-disposition",
+    operation: "handoff",
+    disposition: "unfinished",
+    occurredAt: instant,
+    record: { workflow: { summary: "Tests are green", nextAction: "Open the review", inbox: true, handedOffAt: instant } },
+  });
+
+  const restarted = new SessionService(new SessionStore(root), () => later);
+  const retry = await restarted.handoff("record-abc", {
+    identity,
+    summary: "Tests are green",
+    nextAction: "Open the review",
+    disposition: "unfinished",
+  });
+  expect(retry.eventId).toBe(handedOff.eventId);
+  expect(retry.occurredAt).toBe(instant);
+
+  const completed = await restarted.complete("record-abc", {
+    identity,
+    summary: "Review merged",
+    nextAction: "No further action",
+    disposition: "completed",
+  });
+  expect(completed.record.workflow).toMatchObject({ status: "completed", inbox: false, completedAt: later });
+
+  const reopened = await restarted.complete("record-abc", {
+    identity,
+    summary: "Follow-up found",
+    nextAction: "Fix regression",
+    disposition: "unfinished",
+  });
+  expect(reopened.record.workflow).toMatchObject({ status: "unfinished", inbox: true, completedAt: later });
+  await expect(restarted.handoff("record-abc", {
+    identity: { domain: identity.domain, name: "someone-else" },
+    summary: "wrong identity",
+    nextAction: "must fail",
+    disposition: "paused",
+  })).rejects.toMatchObject({ code: "SESSION_IDENTITY_MISMATCH" });
+});
+
+it("serializes concurrent identical handoffs into one durable observation", async () => {
+  const store = new SessionStore(await temporary());
+  await store.put(record());
+  const service = new SessionService(store, () => later);
+  const results = await Promise.all(Array.from({ length: 12 }, () => service.handoff("record-abc", {
+    identity,
+    summary: "Ready for review",
+    nextAction: "Review changes",
+    disposition: "paused",
+  })));
+  expect(new Set(results.map(result => result.eventId))).toHaveLength(1);
+  expect((await store.read(identity, "claude")).records).toMatchObject([{ workflow: { summary: "Ready for review", dispositionAt: later, inbox: false } }]);
 });

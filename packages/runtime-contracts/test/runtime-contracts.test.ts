@@ -82,7 +82,7 @@ describe("private lifecycle v1 contracts", () => {
   });
 
   it("strictly parses bounded runtime observations without native content", () => {
-    const observation = createRuntimeSessionObservationV1({ runtime: "claude", identityRef: "identity-1", runtimeQualifiedId: "claude:native-1", displayId: "native-1", title: null, resumeState: "resumable", lifecycleState: "active", capturedAt: "2025-01-01T00:00:02.000Z", freshUntil: "2025-01-01T00:01:02.000Z", source: "lifecycle-event", diagnostic: null });
+    const observation = createRuntimeSessionObservationV1({ runtime: "claude", identityRef: "identity-1", runtimeQualifiedId: "claude:native-1", displayId: "native-1", title: null, resumeState: "resumable", lifecycleState: "active", workflowStatus: "unfinished", inbox: true, dispositionAt: null, capturedAt: "2025-01-01T00:00:02.000Z", freshUntil: "2025-01-01T00:01:02.000Z", source: "lifecycle-event", diagnostic: null });
     expect(parseRuntimeSessionObservationV1(observation)).toEqual(observation);
     expect(() => parseRuntimeSessionObservationV1({ ...observation, title: "x".repeat(513) })).toThrowError(/INVALID_CONTRACT/u);
     expect(() => parseRuntimeSessionObservationV1({ ...observation, messages: [] })).toThrowError(/UNKNOWN_FIELD/u);

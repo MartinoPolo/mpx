@@ -117,3 +117,22 @@ describe("session command", () => {
     await expect(executeSessionCommand({ action: "resume", args: ["session-one"], options: new Map([["confirm-plan", planned.data.confirmationDigest]]) }, { ...context, resumeDependencies, executeResume: async () => ({}) })).rejects.toMatchObject({ code: "SESSION_RESUME_CONFIRMATION_MISMATCH" });
   });
 });
+
+it("emits structured no-model handoff and completion envelopes with bounded required user text", async () => {
+  const context = await fixture();
+  const handoff = await executeSessionCommand({ action: "handoff", args: ["session-one"], options: new Map([
+    ["identity", "me"], ["summary", "Implementation is ready"], ["next-action", "Run acceptance"], ["disposition", "paused"],
+  ]) }, context);
+  expect(handoff.data).toMatchObject({ schemaVersion: 1, kind: "session-disposition", operation: "handoff", disposition: "paused" });
+
+  const completion = await executeSessionCommand({ action: "complete", args: ["session-one"], options: new Map([
+    ["identity", "me"], ["summary", "Acceptance passed"], ["next-action", "Archive work"], ["disposition", "completed"],
+  ]) }, context);
+  expect(completion.data).toMatchObject({ schemaVersion: 1, kind: "session-disposition", operation: "completion", record: { workflow: { inbox: false } } });
+
+  for (const [name, value] of [["summary", ""], ["summary", "x".repeat(513)], ["next-action", "bad\u0000text"]] as const) {
+    const options = new Map<string, string>([["identity", "me"], ["summary", "ok"], ["next-action", "continue"], ["disposition", "unfinished"]]);
+    options.set(name, value);
+    await expect(executeSessionCommand({ action: "handoff", args: ["session-one"], options }, context)).rejects.toMatchObject({ code: "SESSION_USAGE_ERROR" });
+  }
+});
