@@ -468,7 +468,9 @@ export async function executeResolvedLaunch(input: {
   }};
   const selected = registries(input.context,input.descriptor,productionRuntimeAdapters({descriptor:input.descriptor,cwd:input.cwd,environment:input.environment,nativeRuntimeRoot:input.nativeRuntimeRoot,stateRoot:input.stateRoot,projectionInput,launchBanner:compactLaunchBanner(input.descriptor),initialSnapshot,statusSnapshot:input.statusSnapshot,bindStatusPath:value=>{boundStatusPath=value;},...(input.context.launchStatusSnapshotMaterializer?{statusMaterializer:input.context.launchStatusSnapshotMaterializer}:{}),...(trustedExecutable ? { trustedExecutable } : {}),...(input.context.launchProjectionBuilder?{builder:input.context.launchProjectionBuilder}:{}),...(input.context.launchProjectionValidator?{validator:input.context.launchProjectionValidator}:{})}),processAdapter);
   const approvals = new HostApprovalStore();
-  const service = new ExecutionService({ ...selected, routes: { materialize: async () => materializedRoutes }, ...(input.context.launchAudit ? { audit: input.context.launchAudit } : {}), approvals });
+  const hostPiProcessExecutor = input.context.launchExecutorAdapters?.find(candidate => candidate.name === "host")
+    ?? (input.context.launchExecutorAdapters ? processAdapter : hostExecutor);
+  const service = new ExecutionService({ ...selected, routes: { materialize: async () => materializedRoutes }, ...(input.context.launchAudit ? { audit: input.context.launchAudit } : {}), approvals, hostPiProcessExecutor });
   let hostApproval;
   const tty = input.tty;
   const environment=Object.fromEntries(Object.entries(input.environment).filter((entry):entry is [string,string]=>entry[1]!==undefined));

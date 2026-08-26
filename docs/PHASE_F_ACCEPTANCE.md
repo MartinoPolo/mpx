@@ -1,6 +1,6 @@
 # Phase F acceptance status
 
-Phase F is **complete**. The final Phase F gates pass, and the spec, security, reliability, and performance reviews are clean. This document records the completed integration slice and its verification boundary; Phase F2 and all later phases remain pending.
+Phase F is **complete** and the Phase F2 host-Pi/sandbox-executor production split is implemented. Live sbx VM/auth attestation remains an installation gate; later phases remain pending.
 
 ## Present in this slice
 
@@ -33,9 +33,9 @@ git diff --check
 
 `pnpm run typecheck` is a required pre-commit gate. The repository uses only the root `pnpm-lock.yaml`; nested package-manager lockfiles fail validation.
 
-## Phase F2 foundation
+## Phase F2 routing and proof
 
-The proof/contracts-only F2 foundation is documented in [`PHASE_F2_PROOF_FOUNDATION.md`](PHASE_F2_PROOF_FOUNDATION.md). It adds immutable sbx and runtime-tool inventory inputs without performing live sandbox operations; F2 runtime acceptance remains pending.
+The host-Pi/sandbox-executor split is documented in [`PHASE_F2_PROOF_FOUNDATION.md`](PHASE_F2_PROOF_FOUNDATION.md). Production remote routing, exact tool replacement, launch/identity binding, child narrowing and fake-worker proof are implemented without performing live sandbox or authentication operations.
 
 ## Supplemental Phase F1 native inventory
 
@@ -43,4 +43,4 @@ The privacy-safe native package/plugin inventory collector, repository declarati
 
 ## Explicit non-claims
 
-This slice does not establish F2 Docker/container isolation, Phase G session continuation/resurrection, Phase I route/MCP provisioning or installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.
+This slice does not claim live Docker VM/auth attestation, Phase G session continuation/resurrection, Phase I installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.

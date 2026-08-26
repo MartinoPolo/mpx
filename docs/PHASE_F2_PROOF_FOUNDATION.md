@@ -1,21 +1,21 @@
-# Phase F2 proof/contracts foundation
+# Phase F2 host-Pi / sandbox-executor split
 
-This slice establishes proof inputs and contracts only. It performs **no live sbx, daemon, container, or authentication operation** and does not claim F2 runtime acceptance.
+Phase F2 production routing is implemented without performing a real container or authentication operation.
 
-## Immutable inputs
+## Host/private boundary
 
-- `inventory/SBX_V0_39_0.json` pins installed standalone sbx v0.39.0, its Windows binary, release/contrib review commits, and reviewed license/features/commands artifact hashes.
-- The legacy Docker sandbox integration and the contrib Pi kit are explicitly rejected; neither can satisfy `SbxPinV1`.
-- `inventory/PHASE_F1_RUNTIME_TOOL_INVENTORY.json` is generated from the code-owned registry in `packages/runtime-tools/src/runtime-tool-registry.ts`. Its executor-evidence binding is the SHA-256 of `packages/executors/src/index.ts`.
+For Docker launches, Pi's process, TUI, model connection, OAuth store, session and history stay on the host. `ExecutionService` launches that process only through its dedicated host-Pi process adapter. Account roots and `PI_CODING_AGENT_DIR` are therefore never sent to the selected Docker executor.
 
-## Proof boundary
+Before session start, `activatePiSandboxExecutor` atomically replaces the complete model-triggerable tool set. It reasserts the same exact set at `session_start` and before every agent turn. File operations, shell/process, Git, browser, MCP, web/content, development services, skill search/load and all child-agent operations are remote proxies. A Docker launch without replacement support, a launch-bound remote executor, or complete attestation fails closed; there is no native host fallback. Host execution remains a separate explicitly approved compatibility mode.
 
-`@mpx/runtime-contracts` publishes strict v1 parsers and a JSON Schema bundle for `SbxPinV1`, `SbxDiagnosticsV1`, `SandboxPlanV1`, `SandboxAttestationV1`, `RemoteToolRequestV1`, `RemoteToolResultV1`, `SandboxResumeTokenV1`, and `F2ProofReportV1`.
+## Binding and privacy
 
-Contracts reject unknown fields, unsupported versions, malformed hashes, oversized identifiers, absolute host roots, and fields representing account IDs, prompts, secrets, credentials, authorization, or raw tokens. Remote requests/results carry hashes rather than prompt or result bodies.
+`ProductionRemoteExecutorRegistry` binds a `SandboxHandle` to launch key, identity, plan, capability and the Phase F1 inventory digest. Requests are sequenced and hash-bound. Cross-identity use, stale/replaced handles, replay, result mismatch, inventory widening and child authority widening are denied. Child lifecycle requests retain the same Docker executor and parent binding through `ChildLaunchAuthorityV1` and can only narrow tools/resources/routes/mounts/destinations/skills/models and nesting.
 
-A proof report is valid only against the current runtime-tool inventory digest and executor-evidence binding. Any registry, child-operation, implementation-path, or executor evidence change regenerates a digest and invalidates prior proof.
+Remote serialization rejects OAuth/authorization/token fields and values, account/native-root fields, `PI_CODING_AGENT_DIR`, `auth.json`, bearer values and token-shaped canaries. Sandbox plans expose only generated sandbox state and include negative VM-scan booleans. Native roots, credentials, opposite-domain roots, Docker sockets and Git common directories are protected mount boundaries.
 
-## Generated checks
+## Inventory and evidence
 
-Run `node scripts/generate-runtime-tool-inventory.mjs` after intentional registry changes. `pnpm run validate:generated` checks the committed inventory for drift.
+[`inventory/PHASE_F1_RUNTIME_TOOL_INVENTORY.json`](inventory/PHASE_F1_RUNTIME_TOOL_INVENTORY.json) is generated from the code-owned registry and now records all 53 top-level and child paths. Its `runtimeToolInventorySha256` binds remote tool-set attestation; its executor evidence digest binds proof to the implementation. Any registry or executor change invalidates prior evidence.
+
+The fake sandbox worker integration proves envelopes and routing without a real container or auth. Live sbx daemon/VM/auth attestation remains an installation gate and is not claimed here.

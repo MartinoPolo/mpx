@@ -63,7 +63,7 @@ export interface RuntimeToolGateway {
   get_search_content(input: { responseId: string }): Promise<{ readonly results?: readonly SearchResult[]; readonly content?: string }>;
   source_check(input: { claim: string; provider?: string; allowPaidCredits?: number; signal?: AbortSignal }): Promise<{ readonly claim: string; readonly sources: readonly SearchResult[] }>;
 }
-export { RUNTIME_GATEWAY_TOOL_NAMES, RUNTIME_TOOL_NAMES, RUNTIME_TOOL_REGISTRY, type RuntimeToolName, type RuntimeToolRegistryEntry } from "./runtime-tool-registry.js";
+export { RUNTIME_GATEWAY_TOOL_NAMES, RUNTIME_TOOL_NAMES, RUNTIME_TOOL_REGISTRY, RUNTIME_TOOL_INVENTORY_SHA256, type RuntimeToolName, type RuntimeToolRegistryEntry } from "./runtime-tool-registry.js";
 import { RUNTIME_GATEWAY_TOOL_NAMES, type RuntimeToolName } from "./runtime-tool-registry.js";
 export interface RuntimeToolUnsupportedDiagnostic { readonly code: "RUNTIME_TOOL_UNSUPPORTED"; readonly tool: RuntimeToolName; readonly phase: "pre-selection" }
 export interface LaunchBoundRuntimeTools {

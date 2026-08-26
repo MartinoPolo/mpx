@@ -144,7 +144,7 @@ export class FileLaunchAuditStore implements LaunchAuditStore {
 
 export class ExecutionService {
   readonly #approvals: HostApprovalStore;
-  constructor(readonly dependencies: { executors: ExecutorRegistry; runtimes: RuntimeAdapterRegistry; routes: RouteMaterializer; audit?: LaunchAuditStore; approvals?: HostApprovalStore; production?: boolean }) { this.#approvals = dependencies.approvals ?? new HostApprovalStore(); }
+  constructor(readonly dependencies: { executors: ExecutorRegistry; runtimes: RuntimeAdapterRegistry; routes: RouteMaterializer; audit?: LaunchAuditStore; approvals?: HostApprovalStore; production?: boolean; hostPiProcessExecutor?: ExecutorAdapter }) { this.#approvals = dependencies.approvals ?? new HostApprovalStore(); }
   hostApprovalRequest(input: Omit<ExecuteInput, "artifact" | "hostApproval" | "tty" | "approvalNonce">, nonce: string): HostApprovalRequest {
     const descriptor = parseLaunchDescriptorV2(input.descriptor);
     const reason = sanitizeHostReason(descriptor.elevationAudit.reason ?? "");
@@ -199,7 +199,12 @@ export class ExecutionService {
         const request = { executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), maxOutputBytes: 65_536, ...(input.signal ? { signal: input.signal } : {}) };
         const executionEvidence = await executor.verify();
         if (!sameVerificationEvidence(executionEvidence, descriptor.executorVerification)) fail("LAUNCH_RESTART_REQUIRED", "Executor verification evidence changed before invocation.", { restartRequired: true });
-        result = await executor.execute(request);
+        // Docker selects the model-triggerable executor, not Pi's UI/model process. Pi and its
+        // account/session environment remain host-side while all tool adapters use SandboxHandle.
+        const processExecutor = descriptor.runtime === "pi" && descriptor.executor.name === "docker"
+          ? this.dependencies.hostPiProcessExecutor ?? fail("HOST_PI_PROCESS_REQUIRED", "Docker Pi launch requires the dedicated host-side Pi process adapter.")
+          : executor;
+        result = await processExecutor.execute(request);
       } finally { await prepared.shutdown?.(); }
       if (audit && attemptId) {
         try { await audit.terminal(attemptId, launchAuditTerminal(descriptor, { result })); }
@@ -372,6 +377,7 @@ export * from "./sbx-policy.js";
 export * from "./remote-tool.js";
 export * from "./f2-evidence.js";
 export * from "./f2-proof-runner.js";
+export * from "./production-remote.js";
 
-/** Production planning and fake-sbx proof are implemented; live proof remains explicit opt-in. */
+/** Production planning, remote routing, and fake-sbx proof are implemented; live VM attestation remains an explicit installation gate. */
 export const F2_RUNTIME_CONTAINMENT_PROOF_IMPLEMENTED = true as const;

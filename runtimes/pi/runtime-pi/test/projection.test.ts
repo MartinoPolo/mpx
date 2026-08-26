@@ -8,5 +8,6 @@ it("projects retained Pi UX and vendored orchestration without host mutation", (
   expect(p.adapters).toEqual(["compact", "guard", "auto-title", "fullscreen", "events", "footer"]);
   expect(p.subagents).toMatchObject({ enabled: true, nestedOrchestration: true, fleetView: true, provenance: expect.stringContaining("projection/imported provenance only") });
   expect(p.accountProfiles).toEqual({ kind: "projection-only", mutation: "unsupported" });
-  expect(p.unsupported).toContain("F2 host replacement");
+  expect(p.unsupported).not.toContain("F2 host replacement");
+  expect(p.unsupported).toContain("live sbx/auth attestation");
 });

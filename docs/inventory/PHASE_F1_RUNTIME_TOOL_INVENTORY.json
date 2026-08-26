@@ -1,110 +1,332 @@
 {
   "schemaVersion": 1,
   "sourceRegistry": "packages/runtime-tools/src/runtime-tool-registry.ts",
-  "runtimeToolInventorySha256": "ef7ddcf9dfb0989b950f38b6443842658860ea4f30daeb6a1d3c06b8441d7ab0",
+  "runtimeToolInventorySha256": "64032f7f15021fc4999cf9458bbada0f61b7627a529e9f3ef62e873b5685451a",
   "executorEvidenceSource": "packages/executors/src/index.ts",
-  "executorEvidenceBindingSha256": "c7f02a54bb79aae274d1214dddf49aa4a3c0f20bb5d33eb6b1cf2c8123969c45",
+  "executorEvidenceBindingSha256": "e25fe17d7198a6d99576b96cf299a3597ef6e26bf22187ce841940f8301bbc8a",
   "counts": {
-    "topLevel": 6,
-    "childAccessible": 10,
-    "total": 16
+    "topLevel": 21,
+    "childAccessible": 32,
+    "total": 53
   },
   "entries": [
+    {
+      "path": "read",
+      "topLevel": "read",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "write",
+      "topLevel": "write",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "edit",
+      "topLevel": "edit",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "find",
+      "topLevel": "find",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "grep",
+      "topLevel": "grep",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "ls",
+      "topLevel": "ls",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "bash",
+      "topLevel": "bash",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "shell/execute",
+      "topLevel": "bash",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "process",
+      "topLevel": "process",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "process/start",
+      "topLevel": "process",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "process/status",
+      "topLevel": "process",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "process/logs",
+      "topLevel": "process",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "process/stop",
+      "topLevel": "process",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git",
+      "topLevel": "git",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/status",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/diff",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/log",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/branch",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/checkout",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/commit",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "git/worktree",
+      "topLevel": "git",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser",
+      "topLevel": "browser",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser/navigate",
+      "topLevel": "browser",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser/snapshot",
+      "topLevel": "browser",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser/click",
+      "topLevel": "browser",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser/type",
+      "topLevel": "browser",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser/evaluate",
+      "topLevel": "browser",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "browser/screenshot",
+      "topLevel": "browser",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
     {
       "path": "mcp",
       "topLevel": "mcp",
       "category": "aggregate",
-      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.mcp"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "mcp/:server/:method",
       "topLevel": "mcp",
       "category": "child-operation",
-      "implementation": "packages/runtime-tools/src/index.ts#GatewayExecutor.executeProcess|requestNetwork"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "web_search",
       "topLevel": "web_search",
       "category": "aggregate",
-      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.web_search"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "web_search/:provider/search",
       "topLevel": "web_search",
       "category": "child-operation",
-      "implementation": "packages/runtime-tools/src/index.ts#ProviderAdapter.search"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "fetch_content",
       "topLevel": "fetch_content",
       "category": "aggregate",
-      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.fetch_content"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "fetch_content/:provider/fetch",
       "topLevel": "fetch_content",
       "category": "child-operation",
-      "implementation": "packages/runtime-tools/src/index.ts#ProviderAdapter.fetch"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "get_search_content",
       "topLevel": "get_search_content",
       "category": "aggregate",
-      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.get_search_content"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "get_search_content/:response",
       "topLevel": "get_search_content",
       "category": "child-operation",
-      "implementation": "packages/runtime-tools/src/index.ts#launchContentStore"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "source_check",
       "topLevel": "source_check",
       "category": "aggregate",
-      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.source_check"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "source_check/web_search",
       "topLevel": "source_check",
       "category": "child-operation",
-      "implementation": "packages/runtime-tools/src/index.ts#RuntimeToolGateway.web_search"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "dev_server",
       "topLevel": "dev_server",
       "category": "aggregate",
-      "implementation": "packages/dev-services/src/tool-adapter.ts#createDevServerToolAdapter"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "dev_server/start",
       "topLevel": "dev_server",
       "category": "child-operation",
-      "implementation": "packages/dev-services/src/tool-adapter.ts#start"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "dev_server/status",
       "topLevel": "dev_server",
       "category": "child-operation",
-      "implementation": "packages/dev-services/src/tool-adapter.ts#status"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "dev_server/logs",
       "topLevel": "dev_server",
       "category": "child-operation",
-      "implementation": "packages/dev-services/src/tool-adapter.ts#logs"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "dev_server/restart",
       "topLevel": "dev_server",
       "category": "child-operation",
-      "implementation": "packages/dev-services/src/tool-adapter.ts#restart"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     },
     {
       "path": "dev_server/stop",
       "topLevel": "dev_server",
       "category": "child-operation",
-      "implementation": "packages/dev-services/src/tool-adapter.ts#stop"
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "mpx_model_search",
+      "topLevel": "mpx_model_search",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "mpx_model_load",
+      "topLevel": "mpx_model_load",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "Agent",
+      "topLevel": "Agent",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "Agent/child",
+      "topLevel": "Agent",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "Agent/nested",
+      "topLevel": "Agent",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "Agent/group",
+      "topLevel": "Agent",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "Agent/schedule",
+      "topLevel": "Agent",
+      "category": "child-operation",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "get_subagent_result",
+      "topLevel": "get_subagent_result",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
+    },
+    {
+      "path": "steer_subagent",
+      "topLevel": "steer_subagent",
+      "category": "aggregate",
+      "implementation": "packages/executors/src/production-remote.ts#ProductionRemoteToolClient.execute"
     }
   ]
 }
