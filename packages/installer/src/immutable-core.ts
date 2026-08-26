@@ -9,7 +9,8 @@ const SHA = /^[a-f0-9]{64}$/u;
 
 export interface ReleaseFileV1 { readonly path: string; readonly bytes: number; readonly sha256: string }
 export interface ReleaseManifestV1 { readonly schemaVersion: 1; readonly kind: "release-manifest"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[] }
-export interface InstallIntentV1 { readonly schemaVersion: 1; readonly kind: "install-intent"; readonly releaseKey: string; readonly convergenceHash: string; readonly components: readonly string[] }
+export interface InstallExternalIntegrationV1 { readonly id: string; readonly adapter: "git-remotes" | "obsidian" | "raycast"; readonly classification: "confirmation-required" | "manual-only" }
+export interface InstallIntentV1 { readonly schemaVersion: 1; readonly kind: "install-intent"; readonly releaseKey: string; readonly convergenceHash: string; readonly components: readonly string[]; readonly externalIntegrations?: readonly InstallExternalIntegrationV1[] }
 export interface MachineObservationV1 { readonly id: string; readonly digest: string | null }
 export interface InstallOperationV1 { readonly id: string; readonly adapter: string; readonly action: "ensure" | "remove"; readonly target: string; readonly desiredDigest: string | null }
 export interface InstallPlanV1 { readonly schemaVersion: 1; readonly kind: "install-plan"; readonly intent: InstallIntentV1; readonly observations: readonly MachineObservationV1[]; readonly operations: readonly InstallOperationV1[]; readonly confirmationDigest: string }
@@ -47,8 +48,20 @@ export function parseReleaseManifestV1(value: unknown): ReleaseManifestV1 {
   return { schemaVersion: 1, kind: "release-manifest", releaseKey: convergenceHash, convergenceHash, files };
 }
 export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
-  const intent = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "components"]);
-  if (intent.schemaVersion !== 1 || intent.kind !== "install-intent" || typeof intent.releaseKey !== "string" || !SHA.test(intent.releaseKey) || intent.releaseKey !== intent.convergenceHash || !Array.isArray(intent.components) || intent.components.some((x) => typeof x !== "string" || !x) || new Set(intent.components).size !== intent.components.length || intent.components.some((x, i, a) => i > 0 && a[i - 1].localeCompare(x) >= 0)) fail("INSTALL_SCHEMA_INVALID", "Invalid install intent.");
+  const record = value as Record<string, unknown> | null;
+  const hasExternal = Boolean(record && Object.prototype.hasOwnProperty.call(record, "externalIntegrations"));
+  const intent = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "components", ...(hasExternal ? ["externalIntegrations"] : [])]);
+  const external = intent.externalIntegrations;
+  const integrationsValid = !hasExternal || Array.isArray(external) && external.every((entry, index, all) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const item = entry as Record<string, unknown>;
+    return Object.keys(item).sort().join("\0") === ["adapter", "classification", "id"].sort().join("\0") &&
+      typeof item.id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(item.id) &&
+      ["git-remotes", "obsidian", "raycast"].includes(item.adapter as string) &&
+      (item.adapter === "raycast" ? item.classification === "manual-only" : item.classification === "confirmation-required") &&
+      (index === 0 || (all[index - 1] as { id: string }).id.localeCompare(item.id) < 0);
+  }) && new Set((external as { id: string }[]).map(entry => entry.id)).size === (external as unknown[]).length;
+  if (intent.schemaVersion !== 1 || intent.kind !== "install-intent" || typeof intent.releaseKey !== "string" || !SHA.test(intent.releaseKey) || intent.releaseKey !== intent.convergenceHash || !Array.isArray(intent.components) || intent.components.some((x) => typeof x !== "string" || !x) || new Set(intent.components).size !== intent.components.length || intent.components.some((x, i, a) => i > 0 && a[i - 1].localeCompare(x) >= 0) || !integrationsValid) fail("INSTALL_SCHEMA_INVALID", "Invalid install intent.");
   return intent as unknown as InstallIntentV1;
 }
 function parseObservation(value: unknown): MachineObservationV1 { const x = exact(value, ["id", "digest"]); if (typeof x.id !== "string" || !x.id || !(x.digest === null || typeof x.digest === "string" && SHA.test(x.digest))) fail("INSTALL_SCHEMA_INVALID", "Invalid observation."); return x as unknown as MachineObservationV1; }
