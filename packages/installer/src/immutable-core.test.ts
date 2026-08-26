@@ -6,6 +6,8 @@ import {
   NodeInstalledReleaseAuthority,
   activateRelease,
   buildReleaseManifest,
+  installerDigest,
+  parseOwnershipReceiptV1,
   parseReleaseManifestV1,
   publishRelease,
   readActiveRelease,
@@ -63,12 +65,23 @@ describe("immutable installer core", () => {
     expect(await readFile(path.join(destination, "runner.js"), "utf8")).toBe("one");
   });
 
+  it("rejects forged operation locators whose immutable specification no longer matches its receipt binding", () => {
+    const operation = { id: "owned", adapter: "files", action: "ensure" as const, target: "C:\\owned", desiredDigest: "b".repeat(64) }, spec = { kind: "file" };
+    const receipt = { schemaVersion: 2, kind: "ownership-receipt", releaseKey: installerDigest([]), convergenceHash: installerDigest([]), files: [], operations: [operation], operationLocators: [{ operationId: operation.id, adapter: operation.adapter, spec, bindingDigest: installerDigest({ operation, spec }) }], installedAt: "2025-01-01T00:00:00.000Z" };
+    expect(() => parseOwnershipReceiptV1({ ...receipt, operationLocators: [{ ...receipt.operationLocators[0], spec: { kind: "native" } }] })).toThrow(expect.objectContaining({ code: "INSTALL_SCHEMA_INVALID" }));
+  });
+
+  it("rejects legacy receipts whose removal operations have no durable locator", () => {
+    const releaseKey = installerDigest([]);
+    expect(() => parseOwnershipReceiptV1({ schemaVersion: 1, kind: "ownership-receipt", releaseKey, convergenceHash: releaseKey, files: [], operations: [{ id: "owned", adapter: "files", action: "ensure", target: "C:\\owned", desiredDigest: "b".repeat(64) }], installedAt: "2025-01-01T00:00:00.000Z" })).toThrow(expect.objectContaining({ code: "INSTALL_SCHEMA_INVALID" }));
+  });
+
   it("authorizes only a receipt-bound regular release file immediately before use", async () => {
     const source = await temporary(), apps = await temporary();
     await writeFile(path.join(source, "runner.js"), "runner");
     const manifest = await publishRelease({ sourceDirectory: source, appsRoot: apps });
     const entry = manifest.files[0]!;
-    const receipt: OwnershipReceiptV1 = { schemaVersion: 1, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations: [], installedAt: "2025-01-01T00:00:00.000Z" };
+    const receipt: OwnershipReceiptV1 = { schemaVersion: 2, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations: [], operationLocators: [], installedAt: "2025-01-01T00:00:00.000Z" };
     const authority = new NodeInstalledReleaseAuthority({ appsRoot: apps, receipt: async () => receipt, prohibitedRoots: [] });
     const evidence = { path: path.join(apps, "mpx", "releases", manifest.releaseKey, entry.path), sha256: entry.sha256, bytes: entry.bytes, version: manifest.releaseKey };
     await expect(authority.verifyInstalled(evidence)).resolves.toMatchObject(evidence);

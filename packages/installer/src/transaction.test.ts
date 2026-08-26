@@ -20,7 +20,7 @@ describe("durable installer transaction state", () => {
     const root = await mkdtemp(path.join(tmpdir(), "mpx-installer-state-"));
     const store = new NodeTransactionStore(root);
     const releaseKey = installerDigest([]);
-    const receipt = { schemaVersion: 1 as const, kind: "ownership-receipt" as const, releaseKey, convergenceHash: releaseKey, files: [], operations: [], installedAt: "2025-01-01T00:00:00.000Z" };
+    const receipt = { schemaVersion: 2 as const, kind: "ownership-receipt" as const, releaseKey, convergenceHash: releaseKey, files: [], operations: [], operationLocators: [], installedAt: "2025-01-01T00:00:00.000Z" };
     const snapshot = { schemaVersion: 1 as const, kind: "machine-snapshot" as const, transactionId: "tx", observations: [], capturedAt: "2025-01-01T00:00:00.000Z" };
     const stored = { journal: { schemaVersion: 1 as const, kind: "transaction-journal" as const, transactionId: "tx", phase: "applying" as const, completedOperationIds: [], snapshot }, snapshots: {}, operations: [] };
     await store.writeReceipt(receipt);

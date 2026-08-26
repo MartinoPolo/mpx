@@ -126,21 +126,26 @@ describe("local Markdown issues", () => {
     await expect(new LocalIssueStore(directory).create({ title: "blocked", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_IO" });
   });
 
-  it("reports a missed heartbeat and leaves a replacement owner untouched", async () => {
+  it("reports heartbeat loss during a post-commit callback as projection rebuild pending without inviting a duplicate retry", async () => {
     const directory = await root(), lock = path.join(directory, ".mpx-issues.lock"), displaced = `${lock}.displaced`;
-    let unblock!: () => void; const blocked = new Promise<void>(resolve => { unblock = resolve; });
-    const holding = new LocalIssueStore(directory, { staleLockMilliseconds: 15, lockHeartbeatMilliseconds: 1, lockToken: () => "holder", onChanged: async () => blocked }).create({ title: "holder", body: "" });
-    const holdingResult = holding.catch(error => error as LocalIssueError);
-    while (true) { try { await readFile(path.join(lock, "owner.json")); break; } catch { await new Promise(resolve => setTimeout(resolve, 1)); } }
+    let unblock!: () => void, callbackStarted!: () => void; const blocked = new Promise<void>(resolve => { unblock = resolve; }), started = new Promise<void>(resolve => { callbackStarted = resolve; });
+    const holding = new LocalIssueStore(directory, { staleLockMilliseconds: 15, lockHeartbeatMilliseconds: 1, lockToken: () => "holder", onChanged: async () => { callbackStarted(); await blocked; } }).create({ title: "holder", body: "" });
+    await started;
     for (let attempt = 0;; attempt++) { try { await rename(lock, displaced); break; } catch (error) { if (attempt === 20 || !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; await new Promise(resolve => setTimeout(resolve, 2)); } }
     await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "replacement", pid: process.pid, acquiredAt: Date.now(), heartbeatAt: Date.now() }));
     await new Promise(resolve => setTimeout(resolve, 20));
-    const indexBeforeRelease = await readFile(path.join(directory, ".mpx-index.json"), "utf8").catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; });
-    unblock(); expect(await holdingResult).toMatchObject({ code: "LOCAL_ISSUE_LOCK_LOST" });
+    unblock();
+    expect(await holding).toMatchObject({ id: "1", providerData: { local: { projectionRebuildPending: true, diagnostics: ["LOCAL_ISSUE_PROJECTION_REBUILD_PENDING"] } } });
+    expect((await new LocalIssueStore(directory).view("1")).title).toBe("holder");
     expect(JSON.parse(await readFile(path.join(lock, "owner.json"), "utf8"))).toMatchObject({ token: "replacement" });
-    await expect(new LocalIssueStore(directory, { staleLockMilliseconds: 1_000, lockTimeoutMilliseconds: 20, lockRetryMilliseconds: 1 }).create({ title: "concurrent", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_TIMEOUT" });
-    expect(await readFile(path.join(directory, ".mpx-index.json"), "utf8").catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; })).toBe(indexBeforeRelease);
     await rm(lock, { recursive: true, force: true }); await rm(displaced, { recursive: true, force: true });
+  });
+
+  it("returns a non-fatal pending projection diagnostic when the post-commit callback fails", async () => {
+    const directory = await root(), changed = async () => { throw new Error("projection offline"); };
+    const created = await new LocalIssueStore(directory, { onChanged: changed }).create({ title: "committed once", body: "" });
+    expect(created).toMatchObject({ id: "1", providerData: { local: { projectionRebuildPending: true, diagnostics: ["LOCAL_ISSUE_PROJECTION_REBUILD_PENDING"] } } });
+    expect((await new LocalIssueStore(directory).list()).map(issue => issue.id)).toEqual(["1"]);
   });
 
   it("uses deterministic lease time and atomic takeover for a dead owner", async () => {
@@ -157,7 +162,7 @@ describe("local Markdown issues", () => {
     const holding = new LocalIssueStore(directory, { lockToken: () => "old-token", onChanged: async()=>blocked }).create({ title:"old", body:"" });
     while(true){try{await readFile(path.join(lock,"owner.json"));break;}catch{await new Promise(resolve=>setTimeout(resolve,1));}}
     await rename(lock,`${lock}.removed`);await mkdir(lock);await writeFile(path.join(lock,"owner.json"),JSON.stringify({schemaVersion:1,token:"replacement",pid:process.pid,acquiredAt:Date.now(),heartbeatAt:Date.now()}));
-    unblock();await expect(holding).rejects.toMatchObject({code:"LOCAL_ISSUE_LOCK_LOST"});
+    unblock();expect(await holding).toMatchObject({id:"1",providerData:{local:{projectionRebuildPending:true}}});
     expect(JSON.parse(await readFile(path.join(lock,"owner.json"),"utf8"))).toMatchObject({token:"replacement"});
     await rm(lock,{recursive:true,force:true});await rm(`${lock}.removed`,{recursive:true,force:true});
   });

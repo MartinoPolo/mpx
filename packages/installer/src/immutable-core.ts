@@ -17,7 +17,8 @@ export interface InstallOperationV1 { readonly id: string; readonly adapter: str
 export interface InstallPlanReferenceV1 { readonly id: string; readonly planDigest: string; readonly verifierRef: string }
 export interface InstallOperationClassificationsV1 { readonly automatic: readonly string[]; readonly confirmationRequired: readonly InstallPlanReferenceV1[]; readonly manualOnly: readonly InstallPlanReferenceV1[] }
 export interface InstallPlanV1 { readonly schemaVersion: 1; readonly kind: "install-plan"; readonly intent: InstallIntentV1; readonly observations: readonly MachineObservationV1[]; readonly operations: readonly InstallOperationV1[]; readonly classifications?: InstallOperationClassificationsV1; readonly confirmationDigest: string }
-export interface OwnershipReceiptV1 { readonly schemaVersion: 1; readonly kind: "ownership-receipt"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[]; readonly operations: readonly InstallOperationV1[]; readonly installIntent?: InstallIntentV1; readonly installedAt: string }
+export interface InstallOperationLocatorV1 { readonly operationId: string; readonly adapter: string; readonly spec: unknown; readonly bindingDigest: string }
+export interface OwnershipReceiptV1 { readonly schemaVersion: 2; readonly kind: "ownership-receipt"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[]; readonly operations: readonly InstallOperationV1[]; readonly operationLocators: readonly InstallOperationLocatorV1[]; readonly installIntent?: InstallIntentV1; readonly installedAt: string }
 export interface InstallVerificationComponentV1 { readonly id: string; readonly automatic: true; readonly status: "actual-state-verified" | "unhealthy" }
 export interface InstallVerificationExternalV1 { readonly id: string; readonly classification: "confirmation-required" | "manual-only"; readonly status: "confirmed" | "manual-required"; readonly verifierRef: string }
 export interface InstallVerificationV1 { readonly schemaVersion: 1; readonly kind: "install-verification"; readonly releaseKey: string; readonly healthy: boolean; readonly issues: readonly string[]; readonly checkedAt: string; readonly components?: readonly InstallVerificationComponentV1[]; readonly externalIntegrations?: readonly InstallVerificationExternalV1[]; readonly manualOnly?: readonly string[] }
@@ -96,15 +97,35 @@ export function parseInstallPlanV1(value: unknown): InstallPlanV1 {
   if (!orderedUnique(parsed.observations) || !orderedUnique(parsed.operations) || installerDigest(parsed) !== plan.confirmationDigest || parsed.classifications && installerDigest(parsed.classifications.automatic) !== installerDigest(parsed.operations.slice(0, parsed.classifications.automatic.length).map(operation => operation.id))) fail("INSTALL_SCHEMA_INVALID", "Invalid plan confirmation or ordering.");
   return { ...parsed, confirmationDigest: plan.confirmationDigest };
 }
+function boundedLocatorSpec(value: unknown): unknown {
+  let nodes = 0;
+  const visit = (item: unknown, depth: number): unknown => {
+    if (++nodes > 4_096 || depth > 16) fail("INSTALL_SCHEMA_INVALID", "Receipt operation locator is too large.");
+    if (item === null || typeof item === "string" || typeof item === "boolean" || typeof item === "number" && Number.isFinite(item)) return item;
+    if (Array.isArray(item)) return item.map(child => visit(child, depth + 1));
+    if (!item || typeof item !== "object") fail("INSTALL_SCHEMA_INVALID", "Receipt operation locator is invalid.");
+    const entries = Object.entries(item as Record<string, unknown>);
+    if (entries.some(([key]) => !key || key.length > 128)) fail("INSTALL_SCHEMA_INVALID", "Receipt operation locator is invalid.");
+    return Object.fromEntries(entries.sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, visit(child, depth + 1)]));
+  };
+  const parsed = visit(value, 0);
+  if (Buffer.byteLength(canonicalJson(parsed), "utf8") > 65_536) fail("INSTALL_SCHEMA_INVALID", "Receipt operation locator is too large.");
+  return parsed;
+}
 export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
   const source = value as Record<string, unknown> | null, hasIntent = Boolean(source && Object.prototype.hasOwnProperty.call(source, "installIntent"));
-  const receipt = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "files", "operations", ...(hasIntent ? ["installIntent"] : []), "installedAt"]);
-  if (receipt.schemaVersion !== 1 || receipt.kind !== "ownership-receipt" || typeof receipt.installedAt !== "string" || !Number.isFinite(Date.parse(receipt.installedAt)) || !Array.isArray(receipt.operations)) fail("INSTALL_SCHEMA_INVALID", "Invalid ownership receipt.");
+  const receipt = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "files", "operations", "operationLocators", ...(hasIntent ? ["installIntent"] : []), "installedAt"]);
+  if (receipt.schemaVersion !== 2 || receipt.kind !== "ownership-receipt" || typeof receipt.installedAt !== "string" || !Number.isFinite(Date.parse(receipt.installedAt)) || !Array.isArray(receipt.operations) || !Array.isArray(receipt.operationLocators)) fail("INSTALL_SCHEMA_INVALID", "Invalid or legacy-ambiguous ownership receipt.");
   const manifest = parseReleaseManifestV1({ schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files });
-  const operations = receipt.operations.map(parseInstallOperationV1); if (!orderedUnique(operations)) fail("INSTALL_SCHEMA_INVALID", "Receipt operations must be sorted.");
+  const operations = receipt.operations.map(parseInstallOperationV1); if (!orderedUnique(operations) || receipt.operationLocators.length !== operations.length) fail("INSTALL_SCHEMA_INVALID", "Receipt operations and locators must be sorted and complete.");
+  const operationLocators = receipt.operationLocators.map((value, index): InstallOperationLocatorV1 => {
+    const locator = exact(value, ["operationId", "adapter", "spec", "bindingDigest"]), operation = operations[index]!, spec = boundedLocatorSpec(locator.spec);
+    if (locator.operationId !== operation.id || locator.adapter !== operation.adapter || typeof locator.bindingDigest !== "string" || !SHA.test(locator.bindingDigest) || locator.bindingDigest !== installerDigest({ operation, spec })) fail("INSTALL_SCHEMA_INVALID", "Receipt operation locator binding is invalid.");
+    return { operationId: operation.id, adapter: operation.adapter, spec, bindingDigest: locator.bindingDigest };
+  });
   const installIntent = hasIntent ? parseInstallIntentV1(receipt.installIntent) : undefined;
   if (installIntent && installIntent.releaseKey !== manifest.releaseKey) fail("INSTALL_SCHEMA_INVALID", "Receipt intent does not match its release.");
-  return { schemaVersion: 1, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations, ...(installIntent ? { installIntent } : {}), installedAt: receipt.installedAt as string };
+  return { schemaVersion: 2, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations, operationLocators, ...(installIntent ? { installIntent } : {}), installedAt: receipt.installedAt as string };
 }
 export function parseInstallVerificationV1(value: unknown): InstallVerificationV1 {
   const verification = exact(value, ["schemaVersion", "kind", "releaseKey", "healthy", "issues", "checkedAt"]);

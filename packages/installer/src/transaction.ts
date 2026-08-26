@@ -11,6 +11,7 @@ import {
   parseMachineSnapshotV1,
   parseOwnershipReceiptV1,
   type InstallIntentV1,
+  type InstallOperationLocatorV1,
   type InstallOperationV1,
   type InstallPlanV1,
   type InstallVerificationV1,
@@ -30,6 +31,8 @@ export interface SideEffectAdapter {
   capture(operation: InstallOperationV1): Promise<string | null>;
   apply(operation: InstallOperationV1): Promise<void>;
   restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
+  receiptLocator?(operation: InstallOperationV1): Promise<unknown>;
+  hydrateReceiptOperation?(operation: InstallOperationV1, locator: unknown): Promise<void>;
 }
 export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[]; priorReceipt?: OwnershipReceiptV1 }
 function durableSnapshots(snapshots:Readonly<Record<string,string|null>>,journal:TransactionJournalV1):Record<string,string|null>{const ids=[...journal.completedOperationIds,...(journal.inFlightOperationId?[journal.inFlightOperationId]:[])];return Object.fromEntries(ids.map(id=>[id,snapshots[id]??null]));}
@@ -171,7 +174,12 @@ export class ImmutableInstallerService {
         }
         const manifest = this.options.manifest;
         if (!priorReceipt && (!manifest || manifest.releaseKey !== plan.intent.releaseKey || manifest.convergenceHash !== plan.intent.convergenceHash)) fail("INSTALL_RELEASE_MANIFEST_REQUIRED", "Exact release manifest is required for ownership.");
-        const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 1, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: manifest!.files, operations: plan.operations, installIntent: plan.intent, installedAt: this.now().toISOString() };
+        const operationLocators: InstallOperationLocatorV1[] = [];
+        for (const operation of plan.operations) {
+          const spec = await this.adapter(operation.adapter).receiptLocator?.(operation) ?? null;
+          operationLocators.push({ operationId: operation.id, adapter: operation.adapter, spec, bindingDigest: installerDigest({ operation, spec }) });
+        }
+        const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 2, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: manifest!.files, operations: plan.operations, operationLocators, installIntent: plan.intent, installedAt: this.now().toISOString() };
         await this.options.store.writeReceipt(receipt); journal = { ...journal, phase: "committed" }; await this.options.store.writeTransaction({ journal, snapshots: durableSnapshots(snapshots,journal), operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) }); return receipt;
       } catch (failure) {
         try { await this.rollbackStored({ journal, snapshots, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) }, plan.operations); }
@@ -192,7 +200,16 @@ export class ImmutableInstallerService {
   async recover(): Promise<void> { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase === "rolled-back") return; await this.rollbackStored(stored, stored.operations); }
   async rollback(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (stored && stored.journal.phase !== "rolled-back") await this.rollbackStored(stored, stored.operations); }); }
   async verify(): Promise<InstallVerificationV1> { const receipt = await this.options.store.readReceipt(); const issues: string[] = []; if (!receipt) issues.push("receipt-missing"); else for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation); if (operation.action === "ensure" ? actual !== operation.desiredDigest : actual !== null) issues.push(`operation-drift:${operation.id}`); } return { schemaVersion: 1, kind: "install-verification", releaseKey: receipt?.releaseKey ?? "", healthy: issues.length === 0, issues, checkedAt: this.now().toISOString() }; }
-  async planUninstall(): Promise<InstallPlanV1> { const receipt = await this.options.store.readReceipt(); if (!receipt) fail("INSTALL_NOT_OWNED", "Installation is not owned."); const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["uninstall"] }; const operations = receipt.operations.map((operation) => ({ ...operation, action: "remove" as const, desiredDigest: null })); return this.plan(intent, operations); }
+  async planUninstall(): Promise<InstallPlanV1> {
+    const receipt = await this.options.store.readReceipt(); if (!receipt) fail("INSTALL_NOT_OWNED", "Installation is not owned.");
+    for (let index = 0; index < receipt.operations.length; index++) {
+      const operation = receipt.operations[index]!, locator = receipt.operationLocators[index]!, adapter = this.adapter(operation.adapter);
+      if (locator.spec !== null && !adapter.hydrateReceiptOperation) fail("INSTALL_RECEIPT_AMBIGUOUS", `Adapter ${operation.adapter} cannot hydrate its durable receipt operation.`);
+      await adapter.hydrateReceiptOperation?.(operation, locator.spec);
+    }
+    const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["uninstall"] };
+    const operations = receipt.operations.map((operation) => ({ ...operation, action: "remove" as const, desiredDigest: null })); return this.plan(intent, operations);
+  }
   async uninstall(planValue: InstallPlanV1, confirmation: string): Promise<void> {
     const plan = parseInstallPlanV1(planValue); if (confirmation !== plan.confirmationDigest) fail("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
     await this.options.store.exclusive(async () => {

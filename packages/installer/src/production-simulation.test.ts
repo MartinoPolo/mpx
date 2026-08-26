@@ -63,8 +63,16 @@ it("runs clean and existing-machine production-backed simulations without live w
     ] });
     for (let index = 0; index < f.fixtureFiles.length; index++) expect(await readFile(f.fixtureFiles[index]!)).toEqual(f.before[index]);
     expect((await readFile(path.join(f.userProfile, ".bashrc"), "utf8")).includes(existing ? "native-profile\r\n" : "# >>> MPX")).toBe(true);
-    const uninstallPlan = await orchestrator.planUninstall();
-    await orchestrator.uninstall(uninstallPlan.confirmationDigest);
+    const restartedAdapter = new ProductionInstallerOperationAdapter({ MPX_APPS: f.appsRoot, APPDATA: path.join(f.root, "roaming"), LOCALAPPDATA: f.localAppData, USERPROFILE: f.userProfile, MPX_NODE_EXECUTABLE: process.execPath }, "DOMAIN\\me", { files: new NodeBinaryFileSystem(), resources: f.native });
+    const restarted = new InstallOrchestrator({ adapter: restartedAdapter, store: new NodeTransactionStore(path.join(f.localAppData, "mpx", "installer")), releases: f.releases });
+    let uninstallPlan = await restarted.planUninstall();
+    if (!existing) {
+      const selector = path.join(f.appsRoot, "mpx", "bin", "mpx.cmd"), ownedSelector = await readFile(selector);
+      await writeFile(selector, "foreign\n"); uninstallPlan = await restarted.planUninstall();
+      await expect(restarted.uninstall(uninstallPlan.confirmationDigest)).rejects.toMatchObject({ code: "INSTALL_FOREIGN_OR_DRIFTED" });
+      await writeFile(selector, ownedSelector); uninstallPlan = await restarted.planUninstall();
+    }
+    await restarted.uninstall(uninstallPlan.confirmationDigest);
     expect(await orchestrator.verify()).toMatchObject({ healthy: false, issues: ["receipt-missing"] });
     expect(await readFile(path.join(f.appsRoot, "mpx", "releases", f.intent.releaseKey, "bin", "mpx.mjs"), "utf8")).toBe("export {};\n");
     successfulSimulations += 1;

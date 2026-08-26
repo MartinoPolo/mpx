@@ -149,6 +149,30 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       manualOnly: references.filter((_reference, index) => intent.externalIntegrations![index]!.classification === "manual-only"),
     } };
   }
+  async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
+    const entry = await this.entry(operation);
+    if (entry.launcher) return { kind: "launcher", spec: entry.launcher };
+    if (entry.resource) return { kind: "resource", spec: entry.resource };
+    return { kind: "file" };
+  }
+  async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown): Promise<void> {
+    if (!locator || typeof locator !== "object" || Array.isArray(locator)) fail("INSTALL_RECEIPT_AMBIGUOUS", `Invalid durable locator for ${operation.id}.`);
+    const value = locator as Record<string, unknown>, keys = Object.keys(value).sort().join("\0");
+    const roots = [this.environment.MPX_APPS, this.environment.APPDATA, this.environment.LOCALAPPDATA, this.environment.USERPROFILE].filter((root): root is string => Boolean(root)).map(root => path.win32.resolve(root).toLowerCase());
+    const target = path.win32.resolve(operation.target).toLowerCase(), assertFileTarget = () => { if (!roots.some(root => target === root || target.startsWith(`${root}\\`))) fail("INSTALL_RECEIPT_FORGED", `Receipt target is outside configured ownership roots for ${operation.id}.`); };
+    let entry: Entry;
+    if (value.kind === "file" && keys === "kind") { assertFileTarget(); entry = { operation, fileBody: Buffer.alloc(0) }; }
+    else if (value.kind === "launcher" && keys === "kind\0spec" && value.spec && typeof value.spec === "object" && !Array.isArray(value.spec)) {
+      assertFileTarget(); const launcher = value.spec as unknown as ManagedLauncherSpec;
+      if (launcher.path !== operation.target) fail("INSTALL_RECEIPT_FORGED", `Launcher locator does not bind ${operation.id}.`);
+      entry = { operation, launcher };
+    } else if (value.kind === "resource" && keys === "kind\0spec" && value.spec && typeof value.spec === "object" && !Array.isArray(value.spec)) {
+      const resource = value.spec as unknown as OwnedResourceSpec;
+      if (resource.target !== operation.target || installerDigest(resource.desired) !== operation.desiredDigest) fail("INSTALL_RECEIPT_FORGED", `Native resource locator does not bind ${operation.id}.`);
+      entry = { operation, resource };
+    } else fail("INSTALL_RECEIPT_AMBIGUOUS", `Invalid durable locator for ${operation.id}.`);
+    this.entries.set(installerDigest(operation), entry);
+  }
   private async entry(operation: InstallOperationV1): Promise<Entry> {
     const exact=this.entries.get(installerDigest(operation));if(exact)return exact;
     if(operation.action==="remove")for(const entry of this.entries.values())if(entry.operation.id===operation.id&&entry.operation.target===operation.target){if(entry.resource&&(await this.owned.inspect(entry.resource)).status==="owned")return entry;if(entry.fileBody||entry.fileSource||entry.launcher)return entry;}
