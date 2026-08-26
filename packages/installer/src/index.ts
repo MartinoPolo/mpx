@@ -1,3 +1,6 @@
+export * from "./immutable-core.js";
+export * from "./transaction.js";
+
 import { createHash, randomUUID } from "node:crypto";
 import {
   chmod,
