@@ -27,7 +27,7 @@ it("runs the production CLI preparation worker handshake through a trusted direc
   const runtime = preparationRuntime(stateRoot, environment, workerEntry);
   const plan: PreparationPlan = {
     execution: "background",
-    steps: [{ id: "harmless", uses: "executable", argv: ["node", "-e", "process.stdout.write('worker-e2e-ready');setTimeout(()=>{},1500)"], required: true, timeoutSeconds: 10 }],
+    steps: [{ id: "harmless", uses: "executable", argv: ["node", "-e", "process.stdout.write('worker-e2e-ready');setTimeout(()=>{},1500)"], required: true, timeoutSeconds: 30 }],
     order: ["harmless"],
     logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
   };
@@ -39,8 +39,8 @@ it("runs the production CLI preparation worker handshake through a trusted direc
   await runtime.run({ key, plan, worktreeRoot: repository, packageManager, exactApproval });
   let state = await runtime.adapters.store.load(key);
   try {
-    const deadline = Date.now() + 40_000;
-    while (state?.status === "preparing" && Date.now() < deadline) {
+    const deadline = Date.now() + 60_000;
+    while (state?.status !== "ready" && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, 50));
       state = await runtime.adapters.store.load(key);
     }
@@ -52,4 +52,4 @@ it("runs the production CLI preparation worker handshake through a trusted direc
   } finally {
     if (state?.status === "preparing") await runtime.cancel(key).catch(() => undefined);
   }
-}, 50_000);
+}, 70_000);

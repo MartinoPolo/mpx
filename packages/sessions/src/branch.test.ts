@@ -54,6 +54,19 @@ describe("conversation branching", () => {
     await expect(new ConversationBranchService(dependencies()).plan({ ...base, launchIdentity: { ...base.launchIdentity, executor: "docker" } })).rejects.toMatchObject({ code: "SESSION_BRANCH_EXECUTOR_NOT_ADMITTED" });
   });
 
+  it("repeats proof-bound Docker session admission at apply before any worktree or launch side effect", async () => {
+    const deps = dependencies(), runtime = { launch: vi.fn() };
+    const admitExecutor = vi.fn(async (value: BranchRequestV1 | { kind: string }) => !("kind" in value) || false);
+    const service = new ConversationBranchService({ ...deps, admitExecutor, runtime }, new BranchLeaseStore(await mkdtemp(path.join(tmpdir(), "mpx-branch-"))));
+    const request = { ...base, launchIdentity: { ...base.launchIdentity, executor: "docker" as const } };
+    const plan = await service.plan(request);
+    await expect(service.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({ code: "SESSION_BRANCH_EXECUTOR_NOT_ADMITTED" });
+    expect(admitExecutor).toHaveBeenNthCalledWith(1, request);
+    expect(admitExecutor).toHaveBeenNthCalledWith(2, plan);
+    expect(deps.createIsolatedWorktree).not.toHaveBeenCalled();
+    expect(runtime.launch).not.toHaveBeenCalled();
+  });
+
   it("requires explicit risk acknowledgement for a shared current checkout", async () => {
     await expect(new ConversationBranchService(dependencies()).plan({ ...base, workspace: { ...base.workspace, selection: "shared" }, files: { ...base.files, sharing: "shared" } })).rejects.toMatchObject({ code: "SESSION_BRANCH_SHARED_RISK_UNACKNOWLEDGED" });
   });

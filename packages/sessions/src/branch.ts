@@ -117,7 +117,8 @@ export interface ConversationBranchDependencies {
   readonly runtime?: BranchArgvExecutionAdapter;
   readonly terminal?: BranchArgvExecutionAdapter;
   readonly lineage?: BranchLineagePersistence;
-  admitExecutor?(input: BranchRequestV1["launchIdentity"]): Promise<boolean>;
+  /** Proof-bound executor/session admission. It is repeated at apply before any workspace or launch side effect. */
+  admitExecutor?(input: BranchRequestV1 | ConversationBranchPlanV1): Promise<boolean>;
 }
 
 const control = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -145,7 +146,7 @@ export class ConversationBranchService {
 
   async plan(input: BranchRequestV1): Promise<ConversationBranchPlanV1> {
     validateRequest(input);
-    if (input.launchIdentity.executor === "docker" && (!this.dependencies.admitExecutor || !await this.dependencies.admitExecutor(input.launchIdentity)))
+    if (input.launchIdentity.executor === "docker" && (!this.dependencies.admitExecutor || !await this.dependencies.admitExecutor(input)))
       throw new SessionError("SESSION_BRANCH_EXECUTOR_NOT_ADMITTED", "Docker branching requires current explicit runtime admission");
     const inspected = await this.dependencies.inspectWorkspace(input.workspace);
     if (!inspected.exists) throw new SessionError("SESSION_BRANCH_WORKSPACE_MISSING", "The selected repository or worktree is missing or deleted");
@@ -181,7 +182,7 @@ export class ConversationBranchService {
       throw new SessionError("SESSION_BRANCH_CONFIRMATION_MISMATCH", "branch plan confirmation digest does not match");
     // Binding/auth validation deliberately precedes worktree, lease, terminal, and process effects.
     const validatedRoot = await this.dependencies.validateNativeBinding?.(plan);
-    if (plan.launchIdentity.executor === "docker" && (!this.dependencies.admitExecutor || !await this.dependencies.admitExecutor(plan.launchIdentity)))
+    if (plan.launchIdentity.executor === "docker" && (!this.dependencies.admitExecutor || !await this.dependencies.admitExecutor(plan)))
       throw new SessionError("SESSION_BRANCH_EXECUTOR_NOT_ADMITTED", "Docker branching requires current explicit runtime admission");
     if (this.dependencies.lineage && !this.dependencies.runtime) throw new SessionError("SESSION_BRANCH_RUNTIME_UNAVAILABLE", "Native branch execution is unavailable");
     if (plan.terminal.enabled && this.dependencies.lineage && !this.dependencies.terminal) throw new SessionError("SESSION_BRANCH_TERMINAL_UNAVAILABLE", "Windows Terminal execution is unavailable");

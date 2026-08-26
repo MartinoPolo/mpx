@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFile } from "node:child_process";
 import { access, lstat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,13 +32,13 @@ import { executeSessionCommand } from "./session-command.js";
 import { executeInstallCommand } from "./install-command.js";
 import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
 import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js";
-import { createProductionSessionBranchRuntimeAdapter, diagnoseSessionBranchAdapters } from "./session-branch-adapters.js";
+import { createProductionSessionBranchRuntimeAdapter, createWindowsTerminalBranchAdapter, diagnoseSessionBranchAdapters } from "./session-branch-adapters.js";
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
 import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
-import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, SessionService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
+import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, SessionService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRequestV1, type BranchRuntimeAdapter, type ConversationBranchPlanV1, type ResumePlanV1 } from "@mpx/sessions";
 import { executeMigrationCommand } from "./migration.js";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
@@ -189,6 +190,19 @@ function human(value:unknown):string {
 }
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
+function branchAdmissionPlan(input: BranchRequestV1 | ConversationBranchPlanV1): ResumePlanV1 {
+  const confirmationDigest = "confirmationDigest" in input ? input.confirmationDigest : sha256Canonical(input as unknown as JsonValue);
+  return {
+    schemaVersion: 1, newLaunchRequired: true,
+    previousLaunch: { launchKey: input.launchIdentity.launchKey, descriptorDigest: input.launchIdentity.descriptorDigest },
+    recordId: input.child.runtimeQualifiedId, runtimeQualifiedId: input.child.runtimeQualifiedId, runtime: input.child.runtime,
+    identity: input.launchIdentity.identity, nativeBindingRef: input.launchIdentity.nativeBindingRef, nativeSessionRef: input.parent.nativeSessionRef,
+    cwd: input.workspace.cwd, projectId: input.workspace.projectRef, repositoryId: input.workspace.repositoryRef,
+    launch: { launchKey: input.launchIdentity.launchKey, descriptorDigest: input.launchIdentity.descriptorDigest, mode: input.launchIdentity.mode, skillPolicy: input.launchIdentity.skillPolicy, contentScope: input.launchIdentity.contentScope, executor: { kind: input.launchIdentity.executor }, workspace: input.launchIdentity.workspace, networkPolicy: input.launchIdentity.networkPolicy, grants: input.launchIdentity.grants, artifactKey: input.launchIdentity.artifactKey, manifestKey: input.launchIdentity.manifestKey },
+    confirmationDigest,
+  };
+}
+
 async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext, branchInvocation?: { readonly executable: string; readonly argv: readonly string[] }): Promise<unknown> {
   const dockerAdmission = plan.launch.executor.kind === "docker" ? await (context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env))(plan) : undefined;
   if (dockerAdmission && !dockerAdmission.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: dockerAdmission.code });
@@ -315,7 +329,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   if (group === "session") {
     const user = await userConfig(context);
     const sessionStore = sessions(context);
-    const terminalAvailability = await diagnoseSessionBranchAdapters({ runtimeAvailable: true, ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ? { terminalCandidate: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE } : {}), trustedRoots: [context.env.WINDIR, context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : undefined].filter((value): value is string => Boolean(value && path.isAbsolute(value))) });
+    const trustedTerminalRoots = [context.env.WINDIR, context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : undefined].filter((value): value is string => Boolean(value && path.isAbsolute(value)));
+    const terminalCandidate = context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ?? (context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps", "wt.exe") : undefined);
+    const terminalAvailability = await diagnoseSessionBranchAdapters({ runtimeAvailable: true, ...(terminalCandidate ? { terminalCandidate } : {}), trustedRoots: trustedTerminalRoots });
     const account = context.env.LOCALAPPDATA ? productionAccountServices(user, context, parsed.cwd) : undefined;
     let branchService = context.sessionBranchService;
     if (action === "branch" && !branchService) {
@@ -345,6 +361,27 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         const exited = executeProductionSessionResume(synthetic, user, { ...context, launchLifecycleBridge: bridge }, invocation).catch(error => { rejectLifecycle(error); throw error; });
         return { lifecycle: childLifecycle, exited };
       } });
+      const productionTerminal = !context.sessionBranchTerminalAdapter && terminalAvailability.terminal.available ? await createWindowsTerminalBranchAdapter({
+        candidate: terminalAvailability.terminal.executable,
+        trustedRoots: trustedTerminalRoots,
+        run: async request => {
+          const before = new Set((await new SessionService(sessionStore).list()).map(record => record.runtimeQualifiedId));
+          let settleExit!: (value: unknown) => void, rejectExit!: (error: unknown) => void;
+          const exited = new Promise<unknown>((resolve, reject) => { settleExit = resolve; rejectExit = reject; });
+          execFile(request.executable, [...request.argv], { cwd: request.cwd, env: context.env, shell: false, windowsHide: true }, (error, stdout, stderr) => error ? rejectExit(error) : settleExit({ exitCode: 0, stdout, stderr }));
+          const lifecycle = (async () => {
+            const deadline = Date.now() + 120_000;
+            while (Date.now() < deadline) {
+              const child = (await new SessionService(sessionStore).list()).find(record => !before.has(record.runtimeQualifiedId) && record.location.cwd === request.cwd);
+              if (child) return { runtimeQualifiedId: child.runtimeQualifiedId, nativeSessionRef: child.nativeSessionRef };
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            throw new SessionError("SESSION_BRANCH_LIFECYCLE_TIMEOUT", "The terminal child did not publish a lifecycle event.");
+          })();
+          return { lifecycle, exited };
+        },
+      }) : null;
+      const dockerAdmission = context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env);
       branchService = new ConversationBranchService({
         inspectWorkspace: async workspace => { try { const info = await lstat(workspace.cwd); return { exists: info.isDirectory() && !info.isSymbolicLink(), collisionDisclosure: workspace.repositoryRef === null ? [] : ["repository refs and external fixed services remain shared"] }; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { exists: false, collisionDisclosure: [] }; throw error; } },
         createIsolatedWorktree: async workspace => {
@@ -369,9 +406,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         },
         adapters: { claude: runtimeAdapter("claude"), pi: runtimeAdapter("pi") },
         runtime: context.sessionBranchRuntimeAdapter ?? productionBranchRuntime,
-        ...(context.sessionBranchTerminalAdapter ? { terminal: context.sessionBranchTerminalAdapter } : {}),
+        ...((context.sessionBranchTerminalAdapter ?? productionTerminal) ? { terminal: (context.sessionBranchTerminalAdapter ?? productionTerminal)! } : {}),
         lineage: new BranchLineageStore(path.join(stateRoot(context), "sessions", "v1", "private", "branch-lineage")),
-        admitExecutor: async launch => launch.executor === "host" || context.env.MPX_RUNTIME_EXECUTOR === "docker",
+        admitExecutor: async branch => branch.launchIdentity.executor === "host" || (await dockerAdmission(branchAdmissionPlan(branch))).admitted,
       }, new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases")));
     }
     const scheduledCaptureAuthority = context.scheduledCaptureAuthority ?? ((context.installOrchestrator || (context.installerOperationAdapter && context.installerTransactionStore)) ? {

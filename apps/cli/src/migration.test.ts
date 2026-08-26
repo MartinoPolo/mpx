@@ -40,7 +40,7 @@ describe("Phase J migration reconciliation",()=>{
   });
 
   it("audits old access read-only with hashed evidence and supports legacy-disabled acceptance",async()=>{
-    const root=await mkdtemp(path.join(tmpdir(),"mpx-j-audit-")),oldPi=path.join("C:/","_MP_projects","mpx-pi"),oldClaude=path.join("C:/","_MP_projects","mpx-claude-code"); const log=path.join(root,"runtime.log"); await writeFile(log,`opened ${oldPi}/skills; token=secret`);
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-j-audit-")),projects=process.env.MPX_PROJECTS??path.join(root,"projects"),oldPi=path.join(projects,"mpx-pi"),oldClaude=path.join(projects,"mpx-claude-code"); const log=path.join(root,"runtime.log"); await writeFile(log,`opened ${oldPi}/skills; token=secret`);
     const audit=await runtimeAccessAudit({roots:[root],processLines:[`node ${oldClaude}/bin.js --password nope`],environment:{MPX_PLUGIN_PATH:oldPi,API_TOKEN:"secret"},legacyDisabled:true});
     expect(audit.readOnly).toBe(true); expect(audit.findings.length).toBeGreaterThan(0); expect(audit.acceptance).toMatchObject({mode:"legacy-disabled",passed:false});
     expect(JSON.stringify(audit)).not.toContain("token=secret"); expect(JSON.stringify(audit)).not.toContain("password nope");
