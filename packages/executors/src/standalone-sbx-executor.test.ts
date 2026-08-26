@@ -25,6 +25,15 @@ describe("production standalone sbx executor",()=>{
     expect(calls.flat().join(" ")).not.toMatch(/CLAUDE_CONFIG_DIR|accounts\/claude|docker_engine/u);
   });
 
+  it("attaches an exactly admitted resume without recreating, host fallback, or orphaning the sbx child process",async()=>{
+    const value=fixture(),calls:string[][]=[];
+    const adapter=new StandaloneSbxExecutorAdapter({...value,agent:"claude",executable:"C:/apps/sbx.exe",cwd:"C:/repo",ports:[],diagnostics:async()=>({status:"pass",digest:h("e")}),run:async request=>{calls.push([...request.argv]);return {exitCode:0,stdout:"",stderr:"",truncated:false};}});
+    adapter.setResumeAction("attach");
+    await adapter.execute({executable:"C:/apps/claude.exe",argv:[],cwd:"C:/repo",environment:{}});
+    expect(calls.map(call=>call[0])).toEqual(["run"]);
+    expect(calls.flat()).not.toContain("host");
+  });
+
   it("starts the launch-private worker bridge before attach and exposes its exact attestation",async()=>{
     const value=fixture(),calls:string[][]=[];
     const adapter=new StandaloneSbxExecutorAdapter({...value,agent:"claude",executable:"C:/apps/sbx.exe",cwd:"C:/repo",ports:[],worker:{argv:["mpx-f2-worker","--stdio"],endpoint:"sbx://launch/bridge",attestationSha256:h("f")},diagnostics:async()=>({status:"pass",digest:h("e")}),run:async request=>{calls.push([...request.argv]);return {exitCode:0,stdout:"",stderr:"",truncated:false};}});

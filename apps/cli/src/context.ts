@@ -26,6 +26,7 @@ import type { AccountAuthVerifier } from "./account-command.js";
 import { InstallerService, NodeReceiptStore, NodeRunnerFileVerifier } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
 import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
+import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
 
 export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild" | "captureReleaseIdentity" | "releaseLinkedAfterRemoval" | "resolveOrphan">;
 export interface CliWorktreeService {
@@ -445,7 +446,7 @@ export function stateRoot(context: CliContext): string {
   return path.join(localAppData, "mpx");
 }
 
-export const defaultContext: CliContext = { env: process.env, launchRoutes: new EnvironmentRouteMaterializer(process.env), launchAudit: new EnvironmentLaunchAuditStore(process.env) };
+export const defaultContext: CliContext = { env: process.env, launchRoutes: new EnvironmentRouteMaterializer(process.env), launchAudit: new EnvironmentLaunchAuditStore(process.env), sessionDockerResumeAdmission: createProductionSessionDockerResumeAdmission(process.env) };
 
 export function sessions(context: CliContext): SessionStore {
   if (context.sessionStore) return context.sessionStore;

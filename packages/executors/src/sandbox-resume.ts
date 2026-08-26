@@ -25,6 +25,7 @@ export function gateLaunchSandboxResume(input:{executor:"docker"|"host";launchKe
 
 export type F2SandboxSessionResumeAdmission =
  | Readonly<{ admitted:true; action:"attach"; sandboxName:string }>
+ | Readonly<{ admitted:true; action:"recreate"; sandboxName:string; hostFallback:false; recreate:Readonly<{required:true;reasons:readonly string[]}> }>
  | Readonly<{ admitted:false; code:"F2_ADMISSION_DENIED"; hostFallback:false; recreate:Readonly<{required:true;reasons:readonly string[]}> }>;
 export interface F2SandboxSessionResumeInput {readonly executor:"docker"|"host";readonly launchKey:string;readonly persistedState:SandboxResumeStateV1|undefined;readonly observed:SbxListEntryV1|undefined;readonly verification:SandboxResumeVerification;readonly plan:SandboxPlanV1;readonly attestation:SandboxAttestationV1;readonly proofReport:F2ProofReportV1}
 /** Pure F2 admission. A denial is always an explicit Docker recreate plan and can never widen to host. */

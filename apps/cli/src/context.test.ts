@@ -9,12 +9,17 @@ import { createNodeWorktreeIncludeDependencies, deriveLifecycleKey, deriveWorktr
 import type { PreparationPlan, ProjectConfig } from "@mpx/config";
 import type { ProviderProcessRequest } from "@mpx/providers";
 import { afterEach, expect, it, vi } from "vitest";
-import { catalogPath, classifyProviderProcessResult, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
+import { catalogPath, classifyProviderProcessResult, defaultContext, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
 
 const exec = promisify(execFile);
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+
+it("provides fail-closed Docker resume admission in the production CLI context", async () => {
+  expect(defaultContext.sessionDockerResumeAdmission).toBeTypeOf("function");
+  await expect(defaultContext.sessionDockerResumeAdmission!({ launch: { executor: { kind: "docker" } } } as never)).resolves.toMatchObject({ admitted: false, hostFallback: false });
+});
 
 async function git(cwd: string, ...args: string[]): Promise<void> {
   await exec("git", args, { cwd });

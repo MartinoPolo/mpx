@@ -34,6 +34,7 @@ import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js"
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
+import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
 import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
 import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
 
@@ -187,10 +188,8 @@ function human(value:unknown):string {
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
 async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext): Promise<unknown> {
-  if (plan.launch.executor.kind === "docker" && context.sessionDockerResumeAdmission) {
-    const admission = await context.sessionDockerResumeAdmission(plan);
-    if (!admission.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: admission.code });
-  }
+  const dockerAdmission = plan.launch.executor.kind === "docker" ? await (context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env))(plan) : undefined;
+  if (dockerAdmission && !dockerAdmission.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: dockerAdmission.code });
   const store = sessions(context);
   let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>> | undefined;
   let reverifyPiAccount: (() => Promise<void>) | undefined;
@@ -255,6 +254,7 @@ async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConf
       const snapshot=found?await status(context).snapshot({cwd,projectRoot:found.root,config:found.config,configHash:sha256Canonical(found.config as unknown as JsonValue)}):parseStatusSnapshotV1({schemaVersion:1,project:{id:repositoryId,cwd},worktree:{id:null,path:null,role:null,branch:null},portResolution:"missing",services:[],diagnostics:[]});
       const configured=user.identities[plan.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"];
       const adapter=await createProductionSbxExecutionAdapter({environment:context.env,cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:plan.runtime,identity:{name:plan.identity.name,domain:plan.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:cwd,gitCommonDir:path.join(cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:snapshot.services.flatMap(service=>service.port===null?[]:[service.port])},context.launchSbxExecutionDependencies);
+      if(dockerAdmission?.admitted) adapter.setResumeAction(dockerAdmission.action);
       resumeContext={...context,launchExecutorAdapters:[adapter],...(adapter.bridge?{launchSbxBridge:adapter.bridge}:{})};
     }catch{/* Exact production proof remains unavailable and the typed Docker gate denies resume. */}
   }

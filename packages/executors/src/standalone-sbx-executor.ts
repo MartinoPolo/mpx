@@ -36,10 +36,12 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly name="docker" as const;
   readonly bridge:{readonly endpoint:string;readonly attestationSha256:string}|undefined;
   readonly remoteToolClient?:ProductionRemoteToolClient;
+  #resumeAction:"attach"|"recreate"|undefined;
   constructor(readonly input:StandaloneSbxExecutorInput) {
     this.bridge=input.worker===undefined?undefined:Object.freeze({endpoint:input.worker.endpoint,attestationSha256:input.worker.attestationSha256});
     if(input.remoteToolClient)this.remoteToolClient=input.remoteToolClient;
   }
+  setResumeAction(action:"attach"|"recreate"):void{this.#resumeAction=action;}
   async verify():Promise<VerificationEvidence>{
     try {
       const report=parseF2ProofReportV1(this.input.report),diagnostics=await this.input.diagnostics();
@@ -67,10 +69,12 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
     const lifecycleRun=(argv:readonly string[],stdin?:Uint8Array)=>productionClaude?run(argv,stdin):this.input.run({executable:this.input.executable,argv,cwd:this.input.cwd,environment:this.input.plan.environment,...(request.signal?{signal:request.signal}:{})});
     let created=false;
     try {
-      const create=await lifecycleRun(commands.create);if(create.exitCode!==0)throw new ExecutionError("SBX_CREATE_FAILED","Standalone sbx create failed.");created=true;
-      if(commands.ports.length>2){const ports=await lifecycleRun(commands.ports);if(ports.exitCode!==0)throw new ExecutionError("SBX_PORTS_FAILED","Standalone sbx port publication failed.");}
-      const policy=await lifecycleRun(commands.policy);if(policy.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection failed.");
-      if(this.input.worker){
+      if(this.#resumeAction!=="attach"){
+        const create=await lifecycleRun(commands.create);if(create.exitCode!==0)throw new ExecutionError("SBX_CREATE_FAILED","Standalone sbx create failed.");created=true;
+        if(commands.ports.length>2){const ports=await lifecycleRun(commands.ports);if(ports.exitCode!==0)throw new ExecutionError("SBX_PORTS_FAILED","Standalone sbx port publication failed.");}
+        const policy=await lifecycleRun(commands.policy);if(policy.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection failed.");
+      }
+      if(this.input.worker&&this.#resumeAction!=="attach"){
         const workerCommands=buildSbxCommandPlans(this.input.plan,{agent:this.input.agent,execArgv:this.input.worker.argv,ports:[]});
         const worker=await lifecycleRun(workerCommands.exec);if(worker.exitCode!==0)throw new ExecutionError("SBX_WORKER_FAILED","Standalone sbx remote worker failed to start.");
       }
