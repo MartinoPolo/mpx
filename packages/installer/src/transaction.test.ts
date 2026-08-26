@@ -8,10 +8,10 @@ class BytesAdapter implements SideEffectAdapter {
   readonly name = "files"; constructor(readonly values: Map<string, Buffer>, readonly failAt = -1) {}
   calls = 0;
   restoreFailure: Error | undefined;
-  async observe(target: string) { const value = this.values.get(target); return value ? installerDigest(value.toString("base64")) : null; }
-  async capture(target: string) { return this.values.get(target)?.toString("base64") ?? null; }
+  async observe(operation: InstallOperationV1) { const value = this.values.get(operation.target); return value ? installerDigest(value.toString("base64")) : null; }
+  async capture(operation: InstallOperationV1) { return this.values.get(operation.target)?.toString("base64") ?? null; }
   async apply(operation: InstallOperationV1) { if (this.calls++ === this.failAt) throw new Error("injected"); operation.action === "remove" ? this.values.delete(operation.target) : this.values.set(operation.target, Buffer.from(operation.desiredDigest!)); }
-  async restore(target: string, snapshot: string | null) { if (this.restoreFailure) throw this.restoreFailure; snapshot === null ? this.values.delete(target) : this.values.set(target, Buffer.from(snapshot, "base64")); }
+  async restore(operation: InstallOperationV1, snapshot: string | null) { if (this.restoreFailure) throw this.restoreFailure; snapshot === null ? this.values.delete(operation.target) : this.values.set(operation.target, Buffer.from(snapshot, "base64")); }
 }
 const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: "a".repeat(64), convergenceHash: "a".repeat(64), components: ["cli"] };
 
@@ -131,7 +131,7 @@ describe("installer transactions", () => {
     const values = new Map<string, Buffer>(), adapter = new BytesAdapter(values), store = new MemoryTransactionStore(), service = new ImmutableInstallerService({ adapters: [adapter], store, manifest: { schemaVersion: 1, kind: "release-manifest", releaseKey: "a".repeat(64), convergenceHash: "a".repeat(64), files: [] } });
     const installPlan = await service.plan(intent, [{ id: "write", adapter: "files", action: "ensure", target: "owned", desiredDigest: "b".repeat(64) }]);
     await service.apply(installPlan, installPlan.confirmationDigest); await service.finalize();
-    adapter.observe = async target => values.has(target) ? "b".repeat(64) : null;
+    adapter.observe = async operation => values.has(operation.target) ? "b".repeat(64) : null;
     const uninstallPlan = await service.planUninstall();
     adapter.apply = async () => { values.delete("owned"); throw new Error("uninstall failed"); };
     adapter.restoreFailure = new Error("restore failed");

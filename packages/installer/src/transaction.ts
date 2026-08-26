@@ -26,10 +26,10 @@ export type { InstallIntentV1, InstallOperationV1 } from "./immutable-core.js";
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
 export interface SideEffectAdapter {
   readonly name: string;
-  observe(target: string): Promise<string | null>;
-  capture(target: string): Promise<string | null>;
+  observe(operation: InstallOperationV1): Promise<string | null>;
+  capture(operation: InstallOperationV1): Promise<string | null>;
   apply(operation: InstallOperationV1): Promise<void>;
-  restore(target: string, snapshot: string | null): Promise<void>;
+  restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
 }
 export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[]; priorReceipt?: OwnershipReceiptV1 }
 function durableSnapshots(snapshots:Readonly<Record<string,string|null>>,journal:TransactionJournalV1):Record<string,string|null>{const ids=[...journal.completedOperationIds,...(journal.inFlightOperationId?[journal.inFlightOperationId]:[])];return Object.fromEntries(ids.map(id=>[id,snapshots[id]??null]));}
@@ -140,11 +140,11 @@ export class ImmutableInstallerService {
     const intent = parseInstallIntentV1(intentValue); const operations = [...requested].sort((a, b) => a.id.localeCompare(b.id));
     if (new Set(operations.map((x) => x.id)).size !== operations.length) fail("INSTALL_OPERATION_DUPLICATE", "Operation IDs must be unique.");
     const observations: MachineObservationV1[] = [];
-    for (const operation of operations) observations.push({ id: operation.id, digest: await this.adapter(operation.adapter).observe(operation.target) });
+    for (const operation of operations) observations.push({ id: operation.id, digest: await this.adapter(operation.adapter).observe(operation) });
     const base = { schemaVersion: 1 as const, kind: "install-plan" as const, intent, observations, operations };
     return parseInstallPlanV1({ ...base, confirmationDigest: installerDigest(base) });
   }
-  private async assertCurrent(plan: InstallPlanV1): Promise<void> { for (let index = 0; index < plan.operations.length; index++) { const operation = plan.operations[index]!, expected = plan.observations[index]!; if (expected.id !== operation.id || await this.adapter(operation.adapter).observe(operation.target) !== expected.digest) fail("INSTALL_OBSERVATION_CHANGED", `Observation changed for ${operation.id}.`); } }
+  private async assertCurrent(plan: InstallPlanV1): Promise<void> { for (let index = 0; index < plan.operations.length; index++) { const operation = plan.operations[index]!, expected = plan.observations[index]!; if (expected.id !== operation.id || await this.adapter(operation.adapter).observe(operation) !== expected.digest) fail("INSTALL_OBSERVATION_CHANGED", `Observation changed for ${operation.id}.`); } }
   async apply(planValue: InstallPlanV1, confirmation: string): Promise<OwnershipReceiptV1> {
     const plan = parseInstallPlanV1(planValue); if (confirmation !== plan.confirmationDigest) fail("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
     return this.options.store.exclusive(async () => {
@@ -152,7 +152,7 @@ export class ImmutableInstallerService {
       const priorReceipt = await this.options.store.readReceipt();
       if (priorReceipt && (priorReceipt.releaseKey !== plan.intent.releaseKey || installerDigest(priorReceipt.operations) !== installerDigest(plan.operations))) fail("INSTALL_OWNERSHIP_MISMATCH", "Existing ownership differs from the plan.");
       const snapshots: Record<string, string | null> = {};
-      for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation.target);
+      for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
       const snapshot: MachineSnapshotV1 = { schemaVersion: 1, kind: "machine-snapshot", transactionId: randomUUID(), observations: plan.observations, capturedAt: this.now().toISOString() };
       let journal: TransactionJournalV1 = { schemaVersion: 1, kind: "transaction-journal", transactionId: snapshot.transactionId, phase: "applying", completedOperationIds: [], snapshot };
       await this.options.store.writeTransaction({ journal, snapshots: {}, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) });
@@ -182,7 +182,7 @@ export class ImmutableInstallerService {
   }
   private async rollbackStored(stored: StoredTransaction, operations: readonly InstallOperationV1[]): Promise<void> {
     const mutated = new Set([...stored.journal.completedOperationIds, ...(stored.journal.inFlightOperationId ? [stored.journal.inFlightOperationId] : [])]);
-    for (const operation of operations.filter(item => mutated.has(item.id)).reverse()) await this.adapter(operation.adapter).restore(operation.target, stored.snapshots[operation.id] ?? null);
+    for (const operation of operations.filter(item => mutated.has(item.id)).reverse()) await this.adapter(operation.adapter).restore(operation, stored.snapshots[operation.id] ?? null);
     if (stored.priorReceipt) await this.options.store.writeReceipt(stored.priorReceipt); else await this.options.store.removeReceipt();
     const { inFlightOperationId: _inFlightOperationId, ...journal } = stored.journal;
     const rolledBack:TransactionJournalV1={...journal,phase:"rolled-back",completedOperationIds:operations.filter(operation=>mutated.has(operation.id)).map(operation=>operation.id)};
@@ -191,14 +191,14 @@ export class ImmutableInstallerService {
   async finalize(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase !== "committed") fail("INSTALL_TRANSACTION_UNAVAILABLE", "Committed transaction is unavailable."); await this.options.store.removeTransaction(); }); }
   async recover(): Promise<void> { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase === "rolled-back") return; await this.rollbackStored(stored, stored.operations); }
   async rollback(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (stored && stored.journal.phase !== "rolled-back") await this.rollbackStored(stored, stored.operations); }); }
-  async verify(): Promise<InstallVerificationV1> { const receipt = await this.options.store.readReceipt(); const issues: string[] = []; if (!receipt) issues.push("receipt-missing"); else for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation.target); if (operation.action === "ensure" ? actual !== operation.desiredDigest : actual !== null) issues.push(`operation-drift:${operation.id}`); } return { schemaVersion: 1, kind: "install-verification", releaseKey: receipt?.releaseKey ?? "", healthy: issues.length === 0, issues, checkedAt: this.now().toISOString() }; }
+  async verify(): Promise<InstallVerificationV1> { const receipt = await this.options.store.readReceipt(); const issues: string[] = []; if (!receipt) issues.push("receipt-missing"); else for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation); if (operation.action === "ensure" ? actual !== operation.desiredDigest : actual !== null) issues.push(`operation-drift:${operation.id}`); } return { schemaVersion: 1, kind: "install-verification", releaseKey: receipt?.releaseKey ?? "", healthy: issues.length === 0, issues, checkedAt: this.now().toISOString() }; }
   async planUninstall(): Promise<InstallPlanV1> { const receipt = await this.options.store.readReceipt(); if (!receipt) fail("INSTALL_NOT_OWNED", "Installation is not owned."); const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["uninstall"] }; const operations = receipt.operations.map((operation) => ({ ...operation, action: "remove" as const, desiredDigest: null })); return this.plan(intent, operations); }
   async uninstall(planValue: InstallPlanV1, confirmation: string): Promise<void> {
     const plan = parseInstallPlanV1(planValue); if (confirmation !== plan.confirmationDigest) fail("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
     await this.options.store.exclusive(async () => {
       await this.recover(); const receipt = await this.options.store.readReceipt(); if (!receipt || receipt.releaseKey !== plan.intent.releaseKey) fail("INSTALL_NOT_OWNED", "Installation is not owned.");
-      for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation.target); if (operation.action === "ensure" && actual !== operation.desiredDigest) fail("INSTALL_FOREIGN_OR_DRIFTED", `Refusing drifted target ${operation.target}.`); }
-      await this.assertCurrent(plan); const snapshots: Record<string, string | null> = {}; for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation.target);
+      for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation); if (operation.action === "ensure" && actual !== operation.desiredDigest) fail("INSTALL_FOREIGN_OR_DRIFTED", `Refusing drifted target ${operation.target}.`); }
+      await this.assertCurrent(plan); const snapshots: Record<string, string | null> = {}; for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
       const snapshot: MachineSnapshotV1 = { schemaVersion: 1, kind: "machine-snapshot", transactionId: randomUUID(), observations: plan.observations, capturedAt: this.now().toISOString() }; let journal: TransactionJournalV1 = { schemaVersion: 1, kind: "transaction-journal", transactionId: snapshot.transactionId, phase: "applying", completedOperationIds: [], snapshot }; const stored: StoredTransaction = { journal, snapshots, operations: plan.operations, priorReceipt: receipt }; await this.options.store.writeTransaction({ ...stored, snapshots:{} });
       try {
         for (let index = 0; index < plan.operations.length; index++) {

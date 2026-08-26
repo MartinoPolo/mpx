@@ -12,10 +12,10 @@ class FixtureAdapter implements InstallerOperationAdapter {
   applyCalls: string[] = [];
   constructor(readonly automatic: readonly InstallOperationV1[], readonly scheduled: readonly InstallOperationV1[] = []) {}
   async operations() { return { automatic: this.automatic, scheduled: this.scheduled }; }
-  async observe(target: string) { return this.values.get(target) ?? null; }
-  async capture(target: string) { return this.values.get(target) ?? null; }
+  async observe(operation: InstallOperationV1) { return this.values.get(operation.target) ?? null; }
+  async capture(operation: InstallOperationV1) { return this.values.get(operation.target) ?? null; }
   async apply(operation: InstallOperationV1) { this.applyCalls.push(operation.id); operation.action === "remove" ? this.values.delete(operation.target) : this.values.set(operation.target, operation.desiredDigest!); }
-  async restore(target: string, snapshot: string | null) { snapshot === null ? this.values.delete(target) : this.values.set(target, snapshot); }
+  async restore(operation: InstallOperationV1, snapshot: string | null) { snapshot === null ? this.values.delete(operation.target) : this.values.set(operation.target, snapshot); }
 }
 async function fixture() {
   const repositoryRoot = await mkdtemp(path.join(tmpdir(), "mpx-orchestrator-repo-"));

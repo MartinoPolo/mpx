@@ -113,6 +113,36 @@ describe("local Markdown issues", () => {
     expect((await new LocalIssueStore(directory, { staleLockMilliseconds: 10, lockTimeoutMilliseconds: 500 }).create({ title: "after crash", body: "" })).id).toBe("2");
   });
 
+  it("propagates malformed owner metadata as a typed lock failure instead of treating it as missing", async () => {
+    const directory = await root(), lock = path.join(directory, ".mpx-issues.lock");
+    await mkdir(lock); await writeFile(path.join(lock, "owner.json"), "{partial");
+    await expect(new LocalIssueStore(directory, { lockTimeoutMilliseconds: 20 }).create({ title: "blocked", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_INVALID" });
+    await expect(readFile(path.join(directory, ".mpx-index.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("propagates owner access failures as typed lock I/O errors", async () => {
+    const directory = await root(), lock = path.join(directory, ".mpx-issues.lock");
+    await mkdir(path.join(lock, "owner.json"), { recursive: true });
+    await expect(new LocalIssueStore(directory).create({ title: "blocked", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_IO" });
+  });
+
+  it("reports a missed heartbeat and leaves a replacement owner untouched", async () => {
+    const directory = await root(), lock = path.join(directory, ".mpx-issues.lock"), displaced = `${lock}.displaced`;
+    let unblock!: () => void; const blocked = new Promise<void>(resolve => { unblock = resolve; });
+    const holding = new LocalIssueStore(directory, { staleLockMilliseconds: 15, lockHeartbeatMilliseconds: 1, lockToken: () => "holder", onChanged: async () => blocked }).create({ title: "holder", body: "" });
+    const holdingResult = holding.catch(error => error as LocalIssueError);
+    while (true) { try { await readFile(path.join(lock, "owner.json")); break; } catch { await new Promise(resolve => setTimeout(resolve, 1)); } }
+    for (let attempt = 0;; attempt++) { try { await rename(lock, displaced); break; } catch (error) { if (attempt === 20 || !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; await new Promise(resolve => setTimeout(resolve, 2)); } }
+    await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "replacement", pid: process.pid, acquiredAt: Date.now(), heartbeatAt: Date.now() }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const indexBeforeRelease = await readFile(path.join(directory, ".mpx-index.json"), "utf8").catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; });
+    unblock(); expect(await holdingResult).toMatchObject({ code: "LOCAL_ISSUE_LOCK_LOST" });
+    expect(JSON.parse(await readFile(path.join(lock, "owner.json"), "utf8"))).toMatchObject({ token: "replacement" });
+    await expect(new LocalIssueStore(directory, { staleLockMilliseconds: 1_000, lockTimeoutMilliseconds: 20, lockRetryMilliseconds: 1 }).create({ title: "concurrent", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_TIMEOUT" });
+    expect(await readFile(path.join(directory, ".mpx-index.json"), "utf8").catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; })).toBe(indexBeforeRelease);
+    await rm(lock, { recursive: true, force: true }); await rm(displaced, { recursive: true, force: true });
+  });
+
   it("uses deterministic lease time and atomic takeover for a dead owner", async () => {
     const directory = await root(), lock = path.join(directory, ".mpx-issues.lock");
     await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "dead", pid: 4242, acquiredAt: 10, heartbeatAt: 20 }));
@@ -127,7 +157,7 @@ describe("local Markdown issues", () => {
     const holding = new LocalIssueStore(directory, { lockToken: () => "old-token", onChanged: async()=>blocked }).create({ title:"old", body:"" });
     while(true){try{await readFile(path.join(lock,"owner.json"));break;}catch{await new Promise(resolve=>setTimeout(resolve,1));}}
     await rename(lock,`${lock}.removed`);await mkdir(lock);await writeFile(path.join(lock,"owner.json"),JSON.stringify({schemaVersion:1,token:"replacement",pid:process.pid,acquiredAt:Date.now(),heartbeatAt:Date.now()}));
-    unblock();await holding;
+    unblock();await expect(holding).rejects.toMatchObject({code:"LOCAL_ISSUE_LOCK_LOST"});
     expect(JSON.parse(await readFile(path.join(lock,"owner.json"),"utf8"))).toMatchObject({token:"replacement"});
     await rm(lock,{recursive:true,force:true});await rm(`${lock}.removed`,{recursive:true,force:true});
   });

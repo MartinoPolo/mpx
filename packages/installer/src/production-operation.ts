@@ -86,9 +86,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   private readonly files: BinaryFileSystem;
   private readonly runtimeRegistrations: RuntimeRegistrationInspectionPort | undefined;
   private readonly resources: JsonResourceStore;
-  private entries = new Map<string, Entry>();
-  constructor(private readonly environment: NodeJS.ProcessEnv, private readonly currentUser: string, resources: ProductionInstallerResources = createProductionInstallerResources(process.platform, environment)) {
-    this.files = resources.files; this.resources = resources.resources; this.launchers = new ManagedLauncherAdapter(resources.files); this.owned = new OwnedJsonResourceAdapter(resources.resources); this.runtimeRegistrations = resources.runtimeRegistrations;
+  private readonly environment: Readonly<NodeJS.ProcessEnv>;
+  private readonly entries = new Map<string, Entry>();
+  constructor(environment: NodeJS.ProcessEnv, private readonly currentUser: string, resources: ProductionInstallerResources = createProductionInstallerResources(process.platform, environment)) {
+    this.environment = { ...environment }; this.files = resources.files; this.resources = resources.resources; this.launchers = new ManagedLauncherAdapter(resources.files); this.owned = new OwnedJsonResourceAdapter(resources.resources); this.runtimeRegistrations = resources.runtimeRegistrations;
   }
   async operations(intent: InstallIntentV1, manifest: ReleaseManifestV1, requireActual = false): Promise<InstallerOperationSet> {
     if (intent.runtimeRegistrations) {
@@ -139,7 +140,8 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     automatic.sort((left, right) => left.operation.id.localeCompare(right.operation.id));
     const scheduled: Entry[] = [{ resource: task, operation: { id: "90-scheduled-capture", adapter: this.name, action: "ensure", target: task.target, desiredDigest: installerDigest(task.desired) } }];
-    this.entries = new Map([...automatic, ...scheduled].map(entry => [entry.operation.id, entry]));
+    for (const entry of [...automatic, ...scheduled]) this.entries.set(installerDigest(entry.operation), entry);
+    while (this.entries.size > 2_048) this.entries.delete(this.entries.keys().next().value!);
     const references = (intent.externalIntegrations ?? []).map(integration => ({ id: integration.id, planDigest: integration.planDigest, verifierRef: integration.verifierRef }));
     return { automatic: automatic.map(x => x.operation), scheduled: scheduled.map(x => x.operation), classifications: {
       automatic: automatic.map(x => x.operation.id),
@@ -147,14 +149,17 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       manualOnly: references.filter((_reference, index) => intent.externalIntegrations![index]!.classification === "manual-only"),
     } };
   }
-  private entry(operation: InstallOperationV1): Entry { return this.entries.get(operation.id) ?? fail("INSTALL_PLAN_STALE", `Unknown production operation ${operation.id}.`); }
-  private byTarget(target: string): Entry { return [...this.entries.values()].find(x => x.operation.target === target) ?? fail("INSTALL_PLAN_STALE", `Unknown production target ${target}.`); }
-  async observe(target: string): Promise<string | null> { const entry = this.byTarget(target); if (entry.fileBody || entry.fileSource) { const current = await this.files.read(target); return current ? sha(current) : null; } if (entry.launcher) return (await this.launchers.inspect(entry.launcher)).digest; return (await this.owned.inspect(entry.resource!)).digest; }
-  async capture(target: string): Promise<string | null> { const entry = this.byTarget(target); if (entry.fileBody || entry.fileSource || entry.launcher) { const current = await this.files.read(target); return current?.toString("base64") ?? null; } const current = await this.resources.read(target); return current === undefined ? null : Buffer.from(JSON.stringify(current)).toString("base64"); }
-  async apply(operation: InstallOperationV1): Promise<void> { const entry = this.entry(operation); if (entry.fileBody || entry.fileSource) { if (operation.action === "remove") await this.files.remove(operation.target); else { const body = entry.fileBody ?? await this.files.read(entry.fileSource!); if (!body || body.length !== entry.expectedBytes && entry.expectedBytes !== undefined || sha(body) !== operation.desiredDigest) fail("INSTALL_RELEASE_PROJECTION_DRIFT", `Immutable projection source changed for ${operation.id}.`); await this.files.write(operation.target, body); } return; } if (operation.action === "remove") { if (entry.launcher) { const plan = await this.launchers.plan(entry.launcher); if (plan.previousManagedBase64 === null) return; await this.launchers.remove({ schemaVersion: 1, kind: "managed-launcher-receipt", target: entry.launcher.path, shell: entry.launcher.shell, managedBase64: plan.previousManagedBase64, previousManagedBase64: null }); } else { const plan = await this.owned.plan(entry.resource!); if (plan.inspection.status === "absent") return; await this.owned.remove({ schemaVersion: 1, kind: "owned-resource-receipt", spec: entry.resource!, desiredDigest: installerDigest(entry.resource!.desired) }); } return; }
+  private async entry(operation: InstallOperationV1): Promise<Entry> {
+    const exact=this.entries.get(installerDigest(operation));if(exact)return exact;
+    if(operation.action==="remove")for(const entry of this.entries.values())if(entry.operation.id===operation.id&&entry.operation.target===operation.target){if(entry.resource&&(await this.owned.inspect(entry.resource)).status==="owned")return entry;if(entry.fileBody||entry.fileSource||entry.launcher)return entry;}
+    return fail("INSTALL_PLAN_STALE", `Unknown or stale production operation ${operation.id}.`);
+  }
+  async observe(operation: InstallOperationV1): Promise<string | null> { const entry = await this.entry(operation), target=operation.target; if (entry.fileBody || entry.fileSource) { const current = await this.files.read(target); return current ? sha(current) : null; } if (entry.launcher) return (await this.launchers.inspect(entry.launcher)).digest; return (await this.owned.inspect(entry.resource!)).digest; }
+  async capture(operation: InstallOperationV1): Promise<string | null> { const entry = await this.entry(operation), target=operation.target; if (entry.fileBody || entry.fileSource || entry.launcher) { const current = await this.files.read(target); return current?.toString("base64") ?? null; } const current = await this.resources.read(target); return current === undefined ? null : Buffer.from(JSON.stringify(current)).toString("base64"); }
+  async apply(operation: InstallOperationV1): Promise<void> { const entry = await this.entry(operation); if (entry.fileBody || entry.fileSource) { if (operation.action === "remove") await this.files.remove(operation.target); else { const body = entry.fileBody ?? await this.files.read(entry.fileSource!); if (!body || body.length !== entry.expectedBytes && entry.expectedBytes !== undefined || sha(body) !== operation.desiredDigest) fail("INSTALL_RELEASE_PROJECTION_DRIFT", `Immutable projection source changed for ${operation.id}.`); await this.files.write(operation.target, body); } return; } if (operation.action === "remove") { if (entry.launcher) { const plan = await this.launchers.plan(entry.launcher); if (plan.previousManagedBase64 === null) return; await this.launchers.remove({ schemaVersion: 1, kind: "managed-launcher-receipt", target: entry.launcher.path, shell: entry.launcher.shell, managedBase64: plan.previousManagedBase64, previousManagedBase64: null }); } else { const plan = await this.owned.plan(entry.resource!); if (plan.inspection.status === "absent") return; await this.owned.remove({ schemaVersion: 1, kind: "owned-resource-receipt", spec: entry.resource!, desiredDigest: installerDigest(entry.resource!.desired) }); } return; }
     if (entry.launcher) await this.launchers.apply(await this.launchers.plan(entry.launcher)); else await this.owned.apply(await this.owned.plan(entry.resource!)); }
-  async restore(target: string, snapshot: string | null): Promise<void> {
-    const entry = this.byTarget(target);
+  async restore(operation: InstallOperationV1, snapshot: string | null): Promise<void> {
+    const entry = await this.entry(operation), target=operation.target;
     if (entry.fileBody || entry.fileSource || entry.launcher) { snapshot === null ? await this.files.remove(target) : await this.files.write(target, Buffer.from(snapshot, "base64")); return; }
     const inspection = await this.owned.inspect(entry.resource!);
     const prior = snapshot === null ? undefined : JSON.parse(Buffer.from(snapshot, "base64").toString("utf8"));
