@@ -5,12 +5,14 @@ import { fileURLToPath } from "node:url";
 import { build as bundle } from "esbuild";
 import {
   parseResolvedSkillManifestV4,
+  parseRuntimeCapabilityManifestV1,
   parseRuntimeContextV1,
   publishRuntimeArtifact,
   validateRuntimeContext,
   type PublishedRuntimeArtifact,
   type PublishedRuntimeArtifactReference,
   type RuntimeBinding,
+  type RuntimeCapabilityManifestV1,
   type RuntimeContextV1,
 } from "@mpx/runtime-contracts";
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from "@mpx/runtime-hooks";
@@ -39,6 +41,7 @@ export * from "./hooks-wiring.js";
 export * from "./subagent-bridge.js";
 export * from "./event-coordination.js";
 export * from "./runtime-tools.js";
+export * from "./production-runtime.js";
 
 export interface PiExtensionAPI {
   registerCommand(name: string, specification: { description?: string; handler(args: string): Promise<void> }): void;
@@ -168,6 +171,8 @@ export interface PiProjectionBuildInput {
   readonly artifactsRoot: string;
   readonly statusSnapshot: StatusSnapshotV1;
   readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
+  readonly runtimeCapabilityManifest?: RuntimeCapabilityManifestV1;
+  readonly runtimeLaunchBinding?: { readonly launchKey: string; readonly runtime: "pi"; readonly identity: { readonly name: string; readonly domain: string }; readonly worktreeRoot: string; readonly assignedPorts: readonly number[]; readonly executor: "host" | "docker" };
   readonly launchBanner: string;
   readonly assetsRoot?: string;
   readonly vendorProvenanceFile?: string;
@@ -192,15 +197,23 @@ async function emit(root: string, relative: string, content: string | Uint8Array
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, content, { encoding: "utf8", flag: "wx" });
 }
-async function bundledProductionSubagents(): Promise<string> {
-  const result = await bundle({ entryPoints: [path.join(packageRoot, "src", "production-subagents.ts")], bundle: true, platform: "node", format: "esm", target: "node22", write: false, legalComments: "none", sourcemap: false });
-  const output = result.outputFiles[0];
-  if (!output) throw new Error("Pi production subagent bundle was not emitted");
-  return output.text;
+const productionBundles = new Map<string, Promise<string>>();
+async function bundledSource(entry: string, label: string): Promise<string> {
+  let pending = productionBundles.get(entry);
+  if (!pending) {
+    pending = bundle({ entryPoints: [path.join(packageRoot, "src", entry)], bundle: true, platform: "node", format: "esm", target: "node22", write: false, legalComments: "none", sourcemap: false }).then(result => {
+      const output = result.outputFiles[0];
+      if (!output) throw new Error(`Pi ${label} bundle was not emitted`);
+      return output.text;
+    });
+    productionBundles.set(entry, pending);
+  }
+  return pending;
 }
 function piExtensionSource(descriptor: {
   manifestKey: string; artifactKey: string; launchBanner: string; runtimeStatusLine: string; commandAllowlist: string[]; modelSearchAllowlist: string[];
-  productionCapability: { executor: "host" | "docker"; tools: string[]; routes: string[] };
+  productionCapability?: RuntimeCapabilityManifestV1;
+  productionLaunch?: { launchKey: string; runtime: "pi"; identity: { name: string; domain: string }; worktreeRoot: string; assignedPorts: readonly number[]; executor: "host" | "docker" };
   entries: Array<{ identity: string; publicName: string; exposure: "full" | "name-only" | "explicit-only" | "off"; contentHash: string; sourcePath: string; commandDescription?: string; canonicalDescription?: string; canonicalTriggers?: string }>;
 }): string {
   const data = JSON.stringify(descriptor);
@@ -210,6 +223,7 @@ function piExtensionSource(descriptor: {
     'import path from "node:path";',
     'import { fileURLToPath } from "node:url";',
     'import { createProjectionSubagentRuntime, projectionRuntimePolicies } from "./production-subagents.mjs";',
+    'import { activatePiProductionRuntime } from "./production-runtime.mjs";',
     'const root = path.dirname(fileURLToPath(import.meta.url));',
     `const projection = ${data};`,
     'function digest(value) { return createHash("sha256").update(typeof value === "string" || value instanceof Uint8Array ? value : stable(value)).digest("hex"); }',
@@ -242,12 +256,11 @@ function piExtensionSource(descriptor: {
     'function parseProjectedBody(bytes) { const text = bytes.toString("utf8").replaceAll("\\r\\n", "\\n"); if (!text.startsWith("---\\n")) restart("SKILL_BODY_INVALID"); const end = text.indexOf("\\n---\\n", 4); if (end < 0) restart("SKILL_BODY_INVALID"); return text.slice(end + 5); }',
     'function modelEntries() { return projection.entries.filter((entry) => projection.modelSearchAllowlist.includes(entry.identity)); }',
     'function search(query) { const value = String(query ?? "").trim().toLowerCase(); if (value.length > 200) throw new Error("QUERY_TOO_LONG"); return modelEntries().map((entry) => ({ ...entry, score: score(entry, value) })).filter((entry) => value.length === 0 || entry.score > 0).sort((left, right) => right.score - left.score || left.identity.localeCompare(right.identity)).slice(0, 20).map(({ identity, publicName, canonicalDescription, canonicalTriggers, score }) => ({ identity, publicName, description: canonicalDescription ?? `mpx skill ${identity}`, ...(canonicalTriggers ? { triggers: canonicalTriggers } : {}), score })); }',
-    'const productionSubagents=createProjectionSubagentRuntime(), productionContent=new Map(), productionServices=new Map(), productionCapability=Object.freeze(projection.productionCapability); let productionShutdown=false, productionStatusTimer;',
-    'function admitProduction(name,route){if(!productionCapability.tools.includes(name)||(route&&!productionCapability.routes.includes(route)))throw new Error("TOOL_AUTHORITY_DENIED");return productionCapability.executor;}',
+    'const productionSubagents=createProjectionSubagentRuntime(); let productionStatusTimer;',
     'const productionOutput=(value,details=value)=>({content:[{type:"text",text:typeof value==="string"?value:JSON.stringify(value)}],details});',
     'function productionStatus(value){const parts=[];if(value?.identity?.label)parts.push(value.identity.label);if(value?.model?.label||value?.model?.modelId)parts.push(value.model.label??value.model.modelId);if(value?.repository?.name)parts.push(`${value.repository.name}${value.repository.branch?`@${value.repository.branch}`:""}`);const freshness=["identity","session","model","location","repository","usage","cost","providerUsage","compactions","subagents","development","actions"].map(name=>value?.[name]?.freshness?.state).filter(state=>state==="stale"||state==="error");if(freshness.length)parts.push([...new Set(freshness)].join("/"));return parts.join(" · ")||projection.runtimeStatusLine;}',
     'async function refreshProductionStatus(ctx){const file=process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE;if(!file){ctx?.ui?.setStatus?.("mpx",projection.runtimeStatusLine);return;}try{const value=projectionRuntimePolicies.parseStatus(await readJson(file,"RUNTIME_STATUS_INVALID",MAX_STATUS_BYTES));const context=await validateContext();if(value?.binding?.launchKey!==context.launchKey||value?.binding?.repositoryId!==context.binding.repositoryId)restart("RUNTIME_STATUS_BINDING_CHANGED");ctx?.ui?.setStatus?.("mpx",productionStatus(value));}catch(error){ctx?.ui?.setStatus?.("mpx",`${projection.runtimeStatusLine} · error`);}}',
-    'async function activateProduction(pi){if(typeof pi.registerTool!=="function")return;const register=(name,description,execute)=>pi.registerTool({name,label:name,description,parameters:{type:"object",additionalProperties:true},execute});register("Agent","Launch through the immutable @mpx/subagents lifecycle.",async(_id,p)=>{const agent=await productionSubagents.launch(p??{});return productionOutput(agent,{provider:"@mpx/subagents",runner:"@mpx/subagents",agent});});register("get_subagent_result","Consume a real lifecycle runner result.",async(_id,p)=>{const id=String(p?.id??""),result=await productionSubagents.result(id);return productionOutput(result,{id,result});});register("steer_subagent","Steer a queued or running lifecycle agent.",async(_id,p)=>{const id=String(p?.id??""),message=String(p?.message??"").trim();productionSubagents.steer(id,message);return productionOutput("Steering accepted.",{id});});const aggregate=(name,fn)=>register(name,`Capability-admitted ${name} aggregate.`,async(_id,p)=>{await ensureBound();admitProduction(name);return productionOutput(await fn(p));});aggregate("mcp",async p=>{const route=`mcp:${String(p?.serverId??"")}`;if(!productionCapability.routes.includes(route))throw new Error("MCP_ROUTE_DENIED");return {executor:admitProduction("mcp",route),route,output:{method:p?.method,params:p?.params}};});aggregate("web_search",async p=>{const query=String(p?.query??"");if(!query)throw new Error("WEB_QUERY_INVALID");const responseId=digest({query,provider:"projection"}),results=[{title:`Projection result for ${query}`,url:"https://example.invalid/projection",snippet:"Immutable launch-bound provider result."}];productionContent.set(responseId,{results});return {executor:admitProduction("web_search","web:projection"),provider:"projection",responseId,results,cached:false};});aggregate("fetch_content",async p=>{const responseId=digest({url:p?.url});const result={executor:"host",provider:"projection",responseId,content:`Fetched ${String(p?.url??"")}`,mediaType:"text/plain",cached:false};productionContent.set(responseId,{content:result.content});return result;});aggregate("get_search_content",async p=>{const found=productionContent.get(String(p?.responseId??""));if(!found)throw new Error("CONTENT_NOT_FOUND");return found;});aggregate("source_check",async p=>{const claim=String(p?.claim??"");return {claim,sources:[{title:"Projection source",url:"https://example.invalid/projection",snippet:claim}]};});register("dev_server","Launch-owned development service manager.",async(_id,p)=>{if(productionShutdown)throw new Error("DEV_SERVER_SHUTDOWN");const action=String(p?.action??"status"),id=String(p?.id??"");if(action==="start"){if(productionServices.has(id))throw new Error("DEV_SERVER_ID_CONFLICT");const service={id,state:"ready",run:1,logs:`started: ${String(p?.command??"")}`};productionServices.set(id,service);return productionOutput(service);}const service=productionServices.get(id);if(!service)throw new Error("DEV_SERVER_NOT_FOUND");if(action==="status")return productionOutput(service);if(action==="logs")return productionOutput({id,logs:service.logs});if(action==="restart"){service.state="ready";service.run++;service.logs+=`\\nrestarted run ${service.run}`;return productionOutput(service);}if(action==="stop"){service.state="stopped";return productionOutput(service);}throw new Error("DEV_SERVER_ACTION_INVALID");});if(typeof pi.on!=="function")return;pi.on("tool_call",async(event)=>{if(event?.toolName!=="bash")return;const decision=projectionRuntimePolicies.toolCall(event?.input??{});if(decision.action==="block")return {block:true,reason:`${decision.code}: ${decision.message}`};if(decision.warning)return {warning:decision.warning};});pi.on("tool_result",async(event)=>{if(["write","edit"].includes(String(event?.toolName).toLowerCase()))return {additionalContext:`post-write quality: ${JSON.stringify(projectionRuntimePolicies.postWrite(String(event?.input?.path??"")))}`};if(event?.toolName==="bash"){const context=projectionRuntimePolicies.postCommand(String(event?.input?.command??""),String(event?.result?.stderr??""));if(context)return {additionalContext:context};}});pi.on("session_start",async(_event,ctx)=>{if(productionStatusTimer){clearInterval(productionStatusTimer);productionStatusTimer=undefined;}await ensureFresh();await refreshProductionStatus(ctx);ctx?.ui?.setWidget?.("mpx-fleet",productionSubagents.list());productionStatusTimer=setInterval(()=>{void refreshProductionStatus(ctx);},1000);productionStatusTimer.unref?.();});pi.on("before_agent_start",async(event,ctx)=>{await ensureBound();await refreshProductionStatus(ctx);return {systemPrompt:`${String(event?.systemPrompt??"")}${disclosure()}`};});pi.on("session_before_compact",async event=>{const plan=projectionRuntimePolicies.compact(String(event?.customInstructions??""));return plan.action==="inject"?{instructions:plan.instructions}:undefined;});pi.on("agent_settled",async(_event,ctx)=>{try{projectionRuntimePolicies.notification();ctx?.ui?.notify?.("Agent settled.","info");ctx?.ui?.setWidget?.("mpx-fleet",productionSubagents.list());}catch{}});pi.on("session_shutdown",async()=>{productionShutdown=true;if(productionStatusTimer){clearInterval(productionStatusTimer);productionStatusTimer=undefined;}for(const service of productionServices.values())service.state="stopped";await productionSubagents.shutdown();});}',
+    'async function activateProduction(pi){if(typeof pi.registerTool!=="function")return;const register=(name,description,execute)=>pi.registerTool({name,label:name,description,parameters:{type:"object",additionalProperties:true},execute});register("Agent","Launch through the immutable @mpx/subagents lifecycle.",async(_id,p)=>{const agent=await productionSubagents.launch(p??{});return productionOutput(agent,{provider:"@mpx/subagents",runner:"@mpx/subagents",agent});});register("get_subagent_result","Consume a real lifecycle runner result.",async(_id,p)=>{const id=String(p?.id??""),result=await productionSubagents.result(id);return productionOutput(result,{id,result});});register("steer_subagent","Steer a queued or running lifecycle agent.",async(_id,p)=>{const id=String(p?.id??""),message=String(p?.message??"").trim();productionSubagents.steer(id,message);return productionOutput("Steering accepted.",{id});});if(projection.productionCapability){if(!projection.productionLaunch)throw new Error("LAUNCH_BINDING_STALE");if(!pi.mpxRuntimeAdapters)throw new Error("ADAPTER_REQUIRED: launch-bound production adapters were not supplied");activatePiProductionRuntime({pi,capability:projection.productionCapability,launch:projection.productionLaunch,adapters:pi.mpxRuntimeAdapters});}if(typeof pi.on!=="function")return;pi.on("tool_call",async(event)=>{if(event?.toolName!=="bash")return;const decision=projectionRuntimePolicies.toolCall(event?.input??{});if(decision.action==="block")return {block:true,reason:`${decision.code}: ${decision.message}`};if(decision.warning)return {warning:decision.warning};});pi.on("tool_result",async(event)=>{if(["write","edit"].includes(String(event?.toolName).toLowerCase()))return {additionalContext:`post-write quality: ${JSON.stringify(projectionRuntimePolicies.postWrite(String(event?.input?.path??"")))}`};if(event?.toolName==="bash"){const context=projectionRuntimePolicies.postCommand(String(event?.input?.command??""),String(event?.result?.stderr??""));if(context)return {additionalContext:context};}});pi.on("session_start",async(_event,ctx)=>{if(productionStatusTimer){clearInterval(productionStatusTimer);productionStatusTimer=undefined;}await ensureFresh();await refreshProductionStatus(ctx);ctx?.ui?.setWidget?.("mpx-fleet",productionSubagents.list());productionStatusTimer=setInterval(()=>{void refreshProductionStatus(ctx);},1000);productionStatusTimer.unref?.();});pi.on("before_agent_start",async(event,ctx)=>{await ensureBound();await refreshProductionStatus(ctx);return {systemPrompt:`${String(event?.systemPrompt??"")}${disclosure()}`};});pi.on("session_before_compact",async event=>{const plan=projectionRuntimePolicies.compact(String(event?.customInstructions??""));return plan.action==="inject"?{instructions:plan.instructions}:undefined;});pi.on("agent_settled",async(_event,ctx)=>{try{projectionRuntimePolicies.notification();ctx?.ui?.notify?.("Agent settled.","info");ctx?.ui?.setWidget?.("mpx-fleet",productionSubagents.list());}catch{}});pi.on("session_shutdown",async()=>{if(productionStatusTimer){clearInterval(productionStatusTimer);productionStatusTimer=undefined;}await productionSubagents.shutdown();});}',
     'export async function activate(pi) { await ensureFresh(); for (const name of projection.commandAllowlist) { const entry = projection.entries.find((item) => item.publicName.slice(1) === name); pi.registerCommand(name, { ...(entry?.commandDescription ? { description: entry.commandDescription } : {}), handler: async (_args) => { const loaded = await body(entry.identity, "human-explicit"); await pi.sendUserMessage([{ type: "text", text: loaded.wrappedBody }]); } }); } if (typeof pi.registerTool === "function") { pi.registerTool({ name: "mpx_model_search", label: "MPX search", description: "Search available skills.", parameters: { type: "object", additionalProperties: false, properties: { query: { type: "string", description: "Search query." } }, required: ["query"] }, async execute(_toolCallId, params) { await ensureBound(); const results = search(params?.query); return { content: [{ type: "text", text: JSON.stringify(results) }], details: { results } }; } }); pi.registerTool({ name: "mpx_model_load", label: "MPX load", description: "Load one available skill.", parameters: { type: "object", additionalProperties: false, properties: { identity: { type: "string", description: "Skill identifier." } }, required: ["identity"] }, async execute(_toolCallId, params) { const identity = String(params?.identity ?? ""); if (!projection.modelSearchAllowlist.includes(identity)) throw new Error("SKILL_INVOCATION_DENIED"); const loaded = await body(identity, "model"); return { content: [{ type: "text", text: loaded.wrappedBody }], details: { identity: loaded.identity, provenance: loaded.provenance } }; } }); } await activateProduction(pi); if (typeof pi.on === "function") { let statusContext, statusTimer; pi.on("tool_call", async (event) => { if (event?.toolName !== "bash") return; await ensureExpected("dangerous-command-policy.mjs"); const {classifyDangerousCommand}=await import("./dangerous-command-policy.mjs"); const decision = classifyDangerousCommand(event?.input?.command); if (decision.action === "block") return { block: true, reason: `${decision.code}: ${decision.message}` }; }); pi.on("before_agent_start", async (event) => { await ensureBound(); if (statusContext) await refreshStatus(statusContext,statusGeneration); return { systemPrompt: `${String(event?.systemPrompt ?? "")}${disclosure()}` }; }); pi.on("session_start", async (_event, ctx) => { const generation=++statusGeneration;statusStopped=false;statusContext=ctx;await ensureFresh();if(statusStopped||generation!==statusGeneration)return;if(statusTimer){clearInterval(statusTimer);statusTimer=undefined;}const previous=statusRefresh;if(previous)await previous.catch(()=>{});if(statusStopped||generation!==statusGeneration)return;await refreshStatus(ctx,generation);if(statusStopped||generation!==statusGeneration)return;statusTimer=setInterval(() => { void refreshStatus(ctx,generation).catch(() => {if(!statusStopped&&generation===statusGeneration)ctx.ui.setStatus("mpx", `${projection.launchBanner} | ports invalid`);}); }, 1000); statusTimer.unref?.(); }); pi.on("session_shutdown", async () => { statusStopped=true;++statusGeneration;statusContext=undefined;if(statusTimer){clearInterval(statusTimer);statusTimer=undefined;}const pending=statusRefresh;if(pending)await pending.catch(()=>{}); }); } }',
     'export async function modelSearch(query) { await ensureBound(); return search(query); }',
     'export default activate;',
@@ -372,16 +385,20 @@ export async function buildPiProjection(input: PiProjectionBuildInput): Promise<
   }
   const commandAllowlist = input.artifact.entries.filter((entry) => entry.permissions.humanInvocation).map((entry) => entry.publicName.slice(1)).sort();
   const modelSearchAllowlist = input.artifact.entries.filter((entry) => entry.permissions.modelInvocation).map((entry) => entry.identity).sort();
-  const productionCapability = { executor: "host" as const, tools: ["mcp", "web_search", "fetch_content", "get_search_content", "source_check", "dev_server"], routes: ["mcp:context7", "web:projection"] };
-  const descriptor = { schemaVersion: 1, runtime: "pi", manifestKey: manifest.manifestKey, runtimeArtifact: input.artifact.reference, runtimeContext: "runtime-context.json", extension: "extension.mjs", commandAllowlist, modelSearchAllowlist, productionCapability, settings: "settings.json", keybindings: "keybindings.json", themes: ["green", "amber"], agents: "agents", vendorProvenance: "vendor/subagents/VENDORED.md", runtimeStatusEnvelope: "status/runtime-status-envelope-v1.json", entries };
+  const productionCapability = input.runtimeCapabilityManifest ? parseRuntimeCapabilityManifestV1(input.runtimeCapabilityManifest) : undefined;
+  const productionLaunch = input.runtimeLaunchBinding;
+  if ((productionCapability === undefined) !== (productionLaunch === undefined)) throw new Error("Pi production capability and launch binding must be supplied together");
+  if (productionCapability && productionLaunch && (productionCapability.runtime !== "pi" || productionCapability.launchKey !== context.launchKey || productionLaunch.launchKey !== context.launchKey || productionLaunch.runtime !== "pi" || productionLaunch.executor !== productionCapability.executor || productionLaunch.identity.name !== productionCapability.identity.name || productionLaunch.identity.domain !== productionCapability.identity.domain || productionCapability.binding.projectId !== context.binding.projectId || productionCapability.binding.repositoryId !== context.binding.repositoryId || productionCapability.binding.contentScope !== context.binding.contentScope)) throw new Error("Pi production capability is stale or belongs to another launch");
+  const descriptor = { schemaVersion: 1, runtime: "pi", manifestKey: manifest.manifestKey, runtimeArtifact: input.artifact.reference, runtimeContext: "runtime-context.json", extension: "extension.mjs", commandAllowlist, modelSearchAllowlist, ...(productionCapability && productionLaunch ? { productionCapability, productionLaunch } : {}), settings: "settings.json", keybindings: "keybindings.json", themes: ["green", "amber"], agents: "agents", vendorProvenance: "vendor/subagents/VENDORED.md", runtimeStatusEnvelope: "status/runtime-status-envelope-v1.json", entries };
   await mkdir(input.artifactsRoot, { recursive: true });
   const staging = await mkdtemp(path.join(input.artifactsRoot, ".pi-build-"));
   try {
     await emit(staging, "projection.json", jsonFile(descriptor));
     await emit(staging, "runtime-context.json", jsonFile(context));
     const runtimeStatusLine = renderPiRuntimeStatus(runtimeStatusEnvelope, "wide");
-    await emit(staging, "extension.mjs", piExtensionSource({ manifestKey: manifest.manifestKey, artifactKey: input.artifact.reference.artifactKey, launchBanner: input.launchBanner, runtimeStatusLine, commandAllowlist, modelSearchAllowlist, productionCapability, entries }));
-    await emit(staging, "production-subagents.mjs", await bundledProductionSubagents());
+    await emit(staging, "extension.mjs", piExtensionSource({ manifestKey: manifest.manifestKey, artifactKey: input.artifact.reference.artifactKey, launchBanner: input.launchBanner, runtimeStatusLine, commandAllowlist, modelSearchAllowlist, ...(productionCapability && productionLaunch ? { productionCapability, productionLaunch } : {}), entries }));
+    await emit(staging, "production-subagents.mjs", await bundledSource("production-subagents.ts", "production subagent"));
+    await emit(staging, "production-runtime.mjs", await bundledSource("production-runtime.ts", "production runtime"));
     await emit(staging, "dangerous-command-policy.mjs", `${dangerousCommandPolicyModuleSource}\n`);
     await emit(staging, "status/status-snapshot.json", jsonFile(statusSnapshot));
     await emit(staging, "status/runtime-status-envelope-v1.json", jsonFile(runtimeStatusEnvelope));
@@ -409,58 +426,4 @@ export function createPiFooterPortAdapter(snapshot: () => Promise<unknown>): PiF
   return { current: () => rendered, refresh: async () => { rendered = renderPiPortSegment(await snapshot()); } };
 }
 
-type AgentModelClass = "sol" | "terra" | "luna";
-type AgentCapability = "read" | "search" | "shell" | "write" | "browser" | "context" | "web";
-interface AgentMetadata { modelClass: AgentModelClass; thinking: "low" | "medium" | "high"; capabilities: AgentCapability[]; nesting: string[]; outputSchema: string }
-interface AgentCatalog { schemaVersion: 1; agents: Record<string, AgentMetadata> }
-export interface GeneratePiAgentsInput { source: string; output: string; check?: boolean }
-const piModels: Record<AgentModelClass, string> = { sol: "openai-codex/gpt-5.6-sol", terra: "openai-codex/gpt-5.6-terra", luna: "openai-codex/gpt-5.6-luna" };
-const piTools: Record<AgentCapability, string[]> = { read: ["read"], search: ["grep", "find", "ls"], shell: ["bash"], write: ["edit", "write"], browser: ["mcp"], context: ["mcp"], web: ["web_search", "fetch_content", "get_search_content", "source_check"] };
-function projectedAgentName(identity: string): string { return identity === "mpx-explorer" ? "Explore" : identity; }
-function expandAgentNesting(selectors: readonly string[], identities: readonly string[]): string[] {
-  const expanded = selectors.flatMap((selector) => {
-    const matches = selector.includes("*")
-      ? identities.filter((identity) => new RegExp(`^${selector.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join(".*")}$`, "u").test(identity))
-      : identities.filter((identity) => identity === selector);
-    if (matches.length === 0) throw new Error(`agent nesting selector '${selector}' does not resolve to a canonical identity`);
-    return matches;
-  });
-  return [...new Set(expanded)];
-}
-function adaptAgent(source: string, identity: string, metadata: AgentMetadata): string {
-  const normalized = source.replaceAll("\r\n", "\n");
-  const marker = normalized.indexOf("\n---\n", 4);
-  if (!normalized.startsWith("---\n") || marker < 0) throw new Error("canonical agent must have frontmatter");
-  const frontmatter = normalized.slice(0, marker).replace(`\nname: ${identity}\n`, `\nname: ${projectedAgentName(identity)}\n`);
-  const tools = [...new Set(metadata.capabilities.flatMap((capability) => piTools[capability] ?? []))];
-  const nesting = metadata.nesting.length ? `\nallowed_subagents: ${metadata.nesting.join(",")}` : "";
-  return `${frontmatter}\nmodel: ${piModels[metadata.modelClass]}\nthinking: ${metadata.thinking}\ntools: ${tools.join(",")}\noutput_schema: ${metadata.outputSchema}${nesting}\n${normalized.slice(marker)}`;
-}
-async function readAgentCatalog(source: string): Promise<AgentCatalog> {
-  const value = JSON.parse(await readFile(path.join(source, "metadata.json"), "utf8")) as AgentCatalog;
-  const classes = new Set(["sol", "terra", "luna"]), thinking = new Set(["low", "medium", "high"]), capabilities = new Set(Object.keys(piTools));
-  const valid = value.schemaVersion === 1 && value.agents && !Array.isArray(value.agents) && Object.entries(value.agents).every(([identity, agent]) =>
-    /^mpx-[a-z0-9-]+$/u.test(identity) && classes.has(agent?.modelClass) && thinking.has(agent?.thinking)
-    && Array.isArray(agent?.capabilities) && agent.capabilities.length > 0 && agent.capabilities.every((item) => capabilities.has(item))
-    && Array.isArray(agent?.nesting) && agent.nesting.every((item) => typeof item === "string") && typeof agent?.outputSchema === "string" && agent.outputSchema.length > 0);
-  if (!valid) throw new Error("invalid agent metadata");
-  return value;
-}
-export async function generatePiAgents(input: GeneratePiAgentsInput): Promise<{ changed: string[]; drift: string[] }> {
-  const names = (await readdir(input.source)).filter((name) => /^mpx-[a-z0-9-]+\.md$/u.test(name)).sort();
-  const catalog = await readAgentCatalog(input.source); const identities = names.map((name) => name.slice(0, -3));
-  if (Object.keys(catalog.agents).sort().join() !== identities.join()) throw new Error("agent metadata must exactly cover canonical agents");
-  const changed: string[] = []; const drift: string[] = [];
-  if (!input.check) await mkdir(input.output, { recursive: true });
-  const generatedNames = names.map((name) => `${projectedAgentName(name.slice(0, -3))}.md`); const generated = new Set(generatedNames);
-  const extras = (await readdir(input.output).catch(() => [] as string[])).filter((name) => /^(?:mpx-[a-z0-9-]+|Explore)\.md$/u.test(name) && !generated.has(name)).sort();
-  if (input.check) drift.push(...extras); else for (const extra of extras) { await rm(path.join(input.output, extra)); changed.push(extra); }
-  for (const name of names) {
-    const identity = name.slice(0, -3), outputName = `${projectedAgentName(identity)}.md`;
-    const metadata = catalog.agents[identity]!; const expected = adaptAgent(await readFile(path.join(input.source, name), "utf8"), identity, { ...metadata, nesting: expandAgentNesting(metadata.nesting, identities) });
-    const target = path.join(input.output, outputName); const actual = await readFile(target, "utf8").catch(() => undefined);
-    if (actual === expected) continue;
-    if (input.check) drift.push(outputName); else { await writeFile(target, expected); changed.push(outputName); }
-  }
-  return { changed: changed.sort(), drift: drift.sort() };
-}
+export { generatePiAgents, type GeneratePiAgentsInput } from "./agent-generator.js";
