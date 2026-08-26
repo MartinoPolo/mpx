@@ -136,6 +136,12 @@ export function registerStaticMcp(input: { readonly label: string; readonly exec
   if (input.argv.some((argument) => /^(?:--?)(?:api[-_]?key|auth|credential|password|secret|token)(?:=|$)/iu.test(argument) || /^(?:[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)[A-Z0-9_]*)=/u.test(argument))) fail("MCP_SECRET_FORBIDDEN", "Static MCP argv cannot contain credentials or environment material.");
   return { schemaVersion: 1, kind: "static-mcp-registration", label: input.label, executable: executable(input.executable), argv: [...input.argv] };
 }
+export function parseStaticMcpRegistrationV1(value: unknown): StaticMcpRegistrationV1 {
+  const record = exactRegistrationRecord(value, ["schemaVersion", "kind", "label", "executable", "argv"]);
+  if (record.schemaVersion !== 1 || record.kind !== "static-mcp-registration" || !Array.isArray(record.argv) || record.argv.some(argument => typeof argument !== "string")) fail("REGISTRATION_SCHEMA_INVALID", "Static MCP registration is invalid.");
+  const executableRecord = exactRegistrationRecord(record.executable, ["path", "sha256", "version"]);
+  return registerStaticMcp({ label: record.label as string, executable: executableRecord as unknown as ExecutableEvidenceV1, argv: record.argv as string[] });
+}
 export interface PrivateLaunchFile { readonly name: "launch-key.json" | "route-bindings.json"; readonly content: string }
 export interface PrivateRuntimeLaunch { readonly executable: ExecutableEvidenceV1; readonly argv: readonly string[]; readonly environment: Readonly<Record<string, string>>; readonly privateFiles: readonly PrivateLaunchFile[] }
 export function materializePrivateRuntimeLaunch(input: { readonly registration: RuntimeRegistrationV1; readonly launchKey: string; readonly nativeRoot: string; readonly projectionRoot: string; readonly mcpBindings: readonly { readonly label: string; readonly privateConfigPath: string }[] }): PrivateRuntimeLaunch {

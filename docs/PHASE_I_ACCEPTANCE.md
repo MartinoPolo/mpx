@@ -17,4 +17,8 @@ Phase I is accepted only from simulation and read-only live inspection. **Do not
 | CLI | `mpx install verify` on an uninstalled machine returns versioned structured unhealthy data containing `receipt-missing`; it is not reported as capability unavailable. |
 | External systems | Git, Obsidian, and Raycast plans contain bounded references, confirmation digests, and verifier references. No external mutation occurs automatically. |
 
+## Production-backed simulation evidence
+
+The automated suite runs two successful scenarios (clean and existing machine) with temporary real filesystem roots, `NodeTransactionStore`, `ProductionInstallerOperationAdapter`, and an in-memory fake Windows-native boundary. Both cover plan/apply/verify/reapply, four runtime routes, managed profiles, Terminal, environment, shortcuts, scheduled capture, immutable release verification after deleting the source checkout, and byte-identical auth/session/cache fixtures. A further 17 isolated simulations inject failure after each planned production operation and require no receipt plus restored private fixtures. Two spawned fresh CLI processes verify an uninstalled root and return structured `receipt-missing` data. These counts are simulation evidence, not live-machine proof.
+
 Run the workspace build, checks, tests, generated-source validation, convergence verification, and native inventory validation. Any unavailable live-only gate remains explicitly pending; simulation is never described as live proof.

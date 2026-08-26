@@ -3,19 +3,24 @@ import { copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, w
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MpxError } from "@mpx/core";
+import { parseRuntimeRegistrationMatrixV1, parseStaticMcpRegistrationV1, type RuntimeRegistrationMatrixV1, type StaticMcpRegistrationV1 } from "./runtime-registration.js";
 
 export const IMMUTABLE_INSTALLER_VERSION = 1 as const;
 const SHA = /^[a-f0-9]{64}$/u;
 
 export interface ReleaseFileV1 { readonly path: string; readonly bytes: number; readonly sha256: string }
 export interface ReleaseManifestV1 { readonly schemaVersion: 1; readonly kind: "release-manifest"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[] }
-export interface InstallExternalIntegrationV1 { readonly id: string; readonly adapter: "git-remotes" | "obsidian" | "raycast"; readonly classification: "confirmation-required" | "manual-only" }
-export interface InstallIntentV1 { readonly schemaVersion: 1; readonly kind: "install-intent"; readonly releaseKey: string; readonly convergenceHash: string; readonly components: readonly string[]; readonly externalIntegrations?: readonly InstallExternalIntegrationV1[] }
+export interface InstallExternalIntegrationV1 { readonly id: string; readonly adapter: "git-remotes" | "obsidian" | "raycast"; readonly classification: "confirmation-required" | "manual-only"; readonly planDigest?: string; readonly verifierRef?: string }
+export interface InstallIntentV1 { readonly schemaVersion: 1; readonly kind: "install-intent"; readonly releaseKey: string; readonly convergenceHash: string; readonly components: readonly string[]; readonly runtimeRegistrations?: RuntimeRegistrationMatrixV1; readonly staticMcpRegistrations?: readonly StaticMcpRegistrationV1[]; readonly externalIntegrations?: readonly InstallExternalIntegrationV1[] }
 export interface MachineObservationV1 { readonly id: string; readonly digest: string | null }
 export interface InstallOperationV1 { readonly id: string; readonly adapter: string; readonly action: "ensure" | "remove"; readonly target: string; readonly desiredDigest: string | null }
-export interface InstallPlanV1 { readonly schemaVersion: 1; readonly kind: "install-plan"; readonly intent: InstallIntentV1; readonly observations: readonly MachineObservationV1[]; readonly operations: readonly InstallOperationV1[]; readonly confirmationDigest: string }
-export interface OwnershipReceiptV1 { readonly schemaVersion: 1; readonly kind: "ownership-receipt"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[]; readonly operations: readonly InstallOperationV1[]; readonly installedAt: string }
-export interface InstallVerificationV1 { readonly schemaVersion: 1; readonly kind: "install-verification"; readonly releaseKey: string; readonly healthy: boolean; readonly issues: readonly string[]; readonly checkedAt: string }
+export interface InstallPlanReferenceV1 { readonly id: string; readonly planDigest: string; readonly verifierRef: string }
+export interface InstallOperationClassificationsV1 { readonly automatic: readonly string[]; readonly confirmationRequired: readonly InstallPlanReferenceV1[]; readonly manualOnly: readonly InstallPlanReferenceV1[] }
+export interface InstallPlanV1 { readonly schemaVersion: 1; readonly kind: "install-plan"; readonly intent: InstallIntentV1; readonly observations: readonly MachineObservationV1[]; readonly operations: readonly InstallOperationV1[]; readonly classifications?: InstallOperationClassificationsV1; readonly confirmationDigest: string }
+export interface OwnershipReceiptV1 { readonly schemaVersion: 1; readonly kind: "ownership-receipt"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[]; readonly operations: readonly InstallOperationV1[]; readonly installIntent?: InstallIntentV1; readonly installedAt: string }
+export interface InstallVerificationComponentV1 { readonly id: string; readonly automatic: true; readonly status: "actual-state-verified" | "unhealthy" }
+export interface InstallVerificationExternalV1 { readonly id: string; readonly classification: "confirmation-required" | "manual-only"; readonly status: "confirmed" | "manual-required"; readonly verifierRef: string }
+export interface InstallVerificationV1 { readonly schemaVersion: 1; readonly kind: "install-verification"; readonly releaseKey: string; readonly healthy: boolean; readonly issues: readonly string[]; readonly checkedAt: string; readonly components?: readonly InstallVerificationComponentV1[]; readonly externalIntegrations?: readonly InstallVerificationExternalV1[]; readonly manualOnly?: readonly string[] }
 export interface MachineSnapshotV1 { readonly schemaVersion: 1; readonly kind: "machine-snapshot"; readonly transactionId: string; readonly observations: readonly MachineObservationV1[]; readonly capturedAt: string }
 export interface TransactionJournalV1 { readonly schemaVersion: 1; readonly kind: "transaction-journal"; readonly transactionId: string; readonly phase: "applying" | "committed" | "rolled-back"; readonly completedOperationIds: readonly string[]; readonly snapshot: MachineSnapshotV1 }
 
@@ -49,37 +54,57 @@ export function parseReleaseManifestV1(value: unknown): ReleaseManifestV1 {
 }
 export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
   const record = value as Record<string, unknown> | null;
-  const hasExternal = Boolean(record && Object.prototype.hasOwnProperty.call(record, "externalIntegrations"));
-  const intent = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "components", ...(hasExternal ? ["externalIntegrations"] : [])]);
+  const has = (key: string): boolean => Boolean(record && Object.prototype.hasOwnProperty.call(record, key));
+  const hasExternal = has("externalIntegrations"), hasRuntime = has("runtimeRegistrations"), hasMcp = has("staticMcpRegistrations");
+  const intent = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "components", ...(hasRuntime ? ["runtimeRegistrations"] : []), ...(hasMcp ? ["staticMcpRegistrations"] : []), ...(hasExternal ? ["externalIntegrations"] : [])]);
   const external = intent.externalIntegrations;
   const integrationsValid = !hasExternal || Array.isArray(external) && external.every((entry, index, all) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
-    const item = entry as Record<string, unknown>;
-    return Object.keys(item).sort().join("\0") === ["adapter", "classification", "id"].sort().join("\0") &&
+    const item = entry as Record<string, unknown>, extended = Object.prototype.hasOwnProperty.call(item, "planDigest") || Object.prototype.hasOwnProperty.call(item, "verifierRef");
+    return Object.keys(item).sort().join("\0") === ["adapter", "classification", "id", ...(extended ? ["planDigest", "verifierRef"] : [])].sort().join("\0") &&
       typeof item.id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(item.id) &&
       ["git-remotes", "obsidian", "raycast"].includes(item.adapter as string) &&
       (item.adapter === "raycast" ? item.classification === "manual-only" : item.classification === "confirmation-required") &&
+      (!extended || typeof item.planDigest === "string" && SHA.test(item.planDigest) && typeof item.verifierRef === "string" && /^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$/u.test(item.verifierRef)) &&
       (index === 0 || (all[index - 1] as { id: string }).id.localeCompare(item.id) < 0);
   }) && new Set((external as { id: string }[]).map(entry => entry.id)).size === (external as unknown[]).length;
   if (intent.schemaVersion !== 1 || intent.kind !== "install-intent" || typeof intent.releaseKey !== "string" || !SHA.test(intent.releaseKey) || intent.releaseKey !== intent.convergenceHash || !Array.isArray(intent.components) || intent.components.some((x) => typeof x !== "string" || !x) || new Set(intent.components).size !== intent.components.length || intent.components.some((x, i, a) => i > 0 && a[i - 1].localeCompare(x) >= 0) || !integrationsValid) fail("INSTALL_SCHEMA_INVALID", "Invalid install intent.");
-  return intent as unknown as InstallIntentV1;
+  const runtimeRegistrations = hasRuntime ? parseRuntimeRegistrationMatrixV1(intent.runtimeRegistrations) : undefined;
+  const staticMcpRegistrations = hasMcp && Array.isArray(intent.staticMcpRegistrations) ? intent.staticMcpRegistrations.map(parseStaticMcpRegistrationV1) : hasMcp ? fail("INSTALL_SCHEMA_INVALID", "Static MCP registrations must be an array.") : undefined;
+  if (staticMcpRegistrations && (new Set(staticMcpRegistrations.map(item => item.label)).size !== staticMcpRegistrations.length || staticMcpRegistrations.some((item, index, all) => index > 0 && all[index - 1]!.label.localeCompare(item.label) >= 0))) fail("INSTALL_SCHEMA_INVALID", "Static MCP registrations must be unique and sorted.");
+  return { schemaVersion: 1, kind: "install-intent", releaseKey: intent.releaseKey, convergenceHash: intent.convergenceHash as string, components: intent.components as string[], ...(runtimeRegistrations ? { runtimeRegistrations } : {}), ...(staticMcpRegistrations ? { staticMcpRegistrations } : {}), ...(hasExternal ? { externalIntegrations: external as InstallExternalIntegrationV1[] } : {}) };
 }
 function parseObservation(value: unknown): MachineObservationV1 { const x = exact(value, ["id", "digest"]); if (typeof x.id !== "string" || !x.id || !(x.digest === null || typeof x.digest === "string" && SHA.test(x.digest))) fail("INSTALL_SCHEMA_INVALID", "Invalid observation."); return x as unknown as MachineObservationV1; }
 function parseOperation(value: unknown): InstallOperationV1 { const x = exact(value, ["id", "adapter", "action", "target", "desiredDigest"]); if (typeof x.id !== "string" || !x.id || typeof x.adapter !== "string" || !x.adapter || !["ensure", "remove"].includes(x.action as string) || typeof x.target !== "string" || !x.target || !(x.desiredDigest === null || typeof x.desiredDigest === "string" && SHA.test(x.desiredDigest))) fail("INSTALL_SCHEMA_INVALID", "Invalid operation."); return x as unknown as InstallOperationV1; }
 function orderedUnique<T extends { id: string }>(values: T[]): boolean { return new Set(values.map((x) => x.id)).size === values.length && values.every((x, i) => i === 0 || values[i - 1]!.id.localeCompare(x.id) < 0); }
+function parseReferences(value: unknown): InstallOperationClassificationsV1 {
+  const record = exact(value, ["automatic", "confirmationRequired", "manualOnly"]);
+  const references = (items: unknown): InstallPlanReferenceV1[] => {
+    if (!Array.isArray(items)) fail("INSTALL_SCHEMA_INVALID", "Plan references must be arrays.");
+    return items.map(item => { const ref = exact(item, ["id", "planDigest", "verifierRef"]); if (typeof ref.id !== "string" || !ref.id || typeof ref.planDigest !== "string" || !SHA.test(ref.planDigest) || typeof ref.verifierRef !== "string" || !ref.verifierRef) fail("INSTALL_SCHEMA_INVALID", "Plan reference is invalid."); return ref as unknown as InstallPlanReferenceV1; });
+  };
+  if (!Array.isArray(record.automatic) || record.automatic.some(id => typeof id !== "string" || !id)) fail("INSTALL_SCHEMA_INVALID", "Automatic classifications are invalid.");
+  const parsed = { automatic: record.automatic as string[], confirmationRequired: references(record.confirmationRequired), manualOnly: references(record.manualOnly) };
+  if (new Set([...parsed.confirmationRequired, ...parsed.manualOnly].map(item => item.id)).size !== parsed.confirmationRequired.length + parsed.manualOnly.length) fail("INSTALL_SCHEMA_INVALID", "Plan references must be unique.");
+  return parsed;
+}
 export function parseInstallPlanV1(value: unknown): InstallPlanV1 {
-  const plan = exact(value, ["schemaVersion", "kind", "intent", "observations", "operations", "confirmationDigest"]);
+  const source = value as Record<string, unknown> | null, hasClassifications = Boolean(source && Object.prototype.hasOwnProperty.call(source, "classifications"));
+  const plan = exact(value, ["schemaVersion", "kind", "intent", "observations", "operations", ...(hasClassifications ? ["classifications"] : []), "confirmationDigest"]);
   if (plan.schemaVersion !== 1 || plan.kind !== "install-plan" || !Array.isArray(plan.observations) || !Array.isArray(plan.operations) || typeof plan.confirmationDigest !== "string" || !SHA.test(plan.confirmationDigest)) fail("INSTALL_SCHEMA_INVALID", "Invalid install plan.");
-  const parsed = { schemaVersion: 1 as const, kind: "install-plan" as const, intent: parseInstallIntentV1(plan.intent), observations: plan.observations.map(parseObservation), operations: plan.operations.map(parseOperation) };
-  if (!orderedUnique(parsed.observations) || !orderedUnique(parsed.operations) || installerDigest(parsed) !== plan.confirmationDigest) fail("INSTALL_SCHEMA_INVALID", "Invalid plan confirmation or ordering.");
+  const parsed = { schemaVersion: 1 as const, kind: "install-plan" as const, intent: parseInstallIntentV1(plan.intent), observations: plan.observations.map(parseObservation), operations: plan.operations.map(parseOperation), ...(hasClassifications ? { classifications: parseReferences(plan.classifications) } : {}) };
+  if (!orderedUnique(parsed.observations) || !orderedUnique(parsed.operations) || installerDigest(parsed) !== plan.confirmationDigest || parsed.classifications && installerDigest(parsed.classifications.automatic) !== installerDigest(parsed.operations.slice(0, parsed.classifications.automatic.length).map(operation => operation.id))) fail("INSTALL_SCHEMA_INVALID", "Invalid plan confirmation or ordering.");
   return { ...parsed, confirmationDigest: plan.confirmationDigest };
 }
 export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
-  const receipt = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "files", "operations", "installedAt"]);
+  const source = value as Record<string, unknown> | null, hasIntent = Boolean(source && Object.prototype.hasOwnProperty.call(source, "installIntent"));
+  const receipt = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "files", "operations", ...(hasIntent ? ["installIntent"] : []), "installedAt"]);
   if (receipt.schemaVersion !== 1 || receipt.kind !== "ownership-receipt" || typeof receipt.installedAt !== "string" || !Number.isFinite(Date.parse(receipt.installedAt)) || !Array.isArray(receipt.operations)) fail("INSTALL_SCHEMA_INVALID", "Invalid ownership receipt.");
   const manifest = parseReleaseManifestV1({ schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files });
   const operations = receipt.operations.map(parseOperation); if (!orderedUnique(operations)) fail("INSTALL_SCHEMA_INVALID", "Receipt operations must be sorted.");
-  return { schemaVersion: 1, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations, installedAt: receipt.installedAt };
+  const installIntent = hasIntent ? parseInstallIntentV1(receipt.installIntent) : undefined;
+  if (installIntent && installIntent.releaseKey !== manifest.releaseKey) fail("INSTALL_SCHEMA_INVALID", "Receipt intent does not match its release.");
+  return { schemaVersion: 1, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations, ...(installIntent ? { installIntent } : {}), installedAt: receipt.installedAt as string };
 }
 export function parseInstallVerificationV1(value: unknown): InstallVerificationV1 {
   const verification = exact(value, ["schemaVersion", "kind", "releaseKey", "healthy", "issues", "checkedAt"]);

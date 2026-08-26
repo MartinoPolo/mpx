@@ -154,7 +154,7 @@ export class ImmutableInstallerService {
         }
         const manifest = this.options.manifest;
         if (!priorReceipt && (!manifest || manifest.releaseKey !== plan.intent.releaseKey || manifest.convergenceHash !== plan.intent.convergenceHash)) fail("INSTALL_RELEASE_MANIFEST_REQUIRED", "Exact release manifest is required for ownership.");
-        const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 1, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: manifest!.files, operations: plan.operations, installedAt: this.now().toISOString() };
+        const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 1, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: manifest!.files, operations: plan.operations, installIntent: plan.intent, installedAt: this.now().toISOString() };
         await this.options.store.writeReceipt(receipt); journal = { ...journal, phase: "committed" }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations }); await this.options.store.removeTransaction(); return receipt;
       } catch (failure) { await this.rollbackStored({ journal, snapshots, operations: plan.operations }, plan.operations); throw failure; }
     });

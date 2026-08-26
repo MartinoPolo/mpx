@@ -12,6 +12,7 @@ import {
   type InstallIntentV1,
   type InstallOperationV1,
   type InstallPlanV1,
+  type InstallOperationClassificationsV1,
   type InstallVerificationV1,
   type OwnershipReceiptV1,
   type ReleaseManifestV1,
@@ -24,6 +25,7 @@ const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException
 export interface InstallerOperationSet {
   readonly automatic: readonly InstallOperationV1[];
   readonly scheduled: readonly InstallOperationV1[];
+  readonly classifications?: InstallOperationClassificationsV1;
 }
 /** The host owns native details; orchestration only consumes ordered, reversible operations. */
 export interface InstallerOperationAdapter extends SideEffectAdapter {
@@ -107,7 +109,7 @@ export class InstallOrchestrator {
   private service(manifest?: ReleaseManifestV1): ImmutableInstallerService {
     return new ImmutableInstallerService({ adapters: [this.options.adapter], store: this.options.store, ...(manifest ? { manifest } : {}), now: this.now });
   }
-  private async current(intentValue: InstallIntentV1): Promise<{ intent: InstallIntentV1; manifest: ReleaseManifestV1; operations: readonly InstallOperationV1[] }> {
+  private async current(intentValue: InstallIntentV1): Promise<{ intent: InstallIntentV1; manifest: ReleaseManifestV1; operations: readonly InstallOperationV1[]; classifications?: InstallOperationClassificationsV1 }> {
     const intent = parseInstallIntentV1(intentValue), manifest = await this.options.releases.build();
     if (intent.releaseKey !== manifest.releaseKey || intent.convergenceHash !== manifest.convergenceHash) fail("INSTALL_INTENT_STALE", "Intent does not describe the current deterministic release.");
     const grouped = await this.options.adapter.operations(intent, manifest);
@@ -116,17 +118,20 @@ export class InstallOrchestrator {
     const operations = [...automatic, ...scheduled];
     if (new Set(operations.map(operation => operation.id)).size !== operations.length) fail("INSTALL_OPERATION_DUPLICATE", "Operation IDs must be unique.");
     if (operations.some((operation, index) => index > 0 && operations[index - 1]!.id.localeCompare(operation.id) >= 0)) fail("INSTALL_OPERATION_ORDER_INVALID", "Automatic operations must sort before scheduled operations.");
-    return { intent, manifest, operations };
+    return { intent, manifest, operations, ...(grouped.classifications ? { classifications: grouped.classifications } : {}) };
   }
   async plan(intent: InstallIntentV1): Promise<InstallPlanV1> {
     const current = await this.current(intent);
-    return this.service(current.manifest).plan(current.intent, current.operations);
+    const base = await this.service(current.manifest).plan(current.intent, current.operations);
+    if (!current.classifications) return base;
+    const classified = { schemaVersion: base.schemaVersion, kind: base.kind, intent: base.intent, observations: base.observations, operations: base.operations, classifications: current.classifications };
+    return parseInstallPlanV1({ ...classified, confirmationDigest: installerDigest(classified) });
   }
   async apply(planValue: InstallPlanV1, confirmation: string): Promise<OwnershipReceiptV1> {
     const plan = parseInstallPlanV1(planValue);
     if (confirmation !== plan.confirmationDigest) fail("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
     const current = await this.current(plan.intent);
-    if (installerDigest(current.operations) !== installerDigest(plan.operations)) fail("INSTALL_PLAN_STALE", "Install operations changed after planning.");
+    if (installerDigest(current.operations) !== installerDigest(plan.operations) || installerDigest(current.classifications ?? null) !== installerDigest(plan.classifications ?? null)) fail("INSTALL_PLAN_STALE", "Install operations changed after planning.");
     const revalidated = await this.service(current.manifest).plan(current.intent, current.operations);
     if (installerDigest(revalidated.observations) !== installerDigest(plan.observations)) fail("INSTALL_OBSERVATION_CHANGED", "Machine observations changed after planning.");
     if (plan.operations.some((operation, index) => operation.action === "ensure" && plan.observations[index]?.digest !== null && plan.observations[index]?.digest !== operation.desiredDigest))
@@ -140,11 +145,15 @@ export class InstallOrchestrator {
     const receipt = await this.options.store.readReceipt();
     if (receipt) {
       const manifest: ReleaseManifestV1 = { schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files };
-      await this.options.adapter.operations({ schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest);
+      await this.options.adapter.operations(receipt.installIntent ?? { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest);
     }
     const base = await this.service().verify();
     const issues = [...base.issues, ...(receipt ? await this.options.releases.verify(receipt, strict) : [])].sort((a, b) => a.localeCompare(b));
-    return { ...base, healthy: issues.length === 0, issues };
+    if (!receipt?.installIntent) return { ...base, healthy: issues.length === 0, issues };
+    const runtimeIds = receipt.installIntent.runtimeRegistrations?.registrations.map(registration => registration.identity) ?? [];
+    const components = ["system", ...runtimeIds].map(id => ({ id, automatic: true as const, status: issues.some(issue => id === "system" ? !issue.includes("registration-") && !runtimeIds.some(runtimeId => issue.includes(runtimeId)) : issue.includes(id)) ? "unhealthy" as const : "actual-state-verified" as const }));
+    const externalIntegrations = (receipt.installIntent.externalIntegrations ?? []).map(integration => ({ id: integration.id, classification: integration.classification, status: integration.classification === "manual-only" ? "manual-required" as const : "confirmed" as const, verifierRef: integration.verifierRef ?? `${integration.adapter}:${integration.id}` }));
+    return { ...base, healthy: issues.length === 0, issues, components, externalIntegrations, manualOnly: externalIntegrations.filter(item => item.classification === "manual-only").map(item => item.id) };
   }
   async rollback(transactionId: string, confirmation: string): Promise<RollbackResultV1> {
     const stored = await this.options.store.readTransaction();
