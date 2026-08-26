@@ -37,6 +37,10 @@ git diff --check
 
 The proof/contracts-only F2 foundation is documented in [`PHASE_F2_PROOF_FOUNDATION.md`](PHASE_F2_PROOF_FOUNDATION.md). It adds immutable sbx and runtime-tool inventory inputs without performing live sandbox operations; F2 runtime acceptance remains pending.
 
+## Supplemental Phase F1 native inventory
+
+The privacy-safe native package/plugin inventory collector, repository declarations, fixture coverage, and redacted execution evidence are documented in [PHASE_F1_NATIVE_INVENTORY.md](PHASE_F1_NATIVE_INVENTORY.md). The current evidence records an unavailable user identity config and therefore makes no live parity claim; collection remains an exact manual gate rather than a reason to scan for account roots.
+
 ## Explicit non-claims
 
 This slice does not establish F2 Docker/container isolation, Phase G session continuation/resurrection, Phase I route/MCP provisioning or installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.

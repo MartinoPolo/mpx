@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "collectionRan": false,
+  "rootDiscovery": {
+    "route": "%APPDATA%/mpx/config.json",
+    "status": "unavailable"
+  },
+  "comparison": {
+    "matched": null,
+    "missing": null,
+    "extra": null,
+    "unsupported": null
+  },
+  "blocker": "USER_CONFIG_REQUIRED",
+  "nativeStateCopied": false
+}

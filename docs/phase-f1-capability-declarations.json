@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "runtime": "claude",
+      "id": "mpx",
+      "version": "0.0.0",
+      "capabilityRoutes": ["hook:hooks"]
+    },
+    {
+      "runtime": "pi",
+      "id": "@mpx/runtime-pi",
+      "version": "0.0.0",
+      "capabilityRoutes": ["extension:mpx"]
+    }
+  ]
+}
