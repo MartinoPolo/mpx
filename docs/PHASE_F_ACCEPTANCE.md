@@ -35,7 +35,7 @@ git diff --check
 
 ## Phase F2 routing and proof
 
-The host-Pi/sandbox-executor split is documented in [`PHASE_F2_PROOF_FOUNDATION.md`](PHASE_F2_PROOF_FOUNDATION.md). Production remote routing, exact tool replacement, launch/identity binding, child narrowing and fake-worker proof are implemented without performing live sandbox or authentication operations.
+The host-Pi/sandbox-executor split is documented in [`PHASE_F2_PROOF_FOUNDATION.md`](PHASE_F2_PROOF_FOUNDATION.md). Production remote routing, exact tool replacement, launch/identity binding, child narrowing and fake-worker proof are implemented without performing live sandbox or authentication operations. F2 launch acceptance now also gates on the CLI-owned launch-private bridge suites: `packages/executors/src/launch-private-bridge.test.ts`, `runtimes/pi/runtime-pi/test/launch-private-client.test.ts`, and `apps/cli/src/fake-pi-bridge.e2e.test.ts`. These prove actual Pi invocation-plan propagation, fake sbx-worker routing, peer/nonce/hash attestation, identity/replay/stale/absence denial, bounded timeout/cancellation, restrictive private state, and awaited process-failure cleanup.
 
 ## Supplemental Phase F1 native inventory
 

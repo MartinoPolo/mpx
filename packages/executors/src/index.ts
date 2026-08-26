@@ -28,7 +28,7 @@ export function sameVerificationEvidence(left: unknown, right: unknown): boolean
 }
 export interface ProcessRequest { readonly executable: string; readonly argv: readonly string[]; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number; readonly signal?: AbortSignal }
 export interface ProcessResult { readonly exitCode: number; readonly stdout: string; readonly stderr: string; readonly truncated: boolean }
-export interface ExecutorAdapter { readonly name: "docker" | "host"; verify(): Promise<VerificationEvidence>; execute(request: ProcessRequest): Promise<ProcessResult> }
+export interface ExecutorAdapter { readonly name: "docker" | "host"; readonly remoteToolClient?: import("./production-remote.js").ProductionRemoteToolClient; verify(): Promise<VerificationEvidence>; execute(request: ProcessRequest): Promise<ProcessResult> }
 export class ExecutorRegistry {
   readonly #adapters = new Map<string, ExecutorAdapter>();
   register(adapter: ExecutorAdapter): void { this.#adapters.set(adapter.name, adapter); }
@@ -381,6 +381,7 @@ export function compactLaunchBanner(descriptorInput: LaunchDescriptor): string {
   const descriptor = parseLaunchDescriptorV2(descriptorInput); return `[mpx ${descriptor.runtime}/${descriptor.executor.name} ${descriptor.launchKey.slice(0, 12)}${descriptor.elevationAudit.elevated ? " ELEVATED" : ""}]`;
 }
 
+export * from "./launch-private-bridge.js";
 export * from "./sbx-client.js";
 export * from "./sandbox-plan.js";
 export * from "./sbx-plans.js";

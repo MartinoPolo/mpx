@@ -1,6 +1,7 @@
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { parseF2ProofReportV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
 import { ExecutionError, type ExecutorAdapter, type ProcessRequest, type ProcessResult, type VerificationEvidence } from "./index.js";
+import type { ProductionRemoteToolClient } from "./production-remote.js";
 import type { SandboxLaunchPlanV1 } from "./sandbox-plan.js";
 import { buildSbxCommandPlans } from "./sbx-plans.js";
 
@@ -13,6 +14,7 @@ export interface StandaloneSbxExecutorInput {
   readonly report:F2ProofReportV1; readonly sbxPinSha256:string; readonly executorEvidenceSha256:string;
   readonly ports:readonly string[];
   readonly worker?:{readonly argv:readonly string[];readonly endpoint:string;readonly attestationSha256:string};
+  readonly remoteToolClient?:ProductionRemoteToolClient;
   readonly diagnostics:()=>Promise<{readonly status:"pass"|"fail";readonly digest:string}>;
   readonly run:(request:StandaloneSbxRunRequest)=>Promise<ProcessResult>;
 }
@@ -22,8 +24,10 @@ const SHA=/^[a-f0-9]{64}$/u;
 export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly name="docker" as const;
   readonly bridge:{readonly endpoint:string;readonly attestationSha256:string}|undefined;
+  readonly remoteToolClient?:ProductionRemoteToolClient;
   constructor(readonly input:StandaloneSbxExecutorInput) {
     this.bridge=input.worker===undefined?undefined:Object.freeze({endpoint:input.worker.endpoint,attestationSha256:input.worker.attestationSha256});
+    if(input.remoteToolClient)this.remoteToolClient=input.remoteToolClient;
   }
   async verify():Promise<VerificationEvidence>{
     try {

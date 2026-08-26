@@ -30,7 +30,7 @@ export interface RemoteToolEnvelope {
   readonly toolPath: string; readonly input: JsonValue; readonly inputSha256: string; readonly requestSha256: string;
 }
 export interface RemoteToolReply { readonly schemaVersion: 1; readonly requestId: string; readonly sequence: number; readonly requestSha256: string; readonly output: JsonValue }
-export interface SandboxWorkerTransport { invoke(request: RemoteToolEnvelope): Promise<RemoteToolReply> }
+export interface SandboxWorkerTransport { invoke(request: RemoteToolEnvelope, signal?:AbortSignal): Promise<RemoteToolReply> }
 export interface RemoteToolSetAttestation { readonly toolPaths: readonly string[]; readonly digest: string; readonly inventorySha256: string }
 
 function fail(code: string, message: string): never { throw new ExecutionError(code, message); }
@@ -59,14 +59,16 @@ export class ProductionRemoteToolClient {
   readonly #seen = new Set<string>(); #sequence = 0;
   constructor(readonly descriptor: Readonly<SandboxHandleBinding>, readonly transport: SandboxWorkerTransport, readonly isCurrent: () => boolean = () => true) {}
   attestation(): RemoteToolSetAttestation { const toolPaths = exactPaths(PHASE_F2_REMOTE_TOOL_PATHS); return Object.freeze({ toolPaths, digest: sha256Canonical(toolPaths as unknown as JsonValue), inventorySha256: this.descriptor.runtimeToolInventorySha256 }); }
-  async execute(toolPath: string, input: unknown, options: { requestId?: string } = {}): Promise<JsonValue> {
+  async execute(toolPath: string, input: unknown, options: { requestId?: string;signal?:AbortSignal } = {}): Promise<JsonValue> {
     if (!this.isCurrent()) fail("REMOTE_HANDLE_STALE", "Sandbox handle was replaced for this launch.");
     if (!(PHASE_F2_REMOTE_TOOL_PATHS as readonly string[]).includes(toolPath)) fail("REMOTE_TOOL_DENIED", "Tool path is outside the attested F1 inventory.");
     const requestId = options.requestId ?? randomUUID(); if (this.#seen.has(requestId)) fail("REMOTE_REPLAY", "Remote request was already used."); this.#seen.add(requestId);
     const payload = safeJson(input); const inputSha256 = sha256Canonical(payload); const sequence = ++this.#sequence;
     const tuple = { schemaVersion: 1 as const, requestId, sequence, launchKey: this.descriptor.launchKey, planKey: this.descriptor.planKey, runtimeToolInventorySha256: this.descriptor.runtimeToolInventorySha256, capabilitySha256: this.descriptor.capabilitySha256, childKey: this.descriptor.childKey ?? null, toolPath, input: payload, inputSha256 };
     const request: RemoteToolEnvelope = Object.freeze({ ...tuple, requestSha256: sha256Canonical(tuple as unknown as JsonValue) });
-    const result = await this.transport.invoke(request);
+    if(options.signal?.aborted)fail("REMOTE_CANCELLED","Remote request was cancelled.");
+    const result = await this.transport.invoke(request,options.signal);
+    if(options.signal?.aborted)fail("REMOTE_CANCELLED","Remote request was cancelled.");
     if (result.schemaVersion !== 1 || result.requestId !== requestId || result.sequence !== sequence || result.requestSha256 !== request.requestSha256) fail("REMOTE_STALE_RESULT", "Remote result does not match its request.");
     return safeJson(result.output);
   }
@@ -97,10 +99,12 @@ export class ProductionRemoteExecutorRegistry {
 export class FakeSandboxWorker implements SandboxWorkerTransport {
   readonly serializedRequests: string[] = []; readonly hostFallbackCalls = 0;
   constructor(readonly handlers: Readonly<Record<string, (input: JsonValue) => Promise<JsonValue>>>) {}
-  async invoke(request: RemoteToolEnvelope): Promise<RemoteToolReply> {
+  async invoke(request: RemoteToolEnvelope, signal?:AbortSignal): Promise<RemoteToolReply> {
     this.serializedRequests.push(JSON.stringify(request)); const handler = this.handlers[request.toolPath];
     if (!handler) fail("REMOTE_TOOL_UNAVAILABLE", "Fake sandbox worker has no handler for this path.");
-    const output = await handler(request.input); return Object.freeze({ schemaVersion: 1, requestId: request.requestId, sequence: request.sequence, requestSha256: request.requestSha256, output });
+    if(signal?.aborted)fail("REMOTE_CANCELLED","Remote request was cancelled.");
+    const cancelled=new Promise<never>((_,reject)=>signal?.addEventListener("abort",()=>reject(new ExecutionError("REMOTE_CANCELLED","Remote request was cancelled.")),{once:true}));
+    const output = await (signal?Promise.race([handler(request.input),cancelled]):handler(request.input)); return Object.freeze({ schemaVersion: 1, requestId: request.requestId, sequence: request.sequence, requestSha256: request.requestSha256, output });
   }
   get scan() { const text = this.serializedRequests.join("\n"); return Object.freeze({ oauthTokenPresent: /oauth|Bearer\s/iu.test(text), piCodingAgentDirPresent: /PI_CODING_AGENT_DIR/u.test(text), authJsonPresent: /auth\.json/iu.test(text), accountRootPresent: /accountRoot|nativeRuntimeRoot/iu.test(text), canaryPresent: /token-shaped-canary/u.test(text) }); }
 }
