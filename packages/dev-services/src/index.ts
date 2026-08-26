@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import path from "node:path";
@@ -18,6 +19,24 @@ export interface ManagedProcess {readonly pid:number;readonly fingerprint:string
 export interface RuntimeAdapter {readonly kind:ExecutorKind;spawn(request:Pick<StartRequest,"executable"|"args"|"cwd"|"logFile">):ManagedProcess|Promise<ManagedProcess>;probe(port:number):Promise<boolean>;inspect(pid:number):Promise<{pid:number;fingerprint:string}|undefined>;stop(process:ManagedProcess):Promise<void>;sleep(ms:number):Promise<void>;now():string}
 export interface DevServiceSnapshot {readonly id:string;readonly state:DevServiceState;readonly pid:number|null;readonly fingerprint:string|null;readonly cwd:string;readonly command:string;readonly ports:readonly number[];readonly readyPorts:readonly number[];readonly run:number;readonly generation:number;readonly createdAt:string;readonly startedAt:string|null;readonly readyAt:string|null;readonly stoppedAt:string|null;readonly exitedAt:string|null;readonly updatedAt:string;readonly exitCode:number|null;readonly exitSignal:string|null;readonly lastError:string|null}
 export interface DevServiceStatusEvent {readonly type:typeof DEV_SERVICES_CHANGED_EVENT;readonly snapshot:DevServiceSnapshot}
+
+interface AtomicReplaceOptions {
+  platform?: NodeJS.Platform;
+  rename?: (temporary: string, destination: string) => Promise<void>;
+  sleep?: (milliseconds: number) => Promise<void>;
+}
+const WINDOWS_ATOMIC_REPLACE_RETRIES=5;
+const WINDOWS_ATOMIC_REPLACE_ERRORS=new Set(["EPERM","EACCES","EBUSY"]);
+export async function replaceAtomicFile(temporary:string,destination:string,options:AtomicReplaceOptions={}):Promise<void>{
+  const move=options.rename??rename,platform=options.platform??process.platform,pause=options.sleep??(milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds)));
+  for(let attempt=0;;attempt++){
+    try{await move(temporary,destination);return}catch(error){
+      const code=(error as NodeJS.ErrnoException).code;
+      if(platform!=="win32"||!WINDOWS_ATOMIC_REPLACE_ERRORS.has(code??"")||attempt>=WINDOWS_ATOMIC_REPLACE_RETRIES)throw error;
+      await pause(10*(attempt+1));
+    }
+  }
+}
 
 function canonical(value:string):string { const win=path.win32.isAbsolute(value); return (win?path.win32.normalize(value).replaceAll("\\","/").toLowerCase():path.resolve(value).replaceAll("\\","/" )).replace(/\/$/u,""); }
 function within(root:string,candidate:string):boolean { const r=canonical(root),c=canonical(candidate); return c===r||c.startsWith(`${r}/`); }
@@ -77,7 +96,7 @@ export class DurableDevServiceManager {
   private readonly stateFile:string;private loaded=false;private records=new Map<string,DurableRecord>();private saveTask:Promise<void>=Promise.resolve();private saveSequence=0;
   constructor(readonly runtime:RuntimeAdapter,readonly stateRoot:string,readonly readinessIntervalMs=200){this.stateFile=path.join(stateRoot,"state.json")}
   private async load(){if(this.loaded)return;this.loaded=true;try{const parsed=JSON.parse(await readFile(this.stateFile,"utf8")) as {version:number;records:DurableRecord[]};if(parsed.version!==1||!Array.isArray(parsed.records))throw new Error("Unsupported durable dev-service state.");for(const item of parsed.records)this.records.set(item.request.id,item)}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error}}
-  private save(){const persist=async()=>{await mkdir(this.stateRoot,{recursive:true,mode:0o700});const temporary=`${this.stateFile}.${process.pid}.${this.saveSequence++}.tmp`;await writeFile(temporary,JSON.stringify({version:1,records:[...this.records.values()]}),{encoding:"utf8",mode:0o600});await chmod(temporary,0o600).catch(()=>{});await rename(temporary,this.stateFile)};const result=this.saveTask.then(persist,persist);this.saveTask=result.then(()=>undefined,()=>undefined);return result}
+  private save(){const persist=async()=>{await mkdir(this.stateRoot,{recursive:true,mode:0o700});const temporary=`${this.stateFile}.${process.pid}.${this.saveSequence++}.${randomUUID()}.tmp`;await writeFile(temporary,JSON.stringify({version:1,records:[...this.records.values()]}),{encoding:"utf8",mode:0o600});await chmod(temporary,0o600).catch(()=>{});await replaceAtomicFile(temporary,this.stateFile)};const result=this.saveTask.then(persist,persist);this.saveTask=result.then(()=>undefined,()=>undefined);return result}
   private snap(request:StartRequest,previous?:DevServiceSnapshot):DevServiceSnapshot {const now=this.runtime.now();return {id:request.id,state:"starting",pid:null,fingerprint:null,cwd:request.cwd,command:displayCommand(request),ports:[...request.ports],readyPorts:[],run:(previous?.run??0)+1,generation:(previous?.generation??0)+1,createdAt:previous?.createdAt??now,startedAt:now,readyAt:null,stoppedAt:null,exitedAt:null,updatedAt:now,exitCode:null,exitSignal:null,lastError:null}}
   async start(input:StartRequest){await this.load();assertExecutorBoundary(input.executor,this.runtime.kind);let request=validateStartRequest(input);if(this.records.has(request.id))throw new Error(`Dev service '${request.id}' already exists.`);const logFile=path.join(this.stateRoot,`${request.id}.log`);await mkdir(this.stateRoot,{recursive:true,mode:0o700});await writeFile(logFile,"",{mode:0o600});request={...request,logFile};let snapshot=this.snap(request);const record={request,snapshot,logFile};this.records.set(request.id,record);await this.save();let child:ManagedProcess;try{child=await this.runtime.spawn(request)}catch(error){snapshot={...snapshot,state:"crashed",exitedAt:this.runtime.now(),updatedAt:this.runtime.now(),lastError:error instanceof Error?error.message:String(error)};record.snapshot=snapshot;await this.save();return snapshot}snapshot={...snapshot,pid:child.pid,fingerprint:child.fingerprint,updatedAt:this.runtime.now()};record.snapshot=snapshot;await this.save();child.onClose(exit=>{void this.markExit(request.id,child,exit)});if(!request.ports.length){snapshot={...snapshot,state:"ready",readyAt:this.runtime.now(),updatedAt:this.runtime.now()};record.snapshot=snapshot;await this.save()}else void this.monitor(record,child);return snapshot}
   private ownsStartingChild(record:DurableRecord,child:ManagedProcess){const snapshot=record.snapshot;return snapshot.state==="starting"&&snapshot.pid===child.pid&&snapshot.fingerprint===child.fingerprint}
@@ -87,7 +106,7 @@ export class DurableDevServiceManager {
   async status(id?:string):Promise<DevServiceSnapshot|readonly DevServiceSnapshot[]|undefined>{await this.load();for(const record of this.records.values())await this.reconcileRecord(record);return id===undefined?[...this.records.values()].map(v=>v.snapshot):this.records.get(id)?.snapshot}
   async list(){return await this.status() as readonly DevServiceSnapshot[]}
   private async required(id:string){await this.load();const record=this.records.get(id);if(!record)throw new Error(`Unknown dev service '${id}'.`);await this.reconcileRecord(record);return record}
-  async logs(id:string,o:{maxCharacters?:number;maxLines?:number}={}){const record=await this.required(id);let text="";try{text=await readFile(record.logFile,"utf8")}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error}const lines=Math.max(1,o.maxLines??200),chars=Math.max(1,o.maxCharacters??20000);text=text.replace(controls,"").split(/\r?\n/u).slice(-lines).join("\n");return text.length>chars?chars===1?"…":`…${text.slice(-(chars-1))}`:text}
+  async logs(id:string,o:{maxCharacters?:number;maxLines?:number}={}){await this.load();const record=this.records.get(id);if(!record)throw new Error(`Unknown dev service '${id}'.`);let text="";try{text=await readFile(record.logFile,"utf8")}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error}const lines=Math.max(1,o.maxLines??200),chars=Math.max(1,o.maxCharacters??20000);text=text.replace(controls,"").split(/\r?\n/u).slice(-lines).join("\n");return text.length>chars?chars===1?"…":`…${text.slice(-(chars-1))}`:text}
   async stop(id:string){const record=await this.required(id),{pid,fingerprint}=record.snapshot;if(pid===null||fingerprint===null)return record.snapshot;const identity=await this.runtime.inspect(pid);if(identity?.pid!==pid||identity.fingerprint!==fingerprint)throw new Error("Process ownership fingerprint no longer matches; refusing termination.");record.snapshot={...record.snapshot,state:"stopped",updatedAt:this.runtime.now()};await this.save();await this.runtime.stop(new ExistingProcess(pid,fingerprint));record.snapshot={...record.snapshot,pid:null,fingerprint:null,stoppedAt:this.runtime.now(),exitedAt:this.runtime.now(),updatedAt:this.runtime.now()};await this.save();return record.snapshot}
   async restart(id:string){const old=await this.required(id);await this.stop(id);this.records.delete(id);await this.save();const {logFile:_logFile,...request}=old.request;const next=await this.start(request);const current=this.records.get(id)!;current.snapshot={...next,run:old.snapshot.run+1,generation:old.snapshot.generation+1,createdAt:old.snapshot.createdAt};await this.save();return current.snapshot}
   async reconcile(){await this.status();return [...this.records.values()].map(v=>v.snapshot)}

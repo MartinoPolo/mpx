@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { DevServiceManager, DurableDevServiceManager, RollingLogBuffer, assertExecutorBoundary, createDevServerToolAdapter, createSystemRuntime, systemSpawnInvocation, validateStartRequest, type ManagedProcess, type RuntimeAdapter } from "./index.js";
+import { DevServiceManager, DurableDevServiceManager, RollingLogBuffer, assertExecutorBoundary, createDevServerToolAdapter, createSystemRuntime, replaceAtomicFile, systemSpawnInvocation, validateStartRequest, type ManagedProcess, type RuntimeAdapter } from "./index.js";
 
 class Child extends EventEmitter implements ManagedProcess {
   stdout=new PassThrough(); stderr=new PassThrough(); fingerprint="started:100"; closed:Promise<{code:number|null;signal:string|null}>; resolve!: (v:{code:number|null;signal:string|null})=>void;
@@ -13,11 +13,11 @@ class Child extends EventEmitter implements ManagedProcess {
   onClose(fn:(e:{code:number|null;signal:string|null})=>void){this.on("close",fn)}
 }
 class Runtime implements RuntimeAdapter {
-  kind="host" as const; children:Child[]=[]; probes=new Map<number,boolean[]>(); stopped:number[]=[]; tick=0;
+  kind="host" as const; children:Child[]=[]; probes=new Map<number,boolean[]>(); stopped:number[]=[]; inspections=0; tick=0;
   now=()=>new Date(1700000000000+this.tick++).toISOString(); sleep=async()=>{};
   spawn=()=>{const c=new Child(100+this.children.length);this.children.push(c);return c};
   probe=async(port:number)=>this.probes.get(port)?.shift()??false;
-  inspect=async(pid:number)=>({pid,fingerprint:this.children.find(c=>c.pid===pid)?.fingerprint??"other"});
+  inspect=async(pid:number)=>{this.inspections++;return {pid,fingerprint:this.children.find(c=>c.pid===pid)?.fingerprint??"other"}};
   stop=async(c:ManagedProcess)=>{this.stopped.push(c.pid);(c as Child).exit(null,"SIGTERM")};
 }
 const request={id:"web",executable:"npm",args:["run","dev"],cwd:"C:/repo",ports:[4100,4101],assignment:{worktreeRoot:"C:/repo",ports:[4100,4101]},executor:"host" as const};
@@ -66,6 +66,31 @@ describe("managed development services",()=>{
     await new DurableDevServiceManager(runtime,root).start({...request,ports:[],assignment:{...request.assignment,ports:[]}});
     expect(await new DurableDevServiceManager(runtime,root).status("web")).toMatchObject({id:"web",state:"ready",pid:100,fingerprint:"started:100"});
   });
+  it("uses distinct atomic state temporaries across manager instances",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-concurrent-state-")),runtime=new Runtime();
+    const web=new DurableDevServiceManager(runtime,root),api=new DurableDevServiceManager(runtime,root);
+    const results=await Promise.allSettled([
+      web.start({...request,id:"web",ports:[],assignment:{...request.assignment,ports:[]}}),
+      api.start({...request,id:"api",ports:[],assignment:{...request.assignment,ports:[]}}),
+    ]);
+    expect(results.map(result=>result.status)).toEqual(["fulfilled","fulfilled"]);
+  });
+  it("bounds retries for transient Windows atomic replacement contention",async()=>{
+    let attempts=0,sleeps=0;
+    await replaceAtomicFile("state.tmp","state.json",{platform:"win32",rename:async()=>{if(++attempts<3)throw Object.assign(new Error("busy"),{code:"EPERM"})},sleep:async()=>{sleeps++}});
+    expect({attempts,sleeps}).toEqual({attempts:3,sleeps:2});
+  });
+  it("does not retry genuine atomic replacement errors",async()=>{
+    let attempts=0;
+    await expect(replaceAtomicFile("state.tmp","state.json",{platform:"win32",rename:async()=>{attempts++;throw Object.assign(new Error("disk failure"),{code:"EIO"})},sleep:async()=>{}})).rejects.toThrow("disk failure");
+    expect(attempts).toBe(1);
+  });
+  it("reads durable logs without repeatedly inspecting an active OS process",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-log-read-")),runtime=new Runtime();
+    const manager=new DurableDevServiceManager(runtime,root);await manager.start({...request,ports:[],assignment:{...request.assignment,ports:[]}});
+    await manager.logs("web");await manager.logs("web");
+    expect(runtime.inspections).toBe(0);
+  });
   it("reconciles stale durable process identity and bounds durable logs",async()=>{
     const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-stale-")),runtime=new Runtime();
     await new DurableDevServiceManager(runtime,root).start({...request,ports:[],assignment:{...request.assignment,ports:[]}});runtime.children[0]!.fingerprint="reused";
@@ -92,7 +117,7 @@ describe("managed development services",()=>{
       const fresh=new DurableDevServiceManager(createSystemRuntime(),root);expect(await fresh.status("web")).toMatchObject({state:"ready",pid,fingerprint:started.fingerprint});
       for(let i=0;i<20&&!(await fresh.logs("web")).includes("durable-ready");i++)await new Promise(r=>setTimeout(r,25));
       expect(await fresh.logs("web")).toContain("durable-ready");expect(await fresh.stop("web")).toMatchObject({state:"stopped",pid:null});expect(await fresh.reconcile()).toEqual([expect.objectContaining({state:"stopped",pid:null})]);
-    } finally { if(pid)try{process.kill(pid,"SIGKILL")}catch{} await rm(root,{recursive:true,force:true}); }
+    } finally { if(pid)try{process.kill(pid,"SIGKILL")}catch{} await rm(root,{recursive:true,force:true,maxRetries:process.platform==="win32"?5:0,retryDelay:20}); }
   });
   it("rolling logs retain UTF-8 boundaries and latest carriage-return frame",()=>{const logs=new RollingLogBuffer({maxCharacters:20});logs.beginRun(1);logs.write("stdout",Buffer.from("old\rnew\n"));expect(logs.present()).toBe("new")});
 });
