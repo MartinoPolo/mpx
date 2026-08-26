@@ -17,7 +17,7 @@ import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/win
 import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { canonicalNativeRootDigest, parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
-import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxExecutable, type BoundedProcessRunner, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
+import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxExecutable, type BoundedProcessRunner, type F2SandboxSessionResumeAdmission, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
 import type { LaunchExecutionContext } from "./launch-execution.js";
 import type { CliDevService } from "./dev-command.js";
 import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type ConversationBranchService, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
@@ -81,6 +81,9 @@ export interface CliContext extends LaunchExecutionContext {
   accountAuthVerifier?: AccountAuthVerifier;
   sessionResumeExecutor?: (plan: ResumePlanV1) => Promise<unknown>;
   sessionBranchService?: ConversationBranchService;
+  /** Application-owned F2 proof/state adapter. It plans admission before any resume side effect. */
+  sessionDockerResumeAdmission?: (plan: ResumePlanV1) => Promise<F2SandboxSessionResumeAdmission>;
+  scheduledCaptureAuthority?: { inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>> };
   installerService?: InstallerService;
   installerServiceFactory?: (stateRoot: string) => InstallerService;
   /** Application-owned trusted extensions; never populated from project configuration. */

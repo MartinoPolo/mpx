@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ExecutionError } from "./index.js";
+import { f2Sha256, parseF2ProofReportV1, parseSandboxAttestationV1, parseSandboxPlanV1, type F2ProofReportV1, type SandboxAttestationV1, type SandboxPlanV1 } from "@mpx/runtime-contracts";
 const SHA=/^[a-f0-9]{64}$/u;
 const NAME=/^[a-z0-9][a-z0-9-]{0,62}$/u;
 export interface SandboxResumeStateV1 {readonly sandboxName:string;readonly appNamespace:string;readonly launchKey:string;readonly planKey:string;readonly runtimeInventorySha256:string;readonly workspaceIdentitySha256:string;readonly branchIdentitySha256:string;readonly attestationSha256:string}
@@ -21,3 +22,24 @@ export class SandboxLifecycle {constructor(readonly backend:SandboxLifecycleBack
 export class SandboxResumeStore {constructor(readonly root:string){if(!path.isAbsolute(root))throw new ExecutionError("SANDBOX_RESUME_PATH_INVALID","Sandbox resume root must be absolute.")}private file(name:string){if(!NAME.test(name))throw new ExecutionError("SANDBOX_RESUME_INVALID","Sandbox name is invalid.");return path.join(this.root,`${name}.json`)}async save(input:SandboxResumeStateV1):Promise<void>{const state=createSandboxResumeStateV1(input);await mkdir(this.root,{recursive:true,mode:0o700});const stat=await lstat(this.root);if(stat.isSymbolicLink()||!stat.isDirectory())throw new ExecutionError("SANDBOX_RESUME_PATH_INVALID","Sandbox resume root is unsafe.");const target=this.file(state.sandboxName),temporary=path.join(this.root,`.${state.sandboxName}.${randomUUID()}.tmp`);try{await writeFile(temporary,`${JSON.stringify(state)}\n`,{encoding:"utf8",flag:"wx",mode:0o600});await chmod(temporary,0o600).catch(()=>{});await rename(temporary,target)}finally{await rm(temporary,{force:true})}}async load(name:string):Promise<SandboxResumeStateV1|undefined>{const raw=await readFile(this.file(name)).catch(error=>{if((error as NodeJS.ErrnoException).code==="ENOENT")return undefined;throw error});if(!raw)return undefined;if(raw.byteLength>16_384)throw new ExecutionError("SANDBOX_RESUME_INVALID","Sandbox resume state exceeds bounds.");let value:unknown;try{value=JSON.parse(raw.toString("utf8"))}catch{throw new ExecutionError("SANDBOX_RESUME_INVALID","Sandbox resume state is invalid JSON.")}if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).sort().join(",")!==[...stateKeys].sort().join(","))throw new ExecutionError("SANDBOX_RESUME_INVALID","Sandbox resume state fields are not exact.");return createSandboxResumeStateV1(value as SandboxResumeStateV1)}}
 /** Session-neutral API gate: callers provide immutable launch-derived hashes, never session records. */
 export function gateLaunchSandboxResume(input:{executor:"docker"|"host";launchKey:string;state:SandboxResumeStateV1;observed:SbxListEntryV1|undefined;verification:SandboxResumeVerification}):ResumeDecision{if(input.executor!=="docker")return Object.freeze({action:"recreate",reasons:Object.freeze(["executor: docker required"])});if(input.launchKey!==input.state.launchKey)return Object.freeze({action:"recreate",reasons:Object.freeze(["launchKey: mismatch"])});return decideSandboxResume(input.state,input.observed,input.verification)}
+
+export type F2SandboxSessionResumeAdmission =
+ | Readonly<{ admitted:true; action:"attach"; sandboxName:string }>
+ | Readonly<{ admitted:false; code:"F2_ADMISSION_DENIED"; hostFallback:false; recreate:Readonly<{required:true;reasons:readonly string[]}> }>;
+export interface F2SandboxSessionResumeInput {readonly executor:"docker"|"host";readonly launchKey:string;readonly persistedState:SandboxResumeStateV1|undefined;readonly observed:SbxListEntryV1|undefined;readonly verification:SandboxResumeVerification;readonly plan:SandboxPlanV1;readonly attestation:SandboxAttestationV1;readonly proofReport:F2ProofReportV1}
+/** Pure F2 admission. A denial is always an explicit Docker recreate plan and can never widen to host. */
+export function planF2SandboxSessionResume(input:F2SandboxSessionResumeInput):F2SandboxSessionResumeAdmission {
+ const reasons:string[]=[];
+ if(input.executor!=="docker")reasons.push("executor: docker required");
+ let plan:SandboxPlanV1|undefined,attestation:SandboxAttestationV1|undefined,report:F2ProofReportV1|undefined,state:SandboxResumeStateV1|undefined;
+ try{plan=parseSandboxPlanV1(input.plan);attestation=parseSandboxAttestationV1(input.attestation);report=parseF2ProofReportV1(input.proofReport);state=input.persistedState?createSandboxResumeStateV1(input.persistedState):undefined}catch{reasons.push("proof: malformed")}
+ if(!state)reasons.push("resumeState: absent");
+ if(state&&state.launchKey!==input.launchKey)reasons.push("launchKey: mismatch");
+ if(state&&plan){if(state.planKey!==plan.planKey)reasons.push("planKey: mismatch");if(state.runtimeInventorySha256!==plan.runtimeToolInventorySha256)reasons.push("runtimeInventorySha256: mismatch")}
+ const attestationSha256=attestation?f2Sha256(attestation):undefined;
+ if(attestation&&plan){if(attestation.outcome!=="pass")reasons.push("attestation: failed");if(attestation.planKey!==plan.planKey||attestation.sbxPinSha256!==plan.sbxPinSha256||attestation.runtimeToolInventorySha256!==plan.runtimeToolInventorySha256||attestation.executorEvidenceSha256!==plan.executorEvidenceSha256)reasons.push("attestation: plan mismatch")}
+ if(state&&attestationSha256&&state.attestationSha256!==attestationSha256)reasons.push("attestationSha256: mismatch");
+ if(report&&plan&&attestationSha256){if(report.verdict!=="pass")reasons.push("proofReport: failed");if(report.planKey!==plan.planKey||report.sbxPinSha256!==plan.sbxPinSha256||report.runtimeToolInventorySha256!==plan.runtimeToolInventorySha256||report.executorEvidenceSha256!==plan.executorEvidenceSha256||report.attestationSha256!==attestationSha256)reasons.push("proofReport: mismatch")}
+ if(state&&reasons.length===0){const decision=decideSandboxResume(state,input.observed,input.verification);if(decision.action==="attach")return Object.freeze({admitted:true,action:"attach",sandboxName:state.sandboxName});reasons.push(...decision.reasons)}
+ return Object.freeze({admitted:false,code:"F2_ADMISSION_DENIED",hostFallback:false,recreate:Object.freeze({required:true,reasons:Object.freeze([...new Set(reasons)])})});
+}

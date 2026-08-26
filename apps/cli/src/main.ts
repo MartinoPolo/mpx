@@ -185,6 +185,10 @@ function human(value:unknown):string {
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
 async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext): Promise<unknown> {
+  if (plan.launch.executor.kind === "docker") {
+    const admission = await context.sessionDockerResumeAdmission?.(plan);
+    if (!admission?.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: admission?.code ?? "F2_ADMISSION_UNAVAILABLE" });
+  }
   const store = sessions(context);
   let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>> | undefined;
   let reverifyPiAccount: (() => Promise<void>) | undefined;
@@ -327,6 +331,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       resumeDependencies: context.sessionResumeDependencies ?? productionSessionResumeDependencies(user, sessionStore, context.nativeAccountBindingVerifier ?? account?.verifier, context.env),
       executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
       ...(branchService ? { branchService } : {}),
+      ...(context.scheduledCaptureAuthority ? { scheduledCaptureAuthority: context.scheduledCaptureAuthority } : {}),
     });
     return { data: result.data, warnings: [...result.warnings] };
   }

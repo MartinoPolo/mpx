@@ -72,6 +72,45 @@ export interface LaunchStatusSnapshotBinding {
 export interface LaunchStatusSnapshotMaterializer {
   materialize(input: { readonly binding: LaunchStatusSnapshotBinding; readonly snapshot: StatusSnapshotV1 }, signal?: AbortSignal): Promise<string | undefined>;
 }
+export interface RuntimeStatusEnvelopeAuthorityV1 { readonly descriptorDigest: string; readonly runtimeRootDigest: string }
+export interface RuntimeStatusEnvelopeMaterializer {
+  materialize(input: { readonly envelope: RuntimeStatusEnvelopeV1; readonly authority: RuntimeStatusEnvelopeAuthorityV1 }, signal?: AbortSignal): Promise<string>;
+}
+const SHA256 = /^[a-f0-9]{64}$/u;
+
+/** Atomic private live-status persistence. Authority is launch/root digest evidence, never renderer-visible session authority. */
+export class NodeRuntimeStatusEnvelopeMaterializer implements RuntimeStatusEnvelopeMaterializer {
+  constructor(readonly stateRoot: string) {}
+  async materialize(input: { envelope: RuntimeStatusEnvelopeV1; authority: RuntimeStatusEnvelopeAuthorityV1 }, signal?: AbortSignal): Promise<string> {
+    const envelope = parseRuntimeStatusEnvelopeV1(input.envelope);
+    if (!SHA256.test(input.authority.descriptorDigest) || !SHA256.test(input.authority.runtimeRootDigest)) throw new MpxError({ code: "RUNTIME_STATUS_BINDING_INVALID", message: "Live status authority is malformed." });
+    const authority = Object.freeze({ schemaVersion: 1, binding: envelope.binding, harness: envelope.harness.kind, descriptorDigest: input.authority.descriptorDigest, runtimeRootDigest: input.authority.runtimeRootDigest });
+    try {
+      signal?.throwIfAborted();
+      const root = path.join(this.stateRoot, "runtime-status", sha256Canonical({ binding: envelope.binding, harness: envelope.harness.kind } as unknown as JsonValue));
+      await mkdir(root, { recursive: true });
+      const [stateStat, rootStat] = await Promise.all([lstat(this.stateRoot), lstat(root)]);
+      if (stateStat.isSymbolicLink() || !stateStat.isDirectory() || rootStat.isSymbolicLink() || !rootStat.isDirectory() || !pathWithin(await realpath(this.stateRoot), await realpath(root))) throw new Error("unsafe root");
+      const target = path.join(root, "current.json"), bindingFile = path.join(root, "authority.json"), authorityText = JSON.stringify(authority);
+      const priorAuthority = await readFile(bindingFile, "utf8").catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : Promise.reject(error));
+      if (priorAuthority !== undefined && priorAuthority !== authorityText) throw new MpxError({ code: "RUNTIME_STATUS_BINDING_INVALID", message: "Live status launch, runtime, repository, or root evidence changed." });
+      if (priorAuthority === undefined) await writeFile(bindingFile, authorityText, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      const prior = await readFile(target, "utf8").catch(error => (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : Promise.reject(error));
+      if (prior !== undefined) {
+        try { const parsed = parseRuntimeStatusEnvelopeV1(JSON.parse(prior)); if (JSON.stringify(parsed.binding) !== JSON.stringify(envelope.binding) || parsed.harness.kind !== envelope.harness.kind) throw new Error("foreign"); }
+        catch { await rename(target, path.join(root, `.quarantine-${randomUUID()}.json`)); }
+      }
+      signal?.throwIfAborted();
+      const temporary = path.join(root, `.current-${randomUUID()}.tmp`);
+      try { await writeFile(temporary, JSON.stringify(envelope), { encoding: "utf8", mode: 0o600, flag: "wx" }); signal?.throwIfAborted(); await rename(temporary, target); }
+      finally { await rm(temporary, { force: true }); }
+      return target;
+    } catch (error) {
+      if (error instanceof MpxError || (error as { code?: unknown }).code === "ABORT_ERR") throw error;
+      throw new MpxError({ code: "RUNTIME_STATUS_PATH_INVALID", message: "The private live status location is unsafe or unavailable." });
+    }
+  }
+}
 
 export interface LaunchExecutionContext {
   launchExecutorAdapters?: readonly ExecutorAdapter[];
@@ -94,6 +133,7 @@ export interface LaunchExecutionContext {
   launchLifecycleBridge?: {
     prepare(input: { descriptor: LaunchDescriptor; runtimeContext: RuntimeContextV1; nativeRuntimeRoot: string; cwd: string; nativeSessionRef?: NativeSessionRefV1; nativeBinding?: NativeBindingRecordV1 }): Promise<{ binding: SessionLifecycleBindingV1; eventDirectory: string }>;
     consume(bindingId: string): Promise<number>;
+    observe?(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
   };
 }
 
@@ -315,10 +355,12 @@ export function composeRuntimeSessionObservation(envelopeInput: RuntimeStatusEnv
   if (observation.runtime !== envelope.binding.runtimeId) throw new MpxError({ code: "SESSION_OBSERVATION_BINDING_MISMATCH", message: "The session observation runtime does not match the runtime status binding." });
   if (new Date(now).toISOString() !== now) throw new MpxError({ code: "SESSION_OBSERVATION_TIME_INVALID", message: "Session observation composition requires a canonical timestamp." });
   const { schemaVersion: _schemaVersion, generatedAt: _generatedAt, binding, harness, ...groups } = envelope;
-  const state = Date.parse(now) <= Date.parse(observation.freshUntil) ? "current" as const : "stale" as const;
+  const freshness = observation.diagnostic !== null
+    ? { state: "error" as const, observedAt: observation.capturedAt, errorCode: observation.diagnostic }
+    : { state: Date.parse(now) <= Date.parse(observation.freshUntil) ? "current" as const : "stale" as const, observedAt: observation.capturedAt, errorCode: null };
   return composeRuntimeStatusEnvelopeV1({ generatedAt: now, binding, harness, contributions: [
     { source: "launch", binding, groups },
-    { source: "runtime", binding, groups: { session: { freshness: { state, observedAt: observation.capturedAt, errorCode: null }, elapsedMs: null, turns: null, title: observation.title } } },
+    { source: "runtime", binding, groups: { session: { freshness, elapsedMs: null, turns: null, title: observation.title } } },
   ] });
 }
 
@@ -398,11 +440,13 @@ async function buildProductionProjection(input:LaunchProjectionBuildInput):Promi
   if(input.descriptor.runtime==="pi") return buildPiProjection({manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonicalRoot:input.canonicalRoot,context:input.runtimeContext,expectedLaunch:{launchKey:input.descriptor.launchKey,descriptorDigest:input.runtimeContext.launchDescriptor.digest},currentBinding:input.manifest.binding,artifactsRoot:input.artifactsRoot,statusSnapshot:input.statusSnapshot,runtimeStatusEnvelope:input.runtimeStatusEnvelope,runtimeCapabilityManifest:input.runtimeCapabilityManifest,runtimeLaunchBinding:{...input.runtimeLaunchBinding,runtime:"pi"},launchBanner:input.launchBanner,...(input.artifactRevalidator?{artifactRevalidator:input.artifactRevalidator}:{})});
   return publishClaudeProjection({manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonical:input.canonicalRoot,agents:input.agentsRoot,artifactsRoot:input.artifactsRoot,statusSnapshot:input.statusSnapshot,runtimeStatusEnvelope:input.runtimeStatusEnvelope,launchBanner:input.launchBanner,runtimeContext:input.runtimeContext,...(input.artifactRevalidator?{artifactRevalidator:input.artifactRevalidator}:{})});
 }
-function productionRuntimeAdapters(input:{descriptor:LaunchDescriptor;cwd:string;environment:NodeJS.ProcessEnv;nativeRuntimeRoot:string;stateRoot:string;projectionInput:Omit<LaunchProjectionBuildInput,"statusSnapshot"|"launchBanner">;launchBanner:string;initialSnapshot:StatusSnapshotV1;statusSnapshot:(signal?:AbortSignal)=>Promise<StatusSnapshotV1>;bindStatusPath:(value:string|undefined)=>void;lifecycle?:{binding:SessionLifecycleBindingV1;eventDirectory:string};resumeTarget?: NativeSessionRefV1 | VerifiedPiResumeTarget;statusMaterializer?:LaunchStatusSnapshotMaterializer;trustedExecutable?:TrustedRuntimeExecutable;builder?:LaunchExecutionContext["launchProjectionBuilder"];validator?:LaunchExecutionContext["launchProjectionValidator"]}):RuntimeAdapter[] {
+function productionRuntimeAdapters(input:{descriptor:LaunchDescriptor;cwd:string;environment:NodeJS.ProcessEnv;nativeRuntimeRoot:string;stateRoot:string;projectionInput:Omit<LaunchProjectionBuildInput,"statusSnapshot"|"launchBanner">;launchBanner:string;initialSnapshot:StatusSnapshotV1;statusSnapshot:(signal?:AbortSignal)=>Promise<StatusSnapshotV1>;bindStatusPath:(value:string|undefined)=>void;bindRuntimeStatusPath:(value:string)=>void;lifecycle?:{binding:SessionLifecycleBindingV1;eventDirectory:string};resumeTarget?: NativeSessionRefV1 | VerifiedPiResumeTarget;statusMaterializer?:LaunchStatusSnapshotMaterializer;runtimeStatusMaterializer?:RuntimeStatusEnvelopeMaterializer;trustedExecutable?:TrustedRuntimeExecutable;builder?:LaunchExecutionContext["launchProjectionBuilder"];validator?:LaunchExecutionContext["launchProjectionValidator"]}):RuntimeAdapter[] {
   const projection=async(runtime:"claude"|"pi")=>{
     const snapshot=input.initialSnapshot;
     const statusSnapshotPath=await resolveLaunchStatusSnapshotPath({stateRoot:input.stateRoot,descriptor:input.descriptor,repositoryId:input.projectionInput.manifest.binding.repositoryId,snapshot,...(input.statusMaterializer?{materializer:input.statusMaterializer}:{})});
     input.bindStatusPath(statusSnapshotPath);
+    const runtimeStatusPath = await (input.runtimeStatusMaterializer ?? new NodeRuntimeStatusEnvelopeMaterializer(input.stateRoot)).materialize({ envelope: input.projectionInput.runtimeStatusEnvelope, authority: { descriptorDigest: input.projectionInput.runtimeContext.launchDescriptor.digest, runtimeRootDigest: input.descriptor.nativeRuntimeRootDigest } });
+    input.bindRuntimeStatusPath(runtimeStatusPath);
     const customBuilder=input.builder!==undefined;
     const built=await (input.builder??buildProductionProjection)({ ...input.projectionInput, statusSnapshot: snapshot, launchBanner: input.launchBanner });
     const expectedBinding={launchKey:input.projectionInput.runtimeContext.launchKey,descriptorDigest:input.projectionInput.runtimeContext.launchDescriptor.digest,runtimeArtifactKey:input.projectionInput.artifact.reference.artifactKey,runtime,manifestKey:input.projectionInput.manifest.manifestKey};
@@ -414,20 +458,20 @@ function productionRuntimeAdapters(input:{descriptor:LaunchDescriptor;cwd:string
         if(!validation.valid) throw new MpxError({code:"LAUNCH_RESTART_REQUIRED",message:"The immutable runtime projection changed before invocation.",remediation:"Rebuild the projection and restart the runtime process."});
       }
     }
-    return {built,statusSnapshotPath};
+    return {built,statusSnapshotPath,runtimeStatusPath};
   };
   if (input.descriptor.runtime === "claude") return [{runtime:"claude",modelTriggerableTools:CLAUDE_MODEL_TOOLS,prepare:async({routes})=>{
     if (!input.trustedExecutable) throw new ExecutionError("TRUSTED_EXECUTABLE_NOT_FOUND", "No trusted absolute runtime executable or Node entry was found.");
     const projectionResult=await projection("claude"),built=projectionResult.built,pluginDirectory=built.pluginDirectory??built.directory;
     const gateway=await materializeClaudeGateway({stateRoot:input.stateRoot,capability:input.projectionInput.runtimeCapabilityManifest,launchBinding:input.projectionInput.runtimeLaunchBinding,routes});
-    const plan=createClaudeInvocationPlan({executable:input.trustedExecutable.executable,pluginDirectory,accountRoot:input.nativeRuntimeRoot,runtimeContext:input.projectionInput.runtimeContext,projectionReference:built.reference,environment:input.environment,gatewayMcpConfigPath:gateway.configPath,...(input.lifecycle?{lifecycle:input.lifecycle}:{}),...(input.resumeTarget?{resumeTarget:input.resumeTarget as NativeSessionRefV1}:{}),...(projectionResult.statusSnapshotPath?{statusSnapshotPath:projectionResult.statusSnapshotPath}:{})});
+    const plan=createClaudeInvocationPlan({executable:input.trustedExecutable.executable,pluginDirectory,accountRoot:input.nativeRuntimeRoot,runtimeContext:input.projectionInput.runtimeContext,projectionReference:built.reference,environment:input.environment,gatewayMcpConfigPath:gateway.configPath,...(input.lifecycle?{lifecycle:input.lifecycle}:{}),...(input.resumeTarget?{resumeTarget:input.resumeTarget as NativeSessionRefV1}:{}),runtimeStatusEnvelopePath:projectionResult.runtimeStatusPath});
     return {executable:plan.executable,argv:[...input.trustedExecutable.argvPrefix,...plan.args],environment:plan.env};
   }}];
   return [{runtime:"pi",modelTriggerableTools:PI_MODEL_TOOLS,prepare:async()=>{
     if (!input.trustedExecutable) throw new ExecutionError("TRUSTED_EXECUTABLE_NOT_FOUND", "No trusted absolute runtime executable or Node entry was found.");
     const projectionResult=await projection("pi"),built=projectionResult.built;
     if(!built.extension||!built.runtimeContextFile) throw new MpxError({code:"RUNTIME_PROJECTION_INVALID",message:"The Pi projection is incomplete."});
-    const plan=planPiInvocation({executable:input.trustedExecutable.executable,extension:built.extension,theme:built.theme==="amber"?"amber":"green",accountRoot:input.nativeRuntimeRoot,runtimeContextFile:built.runtimeContextFile,runtimeContext:input.projectionInput.runtimeContext,projectionReference:built.reference,cwd:input.cwd,immutableProjectionDirectory:built.directory,...(input.lifecycle?{lifecycle:input.lifecycle}:{}),...(input.resumeTarget?{resumeTarget:input.resumeTarget as VerifiedPiResumeTarget}:{}),...(projectionResult.statusSnapshotPath?{statusSnapshotPath:projectionResult.statusSnapshotPath}:{})});
+    const plan=planPiInvocation({executable:input.trustedExecutable.executable,extension:built.extension,theme:built.theme==="amber"?"amber":"green",accountRoot:input.nativeRuntimeRoot,runtimeContextFile:built.runtimeContextFile,runtimeContext:input.projectionInput.runtimeContext,projectionReference:built.reference,cwd:input.cwd,immutableProjectionDirectory:built.directory,...(input.lifecycle?{lifecycle:input.lifecycle}:{}),...(input.resumeTarget?{resumeTarget:input.resumeTarget as VerifiedPiResumeTarget}:{}),runtimeStatusEnvelopePath:projectionResult.runtimeStatusPath});
     return {executable:plan.executable,argv:[...input.trustedExecutable.argvPrefix,...plan.args],environment:plan.env};
   }}];
 }
@@ -502,7 +546,7 @@ export async function executeResolvedLaunch(input: {
   const initialSnapshot = parseStatusSnapshotV1(await input.statusSnapshot());
   const wiring = validateRuntimeLaunchWiring(input.descriptor, initialSnapshot, input.context.launchRuntimeWiringFactory?.({ descriptor: input.descriptor, artifact: input.artifact, snapshot: initialSnapshot, cwd: input.cwd, ...(input.context.launchSessionObservation ? { sessionObservation: input.context.launchSessionObservation } : {}) }) ?? runtimeWiring(input.descriptor, input.artifact, initialSnapshot, input.cwd,input.projectConfig,input.projectRoot,input.context.launchSessionObservation));
   const projectionInput={descriptor:input.descriptor,manifest:input.manifest,artifact:input.artifact,catalog:input.catalog,canonicalRoot:input.canonicalRoot,agentsRoot:input.agentsRoot,artifactsRoot:input.artifactsRoot,runtimeContext,runtimeStatusEnvelope:wiring.status,runtimeCapabilityManifest:wiring.capability,runtimeLaunchBinding:wiring.launchBinding,...(wiring.piProfile?{piRuntimeProfile:wiring.piProfile}:{}),...(input.context.launchProjectionArtifactRevalidator?{artifactRevalidator:input.context.launchProjectionArtifactRevalidator}:{})};
-  let boundStatusPath:string|undefined;
+  let boundStatusPath:string|undefined, boundRuntimeStatusPath:string|undefined;
   const processAdapter:ExecutorAdapter=input.context.launchRuntimeAdapters
     ? { name: adapter.name, verify: () => adapter.verify(), execute: async request => { await input.beforeChildExecution?.(); return adapter.execute(request); } }
     : {name:adapter.name,verify:()=>adapter.verify(),execute:async request=>{
@@ -517,6 +561,11 @@ export async function executeResolvedLaunch(input: {
           if(stopped) return;
           const refreshed=await resolveLaunchStatusSnapshotPath({stateRoot:input.stateRoot,descriptor:input.descriptor,repositoryId:input.manifest.binding.repositoryId,snapshot,signal:refreshAbort.signal,...(input.context.launchStatusSnapshotMaterializer?{materializer:input.context.launchStatusSnapshotMaterializer}:{})});
           if(refreshed!==boundStatusPath) throw statusError("STATUS_SNAPSHOT_BINDING_INVALID","The refreshed private status snapshot changed its launch binding.");
+          const observation = lifecycle && input.context.launchLifecycleBridge?.observe ? await input.context.launchLifecycleBridge.observe(lifecycle.binding.bindingId) : undefined;
+          const refreshedWiring = runtimeWiring(input.descriptor, input.artifact, snapshot, input.cwd, input.projectConfig, input.projectRoot, observation);
+          const runtimePath = await new NodeRuntimeStatusEnvelopeMaterializer(input.stateRoot).materialize({ envelope: refreshedWiring.status, authority: { descriptorDigest: runtimeContext.launchDescriptor.digest, runtimeRootDigest: input.descriptor.nativeRuntimeRootDigest } }, refreshAbort.signal);
+          if (boundRuntimeStatusPath && runtimePath !== boundRuntimeStatusPath) throw statusError("STATUS_SNAPSHOT_BINDING_INVALID", "The refreshed runtime status changed its launch binding.");
+          boundRuntimeStatusPath = runtimePath;
         } catch {
           if(containmentExpired||!boundStatusPath) return;
           try {
@@ -533,7 +582,7 @@ export async function executeResolvedLaunch(input: {
     const clock=input.context.launchStatusRefreshClock??{schedule:(callback:()=>Promise<void>,intervalMs:number)=>{const timer=setInterval(()=>{void callback();},intervalMs);timer.unref?.();return()=>clearInterval(timer);}};
     const cancel=clock.schedule(safeRefresh,1_000);
     try{
-      const childRequest = {...request,environment:Object.freeze({...request.environment,...(boundStatusPath?{MPX_STATUS_SNAPSHOT_FILE:boundStatusPath}:{})})};
+      const childRequest = {...request,environment:Object.freeze({...request.environment,...(boundStatusPath?{MPX_STATUS_SNAPSHOT_FILE:boundStatusPath}:{}),...(boundRuntimeStatusPath?{MPX_RUNTIME_STATUS_FILE:boundRuntimeStatusPath,MPX_RUNTIME_STATUS_ENVELOPE_FILE:boundRuntimeStatusPath}:{})})};
       await input.beforeChildExecution?.();
       return await adapter.execute(childRequest);
     }
@@ -553,7 +602,7 @@ export async function executeResolvedLaunch(input: {
       }
     }
   }};
-  const selected = registries(input.context,input.descriptor,productionRuntimeAdapters({descriptor:input.descriptor,cwd:input.cwd,environment:input.environment,nativeRuntimeRoot:input.nativeRuntimeRoot,stateRoot:input.stateRoot,projectionInput,launchBanner:compactLaunchBanner(input.descriptor),initialSnapshot,statusSnapshot:input.statusSnapshot,bindStatusPath:value=>{boundStatusPath=value;},...(lifecycle?{lifecycle}:{}),...(resumeTarget?{resumeTarget}:{}),...(input.context.launchStatusSnapshotMaterializer?{statusMaterializer:input.context.launchStatusSnapshotMaterializer}:{}),...(trustedExecutable ? { trustedExecutable } : {}),...(input.context.launchProjectionBuilder?{builder:input.context.launchProjectionBuilder}:{}),...(input.context.launchProjectionValidator?{validator:input.context.launchProjectionValidator}:{})}),processAdapter);
+  const selected = registries(input.context,input.descriptor,productionRuntimeAdapters({descriptor:input.descriptor,cwd:input.cwd,environment:input.environment,nativeRuntimeRoot:input.nativeRuntimeRoot,stateRoot:input.stateRoot,projectionInput,launchBanner:compactLaunchBanner(input.descriptor),initialSnapshot,statusSnapshot:input.statusSnapshot,bindStatusPath:value=>{boundStatusPath=value;},bindRuntimeStatusPath:value=>{boundRuntimeStatusPath=value;},...(lifecycle?{lifecycle}:{}),...(resumeTarget?{resumeTarget}:{}),...(input.context.launchStatusSnapshotMaterializer?{statusMaterializer:input.context.launchStatusSnapshotMaterializer}:{}),...(trustedExecutable ? { trustedExecutable } : {}),...(input.context.launchProjectionBuilder?{builder:input.context.launchProjectionBuilder}:{}),...(input.context.launchProjectionValidator?{validator:input.context.launchProjectionValidator}:{})}),processAdapter);
   const approvals = new HostApprovalStore();
   const hostPiProcessExecutor = input.context.launchExecutorAdapters?.find(candidate => candidate.name === "host")
     ?? (input.context.launchExecutorAdapters ? processAdapter : hostExecutor);

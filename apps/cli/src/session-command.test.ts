@@ -107,6 +107,13 @@ describe("session command", () => {
     expect(apply).toHaveBeenCalledWith(planned, confirmationDigest);
   });
 
+  it("keeps installed scheduled capture fail-closed until Phase I authority is enabled", async () => {
+    const context = await fixture(), inspect = vi.fn(async () => ({ installed: true, authorityDigest: "a".repeat(64) })), discoveries = vi.fn(async () => []);
+    await expect(executeSessionCommand({ action: "reconcile", args: [], options: new Map([["capture", "scheduled"]]) }, { ...context, discoveries, scheduledCaptureAuthority: { inspect } })).rejects.toMatchObject({ code: "SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE" });
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(discoveries).not.toHaveBeenCalled();
+  });
+
   it("verifies an existing resume target before consuming pending lifecycle events and then replans", async () => {
     const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString(), order: string[] = [];
     const launch = { launchKey: "old-launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [{ resource: "repo", access: "read" }], artifactKey: "artifact", manifestKey: "manifest" } as const;

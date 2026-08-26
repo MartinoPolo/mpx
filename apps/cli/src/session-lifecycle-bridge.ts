@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { canonicalNativeRootDigest, type LaunchDescriptor } from "@mpx/launch";
-import { createSessionLifecycleBindingV1, type NativeSessionRefV1, type RuntimeContextV1, type SessionLifecycleBindingV1 } from "@mpx/runtime-contracts";
+import { createSessionLifecycleBindingV1, type NativeSessionRefV1, type RuntimeContextV1, type RuntimeSessionObservationV1, type SessionLifecycleBindingV1 } from "@mpx/runtime-contracts";
 import { LifecycleEventDirectoryConsumer, SessionError, SessionService, SessionStore, deriveNativeBindingRef, type NativeBindingRecordV1 } from "@mpx/sessions";
 
 export interface LaunchLifecyclePreparation { readonly binding: SessionLifecycleBindingV1; readonly eventDirectory: string }
@@ -13,6 +13,8 @@ export function reconcileAccountBindingRef(existing: string | null, resolved: st
 export interface SessionLifecycleBridge {
   prepare(input: { descriptor: LaunchDescriptor; runtimeContext: RuntimeContextV1; nativeRuntimeRoot: string; cwd: string; nativeSessionRef?: NativeSessionRefV1; nativeBinding?: NativeBindingRecordV1 }): Promise<LaunchLifecyclePreparation>;
   consume(bindingId: string): Promise<number>;
+  /** Consumes durable events and returns the observation bound to this launch only. */
+  observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
 }
 export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge {
   constructor(private readonly store: SessionStore, private readonly accountBindingRef?: (identity: string, runtime: "claude" | "pi") => Promise<string | null>) {}
@@ -48,4 +50,13 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
     return { binding, eventDirectory };
   }
   async consume(bindingId: string): Promise<number> { return new LifecycleEventDirectoryConsumer(this.store, new SessionService(this.store)).consume(bindingId); }
+  async observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined> {
+    const binding = await this.store.readLifecycleBinding(bindingId);
+    const service = new SessionService(this.store);
+    const observations = await service.reconcile([], [bindingId]);
+    const records = await service.list({ runtime: binding.binding.runtime });
+    const matching = records.filter(record => record.lifecycle.bindingId === bindingId && record.nativeBindingRef === binding.nativeBindingRef);
+    if (matching.length > 1) throw new SessionError("SESSION_LIFECYCLE_OBSERVATION_DUPLICATE", "Multiple sessions claim one lifecycle binding.");
+    return matching.length === 0 ? undefined : observations.find(observation => observation.runtimeQualifiedId === matching[0]!.runtimeQualifiedId && observation.identityRef === binding.binding.identityRef);
+  }
 }

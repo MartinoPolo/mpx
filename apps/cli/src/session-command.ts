@@ -16,6 +16,8 @@ export interface SessionCommandContext {
   readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
   readonly executeResume?: (plan: ResumePlanV1) => Promise<unknown>;
   readonly branchService?: Pick<ConversationBranchService, "plan" | "apply">;
+  /** Installed scheduler observation only; granting authority remains a Phase I responsibility. */
+  readonly scheduledCaptureAuthority?: { inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>> };
 }
 export interface SessionCommandResult { readonly data: unknown; readonly warnings: readonly Diagnostic[] }
 
@@ -157,6 +159,12 @@ export async function executeSessionCommand(input: SessionCommandInput, context:
   }
   if (action === "reconcile") {
     if (input.args.length) usage("session reconcile accepts no positional arguments");
+    const captureMode = text(input, "capture");
+    if (captureMode !== undefined && captureMode !== "scheduled") usage("--capture must be scheduled");
+    if (captureMode === "scheduled") {
+      await context.scheduledCaptureAuthority?.inspect().catch(() => undefined);
+      throw new SessionError("SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE", "Installed scheduled capture has no authority until Phase I enables its proof gate.");
+    }
     const sources = repeated(input, "import-legacy");
     let legacy: unknown = null;
     if (sources.length) {
@@ -220,7 +228,7 @@ export async function executeSessionCommand(input: SessionCommandInput, context:
       return result;
     } } }));
     const observations = await service.reconcile(instrumented, bindingIds);
-    const captures = text(input, "capture") === "scheduled" ? await service.capture() : [];
+    const captures: never[] = [];
     const warnings: Diagnostic[] = sourceDiagnostics.filter(item => item.diagnostic !== null).map(item => ({ code: item.diagnostic!, message: "Runtime session discovery was unavailable or malformed.", severity: "warning" }));
     if (!context.discoveries) warnings.push({ code: "SESSION_DISCOVERY_UNAVAILABLE", message: "Runtime discovery scanners are not configured.", severity: "warning" });
     return { data: { schemaVersion: 1, kind: "session-reconcile", observations, diagnostics: sourceDiagnostics, captures, legacy }, warnings };
