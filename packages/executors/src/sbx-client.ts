@@ -1,0 +1,34 @@
+import path from "node:path";
+import type { BoundedProcessRunner, ProcessResult } from "./index.js";
+import { ExecutionError } from "./index.js";
+
+export async function resolveTrustedSbxExecutable(input:{candidates:readonly string[];projectRoot:string;trustedRoots:readonly string[];expectedSha256:string;inspect(file:string):Promise<{file:boolean;realpath:string;sha256:string}>}):Promise<string>{
+ const normalize=(value:string):string=>(path.win32.isAbsolute(value)?path.win32.normalize(value):path.posix.normalize(value)).replaceAll("\\","/").toLowerCase();
+ const within=(candidate:string,root:string):boolean=>{const c=normalize(candidate),r=normalize(root).replace(/\/$/u,"");return c===r||c.startsWith(`${r}/`)};
+ if(!/^[a-f0-9]{64}$/u.test(input.expectedSha256))throw new ExecutionError("SBX_PIN_INVALID","Pinned sbx digest is invalid.");
+ for(const candidate of input.candidates){if(!path.win32.isAbsolute(candidate)&&!path.posix.isAbsolute(candidate))continue;if(!/\.exe$/iu.test(candidate))continue;const inspected=await input.inspect(candidate).catch(()=>undefined);if(!inspected?.file||inspected.sha256!==input.expectedSha256)continue;if(!path.win32.isAbsolute(inspected.realpath)&&!path.posix.isAbsolute(inspected.realpath))continue;if(within(inspected.realpath,input.projectRoot)||!input.trustedRoots.some(root=>within(inspected.realpath,root)))continue;return inspected.realpath}
+ throw new ExecutionError("SBX_NOT_FOUND","Pinned standalone sbx executable was not found in trusted roots.");
+}
+
+export type SbxFailureCode="SBX_NOT_FOUND"|"VERSION_UNSUPPORTED"|"BUILD_MISMATCH"|"DAEMON_STOPPED"|"UNREACHABLE"|"CLIENT_DAEMON_MISMATCH"|"AUTH_UNAVAILABLE"|"LEGACY_ONLY"|"FEATURE_UNAVAILABLE";
+const commits=/^[a-f0-9]{40}$/u;
+function record(value:unknown,label:string):Record<string,unknown>{if(!value||typeof value!=="object"||Array.isArray(value))throw new ExecutionError("SBX_JSON_INVALID",`${label} is not an object.`);return value as Record<string,unknown>}
+function exact(value:Record<string,unknown>,keys:readonly string[],label:string):void{const unknown=Object.keys(value).find(key=>!keys.includes(key));if(unknown)throw new ExecutionError("SBX_JSON_INVALID",`${label} contains unknown field '${unknown}'.`)}
+function json(text:string,label:string):Record<string,unknown>{if(Buffer.byteLength(text)>65_536)throw new ExecutionError("SBX_JSON_INVALID",`${label} exceeds output bounds.`);try{return record(JSON.parse(text) as unknown,label)}catch(error){if(error instanceof ExecutionError)throw error;throw new ExecutionError("SBX_JSON_INVALID",`${label} is not valid JSON.`)}}
+export function parseSbxVersion(text:string):{version:string;buildCommit:string}{const item=json(text,"sbx version");exact(item,["version","buildCommit"],"sbx version");if(typeof item.version!=="string"||!/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u.test(item.version)||typeof item.buildCommit!=="string"||!commits.test(item.buildCommit))throw new ExecutionError("SBX_JSON_INVALID","sbx version JSON is malformed.");return Object.freeze({version:item.version,buildCommit:item.buildCommit})}
+interface DaemonStatus{status:"running"|"stopped"|"unreachable";clientVersion:string;daemonVersion:string}
+function parseDaemon(text:string):DaemonStatus{const item=json(text,"sbx daemon status");exact(item,["status","clientVersion","daemonVersion"],"sbx daemon status");if(!["running","stopped","unreachable"].includes(item.status as string)||typeof item.clientVersion!=="string"||typeof item.daemonVersion!=="string")throw new ExecutionError("SBX_JSON_INVALID","sbx daemon status JSON is malformed.");return item as unknown as DaemonStatus}
+interface Diagnose {status:"pass"|"fail";features:{clone:boolean;hostWorktree:boolean;remoteTools:boolean};authentication:{available:boolean};integration?:"standalone"|"legacy-only"}
+function parseDiagnose(text:string):Diagnose{const item=json(text,"sbx diagnose");exact(item,["status","features","authentication","integration"],"sbx diagnose");const features=record(item.features,"features"),authentication=record(item.authentication,"authentication");exact(features,["clone","hostWorktree","remoteTools"],"features");exact(authentication,["available"],"authentication");if(!["pass","fail"].includes(item.status as string)||Object.values(features).some(v=>typeof v!=="boolean")||typeof authentication.available!=="boolean"||(item.integration!==undefined&&!['standalone','legacy-only'].includes(item.integration as string)))throw new ExecutionError("SBX_JSON_INVALID","sbx diagnose JSON is malformed.");return item as unknown as Diagnose}
+async function probe(runner:BoundedProcessRunner,executable:string,cwd:string,argv:string[]):Promise<ProcessResult>{return runner.run({executable,argv,cwd,environment:{},timeoutMs:10_000,maxOutputBytes:65_536,shell:false})}
+export async function diagnoseSbx(input:{executable:string|undefined;cwd:string;runner:BoundedProcessRunner;pin:{version:string;buildCommit:string}}):Promise<{available:boolean;failureCodes:readonly SbxFailureCode[];version?:string;readOnly:true}>{
+ if(!input.executable||(!path.win32.isAbsolute(input.executable)&&!path.posix.isAbsolute(input.executable)))return Object.freeze({available:false,failureCodes:["SBX_NOT_FOUND" as const],readOnly:true});
+ const failures:SbxFailureCode[]=[];let version:{version:string;buildCommit:string}|undefined,daemon:DaemonStatus|undefined,diagnose:Diagnose|undefined;
+ try{const result=await probe(input.runner,input.executable,input.cwd,["version","--json"]);if(result.exitCode!==0)failures.push("UNREACHABLE");else version=parseSbxVersion(result.stdout)}catch{failures.push("UNREACHABLE")}
+ if(version){if(version.version!==input.pin.version)failures.push("VERSION_UNSUPPORTED");if(version.buildCommit!==input.pin.buildCommit)failures.push("BUILD_MISMATCH")}
+ try{const result=await probe(input.runner,input.executable,input.cwd,["daemon","status","--json"]);if(result.exitCode!==0)failures.push("UNREACHABLE");else daemon=parseDaemon(result.stdout)}catch{failures.push("UNREACHABLE")}
+ if(daemon){if(daemon.status==="stopped")failures.push("DAEMON_STOPPED");if(daemon.status==="unreachable")failures.push("UNREACHABLE");if(daemon.clientVersion!==daemon.daemonVersion)failures.push("CLIENT_DAEMON_MISMATCH")}
+ try{const result=await probe(input.runner,input.executable,input.cwd,["diagnose","--json"]);if(result.exitCode!==0)failures.push("UNREACHABLE");else diagnose=parseDiagnose(result.stdout)}catch{failures.push("UNREACHABLE")}
+ if(diagnose){if(diagnose.integration==="legacy-only")failures.push("LEGACY_ONLY");if(!diagnose.authentication.available)failures.push("AUTH_UNAVAILABLE");if(!diagnose.features.clone||!diagnose.features.hostWorktree||!diagnose.features.remoteTools)failures.push("FEATURE_UNAVAILABLE")}
+ return Object.freeze({available:true,failureCodes:Object.freeze([...new Set(failures)]),...(version?{version:version.version}:{}),readOnly:true});
+}

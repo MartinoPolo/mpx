@@ -53,6 +53,8 @@ export interface CliContext extends LaunchExecutionContext {
   devService?: CliDevService;
   providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
+  /** Optional read-only standalone sbx probe. It must never start or reset the daemon. */
+  sbxDiagnostics?: () => Promise<{ readonly available: boolean; readonly failureCodes: readonly string[]; readonly readOnly: true }>;
   /** Application-owned trusted extensions; never populated from project configuration. */
   trustedProviderComposition?: Readonly<{ descriptors: readonly ProviderDescriptor[]; adapters: readonly ProviderAdapter[] }>;
 }

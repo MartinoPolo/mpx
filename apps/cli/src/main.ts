@@ -292,6 +292,11 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       });
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
     }
+    if (action!=="explain" && selection.executor==="docker" && context.sbxDiagnostics) {
+      const sbx=await context.sbxDiagnostics(), code=sbx.failureCodes[0];
+      if (sbx.readOnly!==true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
+      if (code) throw new MpxError({code,message:`Standalone sbx launch diagnostic: ${code}.`,details:{executor:"docker"}});
+    }
     const opts=resolveOptions(user,{identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,repositoryId,...(projectId ? {projectId} : {})});
     const canonicalRoot=await catalogPath(context,parsed.cwd), canonicalCatalog=await inventoryCanonical(canonicalRoot);
     const projectInventory=found ? await inventoryProjectSkills(found.root,canonicalCatalog) : {skills:[],diagnostics:[]};
@@ -441,6 +446,11 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       ...configDoctor(found.config,user).map(({ code, message, severity, pointer }) => ({ code, message, severity, ...(pointer ? { details: { pointer } } : {}) })),
       ...skillDoctor(catalog,local).map(({ code, message, path: diagnosticPath }) => ({ code, message, severity: "error" as const, ...(diagnosticPath ? { details: { path: diagnosticPath } } : {}) })),
     ];
+    if (context.sbxDiagnostics) {
+      const sbx = await context.sbxDiagnostics();
+      if (sbx.readOnly !== true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
+      for (const code of [...new Set(sbx.failureCodes)].sort()) diagnostics.push({ code, message: `Standalone sbx diagnostic: ${code}.`, severity: "warning", details: { executor: "docker" } });
+    }
     const services = Object.entries(found.config.development?.services ?? {}).sort(([left], [right]) => left.localeCompare(right));
     for (const [name, service] of services) if (service.port.mode === "fixed-shared") diagnostics.push({ code: "FIXED_SHARED_LIMITATION", message: `Service ${name} uses a fixed-shared port that MPX cannot reserve exclusively.`, severity: "warning", details: { service: name, ...(service.port.preferred === undefined ? {} : { port: service.port.preferred }) } });
     if (services.some(([, service]) => service.port.mode === "managed")) {

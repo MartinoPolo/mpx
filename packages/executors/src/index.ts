@@ -365,5 +365,10 @@ export function compactLaunchBanner(descriptorInput: LaunchDescriptor): string {
   const descriptor = parseLaunchDescriptorV2(descriptorInput); return `[mpx ${descriptor.runtime}/${descriptor.executor.name} ${descriptor.launchKey.slice(0, 12)}${descriptor.elevationAudit.elevated ? " ELEVATED" : ""}]`;
 }
 
-/** Phase F2 runtime containment proof is intentionally not implemented or claimed by this package. */
+export * from "./sbx-client.js";
+export * from "./sandbox-plan.js";
+export * from "./remote-tool.js";
+export * from "./f2-evidence.js";
+
+/** The planning/protocol foundation does not claim a live containment proof. */
 export const F2_RUNTIME_CONTAINMENT_PROOF_IMPLEMENTED = false as const;

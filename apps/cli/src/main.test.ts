@@ -541,6 +541,13 @@ describe("cli",()=>{
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"EXECUTOR_GATE_UNVERIFIED",details:{executor:"docker"}}});
   });
 
+  it("launch surfaces injected sbx diagnostics before the unverified Docker gate",async()=>{
+    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
+    const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot,launchRoutes:{materialize:async()=>({})},sbxDiagnostics:async()=>({available:true,failureCodes:["DAEMON_STOPPED"],readOnly:true})})).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"DAEMON_STOPPED",details:{executor:"docker"}}});
+  });
+
   it("doctor reports a missing managed main reservation without allocating",async()=>{
     const config=JSON.stringify({schemaVersion:1,project:{id:"sample/app"},repository:{provider:"generic",remote:"origin"},development:{services:{app:{scope:"checkout",port:{mode:"managed",preferred:4173},start:{type:"package-script",script:"dev"}}}}});
     const cwd=await fixture(config), env=await launchEnv(cwd), io=captureIo(); let ensured=false; let doctorRequest: {config: unknown; configHash: string}|undefined;
@@ -549,6 +556,13 @@ describe("cli",()=>{
     expect(await run(["--json","--cwd",cwd,"doctor"],io,{env,portService,catalogRoot})).toBe(1);
     expect(JSON.parse(io.out[0]!).data.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({code:"PORT_LEASE_INVALID",severity:"error"})]));
     expect(ensured).toBe(false); expect(doctorRequest!.configHash).toBe(sha256Canonical(doctorRequest!.config as JsonValue));
+  });
+
+  it("doctor includes read-only standalone sbx diagnostics without making Docker required",async()=>{
+    const cwd=await fixture(valid), env=await launchEnv(cwd), io=captureIo();
+    const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    expect(await run(["--json","--cwd",cwd,"doctor"],io,{env,catalogRoot,sbxDiagnostics:async()=>({available:false,failureCodes:["SBX_NOT_FOUND"],readOnly:true})})).toBe(0);
+    expect(JSON.parse(io.out[0]!).data.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({code:"SBX_NOT_FOUND",severity:"warning"})]));
   });
 
   it("doctor warns deterministically for fixed-shared services without requiring a reservation",async()=>{
