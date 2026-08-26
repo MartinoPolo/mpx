@@ -10,7 +10,7 @@ const SHA = /^[a-f0-9]{64}$/u;
 
 export interface ReleaseFileV1 { readonly path: string; readonly bytes: number; readonly sha256: string }
 export interface ReleaseManifestV1 { readonly schemaVersion: 1; readonly kind: "release-manifest"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: readonly ReleaseFileV1[] }
-export interface InstallExternalIntegrationV1 { readonly id: string; readonly adapter: "git-remotes" | "obsidian" | "raycast"; readonly classification: "confirmation-required" | "manual-only"; readonly planDigest?: string; readonly verifierRef?: string }
+export interface InstallExternalIntegrationV1 { readonly id: string; readonly adapter: "git-remotes" | "obsidian" | "raycast"; readonly classification: "confirmation-required" | "manual-only"; readonly planDigest: string; readonly verifierRef: string }
 export interface InstallIntentV1 { readonly schemaVersion: 1; readonly kind: "install-intent"; readonly releaseKey: string; readonly convergenceHash: string; readonly components: readonly string[]; readonly runtimeRegistrations?: RuntimeRegistrationMatrixV1; readonly staticMcpRegistrations?: readonly StaticMcpRegistrationV1[]; readonly externalIntegrations?: readonly InstallExternalIntegrationV1[] }
 export interface MachineObservationV1 { readonly id: string; readonly digest: string | null }
 export interface InstallOperationV1 { readonly id: string; readonly adapter: string; readonly action: "ensure" | "remove"; readonly target: string; readonly desiredDigest: string | null }
@@ -60,12 +60,12 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
   const external = intent.externalIntegrations;
   const integrationsValid = !hasExternal || Array.isArray(external) && external.every((entry, index, all) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
-    const item = entry as Record<string, unknown>, extended = Object.prototype.hasOwnProperty.call(item, "planDigest") || Object.prototype.hasOwnProperty.call(item, "verifierRef");
-    return Object.keys(item).sort().join("\0") === ["adapter", "classification", "id", ...(extended ? ["planDigest", "verifierRef"] : [])].sort().join("\0") &&
+    const item = entry as Record<string, unknown>;
+    return Object.keys(item).sort().join("\0") === ["adapter", "classification", "id", "planDigest", "verifierRef"].sort().join("\0") &&
       typeof item.id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(item.id) &&
       ["git-remotes", "obsidian", "raycast"].includes(item.adapter as string) &&
       (item.adapter === "raycast" ? item.classification === "manual-only" : item.classification === "confirmation-required") &&
-      (!extended || typeof item.planDigest === "string" && SHA.test(item.planDigest) && typeof item.verifierRef === "string" && /^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$/u.test(item.verifierRef)) &&
+      typeof item.planDigest === "string" && SHA.test(item.planDigest) && typeof item.verifierRef === "string" && /^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$/u.test(item.verifierRef) &&
       (index === 0 || (all[index - 1] as { id: string }).id.localeCompare(item.id) < 0);
   }) && new Set((external as { id: string }[]).map(entry => entry.id)).size === (external as unknown[]).length;
   if (intent.schemaVersion !== 1 || intent.kind !== "install-intent" || typeof intent.releaseKey !== "string" || !SHA.test(intent.releaseKey) || intent.releaseKey !== intent.convergenceHash || !Array.isArray(intent.components) || intent.components.some((x) => typeof x !== "string" || !x) || new Set(intent.components).size !== intent.components.length || intent.components.some((x, i, a) => i > 0 && a[i - 1].localeCompare(x) >= 0) || !integrationsValid) fail("INSTALL_SCHEMA_INVALID", "Invalid install intent.");

@@ -40,6 +40,7 @@ describe("Phase I external integration confirmation planning", () => {
     expect(plan.confirmation).toMatchObject({ scope: repository, required: true });
     expect(plan.rollback).toMatchObject({ snapshot: { path: path.join(repository, ".git", "config"), encoding: "base64" }, automatic: false });
     expect(Buffer.from(plan.rollback.snapshot.bytes, "base64").toString()).toBe(config);
+    await expect(adapter.verify(plan)).resolves.toEqual({ healthy: false, issues: ["git-remote-drift"] });
   });
 
   it("plans only the exact reviewed Obsidian MPX subtree files with atomic snapshots", async () => {
@@ -66,6 +67,7 @@ describe("Phase I external integration confirmation planning", () => {
     expect(plan.rollback.steps.join(" ")).toContain("atomic");
     expect(plan.confirmation.scope).toBe(subtree);
     expect(await readFile(path.join(vault, "Private", "unrelated.md"), "utf8")).toBe("DO NOT READ");
+    await expect(adapter.verify(plan)).resolves.toEqual({ healthy: false, issues: expect.arrayContaining(["obsidian-file-drift:Projects/alpha.md"]) });
   });
 
   it("rejects traversals and symlinks before Obsidian planning", async () => {
@@ -94,11 +96,12 @@ describe("Phase I external integration confirmation planning", () => {
   it("binds sorted typed external requests into immutable installer intent and classifies inherently interactive actions manual-only", () => {
     const hash = "a".repeat(64);
     const intent = { schemaVersion: 1 as const, kind: "install-intent" as const, releaseKey: hash, convergenceHash: hash, components: ["cli"], externalIntegrations: [
-      { id: "git", adapter: "git-remotes" as const, classification: "confirmation-required" as const },
-      { id: "raycast", adapter: "raycast" as const, classification: "manual-only" as const },
+      { id: "git", adapter: "git-remotes" as const, classification: "confirmation-required" as const, planDigest: hash, verifierRef: "git:repo" },
+      { id: "raycast", adapter: "raycast" as const, classification: "manual-only" as const, planDigest: hash, verifierRef: "raycast:export" },
     ] };
     expect(parseInstallIntentV1(intent)).toEqual(intent);
     expect(["auth-login", "repo-rename", "export-import"].map(action => classifyExternalAction(action as "auth-login"))).toEqual(["manual-only", "manual-only", "manual-only"]);
     expect(() => parseInstallIntentV1({ ...intent, externalIntegrations: [...intent.externalIntegrations].reverse() })).toThrow();
+    expect(() => parseInstallIntentV1({ ...intent, externalIntegrations: [{ id: "git", adapter: "git-remotes", classification: "confirmation-required" }] })).toThrow();
   });
 });

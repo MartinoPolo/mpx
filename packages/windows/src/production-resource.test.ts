@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { PowerShellResult, PowerShellRunner } from "./adapter.js";
 import { ProductionWindowsResourceStore } from "./production-resource.js";
@@ -35,6 +37,13 @@ describe("ProductionWindowsResourceStore", () => {
     expect(runner.calls[2]!.script).toContain("Register-ScheduledTask");
     expect(runner.calls[3]!.script).toContain("Start-ScheduledTask");
     expect(runner.calls.every(call => !call.script.includes(shortcut) && !call.script.includes("DOMAIN\\me"))).toBe(true);
+  });
+
+  it("parses production PowerShell scheduled-task fixture with hashes, trigger, and settings", async () => {
+    const runner = new Runner();
+    runner.outputs.push(await readFile(fileURLToPath(new URL("../test/fixtures/powershell-scheduled-task.json", import.meta.url)), "utf8"));
+    const store = new ProductionWindowsResourceStore({ platform: "win32", runner });
+    await expect(store.read("\\MPX\\Session Capture")).resolves.toMatchObject({ executableSha256: "a".repeat(64), cliSha256: "b".repeat(64), argv: ["C:\\MPX Apps\\mpx.mjs", "session", "reconcile"], trigger: { cadenceMinutes: 10 }, settings: { multipleInstances: "IgnoreNew", executionTimeLimitSeconds: 300 } });
   });
 
   it("returns structured manual-run status evidence", async () => {

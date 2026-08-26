@@ -63,6 +63,6 @@ export function buildWindowsIntegrationSpecs(environment: NodeJS.ProcessEnv, cur
     terminal: { kind: "terminal-profile", target: path.win32.join(localAppData, "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "settings.json"), ownershipKey: guid, desired: { guid, name: "MPX", commandline: { executable: selector, argv: ["shell"] }, startingDirectory: userProfile } },
     environment: { kind: "user-environment", target: "HKCU\\Environment", ownershipKey: "mpx", desired: { owner: "mpx", ...roots, MPX_EXECUTABLE: selector, MPX_NODE_EXECUTABLE: node, PathPrepend: path.win32.join(apps, "mpx", "bin") } },
     shortcuts: [shortcut(path.win32.join(userProfile, "Desktop", "MPX.lnk")), shortcut(path.win32.join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "MPX.lnk"))],
-    task: { kind: "scheduled-task", target: "\\MPX\\Session Capture", ownershipKey: "mpx", desired: { owner: "mpx", executable: node, argv: [cli, "session", "reconcile", "--capture", "scheduled", "--json"], principal: currentUser, logonType: "InteractiveToken", runLevel: "LeastPrivilege" } },
+    task: { kind: "scheduled-task", target: "\\MPX\\Session Capture", ownershipKey: "mpx", desired: { owner: "mpx", executable: node, argv: [cli, "session", "reconcile", "--capture", "scheduled", "--json"], principal: currentUser, logonType: "InteractiveToken", runLevel: "LeastPrivilege", trigger: { cadenceMinutes: 10 }, settings: { startWhenAvailable: true, multipleInstances: "IgnoreNew", executionTimeLimitSeconds: 300, hidden: false, enabled: true } } },
   };
 }

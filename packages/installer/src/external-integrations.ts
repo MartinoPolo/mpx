@@ -51,7 +51,12 @@ export interface GitCommandPort { run(cwd: string, argv: readonly string[]): Pro
 export interface GitRemotePlan {
   readonly kind: "git-remotes"; readonly classification: "confirmation-required"; readonly repository: string;
   readonly commands: readonly { executable: "git"; cwd: string; argv: readonly string[] }[];
-  readonly preservedRemotes: readonly string[]; readonly confirmation: Confirmation; readonly rollback: RollbackGuidance;
+  readonly preservedRemotes: readonly string[]; readonly expectedRemotes: readonly { remote: string; url: string; direction: "fetch" | "push" }[]; readonly confirmation: Confirmation; readonly rollback: RollbackGuidance;
+}
+function normalizedRemoteLines(stdout: string): { remote: string; url: string; direction: "fetch" | "push" }[] {
+  const lines: { remote: string; url: string; direction: "fetch" | "push" }[] = [];
+  for (const line of stdout.split(/\r?\n/u).filter(Boolean)) { const match = /^(\S+)\s+(\S+)\s+\((fetch|push)\)$/u.exec(line.trim()); if (match && safeName(match[1]!)) lines.push({ remote: match[1]!, url: match[2]!, direction: match[3]! as "fetch" | "push" }); }
+  return lines.sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b)));
 }
 export class GitRemotePlanningAdapter implements ExternalIntegrationAdapter<GitRemoteRequest, GitRemoteInspection, GitRemotePlan, { healthy: boolean; issues: readonly string[] }> {
   constructor(private readonly options: { readonly allowedRoots: readonly string[]; readonly git: GitCommandPort }) {}
@@ -69,17 +74,26 @@ export class GitRemotePlanningAdapter implements ExternalIntegrationAdapter<GitR
     }
     const result = await this.options.git.run(repository, ["remote", "-v"]);
     if (result.exitCode !== 0) fail("GIT_INSPECTION_FAILED", "git remote inspection failed.");
-    const remotes = [...new Set(result.stdout.split(/\r?\n/u).filter(Boolean).map(line => line.split(/\s/u, 1)[0]!).filter(safeName))].sort();
+    const remotes = [...new Set(normalizedRemoteLines(result.stdout).map(item => item.remote))].sort();
     const bytes = await readFile(configPath);
     return { repository, proposals: request.proposals, remotes, config: { path: configPath, encoding: "base64", bytes: bytes.toString("base64"), sha256: digest(bytes) } };
   }
   async plan(inspection: GitRemoteInspection): Promise<GitRemotePlan> {
     const commands = [...inspection.proposals].map(proposal => ({ executable: "git" as const, cwd: inspection.repository, argv: proposal.action === "rename" ? ["remote", "rename", proposal.remote, proposal.newName] : ["remote", proposal.action, proposal.remote, proposal.url] })).sort((a, b) => a.argv.join("\0").localeCompare(b.argv.join("\0")));
     const confirmationDigest = installerDigest({ repository: inspection.repository, config: inspection.config.sha256, commands });
-    return { kind: "git-remotes", classification: "confirmation-required", repository: inspection.repository, commands, preservedRemotes: inspection.remotes, confirmation: { required: true, scope: inspection.repository, digest: confirmationDigest }, rollback: { automatic: false, snapshot: inspection.config, steps: ["Do not delete any pre-existing remote.", "Restore .git/config from the byte snapshot after confirming repository scope.", "Run git remote -v in this repository and compare with the reviewed plan."] } };
+    const initial = Buffer.from(inspection.config.bytes, "base64").toString("utf8");
+    const configured = [...initial.matchAll(/\[remote "([^"]+)"\]\s*\n\s*url = ([^\r\n]+)/gu)].flatMap(match => [{ remote: match[1]!, url: match[2]!, direction: "fetch" as const }, { remote: match[1]!, url: match[2]!, direction: "push" as const }]);
+    for (const proposal of inspection.proposals) {
+      if (proposal.action === "rename") { for (const item of configured) if (item.remote === proposal.remote) item.remote = proposal.newName; continue; }
+      const existing = configured.filter(item => item.remote === proposal.remote);
+      if (proposal.action === "add" && existing.length === 0) configured.push({ remote: proposal.remote, url: proposal.url, direction: "fetch" }, { remote: proposal.remote, url: proposal.url, direction: "push" });
+      else for (const item of existing) item.url = proposal.url;
+    }
+    const expectedRemotes = configured.sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b)));
+    return { kind: "git-remotes", classification: "confirmation-required", repository: inspection.repository, commands, preservedRemotes: inspection.remotes, expectedRemotes, confirmation: { required: true, scope: inspection.repository, digest: confirmationDigest }, rollback: { automatic: false, snapshot: inspection.config, steps: ["Do not delete any pre-existing remote.", "Restore .git/config from the byte snapshot after confirming repository scope.", "Run git remote -v in this repository and compare with the reviewed plan."] } };
   }
   async verify(plan: GitRemotePlan): Promise<{ healthy: boolean; issues: readonly string[] }> {
-    const result = await this.options.git.run(plan.repository, ["remote", "-v"]); return { healthy: result.exitCode === 0, issues: result.exitCode === 0 ? [] : ["git-remote-inspection-failed"] };
+    const result = await this.options.git.run(plan.repository, ["remote", "-v"]); if (result.exitCode !== 0) return { healthy: false, issues: ["git-remote-inspection-failed"] }; const healthy = canonicalJson(normalizedRemoteLines(result.stdout)) === canonicalJson(plan.expectedRemotes); return { healthy, issues: healthy ? [] : ["git-remote-drift"] };
   }
 }
 
@@ -88,7 +102,7 @@ export type ObsidianChange =
   | { readonly action: "rename"; readonly path: string; readonly destination: string };
 export interface ObsidianRequest { readonly reviewedFiles: readonly string[]; readonly changes: readonly ObsidianChange[] }
 export interface ObsidianInspection { readonly vault: string; readonly subtree: string; readonly reviewedFiles: readonly string[]; readonly changes: readonly ObsidianChange[]; readonly snapshots: readonly FileSnapshot[] }
-export interface ObsidianPlan { readonly kind: "obsidian"; readonly classification: "confirmation-required"; readonly reviewedFiles: readonly string[]; readonly operations: readonly ObsidianChange[]; readonly confirmation: Confirmation; readonly rollback: { automatic: false; readonly snapshots: readonly FileSnapshot[]; readonly steps: readonly string[] } }
+export interface ObsidianPlan { readonly kind: "obsidian"; readonly classification: "confirmation-required"; readonly subtree: string; readonly reviewedFiles: readonly string[]; readonly expectedFiles: readonly { path: string; sha256: string | null }[]; readonly operations: readonly ObsidianChange[]; readonly confirmation: Confirmation; readonly rollback: { automatic: false; readonly snapshots: readonly FileSnapshot[]; readonly steps: readonly string[] } }
 function safeRelative(value: string): boolean { const normalized = path.posix.normalize(value); return Boolean(value) && !value.includes("\\") && !value.includes("\0") && normalized === value && normalized !== ".." && !normalized.startsWith("../") && !path.posix.isAbsolute(value); }
 export class ObsidianPlanningAdapter implements ExternalIntegrationAdapter<ObsidianRequest, ObsidianInspection, ObsidianPlan, { healthy: boolean; issues: readonly string[] }> {
   constructor(private readonly environment: NodeJS.ProcessEnv = process.env) {}
@@ -110,9 +124,16 @@ export class ObsidianPlanningAdapter implements ExternalIntegrationAdapter<Obsid
   }
   async plan(inspection: ObsidianInspection): Promise<ObsidianPlan> {
     const operations = [...inspection.changes].sort((a, b) => a.path.localeCompare(b.path));
-    return { kind: "obsidian", classification: "confirmation-required", reviewedFiles: inspection.reviewedFiles, operations, confirmation: { required: true, scope: inspection.subtree, digest: installerDigest({ snapshots: inspection.snapshots, operations }) }, rollback: { automatic: false, snapshots: inspection.snapshots, steps: ["Apply all reviewed writes and renames as one atomic batch.", "On any failure restore every reviewed path from its byte snapshot and remove paths whose snapshot is absent.", "Re-open only the reviewed files to verify backlinks, queries, CSS and rename targets."] } };
+    const contents = new Map(inspection.snapshots.map(snapshot => [snapshot.path, snapshot.sha256 === null ? null : Buffer.from(snapshot.bytes, "base64")] as const));
+    for (const operation of operations) { if (operation.action === "write") contents.set(operation.path, Buffer.from(operation.content)); else { const body = contents.get(operation.path) ?? null; contents.set(operation.path, null); contents.set(operation.destination, body); } }
+    const expectedFiles = inspection.reviewedFiles.map(file => { const body = contents.get(file) ?? null; return { path: file, sha256: body === null ? null : digest(body) }; });
+    return { kind: "obsidian", classification: "confirmation-required", subtree: inspection.subtree, reviewedFiles: inspection.reviewedFiles, expectedFiles, operations, confirmation: { required: true, scope: inspection.subtree, digest: installerDigest({ snapshots: inspection.snapshots, operations }) }, rollback: { automatic: false, snapshots: inspection.snapshots, steps: ["Apply all reviewed writes and renames as one atomic batch.", "On any failure restore every reviewed path from its byte snapshot and remove paths whose snapshot is absent.", "Re-open only the reviewed files to verify backlinks, queries, CSS and rename targets."] } };
   }
-  async verify(plan: ObsidianPlan): Promise<{ healthy: boolean; issues: readonly string[] }> { return { healthy: plan.reviewedFiles.length > 0, issues: plan.reviewedFiles.length > 0 ? [] : ["review-list-empty"] }; }
+  async verify(plan: ObsidianPlan): Promise<{ healthy: boolean; issues: readonly string[] }> {
+    const issues: string[] = [];
+    for (const expected of plan.expectedFiles) { const candidate = path.join(plan.subtree, ...expected.path.split("/")); let actual: string | null = null; try { const file = await assertContainedRegular(plan.subtree, candidate, "file"); actual = digest(await readFile(file)); } catch (failure) { if ((failure as { code?: string }).code !== "EXTERNAL_PATH_INVALID") throw failure; } if (actual !== expected.sha256) issues.push(`obsidian-file-drift:${expected.path}`); }
+    return { healthy: issues.length === 0, issues };
+  }
 }
 
 export interface RaycastDerivative { readonly encrypted: true; readonly items: readonly { readonly id: string; readonly category: string; readonly command: string }[] }
