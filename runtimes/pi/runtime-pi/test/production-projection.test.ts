@@ -14,10 +14,12 @@ import { fixture } from "./fixture.js";
 const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;
 const originalStatusSnapshotFile = process.env.MPX_STATUS_SNAPSHOT_FILE;
+const originalRuntimeStatusEnvelopeFile = process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE;
 afterEach(() => {
   if (originalRuntimeContext === undefined) delete process.env.MPX_RUNTIME_CONTEXT; else process.env.MPX_RUNTIME_CONTEXT = originalRuntimeContext;
   if (originalProjectionReference === undefined) delete process.env.MPX_RUNTIME_PROJECTION_REFERENCE; else process.env.MPX_RUNTIME_PROJECTION_REFERENCE = originalProjectionReference;
   if (originalStatusSnapshotFile === undefined) delete process.env.MPX_STATUS_SNAPSHOT_FILE; else process.env.MPX_STATUS_SNAPSHOT_FILE = originalStatusSnapshotFile;
+  if (originalRuntimeStatusEnvelopeFile === undefined) delete process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE; else process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE = originalRuntimeStatusEnvelopeFile;
   vi.restoreAllMocks();
   syncBuiltinESMExports();
 });
@@ -404,6 +406,72 @@ describe("production Pi projection", () => {
     await expect(policy({ toolName: "read", input: { command: "rm -rf /" } })).resolves.toBeUndefined();
   });
 
+  it("activates every production capability through Pi's registered tools and events", async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-production-activation-"));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const module = await import(`${pathToFileURL(projection.extension).href}?production=${Date.now()}`);
+    const tools = new Map<string, { execute(id: string, params: Record<string, unknown>): Promise<any> }>();
+    const events = new Map<string, Array<(...args: any[]) => any>>();
+    const notifications: string[] = [], widgets: unknown[] = [], statuses: string[] = [], messages: string[] = [];
+    const pi = {
+      registerCommand() {},
+      registerTool(tool: { name: string; execute(id: string, params: Record<string, unknown>): Promise<any> }) { tools.set(tool.name, tool); },
+      on(name: string, handler: (...args: any[]) => any) { events.set(name, [...(events.get(name) ?? []), handler]); },
+      sendUserMessage: async (content: readonly { text: string }[]) => { messages.push(content[0]!.text); },
+    };
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    const liveEnvelope = path.join(artifactsRoot, "live-envelope.json");
+    await writeFile(liveEnvelope, JSON.stringify(f.runtimeStatusEnvelope));
+    process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE = liveEnvelope;
+
+    await module.activate(pi);
+    expect([...tools.keys()]).toEqual(expect.arrayContaining(["Agent", "get_subagent_result", "steer_subagent", "mcp", "web_search", "fetch_content", "get_search_content", "source_check", "dev_server"]));
+
+    const launched = await tools.get("Agent")!.execute("agent", { id: "child-1", prompt: "inspect", join: "background" });
+    expect(launched.details).toMatchObject({ provider: "@mpx/subagents", runner: "@mpx/subagents", agent: { id: "child-1" } });
+    expect(await tools.get("get_subagent_result")!.execute("result", { id: "child-1" })).toMatchObject({ details: { id: "child-1", result: expect.stringContaining("inspect") } });
+    await tools.get("Agent")!.execute("agent-2", { id: "child-2", prompt: "wait", join: "background" });
+    expect(await tools.get("steer_subagent")!.execute("steer", { id: "child-2", message: "focus" })).toMatchObject({ details: { id: "child-2" } });
+
+    expect(await tools.get("mcp")!.execute("mcp", { serverId: "context7", method: "tools/list", params: null })).toMatchObject({ details: { executor: "host", route: "mcp:context7" } });
+    await expect(tools.get("mcp")!.execute("mcp-denied", { serverId: "other", method: "tools/list", params: null })).rejects.toThrow("MCP_ROUTE_DENIED");
+    const searched = await tools.get("web_search")!.execute("web", { query: "projection" });
+    expect(searched.details).toMatchObject({ executor: "host", provider: "projection" });
+    expect(await tools.get("get_search_content")!.execute("content", { responseId: searched.details.responseId })).toMatchObject({ details: { results: expect.any(Array) } });
+    expect(await tools.get("source_check")!.execute("source", { claim: "projection works" })).toMatchObject({ details: { claim: "projection works" } });
+
+    const dev = tools.get("dev_server")!;
+    expect(await dev.execute("start", { action: "start", id: "app", command: "pnpm dev" })).toMatchObject({ details: { state: "ready", run: 1 } });
+    expect(await dev.execute("status", { action: "status", id: "app" })).toMatchObject({ details: { state: "ready" } });
+    expect(await dev.execute("logs", { action: "logs", id: "app" })).toMatchObject({ details: { logs: expect.stringContaining("pnpm dev") } });
+    expect(await dev.execute("restart", { action: "restart", id: "app" })).toMatchObject({ details: { run: 2 } });
+    expect(await dev.execute("stop", { action: "stop", id: "app" })).toMatchObject({ details: { state: "stopped" } });
+
+    const ctx = { ui: { setStatus: (_key: string, value: string) => statuses.push(value), notify: (value: string) => notifications.push(value), setWidget: (_key: string, value: unknown) => widgets.push(value) } };
+    const dispatch = async (name: string, ...args: unknown[]) => { let outcome: unknown; for (const handler of events.get(name) ?? []) outcome = (await handler(...args)) ?? outcome; return outcome; };
+    await dispatch("session_start", {}, ctx);
+    expect(await dispatch("tool_call", { toolName: "bash", input: { command: "npm install" } }, ctx)).toMatchObject({ block: true, reason: expect.stringContaining("pnpm") });
+    expect(await dispatch("tool_call", { toolName: "bash", input: { command: "git commit -m 'x'", staged: [{ file: "x.ts", diff: "+api_key=abcdefgh" }] } }, ctx)).toMatchObject({ block: true, reason: expect.stringContaining("STAGED_SECRET") });
+    expect(await dispatch("tool_call", { toolName: "bash", input: { command: "git push", fallow: { status: 2 } } }, ctx)).toMatchObject({ warning: expect.stringContaining("fallow") });
+    expect(await dispatch("tool_result", { toolName: "write", input: { path: "x.ts" } }, ctx)).toMatchObject({ additionalContext: expect.stringContaining("post-write") });
+    expect(await dispatch("tool_result", { toolName: "bash", input: { command: "pnpm install" }, result: { stderr: "1 vulnerability" } }, ctx)).toMatchObject({ additionalContext: expect.stringContaining("vulnerabilit") });
+    expect(await dispatch("session_before_compact", { customInstructions: "manual" }, ctx)).toMatchObject({ instructions: expect.stringContaining("manual") });
+    await dispatch("agent_settled", {}, ctx);
+    expect(notifications.length).toBeGreaterThan(0);
+    expect(widgets.length).toBeGreaterThan(0);
+
+    await writeFile(liveEnvelope, JSON.stringify({ ...f.runtimeStatusEnvelope, identity: { ...f.runtimeStatusEnvelope.identity, label: "Changed", freshness: { state: "stale", observedAt: "2025-01-01T00:00:00.000Z", errorCode: null } }, model: { ...f.runtimeStatusEnvelope.model, freshness: { state: "error", observedAt: null, errorCode: "MODEL_DOWN" } } }));
+    await dispatch("before_agent_start", { systemPrompt: "BASE" }, ctx);
+    expect(statuses.at(-1)).toContain("Changed");
+    expect(statuses.at(-1)).toMatch(/stale|error/u);
+
+    await dispatch("session_shutdown", {}, ctx);
+    await expect(dev.execute("after-shutdown", { action: "start", id: "late", command: "pnpm dev" })).rejects.toThrow("DEV_SERVER_SHUTDOWN");
+    expect({ notifications: notifications.length, widgets: widgets.length, messages }).toMatchObject({ notifications: expect.any(Number), widgets: expect.any(Number) });
+  });
+
   it("activates the generated extension with current tool, disclosure, command, status, and restart semantics", async () => {
     const f = await fixture();
     const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-projections-"));
@@ -428,7 +496,7 @@ describe("production Pi projection", () => {
 
     await expect(module.activate(pi)).resolves.toBeUndefined();
     expect([...commands.keys()]).toEqual(["mpx:explicit", "mpx:full", "mpx:named"]);
-    expect([...tools.keys()]).toEqual(["mpx_model_search", "mpx_model_load"]);
+    expect([...tools.keys()]).toEqual(expect.arrayContaining(["mpx_model_search", "mpx_model_load", "Agent", "get_subagent_result", "steer_subagent", "mcp", "web_search", "dev_server"]));
     expect(events.has("before_agent_start")).toBe(true);
     expect(events.has("session_start")).toBe(true);
     expect(events.has("session_shutdown")).toBe(true);
