@@ -25,7 +25,7 @@ import { probeProvider, type ProviderRegistry } from "@mpx/providers";
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
 import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
-import { catalogPath, configuredProviderRegistry, defaultContext, executeInternalPreparationWorker, NodeProviderProcessExecutor, ports, providerService, status, worktrees, type CliContext } from "./context.js";
+import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, NodeProviderProcessExecutor, ports, providerService, status, worktrees, type CliContext } from "./context.js";
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
@@ -292,8 +292,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       });
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
     }
-    if (action!=="explain" && selection.executor==="docker" && context.sbxDiagnostics) {
-      const sbx=await context.sbxDiagnostics(), code=sbx.failureCodes[0];
+    const sbxProbe=context.sbxDiagnostics??(context===defaultContext?()=>createDefaultSbxDiagnostics(context.env,parsed.cwd):undefined);
+    if (action!=="explain" && selection.executor==="docker" && sbxProbe) {
+      const sbx=await sbxProbe(), code=sbx.failureCodes[0];
       if (sbx.readOnly!==true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
       if (code) throw new MpxError({code,message:`Standalone sbx launch diagnostic: ${code}.`,details:{executor:"docker"}});
     }
@@ -446,8 +447,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       ...configDoctor(found.config,user).map(({ code, message, severity, pointer }) => ({ code, message, severity, ...(pointer ? { details: { pointer } } : {}) })),
       ...skillDoctor(catalog,local).map(({ code, message, path: diagnosticPath }) => ({ code, message, severity: "error" as const, ...(diagnosticPath ? { details: { path: diagnosticPath } } : {}) })),
     ];
-    if (context.sbxDiagnostics) {
-      const sbx = await context.sbxDiagnostics();
+    const sbxProbe=context.sbxDiagnostics??(context===defaultContext?()=>createDefaultSbxDiagnostics(context.env,parsed.cwd):undefined);
+    if (sbxProbe) {
+      const sbx = await sbxProbe();
       if (sbx.readOnly !== true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
       for (const code of [...new Set(sbx.failureCodes)].sort()) diagnostics.push({ code, message: `Standalone sbx diagnostic: ${code}.`, severity: "warning", details: { executor: "docker" } });
     }

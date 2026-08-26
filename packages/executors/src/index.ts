@@ -367,8 +367,11 @@ export function compactLaunchBanner(descriptorInput: LaunchDescriptor): string {
 
 export * from "./sbx-client.js";
 export * from "./sandbox-plan.js";
+export * from "./sbx-plans.js";
+export * from "./sbx-policy.js";
 export * from "./remote-tool.js";
 export * from "./f2-evidence.js";
+export * from "./f2-proof-runner.js";
 
-/** The planning/protocol foundation does not claim a live containment proof. */
-export const F2_RUNTIME_CONTAINMENT_PROOF_IMPLEMENTED = false as const;
+/** Production planning and fake-sbx proof are implemented; live proof remains explicit opt-in. */
+export const F2_RUNTIME_CONTAINMENT_PROOF_IMPLEMENTED = true as const;
