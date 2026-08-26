@@ -640,6 +640,30 @@ describe("Phase F launch execution", () => {
     expect(execute.mock.calls[0]![0].argv.join(" ")).not.toContain(skillDirectory);
   });
 
+  it("projects configured development services as immutable launch requests", async () => {
+    const fixture = await launchFixture(), io = captureIo();
+    await writeFile(path.join(fixture.cwd, "mpxconfig.json"), JSON.stringify({
+      schemaVersion: 1, project: { id: "sample/app" }, repository: { provider: "generic", remote: "origin" }, tooling: { packageManager: "pnpm" },
+      development: { services: {
+        web: { scope: "checkout", port: { mode: "managed", preferred: 4100 }, environmentVariable: "WEB_URL", protocol: "http", start: { type: "package-script", script: "dev:web" } },
+        api: { scope: "checkout", port: { mode: "managed", preferred: 4101 }, environmentVariable: "API_URL", protocol: "http", start: { type: "package-script", script: "dev:api" } },
+      } },
+    }));
+    const executable = path.join(fixture.env.APPDATA!, "pi-services.exe"); await writeFile(executable, "trusted\n");
+    const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "fake-docker", evidenceDigest: "a".repeat(64) }), execute: async () => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }) };
+    const builder = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => ({ directory: "C:/immutable/pi", reference: publishedReference(input), extension: "C:/immutable/pi/extension.mjs", runtimeContextFile: "C:/immutable/pi/runtime-context.json", theme: "green" as const }));
+    const statusProvider = { snapshot: async () => ({ schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "wt-1", path: fixture.cwd, role: "linked" as const, branch: "phase-h" }, portResolution: "valid" as const, services: [
+      { id: "web", mode: "managed" as const, scope: "checkout" as const, protocol: "http" as const, port: 4100, listening: false, conflict: "none" as const, pid: null },
+      { id: "api", mode: "managed" as const, scope: "checkout" as const, protocol: "http" as const, port: 4101, listening: false, conflict: "none" as const, pid: null },
+    ], diagnostics: [] }) };
+
+    expect(await run(["--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable }, catalogRoot: fixture.catalogRoot, launchExecutorAdapters: [executor], launchProjectionBuilder: builder, launchProjectionValidator: async () => undefined, launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) }, statusProvider })).toBe(0);
+    expect(builder.mock.calls[0]![0].runtimeLaunchBinding.services).toEqual({
+      api: { id: "api", executable: "pnpm", args: ["run", "dev:api"], cwd: fixture.cwd, ports: [4101], assignment: { worktreeRoot: fixture.cwd, ports: [4101] }, executor: "docker", environment: { API_URL: "http://localhost:4101", WEB_URL: "http://localhost:4100" } },
+      web: { id: "web", executable: "pnpm", args: ["run", "dev:web"], cwd: fixture.cwd, ports: [4100], assignment: { worktreeRoot: fixture.cwd, ports: [4100] }, executor: "docker", environment: { API_URL: "http://localhost:4101", WEB_URL: "http://localhost:4100" } },
+    });
+  });
+
   it("uses a trusted absolute Pi executable with status before projection and process work", async () => {
     const fixture = await launchFixture(), io = captureIo();
     const effects: string[] = [];

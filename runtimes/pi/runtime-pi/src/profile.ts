@@ -34,7 +34,16 @@ export function createPiRuntimeProfileV1(capabilityIds: readonly string[] = []):
     tuiMode: "fullscreen",
     terminalProgress: false,
     trust: "ask",
-    keybindings: { "app.model.select": "alt+p", "tui.altScreen.pageUp": [], "tui.altScreen.pageDown": [], "tui.altScreen.halfPageUp": "pageUp", "tui.altScreen.halfPageDown": "pageDown" },
+    keybindings: {
+      "app.model.select": "alt+p",
+      "app.model.cycleBackward": "shift+ctrl+p",
+      "tui.altScreen.pageUp": [],
+      "tui.altScreen.pageDown": [],
+      "tui.altScreen.halfPageUp": "pageUp",
+      "tui.altScreen.halfPageDown": "pageDown",
+      "tui.altScreen.top": [],
+      "tui.altScreen.bottom": [],
+    },
     capabilityIds: [...capabilityIds],
   });
 }

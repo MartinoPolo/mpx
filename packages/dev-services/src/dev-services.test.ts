@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -24,8 +25,11 @@ const request={id:"web",executable:"npm",args:["run","dev"],cwd:"C:/repo",ports:
 
 describe("managed development services",()=>{
   it("spawns an executable and argv directly without shell interpolation",()=>{
-    expect(systemSpawnInvocation("npm",["run","dev; touch owned"],"linux")).toEqual({file:"npm",args:["run","dev; touch owned"],detached:true});
-    expect(systemSpawnInvocation("npm",["run","dev & calc"],"win32")).toEqual({file:"npm",args:["run","dev & calc"],detached:false});
+    expect(systemSpawnInvocation("npm",["run","dev; touch owned"],"linux")).toEqual({file:"npm",args:["run","dev; touch owned"],detached:true,unref:false});
+    expect(systemSpawnInvocation("npm",["run","dev & calc"],"win32")).toEqual({file:"npm",args:["run","dev & calc"],detached:false,unref:false});
+  });
+  it("releases the CLI event-loop handle for a durable service process",()=>{
+    expect(systemSpawnInvocation("pnpm",["run","dev"],"win32",true)).toMatchObject({unref:true});
   });
   it("validates and preserves the complete assigned environment map",()=>{
     const validated=validateStartRequest({...request,environment:{WEB_URL:"http://localhost:4100",API_URL:"http://localhost:4101"}});
@@ -115,6 +119,23 @@ describe("managed development services",()=>{
     const manager=new DurableDevServiceManager(runtime,root);await manager.start({...request,ports:[4100],assignment:{...request.assignment,ports:[4100]}});
     await new Promise(r=>setImmediate(r));runtime.children[0]!.exit(9,null);await new Promise(r=>setImmediate(r));finishProbe(true);await new Promise(r=>setImmediate(r));
     expect(await manager.status("web")).toMatchObject({state:"crashed",pid:null,exitCode:9,readyAt:null});
+  });
+  it.skipIf(process.platform!=="win32")("keeps an immediate nested launcher exit under a durable Windows supervisor and stops its exact surviving listener tree",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-nested-win-"));
+    const port=await new Promise<number>((resolve,reject)=>{const server=createServer();server.once("error",reject);server.listen(0,"127.0.0.1",()=>{const address=server.address();if(!address||typeof address==="string")return reject(new Error("port"));const selected=address.port;server.close(error=>error?reject(error):resolve(selected));});});
+    const leaf=path.join(root,"leaf.mjs"),middle=path.join(root,"middle.mjs"),top=path.join(root,"top.mjs");
+    await writeFile(leaf,`import net from "node:net";net.createServer(()=>{}).listen(${port},"127.0.0.1",()=>console.log("nested-ready"));setInterval(()=>{},1000);\n`);
+    await writeFile(middle,`import {spawn} from "node:child_process";const child=spawn(process.execPath,[${JSON.stringify(leaf)}],{detached:true,stdio:"inherit"});child.unref();\n`);
+    await writeFile(top,`import {spawn} from "node:child_process";const child=spawn(process.execPath,[${JSON.stringify(middle)}],{detached:true,stdio:"inherit"});child.unref();\n`);
+    let supervisorPid:number|undefined;
+    try{
+      const started=await new DurableDevServiceManager(createSystemRuntime(),path.join(root,"state"),25).start({...request,executable:"node",args:[top],cwd:root,ports:[port],assignment:{worktreeRoot:root,ports:[port]}});supervisorPid=started.pid??undefined;
+      const fresh=new DurableDevServiceManager(createSystemRuntime(),path.join(root,"state"),25);let status=await fresh.status("web") as Awaited<ReturnType<typeof fresh.start>>|undefined;for(let i=0;i<80&&status?.state!=="ready";i++){await new Promise(r=>setTimeout(r,25));status=await fresh.status("web") as Awaited<ReturnType<typeof fresh.start>>|undefined;}
+      expect(status).toMatchObject({state:"ready",pid:supervisorPid,fingerprint:started.fingerprint,childPid:expect.any(Number),childFingerprint:expect.any(String)});
+      expect(await fresh.logs("web")).toContain("nested-ready");
+      await expect(fresh.stop("web")).resolves.toMatchObject({state:"stopped",pid:null});
+      await expect(createSystemRuntime().probe(port)).resolves.toBe(false);
+    }finally{if(supervisorPid)try{process.kill(supervisorPid,"SIGKILL")}catch{}await rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:50}).catch(()=>undefined);}
   });
   it.skipIf(process.platform!=="win32"&&process.platform!=="linux")("reloads and safely controls an exact disposable OS child across managers (unsupported: durable process fingerprints require Windows or Linux)",async()=>{
     const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-os-"));const first=new DurableDevServiceManager(createSystemRuntime(),root);let pid:number|undefined;

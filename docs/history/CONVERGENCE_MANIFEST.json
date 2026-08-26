@@ -2647,12 +2647,12 @@
             "path": "local/skills/mp-clean-pc/SKILL.md",
             "sha256": "8ded059bef755345aa4c7160432bb1c5343b71446a18d0f50bcc7a5b500902e8"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -4449,12 +4449,12 @@
             "path": "plugins/gh/skills/mp-execute/SKILL.md",
             "sha256": "1fca3e7bd68dead97bd703a215d896e1f24b4cbf31e545112e0b380abff50beb"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -4563,12 +4563,12 @@
             "path": "plugins/gh/skills/mp-init-repo/SKILL.md",
             "sha256": "74e5dbb0a5a49670f008fcef9efd11f4e7724987e0a773f7e2d8553a7b9e0f55"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -4867,12 +4867,12 @@
             "path": "plugins/gh/skills/mp-to-issues/SKILL.md",
             "sha256": "3d401687696358f9168453c0d29aeb5dbd729df42562a5e7939348b2696f39f7"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -5087,21 +5087,9 @@
           "sha256": "1d32dc6f3b1842d3038e5e16b67d4c518b995ff2987be1f5e71a3c5344c52221",
           "reference": "content/agents/mpx-chrome-devtools-tester.md",
           "verification": "verified"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "plugins/mp/agents/mp-chrome-devtools-tester.md",
-            "sha256": "78a5eaae0d01a1a6746f256c888bec1a4d673fbc9aa7708b361d8780efe422be"
-          },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "content/agents/mpx-chrome-devtools-tester.md"
     },
     {
       "source": "claude",
@@ -8070,12 +8058,12 @@
             "path": "plugins/mp/skills/mp-continue/SKILL.md",
             "sha256": "e4d8db57e475f8aa13610640931271582420a2221cb53aec18933c72684870d1"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -8564,12 +8552,12 @@
             "path": "plugins/mp/skills/mp-harvest-decisions/SKILL.md",
             "sha256": "33b8088a8a20fcd6cad83c0405636a0421aa80b280ee54ba64577e357ad38946"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -8678,12 +8666,12 @@
             "path": "plugins/mp/skills/mp-review/SKILL.md",
             "sha256": "57d0fa63197db25c02084f67fa138e6ee7301643c3ba02d51ceee5dc1e136861"
           },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
+          "reference": "packages/skills/test/directory-inventory.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "packages/skills/test/directory-inventory.test.ts"
     },
     {
       "source": "claude",
@@ -9365,21 +9353,9 @@
           "sha256": "b2db86300ce36d8eb9897679bda2552e6edbb4130f3311c6039696ec3df3653d",
           "reference": "content/instructions/shared/EXECUTOR_CONTRACT.md",
           "verification": "verified"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "plugins/mp/skills/shared/EXECUTOR_CONTRACT.md",
-            "sha256": "f54637ab376a07fe618e3d9cea756312322076e39004325f1ff304de40e059e2"
-          },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "content/instructions/shared/EXECUTOR_CONTRACT.md"
     },
     {
       "source": "claude",
@@ -9670,21 +9646,9 @@
           "sha256": "ff28eb2e57cd091dfc8998e85025702c5ddff8156b9013a821be20b095b2d6fb",
           "reference": "content/instructions/shared/SUBAGENT_PROTOCOL.md",
           "verification": "verified"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "plugins/mp/skills/shared/SUBAGENT_PROTOCOL.md",
-            "sha256": "a8e86660f363b533d9405035847a384bf2312242133e2e410accd965d857190a"
-          },
-          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
-          "reference": "packages/skills/test/source-semantic-parity.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/source-semantic-parity.test.ts"
+      "test": "content/instructions/shared/SUBAGENT_PROTOCOL.md"
     },
     {
       "source": "claude",
@@ -10495,11 +10459,11 @@
       "kind": "file",
       "state": "modified",
       "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd",
-      "completion": "reviewed",
+      "completion": "completed",
       "phase": "Phase I",
       "disposition": "Claude-specific",
-      "destination": null,
-      "adaptation": "preserve the explicit Claude model selection when the Phase I installer gains a reviewed settings route",
+      "destination": "runtimes/claude/runtime-claude/src/index.ts",
+      "adaptation": "normalized into the generated Claude runtime projection",
       "rationale": "The source-only model change is reviewed drift, but no MPX installation destination is implemented yet; recording one would overstate current delivery.",
       "evidence": [
         {
@@ -10513,9 +10477,22 @@
           "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd",
           "reference": "claude:settings.json@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "claude",
+            "path": "settings.json",
+            "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd"
+          },
+          "sha256": "901968b9b3855b38f6ef89c911aa903f59ebcd0de9d99d91c5c7aa066d721cc9",
+          "reference": "runtimes/claude/runtime-claude/src/index.test.ts",
+          "verification": "passed"
         }
       ],
-      "headSha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b"
+      "headSha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b",
+      "test": "runtimes/claude/runtime-claude/src/index.test.ts"
     },
     {
       "source": "claude",
@@ -11979,7 +11956,7 @@
             "path": "extensions/dev-server-pane.ps1",
             "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12018,7 +11995,7 @@
             "path": "extensions/dev-server-pane.ts",
             "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12056,7 +12033,7 @@
             "path": "extensions/dev-server/contract.ts",
             "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12094,7 +12071,7 @@
             "path": "extensions/dev-server/footer-format.test.ts",
             "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12132,7 +12109,7 @@
             "path": "extensions/dev-server/footer-format.ts",
             "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12170,7 +12147,7 @@
             "path": "extensions/dev-server/footer-lifecycle.test.ts",
             "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12208,7 +12185,7 @@
             "path": "extensions/dev-server/index.test.ts",
             "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12246,7 +12223,7 @@
             "path": "extensions/dev-server/index.ts",
             "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12284,7 +12261,7 @@
             "path": "extensions/dev-server/log-buffer.test.ts",
             "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12322,7 +12299,7 @@
             "path": "extensions/dev-server/log-buffer.ts",
             "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12360,7 +12337,7 @@
             "path": "extensions/dev-server/manager.test.ts",
             "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12398,7 +12375,7 @@
             "path": "extensions/dev-server/manager.ts",
             "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12436,7 +12413,7 @@
             "path": "extensions/dev-server/package.json",
             "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12474,7 +12451,7 @@
             "path": "extensions/dev-server/system-runtime.test.ts",
             "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -12512,7 +12489,7 @@
             "path": "extensions/dev-server/system-runtime.ts",
             "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715"
           },
-          "sha256": "a14c20b3eb0c0935cd965f7006b89d9cd5ec7148a6762aae7930e89677256877",
+          "sha256": "11bf0fa0ea9cc62b28b02e3a826339bf729f3d9fa2c2b9ddef6bd8ece22b4ede",
           "reference": "packages/dev-services/src/dev-services.test.ts",
           "verification": "passed"
         }
@@ -14465,11 +14442,11 @@
       "path": "keybindings.json",
       "kind": "file",
       "state": "modified",
-      "sha256": "1e40645eed52ede378ce599c7d036809d6eda1470f906bedf08e56ba402ab2bd",
+      "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52",
       "completion": "completed",
       "disposition": "Pi-specific",
       "destination": "runtimes/pi/runtime-pi/src/profile.ts",
-      "adaptation": "normalized into the generated Pi profile and launch-bound adapter",
+      "adaptation": "normalized the reviewed model-cycle and alternate-screen keybindings into the generated Pi profile and launch-bound projection",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14477,9 +14454,9 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "keybindings.json",
-            "sha256": "1e40645eed52ede378ce599c7d036809d6eda1470f906bedf08e56ba402ab2bd"
+            "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52"
           },
-          "sha256": "1e40645eed52ede378ce599c7d036809d6eda1470f906bedf08e56ba402ab2bd",
+          "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52",
           "reference": "pi:keybindings.json@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
         },
@@ -14489,15 +14466,15 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "keybindings.json",
-            "sha256": "1e40645eed52ede378ce599c7d036809d6eda1470f906bedf08e56ba402ab2bd"
+            "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52"
           },
-          "sha256": "92d852ae0f9b9fda99f270e94bdf9c62d183df03c8d7bd86715aef2e98ca00f3",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "5423b62dd35c2f5f2370129dedf556f555cc04789902319800baee8cc06340ca",
+          "reference": "runtimes/pi/runtime-pi/test/keybindings-profile.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "81957c1d02b7d0cd7f55be83c0dc61303605c9d95cc67a7876a244d645bd714f",
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/keybindings-profile.test.ts"
     },
     {
       "source": "pi",

@@ -34,12 +34,23 @@ export class ExecutorRegistry {
   register(adapter: ExecutorAdapter): void { this.#adapters.set(adapter.name, adapter); }
   get(name: string): ExecutorAdapter { return this.#adapters.get(name) ?? fail("EXECUTOR_UNAVAILABLE", `Executor '${name}' is unavailable.`, { executor: name }); }
 }
+export interface RuntimeLaunchService {
+  readonly id: string;
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly ports: readonly number[];
+  readonly assignment: { readonly worktreeRoot: string; readonly ports: readonly number[] };
+  readonly executor: "docker" | "host";
+  readonly environment?: Readonly<Record<string, string>>;
+}
 export interface RuntimeLaunchBinding {
   readonly launchKey: string;
   readonly runtime: "claude" | "pi";
   readonly identity: LaunchDescriptor["identity"];
   readonly worktreeRoot: string;
   readonly assignedPorts: readonly number[];
+  readonly services?: Readonly<Record<string, RuntimeLaunchService>>;
   readonly executor: "docker" | "host";
 }
 export interface RuntimePreparation { readonly executable: string; readonly argv: readonly string[]; readonly environment: Readonly<Record<string, string>>; readonly shutdown?: () => Promise<void> }

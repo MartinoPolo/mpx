@@ -174,7 +174,7 @@ export interface PiProjectionBuildInput {
   readonly statusSnapshot: StatusSnapshotV1;
   readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
   readonly runtimeCapabilityManifest?: RuntimeCapabilityManifestV1;
-  readonly runtimeLaunchBinding?: { readonly launchKey: string; readonly runtime: "pi"; readonly identity: { readonly name: string; readonly domain: string }; readonly worktreeRoot: string; readonly assignedPorts: readonly number[]; readonly executor: "host" | "docker" };
+  readonly runtimeLaunchBinding?: { readonly launchKey: string; readonly runtime: "pi"; readonly identity: { readonly name: string; readonly domain: string }; readonly worktreeRoot: string; readonly assignedPorts: readonly number[]; readonly services?:Readonly<Record<string,import("@mpx/dev-services").StartRequest>>; readonly executor: "host" | "docker" };
   readonly launchBanner: string;
   readonly assetsRoot?: string;
   readonly vendorProvenanceFile?: string;
@@ -215,7 +215,7 @@ async function bundledSource(entry: string, label: string): Promise<string> {
 function piExtensionSource(descriptor: {
   manifestKey: string; artifactKey: string; launchBanner: string; runtimeStatusLine: string; commandAllowlist: string[]; modelSearchAllowlist: string[];
   productionCapability?: RuntimeCapabilityManifestV1;
-  productionLaunch?: { launchKey: string; runtime: "pi"; identity: { name: string; domain: string }; worktreeRoot: string; assignedPorts: readonly number[]; executor: "host" | "docker" };
+  productionLaunch?: { launchKey: string; runtime: "pi"; identity: { name: string; domain: string }; worktreeRoot: string; assignedPorts: readonly number[]; services?:Readonly<Record<string,import("@mpx/dev-services").StartRequest>>; executor: "host" | "docker" };
   entries: Array<{ identity: string; publicName: string; exposure: "full" | "name-only" | "explicit-only" | "off"; contentHash: string; sourcePath: string; commandDescription?: string; canonicalDescription?: string; canonicalTriggers?: string }>;
 }): string {
   const data = JSON.stringify(descriptor);

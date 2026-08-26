@@ -79,7 +79,7 @@ $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PidValue" -ErrorAction St
 if ($null -eq $p) { @{status='missing'} | ConvertTo-Json -Compress; exit 0 }
 $actual = if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{''}
 if ($actual -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
-Stop-Process -Id $PidValue -ErrorAction Stop
+Stop-Process -Id $PidValue -Force -ErrorAction Stop
 @{status='killed'} | ConvertTo-Json -Compress`;
 
 const TREE_KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
@@ -156,6 +156,13 @@ export class WindowsProcessCapabilities {
     const item = record(parsed); const actualPid = requiredInteger(item.ProcessId); const startedAt = optionalString(item.StartedAt);
     if (actualPid !== pid || !startedAt) throw malformed();
     return { pid, startFingerprint: startedAt };
+  }
+  async terminate(process: OwnedWindowsProcess): Promise<void> {
+    const parsed = record(await this.invoke(KILL_SCRIPT, { PidValue: String(process.pid), StartedAt: process.startFingerprint }));
+    if (parsed.status === "killed") return;
+    if (parsed.status === "missing") throw new MpxError({ code: "PROCESS_DISAPPEARED", message: "The process disappeared before it could be terminated." });
+    if (parsed.status === "mismatch") throw new MpxError({ code: "PROCESS_FINGERPRINT_MISMATCH", message: "The PID now belongs to a different process." });
+    throw malformed();
   }
   async terminateTree(process: OwnedWindowsProcess): Promise<void> {
     const parsed = record(await this.invoke(TREE_KILL_SCRIPT, { PidValue: String(process.pid), StartedAt: process.startFingerprint }));

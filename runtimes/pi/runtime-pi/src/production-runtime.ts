@@ -1,6 +1,6 @@
 import { parseRuntimeCapabilityManifestV1, type RuntimeCapabilityManifestV1 } from "@mpx/runtime-contracts";
 import type { GatewayExecutor, McpLaunchDescriptor, ProviderAdapter, RuntimeToolCache, RuntimeToolGatewayOptions } from "@mpx/runtime-tools";
-import type { RuntimeAdapter } from "@mpx/dev-services";
+import type { RuntimeAdapter, StartRequest } from "@mpx/dev-services";
 import { createPiDevServerCapability } from "./dev-services.js";
 import { registerPiRuntimeTools } from "./runtime-tools.js";
 import { activatePiSandboxExecutor, type PiRemoteExecutor, type PiToolSetControl } from "./sandbox-executor.js";
@@ -9,6 +9,7 @@ export interface PiProductionLaunchBinding {
   readonly launchKey: string;
   readonly worktreeRoot: string;
   readonly assignedPorts: readonly number[];
+  readonly services?: Readonly<Record<string, StartRequest>>;
   readonly executor: "host" | "docker";
 }
 export interface PiProductionAdapters {
@@ -44,7 +45,7 @@ export function activatePiProductionRuntime(input: PiProductionRuntimeInput) {
     if (!input.pi.replaceModelTools || !input.pi.activeModelTools) throw new Error("REMOTE_TOOL_REPLACEMENT_REQUIRED: Pi must atomically replace native model tools");
     return activatePiSandboxExecutor({ pi: input.pi as PiApi & PiToolSetControl, executor: "docker", remote: input.adapters.remoteExecutor });
   }
-  const dev = createPiDevServerCapability({ launchKey: capability.launchKey, worktree: input.launch.worktreeRoot, ports: input.launch.assignedPorts, executor: capability.executor, ...(input.adapters.devRuntime ? { runtimeAdapter: input.adapters.devRuntime } : {}) });
+  const dev = createPiDevServerCapability({ launchKey: capability.launchKey, worktree: input.launch.worktreeRoot, ports: input.launch.assignedPorts, executor: capability.executor, services:input.launch.services??{}, ...(input.adapters.devRuntime ? { runtimeAdapter: input.adapters.devRuntime } : {}) });
   let stopped = false;
   const shutdown = async () => { if (stopped) return; stopped = true; await dev.shutdown(); await input.adapters.shutdown?.(); };
   return registerPiRuntimeTools({ pi: input.pi, capability, executor: input.adapters.executor!, mcpRoutes: input.adapters.mcpRoutes ?? {}, providers: input.adapters.providers ?? [], devServer: dev.tool, shutdown, ...(input.adapters.cache ? { cache: input.adapters.cache } : {}), ...(input.adapters.managedDevServices ? { managedDevServices: input.adapters.managedDevServices } : {}), ...(input.adapters.firecrawlFallback === undefined ? {} : { firecrawlFallback: input.adapters.firecrawlFallback }) });
