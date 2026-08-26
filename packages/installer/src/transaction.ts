@@ -81,16 +81,32 @@ export class NodeTransactionStore implements TransactionStore {
   }
   async writeTransaction(value: StoredTransaction): Promise<void> { await this.atomic("transaction.json", value); }
   async removeTransaction(): Promise<void> { await rm(this.file("transaction.json"), { force: true }); }
+  private processExists(pid: number): boolean {
+    try { process.kill(pid, 0); return true; }
+    catch (failure) { return (failure as NodeJS.ErrnoException).code === "EPERM"; }
+  }
+  private async removeAbandonedLock(lock: string): Promise<boolean> {
+    let body: string;
+    try { body = await readFile(lock, "utf8"); } catch (failure) { if ((failure as NodeJS.ErrnoException).code === "ENOENT") return true; throw failure; }
+    let value: unknown; try { value = parseStrictJson(body); } catch { return false; }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    if (record.schemaVersion !== 1 || !Number.isSafeInteger(record.pid) || (record.pid as number) < 1 || this.processExists(record.pid as number)) return false;
+    // Re-read before removal so a lock that changed ownership is never intentionally removed.
+    if (await readFile(lock, "utf8").catch(() => "") !== body) return true;
+    await rm(lock, { force: true }); return true;
+  }
   private async acquireProcessLock(): Promise<() => Promise<void>> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const lock = this.file("transaction.lock"), deadline = Date.now() + 30_000;
     for (;;) {
       try {
         const handle = await open(lock, "wx", 0o600);
-        await handle.writeFile(`${process.pid}\n`);
+        await handle.writeFile(`${JSON.stringify({ schemaVersion: 1, pid: process.pid, nonce: randomUUID() })}\n`);
         return async () => { await handle.close(); await rm(lock, { force: true }); };
       } catch (failure) {
         if ((failure as NodeJS.ErrnoException).code !== "EEXIST") throw failure;
+        if (await this.removeAbandonedLock(lock)) continue;
         if (Date.now() >= deadline) fail("INSTALL_TRANSACTION_LOCKED", "Another installer transaction owns the machine lock.");
         await new Promise(resolve => setTimeout(resolve, 25));
       }

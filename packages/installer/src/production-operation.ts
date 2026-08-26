@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { MpxError, parseStrictJson } from "@mpx/core";
-import { ManagedLauncherAdapter, OwnedJsonResourceAdapter, type BinaryFileSystem, type JsonResourceStore, type ManagedLauncherSpec, type OwnedResourceSpec } from "@mpx/windows";
+import { ManagedLauncherAdapter, OwnedJsonResourceAdapter, ProductionWindowsResourceStore, type BinaryFileSystem, type JsonResourceStore, type ManagedLauncherSpec, type OwnedResourceSpec } from "@mpx/windows";
 import { installerDigest, type InstallIntentV1, type InstallOperationV1, type ReleaseManifestV1 } from "./immutable-core.js";
 import { buildStableSelectorBody, buildWindowsIntegrationSpecs } from "./windows-integration.js";
 import type { InstallerOperationAdapter, InstallerOperationSet } from "./orchestration.js";
@@ -29,6 +29,17 @@ export interface ProductionInstallerResources {
   readonly files: BinaryFileSystem;
   readonly resources: JsonResourceStore;
 }
+class RoutedProductionResourceStore implements JsonResourceStore {
+  constructor(private readonly files: JsonResourceStore, private readonly native: JsonResourceStore) {}
+  private store(target: string): JsonResourceStore { return path.extname(target).toLowerCase() === ".json" ? this.files : this.native; }
+  read(target: string): Promise<unknown | undefined> { return this.store(target).read(target); }
+  write(target: string, value: unknown): Promise<void> { return this.store(target).write(target, value); }
+  remove(target: string): Promise<void> { return this.store(target).remove(target); }
+}
+export function createProductionInstallerResources(platform: NodeJS.Platform = process.platform): ProductionInstallerResources {
+  const files = new NodeBinaryFileSystem(), json = new NodeJsonResourceStore();
+  return { files, resources: platform === "win32" ? new RoutedProductionResourceStore(json, new ProductionWindowsResourceStore({ platform })) : json };
+}
 
 interface Entry { operation: InstallOperationV1; launcher?: ManagedLauncherSpec; resource?: OwnedResourceSpec; fileBody?: Buffer }
 export class ProductionInstallerOperationAdapter implements InstallerOperationAdapter {
@@ -37,7 +48,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   private readonly owned: OwnedJsonResourceAdapter;
   private readonly files: BinaryFileSystem;
   private entries = new Map<string, Entry>();
-  constructor(private readonly environment: NodeJS.ProcessEnv, private readonly currentUser: string, resources: ProductionInstallerResources = { files: new NodeBinaryFileSystem(), resources: new NodeJsonResourceStore() }) {
+  constructor(private readonly environment: NodeJS.ProcessEnv, private readonly currentUser: string, resources: ProductionInstallerResources = createProductionInstallerResources()) {
     this.files = resources.files; this.launchers = new ManagedLauncherAdapter(resources.files); this.owned = new OwnedJsonResourceAdapter(resources.resources);
   }
   async operations(intent: InstallIntentV1, manifest: ReleaseManifestV1): Promise<InstallerOperationSet> {
@@ -50,7 +61,11 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const task: OwnedResourceSpec = { ...specs.task, desired: { ...specs.task.desired, executableSha256: sha(await readFile(nodePath)), cliSha256: cliEvidence.sha256 } }; 
     const selectorBody = Buffer.from(buildStableSelectorBody(), "utf8");
     const selectorTarget = path.win32.join(this.environment.MPX_APPS!, "mpx", "bin", "mpx.cmd");
-    const automatic: Entry[] = [{ fileBody: selectorBody, operation: { id: "05-cli-selector", adapter: this.name, action: "ensure", target: selectorTarget, desiredDigest: sha(selectorBody) } }];
+    const activeBody = Buffer.from(`${intent.releaseKey}\n`, "utf8"), activeTarget = path.win32.join(this.environment.LOCALAPPDATA!, "mpx", "active-release");
+    const automatic: Entry[] = [
+      { fileBody: selectorBody, operation: { id: "05-cli-selector", adapter: this.name, action: "ensure", target: selectorTarget, desiredDigest: sha(selectorBody) } },
+      { fileBody: activeBody, operation: { id: "06-active-release", adapter: this.name, action: "ensure", target: activeTarget, desiredDigest: sha(activeBody) } },
+    ];
     for (const [index, launcher] of specs.launchers.entries()) {
       const plan = await this.launchers.plan(launcher), desiredDigest = sha(Buffer.from(plan.managedBase64, "base64"));
       automatic.push({ launcher, operation: { id: `10-profile-${index}`, adapter: this.name, action: "ensure", target: launcher.path, desiredDigest } });
