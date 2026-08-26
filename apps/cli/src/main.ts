@@ -22,6 +22,7 @@ import { createSkillArtifactReference, errorEnvelope, MpxError, sha256Canonical,
 import { resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
 import { ExecutionError, namedSbxPolicies, sanitizeHostReason } from "@mpx/executors";
 import { probeProvider, type ProviderRegistry } from "@mpx/providers";
+import { LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local";
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
 import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
@@ -39,7 +40,7 @@ import { BranchLeaseStore, ConversationBranchService, RootAttestationService, Ro
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
 class UsageError extends Error {}
-const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
+const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|view rebuild|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
 
 const shortLaunchAliases = new Set<ShortLaunchAlias>(["cc", "ccw", "pi", "piw"]);
 function parse(argv: readonly string[]): Parsed {
@@ -381,6 +382,15 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     if(service.runtimeKind!==undefined&&service.runtimeKind!==executor)throw new MpxError({code:"DEV_EXECUTOR_BINDING_REQUIRED",message:"The development-service adapter does not match the selected executor."});
     data=await executeDevCommand({action,...(id?{id}:{}),cwd:parsed.cwd,config:found.config,projectRoot:found.root,...(action==="start"?{portService:ports(context) as never}:{}),service,executor,...(lines===undefined?{}:{lines})});
     return {data,warnings};
+  }
+  if (group === "view") {
+    if (action !== "rebuild" || args.length) throw new UsageError("view requires rebuild");
+    const found = await project(parsed), issues = found.config.issues;
+    if (issues?.provider !== "local" || !issues.store || !issues.view) throw new MpxError({ code: "LOCAL_VIEW_UNAVAILABLE", message: "The project must select logical local store and view registrations." });
+    const user = await requiredUserConfig(context), storeRegistration = user.localIssueStores?.[issues.store], view = user.localViews?.[issues.view];
+    if (!storeRegistration || !view) throw new MpxError({ code: "LOCAL_VIEW_UNAVAILABLE", message: "The selected logical local store or view is not registered." });
+    data = await rebuildObsidianIssueViews(new LocalIssueStore(storeRegistration.root, { projectId: found.config.project.id }), { vaultRoot: view.vaultRoot, outputRoot: view.outputRoot, projectId: found.config.project.id, resumeBaseUrl: view.resumeBaseUrl });
+    return { data, warnings };
   }
   if (["issue","review","ci"].includes(group)) {
     const actions=group==="issue"

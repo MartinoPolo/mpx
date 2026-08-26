@@ -16,8 +16,9 @@ export type Executor = "host" | "docker";
 export type WorkspaceStrategy = "clone" | "host-worktree" | "direct";
 export type NetworkPolicyPreset = "allow-all" | "balanced" | "deny-all";
 export interface IssueStates { todo: string; wip: string; review: string; done: string; archive?: string }
-export interface IssueViewsConfig { vaultRoot: string; outputRoot: string; resumeBaseUrl: string }
-export interface IssuesConfig { provider: IssueProvider; root?: string; views?: IssueViewsConfig; boardId?: string; boardName?: string; states?: IssueStates }
+export interface IssuesConfig { provider: IssueProvider; store?: string; view?: string; boardId?: string; boardName?: string; states?: IssueStates }
+export interface LocalIssueStoreRegistration { root: string }
+export interface LocalViewRegistration { vaultRoot: string; outputRoot: string; vaultSubtree: string; resumeBaseUrl: string }
 export interface PreparationStepBase { id: string; dependsOn?: string[]; required?: boolean; timeoutSeconds?: number; cwd?: string; environment?: string[] }
 export type PreparationStep =
   | (PreparationStepBase & { uses: "package-install" })
@@ -78,6 +79,8 @@ export interface UserConfig {
   networkPolicies: Record<string, NetworkPolicyConfig>;
   executors: Partial<Record<Executor, Record<string, never>>>;
   projects?: Record<string, ProjectOverride>;
+  localIssueStores?: Record<string, LocalIssueStoreRegistration>;
+  localViews?: Record<string, LocalViewRegistration>;
 }
 export type CwdClassification = { status: "known"; domain: string; root: string } | { status: "unknown" };
 export type ContentScopeClassification = { status: "known"; contentScope: string; root: string } | { status: "unknown" };

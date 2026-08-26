@@ -17,7 +17,7 @@ export interface SessionLifecycleBridge {
   observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
 }
 export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge {
-  constructor(private readonly store: SessionStore, private readonly accountBindingRef?: (identity: string, runtime: "claude" | "pi") => Promise<string | null>) {}
+  constructor(private readonly store: SessionStore, private readonly accountBindingRef?: (identity: string, runtime: "claude" | "pi") => Promise<string | null>, private readonly onSessionsChanged?: () => Promise<void>) {}
   async prepare(input: { descriptor: LaunchDescriptor; runtimeContext: RuntimeContextV1; nativeRuntimeRoot: string; cwd: string; nativeSessionRef?: NativeSessionRefV1; nativeBinding?: NativeBindingRecordV1 }): Promise<LaunchLifecyclePreparation> {
     const now = new Date().toISOString(), bindingId = randomUUID();
     const rootDigest = canonicalNativeRootDigest(input.nativeRuntimeRoot);
@@ -49,7 +49,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
     if (stat.isSymbolicLink() || !stat.isDirectory() || !samePath) throw new Error("Unsafe lifecycle event directory");
     return { binding, eventDirectory };
   }
-  async consume(bindingId: string): Promise<number> { return new LifecycleEventDirectoryConsumer(this.store, new SessionService(this.store)).consume(bindingId); }
+  async consume(bindingId: string): Promise<number> { const consumed = await new LifecycleEventDirectoryConsumer(this.store, new SessionService(this.store)).consume(bindingId); if (consumed > 0) await this.onSessionsChanged?.(); return consumed; }
   async observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined> {
     const binding = await this.store.readLifecycleBinding(bindingId);
     const service = new SessionService(this.store);
@@ -57,6 +57,8 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
     const records = await service.list({ runtime: binding.binding.runtime });
     const matching = records.filter(record => record.lifecycle.bindingId === bindingId && record.nativeBindingRef === binding.nativeBindingRef);
     if (matching.length > 1) throw new SessionError("SESSION_LIFECYCLE_OBSERVATION_DUPLICATE", "Multiple sessions claim one lifecycle binding.");
-    return matching.length === 0 ? undefined : observations.find(observation => observation.runtimeQualifiedId === matching[0]!.runtimeQualifiedId && observation.identityRef === binding.binding.identityRef);
+    const result = matching.length === 0 ? undefined : observations.find(observation => observation.runtimeQualifiedId === matching[0]!.runtimeQualifiedId && observation.identityRef === binding.binding.identityRef);
+    await this.onSessionsChanged?.();
+    return result;
   }
 }

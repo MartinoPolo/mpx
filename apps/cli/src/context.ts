@@ -5,13 +5,13 @@ import { access, lstat, mkdir, opendir, readFile, realpath, stat, writeFile } fr
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MpxError } from "@mpx/core";
-import { isSafeRouteLabel, preparationPlan, type PreparationPlan, type ProjectConfig } from "@mpx/config";
+import { isSafeRouteLabel, loadUserConfig, preparationPlan, type PreparationPlan, type ProjectConfig } from "@mpx/config";
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from "@mpx/ports";
 import { createStatusProvider, type StatusProvider } from "@mpx/status";
 import { createGitHubAdapters } from "@mpx/provider-github";
 import { createGitLabAdapters } from "@mpx/provider-gitlab";
 import { createKanbanFlowAdapter } from "@mpx/provider-kanbanflow";
-import { createLocalIssueAdapter } from "@mpx/provider-local";
+import { createLocalIssueAdapter, LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local";
 import { BUILTIN_PROVIDERS, ProviderRegistry, ProviderService, providerRegistry, type ProviderAdapter, type ProviderDescriptor, type ProviderProcessExecutor, type ProviderProcessRequest, type ProviderProcessResult } from "@mpx/providers";
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/windows";
 import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
@@ -300,11 +300,25 @@ export async function providerService(context: CliContext, config: ProjectConfig
   const repository = needsForgeRepository
     ? await (context.repositorySelectorResolver ?? new NodeRepositorySelectorResolver(context.env)).resolve({ root: cwd, remote: config.repository.remote })
     : undefined;
+  let localRoot: string | undefined;
+  let localOnChanged: (() => Promise<void>) | undefined;
+  if (selectedProvider === "local" && config.issues?.provider === "local") {
+    const appdata = context.env.APPDATA;
+    if (!appdata || !path.isAbsolute(appdata)) throw new MpxError({ code: "LOCAL_ISSUE_STORE_UNAVAILABLE", message: "Local issues require identity-local user configuration." });
+    const user = await loadUserConfig(path.join(appdata, "mpx", "config.json"), context.env);
+    localRoot = user.localIssueStores?.[config.issues.store ?? ""]?.root;
+    if (!localRoot) throw new MpxError({ code: "LOCAL_ISSUE_STORE_UNAVAILABLE", message: "The selected logical local issue store is not registered in user configuration." });
+    if (config.issues.view) {
+      const view = user.localViews?.[config.issues.view];
+      if (!view) throw new MpxError({ code: "LOCAL_VIEW_UNAVAILABLE", message: "The selected logical local view is not registered in user configuration." });
+      localOnChanged = async () => { await rebuildObsidianIssueViews(new LocalIssueStore(localRoot!, { projectId: config.project.id }), { vaultRoot: view.vaultRoot, outputRoot: view.outputRoot, projectId: config.project.id, resumeBaseUrl: view.resumeBaseUrl }); };
+    }
+  }
   const adapters = [
     ...(selectedProvider === undefined || selectedProvider === "github" ? createGitHubAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
     ...(selectedProvider === undefined || selectedProvider === "gitlab" ? createGitLabAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
     ...(selectedProvider === undefined || selectedProvider === "kanbanflow" ? [createKanbanFlowAdapter(executor, { cwd, ...(config.issues?.provider === "kanbanflow" && config.issues.states !== undefined ? { states: config.issues.states } : {}) })] : []),
-    ...(selectedProvider === "local" && config.issues?.provider === "local" && config.issues.root ? [createLocalIssueAdapter({ root: path.resolve(cwd, config.issues.root) })] : []),
+    ...(selectedProvider === "local" && localRoot ? [createLocalIssueAdapter({ root: localRoot, projectId: config.project.id, ...(localOnChanged ? { onChanged: async () => localOnChanged!() } : {}) })] : []),
     ...(context.trustedProviderComposition?.adapters.filter(adapter => selectedProvider === undefined || adapter.providerId === selectedProvider) ?? []),
   ];
   return new ProviderService(configuredProviderRegistry(context), adapters);

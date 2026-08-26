@@ -14,6 +14,34 @@ describe("local Markdown issues", () => {
     expect((await b.create({ title: "C", body: "three" })).id).toBe("1");
   });
 
+  it("uses zero-padded slug filenames, a lookup index, and stable title renames", async () => {
+    const directory = await root(), store = new LocalIssueStore(directory, { projectId: "acme/app" });
+    const issue = await store.create({ title: "Hello, World!", body: "" });
+    expect(await readFile(path.join(directory, ".mpx-index.json"), "utf8")).toContain('"1":"000001-hello-world.md"');
+    await store.update(issue.id, { title: "Renamed Title" });
+    await expect(readFile(path.join(directory, "000001-hello-world.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await store.view("1")).title).toBe("Renamed Title");
+    expect(await readFile(path.join(directory, "000001-renamed-title.md"), "utf8")).toContain('project: "acme/app"');
+  });
+
+  it("round-trips the complete versioned issue schema and preserves unknown content", async () => {
+    const directory = await root(), store = new LocalIssueStore(directory, { projectId: "acme/app" });
+    const created = await store.create({ title: "Schema", body: "Plan body", kind: "feature", priority: "high", assignees: ["alice"], plan: "ship", effort: "3d", capture: "inbox" });
+    await store.create({ title: "Related", body: "" });
+    await store.update(created.id, { localState: "doing", related: ["2"], blockedBy: [], blocks: [] });
+    const local = (await store.view(created.id)).providerData.local;
+    expect(local).toMatchObject({ project: "acme/app", kind: "feature", priority: "high", assignees: ["alice"], localState: "doing", plan: "ship", effort: "3d", capture: "inbox", related: ["2"], blockedBy: [], blocks: [] });
+  });
+
+  it("fails visibly with typed diagnostics when a dependency reference is missing", async () => {
+    const directory = await root(), store = new LocalIssueStore(directory);
+    const created = await store.create({ title: "Broken", body: "" });
+    const file = path.join(directory, "000001-broken.md");
+    await writeFile(file, (await readFile(file, "utf8")).replace('blockedBy: []', 'blockedBy: ["99"]'));
+    await expect(store.view(created.id)).rejects.toMatchObject({ code: "LOCAL_ISSUE_REFERENCE_MISSING", details: { issueId: "1", referenceId: "99", relationship: "blockedBy" } });
+    await expect(store.update(created.id, { title: "Nope" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_REFERENCE_MISSING" });
+  });
+
   it("round-trips relationships and derives the dependency frontier, including cycles", async () => {
     const store = new LocalIssueStore(await root());
     await store.create({ title: "one", body: "" });
@@ -29,20 +57,22 @@ describe("local Markdown issues", () => {
   it("preserves unknown frontmatter and trailing body sections when editing known fields", async () => {
     const directory = await root(), store = new LocalIssueStore(directory);
     const created = await store.create({ title: "old", body: "Main\n\n<!-- mpx:preserve -->\n## Custom\nKeep" });
-    const file = path.join(directory, `${created.id}.md`);
-    await writeFile(file, (await readFile(file, "utf8")).replace("schemaVersion: 1", "schemaVersion: 1\nfutureKey: {\"enabled\":true}"));
+    const file = path.join(directory, "000001-old.md");
+    await writeFile(file, (await readFile(file, "utf8")).replace("schemaVersion: 2", "schemaVersion: 2\nfutureKey: {\"enabled\":true}"));
     await store.update(created.id, { title: "new", body: "Changed" });
-    const text = await readFile(file, "utf8");
+    const text = await readFile(path.join(directory, "000001-new.md"), "utf8");
     expect(text).toContain("futureKey: {\"enabled\":true}");
     expect(text).toContain("<!-- mpx:preserve -->\n## Custom\nKeep");
   });
 
   it("rejects malformed documents and compare-and-swap conflicts after external edits", async () => {
     const directory = await root(), store = new LocalIssueStore(directory);
-    await writeFile(path.join(directory, "9.md"), "---\nschemaVersion: nope\n---\nbad");
+    await writeFile(path.join(directory, "000009-bad.md"), "---\nschemaVersion: nope\n---\nbad");
+    await writeFile(path.join(directory, ".mpx-index.json"), JSON.stringify({ schemaVersion: 1, next: 10, files: { "9": "000009-bad.md" } }));
     await expect(store.view("9")).rejects.toMatchObject({ code: "LOCAL_ISSUE_MALFORMED" });
     const created = await store.create({ title: "A", body: "B" });
-    await writeFile(path.join(directory, `${created.id}.md`), (await readFile(path.join(directory, `${created.id}.md`), "utf8")) + "external");
+    const createdPath=path.join(directory, "000010-a.md");
+    await writeFile(createdPath, (await readFile(createdPath, "utf8")) + "external");
     await expect(store.update(created.id, { title: "C" }, String(created.providerData?.local?.revision))).rejects.toMatchObject({ code: "LOCAL_ISSUE_CONFLICT" });
   });
 
@@ -86,12 +116,12 @@ describe("local Markdown issues", () => {
     await store.create({ title: "Visible", body: "secret body" });
     const output = path.join(vault, "MPX", "Issues");
     await mkdir(output, { recursive: true });
-    await writeFile(path.join(output, "999.md"), "generated");
+    await writeFile(path.join(output, "000999-stale.md"), "generated");
     await rebuildObsidianIssueViews(store, { vaultRoot: vault, outputRoot: output, projectId: "acme/app", resumeBaseUrl: "mpx://resume" });
-    const once = await readFile(path.join(output, "1.md"), "utf8");
+    const once = await readFile(path.join(output, "000001-visible.md"), "utf8");
     await rebuildObsidianIssueViews(store, { vaultRoot: vault, outputRoot: output, projectId: "acme/app", resumeBaseUrl: "mpx://resume" });
-    expect(await readFile(path.join(output, "1.md"), "utf8")).toBe(once);
-    await expect(readFile(path.join(output, "999.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(path.join(output, "000001-visible.md"), "utf8")).toBe(once);
+    await expect(readFile(path.join(output, "000999-stale.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(once).not.toContain("secret body");
     await expect(rebuildObsidianIssueViews(store, { vaultRoot: vault, outputRoot: output, projectId: "../bad", resumeBaseUrl: "javascript:bad" })).rejects.toMatchObject({ code: "LOCAL_VIEW_CONFIG_INVALID" });
   });

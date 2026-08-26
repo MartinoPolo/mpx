@@ -8,9 +8,16 @@ it("rejects empty or duplicate preparation dependencies",()=>{
   const config={...base(),worktrees:{postCreate:{execution:"foreground",steps:[{id:"",uses:"package-install",dependsOn:["build","build"]}]}}};
   expect(()=>assertValid(validateProject,config)).toThrow();
 });
-it("validates local issue root and optional view configuration",()=>{
-  expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local",root:"issues",views:{vaultRoot:"C:/vault",outputRoot:"C:/vault/MPX/Issues",resumeBaseUrl:"mpx://resume"}}})).not.toThrow();
+it("keeps machine-local issue and vault roots out of committed project config",()=>{
+  expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local",store:"personal-issues",view:"obsidian-issues"}})).not.toThrow();
+  expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local",root:"issues",views:{vaultRoot:"C:/vault",outputRoot:"C:/vault/MPX/Issues",resumeBaseUrl:"mpx://resume"}}})).toThrow();
   expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local"}})).toThrow();
+});
+it("accepts identity-local logical issue store and view registrations",()=>{
+  const value=JSON.parse(user("C:/work"));
+  value.localIssueStores={"personal-issues":{root:"${MPX_PROJECTS}"}};
+  value.localViews={"obsidian-issues":{vaultRoot:"${MPX_OBSIDIAN_VAULT}",outputRoot:"C:/vault/MPX/Issues",vaultSubtree:"MPX/Issues",resumeBaseUrl:"mpx://resume"}};
+  expect(()=>parseUserConfig(JSON.stringify(value),{MPX_PROJECTS:"C:/projects",MPX_OBSIDIAN_VAULT:"C:/vault"})).not.toThrow();
 });
 describe("strict json",()=>{it.each(['{"a":1,"a":2}','{"__proto__":1}','{"nested":{"constructor":1}}'])("rejects malicious %s",s=>expect(()=>parseStrictJson(s)).toThrow(StrictJsonError));it("schema rejects secret fields",()=>expect(()=>assertValid(validateProject,{...base(),token:"secret"})).toThrow())});
 const user=(root:string,pack="core")=>JSON.stringify({identities:{},domains:{work:[root]},contentScopes:{work:{roots:[root],skillPacks:[pack]}},modes:{},skillPolicies:{},presets:{},launchDefaults:{scopes:{},projects:{}},networkPolicies:{},executors:{host:{}}});

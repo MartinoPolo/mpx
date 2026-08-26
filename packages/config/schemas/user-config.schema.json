@@ -14,7 +14,9 @@
     "launchDefaults": { "$ref": "#/$defs/launchDefaults" },
     "networkPolicies": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/networkPolicy" } },
     "executors": { "type": "object", "propertyNames": { "enum": ["host", "docker"] }, "additionalProperties": { "$ref": "#/$defs/empty" } },
-    "projects": { "type": "object", "propertyNames": { "$ref": "#/$defs/projectId" }, "additionalProperties": { "$ref": "#/$defs/override" } }
+    "projects": { "type": "object", "propertyNames": { "$ref": "#/$defs/projectId" }, "additionalProperties": { "$ref": "#/$defs/override" } },
+    "localIssueStores": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/localIssueStore" } },
+    "localViews": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/localView" } }
   },
   "$defs": {
     "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
@@ -23,6 +25,8 @@
     "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
     "roots": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/path" } },
     "empty": { "type": "object", "additionalProperties": false },
+    "localIssueStore": { "type": "object", "additionalProperties": false, "required": ["root"], "properties": { "root": { "$ref": "#/$defs/path" } } },
+    "localView": { "type": "object", "additionalProperties": false, "required": ["vaultRoot", "outputRoot", "vaultSubtree", "resumeBaseUrl"], "properties": { "vaultRoot": { "$ref": "#/$defs/path" }, "outputRoot": { "$ref": "#/$defs/path" }, "vaultSubtree": { "type": "string", "pattern": "^MPX(?:/[A-Za-z0-9._-]+)+$" }, "resumeBaseUrl": { "type": "string", "pattern": "^mpx://[A-Za-z0-9/?&=._%-]+$" } } },
     "mode": {
       "type": "object", "additionalProperties": false, "required": ["resources"],
       "properties": {

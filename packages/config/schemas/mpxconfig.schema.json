@@ -79,40 +79,12 @@
           "additionalProperties": false,
           "required": [
             "provider",
-            "root"
+            "store"
           ],
           "properties": {
-            "provider": {
-              "const": "local"
-            },
-            "root": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1024
-            },
-            "views": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "vaultRoot",
-                "outputRoot",
-                "resumeBaseUrl"
-              ],
-              "properties": {
-                "vaultRoot": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "outputRoot": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "resumeBaseUrl": {
-                  "type": "string",
-                  "pattern": "^mpx://"
-                }
-              }
-            }
+            "provider": { "const": "local" },
+            "store": { "$ref": "#/$defs/logicalId" },
+            "view": { "$ref": "#/$defs/logicalId" }
           }
         },
         {
@@ -299,6 +271,7 @@
     }
   },
   "$defs": {
+    "logicalId": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
     "installStep": {
       "type": "object",
       "additionalProperties": false,
