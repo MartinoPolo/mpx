@@ -79,7 +79,7 @@ describe("owned JSON system resources", () => {
   it("registers a scheduled task only with a direct immutable runner and round-trips transactionally", async () => {
     const store = new FakeJsonResourceStore();
     const adapter = new OwnedJsonResourceAdapter(store);
-    const desired = { owner: "mpx", executable: "C:\\_MP_apps\\mpx\\releases\\" + "a".repeat(64) + "\\runner.exe", argv: ["session", "reconcile", "--json"] };
+    const desired = { owner: "mpx", executable: "C:\\Program Files\\nodejs\\node.exe", executableSha256: "b".repeat(64), cliSha256: "c".repeat(64), argv: ["C:\\_MP_apps\\mpx\\releases\\" + "a".repeat(64) + "\\bin\\mpx.mjs", "session", "reconcile", "--json"] };
     const spec: OwnedResourceSpec = { kind: "scheduled-task", target: "task", ownershipKey: "mpx", desired };
     const receipt = await adapter.apply(await adapter.plan(spec));
     expect(await adapter.inspect(spec)).toMatchObject({ status: "owned", value: desired });

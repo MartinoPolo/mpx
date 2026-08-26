@@ -9,13 +9,19 @@ import { createNodeWorktreeIncludeDependencies, deriveLifecycleKey, deriveWorktr
 import type { PreparationPlan, ProjectConfig } from "@mpx/config";
 import type { ProviderProcessRequest } from "@mpx/providers";
 import { afterEach, expect, it, vi } from "vitest";
-import { catalogPath, classifyProviderProcessResult, defaultContext, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
+import { catalogPath, classifyProviderProcessResult, defaultContext, immutableInstaller, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
 import { SessionService, SessionStore } from "@mpx/sessions";
 
 const exec = promisify(execFile);
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+
+it("constructs the production installer without injected test adapters", () => {
+  const root = path.resolve("C:/temp/mpx-installer-context");
+  const orchestrator = immutableInstaller({ env: { MPX_APPS: path.join(root, "apps"), APPDATA: path.join(root, "roaming"), LOCALAPPDATA: path.join(root, "local"), USERPROFILE: path.join(root, "profile"), USERNAME: "tester" } });
+  expect(orchestrator).toBeDefined();
+});
 
 it("provides fail-closed Docker resume admission in the production CLI context", async () => {
   expect(defaultContext.sessionDockerResumeAdmission).toBeTypeOf("function");

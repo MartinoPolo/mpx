@@ -3,6 +3,7 @@ export * from "./transaction.js";
 export * from "./windows-integration.js";
 export * from "./orchestration.js";
 export * from "./runtime-registration.js";
+export * from "./production-operation.js";
 
 import { createHash, randomUUID } from "node:crypto";
 import {

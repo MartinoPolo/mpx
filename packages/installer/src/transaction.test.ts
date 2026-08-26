@@ -1,5 +1,8 @@
+import { mkdtemp, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ImmutableInstallerService, MemoryTransactionStore, installerDigest, type InstallIntentV1, type InstallOperationV1, type SideEffectAdapter } from "./transaction.js";
+import { ImmutableInstallerService, MemoryTransactionStore, NodeTransactionStore, installerDigest, type InstallIntentV1, type InstallOperationV1, type SideEffectAdapter } from "./transaction.js";
 
 class BytesAdapter implements SideEffectAdapter {
   readonly name = "files"; constructor(readonly values: Map<string, Buffer>, private readonly failAt = -1) {}
@@ -10,6 +13,39 @@ class BytesAdapter implements SideEffectAdapter {
   async restore(target: string, snapshot: string | null) { snapshot === null ? this.values.delete(target) : this.values.set(target, Buffer.from(snapshot, "base64")); }
 }
 const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: "a".repeat(64), convergenceHash: "a".repeat(64), components: ["cli"] };
+
+describe("durable installer transaction state", () => {
+  it("atomically persists private receipts and in-flight snapshots across process instances", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-installer-state-"));
+    const store = new NodeTransactionStore(root);
+    const releaseKey = installerDigest([]);
+    const receipt = { schemaVersion: 1 as const, kind: "ownership-receipt" as const, releaseKey, convergenceHash: releaseKey, files: [], operations: [], installedAt: "2025-01-01T00:00:00.000Z" };
+    const snapshot = { schemaVersion: 1 as const, kind: "machine-snapshot" as const, transactionId: "tx", observations: [], capturedAt: "2025-01-01T00:00:00.000Z" };
+    const stored = { journal: { schemaVersion: 1 as const, kind: "transaction-journal" as const, transactionId: "tx", phase: "applying" as const, completedOperationIds: [], snapshot }, snapshots: { operation: "opaque" }, operations: [] };
+    await store.writeReceipt(receipt);
+    await store.writeTransaction(stored);
+    const restarted = new NodeTransactionStore(root);
+    expect(await restarted.readReceipt()).toEqual(receipt);
+    expect(await restarted.readTransaction()).toEqual(stored);
+    if (process.platform !== "win32") expect((await stat(path.join(root, "receipt.json"))).mode & 0o077).toBe(0);
+  });
+
+  it("serializes transactions across independent store instances", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-installer-lock-"));
+    const first = new NodeTransactionStore(root), second = new NodeTransactionStore(root);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const events: string[] = [];
+    const a = first.exclusive(async () => { events.push("first-enter"); await held; events.push("first-exit"); });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const b = second.exclusive(async () => { events.push("second-enter"); });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(events).toEqual(["first-enter"]);
+    release();
+    await Promise.all([a, b]);
+    expect(events).toEqual(["first-enter", "first-exit", "second-enter"]);
+  });
+});
 
 describe("installer transactions", () => {
   it("revalidates observations and exact confirmation before side effects", async () => {

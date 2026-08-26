@@ -131,7 +131,7 @@ export class NodeInstalledReleaseAuthority {
 
 export interface CurrentReleaseOptions { readonly repositoryRoot: string; readonly assetPaths?: readonly string[] }
 async function withCurrentReleaseSource<T>(options: CurrentReleaseOptions, action: (sourceDirectory: string) => Promise<T>): Promise<T> {
-  const assets = options.assetPaths ?? ["apps/cli/dist", "content", "packages/subagents/dist", "runtimes", "LICENSE", "LICENSE.md"];
+  const assets = options.assetPaths ?? ["bin", "content", "packages/subagents/dist", "runtimes", "LICENSE", "LICENSE.md"];
   const staging = await mkdtemp(path.join(tmpdir(), "mpx-current-release-"));
   try {
     for (const asset of [...assets].sort()) {
@@ -151,4 +151,9 @@ export async function publishCurrentRelease(options: CurrentReleaseOptions & { r
 }
 export function mutableStateRoots(environment: NodeJS.ProcessEnv = process.env): readonly string[] { const roots = [environment.APPDATA, environment.LOCALAPPDATA].filter((x): x is string => Boolean(x)); if (roots.length !== 2) fail("INSTALL_MUTABLE_ROOT_UNAVAILABLE", "APPDATA and LOCALAPPDATA are required."); return roots; }
 export async function writeActiveRelease(localAppData: string, releaseKey: string): Promise<void> { if (!SHA.test(releaseKey)) fail("INSTALL_SELECTOR_INVALID", "Release key is invalid."); const directory = path.join(localAppData, "mpx"), file = path.join(directory, "active-release"), temporary = `${file}.${randomUUID()}.tmp`; await mkdir(directory, { recursive: true }); try { await writeFile(temporary, `${releaseKey}\n`, { flag: "wx", mode: 0o600 }); await rename(temporary, file); } finally { await rm(temporary, { force: true }); } }
+export async function removeActiveRelease(localAppData: string, expectedReleaseKey: string): Promise<void> {
+  const actual = await readActiveRelease(localAppData);
+  if (actual !== expectedReleaseKey) fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to remove a drifted active release selector.");
+  await rm(path.join(localAppData, "mpx", "active-release"));
+}
 export async function readActiveRelease(localAppData: string): Promise<string> { const file = path.join(localAppData, "mpx", "active-release"); const info = await lstat(file).catch(() => fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is unavailable.")); if (!info.isFile() || info.isSymbolicLink()) fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is unsafe."); const key = (await readFile(file, "utf8")).trim(); if (!SHA.test(key)) fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is invalid."); return key; }

@@ -92,6 +92,10 @@ export interface InstallOrchestratorOptions {
   readonly adapter: InstallerOperationAdapter;
   readonly store: TransactionStore;
   readonly releases: CurrentReleaseBuilder;
+  /** Publishes the mutable stable selector after all release-bound operations commit. */
+  readonly activate?: (releaseKey: string) => Promise<void>;
+  /** Removes the mutable stable selector only after owned resources uninstall. */
+  readonly deactivate?: (releaseKey: string) => Promise<void>;
   readonly now?: () => Date;
 }
 export interface RollbackResultV1 { readonly schemaVersion: 1; readonly kind: "install-rollback"; readonly transactionId: string; readonly rolledBack: true }
@@ -128,10 +132,17 @@ export class InstallOrchestrator {
     if (plan.operations.some((operation, index) => operation.action === "ensure" && plan.observations[index]?.digest !== null && plan.observations[index]?.digest !== operation.desiredDigest))
       fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to overwrite a foreign or drifted target.");
     const manifest = await this.options.releases.publish(plan.intent.releaseKey);
-    return this.service(manifest).apply(plan, confirmation);
+    const receipt = await this.service(manifest).apply(plan, confirmation);
+    await this.options.activate?.(receipt.releaseKey);
+    return receipt;
   }
   async verify(strict = false): Promise<InstallVerificationV1> {
-    const base = await this.service().verify(), receipt = await this.options.store.readReceipt();
+    const receipt = await this.options.store.readReceipt();
+    if (receipt) {
+      const manifest: ReleaseManifestV1 = { schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files };
+      await this.options.adapter.operations({ schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest);
+    }
+    const base = await this.service().verify();
     const issues = [...base.issues, ...(receipt ? await this.options.releases.verify(receipt, strict) : [])].sort((a, b) => a.localeCompare(b));
     return { ...base, healthy: issues.length === 0, issues };
   }
@@ -146,6 +157,7 @@ export class InstallOrchestrator {
   async uninstall(confirmation: string): Promise<UninstallResultV1> {
     const plan = await this.planUninstall();
     await this.service().uninstall(plan, confirmation);
+    await this.options.deactivate?.(plan.intent.releaseKey);
     return { schemaVersion: 1, kind: "install-uninstall", releaseKey: plan.intent.releaseKey, removed: true };
   }
 }

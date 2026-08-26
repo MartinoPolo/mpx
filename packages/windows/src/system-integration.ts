@@ -3,7 +3,9 @@ import { MpxError } from "@mpx/core";
 
 const BEGIN = "# >>> MPX MANAGED LAUNCHERS >>>";
 const END = "# <<< MPX MANAGED LAUNCHERS <<<";
-const RELEASE_PATH = /[\\/]mpx[\\/]releases[\\/][a-f0-9]{64}[\\/][^\\/]+$/iu;
+const RELEASE_CLI_PATH = /[\\/]mpx[\\/]releases[\\/][a-f0-9]{64}[\\/]bin[\\/]mpx\.mjs$/iu;
+const ABSOLUTE_WINDOWS_EXECUTABLE = /^[A-Za-z]:[\\/].+\.exe$/iu;
+const SHA256 = /^[a-f0-9]{64}$/u;
 
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
 function digest(value: Uint8Array | unknown): string {
@@ -123,8 +125,8 @@ function validateResource(spec: OwnedResourceSpec): void {
 }
 function validateDesired(spec: OwnedResourceSpec): void {
   if (spec.kind === "scheduled-task") {
-    const executable = spec.desired.executable;
-    if (typeof executable !== "string" || !RELEASE_PATH.test(executable) || !Array.isArray(spec.desired.argv) || spec.desired.argv.some((x) => typeof x !== "string")) fail("WINDOWS_TASK_RUNNER_MUTABLE", "Scheduled task must invoke a direct immutable release runner.");
+    const executable = spec.desired.executable, argv = spec.desired.argv;
+    if (typeof executable !== "string" || !ABSOLUTE_WINDOWS_EXECUTABLE.test(executable) || !Array.isArray(argv) || typeof argv[0] !== "string" || !RELEASE_CLI_PATH.test(argv[0]) || argv.some((x) => typeof x !== "string") || typeof spec.desired.executableSha256 !== "string" || !SHA256.test(spec.desired.executableSha256) || typeof spec.desired.cliSha256 !== "string" || !SHA256.test(spec.desired.cliSha256)) fail("WINDOWS_TASK_RUNNER_MUTABLE", "Scheduled task must invoke verified Node with a receipt-bound immutable CLI bundle.");
   }
 }
 export class OwnedJsonResourceAdapter {

@@ -9,6 +9,8 @@ describe("Phase I Windows integration specification", () => {
       expect(body).toContain("MPX_DIRECT_REASON");
       expect(body.toLowerCase()).toContain("tty");
       expect(body).toContain("--executor host");
+      expect(body).toContain("--identity personal");
+      expect(body).toContain("--identity work");
       expect(body).not.toMatch(/dangerous[^\n]*(skip|bypass)|--(?:skip|bypass)[^\n]*dangerous/iu);
     }
   });
@@ -22,8 +24,14 @@ describe("Phase I Windows integration specification", () => {
     };
     const specs = buildWindowsIntegrationSpecs(environment, "DOMAIN\\me", "a".repeat(64));
     expect(specs.environment.desired).toMatchObject({ MPX_APPS: environment.MPX_APPS });
-    expect(specs.task.desired).toMatchObject({ executable: `${environment.MPX_APPS}\\mpx\\releases\\${"a".repeat(64)}\\runner.exe`, principal: "DOMAIN\\me" });
+    const release = `${environment.MPX_APPS}\\mpx\\releases\\${"a".repeat(64)}`;
+    const selector = `${environment.MPX_APPS}\\mpx\\bin\\mpx.cmd`;
+    expect(specs.terminal.desired).toMatchObject({ commandline: { executable: selector, argv: ["shell"] } });
+    expect(specs.shortcuts.every(item => item.desired.targetPath === selector)).toBe(true);
+    expect(specs.task.desired).toMatchObject({ executable: process.execPath, argv: [`${release}\\bin\\mpx.mjs`, "session", "reconcile", "--capture", "scheduled", "--json"], principal: "DOMAIN\\me" });
     expect(JSON.stringify(specs)).toContain("Apps ' ; $evil");
+    expect(JSON.stringify(specs)).not.toContain("runner.exe");
+    expect(JSON.stringify(specs)).not.toContain("mpx.exe");
     expect(specs.task.desired).not.toHaveProperty("command");
     expect(specs.shortcuts.map((item) => item.target)).toEqual([
       "C:\\Users\\me\\Desktop\\MPX.lnk",

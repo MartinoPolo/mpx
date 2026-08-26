@@ -23,7 +23,7 @@ import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
 import { ClaudeActiveScanner, PiV2ActiveRegistryScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ProcessInspector, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
-import { InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeReceiptStore, NodeRunnerFileVerifier, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
+import { InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, writeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
 import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
@@ -561,12 +561,12 @@ export function installer(context: CliContext, cwd: string): InstallerService {
 
 export function immutableInstaller(context: CliContext): InstallOrchestrator {
   if (context.installOrchestrator) return context.installOrchestrator;
-  const adapter = context.installerOperationAdapter, store = context.installerTransactionStore;
-  if (!adapter || !store) throw new MpxError({ code: "INSTALL_ADAPTER_UNAVAILABLE", message: "A trusted InstallerOperationAdapter and transaction store must be injected." });
   const appsRoot = context.env.MPX_APPS, appData = context.env.APPDATA, localAppData = context.env.LOCALAPPDATA;
   if (![appsRoot, appData, localAppData].every(root => root && path.isAbsolute(root))) throw new MpxError({ code: "INSTALL_ROOT_UNAVAILABLE", message: "APPDATA, LOCALAPPDATA, and MPX_APPS must be absolute paths." });
+  const adapter = context.installerOperationAdapter ?? new ProductionInstallerOperationAdapter(context.env, context.env.USERDOMAIN && context.env.USERNAME ? `${context.env.USERDOMAIN}\\${context.env.USERNAME}` : context.env.USERNAME ?? context.env.USER ?? "");
+  const store = context.installerTransactionStore ?? new NodeTransactionStore(path.join(localAppData!, "mpx", "installer"));
   const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-  return new InstallOrchestrator({ adapter, store, releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot: appsRoot! }) });
+  return new InstallOrchestrator({ adapter, store, releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot: appsRoot! }), activate: releaseKey => writeActiveRelease(localAppData!, releaseKey), deactivate: releaseKey => removeActiveRelease(localAppData!, releaseKey) });
 }
 
 export function ports(context: CliContext): CliPortService {

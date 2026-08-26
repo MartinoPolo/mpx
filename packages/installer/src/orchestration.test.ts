@@ -39,6 +39,16 @@ describe("Phase I install orchestration", () => {
     await expect(readFile(path.join(f.appsRoot, "mpx", "releases", f.manifest.releaseKey, "dist", "mpx.js"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("activates the immutable release only after every apply side effect succeeds", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")], [operation("90-scheduled")]), events: string[] = [];
+    const originalApply = adapter.apply.bind(adapter);
+    adapter.apply = async operation => { events.push(operation.id); await originalApply(operation); };
+    const orchestrator = new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder, activate: async releaseKey => { events.push(`active:${releaseKey}`); } });
+    const plan = await orchestrator.plan(f.intent);
+    await orchestrator.apply(plan, plan.confirmationDigest);
+    expect(events).toEqual(["10-automatic", "90-scheduled", `active:${f.manifest.releaseKey}`]);
+  });
+
   it("publishes before automatic operations, schedules last, and converges idempotently", async () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")], [operation("90-scheduled")]), store = new MemoryTransactionStore();
     const originalApply = adapter.apply.bind(adapter);
@@ -69,6 +79,20 @@ describe("Phase I install orchestration", () => {
     expect(await orchestrator.verify()).toMatchObject({ healthy: false, issues: ["operation-drift:10-automatic", "release-file-drift:dist/mpx.js"] });
   });
 
+  it("recomposes production operations from the receipt in a fresh verify process", async () => {
+    const f = await fixture(), store = new MemoryTransactionStore(), installed = new FixtureAdapter([operation("10-automatic")]);
+    const first = new InstallOrchestrator({ adapter: installed, store, releases: f.builder });
+    const plan = await first.plan(f.intent);
+    await first.apply(plan, plan.confirmationDigest);
+    let composed = false;
+    const fresh = new FixtureAdapter([operation("10-automatic")]);
+    const baseOperations = fresh.operations.bind(fresh), baseObserve = fresh.observe.bind(fresh);
+    fresh.operations = async () => { composed = true; return baseOperations(); };
+    fresh.observe = async target => composed ? baseObserve(target) : Promise.reject(new Error("operations not composed"));
+    fresh.values.set("10-automatic", installerDigest("10-automatic"));
+    await expect(new InstallOrchestrator({ adapter: fresh, store, releases: f.builder }).verify()).resolves.toMatchObject({ healthy: true, issues: [] });
+  });
+
   it("strict verification reports foreign release entries without deleting them", async () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore();
     const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
@@ -94,7 +118,8 @@ describe("Phase I install orchestration", () => {
 
   it("uninstalls only receipt-owned state with exact confirmation", async () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore();
-    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const deactivated: string[] = [];
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder, deactivate: async releaseKey => { deactivated.push(releaseKey); } });
     await expect(orchestrator.uninstall("x")).rejects.toMatchObject({ code: "INSTALL_NOT_OWNED" });
     const installPlan = await orchestrator.plan(f.intent);
     await orchestrator.apply(installPlan, installPlan.confirmationDigest);
@@ -102,5 +127,6 @@ describe("Phase I install orchestration", () => {
     await expect(orchestrator.uninstall("x")).rejects.toMatchObject({ code: "INSTALL_CONFIRMATION_MISMATCH" });
     await expect(orchestrator.uninstall(uninstallPlan.confirmationDigest)).resolves.toMatchObject({ removed: true, releaseKey: f.manifest.releaseKey });
     expect(adapter.values.size).toBe(0);
+    expect(deactivated).toEqual([f.manifest.releaseKey]);
   });
 });

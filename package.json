@@ -1,5 +1,5 @@
 {
-  "name": "mpx",
+  "name": "mpx-workspace",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.15.1",
@@ -10,7 +10,7 @@
     "build": "pnpm -r build",
     "check": "pnpm -r check",
     "test": "pnpm run build && pnpm run test:integration && pnpm -r test",
-    "test:integration": "vitest run scripts/validate-generated.test.mjs scripts/convergence-manifest.test.mjs scripts/native-capability-inventory.test.mjs",
+    "test:integration": "vitest run scripts/validate-generated.test.mjs scripts/convergence-manifest.test.mjs scripts/native-capability-inventory.test.mjs scripts/build-preparation.test.mjs",
     "inventory:native": "node scripts/native-capability-inventory.mjs",
     "typecheck": "pnpm -r build && pnpm -r typecheck",
     "baseline:capture": "node scripts/capture-migration-baseline.mjs",
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "esbuild": "0.25.12",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

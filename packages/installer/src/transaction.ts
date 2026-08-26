@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { MpxError } from "@mpx/core";
+import { chmod, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { MpxError, parseStrictJson } from "@mpx/core";
 import {
   installerDigest,
   parseInstallIntentV1,
   parseInstallPlanV1,
+  parseOwnershipReceiptV1,
   type InstallIntentV1,
   type InstallOperationV1,
   type InstallPlanV1,
@@ -44,6 +47,63 @@ export class MemoryTransactionStore implements TransactionStore {
   async readTransaction() { return this.transaction && structuredClone(this.transaction); }
   async removeTransaction() { this.transaction = undefined; }
   async exclusive<T>(action: () => Promise<T>): Promise<T> { const previous = this.tail; let release!: () => void; this.tail = new Promise<void>((resolve) => { release = resolve; }); await previous; try { return await action(); } finally { release(); } }
+}
+
+/** Durable, atomic installer state. The directory is private and never contains credentials. */
+export class NodeTransactionStore implements TransactionStore {
+  private tail: Promise<void> = Promise.resolve();
+  constructor(private readonly directory: string) {}
+  private file(name: string): string { return path.join(this.directory, name); }
+  private async atomic(name: string, value: unknown): Promise<void> {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32") await chmod(this.directory, 0o700);
+    const target = this.file(name), temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(value)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      if (process.platform !== "win32") await chmod(temporary, 0o600);
+      await rename(temporary, target);
+    } finally { await rm(temporary, { force: true }); }
+  }
+  private async read(name: string): Promise<unknown | undefined> {
+    try { return parseStrictJson(await readFile(this.file(name), "utf8")); }
+    catch (failure) { if ((failure as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw failure; }
+  }
+  async readReceipt(): Promise<OwnershipReceiptV1 | undefined> { const value = await this.read("receipt.json"); return value === undefined ? undefined : parseOwnershipReceiptV1(value); }
+  async writeReceipt(value: OwnershipReceiptV1): Promise<void> { await this.atomic("receipt.json", parseOwnershipReceiptV1(value)); }
+  async removeReceipt(): Promise<void> { await rm(this.file("receipt.json"), { force: true }); }
+  async readTransaction(): Promise<StoredTransaction | undefined> {
+    const value = await this.read("transaction.json");
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== "object" || Array.isArray(value)) fail("INSTALL_TRANSACTION_INVALID", "Transaction state is invalid.");
+    const stored = value as Partial<StoredTransaction>;
+    if (!stored.journal || !Array.isArray(stored.operations) || !stored.snapshots || typeof stored.snapshots !== "object") fail("INSTALL_TRANSACTION_INVALID", "Transaction state is invalid.");
+    return structuredClone(value) as StoredTransaction;
+  }
+  async writeTransaction(value: StoredTransaction): Promise<void> { await this.atomic("transaction.json", value); }
+  async removeTransaction(): Promise<void> { await rm(this.file("transaction.json"), { force: true }); }
+  private async acquireProcessLock(): Promise<() => Promise<void>> {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    const lock = this.file("transaction.lock"), deadline = Date.now() + 30_000;
+    for (;;) {
+      try {
+        const handle = await open(lock, "wx", 0o600);
+        await handle.writeFile(`${process.pid}\n`);
+        return async () => { await handle.close(); await rm(lock, { force: true }); };
+      } catch (failure) {
+        if ((failure as NodeJS.ErrnoException).code !== "EEXIST") throw failure;
+        if (Date.now() >= deadline) fail("INSTALL_TRANSACTION_LOCKED", "Another installer transaction owns the machine lock.");
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+    }
+  }
+  async exclusive<T>(action: () => Promise<T>): Promise<T> {
+    const previous = this.tail; let releaseLocal!: () => void;
+    this.tail = new Promise<void>(resolve => { releaseLocal = resolve; });
+    await previous;
+    let releaseProcess: (() => Promise<void>) | undefined;
+    try { releaseProcess = await this.acquireProcessLock(); return await action(); }
+    finally { await releaseProcess?.(); releaseLocal(); }
+  }
 }
 export interface ImmutableInstallerServiceOptions { readonly adapters: readonly SideEffectAdapter[]; readonly store: TransactionStore; readonly manifest?: ReleaseManifestV1; readonly now?: () => Date; readonly failureInjection?: (operationId: string, index: number) => void }
 export class ImmutableInstallerService {
