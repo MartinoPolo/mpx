@@ -1,6 +1,7 @@
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createServer, type Server } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSandboxWorker, createSandboxHandle } from "./production-remote.js";
 import { connectLaunchPrivateBridge, startLaunchPrivateBridge, type LaunchPrivateBridge } from "./launch-private-bridge.js";
@@ -45,6 +46,16 @@ describe("launch-private Pi remote executor bridge",()=>{
   const bridge=await startLaunchPrivateBridge({stateRoot:root,binding:handle.descriptor,client:handle.client,requestTimeoutMs:1000});bridges.push(bridge);
   const abort=new AbortController(),call=connectLaunchPrivateBridge(bridge.config).execute("read",{}, {signal:abort.signal});abort.abort();
   await expect(call).rejects.toMatchObject({code:"REMOTE_CANCELLED"});
+ });
+
+ it.each(["listen","state-write","acl"] as const)("closes startup resources after an injected %s failure so its port is reusable",async stage=>{
+  const root=await mkdtemp(path.join(tmpdir(),"mpx-private-bridge-startup-"));roots.push(root);let port=0,aclCalls=0;
+  const listen=async(server:Server)=>{await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",()=>{server.off("error",reject);const address=server.address();if(address&&typeof address!=="string")port=address.port;resolve();});});if(stage==="listen")throw new Error("injected listen failure");};
+  const handle=createSandboxHandle(binding(),new FakeSandboxWorker({read:async()=>({})}));
+  await expect(startLaunchPrivateBridge({stateRoot:root,binding:handle.descriptor,client:handle.client,dependencies:{listen,writeState:stage==="state-write"?async()=>{throw new Error("injected state write failure");}:undefined,restrictAcl:stage==="acl"?async()=>{aclCalls++;if(aclCalls===2)throw new Error("injected ACL failure");}:undefined}})).rejects.toThrow(/injected/iu);
+  expect(port).toBeGreaterThan(0);
+  const probe=createServer();await new Promise<void>((resolve,reject)=>{probe.once("error",reject);probe.listen(port,"127.0.0.1",()=>resolve());});await new Promise<void>(resolve=>probe.close(()=>resolve()));
+  await expect(lstat(path.join(root,"launch-private",binding().launchKey))).rejects.toMatchObject({code:"ENOENT"});
  });
 
  it("times out and awaits shutdown while cleaning private state",async()=>{

@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { parseF2ProofReportV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
-import { buildSandboxPlanV1, diagnoseSbx, resolveTrustedSbxExecutable, SBX_V0_39_0_PIN, StandaloneSbxExecutorAdapter, type BoundedProcessRunner, type ClaudeCredentialAttestation, type ClaudeVmProjection, type ProcessResult, type StandaloneSbxRunRequest } from "@mpx/executors";
+import { buildSandboxPlanV1, diagnoseSbx, resolveTrustedSbxExecutable, SBX_V0_39_0_PIN, StandaloneSbxExecutorAdapter, type BoundedProcessRunner, type ClaudeVmProjection, type ProcessResult, type StandaloneSbxRunRequest } from "@mpx/executors";
 
 export interface SbxProofSources { readonly sbxPinSha256:string; readonly runtimeToolInventorySha256:string; readonly executorEvidenceSha256:string }
 export interface ProductionSbxExecutionInput {
@@ -16,12 +16,13 @@ export interface ProductionSbxExecutionInput {
   readonly network:{readonly name:string;readonly allow:readonly string[]}; readonly ports:readonly number[]; readonly directCompatibility?:boolean;
   readonly sources?:SbxProofSources; readonly proof?:F2ProofReportV1;
   /** Exact launch-bound bytes and Docker credential proof required for a new Claude VM. */
-  readonly claudeLaunch?:{readonly projection:ClaudeVmProjection;readonly credentialAttestation:ClaudeCredentialAttestation};
+  readonly claudeLaunch?:{readonly projection:ClaudeVmProjection};
 }
 export interface SbxExecutionDependencies {
   inspectExecutable(file:string):Promise<{file:boolean;realpath:string;sha256:string}>;
   diagnostics(executable:string,cwd:string):Promise<{status:"pass"|"fail";digest:string}>;
   run(request:StandaloneSbxRunRequest):Promise<ProcessResult>;
+  readonly allowSignedFixtureEvidence?:boolean;
 }
 export type SbxExecutionAdapter=StandaloneSbxExecutorAdapter;
 const SHA=/^[a-f0-9]{64}$/u;
@@ -81,5 +82,5 @@ export async function createProductionSbxExecutionAdapter(input:ProductionSbxExe
   const deps=dependencies??defaults(input.environment),sources=input.sources??await loadProductionSbxProofSources(input.environment),planned=planProductionSbxExecution({...input,sources}),locations=candidates(input.environment);
   const executable=await resolveTrustedSbxExecutable({candidates:locations.candidates,projectRoot:input.cwd,trustedRoots:locations.trustedRoots,expectedSha256:SBX_V0_39_0_PIN.windowsBinarySha256,inspect:file=>deps.inspectExecutable(file)});
   const proof=await readProof(input,planned.plan.planKey);
-  return new StandaloneSbxExecutorAdapter({executable,cwd:input.cwd,plan:planned.plan,agent:input.runtime==="claude"?"claude":"shell",report:proof,sbxPinSha256:sources.sbxPinSha256,executorEvidenceSha256:sources.executorEvidenceSha256,ports:input.ports.map(port=>`127.0.0.1:${port}:${port}/tcp4`),worker:{argv:["mpx-f2-worker","--bridge",planned.bridge.endpoint,"--attestation",planned.bridge.attestationSha256],...planned.bridge},...(input.claudeLaunch?{projection:input.claudeLaunch.projection,credentialAttestation:input.claudeLaunch.credentialAttestation}:{}),diagnostics:()=>deps.diagnostics(executable,input.cwd),run:deps.run});
+  return new StandaloneSbxExecutorAdapter({executable,cwd:input.cwd,plan:planned.plan,agent:input.runtime==="claude"?"claude":"shell",report:proof,sbxPinSha256:sources.sbxPinSha256,executorEvidenceSha256:sources.executorEvidenceSha256,ports:input.ports.map(port=>`127.0.0.1:${port}:${port}/tcp4`),worker:{argv:["mpx-f2-worker","--bridge",planned.bridge.endpoint,"--attestation",planned.bridge.attestationSha256],...planned.bridge},...(input.claudeLaunch?{projection:input.claudeLaunch.projection}:{}),...(proof.builtInClaudeEvidence?{claudeEvidence:proof.builtInClaudeEvidence}:{}),...(deps.allowSignedFixtureEvidence?{allowSignedFixtureEvidence:true}:{}),diagnostics:()=>deps.diagnostics(executable,input.cwd),run:deps.run});
 }

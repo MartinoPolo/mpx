@@ -38,7 +38,7 @@ describe("Phase F2 proof contracts", () => {
 
   it("publishes closed JSON schemas for every v1 proof contract", async () => {
     const schema = JSON.parse(await readFile(fileURLToPath(new URL("../schemas/f2-proof-contracts-v1.schema.json", import.meta.url)), "utf8"));
-    const names = ["SbxPinV1", "SbxDiagnosticsV1", "SandboxPlanV1", "SandboxAttestationV1", "RemoteToolRequestV1", "RemoteToolResultV1", "SandboxResumeTokenV1", "F2ProofReportV1"];
+    const names = ["SbxPinV1", "SbxDiagnosticsV1", "SandboxPlanV1", "SandboxAttestationV1", "RemoteToolRequestV1", "RemoteToolResultV1", "SandboxResumeTokenV1", "BuiltInClaudeIdentityEvidenceV1", "BuiltInClaudeEvidenceV1", "F2ProofReportV1"];
     expect(names.every(name => schema.$defs[name].additionalProperties === false)).toBe(true);
   });
 
@@ -47,5 +47,15 @@ describe("Phase F2 proof contracts", () => {
     const report = createF2ProofReportV1({ planKey: plan.planKey, sbxPinSha256: h("a"), runtimeToolInventorySha256: h("b"), executorEvidenceSha256: h("c"), attestationSha256: h("d"), verdict: "pass" });
     expect(validateF2ProofReportV1(report, { runtimeToolInventorySha256: h("b"), executorEvidenceSha256: h("c") }).valid).toBe(true);
     expect(validateF2ProofReportV1(report, { runtimeToolInventorySha256: h("e"), executorEvidenceSha256: h("c") })).toMatchObject({ valid: false, diagnostics: [{ code: "RUNTIME_TOOL_INVENTORY_DRIFT" }] });
+  });
+
+  it("binds independently captured built-in Claude evidence for both identities into the report key", () => {
+    const builtInClaudeEvidence={source:"signed-fixture" as const,identities:[
+      {identity:"personal" as const,appNamespace:"mpx-claude-personal",enrollmentEvidenceSha256:h("1"),isolationEvidenceSha256:h("2"),oppositeIdentityDenialEvidenceSha256:h("3"),captureSignatureSha256:h("4")},
+      {identity:"work" as const,appNamespace:"mpx-claude-work",enrollmentEvidenceSha256:h("5"),isolationEvidenceSha256:h("6"),oppositeIdentityDenialEvidenceSha256:h("7"),captureSignatureSha256:h("8")},
+    ] as const};
+    const report=createF2ProofReportV1({planKey:h("a"),sbxPinSha256:h("b"),runtimeToolInventorySha256:h("c"),executorEvidenceSha256:h("d"),attestationSha256:h("e"),builtInClaudeEvidence,verdict:"pass"});
+    expect(report.builtInClaudeEvidence).toEqual(builtInClaudeEvidence);
+    expect(()=>createF2ProofReportV1({...report,builtInClaudeEvidence:{...builtInClaudeEvidence,identities:[builtInClaudeEvidence.identities[0],builtInClaudeEvidence.identities[0]]} as never})).toThrow(/identities/iu);
   });
 });

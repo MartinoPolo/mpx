@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
-import { parseF2ProofReportV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
+import { f2Sha256, parseF2ProofReportV1, type BuiltInClaudeEvidenceV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
 import { ExecutionError, type ExecutorAdapter, type ProcessRequest, type ProcessResult, type VerificationEvidence } from "./index.js";
 import { PHASE_F2_REMOTE_TOOL_PATHS, attestRemoteToolSet, type ProductionRemoteToolClient, type RemoteToolSetAttestation } from "./production-remote.js";
 import type { SandboxLaunchPlanV1 } from "./sandbox-plan.js";
@@ -11,10 +11,6 @@ import { buildSbxCommandPlans } from "./sbx-plans.js";
 export interface StandaloneSbxRunRequest {
   readonly executable:string; readonly argv:readonly string[]; readonly cwd:string;
   readonly environment:Readonly<Record<string,string>>; readonly signal?:AbortSignal; readonly stdin?:Uint8Array;
-}
-export interface ClaudeCredentialAttestation {
-  readonly appNamespace:string; readonly identity:string; readonly enrollmentSha256:string;
-  readonly credentialIsolation:true; readonly oppositeIdentityDenied:true;
 }
 export interface ClaudeVmProjection {
   readonly archive:Uint8Array; readonly sha256:string; readonly pluginPath:string; readonly aggregateMcpPath:string;
@@ -27,7 +23,7 @@ export interface StandaloneSbxExecutorInput {
   readonly worker?:{readonly argv:readonly string[];readonly endpoint:string;readonly attestationSha256:string};
   readonly remoteToolClient?:ProductionRemoteToolClient;
   readonly diagnostics:()=>Promise<{readonly status:"pass"|"fail";readonly digest:string}>;
-  readonly credentialAttestation?:ClaudeCredentialAttestation; readonly projection?:ClaudeVmProjection;
+  readonly claudeEvidence?:BuiltInClaudeEvidenceV1; readonly allowSignedFixtureEvidence?:boolean; readonly projection?:ClaudeVmProjection;
   readonly run:(request:StandaloneSbxRunRequest)=>Promise<ProcessResult>;
 }
 const SHA=/^[a-f0-9]{64}$/u;
@@ -39,9 +35,8 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly remoteToolClient?:ProductionRemoteToolClient;
   #resumeAction:"attach"|"recreate"|undefined;
   #projection:ClaudeVmProjection|undefined;
-  #credentialAttestation:ClaudeCredentialAttestation|undefined;
   constructor(readonly input:StandaloneSbxExecutorInput) {
-    this.#projection=input.projection;this.#credentialAttestation=input.credentialAttestation;
+    this.#projection=input.projection;
     this.bridge=input.worker===undefined?undefined:Object.freeze({endpoint:input.worker.endpoint,attestationSha256:input.worker.attestationSha256});
     if(input.remoteToolClient)this.remoteToolClient=input.remoteToolClient;
   }
@@ -49,12 +44,13 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   async verify():Promise<VerificationEvidence>{
     try {
       const report=parseF2ProofReportV1(this.input.report),diagnostics=await this.input.diagnostics();
+      const claudeEvidenceValid=this.input.agent!=="claude"||this.#resumeAction==="attach"||this.#validateClaudeEvidence(report);
       const claudeRouteValid=this.input.agent!=="claude"||this.#resumeAction==="attach"||this.#projection===undefined||this.#validateClaudeRoute();
       const matches=diagnostics.status==="pass"&&SHA.test(diagnostics.digest)&&report.verdict==="pass"
         &&report.planKey===this.input.plan.planKey
         &&report.runtimeToolInventorySha256===this.input.plan.runtimeToolInventorySha256
         &&report.sbxPinSha256===this.input.sbxPinSha256
-        &&report.executorEvidenceSha256===this.input.executorEvidenceSha256&&claudeRouteValid;
+        &&report.executorEvidenceSha256===this.input.executorEvidenceSha256&&claudeEvidenceValid&&claudeRouteValid;
       return Object.freeze({status:matches?"verified":"unverified",verifier:"standalone-sbx-live",evidenceDigest:matches?report.reportKey:sha256Canonical({gate:"unverified",planKey:this.input.plan.planKey} as JsonValue)});
     } catch {
       return Object.freeze({status:"unverified",verifier:"standalone-sbx-live",evidenceDigest:sha256Canonical({gate:"invalid-proof",planKey:this.input.plan.planKey} as JsonValue)});
@@ -73,10 +69,12 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
     // Older proof-only fixtures use the unscoped lifecycle. Every production Claude
     // route is app-name scoped so Docker owns the selected identity's credential store.
     const lifecycleRun=(argv:readonly string[],stdin?:Uint8Array)=>productionClaude?run(argv,stdin):this.input.run({executable:this.input.executable,argv,cwd:this.input.cwd,environment:this.input.plan.environment,...(request.signal?{signal:request.signal}:{})});
-    let created=false;
+    const cleanupLifecycleRun=(argv:readonly string[])=>this.input.run({executable:this.input.executable,argv:productionClaude?scoped(argv):argv,cwd:this.input.cwd,environment:this.input.plan.environment});
+    let cleanupRequired=false,primaryError:unknown;
     try {
       if(this.#resumeAction!=="attach"){
-        const create=await lifecycleRun(commands.create);if(create.exitCode!==0)throw new ExecutionError("SBX_CREATE_FAILED","Standalone sbx create failed.");created=true;
+        cleanupRequired=true;
+        const create=await lifecycleRun(commands.create);if(create.exitCode!==0)throw new ExecutionError("SBX_CREATE_FAILED","Standalone sbx create failed.");
         if(commands.ports.length>2){const ports=await lifecycleRun(commands.ports);if(ports.exitCode!==0)throw new ExecutionError("SBX_PORTS_FAILED","Standalone sbx port publication failed.");}
         const policy=await lifecycleRun(commands.policy);if(policy.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection failed.");
       }
@@ -91,19 +89,32 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
       if(delivery.exitCode!==0)throw new ExecutionError("SBX_PROJECTION_DELIVERY_FAILED","Immutable MPX projection delivery failed.");
       const forwarded=this.#safeClaudeArgv(request.argv);
       return await lifecycleRun(["exec",this.input.plan.appName,"claude","--plugin-dir",path.posix.join(root,projection.pluginPath),"--mcp-config",path.posix.join(root,projection.aggregateMcpPath),...forwarded]);
+    } catch(error) {
+      primaryError=error;throw error;
     } finally {
-      if(created){const removed=await lifecycleRun(commands.delete);if(removed.exitCode!==0)throw new ExecutionError("SBX_TEARDOWN_FAILED","Standalone sbx teardown failed.");}
+      if(cleanupRequired){
+        try{const removed=await cleanupLifecycleRun(commands.delete);if(removed.exitCode!==0)throw new ExecutionError("SBX_TEARDOWN_FAILED","Standalone sbx teardown failed.");}
+        catch(cleanupError){
+          if(primaryError instanceof ExecutionError)throw new ExecutionError(primaryError.code,primaryError.message,{...primaryError.details,cleanupFailure:cleanupError instanceof ExecutionError?cleanupError.code:"SBX_TEARDOWN_FAILED"});
+          if(primaryError instanceof Error){Object.defineProperty(primaryError,"cleanupFailure",{value:cleanupError,enumerable:true});throw primaryError;}
+          throw cleanupError;
+        }
+      }
     }
   }
+  #validateClaudeEvidence(report:F2ProofReportV1):boolean{
+    const evidence=this.input.claudeEvidence;
+    if(!evidence||!report.builtInClaudeEvidence||f2Sha256(evidence)!==f2Sha256(report.builtInClaudeEvidence))return false;
+    if(evidence.source!=="live"&&!(evidence.source==="signed-fixture"&&this.input.allowSignedFixtureEvidence===true))return false;
+    const identity=this.input.plan.appNamespace.replace(/^mpx-claude-/u,"");
+    return this.input.plan.credentialProofRequirements?.provider==="sbx-built-in"&&evidence.identities.some(item=>item.identity===identity&&item.appNamespace===this.input.plan.appNamespace);
+  }
   #validateClaudeRoute():boolean {
-    const credential=this.#credentialAttestation,projection=this.#projection;
-    if(!credential||!projection)return false;
+    const projection=this.#projection;
+    if(!projection)return false;
     const digest=createHash("sha256").update(projection.archive).digest("hex");
     const safeRelative=(value:string)=>value.length>0&&!path.posix.isAbsolute(value)&&!value.split("/").includes("..")&&!/[\\\r\n\0]/u.test(value);
-    return this.input.plan.credentialProofRequirements?.provider==="sbx-built-in"
-      &&credential.appNamespace===this.input.plan.appNamespace&&credential.identity===this.input.plan.appNamespace.replace(/^mpx-claude-/u,"")
-      &&SHA.test(credential.enrollmentSha256)&&credential.credentialIsolation===true&&credential.oppositeIdentityDenied===true
-      &&projection.sha256===digest&&safeRelative(projection.pluginPath)&&safeRelative(projection.aggregateMcpPath)
+    return projection.sha256===digest&&safeRelative(projection.pluginPath)&&safeRelative(projection.aggregateMcpPath)
       &&attestRemoteToolSet(projection.remoteAttestation,PHASE_F2_REMOTE_TOOL_PATHS,this.input.plan.runtimeToolInventorySha256);
   }
   async #bindClaudeLaunch(request:ProcessRequest):Promise<void>{
@@ -115,7 +126,6 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
     await walk(pluginRoot);files.push({path:"mcp/aggregate.json",bodyBase64:(await readFile(mcpFile)).toString("base64")});files.sort((a,b)=>a.path.localeCompare(b.path));
     const archive=Buffer.from(JSON.stringify({schemaVersion:1,files}),"utf8"),sha256=createHash("sha256").update(archive).digest("hex"),toolPaths=[...PHASE_F2_REMOTE_TOOL_PATHS].sort();
     this.#projection={archive,sha256,pluginPath:"plugin",aggregateMcpPath:"mcp/aggregate.json",remoteAttestation:{toolPaths,digest:sha256Canonical(toolPaths as unknown as JsonValue),inventorySha256:this.input.plan.runtimeToolInventorySha256}};
-    this.#credentialAttestation={appNamespace:this.input.plan.appNamespace,identity:this.input.plan.appNamespace.replace(/^mpx-claude-/u,""),enrollmentSha256:this.input.report.attestationSha256,credentialIsolation:true,oppositeIdentityDenied:true};
   }
   #safeClaudeArgv(argv:readonly string[]):readonly string[]{
     const forwarded:string[]=[];for(let index=0;index<argv.length;index++){const value=argv[index]!;if(value==="--plugin-dir"||value==="--mcp-config"){index++;continue;}if(value==="--strict-mcp-config")continue;forwarded.push(value);}
