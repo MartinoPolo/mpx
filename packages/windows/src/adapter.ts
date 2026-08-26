@@ -21,7 +21,7 @@ function nativePowerShellExecutable(): string {
 export class NativePowerShellRunner implements PowerShellRunner {
   async run(script: string, parameters: Readonly<Record<string, string>> = {}): Promise<PowerShellResult> {
     const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script];
-    const names: Readonly<Record<string, string>> = { PortsJson: "MPX_PORTS_JSON", PidValue: "MPX_PID_VALUE", StartedAt: "MPX_STARTED_AT" };
+    const names: Readonly<Record<string, string>> = { PortsJson: "MPX_PORTS_JSON", PidValue: "MPX_PID_VALUE", StartedAt: "MPX_STARTED_AT", ScheduledTaskJson: "MPX_SCHEDULED_TASK_JSON" };
     const environment = { ...process.env };
     for (const key of Object.keys(environment)) if (Object.values(names).includes(key.toUpperCase())) delete environment[key];
     for (const [name, value] of Object.entries(parameters)) {

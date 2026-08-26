@@ -47,11 +47,15 @@ function validateSkillArtifact(input: ResolveLaunchInput["skillArtifact"]): void
   }
 }
 
-function canonicalNativeRoot(value: string): string {
+export function canonicalNativeRoot(value: string): string {
   const windows = path.win32.isAbsolute(value);
   if (!windows && !path.posix.isAbsolute(value)) fail("NATIVE_RUNTIME_ROOT_INVALID", "Selected native runtime root must be absolute.");
   const normalized = windows ? path.win32.normalize(value).replaceAll("\\", "/").toLowerCase() : path.posix.normalize(value);
   return normalized.replace(/\/$/u, "");
+}
+
+export function canonicalNativeRootDigest(value: string): string {
+  return sha256Canonical(canonicalNativeRoot(value));
 }
 
 function routeLabel(value: string, field: string): string {
@@ -209,7 +213,7 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
   const configuredNativeRoot = canonicalNativeRoot(identity.runtimeRoots[selection.runtime]);
   const selectedNativeRoot = canonicalNativeRoot(input.selectedNativeRuntimeRoot);
   if (selectedNativeRoot !== configuredNativeRoot) fail("NATIVE_RUNTIME_ROOT_MISMATCH", "Selected native runtime root does not match the resolved identity runtime root.");
-  const nativeRuntimeRootDigest = sha256Canonical(selectedNativeRoot);
+  const nativeRuntimeRootDigest = canonicalNativeRootDigest(selectedNativeRoot);
   const cwdDomain = { status: "known" as const, domain: selection.cwdClassification.domain };
   const cwdContent = { status: "known" as const, contentScope: selection.cwdClassification.contentScope };
 

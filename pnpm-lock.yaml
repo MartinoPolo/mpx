@@ -32,6 +32,9 @@ importers:
       '@mpx/executors':
         specifier: workspace:*
         version: link:../../packages/executors
+      '@mpx/installer':
+        specifier: workspace:*
+        version: link:../../packages/installer
       '@mpx/launch':
         specifier: workspace:*
         version: link:../../packages/launch
@@ -62,6 +65,9 @@ importers:
       '@mpx/runtime-tools':
         specifier: workspace:*
         version: link:../../packages/runtime-tools
+      '@mpx/sessions':
+        specifier: workspace:*
+        version: link:../../packages/sessions
       '@mpx/skills':
         specifier: workspace:*
         version: link:../../packages/skills
@@ -136,6 +142,25 @@ importers:
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/installer:
+    dependencies:
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
+      '@mpx/windows':
+        specifier: workspace:*
+        version: link:../windows
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -269,6 +294,25 @@ importers:
 
   packages/runtime-tools:
     dependencies:
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/sessions:
+    dependencies:
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
@@ -442,6 +486,9 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/subagents
     devDependencies:
+      '@mpx/windows':
+        specifier: workspace:*
+        version: link:../../../packages/windows
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1

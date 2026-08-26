@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": { "mpx": "./dist/main.js" },
+  "bin": {
+    "mpx": "./dist/main.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "pnpm run build && tsc -p tsconfig.json --noEmit && vitest run",
@@ -28,7 +30,9 @@
     "@mpx/ports": "workspace:*",
     "@mpx/windows": "workspace:*",
     "@mpx/status": "workspace:*",
-    "@mpx/worktrees": "workspace:*"
+    "@mpx/worktrees": "workspace:*",
+    "@mpx/sessions": "workspace:*",
+    "@mpx/installer": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

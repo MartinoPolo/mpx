@@ -25,15 +25,20 @@ import { probeProvider, type ProviderRegistry } from "@mpx/providers";
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
 import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
-import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, NodeProviderProcessExecutor, ports, providerService, status, worktrees, type CliContext } from "./context.js";
+import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, installer, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
+import { executeSessionCommand } from "./session-command.js";
+import { executeInstallCommand } from "./install-command.js";
+import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
+import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js";
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
+import { RootAttestationService, RootAttestationStore, SessionError, type ResumePlanV1 } from "@mpx/sessions";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
 class UsageError extends Error {}
-const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
+const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
 
 const shortLaunchAliases = new Set<ShortLaunchAlias>(["cc", "ccw", "pi", "piw"]);
 function parse(argv: readonly string[]): Parsed {
@@ -42,10 +47,10 @@ function parse(argv: readonly string[]): Parsed {
     const word=argv[i]!;
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
-    if (["json","rebuild","confirm","machine","cancel"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","template","slug","author","issue","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state"].includes(name!)) {
+    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run"].includes(name!)) options.set(name!,true);
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state","status","note","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version"].includes(name!)) {
       const value=inline ?? argv[++i]; if (!value || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
-      if (name==="grant") options.set(name,[...((options.get(name) as string[]|undefined)??[]),value]);
+      if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
     } else throw new UsageError(`Unknown option: --${name}`);
   }
@@ -78,6 +83,24 @@ async function requiredUserConfig(context:CliContext):Promise<UserConfig>{
   const file=path.join(appdata,"mpx","config.json");
   if (!await present(file,context.accessFile)) throw new MpxError({code:"USER_CONFIG_REQUIRED",message:"Launch-bound commands require strict user-local configuration.",remediation:"Create %APPDATA%/mpx/config.json."});
   return readUserConfig(file,context);
+}
+function productionAccountServices(user: UserConfig, context: CliContext, cwd: string) {
+  const service = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+  const auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+  const resolver = { resolve: async (identity: { domain: string; name: string }, runtime: "claude" | "pi", root: string): Promise<string | null> => runtime === "claude" ? null : (await service.verify(identity, root)).ref };
+  const verifier = { verify: async (ref: string): Promise<"verified" | "unavailable" | "mismatch" | "duplicate"> => {
+    try {
+      const matches = (await service.store.list()).filter(record => record.ref === ref);
+      if (matches.length > 1) return "duplicate";
+      const record = matches[0]; if (!record) return "unavailable";
+      const configured = user.identities[record.identity.name];
+      if (!configured || configured.domain !== record.identity.domain) return "mismatch";
+      await service.verify(record.identity, configured.runtimeRoots.pi, ref);
+      await auth.verify(configured.runtimeRoots.pi);
+      return "verified";
+    } catch (error) { return (error as { code?: unknown }).code === "ACCOUNT_ROOT_CHANGED" || (error as { code?: unknown }).code === "ACCOUNT_BINDING_MISMATCH" ? "mismatch" : "unavailable"; }
+  } };
+  return { service, auth, resolver, verifier };
 }
 async function project(parsed:Parsed):Promise<DiscoveredConfig>{
   const found=await discoverProjectConfig(parsed.cwd);
@@ -160,6 +183,96 @@ function human(value:unknown):string {
 }
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
+async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext): Promise<unknown> {
+  const store = sessions(context);
+  let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>> | undefined;
+  let reverifyPiAccount: (() => Promise<void>) | undefined;
+  if (plan.runtime === "pi") {
+    try {
+      nativeBinding = await store.readNativeBinding(plan.nativeBindingRef);
+    } catch {
+      throw new SessionError("SESSION_RESUME_ACCOUNT_UNAVAILABLE", "The recorded Pi account binding is unavailable.");
+    }
+    const configured = user.identities[plan.identity.name];
+    const accountRef = nativeBinding.accountBindingRef;
+    if (!configured || configured.domain !== plan.identity.domain || nativeBinding.runtime !== "pi" || nativeBinding.identity.domain !== plan.identity.domain || nativeBinding.identity.name !== plan.identity.name) {
+      throw new SessionError("SESSION_RESUME_ACCOUNT_MISMATCH", "The recorded Pi account binding does not match the configured identity.");
+    }
+    if (accountRef === null) throw new SessionError("SESSION_RESUME_ACCOUNT_UNAVAILABLE", "The recorded Pi account binding is unavailable.");
+    const configuredRoot = configured.runtimeRoots.pi;
+    const accountService = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+    const auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: plan.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+    reverifyPiAccount = async () => {
+      try {
+        const matchingRefs = await accountService.store?.list();
+        if (matchingRefs && matchingRefs.filter(record => record.ref === accountRef).length > 1) throw Object.assign(new Error("duplicate"), { code: "ACCOUNT_ROOT_DUPLICATE" });
+        await accountService.verify(plan.identity, configuredRoot, accountRef);
+        await auth.verify(configuredRoot);
+      } catch (error) {
+        const code = (error as { code?: unknown }).code;
+        if (code === "ACCOUNT_ROOT_DUPLICATE" || code === "ACCOUNT_IDENTITY_DUPLICATE") throw new SessionError("SESSION_RESUME_ACCOUNT_DUPLICATE", "The recorded Pi account binding is duplicated.");
+        if (code === "ACCOUNT_ROOT_CHANGED" || code === "ACCOUNT_BINDING_MISMATCH") throw new SessionError("SESSION_RESUME_ACCOUNT_MISMATCH", "The recorded Pi account binding no longer matches the configured identity and root.");
+        throw new SessionError("SESSION_RESUME_ACCOUNT_UNAVAILABLE", "The recorded Pi account binding or live OAuth is unavailable.");
+      }
+    };
+    await reverifyPiAccount();
+  }
+  const cwd = plan.cwd;
+  if (!path.isAbsolute(cwd)) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE", message: "The recorded workspace is not an absolute launch cwd." });
+  const found = await discoverProjectConfig(cwd);
+  const projectId = plan.projectId ?? undefined;
+  if ((found?.config.project.id ?? null) !== plan.projectId) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_BINDING_MISMATCH", message: "The current project binding does not match the recorded launch." });
+  if (plan.repositoryId === null) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE", message: "The recorded launch lacks a repository binding." });
+  const repositoryId = plan.repositoryId;
+  const selectionInput: ResolveLaunchSelectionInput = {
+    userConfig: user, cwd, runtime: plan.runtime, identity: plan.identity.name,
+    mode: plan.launch.mode, skillPolicy: plan.launch.skillPolicy, contentScope: plan.launch.contentScope,
+    executor: plan.launch.executor.kind, workspace: plan.launch.workspace as "clone" | "host-worktree" | "direct",
+    networkPolicy: plan.launch.networkPolicy, ...(projectId ? { projectId } : {}),
+  };
+  if (!(["clone", "host-worktree", "direct"] as const).includes(plan.launch.workspace as "clone" | "host-worktree" | "direct")) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE", message: "The recorded launch lacks a valid workspace strategy." });
+  const selection = await resolveLaunchSelection(selectionInput);
+  if (selection.identity.domain !== plan.identity.domain) throw new MpxError({ code: "SESSION_RESUME_IDENTITY_MISMATCH", message: "The current launch identity does not match the recorded domain." });
+  const opts = resolveOptions(user, { identity: plan.identity.name, skillPolicy: plan.launch.skillPolicy, contentScope: plan.launch.contentScope, repositoryId, ...(projectId ? { projectId } : {}) });
+  const canonicalRoot = await catalogPath(context, cwd), canonicalCatalog = await inventoryCanonical(canonicalRoot);
+  const projectInventory = found ? await inventoryProjectSkills(found.root, canonicalCatalog) : { skills: [], diagnostics: [] };
+  if (projectInventory.diagnostics.length) throw new SkillCatalogError(projectInventory.diagnostics);
+  const catalog = [...canonicalCatalog, ...projectInventory.skills].sort((left, right) => left.identity.localeCompare(right.identity));
+  const manifest = resolveManifest(catalog, opts), artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: plan.runtime });
+  const scope = user.contentScopes[plan.launch.contentScope], projectOverride = projectId ? user.projects?.[projectId] : undefined;
+  if (!scope) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE", message: "The recorded content scope is no longer configured." });
+  const skillArtifact = createSkillArtifactReference({ runtime: plan.runtime, identity: plan.identity.name, skillPolicy: plan.launch.skillPolicy, contentScope: plan.launch.contentScope, projectId: projectId ?? null, catalogHash: sha256Canonical(catalog.map(skill => ({ identity: skill.identity, contentHash: skill.contentHash, ...("directoryHash" in skill ? { origin: "project", directoryHash: skill.directoryHash, realPath: skill.realPath, realProjectRoot: skill.realProjectRoot } : { origin: "canonical" }) })) as unknown as JsonValue), enabledPacks: resolveEffectiveSkillPacks({ contentScopeSkillPacks: scope.skillPacks, projectSkillPacks: projectOverride?.skillPacks, skillPolicySkillPacks: selection.skillPolicy.declaration.skillPacks }), skillPolicyConfig: selection.skillPolicy.declaration as unknown as JsonValue, contentScopeExposure: (scope.skillExposure ?? {}) as unknown as JsonValue, projectExposure: (projectOverride?.skillExposure ?? null) as unknown as JsonValue });
+  const evidence = await executorEvidence(context, plan.launch.executor.kind);
+  const descriptor = await resolveLaunch({ ...selectionInput, grants: plan.launch.grants.map(grant => `${grant.access}:${grant.resource}`), ...(plan.launch.executor.kind === "host" ? { reason: "confirmed session resume", hostApproval: { reason: "confirmed session resume", approvalKey: sha256Canonical({ confirmationDigest: plan.confirmationDigest } as unknown as JsonValue) } } : {}), skillArtifact, selectedNativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], ...(projectId ? { projectId } : {}), repositoryId, dockerAvailability: evidence.status === "verified" ? "available" : evidence.status === "unavailable" ? "unavailable" : "unverified", executorVerification: evidence, policyInputs: { schemaVersion: 1, manifestKey: manifest.manifestKey, skillArtifactKey: skillArtifact.artifactKey } });
+  const descriptorDigest = sha256Canonical(descriptor as unknown as JsonValue);
+  const currentLaunch = {
+    launchKey: descriptor.launchKey,
+    descriptorDigest,
+    mode: descriptor.mode,
+    skillPolicy: descriptor.skillPolicy,
+    contentScope: descriptor.contentScope.name,
+    executor: { kind: descriptor.executor.name },
+    workspace: descriptor.workspace,
+    networkPolicy: descriptor.networkPolicy.name,
+    grants: descriptor.grants,
+    artifactKey: artifact.reference.artifactKey,
+    manifestKey: manifest.manifestKey,
+  };
+  const { launchKey: currentLaunchKey, descriptorDigest: currentDescriptorDigest, ...currentPolicyAxes } = currentLaunch;
+  const { launchKey: previousLaunchKey, descriptorDigest: previousDescriptorDigest, ...recordedPolicyAxes } = plan.launch;
+  if (previousLaunchKey !== plan.previousLaunch.launchKey || previousDescriptorDigest !== plan.previousLaunch.descriptorDigest || descriptor.runtime !== plan.runtime || descriptor.identity.domain !== plan.identity.domain || descriptor.identity.name !== plan.identity.name || sha256Canonical(currentPolicyAxes as unknown as JsonValue) !== sha256Canonical(recordedPolicyAxes as unknown as JsonValue)) {
+    throw new SessionError("SESSION_RESUME_PLAN_STALE", "Current capability, policy, grant, artifact, or manifest evidence differs from the explicitly confirmed resume plan.");
+  }
+  const appData = context.env.APPDATA, localAppData = context.env.LOCALAPPDATA;
+  if (!appData || !localAppData) throw new MpxError({ code: "STATE_ROOT_UNAVAILABLE", message: "APPDATA and LOCALAPPDATA are required for resume execution." });
+  nativeBinding = nativeBinding ?? await store.readNativeBinding(plan.nativeBindingRef);
+  const beforeChildExecution = reverifyPiAccount;
+  const launchContext = context.launchLifecycleBridge || context.launchRuntimeAdapters ? context : { ...context, launchLifecycleBridge: new ProductionSessionLifecycleBridge(store, context.nativeAccountBindingResolver ? (name, runtime) => context.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined) };
+  const snapshot = found ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) }) : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
+  const result = await executeResolvedLaunch({ descriptor, manifest, artifact, catalog, canonicalRoot, agentsRoot: path.join(path.dirname(canonicalRoot), "agents"), artifactsRoot: path.join(appData, "mpx", "runtime-artifacts"), stateRoot: path.join(localAppData, "mpx"), cwd, environment: context.env, context: launchContext, tty: context.launchTty ?? directProcessTty(), nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], statusSnapshot: snapshot, resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef }, ...(beforeChildExecution ? { beforeChildExecution } : {}) });
+  return { ...result, resumeLaunch: { previousLaunchKey, previousDescriptorDigest, newLaunchKey: currentLaunchKey, newDescriptorDigest: currentDescriptorDigest } };
+}
+
 async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult> {
   const [group,action,...args]=parsed.command;
   if (!group) throw new UsageError(usage);
@@ -167,6 +280,38 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   if (parsed.options.get("confirm") === true && (group !== "init" || action !== undefined)) throw new UsageError("--confirm is valid only for init");
   let data: unknown;
   let warnings: Diagnostic[] = [];
+  if (group === "account") {
+    if (!action || !["enroll", "re-enroll", "list", "status", "verify"].includes(action) || args.length !== 0) throw new UsageError("Usage: mpx account <enroll|re-enroll|list|status|verify> [--identity NAME] [--confirm-plan DIGEST]");
+    const user = await requiredUserConfig(context);
+    const accountStateRoot = stateRoot(context);
+    const service = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(accountStateRoot));
+    const auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+    const identityName = stringOption(parsed, "identity"), confirmationDigest = stringOption(parsed, "confirm-plan");
+    data = await executeAccountCommand({ action: action as "enroll" | "re-enroll" | "list" | "status" | "verify", ...(identityName ? { identityName } : {}), ...(confirmationDigest ? { confirmationDigest } : {}) }, { user, service, auth });
+    return { data, warnings };
+  }
+  if (group === "session") {
+    const user = await userConfig(context);
+    const sessionStore = sessions(context);
+    const account = context.env.LOCALAPPDATA ? productionAccountServices(user, context, parsed.cwd) : undefined;
+    const result = await executeSessionCommand({ action, args, options: parsed.options }, {
+      store: sessionStore,
+      resolveIdentity: async name => {
+        const identity = user.identities[name];
+        if (!identity) throw new MpxError({ code: "IDENTITY_UNKNOWN", message: `Unknown identity '${name}'.` });
+        return { domain: identity.domain, name };
+      },
+      discoveries: context.sessionDiscoveries ?? (() => productionSessionDiscoveries(user, sessionStore, context.env, context.nativeAccountBindingResolver ?? account?.resolver)),
+      processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
+      resumeDependencies: context.sessionResumeDependencies ?? productionSessionResumeDependencies(user, sessionStore, context.nativeAccountBindingVerifier ?? account?.verifier, context.env),
+      executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
+    });
+    return { data: result.data, warnings: [...result.warnings] };
+  }
+  if (group === "install") {
+    const result = await executeInstallCommand({ action, args, options: parsed.options }, { service: installer(context, parsed.cwd) });
+    return { data: result.data, warnings };
+  }
   if (["identity","mode","skill-policy","preset"].includes(group) && ["list","show"].includes(action ?? "")) {
     const user=await requiredUserConfig(context);
     const source=group==="identity" ? user.identities : group==="mode" ? user.modes : group==="skill-policy" ? user.skillPolicies : user.presets;
@@ -285,6 +430,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const runtime=runtimeOption ?? (alias?undefined:"pi");
     const launchInput=common(runtime,identityOption);
     const selection=await resolveLaunchSelection(launchInput);
+    let piAttestation: Awaited<ReturnType<RootAttestationService["verify"]>> | undefined;
+    let beforeChildExecution: (() => Promise<void>) | undefined;
+    const requirePiAccountPreflight = context.env.LOCALAPPDATA !== undefined && (context.launchExecutorAdapters === undefined || context.rootAttestationService !== undefined || context.accountAuthVerifier !== undefined);
     if (action==="explain" && runtimeOption===undefined) {
       if (projectId && selection.identity.domain!==selection.cwdClassification.domain) throw new MpxError({
         code:"IDENTITY_DOMAIN_MISMATCH",
@@ -322,12 +470,21 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       policyInputs:{schemaVersion:1,manifestKey:manifest.manifestKey,skillArtifactKey:skillArtifact.artifactKey},
     });
     if(action==="explain") return {data:serializeLaunchPublic(descriptor),warnings};
+    if (selection.runtime === "pi" && evidence.status === "verified" && requirePiAccountPreflight) {
+      const accountService = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+      const configured = user.identities[selection.identity.name]!, auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+      piAttestation = await accountService.verify(selection.identity, configured.runtimeRoots.pi);
+      await auth.verify(configured.runtimeRoots.pi);
+      const attestationRef = piAttestation.ref;
+      beforeChildExecution = async () => { await accountService.verify(selection.identity, configured.runtimeRoots.pi, attestationRef); await auth.verify(configured.runtimeRoots.pi); };
+    }
     const appData=context.env.APPDATA;
     if(!appData) throw new MpxError({code:"USER_CONFIG_ROOT_MISSING",message:"APPDATA is required to publish immutable runtime projections."});
     const statusSnapshot = found
       ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
       : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
-    const processResult=await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,environment:context.env,context,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(found?{projectConfig:found.config,projectRoot:found.root}:{})});
+    const launchContext = context.launchLifecycleBridge || context.launchRuntimeAdapters || !context.env.LOCALAPPDATA ? context : { ...context, launchLifecycleBridge: new ProductionSessionLifecycleBridge(sessions(context), async (name, runtime) => runtime === "pi" && piAttestation && name === piAttestation.identity.name ? piAttestation.ref : context.nativeAccountBindingResolver?.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) ?? null) };
+    const processResult=await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,environment:context.env,context:launchContext,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(found?{projectConfig:found.config,projectRoot:found.root}:{}),...(beforeChildExecution?{beforeChildExecution}:{})});
     return {data:null,warnings,silent:true,exitCode:processResult.exitCode};
   }
   if (group === "worktree" && ["create","remove","list","select","status","prepare","cancel","reconcile"].includes(action ?? "")) {

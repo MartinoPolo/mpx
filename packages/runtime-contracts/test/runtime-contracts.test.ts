@@ -31,6 +31,13 @@ import {
   revalidateRuntimeArtifact,
   validateRuntimeContext,
   type RuntimeProjectionBuilder,
+  createSessionLifecycleBindingV1,
+  parseSessionLifecycleBindingV1,
+  createSessionLifecycleEventV1,
+  parseSessionLifecycleEventV1,
+  createRuntimeSessionObservationV1,
+  parseRuntimeSessionObservationV1,
+  validateSessionLifecycleBindingV1,
 } from "../src/index.js";
 
 const roots: string[] = [];
@@ -48,6 +55,39 @@ const decisions = [{
 }];
 const binding = { projectId: "project-1", repositoryId: "repo-1", contentScope: "work" };
 const launchBinding = (launchKey = "launch") => ({ launchKey, descriptorDigest: "descriptor", runtimeArtifactKey: "skills", runtime: "pi" as const, manifestKey: "manifest" });
+
+describe("private lifecycle v1 contracts", () => {
+  const lifecycleBinding = createSessionLifecycleBindingV1({ bindingId: "binding-1", bindingRef: "binding-ref-1", runtime: "pi", identityRef: "identity-1", launchKey: "launch", launchDescriptorDigest: "digest", artifactKey: "artifact", manifestKey: "manifest", projectRef: "project-1", repositoryRef: "repository-1", worktreeRef: "worktree-1", createdAt: "2025-01-01T00:00:00.000Z", expiresAt: "2025-01-02T00:00:00.000Z" });
+
+  it("strictly parses private lifecycle bindings and rejects unknown or malformed data", () => {
+    expect(parseSessionLifecycleBindingV1(lifecycleBinding)).toEqual(lifecycleBinding);
+    expect(() => parseSessionLifecycleBindingV1({ ...lifecycleBinding, extra: true })).toThrowError(/UNKNOWN_FIELD/u);
+    expect(() => parseSessionLifecycleBindingV1({ ...lifecycleBinding, schemaVersion: 2 })).toThrowError(/UNKNOWN_SCHEMA_VERSION/u);
+    expect(() => createSessionLifecycleBindingV1({ ...lifecycleBinding, identityRef: "bad\nidentity" })).toThrowError(/INVALID_CONTRACT/u);
+  });
+
+  it("keeps lifecycle events prompt-blind and validates safe native references", () => {
+    const event = createSessionLifecycleEventV1({ eventId: "event-1", bindingId: lifecycleBinding.bindingId, type: "start", sequence: 1, timestamp: "2025-01-01T00:00:01.000Z", nativeSessionId: "native-1", nativeSessionRef: { kind: "root-relative-file", value: "sessions/native-1.jsonl" }, cwd: "C:/repo", title: "Safe title", model: "model", effort: null, pid: 12, startFingerprint: "pid-12-start" });
+    expect(parseSessionLifecycleEventV1(event)).toEqual(event);
+    expect(JSON.stringify(event)).not.toMatch(/prompt|message|transcript/iu);
+    expect(() => parseSessionLifecycleEventV1({ ...event, prompt: "secret" })).toThrowError(/UNKNOWN_FIELD/u);
+    expect(() => createSessionLifecycleEventV1({ ...event, nativeSessionRef: { kind: "root-relative-file", value: "../secret" } })).toThrowError(/INVALID_CONTRACT/u);
+  });
+
+  it("rejects expired or launch-mismatched lifecycle bindings", () => {
+    const context = createRuntimeContextV1({ launchKey: "launch", launchDescriptor: { reference: "launch.json", digest: "digest" }, manifestKey: "manifest", runtimeArtifact: { schemaVersion: 4, runtime: "pi", manifestKey: "manifest", artifactKey: "artifact", fileMapHash: "map" }, binding });
+    expect(validateSessionLifecycleBindingV1({ binding: lifecycleBinding, context, runtime: "pi", now: "2025-01-01T12:00:00.000Z" })).toEqual(lifecycleBinding);
+    expect(() => validateSessionLifecycleBindingV1({ binding: lifecycleBinding, context, runtime: "pi", now: "2025-01-02T00:00:00.000Z" })).toThrowError(/LIFECYCLE_BINDING_EXPIRED/u);
+    expect(() => validateSessionLifecycleBindingV1({ binding: { ...lifecycleBinding, artifactKey: "wrong" }, context, runtime: "pi", now: "2025-01-01T12:00:00.000Z" })).toThrowError(/BINDING_MISMATCH/u);
+  });
+
+  it("strictly parses bounded runtime observations without native content", () => {
+    const observation = createRuntimeSessionObservationV1({ runtime: "claude", identityRef: "identity-1", runtimeQualifiedId: "claude:native-1", displayId: "native-1", title: null, resumeState: "resumable", lifecycleState: "active", capturedAt: "2025-01-01T00:00:02.000Z", freshUntil: "2025-01-01T00:01:02.000Z", source: "lifecycle-event", diagnostic: null });
+    expect(parseRuntimeSessionObservationV1(observation)).toEqual(observation);
+    expect(() => parseRuntimeSessionObservationV1({ ...observation, title: "x".repeat(513) })).toThrowError(/INVALID_CONTRACT/u);
+    expect(() => parseRuntimeSessionObservationV1({ ...observation, messages: [] })).toThrowError(/UNKNOWN_FIELD/u);
+  });
+});
 
 describe("runtime-neutral v4 contracts", () => {
   it("shares one body-free, path-free manifest key across runtime projections", () => {
