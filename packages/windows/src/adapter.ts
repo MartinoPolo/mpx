@@ -66,25 +66,25 @@ $pids = @($connections | Select-Object -ExpandProperty OwningProcess -Unique)
 $byPid = @{}; if ($pids.Count -gt 0) { Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { $pids -contains $_.ProcessId } | ForEach-Object { $byPid[[int]$_.ProcessId] = $_ } }
 @($connections | ForEach-Object {
   $p = $byPid[[int]$_.OwningProcess]
-  [ordered]@{ LocalPort=[int]$_.LocalPort; LocalAddress=[string]$_.LocalAddress; OwningProcess=[int]$_.OwningProcess; Name=if($p){[string]$p.Name}else{$null}; ExecutablePath=if($p){[string]$p.ExecutablePath}else{$null}; StartedAt=if($p -and $p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{$null} }
+  [ordered]@{ LocalPort=[int]$_.LocalPort; LocalAddress=[string]$_.LocalAddress; OwningProcess=[int]$_.OwningProcess; Name=if($p){[string]$p.Name}else{$null}; ExecutablePath=if($p){[string]$p.ExecutablePath}else{$null}; StartedAt=if($p -and $p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{$null} }
 }) | ConvertTo-Json -Compress -Depth 3`;
 
 const PROCESS_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PidValue" -ErrorAction Stop
-if ($null -eq $p) { $null | ConvertTo-Json -Compress } else { [ordered]@{ ProcessId=[int]$p.ProcessId; Name=[string]$p.Name; ExecutablePath=[string]$p.ExecutablePath; StartedAt=if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{$null} } | ConvertTo-Json -Compress }`;
+if ($null -eq $p) { $null | ConvertTo-Json -Compress } else { [ordered]@{ ProcessId=[int]$p.ProcessId; Name=[string]$p.Name; ExecutablePath=[string]$p.ExecutablePath; StartedAt=if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{$null} } | ConvertTo-Json -Compress }`;
 
 const KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $StartedAt = $env:MPX_STARTED_AT
 $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PidValue" -ErrorAction Stop
 if ($null -eq $p) { @{status='missing'} | ConvertTo-Json -Compress; exit 0 }
-$actual = if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{''}
+$actual = if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{''}
 if ($actual -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
 Stop-Process -Id $PidValue -Force -ErrorAction Stop
 @{status='killed'} | ConvertTo-Json -Compress`;
 
 const TREE_KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $StartedAt = $env:MPX_STARTED_AT
-function Get-Fingerprint($Process) { if($Process.CreationDate){$Process.CreationDate.ToUniversalTime().ToString('o')}else{''} }
+function Get-Fingerprint($Process) { if($Process.CreationDate){$Process.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{''} }
 try {
   # Verify the complete root identity, then stop it before inspecting descendants again.
   $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)

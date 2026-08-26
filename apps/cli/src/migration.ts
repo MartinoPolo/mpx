@@ -102,7 +102,12 @@ export async function rollbackDrill(input:{content:string;startMarker:string;end
 
 export async function loadJson<T>(file:string):Promise<T>{return JSON.parse(await readFile(file,"utf8")) as T;}
 
-async function processCommandLines():Promise<string[]>{
+async function processCommandLines(snapshotFile?:string):Promise<string[]>{
+  if(snapshotFile){
+    const parsed=await loadJson<unknown>(snapshotFile);
+    if(!Array.isArray(parsed)||!parsed.every(item=>typeof item==="string"))throw new Error("MPX_MIGRATION_PROCESS_SNAPSHOT must contain a JSON array of command lines");
+    return parsed;
+  }
   if(process.platform!=="win32")return [];
   try{
     const script="Get-CimInstance Win32_Process | Select-Object -ExpandProperty CommandLine | ConvertTo-Json -Compress";
@@ -122,7 +127,7 @@ export async function executeMigrationCommand(input:{action:string;repoRoot:stri
   const exceptions=await optionalJson<{id:string;reason:string}[]>(path.join(input.repoRoot,"docs","phase-j-exceptions.json"),[]),report=createParityReport({baseline,drift,exceptions});
   const auditRoots=[input.env.APPDATA?path.join(input.env.APPDATA,"mpx","logs"):"",input.env.LOCALAPPDATA?path.join(input.env.LOCALAPPDATA,"mpx","logs"):""].filter(Boolean);
   const installedProjections=[input.env.LOCALAPPDATA?path.join(input.env.LOCALAPPDATA,"mpx"):"",input.env.MPX_APPS?path.join(input.env.MPX_APPS,"mpx"):""].filter(Boolean);
-  const audit=await runtimeAccessAudit({roots:auditRoots,projectionRoots:[path.join(input.repoRoot,"runtimes"),...installedProjections],processLines:await processCommandLines(),environment:input.env,legacyDisabled:input.legacyDisabled});
+  const audit=await runtimeAccessAudit({roots:auditRoots,projectionRoots:[path.join(input.repoRoot,"runtimes"),...installedProjections],processLines:await processCommandLines(input.env.MPX_MIGRATION_PROCESS_SNAPSHOT),environment:input.env,legacyDisabled:input.legacyDisabled});
   const liveGatePassed=report.gate.passed&&audit.acceptance.passed;
   if(input.action==="reconcile")return {schemaVersion:1,kind:"mpx-migration-reconciliation",sourceDrift:drift,runtimeAccessAudit:audit,gate:{passed:liveGatePassed}};
   if(input.action==="report")return {...report,sourceDriftSummary:drift.counts,runtimeAccessAudit:audit,gate:{...report.gate,passed:liveGatePassed,legacyDisabledAccepted:audit.acceptance.passed}};
