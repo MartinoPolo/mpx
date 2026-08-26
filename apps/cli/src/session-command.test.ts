@@ -88,6 +88,25 @@ describe("session command", () => {
     expect(result.data.legacy.quarantine).toEqual([]);
   });
 
+  it("returns a branch plan without applying side effects before confirmation", async () => {
+    const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString();
+    await context.store.saveNativeBinding({ schemaVersion: 1, ref: "binding", identity, runtime: "claude", recordedRootDigest: "b".repeat(64), accountBindingRef: null, createdAt: now, updatedAt: now });
+    await service.save({ ...record("session-one"), launch: { launchKey: "launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [], artifactKey: "artifact", manifestKey: "manifest" } });
+    const plan = vi.fn(async (request: unknown) => ({ schemaVersion: 1 as const, kind: "session-branch-plan" as const, confirmationDigest: "c".repeat(64), request })), apply = vi.fn();
+    const result = await executeSessionCommand({ action: "branch", args: ["session-one"], options: new Map([["workspace", "isolated"]]) }, { ...context, branchService: { plan, apply } as never });
+    expect(result.data).toMatchObject({ kind: "session-branch-plan", confirmationDigest: "c".repeat(64) });
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("applies only the digest-confirmed branch plan", async () => {
+    const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString(), confirmationDigest = "c".repeat(64);
+    await context.store.saveNativeBinding({ schemaVersion: 1, ref: "binding", identity, runtime: "claude", recordedRootDigest: "b".repeat(64), accountBindingRef: null, createdAt: now, updatedAt: now });
+    await service.save({ ...record("session-one"), launch: { launchKey: "launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [], artifactKey: "artifact", manifestKey: "manifest" } });
+    const planned = { schemaVersion: 1 as const, kind: "session-branch-plan" as const, confirmationDigest }, plan = vi.fn(async () => planned), apply = vi.fn(async () => ({ schemaVersion: 1, kind: "session-branch-apply", writerLease: null }));
+    await executeSessionCommand({ action: "branch", args: ["session-one"], options: new Map([["confirm-plan", confirmationDigest]]) }, { ...context, branchService: { plan, apply } as never });
+    expect(apply).toHaveBeenCalledWith(planned, confirmationDigest);
+  });
+
   it("verifies an existing resume target before consuming pending lifecycle events and then replans", async () => {
     const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString(), order: string[] = [];
     const launch = { launchKey: "old-launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [{ resource: "repo", access: "read" }], artifactKey: "artifact", manifestKey: "manifest" } as const;

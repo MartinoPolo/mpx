@@ -316,6 +316,9 @@ importers:
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
+      '@mpx/worktrees':
+        specifier: workspace:*
+        version: link:../worktrees
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

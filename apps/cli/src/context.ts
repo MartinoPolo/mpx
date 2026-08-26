@@ -19,7 +19,7 @@ import { canonicalNativeRootDigest, parseLaunchDescriptorV2, type LaunchDescript
 import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxExecutable, type BoundedProcessRunner, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
 import type { LaunchExecutionContext } from "./launch-execution.js";
 import type { CliDevService } from "./dev-command.js";
-import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
+import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type ConversationBranchService, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
 import { InstallerService, NodeReceiptStore, NodeRunnerFileVerifier } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
@@ -79,6 +79,7 @@ export interface CliContext extends LaunchExecutionContext {
   rootAttestationService?: RootAttestationService;
   accountAuthVerifier?: AccountAuthVerifier;
   sessionResumeExecutor?: (plan: ResumePlanV1) => Promise<unknown>;
+  sessionBranchService?: ConversationBranchService;
   installerService?: InstallerService;
   installerServiceFactory?: (stateRoot: string) => InstallerService;
   /** Application-owned trusted extensions; never populated from project configuration. */

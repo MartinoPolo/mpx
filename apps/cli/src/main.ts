@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { access } from "node:fs/promises";
+import { access, lstat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -30,10 +30,10 @@ import { executeSessionCommand } from "./session-command.js";
 import { executeInstallCommand } from "./install-command.js";
 import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
 import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js";
-import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence } from "./launch-execution.js";
+import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
-import { RootAttestationService, RootAttestationStore, SessionError, type ResumePlanV1 } from "@mpx/sessions";
+import { BranchLeaseStore, ConversationBranchService, RootAttestationService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
@@ -47,8 +47,8 @@ function parse(argv: readonly string[]): Parsed {
     const word=argv[i]!;
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
-    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version"].includes(name!)) {
+    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab"].includes(name!)) options.set(name!,true);
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version","intent","native-root","terminal-executable","terminal-title"].includes(name!)) {
       const value=inline ?? argv[++i]; if (!value || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
@@ -294,6 +294,26 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const user = await userConfig(context);
     const sessionStore = sessions(context);
     const account = context.env.LOCALAPPDATA ? productionAccountServices(user, context, parsed.cwd) : undefined;
+    let branchService = context.sessionBranchService;
+    if (action === "branch" && !branchService) {
+      const runtimeAdapter = (runtime: "claude" | "pi"): BranchRuntimeAdapter => ({ plan: async (parent, cwd, selectedRoot) => {
+        const trusted = await resolveTrustedRuntimeExecutable({ runtime, cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+        if (trusted.argvPrefix.length !== 0) throw new SessionError("SESSION_BRANCH_EXECUTABLE_WRAPPER_UNSUPPORTED", "Native branch adapters require a direct trusted runtime executable.");
+        return (runtime === "claude" ? createClaudeBranchAdapter(trusted.executable) : createPiBranchAdapter(trusted.executable)).plan(parent, cwd, selectedRoot);
+      } });
+      const lifecycle = worktrees(context);
+      branchService = new ConversationBranchService({
+        inspectWorkspace: async workspace => { try { const info = await lstat(workspace.cwd); return { exists: info.isDirectory() && !info.isSymbolicLink(), collisionDisclosure: workspace.repositoryRef === null ? [] : ["repository refs and external fixed services remain shared"] }; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { exists: false, collisionDisclosure: [] }; throw error; } },
+        createIsolatedWorktree: async workspace => {
+          if (!workspace.branch) throw new SessionError("SESSION_BRANCH_WORKTREE_BRANCH_REQUIRED", "An isolated branch requires a worktree branch ref.");
+          const created = await lifecycle.create({ cwd: workspace.cwd, branch: workspace.branch, execution: "none" }) as { worktreePath?: unknown };
+          if (typeof created.worktreePath !== "string" || !path.isAbsolute(created.worktreePath)) throw new SessionError("SESSION_BRANCH_WORKTREE_CREATE_FAILED", "The worktree service did not return a canonical worktree path.");
+          return { cwd: created.worktreePath, worktreeRef: workspace.branch };
+        },
+        adapters: { claude: runtimeAdapter("claude"), pi: runtimeAdapter("pi") },
+        admitExecutor: async launch => launch.executor === "host" || context.env.MPX_RUNTIME_EXECUTOR === "docker",
+      }, new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases")));
+    }
     const result = await executeSessionCommand({ action, args, options: parsed.options }, {
       store: sessionStore,
       resolveIdentity: async name => {
@@ -305,6 +325,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
       resumeDependencies: context.sessionResumeDependencies ?? productionSessionResumeDependencies(user, sessionStore, context.nativeAccountBindingVerifier ?? account?.verifier, context.env),
       executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
+      ...(branchService ? { branchService } : {}),
     });
     return { data: result.data, warnings: [...result.warnings] };
   }

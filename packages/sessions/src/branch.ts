@@ -1,0 +1,216 @@
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { resolveConversationWorkspaceSelection } from "@mpx/worktrees";
+import type { NativeSessionRefV1, RuntimeName } from "@mpx/runtime-contracts";
+import { SessionError, stableDigest, type IdentityV1 } from "./schemas.js";
+
+export interface BranchNativeIdentityV1 {
+  readonly runtimeQualifiedId: string;
+  readonly nativeSessionRef: NativeSessionRefV1;
+}
+export interface BranchRequestV1 {
+  readonly schemaVersion: 1;
+  readonly parent: BranchNativeIdentityV1;
+  readonly child: { readonly runtimeQualifiedId: string; readonly runtime: RuntimeName };
+  readonly launchIdentity: {
+    readonly identity: IdentityV1;
+    readonly rootDigest: string;
+    readonly mode: string;
+    readonly executor: "host" | "docker";
+  };
+  readonly workspace: {
+    readonly selection: "default" | "isolated" | "shared";
+    readonly intent: "read" | "modify";
+    readonly cwd: string;
+    readonly projectRef: string | null;
+    readonly repositoryRef: string | null;
+    readonly worktreeRef: string | null;
+    readonly branch: string | null;
+    readonly selectedNativeRoot?: string;
+  };
+  readonly files: {
+    readonly sharing: "isolated" | "shared";
+    readonly collisionDisclosure: readonly string[];
+    readonly duplicateWriterRiskAcknowledged: boolean;
+  };
+  readonly terminal: TerminalTabRequest;
+}
+export interface NativeBranchInvocation {
+  readonly executable: string;
+  readonly argv: readonly string[];
+  readonly cwd: string;
+  readonly nativeTarget: "runtime-created";
+}
+export interface TerminalTabRequest {
+  readonly enabled: boolean;
+  readonly executable?: string;
+  readonly cwd?: string;
+  readonly title?: string;
+}
+export interface TerminalTabPlan {
+  readonly executable: string;
+  readonly argv: readonly string[];
+  readonly cwd: string;
+}
+export interface ConversationBranchPlanV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "session-branch-plan";
+  readonly parent: BranchRequestV1["parent"];
+  readonly child: BranchRequestV1["child"];
+  readonly launchIdentity: BranchRequestV1["launchIdentity"];
+  readonly workspace: BranchRequestV1["workspace"] & {
+    readonly selection: "isolated" | "shared";
+    readonly sharing: "isolated" | "shared";
+    readonly provision: "new-worktree" | "current-checkout";
+    readonly collisionDisclosure: readonly string[];
+  };
+  readonly files: BranchRequestV1["files"];
+  readonly terminal: TerminalTabRequest;
+  readonly confirmationDigest: string;
+}
+export interface BranchRuntimeAdapter {
+  plan(parent: BranchNativeIdentityV1, cwd: string, selectedRoot?: string): NativeBranchInvocation | Promise<NativeBranchInvocation>;
+}
+export interface ConversationBranchDependencies {
+  inspectWorkspace(input: BranchRequestV1["workspace"]): Promise<{ readonly exists: boolean; readonly collisionDisclosure: readonly string[] }>;
+  createIsolatedWorktree(input: ConversationBranchPlanV1["workspace"]): Promise<{ readonly cwd: string; readonly worktreeRef: string }>;
+  readonly adapters: Readonly<Record<RuntimeName, BranchRuntimeAdapter>>;
+  admitExecutor?(input: BranchRequestV1["launchIdentity"]): Promise<boolean>;
+}
+
+const control = /[\u0000-\u001f\u007f-\u009f]/u;
+function safeText(value: string, label: string, maximum = 4096): void {
+  if (!value || value.length > maximum || control.test(value) || value !== value.normalize("NFC"))
+    throw new SessionError("SESSION_BRANCH_INVALID", `${label} is invalid`);
+}
+function absolute(value: string, label: string): string {
+  safeText(value, label);
+  if (!path.isAbsolute(value)) throw new SessionError("SESSION_BRANCH_INVALID", `${label} must be absolute`);
+  return path.normalize(value).replaceAll("\\", "/");
+}
+function validateRequest(input: BranchRequestV1): void {
+  if (input.schemaVersion !== 1 || !/^[a-f0-9]{64}$/u.test(input.launchIdentity.rootDigest))
+    throw new SessionError("SESSION_BRANCH_INVALID", "branch schema or root digest is invalid");
+  safeText(input.parent.runtimeQualifiedId, "parent.runtimeQualifiedId");
+  safeText(input.child.runtimeQualifiedId, "child.runtimeQualifiedId");
+  if (!input.parent.runtimeQualifiedId.startsWith(`${input.child.runtime}:`) || !input.child.runtimeQualifiedId.startsWith(`${input.child.runtime}:`))
+    throw new SessionError("SESSION_BRANCH_RUNTIME_MISMATCH", "parent and child native IDs must be qualified by the selected runtime");
+  absolute(input.workspace.cwd, "workspace.cwd");
+  if (input.workspace.selectedNativeRoot !== undefined) absolute(input.workspace.selectedNativeRoot, "workspace.selectedNativeRoot");
+}
+
+export class ConversationBranchService {
+  constructor(private readonly dependencies: ConversationBranchDependencies, private readonly leases?: BranchLeaseStore) {}
+
+  async plan(input: BranchRequestV1): Promise<ConversationBranchPlanV1> {
+    validateRequest(input);
+    if (input.launchIdentity.executor === "docker" && (!this.dependencies.admitExecutor || !await this.dependencies.admitExecutor(input.launchIdentity)))
+      throw new SessionError("SESSION_BRANCH_EXECUTOR_NOT_ADMITTED", "Docker branching requires current explicit runtime admission");
+    const inspected = await this.dependencies.inspectWorkspace(input.workspace);
+    if (!inspected.exists) throw new SessionError("SESSION_BRANCH_WORKSPACE_MISSING", "The selected repository or worktree is missing or deleted");
+    const policy = resolveConversationWorkspaceSelection({ selection: input.workspace.selection, intent: input.workspace.intent, riskAcknowledged: input.files.duplicateWriterRiskAcknowledged });
+    if (input.files.sharing !== policy.sharing && input.workspace.selection !== "default")
+      throw new SessionError("SESSION_BRANCH_DISCLOSURE_MISMATCH", "File sharing disclosure differs from the selected workspace");
+    if (input.child.runtime === "pi" && !input.workspace.selectedNativeRoot)
+      throw new SessionError("SESSION_BRANCH_PI_ROOT_REQUIRED", "Pi branching requires the explicitly selected native root");
+    const collisionDisclosure = [...new Set([...input.files.collisionDisclosure, ...inspected.collisionDisclosure])].sort();
+    const unsigned = {
+      schemaVersion: 1 as const,
+      kind: "session-branch-plan" as const,
+      parent: input.parent,
+      child: input.child,
+      launchIdentity: input.launchIdentity,
+      workspace: { ...input.workspace, ...policy, collisionDisclosure },
+      files: { ...input.files, sharing: policy.sharing },
+      terminal: input.terminal,
+    };
+    return { ...unsigned, confirmationDigest: stableDigest(unsigned) };
+  }
+
+  async apply(plan: ConversationBranchPlanV1, confirmationDigest: string): Promise<{
+    readonly schemaVersion: 1;
+    readonly kind: "session-branch-apply";
+    readonly invocation: NativeBranchInvocation;
+    readonly terminal: TerminalTabPlan | null;
+    readonly workspace: { readonly cwd: string; readonly worktreeRef: string | null };
+    readonly writerLease: BranchWriterLease | null;
+  }> {
+    const { confirmationDigest: ignored, ...unsigned } = plan;
+    void ignored;
+    if (plan.confirmationDigest !== confirmationDigest || stableDigest(unsigned) !== confirmationDigest)
+      throw new SessionError("SESSION_BRANCH_CONFIRMATION_MISMATCH", "branch plan confirmation digest does not match");
+    let workspace = { cwd: plan.workspace.cwd, worktreeRef: plan.workspace.worktreeRef };
+    if (plan.workspace.provision === "new-worktree") workspace = await this.dependencies.createIsolatedWorktree(plan.workspace);
+    let writerLease: BranchWriterLease | null = null;
+    try {
+      if (plan.workspace.intent === "modify") {
+        if (!this.leases) throw new SessionError("SESSION_BRANCH_LEASE_UNAVAILABLE", "duplicate-writer prevention is unavailable");
+        writerLease = await this.leases.acquire(workspace.cwd, plan.child.runtimeQualifiedId);
+      }
+      const invocation = await this.dependencies.adapters[plan.child.runtime].plan(plan.parent, workspace.cwd, plan.workspace.selectedNativeRoot);
+      return { schemaVersion: 1, kind: "session-branch-apply", invocation, terminal: planWindowsTerminalTab(plan.terminal, invocation), workspace, writerLease };
+    } catch (error) {
+      await writerLease?.release();
+      throw error;
+    }
+  }
+}
+
+export interface BranchWriterLease { readonly owner: string; readonly workspaceDigest: string; release(): Promise<void> }
+export class BranchLeaseStore {
+  constructor(private readonly root: string) {}
+  async acquire(workspace: string, owner: string): Promise<BranchWriterLease> {
+    absolute(workspace, "lease.workspace"); safeText(owner, "lease.owner", 512);
+    const workspaceDigest = stableDigest({ workspace: path.normalize(workspace).toLowerCase() }), directory = path.join(this.root, `${workspaceDigest}.writer`), token = randomUUID();
+    await mkdir(this.root, { recursive: true });
+    try { await mkdir(directory); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new SessionError("SESSION_BRANCH_DUPLICATE_WRITER", "The selected workspace already has a branch writer");
+      throw error;
+    }
+    try { await writeFile(path.join(directory, "owner.json"), JSON.stringify({ owner, token }), { flag: "wx" }); }
+    catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
+    return { owner, workspaceDigest, release: async () => {
+      try { const current = JSON.parse(await readFile(path.join(directory, "owner.json"), "utf8")) as { token?: unknown }; if (current.token === token) await rm(directory, { recursive: true, force: true }); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    } };
+  }
+}
+
+export function createClaudeBranchAdapter(executable: string): BranchRuntimeAdapter {
+  const trusted = absolute(executable, "claude.executable");
+  return { plan(parent, cwd) {
+    if (parent.nativeSessionRef.kind !== "native-id") throw new SessionError("SESSION_BRANCH_CLAUDE_TARGET_INVALID", "Claude branching requires a native session ID");
+    return { executable: trusted, argv: ["--resume", parent.nativeSessionRef.value, "--fork-session"], cwd: absolute(cwd, "claude.cwd"), nativeTarget: "runtime-created" };
+  } };
+}
+function within(root: string, candidate: string): boolean { const relative = path.relative(root, candidate); return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)); }
+export function createPiBranchAdapter(executable: string): BranchRuntimeAdapter {
+  const trusted = absolute(executable, "pi.executable");
+  return { async plan(parent, cwd, selectedRoot) {
+    if (!selectedRoot || parent.nativeSessionRef.kind !== "root-relative-file") throw new SessionError("SESSION_BRANCH_PI_TARGET_INVALID", "Pi branching requires a root-relative source in the selected root");
+    const relative = parent.nativeSessionRef.value;
+    if (path.posix.isAbsolute(relative) || path.win32.isAbsolute(relative) || relative.includes("\\") || relative.split("/").some(part => !part || part === "." || part === "..")) throw new SessionError("SESSION_BRANCH_PI_TARGET_INVALID", "Pi source path is unsafe");
+    let fileHandle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      const rootNamed = await lstat(selectedRoot); if (!rootNamed.isDirectory() || rootNamed.isSymbolicLink()) throw new Error("unsafe root");
+      const root = await realpath(selectedRoot), candidate = path.join(root, ...relative.split("/"));
+      fileHandle = await open(candidate, "r");
+      const opened = await fileHandle.stat(), named = await lstat(candidate), resolved = await realpath(candidate);
+      if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() || opened.dev !== named.dev || opened.ino !== named.ino || !within(root, resolved)) throw new Error("unsafe target");
+      const source = path.normalize(resolved).replaceAll("\\", "/");
+      return { executable: trusted, argv: ["--fork", source], cwd: absolute(cwd, "pi.cwd"), nativeTarget: "runtime-created" };
+    } catch { throw new SessionError("SESSION_BRANCH_PI_TARGET_INVALID", "Pi source is missing, unsafe, cross-root, or identity-unstable"); }
+    finally { await fileHandle?.close().catch(() => undefined); }
+  } };
+}
+
+export function planWindowsTerminalTab(request: TerminalTabRequest, invocation: NativeBranchInvocation): TerminalTabPlan | null {
+  if (!request.enabled) return null;
+  if (!request.executable || !request.title) throw new SessionError("SESSION_BRANCH_TERMINAL_INVALID", "enabled terminal tab requires executable and title");
+  safeText(request.title, "terminal.title", 128);
+  const cwd = absolute(invocation.cwd, "invocation.cwd");
+  if (request.cwd !== undefined && absolute(request.cwd, "terminal.cwd") !== cwd) throw new SessionError("SESSION_BRANCH_TERMINAL_INVALID", "terminal cwd differs from branch invocation cwd");
+  return { executable: absolute(request.executable, "terminal.executable"), argv: ["new-tab", "--title", request.title, "--startingDirectory", cwd, "--", invocation.executable, ...invocation.argv], cwd };
+}

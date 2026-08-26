@@ -1,5 +1,13 @@
 # @mpx/sessions
 
+Provider-neutral session records, resume, and conversation branching.
+
+## Conversation branching
+
+`ConversationBranchService.plan()` is read-only and returns a digest-bound disclosure of parent/child runtime IDs, immutable identity/root/mode/executor, repository/worktree refs, file sharing, collision risks, and optional terminal behavior. `apply()` rejects any stale digest before creating an MPX worktree or writer lease. Modifying branches default to an isolated `@mpx/worktrees` checkout; sharing the current checkout is an explicit acknowledged-risk choice.
+
+Native limits are deliberate: Claude uses the supported `--resume <id> --fork-session` flow and never copies transcript files. Pi uses `--fork <verified-root-relative-file>` only after regular-file, non-symlink, file-identity, and selected-root containment checks. Both runtimes assign the final child native session ID at startup; the plan therefore carries a runtime-qualified pending child target until lifecycle ingestion records the runtime-created ID. Windows Terminal support is optional and emits only executable/cwd/argv arrays; it never emits shell command text.
+
 Private, partitioned session records and lifecycle ingestion for MPX.
 
 Production discovery is identity- and runtime-root-bound. Each configured `(domain, identity, runtime, native root digest)` receives a distinct native binding; roots are never inferred from the current directory or shared across identities. Claude discovery runs the trusted absolute `MPX_CLAUDE_EXECUTABLE` with `CLAUDE_CONFIG_DIR` and direct `agents --json` arguments. Pi discovery is lifecycle-owned: validated MPX lifecycle events create and update records. Reading a legacy Pi `agent-resurrect` registry is supported only as an explicit, confirmation-bound one-time import, never as continuous production discovery.
