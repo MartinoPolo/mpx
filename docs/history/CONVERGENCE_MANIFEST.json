@@ -2647,12 +2647,12 @@
             "path": "local/skills/mp-clean-pc/SKILL.md",
             "sha256": "8ded059bef755345aa4c7160432bb1c5343b71446a18d0f50bcc7a5b500902e8"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -4449,12 +4449,12 @@
             "path": "plugins/gh/skills/mp-execute/SKILL.md",
             "sha256": "1fca3e7bd68dead97bd703a215d896e1f24b4cbf31e545112e0b380abff50beb"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -4563,12 +4563,12 @@
             "path": "plugins/gh/skills/mp-init-repo/SKILL.md",
             "sha256": "74e5dbb0a5a49670f008fcef9efd11f4e7724987e0a773f7e2d8553a7b9e0f55"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -4867,12 +4867,12 @@
             "path": "plugins/gh/skills/mp-to-issues/SKILL.md",
             "sha256": "3d401687696358f9168453c0d29aeb5dbd729df42562a5e7939348b2696f39f7"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -5087,9 +5087,21 @@
           "sha256": "1d32dc6f3b1842d3038e5e16b67d4c518b995ff2987be1f5e71a3c5344c52221",
           "reference": "content/agents/mpx-chrome-devtools-tester.md",
           "verification": "verified"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "claude",
+            "path": "plugins/mp/agents/mp-chrome-devtools-tester.md",
+            "sha256": "78a5eaae0d01a1a6746f256c888bec1a4d673fbc9aa7708b361d8780efe422be"
+          },
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "verification": "passed"
         }
       ],
-      "test": "content/agents/mpx-chrome-devtools-tester.md"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -8058,12 +8070,12 @@
             "path": "plugins/mp/skills/mp-continue/SKILL.md",
             "sha256": "e4d8db57e475f8aa13610640931271582420a2221cb53aec18933c72684870d1"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -8552,12 +8564,12 @@
             "path": "plugins/mp/skills/mp-harvest-decisions/SKILL.md",
             "sha256": "33b8088a8a20fcd6cad83c0405636a0421aa80b280ee54ba64577e357ad38946"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -8666,12 +8678,12 @@
             "path": "plugins/mp/skills/mp-review/SKILL.md",
             "sha256": "57d0fa63197db25c02084f67fa138e6ee7301643c3ba02d51ceee5dc1e136861"
           },
-          "sha256": "4e9beb274f716057a8cbcbe552923ed3cbcbe7aa3734fdb4f64c1ebb580dd3bd",
-          "reference": "packages/skills/test/directory-inventory.test.ts",
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/directory-inventory.test.ts"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -9353,9 +9365,21 @@
           "sha256": "b2db86300ce36d8eb9897679bda2552e6edbb4130f3311c6039696ec3df3653d",
           "reference": "content/instructions/shared/EXECUTOR_CONTRACT.md",
           "verification": "verified"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "claude",
+            "path": "plugins/mp/skills/shared/EXECUTOR_CONTRACT.md",
+            "sha256": "f54637ab376a07fe618e3d9cea756312322076e39004325f1ff304de40e059e2"
+          },
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "verification": "passed"
         }
       ],
-      "test": "content/instructions/shared/EXECUTOR_CONTRACT.md"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",
@@ -9646,9 +9670,21 @@
           "sha256": "ff28eb2e57cd091dfc8998e85025702c5ddff8156b9013a821be20b095b2d6fb",
           "reference": "content/instructions/shared/SUBAGENT_PROTOCOL.md",
           "verification": "verified"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "claude",
+            "path": "plugins/mp/skills/shared/SUBAGENT_PROTOCOL.md",
+            "sha256": "a8e86660f363b533d9405035847a384bf2312242133e2e410accd965d857190a"
+          },
+          "sha256": "5d4432781933c05cec493121d62092270984182d5dd49c8fa44ad6dc1312d8ab",
+          "reference": "packages/skills/test/source-semantic-parity.test.ts",
+          "verification": "passed"
         }
       ],
-      "test": "content/instructions/shared/SUBAGENT_PROTOCOL.md"
+      "test": "packages/skills/test/source-semantic-parity.test.ts"
     },
     {
       "source": "claude",

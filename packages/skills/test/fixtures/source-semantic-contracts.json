@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "description": "Reviewed source-derived scenario mappings; clauses are provider-neutral semantic obligations, not source implementation commands.",
+  "scenarios": [
+    {
+      "id": "canonical-review",
+      "family": "canonical-skills",
+      "source": {
+        "id": "claude",
+        "path": "plugins/mp/skills/mp-review/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "57d0fa63197db25c02084f67fa138e6ee7301643c3ba02d51ceee5dc1e136861"
+      },
+      "destination": "content/skills/review/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "20cf3c7326a3e4641b8dbbd7984a4ed0d0cfc8693e361e6c15dcf1655758cf5a"
+      },
+      "contract": {
+        "triggers": [
+          "Review the intended change against its Issue and repository contracts"
+        ],
+        "decisions": [
+          "If scope is missing or invalid, ask the user"
+        ],
+        "gates": [
+          "Provider Reviews always require an explicit Review ID"
+        ],
+        "boundaries": [
+          "Spawn the selected reviewers in parallel"
+        ],
+        "actions": [
+          "Use mpx ci status"
+        ],
+        "privacy": [
+          "security boundaries"
+        ],
+        "fallbacks": [
+          "A direct provider command is not a fallback"
+        ],
+        "supportAssets": [
+          "Write REVIEW.md only when findings exist"
+        ],
+        "outcomes": [
+          "Report findings first with precise locations and consequences"
+        ]
+      },
+      "flow": [
+        "Review the intended change against its Issue and repository contracts",
+        "If scope is missing or invalid, ask the user",
+        "Provider Reviews always require an explicit Review ID",
+        "security boundaries",
+        "Spawn the selected reviewers in parallel",
+        "Use mpx ci status",
+        "Write REVIEW.md only when findings exist",
+        "Report findings first with precise locations and consequences",
+        "A direct provider command is not a fallback"
+      ]
+    },
+    {
+      "id": "continue-recovery",
+      "family": "recovery",
+      "source": {
+        "id": "claude",
+        "path": "plugins/mp/skills/mp-continue/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "e4d8db57e475f8aa13610640931271582420a2221cb53aec18933c72684870d1"
+      },
+      "destination": "content/skills/continue/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "ef6dd566d118dcdcaa35bd1a1b0b18812edeb5e90e1fe3b3b9e7ee850538bd11"
+      },
+      "contract": {
+        "triggers": [
+          "Conversation wording by itself is not proof of an interruption"
+        ],
+        "decisions": [
+          "No interruption: continue the most recent task normally"
+        ],
+        "gates": [
+          "Before steering or respawning anything"
+        ],
+        "boundaries": [
+          "continue with independent work"
+        ],
+        "actions": [
+          "steer it using the same child ID"
+        ],
+        "privacy": [
+          "Do not depend on a provider's private message API"
+        ],
+        "fallbacks": [
+          "respawn a matching child with only the remaining scope"
+        ],
+        "supportAssets": [
+          "runtime dev_server contract"
+        ],
+        "outcomes": [
+          "Continue the active task after dependencies are restored"
+        ]
+      },
+      "flow": [
+        "Conversation wording by itself is not proof of an interruption",
+        "No interruption: continue the most recent task normally",
+        "Before steering or respawning anything",
+        "steer it using the same child ID",
+        "respawn a matching child with only the remaining scope",
+        "continue with independent work",
+        "Do not depend on a provider's private message API",
+        "runtime dev_server contract",
+        "Continue the active task after dependencies are restored"
+      ]
+    },
+    {
+      "id": "decision-harvest",
+      "family": "decision-harvest",
+      "source": {
+        "id": "claude",
+        "path": "plugins/mp/skills/mp-harvest-decisions/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "33b8088a8a20fcd6cad83c0405636a0421aa80b280ee54ba64577e357ad38946"
+      },
+      "destination": "content/skills/harvest-decisions/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "2c298d1d08d5a6997ad6c3405cdd5a3dcab5b0e62e9785086ef9fd444f6bc7c2"
+      },
+      "contract": {
+        "triggers": [
+          "only when the user explicitly invokes this skill"
+        ],
+        "decisions": [
+          "use 30 when it is absent"
+        ],
+        "gates": [
+          "Identity or root mismatch: stop"
+        ],
+        "boundaries": [
+          "launch parallel read-only children in bounded groups"
+        ],
+        "actions": [
+          "Read .mpx/CONTEXT.md and .mpx/DECISIONS.md"
+        ],
+        "privacy": [
+          "Never disclose private storage locations"
+        ],
+        "fallbacks": [
+          "offer a privacy-safe manual fallback"
+        ],
+        "supportAssets": [
+          "Prepare a preview before any write"
+        ],
+        "outcomes": [
+          "Only after confirmation, apply exactly the confirmed preview"
+        ]
+      },
+      "flow": [
+        "only when the user explicitly invokes this skill",
+        "use 30 when it is absent",
+        "Identity or root mismatch: stop",
+        "offer a privacy-safe manual fallback",
+        "Never disclose private storage locations",
+        "launch parallel read-only children in bounded groups",
+        "Read .mpx/CONTEXT.md and .mpx/DECISIONS.md",
+        "Prepare a preview before any write",
+        "Only after confirmation, apply exactly the confirmed preview"
+      ]
+    },
+    {
+      "id": "issue-execution",
+      "family": "provider-delivery",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-execute/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "1fca3e7bd68dead97bd703a215d896e1f24b4cbf31e545112e0b380abff50beb"
+      },
+      "destination": "content/skills/execute/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "bc43eac7f513465e6bd754e947f77ed4b15ee9e253d6c57cc45b01bcc8588005"
+      },
+      "contract": {
+        "triggers": [
+          "Resolve the explicit Issue"
+        ],
+        "decisions": [
+          "Stop at the HITL gate for unresolved product decisions"
+        ],
+        "gates": [
+          "unresolved failures block close-out"
+        ],
+        "boundaries": [
+          "Delegate independent items concurrently only when file ownership is disjoint"
+        ],
+        "actions": [
+          "Follow red-green-refactor per observable behavior"
+        ],
+        "privacy": [
+          "Preserve unrelated changes and privacy-sensitive data"
+        ],
+        "fallbacks": [
+          "require manual handoffs where automation cannot verify"
+        ],
+        "supportAssets": [
+          "Follow close-out"
+        ],
+        "outcomes": [
+          "Report changed files, tests and checks"
+        ]
+      },
+      "flow": [
+        "Resolve the explicit Issue",
+        "Stop at the HITL gate for unresolved product decisions",
+        "Preserve unrelated changes and privacy-sensitive data",
+        "Delegate independent items concurrently only when file ownership is disjoint",
+        "Follow red-green-refactor per observable behavior",
+        "unresolved failures block close-out",
+        "Follow close-out",
+        "require manual handoffs where automation cannot verify",
+        "Report changed files, tests and checks"
+      ]
+    },
+    {
+      "id": "epic-decomposition",
+      "family": "provider-delivery",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-to-issues/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "3d401687696358f9168453c0d29aeb5dbd729df42562a5e7939348b2696f39f7"
+      },
+      "destination": "content/skills/epic-decompose/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "fbeb4c95daa4f6f96ac25b31b6bc4f1512eca58e16e3ea2f36d8d1bd91a4d892"
+      },
+      "contract": {
+        "triggers": [
+          "Fetch the explicit Epic and comments"
+        ],
+        "decisions": [
+          "Resolve Epic-wide ambiguity at a HITL gate"
+        ],
+        "gates": [
+          "Create nothing before explicit approval"
+        ],
+        "boundaries": [
+          "Design 3–15 independently testable vertical slices"
+        ],
+        "actions": [
+          "Link and update only through launch-bound capabilities"
+        ],
+        "privacy": [
+          "never emulate a native sub-issue with an unconfirmed textual link"
+        ],
+        "fallbacks": [
+          "Do not fall back to direct provider commands"
+        ],
+        "supportAssets": [
+          "Build every body from ISSUE_TEMPLATE.md"
+        ],
+        "outcomes": [
+          "support status and manual handoff must be explicit"
+        ]
+      },
+      "flow": [
+        "Fetch the explicit Epic and comments",
+        "Resolve Epic-wide ambiguity at a HITL gate",
+        "Design 3–15 independently testable vertical slices",
+        "Create nothing before explicit approval",
+        "Build every body from ISSUE_TEMPLATE.md",
+        "Link and update only through launch-bound capabilities",
+        "never emulate a native sub-issue with an unconfirmed textual link",
+        "Do not fall back to direct provider commands",
+        "support status and manual handoff must be explicit"
+      ]
+    },
+    {
+      "id": "repository-setup",
+      "family": "provider-setup",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-init-repo/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "74e5dbb0a5a49670f008fcef9efd11f4e7724987e0a773f7e2d8553a7b9e0f55"
+      },
+      "destination": "content/skills/repository-setup/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "2ab7b2363c8952a273e6bfa77805ae137895e78636e5c1adf65d0348d91ca28b"
+      },
+      "contract": {
+        "triggers": [
+          "Abort if .git/ exists"
+        ],
+        "decisions": [
+          "Ask privacy visibility"
+        ],
+        "gates": [
+          "requiring Review integration and CI checks"
+        ],
+        "boundaries": [
+          "continue safe independent setup"
+        ],
+        "actions": [
+          "repository.create"
+        ],
+        "privacy": [
+          "Never expose repository contents or credentials"
+        ],
+        "fallbacks": [
+          "Do not fall back to a provider CLI"
+        ],
+        "supportAssets": [
+          "canonical project scaffolds only when missing or untouched"
+        ],
+        "outcomes": [
+          "never report protection as applied"
+        ]
+      },
+      "flow": [
+        "Abort if .git/ exists",
+        "canonical project scaffolds only when missing or untouched",
+        "Ask privacy visibility",
+        "Never expose repository contents or credentials",
+        "repository.create",
+        "requiring Review integration and CI checks",
+        "Do not fall back to a provider CLI",
+        "continue safe independent setup",
+        "never report protection as applied"
+      ]
+    },
+    {
+      "id": "personal-cleanup",
+      "family": "personal-skills",
+      "source": {
+        "id": "claude",
+        "path": "local/skills/mp-clean-pc/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "8ded059bef755345aa4c7160432bb1c5343b71446a18d0f50bcc7a5b500902e8"
+      },
+      "destination": "content/skills/clean-pc/SKILL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "11e1042a702d828a60fcf03c73366af16a9e91a5a0caee73477f0747a3ba64c2"
+      },
+      "contract": {
+        "triggers": [
+          "With no arguments, scan all eight domains"
+        ],
+        "decisions": [
+          "offer the install once"
+        ],
+        "gates": [
+          "Re-verify at execution time"
+        ],
+        "boundaries": [
+          "Spawn one general-purpose sub-agent per domain"
+        ],
+        "actions": [
+          "execute approved groups by destination"
+        ],
+        "privacy": [
+          "Images and video stay out of the artifact"
+        ],
+        "fallbacks": [
+          "fall back to scripts/Scan-FolderMap.ps1"
+        ],
+        "supportAssets": [
+          "New-VisualStaging.ps1"
+        ],
+        "outcomes": [
+          "Measured free-space delta per drive"
+        ]
+      },
+      "flow": [
+        "With no arguments, scan all eight domains",
+        "offer the install once",
+        "fall back to scripts/Scan-FolderMap.ps1",
+        "Spawn one general-purpose sub-agent per domain",
+        "Images and video stay out of the artifact",
+        "New-VisualStaging.ps1",
+        "Re-verify at execution time",
+        "execute approved groups by destination",
+        "Measured free-space delta per drive"
+      ]
+    },
+    {
+      "id": "executor-boundary",
+      "family": "shared-instructions",
+      "source": {
+        "id": "claude",
+        "path": "plugins/mp/skills/shared/EXECUTOR_CONTRACT.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "f54637ab376a07fe618e3d9cea756312322076e39004325f1ff304de40e059e2"
+      },
+      "destination": "content/instructions/shared/EXECUTOR_CONTRACT.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "b2db86300ce36d8eb9897679bda2552e6edbb4130f3311c6039696ec3df3653d"
+      },
+      "contract": {
+        "triggers": [
+          "Executors implement supplied work"
+        ],
+        "decisions": [
+          "The parent owns analysis, acceptance"
+        ],
+        "gates": [
+          "Missing concrete work or acceptance criteria is a blocker"
+        ],
+        "boundaries": [
+          "Executors cannot assume nested delegation"
+        ],
+        "actions": [
+          "runs the commands and reports exact results"
+        ],
+        "privacy": [
+          "Keep changes limited to assigned behavior"
+        ],
+        "fallbacks": [
+          "structured manual handoff"
+        ],
+        "supportAssets": [
+          "SUBAGENT_PROTOCOL.md"
+        ],
+        "outcomes": [
+          "Needs From Parent"
+        ]
+      },
+      "flow": [
+        "Executors implement supplied work",
+        "The parent owns analysis, acceptance",
+        "Missing concrete work or acceptance criteria is a blocker",
+        "runs the commands and reports exact results",
+        "Keep changes limited to assigned behavior",
+        "Executors cannot assume nested delegation",
+        "structured manual handoff",
+        "Needs From Parent",
+        "SUBAGENT_PROTOCOL.md"
+      ]
+    },
+    {
+      "id": "delegation-protocol",
+      "family": "shared-instructions",
+      "source": {
+        "id": "claude",
+        "path": "plugins/mp/skills/shared/SUBAGENT_PROTOCOL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "a8e86660f363b533d9405035847a384bf2312242133e2e410accd965d857190a"
+      },
+      "destination": "content/instructions/shared/SUBAGENT_PROTOCOL.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "ff28eb2e57cd091dfc8998e85025702c5ddff8156b9013a821be20b095b2d6fb"
+      },
+      "contract": {
+        "triggers": [
+          "Only structured runtime configuration selects a model"
+        ],
+        "decisions": [
+          "Select by task horizon"
+        ],
+        "gates": [
+          "fail closed when a required grant is unavailable"
+        ],
+        "boundaries": [
+          "Fan out from the parent by default"
+        ],
+        "actions": [
+          "Check capability availability first"
+        ],
+        "privacy": [
+          "least-privilege allowlists"
+        ],
+        "fallbacks": [
+          "structured unsupported/manual handoff"
+        ],
+        "supportAssets": [
+          "Each projection records canonical source/version"
+        ],
+        "outcomes": [
+          "returns the exact capability needed to its parent"
+        ]
+      },
+      "flow": [
+        "Only structured runtime configuration selects a model",
+        "Select by task horizon",
+        "Fan out from the parent by default",
+        "returns the exact capability needed to its parent",
+        "fail closed when a required grant is unavailable",
+        "least-privilege allowlists",
+        "Check capability availability first",
+        "structured unsupported/manual handoff",
+        "Each projection records canonical source/version"
+      ]
+    },
+    {
+      "id": "browser-agent",
+      "family": "agent-semantics",
+      "source": {
+        "id": "claude",
+        "path": "plugins/mp/agents/mp-chrome-devtools-tester.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "78a5eaae0d01a1a6746f256c888bec1a4d673fbc9aa7708b361d8780efe422be"
+      },
+      "destination": "content/agents/mpx-chrome-devtools-tester.md",
+      "review": {
+        "status": "reviewed",
+        "method": "source-to-canonical scenario mapping",
+        "destinationSha256": "1d32dc6f3b1842d3038e5e16b67d4c518b995ff2987be1f5e71a3c5344c52221"
+      },
+      "contract": {
+        "triggers": [
+          "Interactive exploratory browser testing"
+        ],
+        "decisions": [
+          "Any hit means an auth wall"
+        ],
+        "gates": [
+          "a login form still on screen means the login failed"
+        ],
+        "boundaries": [
+          "one page per target"
+        ],
+        "actions": [
+          "perform the UI actions"
+        ],
+        "privacy": [
+          "keep credentials out of the report"
+        ],
+        "fallbacks": [
+          "a failure never stops the run"
+        ],
+        "supportAssets": [
+          "capture take_screenshot evidence"
+        ],
+        "outcomes": [
+          "record PASS / FAIL / BLOCKED"
+        ]
+      },
+      "flow": [
+        "Interactive exploratory browser testing",
+        "keep credentials out of the report",
+        "Any hit means an auth wall",
+        "a login form still on screen means the login failed",
+        "one page per target",
+        "perform the UI actions",
+        "capture take_screenshot evidence",
+        "record PASS / FAIL / BLOCKED",
+        "a failure never stops the run"
+      ]
+    }
+  ]
+}
