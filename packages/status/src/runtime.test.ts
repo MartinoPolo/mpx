@@ -4,6 +4,7 @@ import {
   composeRuntimeStatusEnvelopeV1,
   createRuntimeStatusRefreshController,
   getRuntimeStatusCapabilitiesV1,
+  parseRuntimeStatusCapabilitiesV1,
   parseRuntimeStatusEnvelopeV1,
   projectRuntimeStatusEnvelopeV1,
   type RuntimeStatusBindingV1,
@@ -11,8 +12,8 @@ import {
 } from "./index.js";
 
 const binding: RuntimeStatusBindingV1 = { launchKey: "launch-123", runtimeId: "runtime-1", repositoryId: "repo-123" };
-const unavailable = { freshness: { state: "unavailable" as const, observedAt: null, errorCode: null } };
-const current = { freshness: { state: "current" as const, observedAt: "2025-06-01T12:00:00.000Z", errorCode: null } };
+const unavailable = { source: "derived" as const, state: "unavailable" as const, capturedAt: null, freshUntil: null, diagnostic: null, unavailable: "not reported" };
+const current = { source: "native" as const, state: "current" as const, capturedAt: "2025-06-01T12:00:00.000Z", freshUntil: "2025-06-01T12:01:00.000Z", diagnostic: null, unavailable: null };
 
 function envelope(): RuntimeStatusEnvelopeV1 {
   return {
@@ -36,6 +37,16 @@ function envelope(): RuntimeStatusEnvelopeV1 {
 }
 
 describe("RuntimeStatusEnvelopeV1 schema", () => {
+  it("requires explicit provenance, state, lifetime, diagnostic, and unavailability metadata on every group", () => {
+    const metadata = { source: "native", state: "current", capturedAt: envelope().generatedAt, freshUntil: "2025-06-01T12:01:00.000Z", diagnostic: null, unavailable: null };
+    const candidate = structuredClone(envelope()) as unknown as Record<string, unknown>;
+    for (const name of ["identity", "session", "model", "location", "repository", "usage", "cost", "providerUsage", "compactions", "subagents", "development", "actions"]) {
+      const group = candidate[name] as Record<string, unknown>;
+      Object.assign(group, metadata);
+    }
+    expect(parseRuntimeStatusEnvelopeV1(candidate).identity).toMatchObject(metadata);
+  });
+
   it("parses all Claude/Pi personal/work fixtures with every status group present", async () => {
     for (const name of ["runtime-claude-personal", "runtime-claude-work", "runtime-pi-personal", "runtime-pi-work"]) {
       const parsed = parseRuntimeStatusEnvelopeV1(JSON.parse(await readFile(new URL(`../fixtures/${name}.json`, import.meta.url), "utf8")));
@@ -63,14 +74,33 @@ describe("RuntimeStatusEnvelopeV1 schema", () => {
     expect(() => parseRuntimeStatusEnvelopeV1({ ...envelope(), identity: { ...envelope().identity, label: "Bearer abcdefghijklmnop" } })).toThrow(/privacy/i);
   });
 
-  it("enforces freshness discriminants", () => {
-    expect(() => parseRuntimeStatusEnvelopeV1({ ...envelope(), cost: { ...envelope().cost, freshness: { state: "error", observedAt: null, errorCode: null } } })).toThrow(/errorCode/i);
+  it("enforces state discriminants and fails closed on the replaced freshness shape", () => {
+    expect(() => parseRuntimeStatusEnvelopeV1({ ...envelope(), cost: { ...envelope().cost, state: "error", capturedAt: null, freshUntil: null, diagnostic: null, unavailable: null } })).toThrow(/diagnostic/i);
+    const { source: _source, state: _state, capturedAt: _capturedAt, freshUntil: _freshUntil, diagnostic: _diagnostic, unavailable: _unavailable, ...values } = envelope().identity;
+    expect(() => parseRuntimeStatusEnvelopeV1({ ...envelope(), identity: { freshness: { state: "current", observedAt: envelope().generatedAt, errorCode: null }, ...values } })).toThrow(/runtime status envelope/i);
+    expect(() => parseRuntimeStatusEnvelopeV1({ ...envelope(), identity: { ...envelope().identity, capturedAt: "2025-06-01T11:59:00.000Z", freshUntil: "2025-06-01T11:59:59.000Z" } })).toThrow(/current/i);
   });
 
   it("preserves explicit units without floating point currency ambiguity", () => {
     const parsed = parseRuntimeStatusEnvelopeV1(envelope());
     expect(parsed.cost).toMatchObject({ currency: "USD", amountMicros: 125000 });
     expect(parsed.providerUsage.unit).toBe("percent");
+  });
+
+  it("strictly validates and freezes the exhaustive per-field capability map", () => {
+    const capabilities = getRuntimeStatusCapabilitiesV1("claude");
+    expect(parseRuntimeStatusCapabilitiesV1(capabilities)).toEqual(capabilities);
+    expect(Object.keys(capabilities.fields)).toHaveLength(35);
+    expect(Object.isFrozen(capabilities.fields)).toBe(true);
+    expect(capabilities.fields["model.modelId"]).toEqual({ support: "native" });
+    expect(capabilities.fields["providerUsage.used"]).toMatchObject({ support: "unsupported", reason: expect.any(String) });
+    for (const candidate of [
+      { ...capabilities, schemaVersion: 2 },
+      { ...capabilities, extra: true },
+      { ...capabilities, widths: ["narrow", "wide", "huge"] },
+      { ...capabilities, fields: { ...capabilities.fields, "model.modelId": undefined } },
+      { ...capabilities, fields: { ...capabilities.fields, "model.modelId": { support: "unsupported", reason: "C:\\Users\\alice" } } },
+    ]) expect(() => parseRuntimeStatusCapabilitiesV1(candidate)).toThrow(/capabilit/i);
   });
 });
 
@@ -92,7 +122,7 @@ describe("runtime status composition", () => {
 
   it("keeps absent providers explicitly unavailable", () => {
     const result = composeRuntimeStatusEnvelopeV1({ generatedAt: envelope().generatedAt, binding, harness: envelope().harness, contributions: [] });
-    expect(result.providerUsage.freshness.state).toBe("unavailable");
+    expect(result.providerUsage.state).toBe("unavailable");
     expect(result.development.services).toEqual([]);
   });
 });
@@ -110,7 +140,7 @@ describe("runtime status refresh and projection", () => {
     expect(controller.current()?.identity.label).toBe("Personal");
     const failed = createRuntimeStatusRefreshController({ read: async () => { throw new Error("offline"); } }, { initial: envelope(), timeoutMs: 50 });
     await expect(failed.refresh()).resolves.toBeUndefined();
-    expect(failed.current()?.identity.freshness.state).toBe("stale");
+    expect(failed.current()?.identity.state).toBe("stale");
     controller.abort();
   });
 
@@ -120,8 +150,8 @@ describe("runtime status refresh and projection", () => {
       const signals: AbortSignal[] = []; let calls = 0;
       const controller = createRuntimeStatusRefreshController({ read: async signal => { signals.push(signal); calls++; if (calls === 1) return new Promise<never>(() => {}); return envelope(); } }, { initial: envelope(), timeoutMs: 50 });
       const hung = controller.refresh(); await vi.advanceTimersByTimeAsync(50); await expect(hung).resolves.toBeUndefined();
-      expect(signals[0]?.aborted).toBe(true); expect(controller.current()?.identity.freshness.state).toBe("stale");
-      await expect(controller.refresh()).resolves.toBeUndefined(); expect(calls).toBe(2); expect(controller.current()?.identity.freshness.state).toBe("current");
+      expect(signals[0]?.aborted).toBe(true); expect(controller.current()?.identity.state).toBe("stale");
+      await expect(controller.refresh()).resolves.toBeUndefined(); expect(calls).toBe(2); expect(controller.current()?.identity.state).toBe("current");
     } finally { vi.useRealTimers(); }
   });
 

@@ -14,7 +14,17 @@ it("composes a fresh session observation into the runtime status envelope", () =
 
   const composed = composeRuntimeSessionObservation(envelope, observation, "2025-02-02T03:04:30.000Z");
 
-  expect(composed.session).toEqual({ freshness: { state: "current", observedAt: generatedAt, errorCode: null }, elapsedMs: null, turns: null, title: "Focused work" });
+  expect(composed.session).toEqual({ source: "cache", state: "current", capturedAt: generatedAt, freshUntil: "2025-02-02T03:05:05.000Z", diagnostic: null, unavailable: null, elapsedMs: null, turns: null, title: "Focused work" });
+});
+
+it("preserves native runtime session authority over lower-priority cached observations", () => {
+  const generatedAt = "2025-02-02T03:04:05.000Z";
+  const binding = { launchKey: "launch", runtimeId: "claude", repositoryId: "repo" };
+  const native = { source: "native" as const, state: "current" as const, capturedAt: generatedAt, freshUntil: "2025-02-02T03:05:05.000Z", diagnostic: null, unavailable: null };
+  const envelope = composeRuntimeStatusEnvelopeV1({ generatedAt, binding, harness: { kind: "claude", version: null, surface: "statusline" }, contributions: [{ source: "runtime", binding, groups: { session: { ...native, elapsedMs: 42, turns: 1, title: "Native" } } }] });
+  const observation = createRuntimeSessionObservationV1({ runtime: "claude", identityRef: "work:me", runtimeQualifiedId: "claude:cached", displayId: "cached", title: "Cached", resumeState: "resumable", lifecycleState: "active", workflowStatus: "unfinished", inbox: true, dispositionAt: null, capturedAt: generatedAt, freshUntil: "2025-02-02T03:06:05.000Z", source: "sessions:lifecycle", diagnostic: null });
+
+  expect(composeRuntimeSessionObservation(envelope, observation, generatedAt).session).toMatchObject({ source: "native", title: "Native", elapsedMs: 42 });
 });
 
 it("maps stale and diagnostic lifecycle observations to explicit freshness", () => {
@@ -22,8 +32,8 @@ it("maps stale and diagnostic lifecycle observations to explicit freshness", () 
   const binding = { launchKey: "launch", runtimeId: "claude", repositoryId: "repo" };
   const envelope = composeRuntimeStatusEnvelopeV1({ generatedAt, binding, harness: { kind: "claude", version: null, surface: "statusline" }, contributions: [] });
   const base = { runtime: "claude" as const, identityRef: "work:me", runtimeQualifiedId: "claude:native", displayId: "native", title: null, resumeState: "unknown" as const, lifecycleState: "unknown" as const, workflowStatus: "unfinished" as const, inbox: true, dispositionAt: null, capturedAt: generatedAt, freshUntil: generatedAt, source: "sessions:lifecycle" };
-  expect(composeRuntimeSessionObservation(envelope, createRuntimeSessionObservationV1({ ...base, diagnostic: null }), "2025-02-02T03:04:06.000Z").session.freshness.state).toBe("stale");
-  expect(composeRuntimeSessionObservation(envelope, createRuntimeSessionObservationV1({ ...base, diagnostic: "SESSION_SOURCE_MALFORMED" }), generatedAt).session.freshness).toEqual({ state: "error", observedAt: generatedAt, errorCode: "SESSION_SOURCE_MALFORMED" });
+  expect(composeRuntimeSessionObservation(envelope, createRuntimeSessionObservationV1({ ...base, diagnostic: null }), "2025-02-02T03:04:06.000Z").session.state).toBe("stale");
+  expect(composeRuntimeSessionObservation(envelope, createRuntimeSessionObservationV1({ ...base, diagnostic: "SESSION_SOURCE_MALFORMED" }), generatedAt).session).toMatchObject({ source: "cache", state: "error", capturedAt: generatedAt, freshUntil: null, diagnostic: "SESSION_SOURCE_MALFORMED", unavailable: null });
 });
 
 it("durably refreshes a proof-bound live envelope across process restart and quarantines malformed observations", async () => {

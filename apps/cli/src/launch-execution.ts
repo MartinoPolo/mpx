@@ -360,12 +360,14 @@ export function composeRuntimeSessionObservation(envelopeInput: RuntimeStatusEnv
   if (observation.runtime !== envelope.binding.runtimeId) throw new MpxError({ code: "SESSION_OBSERVATION_BINDING_MISMATCH", message: "The session observation runtime does not match the runtime status binding." });
   if (new Date(now).toISOString() !== now) throw new MpxError({ code: "SESSION_OBSERVATION_TIME_INVALID", message: "Session observation composition requires a canonical timestamp." });
   const { schemaVersion: _schemaVersion, generatedAt: _generatedAt, binding, harness, ...groups } = envelope;
-  const freshness = observation.diagnostic !== null
-    ? { state: "error" as const, observedAt: observation.capturedAt, errorCode: observation.diagnostic }
-    : { state: Date.parse(now) <= Date.parse(observation.freshUntil) ? "current" as const : "stale" as const, observedAt: observation.capturedAt, errorCode: null };
+  const { session: _session, ...nonSessionGroups } = groups;
+  const runtimeGroups = envelope.session.source === "native" ? groups : nonSessionGroups;
+  const metadata = observation.diagnostic !== null
+    ? { source: "cache" as const, state: "error" as const, capturedAt: observation.capturedAt, freshUntil: null, diagnostic: observation.diagnostic, unavailable: null }
+    : { source: "cache" as const, state: Date.parse(now) <= Date.parse(observation.freshUntil) ? "current" as const : "stale" as const, capturedAt: observation.capturedAt, freshUntil: observation.freshUntil, diagnostic: null, unavailable: null };
   return composeRuntimeStatusEnvelopeV1({ generatedAt: now, binding, harness, contributions: [
-    { source: "launch", binding, groups },
-    { source: "runtime", binding, groups: { session: { freshness, elapsedMs: null, turns: null, title: observation.title } } },
+    { source: "cache", binding, groups: { session: { ...metadata, elapsedMs: null, turns: null, title: observation.title } } },
+    { source: "runtime", binding, groups: runtimeGroups },
   ] });
 }
 
@@ -426,14 +428,14 @@ function runtimeWiring(descriptor: LaunchDescriptor, artifact: RuntimeSkillArtif
     models: piProfile ? piProfile.models : ["haiku", "opus", "sonnet"], nesting: { depth: 0, maxDepth: 2 },
   });
   const observedAt = new Date().toISOString();
-  const freshness = Object.freeze({ state: "current" as const, observedAt, errorCode: null });
-  const unavailable = Object.freeze({ state: "unavailable" as const, observedAt: null, errorCode: null });
+  const freshness = Object.freeze({ source: "derived" as const, state: "current" as const, capturedAt: observedAt, freshUntil: new Date(Date.parse(observedAt) + 60_000).toISOString(), diagnostic: null, unavailable: null });
+  const unavailable = Object.freeze({ source: "derived" as const, state: "unavailable" as const, capturedAt: null, freshUntil: null, diagnostic: null, unavailable: "not supported" });
   const binding = Object.freeze({ launchKey: descriptor.launchKey, runtimeId: descriptor.runtime, repositoryId: descriptor.binding.repositoryId });
   const launchStatus = composeRuntimeStatusEnvelopeV1({ generatedAt: observedAt, binding, harness: descriptor.runtime === "claude" ? { kind: "claude", version: null, surface: "statusline" } : { kind: "pi", version: null, surface: "footer" }, contributions: [{ source: "launch", binding, groups: {
-    identity: { freshness, profile: descriptor.identity.name === "personal" || descriptor.identity.name === "work" ? descriptor.identity.name : null, label: descriptor.identity.name === "personal" ? "Personal" : descriptor.identity.name === "work" ? "Work" : null },
-    location: { freshness, label: snapshot.worktree.role ?? "project" },
-    development: { freshness, services: snapshot.services.map(service => ({ id: service.id, state: service.conflict !== "none" ? "conflict" : service.listening ? "listening" : "stopped", port: service.port })) },
-    actions: { freshness: unavailable, items: [] },
+    identity: { ...freshness, profile: descriptor.identity.name === "personal" || descriptor.identity.name === "work" ? descriptor.identity.name : null, label: descriptor.identity.name === "personal" ? "Personal" : descriptor.identity.name === "work" ? "Work" : null },
+    location: { ...freshness, label: snapshot.worktree.role ?? "project" },
+    development: { ...freshness, services: snapshot.services.map(service => ({ id: service.id, state: service.conflict !== "none" ? "conflict" : service.listening ? "listening" : "stopped", port: service.port })) },
+    actions: { ...unavailable, items: [] },
   } }] });
   const status = sessionObservation ? composeRuntimeSessionObservation(launchStatus, sessionObservation, observedAt) : launchStatus;
   const services=runtimeServiceRequests(config,projectRoot,snapshot,descriptor.executor.name);

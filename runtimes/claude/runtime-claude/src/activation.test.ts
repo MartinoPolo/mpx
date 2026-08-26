@@ -34,7 +34,7 @@ it("activates the generated Claude surface with launch-bound gateway, dev-servic
   const line=activated.status.render({launchBanner:"[mpx claude/host abc]"});
   for(const text of ["web:4100*","Task panel","Review #42","CI passing"])expect(line).toContain(text);
   live={...changed,binding:{...changed.binding,repositoryId:"other"}}; await activated.status.refresh();
-  expect(activated.status.current()!.development.freshness.state).toBe("stale");
+  expect(activated.status.current()!.development.state).toBe("stale");
   expect(activated.status.render({launchBanner:"[mpx claude/host abc]"})).toContain("Task panel");
   await activated.shutdown();
   expect(runtimeAdapter.stop).toHaveBeenCalled();

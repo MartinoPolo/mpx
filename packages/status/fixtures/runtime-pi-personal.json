@@ -12,48 +12,53 @@
     "surface": "footer"
   },
   "identity": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "derived",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "profile": "personal",
     "label": "Personal"
   },
   "session": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "cache",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "elapsedMs": 60000,
     "turns": 4
   },
   "model": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "native",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "modelId": "gpt-5",
     "label": "GPT-5",
     "contextUsedTokens": 1200,
     "contextLimitTokens": 200000
   },
   "location": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "derived",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "label": "mpx"
   },
   "repository": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "derived",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "name": "mpx",
     "branch": "main",
     "dirty": false,
@@ -61,11 +66,12 @@
     "behind": 0
   },
   "usage": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "native",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "inputTokens": 500,
     "outputTokens": 300,
     "cacheReadTokens": 200,
@@ -73,20 +79,22 @@
     "totalTokens": 1000
   },
   "cost": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "native",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "currency": "USD",
     "amountMicros": 25000
   },
   "providerUsage": {
-    "freshness": {
-      "state": "unavailable",
-      "observedAt": null,
-      "errorCode": null
-    },
+    "source": "provider",
+    "state": "unavailable",
+    "capturedAt": null,
+    "freshUntil": null,
+    "diagnostic": null,
+    "unavailable": "not reported",
     "provider": null,
     "used": null,
     "limit": null,
@@ -94,43 +102,47 @@
     "resetAt": null
   },
   "compactions": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "native",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "count": 0,
     "lastAt": null
   },
   "subagents": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "derived",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "active": 0,
     "completed": 1,
     "failed": 0
   },
   "development": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "derived",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "services": []
   },
   "actions": {
-    "freshness": {
-      "state": "current",
-      "observedAt": "2025-06-01T12:00:00.000Z",
-      "errorCode": null
-    },
+    "source": "derived",
+    "state": "current",
+    "capturedAt": "2025-06-01T12:00:00.000Z",
+    "freshUntil": "2025-06-01T12:01:00.000Z",
+    "diagnostic": null,
+    "unavailable": null,
     "items": [
       {
         "id": "refresh",
         "enabled": true,
-        "narrowLabel": "↻",
+        "narrowLabel": "\u00e2\u2020\u00bb",
         "wideLabel": "Refresh status"
       }
     ]

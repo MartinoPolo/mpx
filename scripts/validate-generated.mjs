@@ -7,7 +7,7 @@ import { buildConvergenceManifest, compareConvergenceManifests, validateConverge
 
 const TEXT = /(?:\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)|(?:^|\/)LICENSE)$/iu;
 const LOCKFILE = /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|pnpm-lock\.yaml)$/iu;
-const PRIVATE_STATE = /(?:^|\/)(?:\.env(?:\..+)?|[^/]*(?:credential|credentials|session|runtime-state)[^/]*)$/iu;
+const PRIVATE_STATE = /(?:^|\/)(?:\.env(?:\..+)?|(?:credentials?|sessions?|runtime-state|runtime-status)(?:\.(?:json|ya?ml|toml))?)$/iu;
 const ACTIVE_ROOT = /^(?:apps|content|packages|runtimes|scripts)\//u;
 const IMPORTED = new Set(["imported-rewritten", "imported-non-normative-history"]);
 const DISPOSITIONS = new Set([...IMPORTED, "deferred-inventory-only", "excluded"]);

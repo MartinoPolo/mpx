@@ -189,6 +189,12 @@ describe("generated repository validation", () => {
     expect(messages(validateFiles(files(path, "secret"), { trackedFiles: [path] }))).toContain("TRACKED_PRIVATE_STATE");
   });
 
+  it("does not classify source and documentation about sessions as private state", () => {
+    for (const path of ["apps/cli/src/session-command.ts", "packages/sessions/src/sessions.test.ts", "docs/SESSIONS_INSTALLER.md"]) {
+      expect(messages(validateFiles(files(path, "public source"), { trackedFiles: [path] }))).not.toContain("TRACKED_PRIVATE_STATE");
+    }
+  });
+
   it("rejects nested package-manager lockfiles", () => {
     expect(messages(validateFiles(files("packages/demo/pnpm-lock.yaml", "lockfileVersion: 9"), { trackedFiles: ["packages/demo/pnpm-lock.yaml"] }))).toContain("NESTED_LOCKFILE");
   });

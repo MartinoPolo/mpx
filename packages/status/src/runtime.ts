@@ -1,10 +1,11 @@
 export type RuntimeStatusFreshnessStateV1 = "current" | "stale" | "unavailable" | "error";
-export interface RuntimeStatusFreshnessV1 { state: RuntimeStatusFreshnessStateV1; observedAt: string | null; errorCode: string | null }
+export type RuntimeStatusSourceV1 = "native" | "provider" | "derived" | "cache";
+export interface RuntimeStatusGroupMetadataV1 { source: RuntimeStatusSourceV1; state: RuntimeStatusFreshnessStateV1; capturedAt: string | null; freshUntil: string | null; diagnostic: string | null; unavailable: string | null }
 export interface RuntimeStatusBindingV1 { launchKey: string; runtimeId: string; repositoryId: string }
 export type RuntimeStatusHarnessV1 =
   | { kind: "claude"; version: string | null; surface: "statusline" }
   | { kind: "pi"; version: string | null; surface: "footer" };
-interface Group { freshness: RuntimeStatusFreshnessV1 }
+interface Group extends RuntimeStatusGroupMetadataV1 {}
 export interface RuntimeIdentityStatusV1 extends Group { profile: "personal" | "work" | null; label: string | null }
 export interface RuntimeSessionStatusV1 extends Group { elapsedMs: number | null; turns: number | null; title?: string | null }
 export interface RuntimeModelStatusV1 extends Group { modelId: string | null; label: string | null; contextUsedTokens: number | null; contextLimitTokens: number | null; effort?: "low" | "medium" | "high" | "max" | null }
@@ -73,17 +74,25 @@ function timestampAt(value: unknown, path: string): string {
   return timestamp;
 }
 function nullableTimestampAt(value: unknown, path: string): string | null { return value === null ? null : timestampAt(value, path); }
-function freshnessAt(value: unknown, path: string): RuntimeStatusFreshnessV1 {
-  const record = objectAt(value, path, ["state", "observedAt", "errorCode"]);
+const GROUP_METADATA_FIELDS = ["source", "state", "capturedAt", "freshUntil", "diagnostic", "unavailable"] as const;
+function metadataAt(record: Record<string, unknown>, path: string): RuntimeStatusGroupMetadataV1 {
+  const source = enumAt(record.source, `${path}.source`, ["native", "provider", "derived", "cache"] as const);
   const state = enumAt(record.state, `${path}.state`, ["current", "stale", "unavailable", "error"] as const);
-  const observedAt = nullableTimestampAt(record.observedAt, `${path}.observedAt`);
-  const errorCode = nullableIdAt(record.errorCode, `${path}.errorCode`);
-  if ((state === "current" || state === "stale") && observedAt === null) fail(`${path}.observedAt`, `present for ${state} freshness`);
-  if (state === "unavailable" && (observedAt !== null || errorCode !== null)) fail(path, "empty when unavailable");
-  if (state === "error" && errorCode === null) fail(`${path}.errorCode`, "present for error freshness");
-  return { state, observedAt, errorCode };
+  const capturedAt = nullableTimestampAt(record.capturedAt, `${path}.capturedAt`);
+  const freshUntil = nullableTimestampAt(record.freshUntil, `${path}.freshUntil`);
+  const diagnostic = nullableIdAt(record.diagnostic, `${path}.diagnostic`);
+  const unavailable = nullableTextAt(record.unavailable, `${path}.unavailable`, 128);
+  if (state === "current" || state === "stale") {
+    if (capturedAt === null) fail(`${path}.capturedAt`, `present for ${state} state`);
+    if (freshUntil === null) fail(`${path}.freshUntil`, `present for ${state} state`);
+    if (Date.parse(freshUntil) < Date.parse(capturedAt)) fail(`${path}.freshUntil`, "not earlier than capturedAt");
+    if (diagnostic !== null || unavailable !== null) fail(path, `diagnostic-free and available for ${state} state`);
+  } else if (state === "unavailable") {
+    if (capturedAt !== null || freshUntil !== null || diagnostic !== null || unavailable === null) fail(path, "empty except for an unavailable reason when unavailable");
+  } else if (freshUntil !== null || diagnostic === null || unavailable !== null) fail(path, "diagnostic-bearing with no freshness or unavailable reason when error");
+  return { source, state, capturedAt, freshUntil, diagnostic, unavailable };
 }
-function baseGroup(value: unknown, path: string, fields: readonly string[]): [Record<string, unknown>, RuntimeStatusFreshnessV1] { const record = objectAt(value, path, ["freshness", ...fields]); return [record, freshnessAt(record.freshness, `${path}.freshness`)]; }
+function baseGroup(value: unknown, path: string, fields: readonly string[]): [Record<string, unknown>, RuntimeStatusGroupMetadataV1] { const record = objectAt(value, path, [...GROUP_METADATA_FIELDS, ...fields]); return [record, metadataAt(record, path)]; }
 function bindingAt(value: unknown): RuntimeStatusBindingV1 { const r = objectAt(value, "binding", ["launchKey", "runtimeId", "repositoryId"]); return { launchKey: idAt(r.launchKey, "binding.launchKey"), runtimeId: idAt(r.runtimeId, "binding.runtimeId"), repositoryId: idAt(r.repositoryId, "binding.repositoryId") }; }
 function harnessAt(value: unknown): RuntimeStatusHarnessV1 {
   const r = objectAt(value, "harness", ["kind", "version", "surface"]); const kind = enumAt(r.kind, "harness.kind", ["claude", "pi"] as const); const version = nullableTextAt(r.version, "harness.version", 64);
@@ -96,18 +105,23 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   const keys = ["schemaVersion", "generatedAt", "binding", "harness", "identity", "session", "model", "location", "repository", "usage", "cost", "providerUsage", "compactions", "subagents", "development", "actions"] as const;
   const root = objectAt(value, "runtime status envelope", keys);
   if (root.schemaVersion !== 1) fail("schemaVersion", "the supported version 1");
-  const [identity, identityFreshness] = baseGroup(root.identity, "identity", ["profile", "label"]);
-  const session = objectAtWithOptional(root.session, "session", ["freshness", "elapsedMs", "turns"], ["title"]), sessionFreshness = freshnessAt(session.freshness, "session.freshness");
-  const model = objectAtWithOptional(root.model, "model", ["freshness", "modelId", "label", "contextUsedTokens", "contextLimitTokens"], ["effort"]), modelFreshness = freshnessAt(model.freshness, "model.freshness");
-  const [location, locationFreshness] = baseGroup(root.location, "location", ["label"]);
-  const [repository, repositoryFreshness] = baseGroup(root.repository, "repository", ["name", "branch", "dirty", "ahead", "behind"]);
-  const [usage, usageFreshness] = baseGroup(root.usage, "usage", ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens"]);
-  const [cost, costFreshness] = baseGroup(root.cost, "cost", ["currency", "amountMicros"]);
-  const [provider, providerFreshness] = baseGroup(root.providerUsage, "providerUsage", ["provider", "used", "limit", "unit", "resetAt"]);
-  const [compactions, compactionsFreshness] = baseGroup(root.compactions, "compactions", ["count", "lastAt"]);
-  const [subagents, subagentsFreshness] = baseGroup(root.subagents, "subagents", ["active", "completed", "failed"]);
-  const [development, developmentFreshness] = baseGroup(root.development, "development", ["services"]);
-  const [actions, actionsFreshness] = baseGroup(root.actions, "actions", ["items"]);
+  const generatedAt = timestampAt(root.generatedAt, "generatedAt");
+  const [identity, identityMetadata] = baseGroup(root.identity, "identity", ["profile", "label"]);
+  const session = objectAtWithOptional(root.session, "session", [...GROUP_METADATA_FIELDS, "elapsedMs", "turns"], ["title"]), sessionMetadata = metadataAt(session, "session");
+  const model = objectAtWithOptional(root.model, "model", [...GROUP_METADATA_FIELDS, "modelId", "label", "contextUsedTokens", "contextLimitTokens"], ["effort"]), modelMetadata = metadataAt(model, "model");
+  const [location, locationMetadata] = baseGroup(root.location, "location", ["label"]);
+  const [repository, repositoryMetadata] = baseGroup(root.repository, "repository", ["name", "branch", "dirty", "ahead", "behind"]);
+  const [usage, usageMetadata] = baseGroup(root.usage, "usage", ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totalTokens"]);
+  const [cost, costMetadata] = baseGroup(root.cost, "cost", ["currency", "amountMicros"]);
+  const [provider, providerMetadata] = baseGroup(root.providerUsage, "providerUsage", ["provider", "used", "limit", "unit", "resetAt"]);
+  const [compactions, compactionsMetadata] = baseGroup(root.compactions, "compactions", ["count", "lastAt"]);
+  const [subagents, subagentsMetadata] = baseGroup(root.subagents, "subagents", ["active", "completed", "failed"]);
+  const [development, developmentMetadata] = baseGroup(root.development, "development", ["services"]);
+  const [actions, actionsMetadata] = baseGroup(root.actions, "actions", ["items"]);
+  for (const [name, metadata] of [["identity", identityMetadata], ["session", sessionMetadata], ["model", modelMetadata], ["location", locationMetadata], ["repository", repositoryMetadata], ["usage", usageMetadata], ["cost", costMetadata], ["providerUsage", providerMetadata], ["compactions", compactionsMetadata], ["subagents", subagentsMetadata], ["development", developmentMetadata], ["actions", actionsMetadata]] as const) {
+    if (metadata.capturedAt !== null && Date.parse(metadata.capturedAt) > Date.parse(generatedAt)) fail(`${name}.capturedAt`, "not later than generatedAt");
+    if (metadata.state === "current" && metadata.freshUntil !== null && Date.parse(metadata.freshUntil) < Date.parse(generatedAt)) fail(`${name}.state`, "current only through freshUntil");
+  }
   if (!Array.isArray(development.services) || development.services.length > 64) fail("development.services", "an array of at most 64 services");
   const services = development.services.map((item, index): RuntimeDevelopmentServiceV1 => { const p = `development.services[${index}]`; const r = objectAt(item, p, ["id", "state", "port"]); const port = integerNullAt(r.port, `${p}.port`, 65535); if (port === 0) fail(`${p}.port`, "null or an integer from 1 through 65535"); return { id: idAt(r.id, `${p}.id`), state: enumAt(r.state, `${p}.state`, ["listening", "stopped", "conflict", "unknown"] as const), port }; });
   if (new Set(services.map(({ id }) => id)).size !== services.length) fail("development.services", "unique by id");
@@ -118,18 +132,18 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   const currency = enumAt(cost.currency, "cost.currency", ["USD"] as const);
   const unit = provider.unit === null ? null : enumAt(provider.unit, "providerUsage.unit", ["requests", "tokens", "percent"] as const);
   return {
-    schemaVersion: 1, generatedAt: timestampAt(root.generatedAt, "generatedAt"), binding: bindingAt(root.binding), harness: harnessAt(root.harness),
-    identity: { freshness: identityFreshness, profile, label: nullableTextAt(identity.label, "identity.label", 64) },
-    session: { freshness: sessionFreshness, elapsedMs: integerNullAt(session.elapsedMs, "session.elapsedMs"), turns: integerNullAt(session.turns, "session.turns", 1_000_000), ...(Object.hasOwn(session, "title") ? { title: nullableTextAt(session.title, "session.title", 128) } : {}) },
-    model: { freshness: modelFreshness, modelId: nullableIdAt(model.modelId, "model.modelId"), label: nullableTextAt(model.label, "model.label", 64), contextUsedTokens: integerNullAt(model.contextUsedTokens, "model.contextUsedTokens"), contextLimitTokens: integerNullAt(model.contextLimitTokens, "model.contextLimitTokens"), ...(Object.hasOwn(model, "effort") ? { effort: model.effort === null ? null : enumAt(model.effort, "model.effort", ["low", "medium", "high", "max"] as const) } : {}) },
-    location: { freshness: locationFreshness, label: nullableTextAt(location.label, "location.label", 128) },
-    repository: { freshness: repositoryFreshness, name: nullableTextAt(repository.name, "repository.name", 128), branch: nullableTextAt(repository.branch, "repository.branch", 256), dirty: boolNullAt(repository.dirty, "repository.dirty"), ahead: integerNullAt(repository.ahead, "repository.ahead", 1_000_000), behind: integerNullAt(repository.behind, "repository.behind", 1_000_000) },
-    usage: { freshness: usageFreshness, inputTokens: integerNullAt(usage.inputTokens, "usage.inputTokens"), outputTokens: integerNullAt(usage.outputTokens, "usage.outputTokens"), cacheReadTokens: integerNullAt(usage.cacheReadTokens, "usage.cacheReadTokens"), cacheWriteTokens: integerNullAt(usage.cacheWriteTokens, "usage.cacheWriteTokens"), totalTokens: integerNullAt(usage.totalTokens, "usage.totalTokens") },
-    cost: { freshness: costFreshness, currency, amountMicros: integerNullAt(cost.amountMicros, "cost.amountMicros") },
-    providerUsage: { freshness: providerFreshness, provider: nullableIdAt(provider.provider, "providerUsage.provider"), used: integerNullAt(provider.used, "providerUsage.used"), limit: integerNullAt(provider.limit, "providerUsage.limit"), unit, resetAt: nullableTimestampAt(provider.resetAt, "providerUsage.resetAt") },
-    compactions: { freshness: compactionsFreshness, count: integerNullAt(compactions.count, "compactions.count", 1_000_000), lastAt: nullableTimestampAt(compactions.lastAt, "compactions.lastAt") },
-    subagents: { freshness: subagentsFreshness, active: integerNullAt(subagents.active, "subagents.active", 100_000), completed: integerNullAt(subagents.completed, "subagents.completed", 1_000_000), failed: integerNullAt(subagents.failed, "subagents.failed", 1_000_000) },
-    development: { freshness: developmentFreshness, services }, actions: { freshness: actionsFreshness, items },
+    schemaVersion: 1, generatedAt, binding: bindingAt(root.binding), harness: harnessAt(root.harness),
+    identity: { ...identityMetadata, profile, label: nullableTextAt(identity.label, "identity.label", 64) },
+    session: { ...sessionMetadata, elapsedMs: integerNullAt(session.elapsedMs, "session.elapsedMs"), turns: integerNullAt(session.turns, "session.turns", 1_000_000), ...(Object.hasOwn(session, "title") ? { title: nullableTextAt(session.title, "session.title", 128) } : {}) },
+    model: { ...modelMetadata, modelId: nullableIdAt(model.modelId, "model.modelId"), label: nullableTextAt(model.label, "model.label", 64), contextUsedTokens: integerNullAt(model.contextUsedTokens, "model.contextUsedTokens"), contextLimitTokens: integerNullAt(model.contextLimitTokens, "model.contextLimitTokens"), ...(Object.hasOwn(model, "effort") ? { effort: model.effort === null ? null : enumAt(model.effort, "model.effort", ["low", "medium", "high", "max"] as const) } : {}) },
+    location: { ...locationMetadata, label: nullableTextAt(location.label, "location.label", 128) },
+    repository: { ...repositoryMetadata, name: nullableTextAt(repository.name, "repository.name", 128), branch: nullableTextAt(repository.branch, "repository.branch", 256), dirty: boolNullAt(repository.dirty, "repository.dirty"), ahead: integerNullAt(repository.ahead, "repository.ahead", 1_000_000), behind: integerNullAt(repository.behind, "repository.behind", 1_000_000) },
+    usage: { ...usageMetadata, inputTokens: integerNullAt(usage.inputTokens, "usage.inputTokens"), outputTokens: integerNullAt(usage.outputTokens, "usage.outputTokens"), cacheReadTokens: integerNullAt(usage.cacheReadTokens, "usage.cacheReadTokens"), cacheWriteTokens: integerNullAt(usage.cacheWriteTokens, "usage.cacheWriteTokens"), totalTokens: integerNullAt(usage.totalTokens, "usage.totalTokens") },
+    cost: { ...costMetadata, currency, amountMicros: integerNullAt(cost.amountMicros, "cost.amountMicros") },
+    providerUsage: { ...providerMetadata, provider: nullableIdAt(provider.provider, "providerUsage.provider"), used: integerNullAt(provider.used, "providerUsage.used"), limit: integerNullAt(provider.limit, "providerUsage.limit"), unit, resetAt: nullableTimestampAt(provider.resetAt, "providerUsage.resetAt") },
+    compactions: { ...compactionsMetadata, count: integerNullAt(compactions.count, "compactions.count", 1_000_000), lastAt: nullableTimestampAt(compactions.lastAt, "compactions.lastAt") },
+    subagents: { ...subagentsMetadata, active: integerNullAt(subagents.active, "subagents.active", 100_000), completed: integerNullAt(subagents.completed, "subagents.completed", 1_000_000), failed: integerNullAt(subagents.failed, "subagents.failed", 1_000_000) },
+    development: { ...developmentMetadata, services }, actions: { ...actionsMetadata, items },
   };
 }
 
@@ -139,26 +153,72 @@ export function parseRuntimeStatusEnvelopeV1Json(text: string): RuntimeStatusEnv
   catch (error) { if (error instanceof RuntimeStatusEnvelopeValidationError) throw error; throw new RuntimeStatusEnvelopeValidationError("document must be valid JSON"); }
 }
 
-export interface RuntimeStatusCapabilitiesV1 { schemaVersion: 1; harness: "claude" | "pi"; surface: "statusline" | "footer"; widths: readonly ["narrow", "wide"]; semanticActions: readonly RuntimeStatusActionIdV1[] }
+export type RuntimeStatusCapabilitySupportV1 = "native" | "adapter" | "derived" | "unsupported";
+export type RuntimeStatusFieldV1 =
+  | "identity.profile" | "identity.label" | "session.elapsedMs" | "session.turns" | "session.title"
+  | "model.modelId" | "model.label" | "model.contextUsedTokens" | "model.contextLimitTokens" | "model.effort" | "location.label"
+  | "repository.name" | "repository.branch" | "repository.dirty" | "repository.ahead" | "repository.behind"
+  | "usage.inputTokens" | "usage.outputTokens" | "usage.cacheReadTokens" | "usage.cacheWriteTokens" | "usage.totalTokens"
+  | "cost.currency" | "cost.amountMicros" | "providerUsage.provider" | "providerUsage.used" | "providerUsage.limit" | "providerUsage.unit" | "providerUsage.resetAt"
+  | "compactions.count" | "compactions.lastAt" | "subagents.active" | "subagents.completed" | "subagents.failed" | "development.services" | "actions.items";
+export type RuntimeStatusFieldCapabilityV1 = { readonly support: "native" | "adapter" | "derived" } | { readonly support: "unsupported"; readonly reason: string };
+export interface RuntimeStatusCapabilitiesV1 { readonly schemaVersion: 1; readonly harness: "claude" | "pi"; readonly surface: "statusline" | "footer"; readonly widths: readonly ["narrow", "wide"]; readonly semanticActions: readonly RuntimeStatusActionIdV1[]; readonly fields: Readonly<Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>> }
+const RUNTIME_STATUS_FIELDS = ["identity.profile","identity.label","session.elapsedMs","session.turns","session.title","model.modelId","model.label","model.contextUsedTokens","model.contextLimitTokens","model.effort","location.label","repository.name","repository.branch","repository.dirty","repository.ahead","repository.behind","usage.inputTokens","usage.outputTokens","usage.cacheReadTokens","usage.cacheWriteTokens","usage.totalTokens","cost.currency","cost.amountMicros","providerUsage.provider","providerUsage.used","providerUsage.limit","providerUsage.unit","providerUsage.resetAt","compactions.count","compactions.lastAt","subagents.active","subagents.completed","subagents.failed","development.services","actions.items"] as const satisfies readonly RuntimeStatusFieldV1[];
+const ALL_ACTIONS = ["refresh", "show-usage", "open-repository", "show-tasks", "open-review", "show-ci"] as const;
+const unsupported = (reason: string): RuntimeStatusFieldCapabilityV1 => ({ support: "unsupported", reason });
+function capabilityFields(overrides: Partial<Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>>): Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1> { return Object.fromEntries(RUNTIME_STATUS_FIELDS.map(field => [field, overrides[field] ?? { support: "adapter" }])) as Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>; }
+const claudeFields = capabilityFields({
+  "session.elapsedMs": { support: "native" }, "session.turns": unsupported("Claude statusline does not report turn count"), "session.title": { support: "native" },
+  "model.modelId": { support: "native" }, "model.label": { support: "native" }, "model.contextUsedTokens": { support: "native" }, "model.contextLimitTokens": { support: "native" }, "model.effort": { support: "native" },
+  "location.label": { support: "derived" }, "usage.inputTokens": { support: "native" }, "usage.outputTokens": { support: "native" }, "usage.cacheReadTokens": { support: "native" }, "usage.cacheWriteTokens": { support: "native" }, "usage.totalTokens": { support: "derived" }, "cost.currency": { support: "derived" }, "cost.amountMicros": { support: "native" },
+  "providerUsage.provider": unsupported("Claude statusline does not expose provider quota"), "providerUsage.used": unsupported("Claude statusline does not expose provider quota"), "providerUsage.limit": unsupported("Claude statusline does not expose provider quota"), "providerUsage.unit": unsupported("Claude statusline does not expose provider quota"), "providerUsage.resetAt": unsupported("Claude statusline does not expose provider quota"),
+  "compactions.count": unsupported("Claude statusline does not report compactions"), "compactions.lastAt": unsupported("Claude statusline does not report compactions"),
+});
+const piFields = capabilityFields({
+  "session.elapsedMs": { support: "derived" }, "session.turns": unsupported("Pi footer does not report turn count"), "session.title": { support: "adapter" },
+  "model.modelId": { support: "native" }, "model.label": { support: "native" }, "model.contextUsedTokens": { support: "native" }, "model.contextLimitTokens": { support: "native" }, "model.effort": unsupported("Pi does not expose Claude effort"),
+  "location.label": { support: "derived" }, "usage.totalTokens": { support: "derived" }, "cost.currency": { support: "derived" }, "cost.amountMicros": unsupported("Pi does not expose native session cost"),
+});
+function parseFieldCapability(value: unknown, path: string): RuntimeStatusFieldCapabilityV1 {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(path, "a capability object");
+  const item = value as Record<string, unknown>, support = enumAt(item.support, `${path}.support`, ["native", "adapter", "derived", "unsupported"] as const);
+  const expected = support === "unsupported" ? ["support", "reason"] : ["support"];
+  for (const key of Object.keys(item)) if (!expected.includes(key)) fail(`${path}.${key}`, "a recognized capability field");
+  for (const key of expected) if (!Object.hasOwn(item, key)) fail(`${path}.${key}`, "present");
+  return support === "unsupported" ? { support, reason: textAt(item.reason, `${path}.reason`, 160) } : { support };
+}
+/** Strictly validates and deeply freezes the complete renderer capability contract. */
+export function parseRuntimeStatusCapabilitiesV1(value: unknown): RuntimeStatusCapabilitiesV1 {
+  const root = objectAt(value, "runtime status capabilities", ["schemaVersion", "harness", "surface", "widths", "semanticActions", "fields"]);
+  if (root.schemaVersion !== 1) fail("runtime status capabilities.schemaVersion", "the supported version 1");
+  const harness = enumAt(root.harness, "runtime status capabilities.harness", ["claude", "pi"] as const), surface = enumAt(root.surface, "runtime status capabilities.surface", ["statusline", "footer"] as const);
+  if ((harness === "claude" && surface !== "statusline") || (harness === "pi" && surface !== "footer")) fail("runtime status capabilities.surface", `the ${harness} surface`);
+  if (!Array.isArray(root.widths) || root.widths.length !== 2 || root.widths[0] !== "narrow" || root.widths[1] !== "wide") fail("runtime status capabilities.widths", "exactly narrow and wide");
+  if (!Array.isArray(root.semanticActions) || root.semanticActions.length > ALL_ACTIONS.length) fail("runtime status capabilities.semanticActions", "a bounded semantic action array");
+  const semanticActions = root.semanticActions.map((action, index) => enumAt(action, `runtime status capabilities.semanticActions[${index}]`, ALL_ACTIONS));
+  if (new Set(semanticActions).size !== semanticActions.length) fail("runtime status capabilities.semanticActions", "unique");
+  const fields = objectAt(root.fields, "runtime status capabilities.fields", RUNTIME_STATUS_FIELDS);
+  const parsedFields = Object.fromEntries(RUNTIME_STATUS_FIELDS.map(field => [field, parseFieldCapability(fields[field], `runtime status capabilities.fields.${field}`)])) as Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>;
+  return deepFreeze({ schemaVersion: 1, harness, surface, widths: ["narrow", "wide"], semanticActions, fields: parsedFields });
+}
 const CAPABILITIES = {
-  claude: Object.freeze({ schemaVersion: 1 as const, harness: "claude" as const, surface: "statusline" as const, widths: Object.freeze(["narrow", "wide"] as const), semanticActions: Object.freeze(["refresh", "show-usage", "open-repository", "show-tasks", "open-review", "show-ci"] as const) }),
-  pi: Object.freeze({ schemaVersion: 1 as const, harness: "pi" as const, surface: "footer" as const, widths: Object.freeze(["narrow", "wide"] as const), semanticActions: Object.freeze(["refresh", "show-usage", "open-repository", "show-tasks", "open-review", "show-ci"] as const) }),
+  claude: parseRuntimeStatusCapabilitiesV1({ schemaVersion: 1, harness: "claude", surface: "statusline", widths: ["narrow", "wide"], semanticActions: ALL_ACTIONS, fields: claudeFields }),
+  pi: parseRuntimeStatusCapabilitiesV1({ schemaVersion: 1, harness: "pi", surface: "footer", widths: ["narrow", "wide"], semanticActions: ALL_ACTIONS, fields: piFields }),
 };
 export function getRuntimeStatusCapabilitiesV1(harness: "claude" | "pi"): RuntimeStatusCapabilitiesV1 { return CAPABILITIES[harness]; }
-
 export type RuntimeStatusGroupNameV1 = "identity" | "session" | "model" | "location" | "repository" | "usage" | "cost" | "providerUsage" | "compactions" | "subagents" | "development" | "actions";
 type RuntimeStatusGroups = Pick<RuntimeStatusEnvelopeV1, RuntimeStatusGroupNameV1>;
-export interface RuntimeStatusContributionV1 { source: "launch" | "repository" | "runtime"; binding: RuntimeStatusBindingV1; groups: Partial<RuntimeStatusGroups> }
+export interface RuntimeStatusContributionV1 { source: "cache" | "launch" | "repository" | "runtime"; binding: RuntimeStatusBindingV1; groups: Partial<RuntimeStatusGroups> }
 export interface ComposeRuntimeStatusEnvelopeV1Input { generatedAt: string; binding: RuntimeStatusBindingV1; harness: RuntimeStatusHarnessV1; contributions: readonly RuntimeStatusContributionV1[] }
 const GROUP_NAMES: readonly RuntimeStatusGroupNameV1[] = ["identity", "session", "model", "location", "repository", "usage", "cost", "providerUsage", "compactions", "subagents", "development", "actions"];
 function unavailableGroups(): RuntimeStatusGroups {
-  const freshness: RuntimeStatusFreshnessV1 = { state: "unavailable", observedAt: null, errorCode: null };
-  return { identity: { freshness, profile: null, label: null }, session: { freshness, elapsedMs: null, turns: null }, model: { freshness, modelId: null, label: null, contextUsedTokens: null, contextLimitTokens: null }, location: { freshness, label: null }, repository: { freshness, name: null, branch: null, dirty: null, ahead: null, behind: null }, usage: { freshness, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, totalTokens: null }, cost: { freshness, currency: "USD", amountMicros: null }, providerUsage: { freshness, provider: null, used: null, limit: null, unit: null, resetAt: null }, compactions: { freshness, count: null, lastAt: null }, subagents: { freshness, active: null, completed: null, failed: null }, development: { freshness, services: [] }, actions: { freshness, items: [] } };
+  const unavailable: RuntimeStatusGroupMetadataV1 = { source: "derived", state: "unavailable", capturedAt: null, freshUntil: null, diagnostic: null, unavailable: "not reported" };
+  return { identity: { ...unavailable, profile: null, label: null }, session: { ...unavailable, elapsedMs: null, turns: null }, model: { ...unavailable, modelId: null, label: null, contextUsedTokens: null, contextLimitTokens: null }, location: { ...unavailable, label: null }, repository: { ...unavailable, name: null, branch: null, dirty: null, ahead: null, behind: null }, usage: { ...unavailable, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, totalTokens: null }, cost: { ...unavailable, currency: "USD", amountMicros: null }, providerUsage: { ...unavailable, provider: null, used: null, limit: null, unit: null, resetAt: null }, compactions: { ...unavailable, count: null, lastAt: null }, subagents: { ...unavailable, active: null, completed: null, failed: null }, development: { ...unavailable, services: [] }, actions: { ...unavailable, items: [] } };
 }
 function sameBinding(a: RuntimeStatusBindingV1, b: RuntimeStatusBindingV1): boolean { return a.launchKey === b.launchKey && a.runtimeId === b.runtimeId && a.repositoryId === b.repositoryId; }
-/** Pure composition. Contributions are atomic by group; precedence is runtime > repository > launch. */
+/** Pure composition. Contributions are atomic by group; precedence is runtime > repository > launch > cache. */
 export function composeRuntimeStatusEnvelopeV1(input: ComposeRuntimeStatusEnvelopeV1Input): RuntimeStatusEnvelopeV1 {
-  const groups = unavailableGroups(); const rank = { launch: 0, repository: 1, runtime: 2 } as const;
+  const groups = unavailableGroups(); const rank = { cache: 0, launch: 1, repository: 2, runtime: 3 } as const;
   if (new Set(input.contributions.map(({ source }) => source)).size !== input.contributions.length) throw new RuntimeStatusEnvelopeValidationError("contribution sources must be unique for deterministic precedence");
   for (const contribution of [...input.contributions].sort((a, b) => rank[a.source] - rank[b.source])) {
     if (!sameBinding(input.binding, contribution.binding)) throw new RuntimeStatusEnvelopeValidationError(`${contribution.source} binding must match launch/runtime/repository binding`);
@@ -170,7 +230,7 @@ export function composeRuntimeStatusEnvelopeV1(input: ComposeRuntimeStatusEnvelo
 export interface RuntimeStatusEnvelopeReader { read(signal: AbortSignal): Promise<unknown> }
 export interface RuntimeStatusRefreshController { current(): RuntimeStatusEnvelopeV1 | undefined; refresh(): Promise<void>; abort(): void }
 export interface RuntimeStatusRefreshOptions { timeoutMs?: number; initial?: RuntimeStatusEnvelopeV1 }
-function staleEnvelope(value: RuntimeStatusEnvelopeV1): RuntimeStatusEnvelopeV1 { const clone = structuredClone(value); for (const name of GROUP_NAMES) if (clone[name].freshness.state === "current") clone[name].freshness.state = "stale"; return clone; }
+function staleEnvelope(value: RuntimeStatusEnvelopeV1): RuntimeStatusEnvelopeV1 { const clone = structuredClone(value); for (const name of GROUP_NAMES) if (clone[name].state === "current") clone[name].state = "stale"; return clone; }
 /** Performs bounded asynchronous reads outside renderers, coalescing concurrent refreshes. */
 export function createRuntimeStatusRefreshController(reader: RuntimeStatusEnvelopeReader, options: RuntimeStatusRefreshOptions = {}): RuntimeStatusRefreshController {
   const timeoutMs = options.timeoutMs ?? 1_000; if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw new RangeError("timeoutMs must be from 1 through 60000");

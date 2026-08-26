@@ -72,7 +72,7 @@ it("rejects a relative Claude executable without changing argv construction",()=
 
 it("adapts native Claude status data into the launch-bound envelope and renders the full safe surface", async () => {
   const base = JSON.parse(await readFile(new URL("../../../../packages/status/fixtures/runtime-claude-personal.json", import.meta.url), "utf8"));
-  base.providerUsage = { freshness: { state: "current", observedAt: base.generatedAt, errorCode: null }, provider: "anthropic", used: 25, limit: 100, unit: "percent", resetAt: null };
+  base.providerUsage = { source: "provider", state: "current", capturedAt: base.generatedAt, freshUntil: base.generatedAt, diagnostic: null, unavailable: null, provider: "anthropic", used: 25, limit: 100, unit: "percent", resetAt: null };
   base.actions.items.push(
     { id: "show-tasks", enabled: true, narrowLabel: "Tsk", wideLabel: "Task panel" },
     { id: "open-review", enabled: true, narrowLabel: "PR", wideLabel: "Review #42" },
