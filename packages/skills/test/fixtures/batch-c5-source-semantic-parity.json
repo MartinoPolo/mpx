@@ -1,0 +1,470 @@
+{
+  "schemaVersion": 1,
+  "base": "036a784",
+  "description": "Captured Batch C5 normalized semantic scenario contracts",
+  "scenarios": [
+    {
+      "identity": "batch-execute",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-batch-execute/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "a7820642318409061989d4e9bced53c23e97b6a8608d3a858da439fe1ed43988"
+      },
+      "destination": "content/skills/batch-execute/SKILL.md",
+      "destinationSha256": "c28504d3253550ce75759c181d9b4733c84a0fd033c09dd2f4ffe136b4f682f5",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Resolve the explicit Issue range/list or label"
+        },
+        {
+          "dimension": "branch",
+          "clause": "ask whether to skip, include, or complete design first"
+        },
+        {
+          "dimension": "concurrency",
+          "clause": "Execute one Issue per `mp-executor`, sequential by default"
+        },
+        {
+          "dimension": "gate",
+          "clause": "Confirm each commit before starting the next"
+        },
+        {
+          "dimension": "review-id",
+          "clause": "Capture its explicit Review ID and URL; do not rediscover it"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Report Issue-to-commit mappings, skips, checks, review findings, visual results, board moves, and Review ID"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "Never fall back to a provider CLI"
+        }
+      ],
+      "assets": [
+        {
+          "path": "content/skills/batch-execute/REFERENCE.md",
+          "sha256": "cdb5ffdc7a3e723e04b907e61f07e098be2e738f07bff79cf24689a0f16a822a"
+        }
+      ]
+    },
+    {
+      "identity": "commit-push-review",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-commit-push-pr/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "2c887e642c9f4b4c56277502c7445ee5d94e27e65b23358561ffb24021665436"
+      },
+      "destination": "content/skills/commit-push-review/SKILL.md",
+      "destinationSha256": "722f9f5390d8c4a0f34891cab6d55732d158bf7915e2965eb2b364863f1110ef",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Inspect status, full diff, branch, base relationship, and repository instructions"
+        },
+        {
+          "dimension": "privacy",
+          "clause": "preserve unrelated changes"
+        },
+        {
+          "dimension": "issue-id",
+          "clause": "Resolve a linked Issue only from branch/commit evidence"
+        },
+        {
+          "dimension": "branch",
+          "clause": "With an explicit Review ID, inspect it"
+        },
+        {
+          "dimension": "review-id",
+          "clause": "Without a Review ID, create one"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Report commit, push, target branch, Review ID/URL/state, created-or-updated status, and skipped steps"
+        },
+        {
+          "dimension": "provider",
+          "clause": "CAPABILITY_UNSUPPORTED"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "without falling back to a provider CLI"
+        }
+      ],
+      "assets": []
+    },
+    {
+      "identity": "epic-review",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-epic-review/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "2f5d883aadbb2ab692f044306fd17152a39c53248b69c38f69f2bf7572af2f30"
+      },
+      "destination": "content/skills/epic-review/SKILL.md",
+      "destinationSha256": "d40e523125f4a6b404277573b11c80e155674b71574e306b001def84bd8dd5d3",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Fetch the explicit Epic and its children/comments"
+        },
+        {
+          "dimension": "review-id",
+          "clause": "For each explicit Review ID run"
+        },
+        {
+          "dimension": "privacy",
+          "clause": "exclude credentials, private unrelated comments, and unnecessary personal data"
+        },
+        {
+          "dimension": "concurrency",
+          "clause": "Run ten analysis branches concurrently"
+        },
+        {
+          "dimension": "asset",
+          "clause": "Write `.mpx/reviews/PHASE_END_EPIC_<id>.md` using [the template](PHASE_END_TEMPLATE.md)"
+        },
+        {
+          "dimension": "gate",
+          "clause": "show the full action list and wait for confirmation, edits, drops, or deferral"
+        },
+        {
+          "dimension": "manual-handoff",
+          "clause": "report structured remediation plus manual handoff"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "Never fall back to provider CLIs"
+        }
+      ],
+      "assets": [
+        {
+          "path": "content/skills/epic-review/ANALYSIS_BRANCHES.md",
+          "sha256": "b25442fe599e5c5c1e3ae646bcfe98be8bd178b4a2c4dbe3e121a4f57aa83b0d"
+        },
+        {
+          "path": "content/skills/epic-review/EXECUTION.md",
+          "sha256": "13a815ce12f2358839fffa7e7f25bea29096c9fd99ed634eb6e07ad507db801c"
+        },
+        {
+          "path": "content/skills/epic-review/PHASE_END_TEMPLATE.md",
+          "sha256": "e9d5dda1f379b0daa7e2462abf0a93746a0960757f0bd2bba19dd103fa12f10c"
+        }
+      ]
+    },
+    {
+      "identity": "hitl",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-hitl/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "4162902a64781219d23ab71d222cd734be2774061023492f3c491f420f1c3752"
+      },
+      "destination": "content/skills/hitl/SKILL.md",
+      "destinationSha256": "bf4b8d95e6e0f94a370724e58a118b99fa57af3e62264b9574a6143aeceae184",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Use an explicit Epic ID when supplied"
+        },
+        {
+          "dimension": "issue-id",
+          "clause": "ask the user to choose when ambiguous"
+        },
+        {
+          "dimension": "branch",
+          "clause": "An HITL Issue is unblocked when each blocker is finished or confirmed AFK"
+        },
+        {
+          "dimension": "gate",
+          "clause": "This is the HITL gate"
+        },
+        {
+          "dimension": "privacy",
+          "clause": "include only decisions needed for implementation"
+        },
+        {
+          "dimension": "manual-handoff",
+          "clause": "return structured remediation plus a manual handoff"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Never use direct provider tooling or claim labels changed"
+        }
+      ],
+      "assets": []
+    },
+    {
+      "identity": "issue-create",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-issue-create/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "600b7aca8481bf0b3c8eef99b49588e1b421649bf50b31cec40b73b5334a4796"
+      },
+      "destination": "content/skills/issue-create/SKILL.md",
+      "destinationSha256": "5f63f83a98495fd5095f2f8066f93e50fcae3b0c03caf7d0ffe6431cacb46d8b",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Parse the confirmed summary, details, and optional explicit Epic ID"
+        },
+        {
+          "dimension": "branch",
+          "clause": "do not silently attach one"
+        },
+        {
+          "dimension": "issue-id",
+          "clause": "Capture the immutable Issue ID and canonical URL"
+        },
+        {
+          "dimension": "manual-handoff",
+          "clause": "preserve the created Issue and provide manual handoff"
+        },
+        {
+          "dimension": "provider",
+          "clause": "GitHub may support native sub-issues and templates"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "never emulate or invoke a provider CLI"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Do not claim creation or linking without a successful response"
+        }
+      ],
+      "assets": []
+    },
+    {
+      "identity": "review-publish",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-pr/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "27988b0936af3de9025be87a0c81a974f9bb92d3b020cb2e6694006930df72a8"
+      },
+      "destination": "content/skills/review-publish/SKILL.md",
+      "destinationSha256": "a4374c2e0baeb9b3aadbe3bf62fbb7a80c1d62dc28d206d38c45b8b19e50aa4c",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Inspect branch status, commits, complete diff, push state, and target branch"
+        },
+        {
+          "dimension": "branch",
+          "clause": "When given an explicit Review ID, treat it as immutable"
+        },
+        {
+          "dimension": "review-id",
+          "clause": "Otherwise create with `mpx review create"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Report target branch, Review ID, URL, state, and whether created or updated"
+        },
+        {
+          "dimension": "provider",
+          "clause": "error.code: CAPABILITY_UNSUPPORTED"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "Do not fall back to direct provider tooling or imply publication occurred"
+        }
+      ],
+      "assets": []
+    },
+    {
+      "identity": "setup-react-native",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-setup-react-native/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "680af3a4bcc0682773ceed8c1db83be71d1ad0368e84fe3745fc1189062d568d"
+      },
+      "destination": "content/skills/setup-react-native/SKILL.md",
+      "destinationSha256": "e1b134670aaa8841d2ebcc7dabae10f50816001dd7abd6fd984a1b06ce58c1cf",
+      "flow": [
+        {
+          "dimension": "asset",
+          "clause": "Read [the platform reference](PLATFORM_REFERENCE.md) before framework-rule setup"
+        },
+        {
+          "dimension": "trigger",
+          "clause": "Collect project name and visibility (private recommended)"
+        },
+        {
+          "dimension": "privacy",
+          "clause": "Do not expose credentials, machine paths, or private repository metadata in output"
+        },
+        {
+          "dimension": "provider",
+          "clause": "GitHub and GitLab may advertise different native template semantics"
+        },
+        {
+          "dimension": "gate",
+          "clause": "requiring Review integration and CI"
+        },
+        {
+          "dimension": "branch",
+          "clause": "Record protection failures as accepted exceptions and continue"
+        },
+        {
+          "dimension": "manual-handoff",
+          "clause": "provide a platform-correct manual command and continue"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Report repository URL, default branch, protection status, monorepo structure, check outcomes, framework rule state, and exceptions"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "do not fall back to any provider CLI"
+        }
+      ],
+      "assets": [
+        {
+          "path": "content/skills/setup-react-native/PLATFORM_REFERENCE.md",
+          "sha256": "ac459e1e353e9c15ec84e5f65f01b28719c80f09e87ac24de6c72e30fbc42088"
+        }
+      ]
+    },
+    {
+      "identity": "setup-sveltekit",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-setup-sveltekit/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "bade962a46f667219b6d5697008ba31d6a767eedfd76b2705fd0e10efaa3ce2c"
+      },
+      "destination": "content/skills/setup-sveltekit/SKILL.md",
+      "destinationSha256": "6092d6ef283b69b16ffce0449b9a046811bfed6a09c75ab9e622feff5ae0b577",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Collect project name and visibility, defaulting to private"
+        },
+        {
+          "dimension": "privacy",
+          "clause": "do not echo tokens, private content, or unrelated machine paths"
+        },
+        {
+          "dimension": "provider",
+          "clause": "If the selected provider has no native template capability, stop remote creation with structured remediation"
+        },
+        {
+          "dimension": "gate",
+          "clause": "requiring Review integration and CI"
+        },
+        {
+          "dimension": "branch",
+          "clause": "Protection failure is graceful"
+        },
+        {
+          "dimension": "manual-handoff",
+          "clause": "provide a manual handoff when absent"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Report URL, default branch, protection, checks, MCP choice, rules, and exceptions"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "do not fall back to a provider CLI"
+        }
+      ],
+      "assets": []
+    },
+    {
+      "identity": "ship",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-ship/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "6aa0e834617c968cd9f32aa8cf82312149c86aefdcb458aa8339621b728eed39"
+      },
+      "destination": "content/skills/ship/SKILL.md",
+      "destinationSha256": "f912ac1ce9229c9e2018d808c9332168aa6c9a788c86fe4114ab219efb8ff772",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Inspect status, branch/upstream, full diff, and commits"
+        },
+        {
+          "dimension": "privacy",
+          "clause": "Preserve unrelated changes"
+        },
+        {
+          "dimension": "review-id",
+          "clause": "Use a trusted explicit Review ID if supplied"
+        },
+        {
+          "dimension": "branch",
+          "clause": "Otherwise create through `mpx review create"
+        },
+        {
+          "dimension": "ci-id",
+          "clause": "Check once with `mpx ci status --id <review-or-pipeline-id>"
+        },
+        {
+          "dimension": "gate",
+          "clause": "Never merge while pending or failed"
+        },
+        {
+          "dimension": "ci-id",
+          "clause": "use `mpx ci retry --run-id <run-id>"
+        },
+        {
+          "dimension": "gate",
+          "clause": "Repeat the CI fix loop at most three times, then stop blocked"
+        },
+        {
+          "dimension": "outcome",
+          "clause": "Report sync, commit, Review ID/URL, CI results and retry count, merge confirmation, Issue/board writeback, and remaining manual handoffs"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "Never fall back to a provider CLI"
+        }
+      ],
+      "assets": []
+    },
+    {
+      "identity": "epic-create",
+      "source": {
+        "id": "claude",
+        "path": "plugins/gh/skills/mp-to-epic/SKILL.md",
+        "revision": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
+        "sha256": "de4d0203d4b465833a2ad6183479c1e3dd5ac49ffe61b5dc78bf6b10380c02fc"
+      },
+      "destination": "content/skills/epic-create/SKILL.md",
+      "destinationSha256": "5bc82d28a9226de5dab623817e2f52b34fc2abc626d7f0a5bdbe70974b8b3c2c",
+      "flow": [
+        {
+          "dimension": "trigger",
+          "clause": "Read `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`; stop if context is absent"
+        },
+        {
+          "dimension": "gate",
+          "clause": "never create before approval"
+        },
+        {
+          "dimension": "issue-id",
+          "clause": "Capture and report the immutable Issue ID"
+        },
+        {
+          "dimension": "provider",
+          "clause": "CAPABILITY_UNSUPPORTED"
+        },
+        {
+          "dimension": "fallback",
+          "clause": "Never use a provider CLI fallback or claim creation"
+        }
+      ],
+      "assets": []
+    }
+  ]
+}
