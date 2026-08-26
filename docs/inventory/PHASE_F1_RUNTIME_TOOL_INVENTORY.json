@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "sourceRegistry": "packages/runtime-tools/src/runtime-tool-registry.ts",
+  "runtimeToolInventorySha256": "ef7ddcf9dfb0989b950f38b6443842658860ea4f30daeb6a1d3c06b8441d7ab0",
+  "executorEvidenceSource": "packages/executors/src/index.ts",
+  "executorEvidenceBindingSha256": "4e608f6283713ebdec0113ccf653349275814766c480534128d779f753fafee6",
+  "counts": {
+    "topLevel": 6,
+    "childAccessible": 10,
+    "total": 16
+  },
+  "entries": [
+    {
+      "path": "mcp",
+      "topLevel": "mcp",
+      "category": "aggregate",
+      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.mcp"
+    },
+    {
+      "path": "mcp/:server/:method",
+      "topLevel": "mcp",
+      "category": "child-operation",
+      "implementation": "packages/runtime-tools/src/index.ts#GatewayExecutor.executeProcess|requestNetwork"
+    },
+    {
+      "path": "web_search",
+      "topLevel": "web_search",
+      "category": "aggregate",
+      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.web_search"
+    },
+    {
+      "path": "web_search/:provider/search",
+      "topLevel": "web_search",
+      "category": "child-operation",
+      "implementation": "packages/runtime-tools/src/index.ts#ProviderAdapter.search"
+    },
+    {
+      "path": "fetch_content",
+      "topLevel": "fetch_content",
+      "category": "aggregate",
+      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.fetch_content"
+    },
+    {
+      "path": "fetch_content/:provider/fetch",
+      "topLevel": "fetch_content",
+      "category": "child-operation",
+      "implementation": "packages/runtime-tools/src/index.ts#ProviderAdapter.fetch"
+    },
+    {
+      "path": "get_search_content",
+      "topLevel": "get_search_content",
+      "category": "aggregate",
+      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.get_search_content"
+    },
+    {
+      "path": "get_search_content/:response",
+      "topLevel": "get_search_content",
+      "category": "child-operation",
+      "implementation": "packages/runtime-tools/src/index.ts#launchContentStore"
+    },
+    {
+      "path": "source_check",
+      "topLevel": "source_check",
+      "category": "aggregate",
+      "implementation": "packages/runtime-tools/src/index.ts#activateRuntimeToolGateway.source_check"
+    },
+    {
+      "path": "source_check/web_search",
+      "topLevel": "source_check",
+      "category": "child-operation",
+      "implementation": "packages/runtime-tools/src/index.ts#RuntimeToolGateway.web_search"
+    },
+    {
+      "path": "dev_server",
+      "topLevel": "dev_server",
+      "category": "aggregate",
+      "implementation": "packages/dev-services/src/tool-adapter.ts#createDevServerToolAdapter"
+    },
+    {
+      "path": "dev_server/start",
+      "topLevel": "dev_server",
+      "category": "child-operation",
+      "implementation": "packages/dev-services/src/tool-adapter.ts#start"
+    },
+    {
+      "path": "dev_server/status",
+      "topLevel": "dev_server",
+      "category": "child-operation",
+      "implementation": "packages/dev-services/src/tool-adapter.ts#status"
+    },
+    {
+      "path": "dev_server/logs",
+      "topLevel": "dev_server",
+      "category": "child-operation",
+      "implementation": "packages/dev-services/src/tool-adapter.ts#logs"
+    },
+    {
+      "path": "dev_server/restart",
+      "topLevel": "dev_server",
+      "category": "child-operation",
+      "implementation": "packages/dev-services/src/tool-adapter.ts#restart"
+    },
+    {
+      "path": "dev_server/stop",
+      "topLevel": "dev_server",
+      "category": "child-operation",
+      "implementation": "packages/dev-services/src/tool-adapter.ts#stop"
+    }
+  ]
+}

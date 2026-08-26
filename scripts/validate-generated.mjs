@@ -295,6 +295,8 @@ async function run() {
 
   const generated = spawnSync(process.execPath, [path.join(root, "runtimes/pi/runtime-pi/scripts/generate-agents.mjs"), "--check"], { cwd: root, encoding: "utf8" });
   const drift = generated.status === 0 ? [] : [generated.stderr.trim() || generated.stdout.trim() || "projection"];
+  const toolInventory = spawnSync(process.execPath, [path.join(root, "scripts/generate-runtime-tool-inventory.mjs"), "--check"], { cwd: root, encoding: "utf8" });
+  const toolInventoryDiagnostics = toolInventory.status === 0 ? [] : [diagnostic("RUNTIME_TOOL_INVENTORY_DRIFT", "docs/inventory/PHASE_F1_RUNTIME_TOOL_INVENTORY.json", toolInventory.stderr.trim() || toolInventory.stdout.trim() || "runtime tool inventory is stale")];
   const convergenceName = "docs/history/CONVERGENCE_MANIFEST.json";
   let convergence;
   const convergenceDiagnostics = [];
@@ -309,7 +311,7 @@ async function run() {
     convergenceDiagnostics.push(...compareConvergenceManifests(convergence, current));
   }
 
-  const diagnostics = [...files.diagnostics, ...convergenceDiagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
+  const diagnostics = [...files.diagnostics, ...toolInventoryDiagnostics, ...convergenceDiagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
     root,
     names,
     tracked,

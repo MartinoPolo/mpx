@@ -16,6 +16,7 @@ import {
   type RuntimeContextV1,
 } from "@mpx/runtime-contracts";
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from "@mpx/runtime-hooks";
+import { RUNTIME_TOOL_NAMES } from "@mpx/runtime-tools";
 import {
   initialModelContext,
   enumerateSkillDirectory,
@@ -156,7 +157,7 @@ export function createPiProjection() {
     adapters: ["compact", "guard", "auto-title", "fullscreen", "events", "footer"] as const,
     subagents: { enabled: true, nestedOrchestration: true, fleetView: true, provenance: "projection/imported provenance only: vendor/subagents/VENDORED.md" },
     accountProfiles: { kind: "projection-only", mutation: "unsupported" },
-    runtimeTools: { aggregates: ["mcp", "web_search", "fetch_content", "get_search_content", "source_check", "dev_server"], selection: "launch-bound" },
+    runtimeTools: { aggregates: RUNTIME_TOOL_NAMES, selection: "launch-bound" },
     unsupported: ["agent-resurrect/session G", "F2 host replacement", "installer/account symlinks", "credential projection"],
   } as const;
 }

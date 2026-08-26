@@ -1,6 +1,6 @@
 import {
   activateRuntimeToolGateway,
-  RUNTIME_TOOL_NAMES,
+  RUNTIME_GATEWAY_TOOL_NAMES,
   type GatewayExecutor,
   type McpLaunchDescriptor,
   type ProviderAdapter,
@@ -39,8 +39,8 @@ export function registerPiRuntimeTools(input: PiRuntimeToolRegistrationInput) {
   if (input.devServer.launchKey !== manifest.launchKey) throw new Error("DEV_SERVER_LAUNCH_STALE: dev_server belongs to another launch");
   const gateway = activateRuntimeToolGateway({ capability: manifest, executor: input.executor, mcpRoutes: input.mcpRoutes, providers: input.providers, ...(input.cache ? { cache: input.cache } : {}), ...(input.firecrawlFallback === undefined ? {} : { firecrawlFallback: input.firecrawlFallback }), ...(input.managedDevServices ? { managedDevServices: input.managedDevServices } : {}) });
   const authorized = new Set(manifest.tools.map(tool => tool.name));
-  const available = RUNTIME_TOOL_NAMES.filter(name => authorized.has(name) && configured(name, input));
-  const diagnostics: RuntimeToolUnsupportedDiagnostic[] = RUNTIME_TOOL_NAMES.filter(name => !available.includes(name)).map(tool => Object.freeze({ code: "RUNTIME_TOOL_UNSUPPORTED", tool, phase: "pre-selection" }));
+  const available = RUNTIME_GATEWAY_TOOL_NAMES.filter(name => authorized.has(name) && configured(name, input));
+  const diagnostics: RuntimeToolUnsupportedDiagnostic[] = RUNTIME_GATEWAY_TOOL_NAMES.filter(name => !available.includes(name)).map(tool => Object.freeze({ code: "RUNTIME_TOOL_UNSUPPORTED", tool, phase: "pre-selection" }));
   for (const name of available) input.pi.registerTool({ name, label: name, description: `Launch-bound ${name} aggregate.`, parameters: schema, async execute(_toolCallId, params) { const result = await gateway[name](params as never); return { content: [{ type: "text", text: JSON.stringify(result) }], details: result }; } });
   input.pi.registerTool({ name: "dev_server", label: "dev_server", description: input.devServer.description, parameters: schema, async execute(_toolCallId, params) { const result = await input.devServer.execute(params); return { content: [{ type: "text", text: JSON.stringify(result) }], details: result }; } });
   input.pi.on?.("session_shutdown", input.shutdown);

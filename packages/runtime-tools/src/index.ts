@@ -63,8 +63,8 @@ export interface RuntimeToolGateway {
   get_search_content(input: { responseId: string }): Promise<{ readonly results?: readonly SearchResult[]; readonly content?: string }>;
   source_check(input: { claim: string; provider?: string; allowPaidCredits?: number; signal?: AbortSignal }): Promise<{ readonly claim: string; readonly sources: readonly SearchResult[] }>;
 }
-export const RUNTIME_TOOL_NAMES = Object.freeze(["mcp", "web_search", "fetch_content", "get_search_content", "source_check"] as const);
-export type RuntimeToolName = (typeof RUNTIME_TOOL_NAMES)[number];
+export { RUNTIME_GATEWAY_TOOL_NAMES, RUNTIME_TOOL_NAMES, RUNTIME_TOOL_REGISTRY, type RuntimeToolName, type RuntimeToolRegistryEntry } from "./runtime-tool-registry.js";
+import { RUNTIME_GATEWAY_TOOL_NAMES, type RuntimeToolName } from "./runtime-tool-registry.js";
 export interface RuntimeToolUnsupportedDiagnostic { readonly code: "RUNTIME_TOOL_UNSUPPORTED"; readonly tool: RuntimeToolName; readonly phase: "pre-selection" }
 export interface LaunchBoundRuntimeTools {
   readonly available: readonly RuntimeToolName[];
@@ -75,8 +75,8 @@ export interface LaunchBoundRuntimeTools {
 export function createLaunchBoundRuntimeTools(input: { readonly capability: RuntimeCapabilityManifestV1; readonly gateway: RuntimeToolGateway }): LaunchBoundRuntimeTools {
   const manifest = parseRuntimeCapabilityManifestV1(input.capability);
   const selected = new Set(manifest.tools.map(tool => tool.name));
-  const available = RUNTIME_TOOL_NAMES.filter(name => selected.has(name)).sort();
-  const diagnostics = RUNTIME_TOOL_NAMES.filter(name => !selected.has(name)).map(tool => Object.freeze({ code: "RUNTIME_TOOL_UNSUPPORTED" as const, tool, phase: "pre-selection" as const }));
+  const available = RUNTIME_GATEWAY_TOOL_NAMES.filter(name => selected.has(name)).sort();
+  const diagnostics = RUNTIME_GATEWAY_TOOL_NAMES.filter(name => !selected.has(name)).map(tool => Object.freeze({ code: "RUNTIME_TOOL_UNSUPPORTED" as const, tool, phase: "pre-selection" as const }));
   const unsupported = (tool: RuntimeToolName): never => fail("RUNTIME_TOOL_UNSUPPORTED", `aggregate '${tool}' was not selected for this launch`);
   const tools: RuntimeToolGateway = {
     async mcp(value) { if (!selected.has("mcp")) unsupported("mcp"); return input.gateway.mcp(value); },

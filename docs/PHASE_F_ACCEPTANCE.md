@@ -33,6 +33,10 @@ git diff --check
 
 `pnpm run typecheck` is a required pre-commit gate. The repository uses only the root `pnpm-lock.yaml`; nested package-manager lockfiles fail validation.
 
+## Phase F2 foundation
+
+The proof/contracts-only F2 foundation is documented in [`PHASE_F2_PROOF_FOUNDATION.md`](PHASE_F2_PROOF_FOUNDATION.md). It adds immutable sbx and runtime-tool inventory inputs without performing live sandbox operations; F2 runtime acceptance remains pending.
+
 ## Explicit non-claims
 
 This slice does not establish F2 Docker/container isolation, Phase G session continuation/resurrection, Phase I route/MCP provisioning or installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.
