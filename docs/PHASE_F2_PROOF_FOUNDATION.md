@@ -31,6 +31,7 @@ Remote serialization rejects OAuth/authorization/token fields and values, accoun
 | Exact worker/projection/mount/network/port/account/identity attach verification | `decideSandboxResume` in `packages/executors/src/sandbox-resume.ts` |
 | Session-neutral launch resume gate and minimal resume persistence | `gateLaunchSandboxResume` and `SandboxResumeStore` |
 | Clone VM Git / host-worktree host Git ownership | `buildSandboxPlanV1` tests |
+| Built-in Claude, personal/work app partition, content-addressed projection, Docker aggregate MCP/dev route, secret exclusion, mismatch, and teardown | `packages/executors/src/standalone-sbx-executor.test.ts` using `scripts/fake-sbx.mjs` |
 
 Every attach mismatch returns `recreate`; the lifecycle has no patch operation. Resume state contains only sandbox/app names, launch/plan/inventory hashes, workspace/branch identity hashes, and the attestation digest.
 
@@ -40,4 +41,4 @@ Every attach mismatch returns `recreate`; the lifecycle has no patch operation. 
 
 ## Live evidence still required
 
-Pinned standalone `sbx` client/daemon diagnostics, real VM mounts/network/port publication, account enrollment, daemon restart, authentication isolation, clone fetch/direct-provider delivery, and containment/bypass observations remain unexecuted. The launch-private bridge is production code with fake-worker end-to-end evidence; it does not by itself claim a live VM containment proof. Docker therefore does not become the default from this offline slice. Live sbx daemon/VM/auth attestation remains an installation gate and is not claimed here.
+Pinned standalone `sbx` client/daemon diagnostics, real VM mounts/network/port publication, live Claude OAuth enrollment for both app names, opposite-identity denial, daemon restart, authentication isolation, clone fetch/direct-provider delivery, and containment/bypass observations remain unexecuted. The Pi launch-private bridge is production code with fake-worker end-to-end evidence, and the Claude built-in VM route is proof-bound production code; neither by itself claims a live VM containment proof. Docker therefore does not become the default from this offline slice. Live sbx daemon/VM/auth attestation remains an installation gate and is not claimed here.
