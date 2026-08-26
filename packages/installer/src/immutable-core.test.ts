@@ -4,15 +4,33 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   NodeInstalledReleaseAuthority,
+  activateRelease,
   buildReleaseManifest,
   parseReleaseManifestV1,
   publishRelease,
+  readActiveRelease,
   type OwnershipReceiptV1,
 } from "./immutable-core.js";
 
 const temporary = () => mkdtemp(path.join(tmpdir(), "mpx-release-"));
 
 describe("immutable installer core", () => {
+  it("refuses foreign selector replacement and reversibly restores an owned prior selector", async () => {
+    const root = await temporary(), prior = "a".repeat(64), activated = "b".repeat(64), foreign = "c".repeat(64);
+    await mkdir(path.join(root, "mpx")); await writeFile(path.join(root, "mpx", "active-release"), `${foreign}\n`);
+    await expect(activateRelease(root, prior, activated)).rejects.toMatchObject({ code: "INSTALL_FOREIGN_OR_DRIFTED" });
+    expect(await readActiveRelease(root)).toBe(foreign);
+    await writeFile(path.join(root, "mpx", "active-release"), `${prior}\n`);
+    const rollback = await activateRelease(root, prior, activated);
+    expect(await readActiveRelease(root)).toBe(activated);
+    await rollback();
+    expect(await readActiveRelease(root)).toBe(prior);
+    const secondRollback = await activateRelease(root, prior, activated);
+    await writeFile(path.join(root, "mpx", "active-release"), `${foreign}\n`);
+    await expect(secondRollback()).rejects.toMatchObject({ code: "INSTALL_FOREIGN_OR_DRIFTED" });
+    expect(await readActiveRelease(root)).toBe(foreign);
+  });
+
   it("builds a deterministic, complete, sorted release manifest", async () => {
     const source = await temporary();
     await mkdir(path.join(source, "z"));

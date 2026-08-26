@@ -43,7 +43,7 @@ describe("Phase I install orchestration", () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")], [operation("90-scheduled")]), events: string[] = [];
     const originalApply = adapter.apply.bind(adapter);
     adapter.apply = async operation => { events.push(operation.id); await originalApply(operation); };
-    const orchestrator = new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder, activate: async releaseKey => { events.push(`active:${releaseKey}`); } });
+    const orchestrator = new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder, activate: async releaseKey => { events.push(`active:${releaseKey}`); return async () => {}; } });
     const plan = await orchestrator.plan(f.intent);
     await orchestrator.apply(plan, plan.confirmationDigest);
     expect(events).toEqual(["10-automatic", "90-scheduled", `active:${f.manifest.releaseKey}`]);
@@ -57,7 +57,23 @@ describe("Phase I install orchestration", () => {
     expect(adapter.values.size).toBe(0);
     expect(await store.readReceipt()).toBeUndefined();
     expect((await store.readTransaction())?.journal.phase).toBe("rolled-back");
-    expect(events).toEqual(["activate", "deactivate"]);
+    expect(events).toEqual(["activate"]);
+  });
+
+  it("aggregates selector and service rollback failures behind the primary post-activation failure", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore();
+    adapter.restore = async () => { throw new Error("service rollback failed"); };
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder, activate: async () => {
+      adapter.values.set("10-automatic", "drifted");
+      return async () => { throw new Error("selector rollback failed"); };
+    } });
+    const plan = await orchestrator.plan(f.intent);
+    const failure = await orchestrator.apply(plan, plan.confirmationDigest).catch(error => error as AggregateError);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure.cause as { code: string }).code).toBe("INSTALL_POST_ACTIVATION_VERIFY_FAILED");
+    expect(failure.errors.map(error => (error as Error).message)).toEqual([
+      "Activated installation failed actual-state verification.", "selector rollback failed", "service rollback failed",
+    ]);
   });
 
   it("does not expose a release when a committed operation fails actual-state verification", async () => {
@@ -66,7 +82,7 @@ describe("Phase I install orchestration", () => {
     let corruptAfterApply = false;
     adapter.apply = async item => { adapter.applyCalls.push(item.id); adapter.values.set(item.target, item.desiredDigest!); corruptAfterApply = true; };
     adapter.observe = async target => corruptAfterApply ? installerDigest("post-commit-drift") : baseObserve(target);
-    const orchestrator = new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder, activate: async key => { activated.push(key); } });
+    const orchestrator = new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder, activate: async key => { activated.push(key); return async () => {}; } });
     const plan = await orchestrator.plan(f.intent);
     await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({ code: "INSTALL_POST_COMMIT_VERIFY_FAILED" });
     expect(activated).toEqual([]);

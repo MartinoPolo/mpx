@@ -23,7 +23,7 @@ import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
 import { ClaudeActiveScanner, PiV2ActiveRegistryScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ProcessInspector, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
-import { InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, writeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
+import { activateRelease, InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
 import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
@@ -570,7 +570,7 @@ export function immutableInstaller(context: CliContext): InstallOrchestrator {
     adapter,
     store,
     releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot: appsRoot! }),
-    activate: releaseKey => writeActiveRelease(localAppData!, releaseKey),
+    activate: (releaseKey, expectedPriorReleaseKey) => activateRelease(localAppData!, expectedPriorReleaseKey, releaseKey),
     deactivate: releaseKey => removeActiveRelease(localAppData!, releaseKey),
   });
 }

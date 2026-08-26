@@ -95,7 +95,7 @@ export interface InstallOrchestratorOptions {
   readonly store: TransactionStore;
   readonly releases: CurrentReleaseBuilder;
   /** Publishes the mutable stable selector after all release-bound operations commit. */
-  readonly activate?: (releaseKey: string) => Promise<void>;
+  readonly activate?: (releaseKey: string, expectedPriorReleaseKey: string | null) => Promise<() => Promise<void>>;
   /** Removes the mutable stable selector only after owned resources uninstall. */
   readonly deactivate?: (releaseKey: string) => Promise<void>;
   readonly now?: () => Date;
@@ -138,20 +138,25 @@ export class InstallOrchestrator {
       fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to overwrite a foreign or drifted target.");
     const manifest = await this.options.releases.publish(plan.intent.releaseKey);
     const service = this.service(manifest);
+    const priorReceipt = await this.options.store.readReceipt();
     const receipt = await service.apply(plan, confirmation);
+    let rollbackActivation: (() => Promise<void>) | undefined;
     try {
       await this.options.adapter.operations(plan.intent, manifest, true);
       const operationVerification = await service.verify();
       const releaseIssues = await this.options.releases.verify(receipt, false);
       if (!operationVerification.healthy || releaseIssues.length > 0) fail("INSTALL_POST_COMMIT_VERIFY_FAILED", "Committed installation failed actual-state verification; release was not activated.");
-      await this.options.activate?.(receipt.releaseKey);
+      rollbackActivation = await this.options.activate?.(receipt.releaseKey, priorReceipt?.releaseKey ?? null);
       const activatedVerification = await service.verify();
       const activatedReleaseIssues = await this.options.releases.verify(receipt, false);
       if (!activatedVerification.healthy || activatedReleaseIssues.length > 0) fail("INSTALL_POST_ACTIVATION_VERIFY_FAILED", "Activated installation failed actual-state verification.");
       await service.finalize();
       return receipt;
     } catch (failure) {
-      try { await this.options.deactivate?.(receipt.releaseKey); } finally { await service.rollback(); }
+      const rollbackFailures: unknown[] = [];
+      if (rollbackActivation) try { await rollbackActivation(); } catch (rollbackFailure) { rollbackFailures.push(rollbackFailure); }
+      try { await service.rollback(); } catch (rollbackFailure) { rollbackFailures.push(rollbackFailure); }
+      if (rollbackFailures.length > 0) throw new AggregateError([failure, ...rollbackFailures], "Install failed and rollback also failed.", { cause: failure });
       throw failure;
     }
   }

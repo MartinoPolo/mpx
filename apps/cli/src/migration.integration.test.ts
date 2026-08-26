@@ -50,6 +50,25 @@ describe("Phase J CLI acceptance fixtures", () => {
     expect(accepted).toMatchObject({ gate: { passed: true, legacyDisabledAccepted: true }, runtimeAccessAudit: { readOnly: true, findings: [] } });
   }, 30_000);
 
+  it("ignores repository runtime provenance while auditing installed projections", async () => {
+    const f = await fixture();
+    await writeFile(path.join(f.repoRoot, "runtimes", "projection.txt"), "OLD_REFERENCE /mp: legacy provenance\n");
+    const report = await executeMigrationCommand({ action: "report", repoRoot: f.repoRoot, env: f.env, legacyDisabled: true });
+    expect(report).toMatchObject({ gate: { passed: true, legacyDisabledAccepted: true }, runtimeAccessAudit: { findings: [] } });
+  }, 30_000);
+
+  it.each([
+    ["malformed JSON", "{"],
+    ["non-array shape", JSON.stringify({ id: "exception", reason: "reason" })],
+    ["unknown fields", JSON.stringify([{ id: "exception", reason: "reason", extra: true }])],
+    ["empty values", JSON.stringify([{ id: "", reason: "reason" }])],
+    ["duplicate IDs", JSON.stringify([{ id: "same", reason: "one" }, { id: "same", reason: "two" }])],
+  ])("rejects %s in phase-j-exceptions.json", async (_label, body) => {
+    const f = await fixture();
+    await writeFile(path.join(f.repoRoot, "docs", "phase-j-exceptions.json"), body);
+    await expect(executeMigrationCommand({ action: "report", repoRoot: f.repoRoot, env: f.env, legacyDisabled: true })).rejects.toThrow();
+  }, 30_000);
+
   it("produces gated cutover and cleanup-safe rollback evidence through executeMigrationCommand", async () => {
     const f = await fixture();
     const cutover = await executeMigrationCommand({ action: "cutover-plan", repoRoot: f.repoRoot, env: f.env, legacyDisabled: true });

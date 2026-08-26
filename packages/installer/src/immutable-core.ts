@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, link, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MpxError } from "@mpx/core";
@@ -22,7 +22,7 @@ export interface InstallVerificationComponentV1 { readonly id: string; readonly 
 export interface InstallVerificationExternalV1 { readonly id: string; readonly classification: "confirmation-required" | "manual-only"; readonly status: "confirmed" | "manual-required"; readonly verifierRef: string }
 export interface InstallVerificationV1 { readonly schemaVersion: 1; readonly kind: "install-verification"; readonly releaseKey: string; readonly healthy: boolean; readonly issues: readonly string[]; readonly checkedAt: string; readonly components?: readonly InstallVerificationComponentV1[]; readonly externalIntegrations?: readonly InstallVerificationExternalV1[]; readonly manualOnly?: readonly string[] }
 export interface MachineSnapshotV1 { readonly schemaVersion: 1; readonly kind: "machine-snapshot"; readonly transactionId: string; readonly observations: readonly MachineObservationV1[]; readonly capturedAt: string }
-export interface TransactionJournalV1 { readonly schemaVersion: 1; readonly kind: "transaction-journal"; readonly transactionId: string; readonly phase: "applying" | "committed" | "rolled-back"; readonly completedOperationIds: readonly string[]; readonly snapshot: MachineSnapshotV1 }
+export interface TransactionJournalV1 { readonly schemaVersion: 1; readonly kind: "transaction-journal"; readonly transactionId: string; readonly phase: "applying" | "committed" | "rolled-back"; readonly completedOperationIds: readonly string[]; readonly inFlightOperationId?: string; readonly snapshot: MachineSnapshotV1 }
 
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
 export function canonicalJson(value: unknown): string { return JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item); }
@@ -75,7 +75,7 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
   return { schemaVersion: 1, kind: "install-intent", releaseKey: intent.releaseKey, convergenceHash: intent.convergenceHash as string, components: intent.components as string[], ...(runtimeRegistrations ? { runtimeRegistrations } : {}), ...(staticMcpRegistrations ? { staticMcpRegistrations } : {}), ...(hasExternal ? { externalIntegrations: external as InstallExternalIntegrationV1[] } : {}) };
 }
 function parseObservation(value: unknown): MachineObservationV1 { const x = exact(value, ["id", "digest"]); if (typeof x.id !== "string" || !x.id || !(x.digest === null || typeof x.digest === "string" && SHA.test(x.digest))) fail("INSTALL_SCHEMA_INVALID", "Invalid observation."); return x as unknown as MachineObservationV1; }
-function parseOperation(value: unknown): InstallOperationV1 { const x = exact(value, ["id", "adapter", "action", "target", "desiredDigest"]); if (typeof x.id !== "string" || !x.id || typeof x.adapter !== "string" || !x.adapter || !["ensure", "remove"].includes(x.action as string) || typeof x.target !== "string" || !x.target || !(x.desiredDigest === null || typeof x.desiredDigest === "string" && SHA.test(x.desiredDigest))) fail("INSTALL_SCHEMA_INVALID", "Invalid operation."); return x as unknown as InstallOperationV1; }
+export function parseInstallOperationV1(value: unknown): InstallOperationV1 { const x = exact(value, ["id", "adapter", "action", "target", "desiredDigest"]); if (typeof x.id !== "string" || !x.id || typeof x.adapter !== "string" || !x.adapter || !["ensure", "remove"].includes(x.action as string) || typeof x.target !== "string" || !x.target || !(x.desiredDigest === null || typeof x.desiredDigest === "string" && SHA.test(x.desiredDigest))) fail("INSTALL_SCHEMA_INVALID", "Invalid operation."); return x as unknown as InstallOperationV1; }
 function orderedUnique<T extends { id: string }>(values: T[]): boolean { return new Set(values.map((x) => x.id)).size === values.length && values.every((x, i) => i === 0 || values[i - 1]!.id.localeCompare(x.id) < 0); }
 function parseReferences(value: unknown): InstallOperationClassificationsV1 {
   const record = exact(value, ["automatic", "confirmationRequired", "manualOnly"]);
@@ -92,7 +92,7 @@ export function parseInstallPlanV1(value: unknown): InstallPlanV1 {
   const source = value as Record<string, unknown> | null, hasClassifications = Boolean(source && Object.prototype.hasOwnProperty.call(source, "classifications"));
   const plan = exact(value, ["schemaVersion", "kind", "intent", "observations", "operations", ...(hasClassifications ? ["classifications"] : []), "confirmationDigest"]);
   if (plan.schemaVersion !== 1 || plan.kind !== "install-plan" || !Array.isArray(plan.observations) || !Array.isArray(plan.operations) || typeof plan.confirmationDigest !== "string" || !SHA.test(plan.confirmationDigest)) fail("INSTALL_SCHEMA_INVALID", "Invalid install plan.");
-  const parsed = { schemaVersion: 1 as const, kind: "install-plan" as const, intent: parseInstallIntentV1(plan.intent), observations: plan.observations.map(parseObservation), operations: plan.operations.map(parseOperation), ...(hasClassifications ? { classifications: parseReferences(plan.classifications) } : {}) };
+  const parsed = { schemaVersion: 1 as const, kind: "install-plan" as const, intent: parseInstallIntentV1(plan.intent), observations: plan.observations.map(parseObservation), operations: plan.operations.map(parseInstallOperationV1), ...(hasClassifications ? { classifications: parseReferences(plan.classifications) } : {}) };
   if (!orderedUnique(parsed.observations) || !orderedUnique(parsed.operations) || installerDigest(parsed) !== plan.confirmationDigest || parsed.classifications && installerDigest(parsed.classifications.automatic) !== installerDigest(parsed.operations.slice(0, parsed.classifications.automatic.length).map(operation => operation.id))) fail("INSTALL_SCHEMA_INVALID", "Invalid plan confirmation or ordering.");
   return { ...parsed, confirmationDigest: plan.confirmationDigest };
 }
@@ -101,7 +101,7 @@ export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
   const receipt = exact(value, ["schemaVersion", "kind", "releaseKey", "convergenceHash", "files", "operations", ...(hasIntent ? ["installIntent"] : []), "installedAt"]);
   if (receipt.schemaVersion !== 1 || receipt.kind !== "ownership-receipt" || typeof receipt.installedAt !== "string" || !Number.isFinite(Date.parse(receipt.installedAt)) || !Array.isArray(receipt.operations)) fail("INSTALL_SCHEMA_INVALID", "Invalid ownership receipt.");
   const manifest = parseReleaseManifestV1({ schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files });
-  const operations = receipt.operations.map(parseOperation); if (!orderedUnique(operations)) fail("INSTALL_SCHEMA_INVALID", "Receipt operations must be sorted.");
+  const operations = receipt.operations.map(parseInstallOperationV1); if (!orderedUnique(operations)) fail("INSTALL_SCHEMA_INVALID", "Receipt operations must be sorted.");
   const installIntent = hasIntent ? parseInstallIntentV1(receipt.installIntent) : undefined;
   if (installIntent && installIntent.releaseKey !== manifest.releaseKey) fail("INSTALL_SCHEMA_INVALID", "Receipt intent does not match its release.");
   return { schemaVersion: 1, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations, ...(installIntent ? { installIntent } : {}), installedAt: receipt.installedAt as string };
@@ -188,10 +188,82 @@ export async function publishCurrentRelease(options: CurrentReleaseOptions & { r
   return withCurrentReleaseSource(options, sourceDirectory => publishRelease({ sourceDirectory, appsRoot: options.appsRoot }));
 }
 export function mutableStateRoots(environment: NodeJS.ProcessEnv = process.env): readonly string[] { const roots = [environment.APPDATA, environment.LOCALAPPDATA].filter((x): x is string => Boolean(x)); if (roots.length !== 2) fail("INSTALL_MUTABLE_ROOT_UNAVAILABLE", "APPDATA and LOCALAPPDATA are required."); return roots; }
-export async function writeActiveRelease(localAppData: string, releaseKey: string): Promise<void> { if (!SHA.test(releaseKey)) fail("INSTALL_SELECTOR_INVALID", "Release key is invalid."); const directory = path.join(localAppData, "mpx"), file = path.join(directory, "active-release"), temporary = `${file}.${randomUUID()}.tmp`; await mkdir(directory, { recursive: true }); try { await writeFile(temporary, `${releaseKey}\n`, { flag: "wx", mode: 0o600 }); await rename(temporary, file); } finally { await rm(temporary, { force: true }); } }
-export async function removeActiveRelease(localAppData: string, expectedReleaseKey: string): Promise<void> {
-  const actual = await readActiveRelease(localAppData);
-  if (actual !== expectedReleaseKey) fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to remove a drifted active release selector.");
-  await rm(path.join(localAppData, "mpx", "active-release"));
+async function observeActiveRelease(localAppData: string): Promise<string | null> {
+  const file = path.join(localAppData, "mpx", "active-release");
+  let info; try { info = await lstat(file); } catch (failure) { if ((failure as NodeJS.ErrnoException).code === "ENOENT") return null; throw failure; }
+  if (!info.isFile() || info.isSymbolicLink()) fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is unsafe.");
+  const key = (await readFile(file, "utf8")).trim();
+  if (!SHA.test(key)) fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is invalid.");
+  return key;
 }
-export async function readActiveRelease(localAppData: string): Promise<string> { const file = path.join(localAppData, "mpx", "active-release"); const info = await lstat(file).catch(() => fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is unavailable.")); if (!info.isFile() || info.isSymbolicLink()) fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is unsafe."); const key = (await readFile(file, "utf8")).trim(); if (!SHA.test(key)) fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is invalid."); return key; }
+function processExists(pid: number): boolean { try { process.kill(pid, 0); return true; } catch (failure) { return (failure as NodeJS.ErrnoException).code === "EPERM"; } }
+async function publishOwner(file: string, owner: string): Promise<void> {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try { await writeFile(temporary, owner, { flag: "wx", mode: 0o600 }); await link(temporary, file); }
+  finally { await rm(temporary, { force: true }); }
+}
+async function releaseExactOwner(file: string, owner: string, label: string): Promise<void> {
+  if (await readFile(file, "utf8").catch(() => "") !== owner) return;
+  const claim = `${file}.${label}-${randomUUID()}`;
+  try {
+    await rename(file, claim);
+    if (await readFile(claim, "utf8").catch(() => "") === owner) await rm(claim, { force: true });
+  } catch (failure) { if ((failure as NodeJS.ErrnoException).code !== "ENOENT") throw failure; }
+}
+export async function acquireAtomicOwnerLock(lock: string, lockedCode: string, lockedMessage: string): Promise<() => Promise<void>> {
+  await mkdir(path.dirname(lock), { recursive: true });
+  const recoveryGuard = `${lock}.recovery-guard`, deadline = Date.now() + 30_000;
+  for (;;) {
+    if (await readFile(recoveryGuard).then(() => true, failure => { if ((failure as NodeJS.ErrnoException).code === "ENOENT") return false; throw failure; })) {
+      if (Date.now() >= deadline) fail(lockedCode, lockedMessage);
+      await new Promise(resolve => setTimeout(resolve, 25)); continue;
+    }
+    const owner = `${JSON.stringify({ schemaVersion: 1, pid: process.pid, nonce: randomUUID() })}\n`;
+    try { await publishOwner(lock, owner); return () => releaseExactOwner(lock, owner, "release"); }
+    catch (failure) {
+      if ((failure as NodeJS.ErrnoException).code !== "EEXIST") throw failure;
+      const observed = await readFile(lock, "utf8").catch(recoveryFailure => { if ((recoveryFailure as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw recoveryFailure; });
+      let stale = false;
+      if (observed !== undefined) {
+        try { const record = JSON.parse(observed) as Record<string, unknown>; stale = record?.schemaVersion === 1 && Number.isSafeInteger(record.pid) && (record.pid as number) > 0 && typeof record.nonce === "string" && record.nonce.length > 0 && !processExists(record.pid as number); } catch {}
+      }
+      if (stale) {
+        const guardOwner = `${JSON.stringify({ schemaVersion: 1, pid: process.pid, nonce: randomUUID() })}\n`;
+        try {
+          await publishOwner(recoveryGuard, guardOwner);
+          try {
+            if (await readFile(lock, "utf8").catch(() => undefined) === observed) {
+              const claim = `${lock}.recovery-${randomUUID()}`;
+              try {
+                await rename(lock, claim);
+                if (await readFile(claim, "utf8").catch(() => undefined) !== observed) fail(lockedCode, lockedMessage);
+                await rm(claim);
+              } catch (recoveryFailure) { if ((recoveryFailure as NodeJS.ErrnoException).code !== "ENOENT") throw recoveryFailure; }
+            }
+          } finally { await releaseExactOwner(recoveryGuard, guardOwner, "release"); }
+          continue;
+        } catch (guardFailure) { if ((guardFailure as NodeJS.ErrnoException).code !== "EEXIST") throw guardFailure; }
+      }
+      if (Date.now() >= deadline) fail(lockedCode, lockedMessage);
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+}
+async function acquireSelectorLock(directory: string): Promise<() => Promise<void>> {
+  return acquireAtomicOwnerLock(path.join(directory, "active-release.lock"), "INSTALL_SELECTOR_LOCKED", "Another process owns the active release selector lock.");
+}
+async function replaceActiveRelease(localAppData: string, expectedReleaseKey: string | null, releaseKey: string | null): Promise<void> {
+  if (releaseKey !== null && !SHA.test(releaseKey)) fail("INSTALL_SELECTOR_INVALID", "Release key is invalid.");
+  const directory = path.join(localAppData, "mpx"), release = await acquireSelectorLock(directory);
+  try {
+    if (await observeActiveRelease(localAppData) !== expectedReleaseKey) fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to replace a foreign or drifted active release selector.");
+    const file = path.join(directory, "active-release");
+    if (releaseKey === null) { await rm(file); return; }
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try { await writeFile(temporary, `${releaseKey}\n`, { flag: "wx", mode: 0o600 }); await rename(temporary, file); } finally { await rm(temporary, { force: true }); }
+  } finally { await release(); }
+}
+export async function activateRelease(localAppData: string, expectedPriorReleaseKey: string | null, releaseKey: string): Promise<() => Promise<void>> { await replaceActiveRelease(localAppData, expectedPriorReleaseKey, releaseKey); return () => replaceActiveRelease(localAppData, releaseKey, expectedPriorReleaseKey); }
+export async function writeActiveRelease(localAppData: string, releaseKey: string): Promise<void> { const prior = await observeActiveRelease(localAppData); await replaceActiveRelease(localAppData, prior, releaseKey); }
+export async function removeActiveRelease(localAppData: string, expectedReleaseKey: string): Promise<void> { await replaceActiveRelease(localAppData, expectedReleaseKey, null); }
+export async function readActiveRelease(localAppData: string): Promise<string> { return await observeActiveRelease(localAppData) ?? fail("INSTALL_SELECTOR_UNAVAILABLE", "Active release selector is unavailable."); }

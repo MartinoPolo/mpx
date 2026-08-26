@@ -1,9 +1,10 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, opendir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, open, opendir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { MpxError } from "@mpx/core";
 
 const execFile=promisify(execFileCallback);
 const OLD_REFERENCE=/(?:mpx-claude-code|mpx-pi|\/mp:|\/mp-gh:|\.worktree-hub\.json|\.mpx[\\/]kanbanflow\.json|statusline-projects\.json)/iu;
@@ -73,9 +74,43 @@ export function createParityReport(input:{baseline:Baseline;drift:{entries:Drift
 }
 
 type AuditFinding={surface:"log"|"process"|"environment"|"projection";reference:string;matchDigest:string};
+function auditFail(code:string,message:string,cause?:unknown):never{throw new MpxError({code,message,...(cause===undefined?{}:{cause})});}
+function sameEntry(left:Awaited<ReturnType<typeof lstat>>,right:Awaited<ReturnType<typeof lstat>>):boolean{return left.dev===right.dev&&left.ino===right.ino&&left.mode===right.mode;}
 async function scanFiles(root:string,findings:AuditFinding[],surface:"log"|"projection"){
-  async function walk(dir:string){let handle;try{handle=await opendir(dir);}catch{return;}for await(const entry of handle){const file=path.join(dir,entry.name),relative=portable(path.relative(root,file));if(PRIVATE_PATH.test(relative))continue;if(entry.isDirectory()){if(![".git","node_modules","dist"].includes(entry.name))await walk(file);continue;}let body="";try{body=(await readFile(file,"utf8")).slice(0,2_000_000);}catch{continue;}if(OLD_REFERENCE.test(body))findings.push({surface,reference:sha(relative).slice(0,16),matchDigest:sha(body.match(OLD_REFERENCE)?.[0]?.toLowerCase()??"match")});}}
-  await walk(root);
+  if(!path.isAbsolute(root))auditFail("MIGRATION_AUDIT_ROOT_INVALID","Migration audit roots must be absolute.");
+  const absoluteRoot=path.resolve(root);
+  async function walk(dir:string):Promise<void>{
+    let before:Awaited<ReturnType<typeof lstat>>;
+    try{before=await lstat(dir);}catch(failure){auditFail("MIGRATION_AUDIT_OPENDIR_FAILED","Migration audit directory cannot be inspected.",failure);}
+    if(before.isSymbolicLink())auditFail("MIGRATION_AUDIT_SYMLINK","Migration audit refuses symbolic links.");
+    if(!before.isDirectory())auditFail("MIGRATION_AUDIT_OPENDIR_FAILED","Migration audit root is not a directory.");
+    let handle;try{handle=await opendir(dir);}catch(failure){auditFail("MIGRATION_AUDIT_OPENDIR_FAILED","Migration audit directory cannot be opened.",failure);}
+    try{const after=await lstat(dir);if(!sameEntry(before,after))auditFail("MIGRATION_AUDIT_PATH_REPLACED","Migration audit directory changed during inspection.");}
+    catch(failure){if(failure instanceof MpxError)throw failure;auditFail("MIGRATION_AUDIT_PATH_REPLACED","Migration audit directory changed during inspection.",failure);}
+    for await(const entry of handle){
+      const file=path.join(dir,entry.name),relative=portable(path.relative(absoluteRoot,file));
+      if(relative.startsWith("../")||path.isAbsolute(relative))auditFail("MIGRATION_AUDIT_PATH_ESCAPE","Migration audit entry escaped its root.");
+      let fileBefore:Awaited<ReturnType<typeof lstat>>;try{fileBefore=await lstat(file);}catch(failure){auditFail("MIGRATION_AUDIT_PATH_REPLACED","Migration audit entry changed during inspection.",failure);}
+      if(fileBefore.isSymbolicLink())auditFail("MIGRATION_AUDIT_SYMLINK","Migration audit refuses symbolic links.");
+      if(PRIVATE_PATH.test(relative))continue;
+      if(fileBefore.isDirectory()){if(![".git","node_modules","dist"].includes(entry.name))await walk(file);continue;}
+      if(!fileBefore.isFile())auditFail("MIGRATION_AUDIT_FILE_INVALID","Migration audit accepts regular files only.");
+      let fileHandle;try{fileHandle=await open(file,"r");}catch(failure){auditFail("MIGRATION_AUDIT_READ_FAILED","Migration audit file cannot be opened.",failure);}
+      try{
+        const opened=await fileHandle.stat();if(!opened.isFile()||!sameEntry(fileBefore,opened))auditFail("MIGRATION_AUDIT_PATH_REPLACED","Migration audit file changed during inspection.");
+        let body:string;try{body=(await fileHandle.readFile("utf8")).slice(0,2_000_000);}catch(failure){auditFail("MIGRATION_AUDIT_READ_FAILED","Migration audit file cannot be read.",failure);}
+        const final=await fileHandle.stat();if(!sameEntry(opened,final))auditFail("MIGRATION_AUDIT_PATH_REPLACED","Migration audit file changed during inspection.");
+        if(OLD_REFERENCE.test(body))findings.push({surface,reference:sha(relative).slice(0,16),matchDigest:sha(body.match(OLD_REFERENCE)?.[0]?.toLowerCase()??"match")});
+      }finally{await fileHandle.close();}
+    }
+  }
+  await walk(absoluteRoot);
+}
+const ROUTE_PROJECTION_KEYS=["MPX_CLAUDE_PERSONAL_PROJECTION_ROOT","MPX_CLAUDE_WORK_PROJECTION_ROOT","MPX_PI_PERSONAL_PROJECTION_ROOT","MPX_PI_WORK_PROJECTION_ROOT"] as const;
+export function migrationProjectionRoots(environment:NodeJS.ProcessEnv|Record<string,string|undefined>):string[]{
+  const fallback=environment.LOCALAPPDATA?path.join(environment.LOCALAPPDATA,"mpx"):undefined, roots:string[]=[];
+  for(const key of ROUTE_PROJECTION_KEYS){const value=environment[key]??fallback;if(!value)continue;if(!path.isAbsolute(value))auditFail("MIGRATION_AUDIT_ROOT_INVALID",`${key} must be absolute.`);const resolved=path.resolve(value);if(PRIVATE_PATH.test(portable(resolved)))auditFail("MIGRATION_AUDIT_ROOT_PRIVATE",`${key} cannot identify private account state.`);const identity=process.platform==="win32"?resolved.toLowerCase():resolved;if(!roots.some(item=>(process.platform==="win32"?item.toLowerCase():item)===identity))roots.push(resolved);}
+  return roots;
 }
 export async function runtimeAccessAudit(input:{roots:string[];projectionRoots?:string[];processLines?:string[];environment?:NodeJS.ProcessEnv|Record<string,string|undefined>;legacyDisabled?:boolean}){
   const findings:AuditFinding[]=[];
@@ -102,7 +137,12 @@ export async function rollbackDrill(input:{content:string;startMarker:string;end
 
 export async function loadJson<T>(file:string):Promise<T>{return JSON.parse(await readFile(file,"utf8")) as T;}
 
-async function processCommandLines(snapshotFile?:string):Promise<string[]>{
+export function parseProcessCommandLines(value:unknown):string[]{
+  if(typeof value==="string")return [value];
+  if(!Array.isArray(value)||!value.every(item=>typeof item==="string"))throw new Error("Windows process audit returned invalid command-line JSON");
+  return value;
+}
+export async function processCommandLines(snapshotFile?:string,runner:typeof execFile=execFile):Promise<string[]>{
   if(snapshotFile){
     const parsed=await loadJson<unknown>(snapshotFile);
     if(!Array.isArray(parsed)||!parsed.every(item=>typeof item==="string"))throw new Error("MPX_MIGRATION_PROCESS_SNAPSHOT must contain a JSON array of command lines");
@@ -111,12 +151,18 @@ async function processCommandLines(snapshotFile?:string):Promise<string[]>{
   if(process.platform!=="win32")return [];
   try{
     const script="Get-CimInstance Win32_Process | Select-Object -ExpandProperty CommandLine | ConvertTo-Json -Compress";
-    const output=(await execFile("powershell.exe",["-NoProfile","-NonInteractive","-Command",script],{encoding:"utf8",windowsHide:true,maxBuffer:8*1024*1024,timeout:10_000})).stdout;
-    const parsed=JSON.parse(output||"[]") as unknown; return Array.isArray(parsed)?parsed.filter((item):item is string=>typeof item==="string"):typeof parsed==="string"?[parsed]:[];
-  }catch{return [];}
+    const output=(await runner("powershell.exe",["-NoProfile","-NonInteractive","-Command",script],{encoding:"utf8",windowsHide:true,maxBuffer:8*1024*1024,timeout:10_000})).stdout;
+    return parseProcessCommandLines(JSON.parse(output||"[]") as unknown);
+  }catch(failure){throw new Error("Windows process audit is unavailable; migration acceptance cannot be evaluated",{cause:failure});}
 }
 function resolveSymbolic(value:string,env:NodeJS.ProcessEnv):string{return value.replace(/^\$\{([^}]+)\}/u,(_,name:string)=>env[name]??`\${${name}}`);}
-async function optionalJson<T>(file:string,fallback:T):Promise<T>{try{return await loadJson<T>(file);}catch{return fallback;}}
+async function optionalJson<T>(file:string,fallback:T):Promise<T>{try{return await loadJson<T>(file);}catch(failure){if((failure as NodeJS.ErrnoException).code==="ENOENT")return fallback;throw failure;}}
+function parseExceptions(value:unknown):{id:string;reason:string}[]{
+  if(!Array.isArray(value))throw new Error("phase-j-exceptions.json must contain an array");
+  const result=value.map(item=>{if(!item||typeof item!=="object"||Array.isArray(item)||Object.keys(item).sort().join(",")!=="id,reason")throw new Error("phase-j-exceptions.json contains an invalid exception");const {id,reason}=item as Record<string,unknown>;if(typeof id!=="string"||id.trim().length===0||typeof reason!=="string"||reason.trim().length===0)throw new Error("phase-j-exceptions.json contains an invalid exception");return {id,reason};});
+  if(new Set(result.map(item=>item.id)).size!==result.length)throw new Error("phase-j-exceptions.json contains duplicate IDs");
+  return result;
+}
 export async function executeMigrationCommand(input:{action:string;repoRoot:string;env:NodeJS.ProcessEnv;legacyDisabled:boolean}){
   const baselineFile=path.join(input.repoRoot,"docs","history","CONVERGENCE_MANIFEST.json");
   const baseline=await loadJson<Baseline>(baselineFile),projects=input.env.MPX_PROJECTS;
@@ -124,10 +170,10 @@ export async function executeMigrationCommand(input:{action:string;repoRoot:stri
   const sourceSpecs=[{id:"claude",root:path.join(projects,"mpx-claude-code"),symbolicRoot:"${MPX_PROJECTS}/mpx-claude-code"},{id:"pi",root:path.join(projects,"mpx-pi"),symbolicRoot:"${MPX_PROJECTS}/mpx-pi"}];
   if(input.action==="rollback-drill")return rollbackDrill({content:"native\n# >>> old-mpx owned >>>\nlegacy\n# <<< old-mpx owned <<<\n",startMarker:"# >>> old-mpx owned >>>",endMarker:"# <<< old-mpx owned <<<"});
   const drift=await captureSourceDrift({baseline,sources:sourceSpecs});
-  const exceptions=await optionalJson<{id:string;reason:string}[]>(path.join(input.repoRoot,"docs","phase-j-exceptions.json"),[]),report=createParityReport({baseline,drift,exceptions});
+  const exceptions=parseExceptions(await optionalJson<unknown>(path.join(input.repoRoot,"docs","phase-j-exceptions.json"),[])),report=createParityReport({baseline,drift,exceptions});
   const auditRoots=[input.env.APPDATA?path.join(input.env.APPDATA,"mpx","logs"):"",input.env.LOCALAPPDATA?path.join(input.env.LOCALAPPDATA,"mpx","logs"):""].filter(Boolean);
-  const installedProjections=[input.env.LOCALAPPDATA?path.join(input.env.LOCALAPPDATA,"mpx"):"",input.env.MPX_APPS?path.join(input.env.MPX_APPS,"mpx"):""].filter(Boolean);
-  const audit=await runtimeAccessAudit({roots:auditRoots,projectionRoots:[path.join(input.repoRoot,"runtimes"),...installedProjections],processLines:await processCommandLines(input.env.MPX_MIGRATION_PROCESS_SNAPSHOT),environment:input.env,legacyDisabled:input.legacyDisabled});
+  const installedProjections=migrationProjectionRoots(input.env);
+  const audit=await runtimeAccessAudit({roots:auditRoots,projectionRoots:installedProjections,processLines:await processCommandLines(input.env.MPX_MIGRATION_PROCESS_SNAPSHOT),environment:input.env,legacyDisabled:input.legacyDisabled});
   const liveGatePassed=report.gate.passed&&audit.acceptance.passed;
   if(input.action==="reconcile")return {schemaVersion:1,kind:"mpx-migration-reconciliation",sourceDrift:drift,runtimeAccessAudit:audit,gate:{passed:liveGatePassed}};
   if(input.action==="report")return {...report,sourceDriftSummary:drift.counts,runtimeAccessAudit:audit,gate:{...report.gate,passed:liveGatePassed,legacyDisabledAccepted:audit.acceptance.passed}};

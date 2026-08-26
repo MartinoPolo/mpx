@@ -71,14 +71,14 @@ it("runs clean and existing-machine production-backed simulations without live w
   }
   const baseline = await simulation(true);
   const baselinePlan = await new InstallOrchestrator({ adapter: baseline.adapter, store: baseline.store, releases: baseline.releases }).plan(baseline.intent);
-  const nativeSnapshots = await Promise.all(baselinePlan.operations.filter(operation => operation.target.endsWith("settings.json") || operation.target === "HKCU\\Environment" || operation.target.endsWith(".lnk") || operation.target.startsWith("\\MPX\\")).map(operation => baseline.adapter.capture(operation.target)));
-  expect(nativeSnapshots.some(snapshot => snapshot !== null)).toBe(true);
   const mutatingOperations = baselinePlan.operations.filter((operation, index) => baselinePlan.observations[index]!.digest !== operation.desiredDigest);
   for (let failedIndex = 0; failedIndex < mutatingOperations.length; failedIndex++) {
     const f = await simulation(true), original = f.adapter.apply.bind(f.adapter); let calls = 0;
     f.adapter.apply = async operation => { await original(operation); if (calls++ === failedIndex) throw new Error(`injected:${operation.id}`); };
     const orchestrator = new InstallOrchestrator({ adapter: f.adapter, store: f.store, releases: f.releases }), plan = await orchestrator.plan(f.intent);
+    const targetSnapshots = await Promise.all(plan.operations.map(operation => f.adapter.capture(operation.target)));
     await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toThrow("injected:");
+    expect(await Promise.all(plan.operations.map(operation => f.adapter.capture(operation.target)))).toEqual(targetSnapshots);
     expect(await f.store.readReceipt()).toBeUndefined();
     expect(await f.native.read(path.win32.join(f.localAppData, "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "settings.json"))).toEqual({ profiles: [{ guid: "foreign", name: "Keep" }, buildWindowsIntegrationSpecs({ MPX_APPS: f.appsRoot, APPDATA: path.join(f.root, "roaming"), LOCALAPPDATA: f.localAppData, USERPROFILE: f.userProfile, MPX_NODE_EXECUTABLE: process.execPath }, "DOMAIN\\me", "a".repeat(64)).terminal.desired], theme: "native" });
     for (let index = 0; index < f.fixtureFiles.length; index++) expect(await readFile(f.fixtureFiles[index]!)).toEqual(f.before[index]);

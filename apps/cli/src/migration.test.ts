@@ -1,10 +1,10 @@
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { buildCutoverPlan, captureSourceDrift, createParityReport, rollbackDrill, runtimeAccessAudit } from "./migration.js";
+import { buildCutoverPlan, captureSourceDrift, createParityReport, migrationProjectionRoots, parseProcessCommandLines, processCommandLines, rollbackDrill, runtimeAccessAudit } from "./migration.js";
 
 const exec = promisify(execFile);
 async function gitFixture(): Promise<string> {
@@ -39,11 +39,31 @@ describe("Phase J migration reconciliation",()=>{
     expect(report.gate).toMatchObject({passed:false,exceptionCount:1});
   });
 
+  it("fails closed when Windows process audit output or execution is unavailable",async()=>{
+    expect(()=>parseProcessCommandLines({CommandLine:"legacy"})).toThrow("invalid command-line JSON");
+    if(process.platform==="win32") await expect(processCommandLines(undefined,(async()=>{throw new Error("command failed");}) as never)).rejects.toThrow("process audit is unavailable");
+  });
+
   it("audits old access read-only with hashed evidence and supports legacy-disabled acceptance",async()=>{
     const root=await mkdtemp(path.join(tmpdir(),"mpx-j-audit-")),projects=process.env.MPX_PROJECTS??path.join(root,"projects"),oldPi=path.join(projects,"mpx-pi"),oldClaude=path.join(projects,"mpx-claude-code"); const log=path.join(root,"runtime.log"); await writeFile(log,`opened ${oldPi}/skills; token=secret`);
     const audit=await runtimeAccessAudit({roots:[root],processLines:[`node ${oldClaude}/bin.js --password nope`],environment:{MPX_PLUGIN_PATH:oldPi,API_TOKEN:"secret"},legacyDisabled:true});
     expect(audit.readOnly).toBe(true); expect(audit.findings.length).toBeGreaterThan(0); expect(audit.acceptance).toMatchObject({mode:"legacy-disabled",passed:false});
     expect(JSON.stringify(audit)).not.toContain("token=secret"); expect(JSON.stringify(audit)).not.toContain("password nope");
+  });
+
+  it("validates and deduplicates all four route projection overrides",()=>{
+    const base=path.resolve(tmpdir(),"mpx-projections"), shared=path.join(base,"shared");
+    const env={LOCALAPPDATA:path.join(base,"local"),MPX_CLAUDE_PERSONAL_PROJECTION_ROOT:shared,MPX_CLAUDE_WORK_PROJECTION_ROOT:shared,MPX_PI_PERSONAL_PROJECTION_ROOT:path.join(base,"pi-personal"),MPX_PI_WORK_PROJECTION_ROOT:path.join(base,"pi-work")};
+    expect(migrationProjectionRoots(env)).toEqual([shared,path.join(base,"pi-personal"),path.join(base,"pi-work")]);
+    expect(()=>migrationProjectionRoots({...env,MPX_PI_WORK_PROJECTION_ROOT:"relative"})).toThrowError(expect.objectContaining({code:"MIGRATION_AUDIT_ROOT_INVALID"}));
+    expect(()=>migrationProjectionRoots({...env,MPX_PI_WORK_PROJECTION_ROOT:path.join(base,"sessions","private")})).toThrowError(expect.objectContaining({code:"MIGRATION_AUDIT_ROOT_PRIVATE"}));
+  });
+
+  it("fails closed on symlinked audit entries without following private links",async()=>{
+    const root=await mkdtemp(path.join(tmpdir(),"mpx-j-malicious-audit-")), outside=await mkdtemp(path.join(tmpdir(),"mpx-j-private-target-"));
+    await writeFile(path.join(outside,"secret.txt"),"/mp: SECRET-CONTENT");
+    await symlink(outside,path.join(root,"sessions"),process.platform==="win32"?"junction":"dir");
+    await expect(runtimeAccessAudit({roots:[root],legacyDisabled:true})).rejects.toMatchObject({code:"MIGRATION_AUDIT_SYMLINK"});
   });
 
   it("plans only exact owned removals behind the gate and restores an immutable rollback simulation",async()=>{
