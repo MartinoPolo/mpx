@@ -31,8 +31,8 @@ it("composes four runtime registrations and external references into automatic, 
   ] });
   const files = new FakeBinaryFileSystem();
   const adapter = new ProductionInstallerOperationAdapter({ MPX_APPS: "C:\\Apps", APPDATA: "C:\\Roaming", LOCALAPPDATA: "C:\\Local", USERPROFILE: "C:\\Users\\me" }, "me", { files, resources: new FakeJsonResourceStore(), runtimeRegistrations: { inspect: async () => ({
-    observations: runtimeRegistrations.registrations.map(({ identity, executable, projection }) => ({ identity, executable, projection })),
-    accountProbes: runtimeRegistrations.registrations.map(registration => ({ identity: registration.identity, runtime: registration.runtime, domain: registration.domain, nativeRootDigest: registration.nativeRootDigest, status: "enrolled" as const, accountLabel: `${registration.domain}:account` })),
+    observations: [],
+    accountProbes: runtimeRegistrations.registrations.map(registration => ({ identity: registration.identity, runtime: registration.runtime, domain: registration.domain, nativeRootDigest: registration.nativeRootDigest, status: "unavailable" as const, accountLabel: `${registration.domain}:account` })),
     mcpSharing: Object.fromEntries(runtimeRegistrations.registrations.map(registration => [registration.identity, registration.routes.mcpSharing])) as never,
   }) } });
   const node = await lstat(process.execPath);

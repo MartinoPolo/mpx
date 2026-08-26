@@ -49,6 +49,17 @@ describe("Phase I install orchestration", () => {
     expect(events).toEqual(["10-automatic", "90-scheduled", `active:${f.manifest.releaseKey}`]);
   });
 
+  it("rolls back committed operations and selector when activation fails", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore(), events: string[] = [];
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder, activate: async () => { events.push("activate"); throw new Error("activation failed"); }, deactivate: async () => { events.push("deactivate"); } });
+    const plan = await orchestrator.plan(f.intent);
+    await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toThrow("activation failed");
+    expect(adapter.values.size).toBe(0);
+    expect(await store.readReceipt()).toBeUndefined();
+    expect((await store.readTransaction())?.journal.phase).toBe("rolled-back");
+    expect(events).toEqual(["activate", "deactivate"]);
+  });
+
   it("does not expose a release when a committed operation fails actual-state verification", async () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), activated: string[] = [];
     const baseObserve = adapter.observe.bind(adapter);

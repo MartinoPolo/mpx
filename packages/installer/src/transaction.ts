@@ -28,7 +28,7 @@ export interface SideEffectAdapter {
   apply(operation: InstallOperationV1): Promise<void>;
   restore(target: string, snapshot: string | null): Promise<void>;
 }
-export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[] }
+export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[]; priorReceipt?: OwnershipReceiptV1 }
 export interface TransactionStore {
   readReceipt(): Promise<OwnershipReceiptV1 | undefined>;
   writeReceipt(receipt: OwnershipReceiptV1): Promise<void>;
@@ -88,6 +88,7 @@ export class NodeTransactionStore implements TransactionStore {
   private async removeAbandonedLock(lock: string): Promise<boolean> {
     let body: string;
     try { body = await readFile(lock, "utf8"); } catch (failure) { if ((failure as NodeJS.ErrnoException).code === "ENOENT") return true; throw failure; }
+    if (body.length === 0) { await rm(lock, { force: true }); return true; }
     let value: unknown; try { value = parseStrictJson(body); } catch { return false; }
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const record = value as Record<string, unknown>;
@@ -100,10 +101,16 @@ export class NodeTransactionStore implements TransactionStore {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const lock = this.file("transaction.lock"), deadline = Date.now() + 30_000;
     for (;;) {
+      let handle: Awaited<ReturnType<typeof open>> | undefined;
       try {
-        const handle = await open(lock, "wx", 0o600);
-        await handle.writeFile(`${JSON.stringify({ schemaVersion: 1, pid: process.pid, nonce: randomUUID() })}\n`);
-        return async () => { await handle.close(); await rm(lock, { force: true }); };
+        handle = await open(lock, "wx", 0o600);
+        const owner = `${JSON.stringify({ schemaVersion: 1, pid: process.pid, nonce: randomUUID() })}\n`;
+        try { await handle.writeFile(owner); }
+        catch (failure) { await handle.close().catch(() => undefined); await rm(lock, { force: true }); throw failure; }
+        return async () => {
+          await handle!.close();
+          if (await readFile(lock, "utf8").catch(() => "") === owner) await rm(lock, { force: true });
+        };
       } catch (failure) {
         if ((failure as NodeJS.ErrnoException).code !== "EEXIST") throw failure;
         if (await this.removeAbandonedLock(lock)) continue;
@@ -145,23 +152,28 @@ export class ImmutableInstallerService {
       for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation.target);
       const snapshot: MachineSnapshotV1 = { schemaVersion: 1, kind: "machine-snapshot", transactionId: randomUUID(), observations: plan.observations, capturedAt: this.now().toISOString() };
       let journal: TransactionJournalV1 = { schemaVersion: 1, kind: "transaction-journal", transactionId: snapshot.transactionId, phase: "applying", completedOperationIds: [], snapshot };
-      await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations });
+      await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) });
       try {
         for (let index = 0; index < plan.operations.length; index++) {
           const operation = plan.operations[index]!, observation = plan.observations[index]!;
           if (!(operation.action === "ensure" && observation.digest === operation.desiredDigest) && !(operation.action === "remove" && observation.digest === null)) { await this.adapter(operation.adapter).apply(operation); this.options.failureInjection?.(operation.id, index); }
-          journal = { ...journal, completedOperationIds: [...journal.completedOperationIds, operation.id] }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations });
+          journal = { ...journal, completedOperationIds: [...journal.completedOperationIds, operation.id] }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) });
         }
         const manifest = this.options.manifest;
         if (!priorReceipt && (!manifest || manifest.releaseKey !== plan.intent.releaseKey || manifest.convergenceHash !== plan.intent.convergenceHash)) fail("INSTALL_RELEASE_MANIFEST_REQUIRED", "Exact release manifest is required for ownership.");
         const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 1, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: manifest!.files, operations: plan.operations, installIntent: plan.intent, installedAt: this.now().toISOString() };
-        await this.options.store.writeReceipt(receipt); journal = { ...journal, phase: "committed" }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations }); await this.options.store.removeTransaction(); return receipt;
-      } catch (failure) { await this.rollbackStored({ journal, snapshots, operations: plan.operations }, plan.operations); throw failure; }
+        await this.options.store.writeReceipt(receipt); journal = { ...journal, phase: "committed" }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) }); return receipt;
+      } catch (failure) { await this.rollbackStored({ journal, snapshots, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) }, plan.operations); throw failure; }
     });
   }
-  private async rollbackStored(stored: StoredTransaction, operations: readonly InstallOperationV1[]): Promise<void> { for (const operation of [...operations].reverse()) await this.adapter(operation.adapter).restore(operation.target, stored.snapshots[operation.id] ?? null); await this.options.store.writeTransaction({ ...stored, journal: { ...stored.journal, phase: "rolled-back" } }); await this.options.store.removeTransaction(); }
-  async recover(): Promise<void> { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase !== "applying") return; await this.rollbackStored(stored, stored.operations); }
-  async rollback(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (stored) await this.rollbackStored(stored, stored.operations); }); }
+  private async rollbackStored(stored: StoredTransaction, operations: readonly InstallOperationV1[]): Promise<void> {
+    for (const operation of [...operations].reverse()) await this.adapter(operation.adapter).restore(operation.target, stored.snapshots[operation.id] ?? null);
+    if (stored.priorReceipt) await this.options.store.writeReceipt(stored.priorReceipt); else await this.options.store.removeReceipt();
+    await this.options.store.writeTransaction({ ...stored, journal: { ...stored.journal, phase: "rolled-back" } });
+  }
+  async finalize(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase !== "committed") fail("INSTALL_TRANSACTION_UNAVAILABLE", "Committed transaction is unavailable."); await this.options.store.removeTransaction(); }); }
+  async recover(): Promise<void> { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase === "rolled-back") return; await this.rollbackStored(stored, stored.operations); }
+  async rollback(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (stored && stored.journal.phase !== "rolled-back") await this.rollbackStored(stored, stored.operations); }); }
   async verify(): Promise<InstallVerificationV1> { const receipt = await this.options.store.readReceipt(); const issues: string[] = []; if (!receipt) issues.push("receipt-missing"); else for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation.target); if (operation.action === "ensure" ? actual !== operation.desiredDigest : actual !== null) issues.push(`operation-drift:${operation.id}`); } return { schemaVersion: 1, kind: "install-verification", releaseKey: receipt?.releaseKey ?? "", healthy: issues.length === 0, issues, checkedAt: this.now().toISOString() }; }
   async planUninstall(): Promise<InstallPlanV1> { const receipt = await this.options.store.readReceipt(); if (!receipt) fail("INSTALL_NOT_OWNED", "Installation is not owned."); const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["uninstall"] }; const operations = receipt.operations.map((operation) => ({ ...operation, action: "remove" as const, desiredDigest: null })); return this.plan(intent, operations); }
   async uninstall(planValue: InstallPlanV1, confirmation: string): Promise<void> {
@@ -170,7 +182,7 @@ export class ImmutableInstallerService {
       await this.recover(); const receipt = await this.options.store.readReceipt(); if (!receipt || receipt.releaseKey !== plan.intent.releaseKey) fail("INSTALL_NOT_OWNED", "Installation is not owned.");
       for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation.target); if (operation.action === "ensure" && actual !== operation.desiredDigest) fail("INSTALL_FOREIGN_OR_DRIFTED", `Refusing drifted target ${operation.target}.`); }
       await this.assertCurrent(plan); const snapshots: Record<string, string | null> = {}; for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation.target);
-      const snapshot: MachineSnapshotV1 = { schemaVersion: 1, kind: "machine-snapshot", transactionId: randomUUID(), observations: plan.observations, capturedAt: this.now().toISOString() }; let journal: TransactionJournalV1 = { schemaVersion: 1, kind: "transaction-journal", transactionId: snapshot.transactionId, phase: "applying", completedOperationIds: [], snapshot }; const stored: StoredTransaction = { journal, snapshots, operations: plan.operations }; await this.options.store.writeTransaction(stored);
+      const snapshot: MachineSnapshotV1 = { schemaVersion: 1, kind: "machine-snapshot", transactionId: randomUUID(), observations: plan.observations, capturedAt: this.now().toISOString() }; let journal: TransactionJournalV1 = { schemaVersion: 1, kind: "transaction-journal", transactionId: snapshot.transactionId, phase: "applying", completedOperationIds: [], snapshot }; const stored: StoredTransaction = { journal, snapshots, operations: plan.operations, priorReceipt: receipt }; await this.options.store.writeTransaction(stored);
       try { for (const operation of plan.operations) { await this.adapter(operation.adapter).apply(operation); journal = { ...journal, completedOperationIds: [...journal.completedOperationIds, operation.id] }; await this.options.store.writeTransaction({ ...stored, journal }); } await this.options.store.removeReceipt(); await this.options.store.removeTransaction(); } catch (failure) { await this.rollbackStored({ ...stored, journal }, plan.operations); throw failure; }
     });
   }

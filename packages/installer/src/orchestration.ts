@@ -29,7 +29,7 @@ export interface InstallerOperationSet {
 }
 /** The host owns native details; orchestration only consumes ordered, reversible operations. */
 export interface InstallerOperationAdapter extends SideEffectAdapter {
-  operations(intent: InstallIntentV1, manifest: ReleaseManifestV1): Promise<InstallerOperationSet>;
+  operations(intent: InstallIntentV1, manifest: ReleaseManifestV1, requireActual?: boolean): Promise<InstallerOperationSet>;
 }
 export interface CurrentReleaseBuilder {
   readonly appsRoot: string;
@@ -139,17 +139,27 @@ export class InstallOrchestrator {
     const manifest = await this.options.releases.publish(plan.intent.releaseKey);
     const service = this.service(manifest);
     const receipt = await service.apply(plan, confirmation);
-    const operationVerification = await service.verify();
-    const releaseIssues = await this.options.releases.verify(receipt, false);
-    if (!operationVerification.healthy || releaseIssues.length > 0) fail("INSTALL_POST_COMMIT_VERIFY_FAILED", "Committed installation failed actual-state verification; release was not activated.");
-    await this.options.activate?.(receipt.releaseKey);
-    return receipt;
+    try {
+      await this.options.adapter.operations(plan.intent, manifest, true);
+      const operationVerification = await service.verify();
+      const releaseIssues = await this.options.releases.verify(receipt, false);
+      if (!operationVerification.healthy || releaseIssues.length > 0) fail("INSTALL_POST_COMMIT_VERIFY_FAILED", "Committed installation failed actual-state verification; release was not activated.");
+      await this.options.activate?.(receipt.releaseKey);
+      const activatedVerification = await service.verify();
+      const activatedReleaseIssues = await this.options.releases.verify(receipt, false);
+      if (!activatedVerification.healthy || activatedReleaseIssues.length > 0) fail("INSTALL_POST_ACTIVATION_VERIFY_FAILED", "Activated installation failed actual-state verification.");
+      await service.finalize();
+      return receipt;
+    } catch (failure) {
+      try { await this.options.deactivate?.(receipt.releaseKey); } finally { await service.rollback(); }
+      throw failure;
+    }
   }
   async verify(strict = false): Promise<InstallVerificationV1> {
     const receipt = await this.options.store.readReceipt();
     if (receipt) {
       const manifest: ReleaseManifestV1 = { schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files };
-      await this.options.adapter.operations(receipt.installIntent ?? { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest);
+      await this.options.adapter.operations(receipt.installIntent ?? { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest, true);
     }
     const base = await this.service().verify();
     const issues = [...base.issues, ...(receipt ? await this.options.releases.verify(receipt, strict) : [])].sort((a, b) => a.localeCompare(b));

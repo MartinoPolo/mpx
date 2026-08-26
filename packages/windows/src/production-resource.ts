@@ -15,14 +15,16 @@ if($null-eq $p){$null|ConvertTo-Json -Compress;exit 0}
 $o=[ordered]@{};foreach($x in $p.PSObject.Properties){if($x.Name -notmatch '^PS'){$n=if($x.Name-eq'MPX_OWNER'){'owner'}else{$x.Name};$o[$n]=[string]$x.Value}}
 if($o.Contains('MPX_PATH_PREPEND')){$o['PathPrepend']=$o['MPX_PATH_PREPEND'];$o.Remove('MPX_PATH_PREPEND')}
 $o|ConvertTo-Json -Compress -Depth 5`;
-const REGISTRY_WRITE = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-New-Item -Path 'HKCU:\Environment' -Force|Out-Null
-$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment';$oldPrefix=[string]$p.MPX_PATH_PREPEND;$wanted=@($d.value.PSObject.Properties|ForEach-Object{if($_.Name-eq'owner'){'MPX_OWNER'}elseif($_.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$_.Name}});foreach($n in @($p.PSObject.Properties.Name|Where-Object{($_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_')-and $_-notin $wanted})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -ErrorAction SilentlyContinue}
-foreach($x in $d.value.PSObject.Properties){$n=if($x.Name-eq'owner'){'MPX_OWNER'}elseif($x.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$x.Name};if($n -eq'MPX_OWNER'-or $n -eq'MPX_PATH_PREPEND'-or $n -match '^MPX_'){Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -Value ([string]$x.Value) -Type String}}
+const REGISTRY_WRITE = String.raw`$ErrorActionPreference='Stop'
+$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
+New-Item -Path 'HKCU:\Environment' -Force -ErrorAction Stop|Out-Null
+$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment';$oldPrefix=[string]$p.MPX_PATH_PREPEND;$wanted=@($d.value.PSObject.Properties|ForEach-Object{if($_.Name-eq'owner'){'MPX_OWNER'}elseif($_.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$_.Name}});foreach($n in @($p.PSObject.Properties.Name|Where-Object{($_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_')-and $_-notin $wanted})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -ErrorAction Stop}
+foreach($x in $d.value.PSObject.Properties){$n=if($x.Name-eq'owner'){'MPX_OWNER'}elseif($x.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$x.Name};if($n -eq'MPX_OWNER'-or $n -eq'MPX_PATH_PREPEND'-or $n -match '^MPX_'){Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -Value ([string]$x.Value) -Type String -ErrorAction Stop}}
 $old=[string](Get-ItemPropertyValue -LiteralPath 'HKCU:\Environment' -Name Path -ErrorAction SilentlyContinue);$parts=@($old-split';'|Where-Object{$_-and(!$oldPrefix-or $_-cne $oldPrefix)-and(!$d.value.PathPrepend-or $_-cne [string]$d.value.PathPrepend)});$new=if($d.value.PathPrepend){(@([string]$d.value.PathPrepend)+$parts)-join';'}else{$parts-join';'};Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value $new -Type ExpandString
 @{ok=$true}|ConvertTo-Json -Compress`;
-const REGISTRY_REMOVE = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment' -ErrorAction SilentlyContinue;if($p){$prefix=[string]$p.MPX_PATH_PREPEND;foreach($x in @($p.PSObject.Properties.Name|Where-Object{$_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_'})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $x -ErrorAction SilentlyContinue};if($prefix){$old=[string]$p.Path;Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value ((@($old-split';'|Where-Object{$_-and $_-cne $prefix}))-join';') -Type ExpandString}}
+const REGISTRY_REMOVE = String.raw`$ErrorActionPreference='Stop'
+$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
+$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment' -ErrorAction Stop;if($p){$prefix=[string]$p.MPX_PATH_PREPEND;foreach($x in @($p.PSObject.Properties.Name|Where-Object{$_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_'})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $x -ErrorAction Stop};if($prefix){$old=[string]$p.Path;Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value ((@($old-split';'|Where-Object{$_-and $_-cne $prefix}))-join';') -Type ExpandString -ErrorAction Stop}}
 @{ok=$true}|ConvertTo-Json -Compress`;
 
 const SHORTCUT_READ = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
@@ -30,11 +32,13 @@ if(-not(Test-Path -LiteralPath $d.target -PathType Leaf)){$null|ConvertTo-Json -
 $s=(New-Object -ComObject WScript.Shell).CreateShortcut([string]$d.target)
 $o=if([string]$s.Description -eq'MPX owner=mpx'){[ordered]@{owner='mpx';targetPath=[string]$s.TargetPath;arguments=[string]$s.Arguments;workingDirectory=[string]$s.WorkingDirectory}}else{[ordered]@{owner='foreign';targetPath=[string]$s.TargetPath;arguments=[string]$s.Arguments;workingDirectory=[string]$s.WorkingDirectory}}
 $o|ConvertTo-Json -Compress -Depth 4`;
-const SHORTCUT_WRITE = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-$parent=Split-Path -Parent ([string]$d.target);New-Item -ItemType Directory -Path $parent -Force|Out-Null
+const SHORTCUT_WRITE = String.raw`$ErrorActionPreference='Stop'
+$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
+$parent=Split-Path -Parent ([string]$d.target);New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop|Out-Null
 $s=(New-Object -ComObject WScript.Shell).CreateShortcut([string]$d.target);$s.TargetPath=[string]$d.value.targetPath;$s.Arguments=[string]$d.value.arguments;$s.WorkingDirectory=[string]$d.value.workingDirectory;$s.Description='MPX owner=mpx';$s.Save();@{ok=$true}|ConvertTo-Json -Compress`;
-const SHORTCUT_REMOVE = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-Remove-Item -LiteralPath ([string]$d.target) -Force -ErrorAction SilentlyContinue;@{ok=$true}|ConvertTo-Json -Compress`;
+const SHORTCUT_REMOVE = String.raw`$ErrorActionPreference='Stop'
+$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
+if(Test-Path -LiteralPath ([string]$d.target)){Remove-Item -LiteralPath ([string]$d.target) -Force -ErrorAction Stop};@{ok=$true}|ConvertTo-Json -Compress`;
 
 const TASK_PARTS = String.raw`$full=[string]$d.target;$at=$full.LastIndexOf('\');$taskPath=$full.Substring(0,$at+1);$taskName=$full.Substring($at+1)`;
 const TASK_READ = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
@@ -43,16 +47,18 @@ try{$t=Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction St
 $a=@($t.Actions)[0];$owner=if([string]$t.Description-eq'MPX owner=mpx'){'mpx'}else{'foreign'}
 $argv=[System.Management.Automation.PSParser]::Tokenize([string]$a.Arguments,[ref]$null)|Where-Object{$_.Type-eq'CommandArgument'}|ForEach-Object{$_.Content};$cli=if($argv.Count){[string]$argv[0]}else{''};$g=@($t.Triggers)[0]
 [ordered]@{owner=$owner;executable=[string]$a.Execute;arguments=[string]$a.Arguments;executableSha256=if(Test-Path -LiteralPath $a.Execute -PathType Leaf){(Get-FileHash -Algorithm SHA256 -LiteralPath $a.Execute).Hash.ToLower()}else{''};cliSha256=if($cli-and(Test-Path -LiteralPath $cli -PathType Leaf)){(Get-FileHash -Algorithm SHA256 -LiteralPath $cli).Hash.ToLower()}else{''};principal=[string]$t.Principal.UserId;logonType='InteractiveToken';runLevel=if([string]$t.Principal.RunLevel-eq'Highest'){'Highest'}else{'LeastPrivilege'};trigger=@{cadenceMinutes=[int]$g.Repetition.Interval.TotalMinutes};settings=@{startWhenAvailable=[bool]$t.Settings.StartWhenAvailable;multipleInstances=[string]$t.Settings.MultipleInstances;executionTimeLimitSeconds=[int]$t.Settings.ExecutionTimeLimit.TotalSeconds;hidden=[bool]$t.Settings.Hidden;enabled=[bool]$t.Settings.Enabled}}|ConvertTo-Json -Compress -Depth 6`;
-const TASK_WRITE = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
+const TASK_WRITE = String.raw`$ErrorActionPreference='Stop'
+$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
 ${TASK_PARTS}
 $a=New-ScheduledTaskAction -Execute ([string]$d.value.executable) -Argument ([string]$d.value.arguments)
 $tr=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes ([int]$d.value.trigger.cadenceMinutes))
 $level=if($d.value.runLevel-eq'Highest'){'Highest'}else{'Limited'};$p=New-ScheduledTaskPrincipal -UserId ([string]$d.value.principal) -LogonType Interactive -RunLevel $level
 $s=New-ScheduledTaskSettingsSet -StartWhenAvailable:([bool]$d.value.settings.startWhenAvailable) -MultipleInstances ([string]$d.value.settings.multipleInstances) -ExecutionTimeLimit (New-TimeSpan -Seconds ([int]$d.value.settings.executionTimeLimitSeconds)) -Hidden:([bool]$d.value.settings.hidden)
-Register-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Description 'MPX owner=mpx' -Action $a -Trigger $tr -Principal $p -Settings $s -Force -ErrorAction Stop|Out-Null;if(-not[bool]$d.value.settings.enabled){Disable-ScheduledTask -TaskPath $taskPath -TaskName $taskName|Out-Null};@{ok=$true}|ConvertTo-Json -Compress`;
-const TASK_REMOVE = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
+Register-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Description 'MPX owner=mpx' -Action $a -Trigger $tr -Principal $p -Settings $s -Force -ErrorAction Stop|Out-Null;if(-not[bool]$d.value.settings.enabled){Disable-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop|Out-Null};@{ok=$true}|ConvertTo-Json -Compress`;
+const TASK_REMOVE = String.raw`$ErrorActionPreference='Stop'
+$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
 ${TASK_PARTS}
-Unregister-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue;@{ok=$true}|ConvertTo-Json -Compress`;
+try{Unregister-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Confirm:$false -ErrorAction Stop}catch{if($_.CategoryInfo.Category-ne'ObjectNotFound'){throw}};@{ok=$true}|ConvertTo-Json -Compress`;
 const TASK_RUN = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
 ${TASK_PARTS}
 Start-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop;@{started=$true}|ConvertTo-Json -Compress`;
@@ -64,6 +70,7 @@ try{$t=Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction St
 export interface ScheduledTaskStatusEvidence { readonly exists: boolean; readonly state?: string; readonly lastResult?: number; readonly lastRunAt?: string; readonly nextRunAt?: string }
 
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
+function stable(value: unknown): string { if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`; if (value && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(",")}}`; return JSON.stringify(value); }
 function classify(target: string): "registry" | "shortcut" | "task" {
   if (target === REGISTRY_TARGET) return "registry";
   if (SHORTCUT_TARGET.test(target) && path.win32.isAbsolute(target)) return "shortcut";
@@ -81,8 +88,8 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
     try { return result.stdout.trim() ? parseStrictJson(result.stdout) : null; } catch { return fail("WINDOWS_RESOURCE_MALFORMED", "Native Windows resource operation returned malformed JSON."); }
   }
   async read(target: string): Promise<unknown | undefined> { const kind = classify(target); const value = await this.invoke(kind === "registry" ? REGISTRY_READ : kind === "shortcut" ? SHORTCUT_READ : TASK_READ, { target }); if (value === null) return undefined; if (kind !== "registry" && value && typeof value === "object" && !Array.isArray(value)) { const { arguments: encoded, ...rest } = value as Record<string, unknown>; if (typeof encoded !== "string") fail("WINDOWS_RESOURCE_MALFORMED", "Native Windows resource arguments are malformed."); return { ...rest, argv: decodeWindowsArgv(encoded) }; } return value; }
-  async write(target: string, value: unknown): Promise<void> { const kind = classify(target); let encoded = value; if (kind !== "registry" && value && typeof value === "object" && !Array.isArray(value)) { const { argv, ...rest } = value as Record<string, unknown>; if (!Array.isArray(argv) || argv.some(argument => typeof argument !== "string")) fail("WINDOWS_RESOURCE_INVALID", "Native Windows resource arguments are invalid."); encoded = { ...rest, arguments: encodeWindowsArgv(argv as string[]) }; } await this.invoke(kind === "registry" ? REGISTRY_WRITE : kind === "shortcut" ? SHORTCUT_WRITE : TASK_WRITE, { target, value: encoded }); }
-  async remove(target: string): Promise<void> { const kind = classify(target); await this.invoke(kind === "registry" ? REGISTRY_REMOVE : kind === "shortcut" ? SHORTCUT_REMOVE : TASK_REMOVE, { target }); }
+  async write(target: string, value: unknown): Promise<void> { const kind = classify(target); let encoded = value; if (kind !== "registry" && value && typeof value === "object" && !Array.isArray(value)) { const { argv, ...rest } = value as Record<string, unknown>; if (!Array.isArray(argv) || argv.some(argument => typeof argument !== "string")) fail("WINDOWS_RESOURCE_INVALID", "Native Windows resource arguments are invalid."); encoded = { ...rest, arguments: encodeWindowsArgv(argv as string[]) }; } await this.invoke(kind === "registry" ? REGISTRY_WRITE : kind === "shortcut" ? SHORTCUT_WRITE : TASK_WRITE, { target, value: encoded }); const actual = await this.read(target); if (stable(actual) !== stable(value)) fail("WINDOWS_RESOURCE_VERIFY_FAILED", "Native Windows resource did not reach desired state."); }
+  async remove(target: string): Promise<void> { const kind = classify(target); await this.invoke(kind === "registry" ? REGISTRY_REMOVE : kind === "shortcut" ? SHORTCUT_REMOVE : TASK_REMOVE, { target }); if (await this.read(target) !== undefined) fail("WINDOWS_RESOURCE_VERIFY_FAILED", "Native Windows resource removal was not confirmed."); }
   async runScheduledTask(target: string): Promise<void> { if (classify(target) !== "task") fail("WINDOWS_RESOURCE_INVALID", "A scheduled task target is required."); await this.invoke(TASK_RUN, { target }); }
   async inspectScheduledTaskStatus(target: string): Promise<ScheduledTaskStatusEvidence> {
     if (classify(target) !== "task") fail("WINDOWS_RESOURCE_INVALID", "A scheduled task target is required.");

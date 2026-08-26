@@ -4,6 +4,14 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { NodeTransactionStore } from "./transaction.js";
 
+it("reclaims a zero-byte lock that has no owner token", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-lock-empty-"));
+  await mkdir(root, { recursive: true });
+  await writeFile(path.join(root, "transaction.lock"), "");
+  await expect(new NodeTransactionStore(root).exclusive(async () => "entered")).resolves.toBe("entered");
+  await expect(readFile(path.join(root, "transaction.lock"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("cleans an abandoned cross-process lock owned by a nonexistent process", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "mpx-lock-"));
   await mkdir(root, { recursive: true });
