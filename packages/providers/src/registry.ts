@@ -4,12 +4,13 @@ export const ISSUE_CAPABILITIES = [
   "issue.list", "issue.view", "issue.create", "issue.edit", "issue.comment",
   "issue.label", "issue.move", "issue.finish",
 ] as const;
+export const LOCAL_ISSUE_CAPABILITIES = ["issue.dependency.add", "issue.dependency.remove"] as const;
 export const REVIEW_CAPABILITIES = [
   "review.view", "review.create", "review.update", "review.comment", "review.ready", "review.merge",
 ] as const;
 export const CI_CAPABILITIES = ["ci.status", "ci.watch", "ci.logs", "ci.retry"] as const;
 
-export type IssueCapability = (typeof ISSUE_CAPABILITIES)[number];
+export type IssueCapability = (typeof ISSUE_CAPABILITIES)[number] | (typeof LOCAL_ISSUE_CAPABILITIES)[number];
 export type ReviewCapability = (typeof REVIEW_CAPABILITIES)[number];
 export type CiCapability = (typeof CI_CAPABILITIES)[number];
 export type ProviderCapability = IssueCapability | ReviewCapability | CiCapability;
@@ -59,11 +60,11 @@ export interface ProviderDescriptor {
   readonly schema: ProviderSchema;
 }
 
-const ALL_CAPABILITIES = new Set<string>([...ISSUE_CAPABILITIES, ...REVIEW_CAPABILITIES, ...CI_CAPABILITIES]);
+const ALL_CAPABILITIES = new Set<string>([...ISSUE_CAPABILITIES, ...LOCAL_ISSUE_CAPABILITIES, ...REVIEW_CAPABILITIES, ...CI_CAPABILITIES]);
 const EMPTY_SCHEMA: ProviderSchema = Object.freeze({ type: "object", properties: Object.freeze({}), additionalProperties: false });
 const REMOTE_SCHEMA: ProviderSchema = Object.freeze({ type: "object", properties: Object.freeze({ remote: Object.freeze({ type: "string", minLength: 1 }) }), additionalProperties: false });
 const KANBAN_SCHEMA: ProviderSchema = Object.freeze({ type: "object", properties: Object.freeze({ boardId: Object.freeze({ type: "string", minLength: 1 }), states: Object.freeze({ type: "object" }) }), required: Object.freeze(["boardId"]), additionalProperties: false });
-const LOCAL_SCHEMA: ProviderSchema = Object.freeze({ type: "object", properties: Object.freeze({ path: Object.freeze({ type: "string", minLength: 1 }) }), additionalProperties: false });
+const LOCAL_SCHEMA: ProviderSchema = Object.freeze({ type: "object", properties: Object.freeze({ root: Object.freeze({ type: "string", minLength: 1 }), views: Object.freeze({ type: "object" }) }), required: Object.freeze(["root"]), additionalProperties: false });
 
 const freezeDescriptor = (descriptor: ProviderDescriptor): ProviderDescriptor => Object.freeze({
   ...descriptor,
@@ -72,8 +73,9 @@ const freezeDescriptor = (descriptor: ProviderDescriptor): ProviderDescriptor =>
   schema: Object.freeze(descriptor.schema),
 });
 
+const localIssue = [...ISSUE_CAPABILITIES, ...LOCAL_ISSUE_CAPABILITIES];
 const allIssue = [...ISSUE_CAPABILITIES];
-const hostedIssue = ISSUE_CAPABILITIES.filter(capability => capability !== "issue.move");
+const hostedIssue = allIssue.filter(capability => capability !== "issue.move");
 const repoCaps = [...REVIEW_CAPABILITIES, ...CI_CAPABILITIES];
 export const BUILTIN_PROVIDERS: readonly ProviderDescriptor[] = Object.freeze([
   freezeDescriptor({ id: "github", roles: ["repository", "issues"], capabilities: [...hostedIssue, ...repoCaps], backend: "gh", schema: REMOTE_SCHEMA }),
@@ -81,7 +83,7 @@ export const BUILTIN_PROVIDERS: readonly ProviderDescriptor[] = Object.freeze([
   freezeDescriptor({ id: "gerrit", roles: ["repository"], capabilities: [], backend: "git-ssh", schema: REMOTE_SCHEMA }),
   freezeDescriptor({ id: "generic", roles: ["repository"], capabilities: [], backend: "none", schema: REMOTE_SCHEMA }),
   freezeDescriptor({ id: "kanbanflow", roles: ["issues"], capabilities: allIssue, backend: "kf", schema: KANBAN_SCHEMA }),
-  freezeDescriptor({ id: "local", roles: ["issues"], capabilities: [], backend: "filesystem", schema: LOCAL_SCHEMA }),
+  freezeDescriptor({ id: "local", roles: ["issues"], capabilities: localIssue, backend: "filesystem", schema: LOCAL_SCHEMA }),
   freezeDescriptor({ id: "none", roles: ["issues"], capabilities: [], backend: "none", schema: EMPTY_SCHEMA }),
 ]);
 

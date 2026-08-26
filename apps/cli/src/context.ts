@@ -11,6 +11,7 @@ import { createStatusProvider, type StatusProvider } from "@mpx/status";
 import { createGitHubAdapters } from "@mpx/provider-github";
 import { createGitLabAdapters } from "@mpx/provider-gitlab";
 import { createKanbanFlowAdapter } from "@mpx/provider-kanbanflow";
+import { createLocalIssueAdapter } from "@mpx/provider-local";
 import { BUILTIN_PROVIDERS, ProviderRegistry, ProviderService, providerRegistry, type ProviderAdapter, type ProviderDescriptor, type ProviderProcessExecutor, type ProviderProcessRequest, type ProviderProcessResult } from "@mpx/providers";
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/windows";
 import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
@@ -297,6 +298,7 @@ export async function providerService(context: CliContext, config: ProjectConfig
     ...(selectedProvider === undefined || selectedProvider === "github" ? createGitHubAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
     ...(selectedProvider === undefined || selectedProvider === "gitlab" ? createGitLabAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
     ...(selectedProvider === undefined || selectedProvider === "kanbanflow" ? [createKanbanFlowAdapter(executor, { cwd, ...(config.issues?.provider === "kanbanflow" && config.issues.states !== undefined ? { states: config.issues.states } : {}) })] : []),
+    ...(selectedProvider === "local" && config.issues?.provider === "local" && config.issues.root ? [createLocalIssueAdapter({ root: path.resolve(cwd, config.issues.root) })] : []),
     ...(context.trustedProviderComposition?.adapters.filter(adapter => selectedProvider === undefined || adapter.providerId === selectedProvider) ?? []),
   ];
   return new ProviderService(configuredProviderRegistry(context), adapters);

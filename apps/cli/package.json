@@ -25,6 +25,7 @@
     "@mpx/provider-github": "workspace:*",
     "@mpx/provider-gitlab": "workspace:*",
     "@mpx/provider-kanbanflow": "workspace:*",
+    "@mpx/provider-local": "workspace:*",
     "@mpx/providers": "workspace:*",
     "@mpx/skills": "workspace:*",
     "@mpx/ports": "workspace:*",

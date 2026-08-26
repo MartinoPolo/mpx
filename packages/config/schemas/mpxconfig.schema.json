@@ -58,9 +58,60 @@
           "properties": {
             "provider": {
               "allOf": [
-                { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$" },
-                { "not": { "const": "kanbanflow" } }
+                {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,62}$"
+                },
+                {
+                  "not": {
+                    "enum": [
+                      "kanbanflow",
+                      "local"
+                    ]
+                  }
+                }
               ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "root"
+          ],
+          "properties": {
+            "provider": {
+              "const": "local"
+            },
+            "root": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "views": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "vaultRoot",
+                "outputRoot",
+                "resumeBaseUrl"
+              ],
+              "properties": {
+                "vaultRoot": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "outputRoot": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "resumeBaseUrl": {
+                  "type": "string",
+                  "pattern": "^mpx://"
+                }
+              }
             }
           }
         },

@@ -48,8 +48,8 @@ function parse(argv: readonly string[]): Parsed {
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
     if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version","intent","native-root","terminal-executable","terminal-title"].includes(name!)) {
-      const value=inline ?? argv[++i]; if (!value || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version","intent","native-root","terminal-executable","terminal-title"].includes(name!)) {
+      const value=inline ?? argv[++i]; if (value===undefined || (value.length===0 && name!=="body") || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
     } else throw new UsageError(`Unknown option: --${name}`);
@@ -117,12 +117,13 @@ function requiredOption(parsed:Parsed,name:string):string {
 async function providerBinding(parsed:Parsed,context:CliContext,role:"repository"|"issues",capability:string) {
   const found=await project(parsed);
   const providerId=role==="repository" ? found.config.repository.provider : found.config.issues?.provider??"none";
+  const registry:ProviderRegistry=configuredProviderRegistry(context);
+  registry.assertCapability(providerId,capability);
+  if(providerId==="local") return {found,providerId,route:undefined};
   const identityName=stringOption(parsed,"identity");
   if(identityName===undefined) throw new MpxError({code:"IDENTITY_REQUIRED",message:"Provider commands require an explicit identity."});
   const user=await requiredUserConfig(context), identity=user.identities[identityName];
   if(!identity) throw new MpxError({code:"IDENTITY_UNKNOWN",message:`Unknown identity '${identityName}'.`});
-  const registry:ProviderRegistry=configuredProviderRegistry(context);
-  registry.assertCapability(providerId,capability);
   const route=identity.providerRoutes?.[providerId];
   if(!route) throw new MpxError({code:"PROVIDER_ROUTE_REQUIRED",message:`Identity '${identityName}' has no route for provider '${providerId}'.`,remediation:"Configure identity.providerRoutes for the selected provider."});
   return {found,providerId,route};
@@ -368,13 +369,16 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   }
   if (["issue","review","ci"].includes(group)) {
     const actions=group==="issue"
-      ? ["list","view","create","edit","comment","label","move","finish"]
+      ? ["list","view","show","create","edit","update","comment","label","move","finish","close","dependency"]
       : group==="review"
         ? ["view","create","update","comment","ready","merge"]
         : ["status","watch","logs","retry"];
     if(!action || !actions.includes(action)) throw new UsageError(`${group} requires one of: ${actions.join(", ")}`);
-    if(args.length) throw new UsageError(`${group} ${action} accepts only explicit flags`);
-    const capability=`${group}.${action}`;
+    if(args.length && action!=="dependency") throw new UsageError(`${group} ${action} accepts only explicit flags`);
+    const dependencyAction=group==="issue"&&action==="dependency"?args[0]:undefined;
+    if(action==="dependency"&&(!dependencyAction||!["add","remove"].includes(dependencyAction)||args.length!==1)) throw new UsageError("issue dependency requires add or remove");
+    const normalizedAction=group==="issue" ? ({show:"view",update:"edit",close:"finish"} as Record<string,string>)[action]??action : action;
+    const capability=action==="dependency"?`issue.dependency.${dependencyAction}`:`${group}.${normalizedAction}`;
     const role=group==="issue"?"issues":"repository";
     const binding=await providerBinding(parsed,context,role,capability);
     if(group==="review" && action==="ready" && binding.found.config.workflow?.codeReview?.markReady==="human") throw new MpxError({code:"WORKFLOW_POLICY_DENIED",message:"Project workflow policy requires a human to mark reviews ready.",capability});
@@ -382,12 +386,13 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     let input:Record<string,unknown>={};
     if(group==="issue") {
       if(action==="list") { const state=stringOption(parsed,"state"); if(state!==undefined && state!=="open" && state!=="finished") throw new UsageError("--state must be open or finished"); input=state===undefined?{}:{state}; }
-      else if(action==="view"||action==="finish") input={id:requiredOption(parsed,"id")};
+      else if(action==="view"||action==="show"||action==="finish"||action==="close") input={id:requiredOption(parsed,"id"),...(stringOption(parsed,"revision")?{revision:stringOption(parsed,"revision")}:{})};
       else if(action==="create") input={title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body")};
-      else if(action==="edit") input={id:requiredOption(parsed,"id"),title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body")};
+      else if(action==="edit"||action==="update") input={id:requiredOption(parsed,"id"),title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body"),...(stringOption(parsed,"revision")?{revision:stringOption(parsed,"revision")}:{})};
       else if(action==="comment") input={id:requiredOption(parsed,"id"),body:requiredOption(parsed,"body")};
       else if(action==="label") input={id:requiredOption(parsed,"id"),label:requiredOption(parsed,"label")};
       else if(action==="move") input={id:requiredOption(parsed,"id"),destination:requiredOption(parsed,"destination")};
+      else if(action==="dependency") input={id:requiredOption(parsed,"id"),dependencyId:requiredOption(parsed,"dependency-id"),...(stringOption(parsed,"revision")?{revision:stringOption(parsed,"revision")}:{})};
     } else if(group==="review") {
       if(action==="view"||action==="ready") input={id:requiredOption(parsed,"id")};
       else if(action==="create") input={title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body"),sourceBranch:requiredOption(parsed,"source-branch"),targetBranch:requiredOption(parsed,"target-branch"),draft:binding.found.config.workflow?.codeReview?.openAsDraft??false};
@@ -396,7 +401,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       else if(action==="merge") { const method=stringOption(parsed,"method")??"merge"; if(!["merge","squash","rebase"].includes(method)) throw new UsageError("--method must be merge, squash, or rebase"); input={id:requiredOption(parsed,"id"),method}; }
     } else if(action==="status"||action==="watch") input={id:requiredOption(parsed,"id")};
     else { const id=requiredOption(parsed,"run-id"); input={id,runId:id}; }
-    data=await (await providerService(context,binding.found.config,binding.found.root,{providerId:binding.providerId,capability})).invoke({providerId:binding.providerId,capability,route:binding.route,input:asJson(input)});
+    data=await (await providerService(context,binding.found.config,binding.found.root,{providerId:binding.providerId,capability})).invoke({providerId:binding.providerId,capability,...(binding.route===undefined?{}:{route:binding.route}),input:asJson(input)});
     return {data,warnings};
   }
   if (group==="launch" && action==="resolve") throw new UsageError("launch resolve was replaced by 'mpx launch explain'");

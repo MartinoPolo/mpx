@@ -16,7 +16,8 @@ export type Executor = "host" | "docker";
 export type WorkspaceStrategy = "clone" | "host-worktree" | "direct";
 export type NetworkPolicyPreset = "allow-all" | "balanced" | "deny-all";
 export interface IssueStates { todo: string; wip: string; review: string; done: string; archive?: string }
-export interface IssuesConfig { provider: IssueProvider; boardId?: string; boardName?: string; states?: IssueStates }
+export interface IssueViewsConfig { vaultRoot: string; outputRoot: string; resumeBaseUrl: string }
+export interface IssuesConfig { provider: IssueProvider; root?: string; views?: IssueViewsConfig; boardId?: string; boardName?: string; states?: IssueStates }
 export interface PreparationStepBase { id: string; dependsOn?: string[]; required?: boolean; timeoutSeconds?: number; cwd?: string; environment?: string[] }
 export type PreparationStep =
   | (PreparationStepBase & { uses: "package-install" })
