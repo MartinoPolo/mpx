@@ -1,6 +1,7 @@
 export * from "./immutable-core.js";
 export * from "./transaction.js";
 export * from "./windows-integration.js";
+export * from "./orchestration.js";
 
 import { createHash, randomUUID } from "node:crypto";
 import {

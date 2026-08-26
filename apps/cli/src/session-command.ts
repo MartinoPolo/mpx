@@ -163,8 +163,9 @@ export async function executeSessionCommand(input: SessionCommandInput, context:
     const captureMode = text(input, "capture");
     if (captureMode !== undefined && captureMode !== "scheduled") usage("--capture must be scheduled");
     if (captureMode === "scheduled") {
-      await context.scheduledCaptureAuthority?.inspect().catch(() => undefined);
-      throw new SessionError("SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE", "Installed scheduled capture has no authority until Phase I enables its proof gate.");
+      const authority = await context.scheduledCaptureAuthority?.inspect().catch(() => undefined);
+      if (!authority?.installed || !authority.authorityDigest || !/^[a-f0-9]{64}$/u.test(authority.authorityDigest))
+        throw new SessionError("SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE", "Installed scheduled capture has no valid immutable runner authority.");
     }
     const sources = repeated(input, "import-legacy");
     let legacy: unknown = null;

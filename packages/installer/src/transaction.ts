@@ -25,7 +25,7 @@ export interface SideEffectAdapter {
   apply(operation: InstallOperationV1): Promise<void>;
   restore(target: string, snapshot: string | null): Promise<void>;
 }
-interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[] }
+export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[] }
 export interface TransactionStore {
   readReceipt(): Promise<OwnershipReceiptV1 | undefined>;
   writeReceipt(receipt: OwnershipReceiptV1): Promise<void>;

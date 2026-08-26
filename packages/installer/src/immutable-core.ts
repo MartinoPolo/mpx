@@ -129,7 +129,8 @@ export class NodeInstalledReleaseAuthority {
   }
 }
 
-export async function publishCurrentRelease(options: { repositoryRoot: string; appsRoot: string; assetPaths?: readonly string[] }): Promise<ReleaseManifestV1> {
+export interface CurrentReleaseOptions { readonly repositoryRoot: string; readonly assetPaths?: readonly string[] }
+async function withCurrentReleaseSource<T>(options: CurrentReleaseOptions, action: (sourceDirectory: string) => Promise<T>): Promise<T> {
   const assets = options.assetPaths ?? ["apps/cli/dist", "content", "packages/subagents/dist", "runtimes", "LICENSE", "LICENSE.md"];
   const staging = await mkdtemp(path.join(tmpdir(), "mpx-current-release-"));
   try {
@@ -139,8 +140,14 @@ export async function publishCurrentRelease(options: { repositoryRoot: string; a
       if (info.isSymbolicLink() || (!info.isFile() && !info.isDirectory())) fail("INSTALL_RELEASE_UNSAFE_ENTRY", "Repository asset is unsafe.");
       const destination = path.join(staging, ...asset.split("/")); if (info.isFile()) { await mkdir(path.dirname(destination), { recursive: true }); await copyFile(source, destination); } else { const entries = await walk(source); for (const entry of entries) { const target = path.join(destination, ...entry.path.split("/")); await mkdir(path.dirname(target), { recursive: true }); await copyFile(path.join(source, ...entry.path.split("/")), target); } }
     }
-    return await publishRelease({ sourceDirectory: staging, appsRoot: options.appsRoot });
+    return await action(staging);
   } finally { await rm(staging, { recursive: true, force: true }); }
+}
+export async function buildCurrentReleaseManifest(options: CurrentReleaseOptions): Promise<ReleaseManifestV1> {
+  return withCurrentReleaseSource(options, buildReleaseManifest);
+}
+export async function publishCurrentRelease(options: CurrentReleaseOptions & { readonly appsRoot: string }): Promise<ReleaseManifestV1> {
+  return withCurrentReleaseSource(options, sourceDirectory => publishRelease({ sourceDirectory, appsRoot: options.appsRoot }));
 }
 export function mutableStateRoots(environment: NodeJS.ProcessEnv = process.env): readonly string[] { const roots = [environment.APPDATA, environment.LOCALAPPDATA].filter((x): x is string => Boolean(x)); if (roots.length !== 2) fail("INSTALL_MUTABLE_ROOT_UNAVAILABLE", "APPDATA and LOCALAPPDATA are required."); return roots; }
 export async function writeActiveRelease(localAppData: string, releaseKey: string): Promise<void> { if (!SHA.test(releaseKey)) fail("INSTALL_SELECTOR_INVALID", "Release key is invalid."); const directory = path.join(localAppData, "mpx"), file = path.join(directory, "active-release"), temporary = `${file}.${randomUUID()}.tmp`; await mkdir(directory, { recursive: true }); try { await writeFile(temporary, `${releaseKey}\n`, { flag: "wx", mode: 0o600 }); await rename(temporary, file); } finally { await rm(temporary, { force: true }); } }

@@ -8,6 +8,14 @@ The stable selector is `%LOCALAPPDATA%/mpx/active-release`. Receipts, journals, 
 
 Immediately before scheduled plan/apply/verify use, `NodeInstalledReleaseAuthority` opens the selected runner and proves that it is a regular file below the receipt's exact release, with the receipt's path, size, and hash. Project, work, and cloned roots can be supplied as prohibited roots. The existing `ImmutableRunnerAuthority` session-capture seam remains structurally compatible.
 
+## CLI orchestration
+
+The public surface is `mpx install plan --intent <file>`, `apply --plan <file> --confirm-plan <digest>`, `verify [--strict]`, `rollback --transaction <id> --confirm-plan <digest>`, and `uninstall --confirm-plan <digest>`. Intent and plan files use strict version-1 parsers. Planning only builds and observes the current deterministic release; it does not publish, authenticate, or launch. Apply rebuilds and revalidates release content, operation composition, and machine observations before publication, then applies automatic operations with the scheduled operation group last. Failures restore captured state in reverse order.
+
+Native side effects remain behind an application-injected `InstallerOperationAdapter`; this package does not implement Windows provisioning internals. `%APPDATA%`, `%LOCALAPPDATA%`, and `MPX_APPS` must be explicit absolute production roots. Verification hashes actual release files and observes actual operation targets; `--strict` additionally reports foreign entries without removing them. Uninstall refuses absent ownership and foreign or drifted owned targets. The legacy public `--component`/`--runner` reader has been removed.
+
+A healthy strict Phase I verification supplies the release-key authority digest used to admit Phase G scheduled capture. Without an injected production adapter and durable transaction store, live install/apply remains fail-closed with `INSTALL_ADAPTER_UNAVAILABLE`.
+
 ## Simulation matrix
 
 | Machine | Scenario | Expected result |

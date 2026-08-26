@@ -107,10 +107,16 @@ describe("session command", () => {
     expect(apply).toHaveBeenCalledWith(planned, confirmationDigest);
   });
 
-  it("keeps installed scheduled capture fail-closed until Phase I authority is enabled", async () => {
+  it("admits scheduled capture only with Phase I immutable runner authority", async () => {
     const context = await fixture(), inspect = vi.fn(async () => ({ installed: true, authorityDigest: "a".repeat(64) })), discoveries = vi.fn(async () => []);
-    await expect(executeSessionCommand({ action: "reconcile", args: [], options: new Map([["capture", "scheduled"]]) }, { ...context, discoveries, scheduledCaptureAuthority: { inspect } })).rejects.toMatchObject({ code: "SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE" });
+    await expect(executeSessionCommand({ action: "reconcile", args: [], options: new Map([["capture", "scheduled"]]) }, { ...context, discoveries, scheduledCaptureAuthority: { inspect } })).resolves.toMatchObject({ data: { schemaVersion: 1, kind: "session-reconcile" } });
     expect(inspect).toHaveBeenCalledOnce();
+    expect(discoveries).toHaveBeenCalledOnce();
+  });
+
+  it("keeps scheduled capture fail-closed without immutable runner authority", async () => {
+    const context = await fixture(), discoveries = vi.fn(async () => []);
+    await expect(executeSessionCommand({ action: "reconcile", args: [], options: new Map([["capture", "scheduled"]]) }, { ...context, discoveries })).rejects.toMatchObject({ code: "SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE" });
     expect(discoveries).not.toHaveBeenCalled();
   });
 

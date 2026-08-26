@@ -26,7 +26,7 @@ import { LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local"
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
 import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
-import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, installer, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
+import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, immutableInstaller, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
 import { executeSessionCommand } from "./session-command.js";
 import { executeInstallCommand } from "./install-command.js";
 import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
@@ -52,7 +52,7 @@ function parse(argv: readonly string[]): Parsed {
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
     if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version","intent","terminal-title"].includes(name!)) {
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","intent","plan","transaction","terminal-title"].includes(name!)) {
       const value=inline ?? argv[++i]; if (value===undefined || (value.length===0 && name!=="body") || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
@@ -369,6 +369,12 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         admitExecutor: async launch => launch.executor === "host" || context.env.MPX_RUNTIME_EXECUTOR === "docker",
       }, new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases")));
     }
+    const scheduledCaptureAuthority = context.scheduledCaptureAuthority ?? ((context.installOrchestrator || (context.installerOperationAdapter && context.installerTransactionStore)) ? {
+      inspect: async () => {
+        const verification = await immutableInstaller(context).verify(true);
+        return { installed: verification.healthy, authorityDigest: verification.healthy && verification.releaseKey ? verification.releaseKey : null };
+      },
+    } : undefined);
     const result = await executeSessionCommand({ action, args, options: parsed.options }, {
       store: sessionStore,
       resolveIdentity: async name => {
@@ -382,12 +388,12 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
       ...(branchService ? { branchService } : {}),
       ...(terminalAvailability.terminal.available ? { terminalExecutable: terminalAvailability.terminal.executable } : {}),
-      ...(context.scheduledCaptureAuthority ? { scheduledCaptureAuthority: context.scheduledCaptureAuthority } : {}),
+      ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
     });
     return { data: result.data, warnings: [...result.warnings] };
   }
   if (group === "install") {
-    const result = await executeInstallCommand({ action, args, options: parsed.options }, { service: installer(context, parsed.cwd) });
+    const result = await executeInstallCommand({ action, args, options: parsed.options }, { orchestrator: immutableInstaller(context) });
     return { data: result.data, warnings };
   }
   if (["identity","mode","skill-policy","preset"].includes(group) && ["list","show"].includes(action ?? "")) {
