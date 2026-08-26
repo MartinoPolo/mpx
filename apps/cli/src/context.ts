@@ -19,6 +19,7 @@ import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { canonicalNativeRootDigest, parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
 import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxExecutable, type BoundedProcessRunner, type F2SandboxSessionResumeAdmission, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
 import type { LaunchExecutionContext } from "./launch-execution.js";
+import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
 import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type ConversationBranchService, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
@@ -68,6 +69,8 @@ export interface CliContext extends LaunchExecutionContext {
   devService?: CliDevService;
   providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
+  /** Test seam for the standalone-sbx process transport; production requires no injection. */
+  launchSbxExecutionDependencies?: SbxExecutionDependencies;
   /** Optional read-only standalone sbx probe. It must never start or reset the daemon. */
   sbxDiagnostics?: () => Promise<{ readonly available: boolean; readonly failureCodes: readonly string[]; readonly readOnly: true }>;
   sessionStore?: SessionStore;

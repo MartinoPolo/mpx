@@ -3,14 +3,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { ExecutionError, compactLaunchBanner, createLaunchExecutionAudit, type ExecutorAdapter, type RuntimeAdapter } from "@mpx/executors";
+import { ExecutionError, SBX_V0_39_0_PIN, compactLaunchBanner, createLaunchExecutionAudit, type ExecutorAdapter, type RuntimeAdapter } from "@mpx/executors";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import type { LaunchDescriptor } from "@mpx/launch";
-import { revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
+import { createF2ProofReportV1, revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
 import { run } from "./main.js";
 import { captureIo } from "./io.js";
 import { NodeLaunchStatusSnapshotMaterializer, resolveLaunchStatusSnapshotPath, type LaunchExecutionContext } from "./launch-execution.js";
 import { NodePrivateRouteMaterializer, defaultContext } from "./context.js";
+import { loadProductionSbxProofSources, planProductionSbxExecution } from "./sbx-execution.js";
 
 async function launchFixture(): Promise<{ cwd: string; env: NodeJS.ProcessEnv; catalogRoot: string }> {
   const cwd = await mkdtemp(path.join(tmpdir(), "mpx-cli-launch-f-"));
@@ -348,6 +349,15 @@ describe("Phase F launch execution", () => {
       hungRead.promise.catch(() => undefined);
       await rm(path.join(stateRoot, "status"), { recursive: true, force: true });
     }
+  });
+
+  it.each(["pi","claude"] as const)("runs actual CLI %s launch through the proof-bound production standalone-sbx lifecycle",async runtime=>{
+    const fixture=await launchFixture(),io=captureIo(),sources=await loadProductionSbxProofSources(),executable=path.join(fixture.env.APPDATA!,"sbx.exe"),proofFile=path.join(fixture.env.APPDATA!,`${runtime}-proof.json`);await writeFile(executable,"fake-sbx");
+    const planned=planProductionSbxExecution({environment:fixture.env,cwd:fixture.cwd,stateRoot:path.join(fixture.env.LOCALAPPDATA!,"mpx"),runtime,identity:{name:"work",domain:"work"},workspaceMode:"clone",worktreeRole:"main",workspaceRoot:fixture.cwd,gitCommonDir:path.join(fixture.cwd,".git"),nativeRoots:["C:/native/personal/claude","C:/native/personal/pi","C:/native/work/claude","C:/native/work/pi"],credentialRoots:[],oppositeDomainRoots:["C:/native/personal/claude","C:/native/personal/pi"],network:{name:"implementation",allow:["api.anthropic.com:443","api.github.com:443","api.openai.com:443","github.com:443","registry.npmjs.org:443"]},ports:[],sources});
+    const proof=createF2ProofReportV1({planKey:planned.plan.planKey,...sources,attestationSha256:"d".repeat(64),verdict:"pass"});await writeFile(proofFile,JSON.stringify(proof));
+    const calls:string[][]=[];const builder=async(input:Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0])=>({directory:`C:/immutable/${runtime}`,reference:publishedReference(input),...(runtime==="pi"?{extension:"C:/immutable/pi/extension.mjs",runtimeContextFile:"C:/immutable/pi/context.json",theme:"green"}:{pluginDirectory:"C:/immutable/claude"})});
+    const context={env:{...fixture.env,MPX_SBX_EXECUTABLE:executable,MPX_F2_PROOF_REPORT_FILE:proofFile,[runtime==="pi"?"MPX_PI_EXECUTABLE":"MPX_CLAUDE_EXECUTABLE"]:process.execPath},catalogRoot:fixture.catalogRoot,launchSbxExecutionDependencies:{inspectExecutable:async(file:string)=>({file:true,realpath:file,sha256:SBX_V0_39_0_PIN.windowsBinarySha256}),diagnostics:async()=>({status:"pass" as const,digest:"e".repeat(64)}),run:async(request:{argv:readonly string[]})=>{calls.push([...request.argv]);return {exitCode:0,stdout:"",stderr:"",truncated:false};}},launchExecutableResolver:async()=>({executable:process.execPath,argvPrefix:[]}),launchProjectionBuilder:builder,launchProjectionValidator:async()=>undefined,launchRoutes:{materialize:async(descriptor:LaunchDescriptor)=>materializeRoutes(descriptor)},...(runtime==="pi"?{rootAttestationService:{verify:async()=>({ref:"account-ref",identity:{name:"work",domain:"work"}})},accountAuthVerifier:{verify:async()=>({status:"authenticated"})}}:{})} as never;
+    expect(await run(["--cwd",fixture.cwd,"launch",runtime,"--identity","work"],io,context)).toBe(0);expect(calls.map(call=>call[0])).toEqual(["create","policy","exec","run","rm"]);expect(calls.flat()).not.toContain("host");
   });
 
   it("gates the safe default Docker executor without falling back to host", async () => {

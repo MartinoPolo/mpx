@@ -4,6 +4,8 @@
   "runtimeToolInventorySha256": "64032f7f15021fc4999cf9458bbada0f61b7627a529e9f3ef62e873b5685451a",
   "executorEvidenceSource": "packages/executors/src/index.ts",
   "executorEvidenceBindingSha256": "009d2636486be26f19844521659d610115ca1a7529ce399302c6d035bc2fca06",
+  "productionBackend": "apps/cli/src/sbx-execution.ts#createProductionSbxExecutionAdapter",
+  "lifecycleAdapter": "packages/executors/src/standalone-sbx-executor.ts#StandaloneSbxLifecycleAdapter",
   "counts": {
     "topLevel": 21,
     "childAccessible": 32,

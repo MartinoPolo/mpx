@@ -12,15 +12,19 @@ export interface StandaloneSbxExecutorInput {
   readonly executable:string; readonly cwd:string; readonly plan:SandboxLaunchPlanV1; readonly agent:"claude"|"shell";
   readonly report:F2ProofReportV1; readonly sbxPinSha256:string; readonly executorEvidenceSha256:string;
   readonly ports:readonly string[];
+  readonly worker?:{readonly argv:readonly string[];readonly endpoint:string;readonly attestationSha256:string};
   readonly diagnostics:()=>Promise<{readonly status:"pass"|"fail";readonly digest:string}>;
   readonly run:(request:StandaloneSbxRunRequest)=>Promise<ProcessResult>;
 }
 const SHA=/^[a-f0-9]{64}$/u;
 
 /** Production adapter for the pinned standalone sbx command surface. It never invokes a shell. */
-export class StandaloneSbxExecutorAdapter implements ExecutorAdapter {
+export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly name="docker" as const;
-  constructor(readonly input:StandaloneSbxExecutorInput) {}
+  readonly bridge:{readonly endpoint:string;readonly attestationSha256:string}|undefined;
+  constructor(readonly input:StandaloneSbxExecutorInput) {
+    this.bridge=input.worker===undefined?undefined:Object.freeze({endpoint:input.worker.endpoint,attestationSha256:input.worker.attestationSha256});
+  }
   async verify():Promise<VerificationEvidence>{
     try {
       const report=parseF2ProofReportV1(this.input.report),diagnostics=await this.input.diagnostics();
@@ -45,9 +49,16 @@ export class StandaloneSbxExecutorAdapter implements ExecutorAdapter {
       const create=await run(commands.create);if(create.exitCode!==0)throw new ExecutionError("SBX_CREATE_FAILED","Standalone sbx create failed.");created=true;
       if(commands.ports.length>2){const ports=await run(commands.ports);if(ports.exitCode!==0)throw new ExecutionError("SBX_PORTS_FAILED","Standalone sbx port publication failed.");}
       const policy=await run(commands.policy);if(policy.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection failed.");
+      if(this.input.worker){
+        const workerCommands=buildSbxCommandPlans(this.input.plan,{agent:this.input.agent,execArgv:this.input.worker.argv,ports:[]});
+        const worker=await run(workerCommands.exec);if(worker.exitCode!==0)throw new ExecutionError("SBX_WORKER_FAILED","Standalone sbx remote worker failed to start.");
+      }
       return await run(commands.attach);
     } finally {
       if(created){const removed=await run(commands.delete);if(removed.exitCode!==0)throw new ExecutionError("SBX_TEARDOWN_FAILED","Standalone sbx teardown failed.");}
     }
   }
 }
+
+/** Executor-facing production name retained for callers; lifecycle behavior lives in the deep adapter above. */
+export class StandaloneSbxExecutorAdapter extends StandaloneSbxLifecycleAdapter {}

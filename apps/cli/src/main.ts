@@ -20,7 +20,7 @@ import {
 } from "@mpx/config";
 import { createSkillArtifactReference, errorEnvelope, MpxError, sha256Canonical, successEnvelope, type Diagnostic, type JsonValue } from "@mpx/core";
 import { resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
-import { ExecutionError, sanitizeHostReason } from "@mpx/executors";
+import { ExecutionError, namedSbxPolicies, sanitizeHostReason } from "@mpx/executors";
 import { probeProvider, type ProviderRegistry } from "@mpx/providers";
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
@@ -33,6 +33,7 @@ import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js"
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
+import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
 import { BranchLeaseStore, ConversationBranchService, RootAttestationService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
@@ -185,9 +186,9 @@ function human(value:unknown):string {
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
 async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext): Promise<unknown> {
-  if (plan.launch.executor.kind === "docker") {
-    const admission = await context.sessionDockerResumeAdmission?.(plan);
-    if (!admission?.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: admission?.code ?? "F2_ADMISSION_UNAVAILABLE" });
+  if (plan.launch.executor.kind === "docker" && context.sessionDockerResumeAdmission) {
+    const admission = await context.sessionDockerResumeAdmission(plan);
+    if (!admission.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: admission.code });
   }
   const store = sessions(context);
   let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>> | undefined;
@@ -247,7 +248,16 @@ async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConf
   const scope = user.contentScopes[plan.launch.contentScope], projectOverride = projectId ? user.projects?.[projectId] : undefined;
   if (!scope) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE", message: "The recorded content scope is no longer configured." });
   const skillArtifact = createSkillArtifactReference({ runtime: plan.runtime, identity: plan.identity.name, skillPolicy: plan.launch.skillPolicy, contentScope: plan.launch.contentScope, projectId: projectId ?? null, catalogHash: sha256Canonical(catalog.map(skill => ({ identity: skill.identity, contentHash: skill.contentHash, ...("directoryHash" in skill ? { origin: "project", directoryHash: skill.directoryHash, realPath: skill.realPath, realProjectRoot: skill.realProjectRoot } : { origin: "canonical" }) })) as unknown as JsonValue), enabledPacks: resolveEffectiveSkillPacks({ contentScopeSkillPacks: scope.skillPacks, projectSkillPacks: projectOverride?.skillPacks, skillPolicySkillPacks: selection.skillPolicy.declaration.skillPacks }), skillPolicyConfig: selection.skillPolicy.declaration as unknown as JsonValue, contentScopeExposure: (scope.skillExposure ?? {}) as unknown as JsonValue, projectExposure: (projectOverride?.skillExposure ?? null) as unknown as JsonValue });
-  const evidence = await executorEvidence(context, plan.launch.executor.kind);
+  let resumeContext=context;
+  if(plan.launch.executor.kind==="docker"&&context.launchExecutorAdapters===undefined&&context.env.LOCALAPPDATA){
+    try{
+      const snapshot=found?await status(context).snapshot({cwd,projectRoot:found.root,config:found.config,configHash:sha256Canonical(found.config as unknown as JsonValue)}):parseStatusSnapshotV1({schemaVersion:1,project:{id:repositoryId,cwd},worktree:{id:null,path:null,role:null,branch:null},portResolution:"missing",services:[],diagnostics:[]});
+      const configured=user.identities[plan.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"];
+      const adapter=await createProductionSbxExecutionAdapter({environment:context.env,cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:plan.runtime,identity:{name:plan.identity.name,domain:plan.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:cwd,gitCommonDir:path.join(cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:snapshot.services.flatMap(service=>service.port===null?[]:[service.port])},context.launchSbxExecutionDependencies);
+      resumeContext={...context,launchExecutorAdapters:[adapter],...(adapter.bridge?{launchSbxBridge:adapter.bridge}:{})};
+    }catch{/* Exact production proof remains unavailable and the typed Docker gate denies resume. */}
+  }
+  const evidence = await executorEvidence(resumeContext, plan.launch.executor.kind);
   const descriptor = await resolveLaunch({ ...selectionInput, grants: plan.launch.grants.map(grant => `${grant.access}:${grant.resource}`), ...(plan.launch.executor.kind === "host" ? { reason: "confirmed session resume", hostApproval: { reason: "confirmed session resume", approvalKey: sha256Canonical({ confirmationDigest: plan.confirmationDigest } as unknown as JsonValue) } } : {}), skillArtifact, selectedNativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], ...(projectId ? { projectId } : {}), repositoryId, dockerAvailability: evidence.status === "verified" ? "available" : evidence.status === "unavailable" ? "unavailable" : "unverified", executorVerification: evidence, policyInputs: { schemaVersion: 1, manifestKey: manifest.manifestKey, skillArtifactKey: skillArtifact.artifactKey } });
   const descriptorDigest = sha256Canonical(descriptor as unknown as JsonValue);
   const currentLaunch = {
@@ -272,7 +282,7 @@ async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConf
   if (!appData || !localAppData) throw new MpxError({ code: "STATE_ROOT_UNAVAILABLE", message: "APPDATA and LOCALAPPDATA are required for resume execution." });
   nativeBinding = nativeBinding ?? await store.readNativeBinding(plan.nativeBindingRef);
   const beforeChildExecution = reverifyPiAccount;
-  const launchContext = context.launchLifecycleBridge || context.launchRuntimeAdapters ? context : { ...context, launchLifecycleBridge: new ProductionSessionLifecycleBridge(store, context.nativeAccountBindingResolver ? (name, runtime) => context.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined) };
+  const launchContext = resumeContext.launchLifecycleBridge || resumeContext.launchRuntimeAdapters ? resumeContext : { ...resumeContext, launchLifecycleBridge: new ProductionSessionLifecycleBridge(store, resumeContext.nativeAccountBindingResolver ? (name, runtime) => resumeContext.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined) };
   const snapshot = found ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) }) : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
   const result = await executeResolvedLaunch({ descriptor, manifest, artifact, catalog, canonicalRoot, agentsRoot: path.join(path.dirname(canonicalRoot), "agents"), artifactsRoot: path.join(appData, "mpx", "runtime-artifacts"), stateRoot: path.join(localAppData, "mpx"), cwd, environment: context.env, context: launchContext, tty: context.launchTty ?? directProcessTty(), nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], statusSnapshot: snapshot, resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef }, ...(beforeChildExecution ? { beforeChildExecution } : {}) });
   return { ...result, resumeLaunch: { previousLaunchKey, previousDescriptorDigest, newLaunchKey: currentLaunchKey, newDescriptorDigest: currentDescriptorDigest } };
@@ -471,11 +481,10 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       });
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
     }
-    const sbxProbe=context.sbxDiagnostics??(context===defaultContext?()=>createDefaultSbxDiagnostics(context.env,parsed.cwd):undefined);
-    if (action!=="explain" && selection.executor==="docker" && sbxProbe) {
-      const sbx=await sbxProbe(), code=sbx.failureCodes[0];
-      if (sbx.readOnly!==true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
-      if (code) throw new MpxError({code,message:`Standalone sbx launch diagnostic: ${code}.`,details:{executor:"docker"}});
+    if(action!=="explain"&&selection.executor==="docker"&&context.sbxDiagnostics){
+      const sbx=await context.sbxDiagnostics(),code=sbx.failureCodes[0];
+      if(sbx.readOnly!==true)throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
+      if(code)throw new MpxError({code,message:`Standalone sbx launch diagnostic: ${code}.`,details:{executor:"docker"}});
     }
     const opts=resolveOptions(user,{identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,repositoryId,...(projectId ? {projectId} : {})});
     const canonicalRoot=await catalogPath(context,parsed.cwd), canonicalCatalog=await inventoryCanonical(canonicalRoot);
@@ -485,7 +494,18 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const manifest=resolveManifest(catalog,opts), artifact=createRuntimeSkillArtifact(manifest,catalog,{runtime:selection.runtime});
     const scope=user.contentScopes[selection.contentScope.name]!, projectOverride=projectId?user.projects?.[projectId]:undefined;
     const skillArtifact=createSkillArtifactReference({runtime:selection.runtime,identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,projectId:projectId??null,catalogHash:sha256Canonical(catalog.map(skill=>({identity:skill.identity,contentHash:skill.contentHash,...("directoryHash" in skill?{origin:"project",directoryHash:skill.directoryHash,realPath:skill.realPath,realProjectRoot:skill.realProjectRoot}:{origin:"canonical"})})) as unknown as JsonValue),enabledPacks:resolveEffectiveSkillPacks({contentScopeSkillPacks:scope.skillPacks,projectSkillPacks:projectOverride?.skillPacks,skillPolicySkillPacks:selection.skillPolicy.declaration.skillPacks}),skillPolicyConfig:selection.skillPolicy.declaration as unknown as JsonValue,contentScopeExposure:(scope.skillExposure??{}) as unknown as JsonValue,projectExposure:(projectOverride?.skillExposure??null) as unknown as JsonValue});
-    const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(context,selection.executor), tty=context.launchTty??directProcessTty();
+    const statusSnapshot = found
+      ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
+      : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
+    let executionContext=context;
+    if(action!=="explain"&&selection.executor==="docker"&&context.launchExecutorAdapters===undefined&&context.env.LOCALAPPDATA){
+      try{
+        const snapshot=await statusSnapshot(),configured=user.identities[selection.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"];
+        const adapter=await createProductionSbxExecutionAdapter({environment:context.env,cwd:parsed.cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:selection.runtime,identity:{name:selection.identity.name,domain:selection.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:parsed.cwd,gitCommonDir:path.join(parsed.cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:snapshot.services.flatMap(service=>service.port===null?[]:[service.port])},context.launchSbxExecutionDependencies);
+        executionContext={...context,launchExecutorAdapters:[adapter],...(adapter.bridge?{launchSbxBridge:adapter.bridge}:{})};
+      }catch{/* The existing typed unverified Docker gate remains authoritative. */}
+    }
+    const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(executionContext,selection.executor), tty=context.launchTty??directProcessTty();
     let hostApproval:{reason:string;approvalKey:string}|undefined;
     if(selection.executor==="host" && action!=="explain") {
       if(parsed.json || !tty.direct) throw new MpxError({code:"HOST_TTY_REQUIRED",message:"Host approval requires a current direct interactive TTY.",remediation:"Run the explicit host launch interactively, or use Docker."});
@@ -511,10 +531,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     }
     const appData=context.env.APPDATA;
     if(!appData) throw new MpxError({code:"USER_CONFIG_ROOT_MISSING",message:"APPDATA is required to publish immutable runtime projections."});
-    const statusSnapshot = found
-      ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
-      : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
-    const launchContext = context.launchLifecycleBridge || context.launchRuntimeAdapters || !context.env.LOCALAPPDATA ? context : { ...context, launchLifecycleBridge: new ProductionSessionLifecycleBridge(sessions(context), async (name, runtime) => runtime === "pi" && piAttestation && name === piAttestation.identity.name ? piAttestation.ref : context.nativeAccountBindingResolver?.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) ?? null) };
+    const launchContext = executionContext.launchLifecycleBridge || executionContext.launchRuntimeAdapters || !executionContext.env.LOCALAPPDATA ? executionContext : { ...executionContext, launchLifecycleBridge: new ProductionSessionLifecycleBridge(sessions(executionContext), async (name, runtime) => runtime === "pi" && piAttestation && name === piAttestation.identity.name ? piAttestation.ref : executionContext.nativeAccountBindingResolver?.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) ?? null) };
     const processResult=await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,environment:context.env,context:launchContext,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(found?{projectConfig:found.config,projectRoot:found.root}:{}),...(beforeChildExecution?{beforeChildExecution}:{})});
     return {data:null,warnings,silent:true,exitCode:processResult.exitCode};
   }
@@ -640,6 +657,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       const sbx = await sbxProbe();
       if (sbx.readOnly !== true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
       for (const code of [...new Set(sbx.failureCodes)].sort()) diagnostics.push({ code, message: `Standalone sbx diagnostic: ${code}.`, severity: "warning", details: { executor: "docker" } });
+      for (const code of await diagnoseConfiguredF2Proof(context.env)) diagnostics.push({code,message:`Standalone sbx proof diagnostic: ${code}.`,severity:"warning",details:{executor:"docker"}});
     }
     const services = Object.entries(found.config.development?.services ?? {}).sort(([left], [right]) => left.localeCompare(right));
     for (const [name, service] of services) if (service.port.mode === "fixed-shared") diagnostics.push({ code: "FIXED_SHARED_LIMITATION", message: `Service ${name} uses a fixed-shared port that MPX cannot reserve exclusively.`, severity: "warning", details: { service: name, ...(service.port.preferred === undefined ? {} : { port: service.port.preferred }) } });

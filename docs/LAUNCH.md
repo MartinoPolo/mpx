@@ -17,7 +17,7 @@ Mode, skill policy, content scope, executor, workspace, and network policy still
 
 ## Execution gates
 
-Docker is the safe default. The production Docker adapter is gated as **unverified pending F2** and launch fails with `EXECUTOR_GATE_UNVERIFIED`; there is no host fallback. This is not a claim of F2 container isolation.
+Docker is the safe default. Production selects the pinned standalone-sbx backend when its live read-only diagnostics, generated sandbox plan, packaged runtime-tool/executor inventories, and `F2ProofReportV1` all match exactly. Missing or stale proof remains a typed `EXECUTOR_GATE_UNVERIFIED` denial with no host fallback. The backend applies loopback ports and the named default-deny policy, starts a launch-private attested worker bridge, attaches the runtime, and awaits teardown.
 
 Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where required, a nonempty reason, the descriptor's trusted elevation approval, and fresh confirmation from a direct TTY. JSON/noninteractive execution cannot approve host mode. Approval is exact, one-use, and launch-bound. Interactive runtime processes have no artificial 120-second lifetime; finite readiness and diagnostic probes remain bounded.
 

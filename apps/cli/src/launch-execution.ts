@@ -119,6 +119,8 @@ export interface LaunchExecutionContext {
   launchAudit?: LaunchAuditStore;
   launchTty?: DirectTty;
   launchExpectedKey?: string;
+  /** Launch-private standalone-sbx worker bridge; never serialized into descriptors or audit. */
+  launchSbxBridge?: { readonly endpoint:string; readonly attestationSha256:string };
   launchProjectionBuilder?: (input:LaunchProjectionBuildInput)=>Promise<LaunchProjection>;
   launchProjectionValidator?: (input:{runtime:"claude"|"pi";directory:string;reference:PublishedRuntimeArtifactReference})=>Promise<void>;
   launchProjectionArtifactRevalidator?: typeof revalidateRuntimeArtifact;
@@ -582,7 +584,7 @@ export async function executeResolvedLaunch(input: {
     const clock=input.context.launchStatusRefreshClock??{schedule:(callback:()=>Promise<void>,intervalMs:number)=>{const timer=setInterval(()=>{void callback();},intervalMs);timer.unref?.();return()=>clearInterval(timer);}};
     const cancel=clock.schedule(safeRefresh,1_000);
     try{
-      const childRequest = {...request,environment:Object.freeze({...request.environment,...(boundStatusPath?{MPX_STATUS_SNAPSHOT_FILE:boundStatusPath}:{}),...(boundRuntimeStatusPath?{MPX_RUNTIME_STATUS_FILE:boundRuntimeStatusPath,MPX_RUNTIME_STATUS_ENVELOPE_FILE:boundRuntimeStatusPath}:{})})};
+      const childRequest = {...request,environment:Object.freeze({...request.environment,...(boundStatusPath?{MPX_STATUS_SNAPSHOT_FILE:boundStatusPath}:{}),...(boundRuntimeStatusPath?{MPX_RUNTIME_STATUS_FILE:boundRuntimeStatusPath,MPX_RUNTIME_STATUS_ENVELOPE_FILE:boundRuntimeStatusPath}:{}),...(input.context.launchSbxBridge?{MPX_RUNTIME_SANDBOX_BRIDGE_ENDPOINT:input.context.launchSbxBridge.endpoint,MPX_RUNTIME_SANDBOX_BRIDGE_ATTESTATION_SHA256:input.context.launchSbxBridge.attestationSha256}:{})})};
       await input.beforeChildExecution?.();
       return await adapter.execute(childRequest);
     }
