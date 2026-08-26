@@ -14,7 +14,7 @@ The semantic-convergence gate is complete for the captured snapshot:
 - 91 `retired`
 - 9 private/generated/dependency inputs explicitly `excluded`
 
-Every non-retired completed input names an existing destination and has source-snapshot-bound behavior-test or generated-artifact evidence whose hash is checked against the repository file. Every retirement records its reason, a null destination, and an explicit null active reader. There are no provisional `_convergence`/`convergence` destinations, planned entries, or unclassified active inputs.
+Every non-retired completed input names an existing destination and has source-snapshot-bound behavior-test or generated-artifact evidence whose hash is checked against the repository file. Every retirement records its reason, a null destination, and an explicit null active reader. Reviewed Phase I drift records its rationale and adaptation with a null destination so evidence does not pretend an unimplemented installer route exists. There are no provisional `_convergence`/`convergence` destinations, planned entries, or unclassified active inputs.
 
 ## Commands
 

@@ -126,6 +126,17 @@ describe("Phase F1 convergence manifest", () => {
     expect(validateConvergenceManifest({ ...base, entries: [{ ...entry, reason: "superseded", activeReader: null }] })).toEqual([]);
   });
 
+  it("accepts reviewed Phase I source drift without pretending its destination is implemented", () => {
+    const hash = "b".repeat(64);
+    const snapshot = { schemaVersion: 1, kind: "source-snapshot", sourceSnapshot: { source: "claude", path: "settings.json", sha256: hash }, sha256: hash, reference: "claude:settings.json@commit", verification: "captured" };
+    const manifest = {
+      schemaVersion: 2,
+      sources: [{ id: "claude", symbolicRoot: "${MPX_PROJECTS}/mpx-claude-code", commit: "a".repeat(40), dirty: true }],
+      entries: [{ source: "claude", path: "settings.json", state: "modified", sha256: hash, completion: "reviewed", phase: "Phase I", disposition: "Claude-specific", destination: null, adaptation: "preserve the explicit model override during install", rationale: "The installer route is not implemented yet.", evidence: [snapshot] }],
+    };
+    expect(validateConvergenceManifest(manifest)).toEqual([]);
+  });
+
   it("rejects unclassified active inputs and classifications without evidence", () => {
     const hash = "b".repeat(64);
     const base = { schemaVersion: 2, sources: [{ id: "pi", symbolicRoot: "${MPX_PROJECTS}/mpx-pi", commit: "a".repeat(40), dirty: false }], entries: [] };

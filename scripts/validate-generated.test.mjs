@@ -92,6 +92,11 @@ describe("generated repository validation", () => {
     expect(validateConvergenceArtifacts({ entries: [entry] }, new Map([[destination, "canonical"]]))).toEqual([]);
   });
 
+  it("does not require an artifact destination for reviewed Phase I drift", () => {
+    const entry = { source: "claude", path: "settings.json", completion: "reviewed", phase: "Phase I", disposition: "Claude-specific", destination: null, adaptation: "preserve during install", rationale: "Installer route is pending.", evidence: [] };
+    expect(validateConvergenceArtifacts({ entries: [entry] }, new Map())).toEqual([]);
+  });
+
   it("reports generated Pi-agent projection drift", () => {
     expect(messages(validateFiles(files("runtimes/pi/runtime-pi/projection/agents/mpx-checker.md", "drift"), {
       generatedPiDiagnostics: ["mpx-checker.md"],

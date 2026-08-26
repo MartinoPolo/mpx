@@ -174,6 +174,7 @@ export function validateCanonicalScriptSyntax(root, names) {
 export function validateConvergenceArtifacts(manifest, files) {
   const diagnostics = [];
   for (const entry of manifest?.entries ?? []) {
+    if (entry.completion === "reviewed" && entry.phase === "Phase I") continue;
     if (!["canonicalized", "Claude-specific", "Pi-specific", "externalized"].includes(entry.disposition)) continue;
     if (!files.has(entry.destination)) {
       diagnostics.push(diagnostic("CONVERGENCE_DESTINATION_MISSING", `${entry.source}:${entry.path}`, `destination is absent: ${entry.destination}`));

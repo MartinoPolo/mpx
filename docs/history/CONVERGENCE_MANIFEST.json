@@ -6,7 +6,7 @@
       "id": "claude",
       "symbolicRoot": "${MPX_PROJECTS}/mpx-claude-code",
       "commit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
-      "dirty": false
+      "dirty": true
     },
     {
       "id": "pi",
@@ -6616,7 +6616,7 @@
             "path": "plugins/mp/scripts/__tests__/detect-base-branch.test.ts",
             "sha256": "28bfd0ac1b06ffbdfc09d52235c93f116f3980cd12d318d9955dfc0a4c63d4d5"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6681,7 +6681,7 @@
             "path": "plugins/mp/scripts/__tests__/init-repo.test.ts",
             "sha256": "3b37b20c5d4ec726953d8de2198610eda3f32ff0a3620a1988bdc137dab0eac3"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7001,7 +7001,7 @@
             "path": "plugins/mp/scripts/detect-base-branch.js",
             "sha256": "2b0eee575cee7cb0f1e1b2c413278a03f55e66e443ad11d11fda503ad28e51b6"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7039,7 +7039,7 @@
             "path": "plugins/mp/scripts/detect-check-scripts.mjs",
             "sha256": "5a057334e270aa0c881583721ef4777b3cb66894fd8700f6b11f188d0ea3243c"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7077,7 +7077,7 @@
             "path": "plugins/mp/scripts/detect-project-scripts.mjs",
             "sha256": "e3a86583424f0d8fd9470a839d5ae8232c8afa6fb5f160675685e7de7def712f"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7142,7 +7142,7 @@
             "path": "plugins/mp/scripts/init-repo.mjs",
             "sha256": "b19f013ab571c1b80f9398715b6b68f862b703eb5321265191932a08beea7b65"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -9950,7 +9950,7 @@
             "path": "README.md",
             "sha256": "aa479d9f2d95adb7a460ae101c4483e7f71fe944d2286d4d31715d4884931878"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -10493,12 +10493,14 @@
       "source": "claude",
       "path": "settings.json",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b",
-      "completion": "completed",
+      "state": "modified",
+      "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd",
+      "completion": "reviewed",
+      "phase": "Phase I",
       "disposition": "Claude-specific",
-      "destination": "runtimes/claude/runtime-claude/src/index.ts",
-      "adaptation": "normalized into the generated Claude runtime projection",
+      "destination": null,
+      "adaptation": "preserve the explicit Claude model selection when the Phase I installer gains a reviewed settings route",
+      "rationale": "The source-only model change is reviewed drift, but no MPX installation destination is implemented yet; recording one would overstate current delivery.",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -10506,26 +10508,14 @@
           "sourceSnapshot": {
             "source": "claude",
             "path": "settings.json",
-            "sha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b"
+            "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd"
           },
-          "sha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b",
+          "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd",
           "reference": "claude:settings.json@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "settings.json",
-            "sha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b"
-          },
-          "sha256": "901968b9b3855b38f6ef89c911aa903f59ebcd0de9d99d91c5c7aa066d721cc9",
-          "reference": "runtimes/claude/runtime-claude/src/index.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "runtimes/claude/runtime-claude/src/index.test.ts"
+      "headSha256": "fdec7c41584e555952675841c2e5e1638b64c12836343472033cd16ab111d24b"
     },
     {
       "source": "claude",
@@ -10827,7 +10817,7 @@
             "path": "WINDOWS-SETUP.md",
             "sha256": "f910bee9d6858592d8c8ff1590c5ff44e9d112e41c27dbab23a6928cd2cf18c9"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -14632,7 +14622,7 @@
             "path": "README.md",
             "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -15068,7 +15058,7 @@
             "path": "WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
             "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48"
           },
-          "sha256": "a6218ba3a8948356ec783017faeeac81d6195f53407ed97e9a6f56656bf15e37",
+          "sha256": "71e914447094daddd3caff03f2a49e32d84f80ada497e28481b5e73f07c080db",
           "reference": "scripts/validate-generated.test.mjs",
           "verification": "passed"
         }

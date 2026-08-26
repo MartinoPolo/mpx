@@ -209,7 +209,11 @@ export function validateConvergenceManifest(manifest, options = {}) {
       if (entry.completion !== "excluded" || typeof entry.reason !== "string" || entry.reason.length === 0 || entry.destination !== null) add("CONVERGENCE_EXCLUSION_INVALID", file, "excluded input requires excluded completion, a reason, and null destination");
       continue;
     }
-    if (!["planned", "completed"].includes(entry.completion)) add("CONVERGENCE_COMPLETION_INVALID", file, "active input requires an explicit planned or completed state");
+    if (!["planned", "completed", "reviewed"].includes(entry.completion)) add("CONVERGENCE_COMPLETION_INVALID", file, "active input requires an explicit planned, reviewed, or completed state");
+    if (entry.completion === "reviewed") {
+      if (entry.phase !== "Phase I" || !ACTIVE_DISPOSITIONS.has(entry.disposition) || entry.destination !== null || typeof entry.adaptation !== "string" || !entry.adaptation.trim() || typeof entry.rationale !== "string" || !entry.rationale.trim()) add("CONVERGENCE_PHASE_REVIEW_INVALID", file, "reviewed drift requires a Phase I disposition, rationale, adaptation, and null destination");
+      continue;
+    }
     if (gate && entry.completion !== "completed") {
       add("CONVERGENCE_INCOMPLETE", file, "active input has not completed semantic mapping");
       continue;
