@@ -15,6 +15,10 @@ export function buildSandboxPlanV1(input:SandboxPlanInput):SandboxLaunchPlanV1{
  const state=canonical(input.stateRoot),workspace=canonical(input.workspaceRoot),common=canonical(input.gitCommonDir);
  const denied=[...input.nativeRoots,...input.credentialRoots,...input.oppositeDomainRoots,...input.dockerSocketPaths,input.gitCommonDir].map(canonical);
  if(denied.some(root=>within(state,root)||within(root,state)))throw new ExecutionError("STATE_ROOT_DENIED","Sandbox state must not intersect native, credential, opposite-domain, Git-common, or Docker roots.");
+ // A checkout commonly contains its own .git directory. That reviewed direct-main/clone
+ // compatibility does not make a Git common directory outside (or above) the workspace mountable.
+ const workspaceContainsProtected=denied.some((root,index)=>within(root,workspace)&&index!==denied.length-1);
+ if(denied.some(root=>within(workspace,root))||workspaceContainsProtected)throw new ExecutionError("WORKSPACE_DENIED","WORKSPACE_DENIED: workspace intersects a protected host root.");
  const mounts:SandboxMount[]=[];
  const add=(raw:{source:string;target:string;access:"ro"|"rw"},classification:SandboxMount["classification"],checkProtected=true):void=>{const source=canonical(raw.source);if(checkProtected&&denied.some(root=>within(source,root)||within(root,source)))throw new ExecutionError("MOUNT_DENIED","MOUNT_DENIED: mount intersects a protected host root.");if(!raw.target.startsWith("/")||raw.target.includes("..")||/[\r\n\0]/u.test(raw.target))throw new ExecutionError("MOUNT_TARGET_INVALID","Mount target is unsafe.");mounts.push(Object.freeze({...raw,source,classification}))};
  if(input.workspaceMode==="host-worktree"||input.workspaceMode==="direct")add({source:workspace,target:"/workspace",access:"rw"},"workspace",false);

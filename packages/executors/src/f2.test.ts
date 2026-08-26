@@ -80,6 +80,18 @@ describe("sandbox planning",()=>{
     expect(JSON.stringify(plan.environment)).not.toMatch(/secret|_MP_projects/u);
     expect(plan.networkPolicy).toEqual({name:"minimal",default:"deny",allow:["api.openai.com:443"]});
   });
+
+  it("rejects the workspace itself when it overlaps every protected root in all workspace modes",()=>{
+    const modes=[
+      {workspaceMode:"clone" as const,worktreeRole:"main" as const},
+      {workspaceMode:"host-worktree" as const,worktreeRole:"linked" as const},
+      {workspaceMode:"direct" as const,worktreeRole:"main" as const,directCompatibility:true},
+    ];
+    for(const mode of modes) for(const workspaceRoot of [...base.nativeRoots,...base.credentialRoots,...base.oppositeDomainRoots,...base.dockerSocketPaths])
+      expect(()=>buildSandboxPlanV1({...base,...mode,workspaceRoot})).toThrow(/WORKSPACE_DENIED/u);
+    expect(()=>buildSandboxPlanV1({...base,workspaceMode:"host-worktree",worktreeRole:"linked",workspaceRoot:base.gitCommonDir})).toThrow(/WORKSPACE_DENIED/u);
+    expect(()=>buildSandboxPlanV1({...base,workspaceMode:"direct",worktreeRole:"main",directCompatibility:true})).not.toThrow();
+  });
 });
 
 describe("sandbox policy evidence",()=>{

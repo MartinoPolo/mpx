@@ -390,6 +390,7 @@ export * from "./f2-evidence.js";
 export * from "./f2-proof-runner.js";
 export * from "./production-remote.js";
 export * from "./sandbox-resume.js";
+export * from "./standalone-sbx-executor.js";
 
 /** Production planning, remote routing, and fake-sbx proof are implemented; live VM attestation remains an explicit installation gate. */
 export const F2_RUNTIME_CONTAINMENT_PROOF_IMPLEMENTED = true as const;
