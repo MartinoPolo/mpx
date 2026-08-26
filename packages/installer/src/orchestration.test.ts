@@ -49,6 +49,18 @@ describe("Phase I install orchestration", () => {
     expect(events).toEqual(["10-automatic", "90-scheduled", `active:${f.manifest.releaseKey}`]);
   });
 
+  it("does not expose a release when a committed operation fails actual-state verification", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), activated: string[] = [];
+    const baseObserve = adapter.observe.bind(adapter);
+    let corruptAfterApply = false;
+    adapter.apply = async item => { adapter.applyCalls.push(item.id); adapter.values.set(item.target, item.desiredDigest!); corruptAfterApply = true; };
+    adapter.observe = async target => corruptAfterApply ? installerDigest("post-commit-drift") : baseObserve(target);
+    const orchestrator = new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder, activate: async key => { activated.push(key); } });
+    const plan = await orchestrator.plan(f.intent);
+    await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({ code: "INSTALL_POST_COMMIT_VERIFY_FAILED" });
+    expect(activated).toEqual([]);
+  });
+
   it("publishes before automatic operations, schedules last, and converges idempotently", async () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")], [operation("90-scheduled")]), store = new MemoryTransactionStore();
     const originalApply = adapter.apply.bind(adapter);

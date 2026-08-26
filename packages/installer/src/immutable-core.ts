@@ -169,7 +169,7 @@ export class NodeInstalledReleaseAuthority {
 
 export interface CurrentReleaseOptions { readonly repositoryRoot: string; readonly assetPaths?: readonly string[] }
 async function withCurrentReleaseSource<T>(options: CurrentReleaseOptions, action: (sourceDirectory: string) => Promise<T>): Promise<T> {
-  const assets = options.assetPaths ?? ["bin", "content", "packages/subagents/dist", "runtimes", "LICENSE", "LICENSE.md"];
+  const assets = options.assetPaths ?? ["bin", "content", "evidence", "packages/subagents/dist", "runtimes", "LICENSE", "LICENSE.md"];
   const staging = await mkdtemp(path.join(tmpdir(), "mpx-current-release-"));
   try {
     for (const asset of [...assets].sort()) {

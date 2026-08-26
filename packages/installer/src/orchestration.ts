@@ -137,7 +137,11 @@ export class InstallOrchestrator {
     if (plan.operations.some((operation, index) => operation.action === "ensure" && plan.observations[index]?.digest !== null && plan.observations[index]?.digest !== operation.desiredDigest))
       fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to overwrite a foreign or drifted target.");
     const manifest = await this.options.releases.publish(plan.intent.releaseKey);
-    const receipt = await this.service(manifest).apply(plan, confirmation);
+    const service = this.service(manifest);
+    const receipt = await service.apply(plan, confirmation);
+    const operationVerification = await service.verify();
+    const releaseIssues = await this.options.releases.verify(receipt, false);
+    if (!operationVerification.healthy || releaseIssues.length > 0) fail("INSTALL_POST_COMMIT_VERIFY_FAILED", "Committed installation failed actual-state verification; release was not activated.");
     await this.options.activate?.(receipt.releaseKey);
     return receipt;
   }

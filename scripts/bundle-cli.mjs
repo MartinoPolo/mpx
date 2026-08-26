@@ -1,11 +1,17 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(root, "bin");
-await mkdir(output, { recursive: true });
+const evidence = path.join(root, "evidence");
+await Promise.all([mkdir(output, { recursive: true }), mkdir(evidence, { recursive: true })]);
+await Promise.all([
+  copyFile(path.join(root, "docs", "inventory", "SBX_V0_39_0.json"), path.join(evidence, "sbx-pin.json")),
+  copyFile(path.join(root, "docs", "inventory", "PHASE_F1_RUNTIME_TOOL_INVENTORY.json"), path.join(evidence, "runtime-tool-inventory.json")),
+  copyFile(path.join(root, "packages", "executors", "src", "index.ts"), path.join(evidence, "executor-evidence.ts")),
+]);
 await build({
   entryPoints: [path.join(root, "apps", "cli", "dist", "main.js")],
   outfile: path.join(output, "mpx.mjs"),

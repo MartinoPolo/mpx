@@ -4,7 +4,7 @@
 
 Installer operations are ordered and snapshot before mutation. On failure, restore completed and attempted targets in reverse order, preserve the applying journal until restoration succeeds, then mark/remove the rolled-back journal. File snapshots are exact bytes. Native resources are removed only when their MPX owner marker and desired digest still match.
 
-The active-release selector is an owned transaction operation, not an after-commit callback. Consequently failed apply removes/restores it and uninstall removes it under the same lock as other resources. A selector or owned target that drifted is never force-deleted.
+The active-release selector is not a normal transaction operation. The production orchestrator atomically activates it only after every release-bound operation commits and actual-state verification passes, so a crash or failure before commit cannot expose the release. Atomic replacement preserves the prior selector if activation fails. Uninstall removes the exact owned selector after receipt-owned resources are removed; a drifted selector or owned target is never force-deleted.
 
 A machine lock serializes apply, recovery, rollback, and uninstall across processes. A lock may be reclaimed only when its structured PID owner no longer exists. Malformed locks and locks for live or inaccessible processes fail closed.
 

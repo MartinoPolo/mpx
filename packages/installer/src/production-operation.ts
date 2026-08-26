@@ -96,10 +96,8 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const task: OwnedResourceSpec = { ...specs.task, desired: { ...specs.task.desired, executableSha256: sha(await readFile(nodePath)), cliSha256: cliEvidence.sha256 } }; 
     const selectorBody = Buffer.from(buildStableSelectorBody(), "utf8");
     const selectorTarget = path.win32.join(this.environment.MPX_APPS!, "mpx", "bin", "mpx.cmd");
-    const activeBody = Buffer.from(`${intent.releaseKey}\n`, "utf8"), activeTarget = path.win32.join(this.environment.LOCALAPPDATA!, "mpx", "active-release");
     const automatic: Entry[] = [
       { fileBody: selectorBody, operation: { id: "05-cli-selector", adapter: this.name, action: "ensure", target: selectorTarget, desiredDigest: sha(selectorBody) } },
-      { fileBody: activeBody, operation: { id: "06-active-release", adapter: this.name, action: "ensure", target: activeTarget, desiredDigest: sha(activeBody) } },
     ];
     for (const [index, launcher] of specs.launchers.entries()) {
       const plan = await this.launchers.plan(launcher), desiredDigest = sha(Buffer.from(plan.managedBase64, "base64"));

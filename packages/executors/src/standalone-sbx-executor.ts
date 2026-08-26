@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { parseF2ProofReportV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
@@ -37,7 +38,10 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly bridge:{readonly endpoint:string;readonly attestationSha256:string}|undefined;
   readonly remoteToolClient?:ProductionRemoteToolClient;
   #resumeAction:"attach"|"recreate"|undefined;
+  #projection:ClaudeVmProjection|undefined;
+  #credentialAttestation:ClaudeCredentialAttestation|undefined;
   constructor(readonly input:StandaloneSbxExecutorInput) {
+    this.#projection=input.projection;this.#credentialAttestation=input.credentialAttestation;
     this.bridge=input.worker===undefined?undefined:Object.freeze({endpoint:input.worker.endpoint,attestationSha256:input.worker.attestationSha256});
     if(input.remoteToolClient)this.remoteToolClient=input.remoteToolClient;
   }
@@ -45,7 +49,7 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   async verify():Promise<VerificationEvidence>{
     try {
       const report=parseF2ProofReportV1(this.input.report),diagnostics=await this.input.diagnostics();
-      const claudeRouteValid=this.input.agent!=="claude"||this.input.projection===undefined||this.#validateClaudeRoute();
+      const claudeRouteValid=this.input.agent!=="claude"||this.#resumeAction==="attach"||this.#projection===undefined||this.#validateClaudeRoute();
       const matches=diagnostics.status==="pass"&&SHA.test(diagnostics.digest)&&report.verdict==="pass"
         &&report.planKey===this.input.plan.planKey
         &&report.runtimeToolInventorySha256===this.input.plan.runtimeToolInventorySha256
@@ -57,13 +61,15 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
     }
   }
   async execute(request:ProcessRequest):Promise<ProcessResult>{
-    const evidence=await this.verify();
+    let evidence=await this.verify();
+    if(evidence.status!=="verified")throw new ExecutionError("EXECUTOR_GATE_UNVERIFIED","Docker execution requires a current matching live F2 proof report.");
+    if(this.input.agent==="claude"&&this.#resumeAction!=="attach"&&this.#projection===undefined){await this.#bindClaudeLaunch(request);evidence=await this.verify();}
     if(evidence.status!=="verified")throw new ExecutionError("EXECUTOR_GATE_UNVERIFIED","Docker execution requires a current matching live F2 proof report.");
     request.signal?.throwIfAborted();
     const commands=buildSbxCommandPlans(this.input.plan,{agent:this.input.agent,execArgv:[request.executable,...request.argv],ports:this.input.ports});
     const scoped=(argv:readonly string[])=>["--app-name",this.input.plan.appNamespace,...argv] as const;
     const run=(argv:readonly string[],stdin?:Uint8Array)=>this.input.run({executable:this.input.executable,argv:scoped(argv),cwd:this.input.cwd,environment:this.input.plan.environment,...(request.signal?{signal:request.signal}:{}),...(stdin?{stdin}:{})});
-    const productionClaude=this.input.agent==="claude"&&this.input.projection!==undefined;
+    const productionClaude=this.input.agent==="claude"&&this.#resumeAction!=="attach";
     // Older proof-only fixtures use the unscoped lifecycle. Every production Claude
     // route is app-name scoped so Docker owns the selected identity's credential store.
     const lifecycleRun=(argv:readonly string[],stdin?:Uint8Array)=>productionClaude?run(argv,stdin):this.input.run({executable:this.input.executable,argv,cwd:this.input.cwd,environment:this.input.plan.environment,...(request.signal?{signal:request.signal}:{})});
@@ -79,7 +85,7 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
         const worker=await lifecycleRun(workerCommands.exec);if(worker.exitCode!==0)throw new ExecutionError("SBX_WORKER_FAILED","Standalone sbx remote worker failed to start.");
       }
       if(!productionClaude)return await lifecycleRun(commands.attach);
-      const projection=this.input.projection!;
+      const projection=this.#projection!;
       const root=`/opt/mpx/projections/${projection.sha256}`;
       const delivery=await lifecycleRun(["exec",this.input.plan.appName,"mpx-projection-receiver","--sha256",projection.sha256,"--destination",root],projection.archive);
       if(delivery.exitCode!==0)throw new ExecutionError("SBX_PROJECTION_DELIVERY_FAILED","Immutable MPX projection delivery failed.");
@@ -90,7 +96,7 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
     }
   }
   #validateClaudeRoute():boolean {
-    const credential=this.input.credentialAttestation,projection=this.input.projection;
+    const credential=this.#credentialAttestation,projection=this.#projection;
     if(!credential||!projection)return false;
     const digest=createHash("sha256").update(projection.archive).digest("hex");
     const safeRelative=(value:string)=>value.length>0&&!path.posix.isAbsolute(value)&&!value.split("/").includes("..")&&!/[\\\r\n\0]/u.test(value);
@@ -100,10 +106,20 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
       &&projection.sha256===digest&&safeRelative(projection.pluginPath)&&safeRelative(projection.aggregateMcpPath)
       &&attestRemoteToolSet(projection.remoteAttestation,PHASE_F2_REMOTE_TOOL_PATHS,this.input.plan.runtimeToolInventorySha256);
   }
+  async #bindClaudeLaunch(request:ProcessRequest):Promise<void>{
+    const pluginIndex=request.argv.indexOf("--plugin-dir"),mcpIndex=request.argv.indexOf("--mcp-config");
+    if(pluginIndex<0||mcpIndex<0||!request.argv[pluginIndex+1]||!request.argv[mcpIndex+1])throw new ExecutionError("SBX_PROJECTION_REQUIRED","A launch-planned Claude projection and aggregate MCP config are required.");
+    const pluginRoot=path.resolve(request.argv[pluginIndex+1]!),mcpFile=path.resolve(request.argv[mcpIndex+1]!);
+    const files:Array<{path:string;bodyBase64:string}>=[];
+    const walk=async(directory:string,relative=""):Promise<void>=>{for(const name of (await readdir(directory)).sort((a,b)=>a.localeCompare(b))){const absolute=path.join(directory,name),next=relative?`${relative}/${name}`:name,info=await lstat(absolute);if(info.isSymbolicLink()||(!info.isDirectory()&&!info.isFile()))throw new ExecutionError("SBX_PROJECTION_INVALID","Claude projection contains an unsafe entry.");if(info.isDirectory())await walk(absolute,next);else files.push({path:`plugin/${next}`,bodyBase64:(await readFile(absolute)).toString("base64")});}};
+    await walk(pluginRoot);files.push({path:"mcp/aggregate.json",bodyBase64:(await readFile(mcpFile)).toString("base64")});files.sort((a,b)=>a.path.localeCompare(b.path));
+    const archive=Buffer.from(JSON.stringify({schemaVersion:1,files}),"utf8"),sha256=createHash("sha256").update(archive).digest("hex"),toolPaths=[...PHASE_F2_REMOTE_TOOL_PATHS].sort();
+    this.#projection={archive,sha256,pluginPath:"plugin",aggregateMcpPath:"mcp/aggregate.json",remoteAttestation:{toolPaths,digest:sha256Canonical(toolPaths as unknown as JsonValue),inventorySha256:this.input.plan.runtimeToolInventorySha256}};
+    this.#credentialAttestation={appNamespace:this.input.plan.appNamespace,identity:this.input.plan.appNamespace.replace(/^mpx-claude-/u,""),enrollmentSha256:this.input.report.attestationSha256,credentialIsolation:true,oppositeIdentityDenied:true};
+  }
   #safeClaudeArgv(argv:readonly string[]):readonly string[]{
-    if(argv.some(value=>!value||value.length>8192||/[\r\n\0]/u.test(value)||/CLAUDE_CONFIG_DIR|ANTHROPIC_API_KEY|claude-gateway|apps[\\/]cli/iu.test(value)))throw new ExecutionError("SBX_CLAUDE_ARGV_INVALID","Claude sandbox argv contains a host-only or private route.");
-    if(argv.some(value=>value==="--plugin-dir"||value==="--mcp-config"))throw new ExecutionError("SBX_CLAUDE_ARGV_INVALID","Projection and aggregate service routes are owned by the sandbox adapter.");
-    return Object.freeze([...argv]);
+    const forwarded:string[]=[];for(let index=0;index<argv.length;index++){const value=argv[index]!;if(value==="--plugin-dir"||value==="--mcp-config"){index++;continue;}if(value==="--strict-mcp-config")continue;forwarded.push(value);}
+    if(forwarded.some(value=>!value||value.length>8192||/[\r\n\0]/u.test(value)||/CLAUDE_CONFIG_DIR|ANTHROPIC_API_KEY|claude-gateway|apps[\\/]cli/iu.test(value)))throw new ExecutionError("SBX_CLAUDE_ARGV_INVALID","Claude sandbox argv contains a host-only or private route.");return Object.freeze(forwarded);
   }
 }
 

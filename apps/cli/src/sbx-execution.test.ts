@@ -1,12 +1,28 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, it, vi } from "vitest";
 import { createF2ProofReportV1 } from "@mpx/runtime-contracts";
 import { SBX_V0_39_0_PIN } from "@mpx/executors";
-import { createProductionSbxExecutionAdapter, planProductionSbxExecution } from "./sbx-execution.js";
+import { createProductionSbxExecutionAdapter, loadProductionSbxProofSources, planProductionSbxExecution } from "./sbx-execution.js";
 
 const h=(value:string)=>value.repeat(64).slice(0,64);
+const sha=(value:Uint8Array|string)=>createHash("sha256").update(value).digest("hex");
+
+it("loads all F2 evidence from a copied immutable release after the source checkout is unavailable",async()=>{
+  const release=await mkdtemp(path.join(tmpdir(),"mpx-installed-release-")),bin=path.join(release,"bin"),evidence=path.join(release,"evidence");
+  await Promise.all([mkdir(bin),mkdir(evidence)]);
+  const executor=Buffer.from("installed executor evidence"),inventory={runtimeToolInventorySha256:h("1"),executorEvidenceBindingSha256:sha(executor)};
+  await Promise.all([
+    writeFile(path.join(bin,"mpx.mjs"),"// copied release bundle"),
+    writeFile(path.join(evidence,"executor-evidence.ts"),executor),
+    writeFile(path.join(evidence,"runtime-tool-inventory.json"),JSON.stringify(inventory)),
+    writeFile(path.join(evidence,"sbx-pin.json"),"installed sbx pin"),
+  ]);
+  await expect(loadProductionSbxProofSources({},pathToFileURL(path.join(bin,"mpx.mjs")).href)).resolves.toEqual({sbxPinSha256:sha("installed sbx pin"),runtimeToolInventorySha256:h("1"),executorEvidenceSha256:sha(executor)});
+});
 
 it("selects verified standalone sbx evidence and runs create, policy, worker bridge, attach, and awaited teardown",async()=>{
   const root=await mkdtemp(path.join(tmpdir(),"mpx-sbx-cli-")),cwd=path.join(root,"repo"),stateRoot=path.join(root,"state"),executable=path.join(root,"apps","sbx.exe");
