@@ -31,12 +31,13 @@ import { executeSessionCommand } from "./session-command.js";
 import { executeInstallCommand } from "./install-command.js";
 import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
 import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js";
+import { createProductionSessionBranchRuntimeAdapter, diagnoseSessionBranchAdapters } from "./session-branch-adapters.js";
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
 import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
-import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
+import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, SessionService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRuntimeAdapter, type ResumePlanV1 } from "@mpx/sessions";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
@@ -187,7 +188,7 @@ function human(value:unknown):string {
 }
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
-async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext): Promise<unknown> {
+async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext, branchInvocation?: { readonly executable: string; readonly argv: readonly string[] }): Promise<unknown> {
   const dockerAdmission = plan.launch.executor.kind === "docker" ? await (context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env))(plan) : undefined;
   if (dockerAdmission && !dockerAdmission.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: dockerAdmission.code });
   const store = sessions(context);
@@ -285,7 +286,7 @@ async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConf
   const beforeChildExecution = reverifyPiAccount;
   const launchContext = resumeContext.launchLifecycleBridge || resumeContext.launchRuntimeAdapters ? resumeContext : { ...resumeContext, launchLifecycleBridge: new ProductionSessionLifecycleBridge(store, resumeContext.nativeAccountBindingResolver ? (name, runtime) => resumeContext.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined) };
   const snapshot = found ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) }) : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
-  const result = await executeResolvedLaunch({ descriptor, manifest, artifact, catalog, canonicalRoot, agentsRoot: path.join(path.dirname(canonicalRoot), "agents"), artifactsRoot: path.join(appData, "mpx", "runtime-artifacts"), stateRoot: path.join(localAppData, "mpx"), cwd, environment: context.env, context: launchContext, tty: context.launchTty ?? directProcessTty(), nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], statusSnapshot: snapshot, resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef }, ...(beforeChildExecution ? { beforeChildExecution } : {}) });
+  const result = await executeResolvedLaunch({ descriptor, manifest, artifact, catalog, canonicalRoot, agentsRoot: path.join(path.dirname(canonicalRoot), "agents"), artifactsRoot: path.join(appData, "mpx", "runtime-artifacts"), stateRoot: path.join(localAppData, "mpx"), cwd, environment: context.env, context: launchContext, tty: context.launchTty ?? directProcessTty(), nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], statusSnapshot: snapshot, ...(branchInvocation ? { branch: { nativeBinding, invocation: branchInvocation } } : { resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef } }), ...(beforeChildExecution ? { beforeChildExecution } : {}) });
   return { ...result, resumeLaunch: { previousLaunchKey, previousDescriptorDigest, newLaunchKey: currentLaunchKey, newDescriptorDigest: currentDescriptorDigest } };
 }
 
@@ -309,6 +310,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   if (group === "session") {
     const user = await userConfig(context);
     const sessionStore = sessions(context);
+    const terminalAvailability = await diagnoseSessionBranchAdapters({ runtimeAvailable: true, ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ? { terminalCandidate: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE } : {}), trustedRoots: [context.env.WINDIR, context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : undefined].filter((value): value is string => Boolean(value && path.isAbsolute(value))) });
     const account = context.env.LOCALAPPDATA ? productionAccountServices(user, context, parsed.cwd) : undefined;
     let branchService = context.sessionBranchService;
     if (action === "branch" && !branchService) {
@@ -318,6 +320,26 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         return (runtime === "claude" ? createClaudeBranchAdapter(trusted.executable) : createPiBranchAdapter(trusted.executable)).plan(parent, cwd, selectedRoot);
       } });
       const lifecycle = worktrees(context);
+      const productionBranchRuntime = createProductionSessionBranchRuntimeAdapter({ executeNormalLaunch: async ({ invocation, plan }) => {
+        let resolveLifecycle!: (event: { runtimeQualifiedId: string; nativeSessionRef: typeof plan.parent.nativeSessionRef }) => void;
+        let rejectLifecycle!: (error: unknown) => void;
+        const childLifecycle = new Promise<{ runtimeQualifiedId: string; nativeSessionRef: typeof plan.parent.nativeSessionRef }>((resolve, reject) => { resolveLifecycle = resolve; rejectLifecycle = reject; });
+        const bridge = new ProductionSessionLifecycleBridge(sessionStore, context.nativeAccountBindingResolver ? (name, runtime) => context.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined, async () => {
+          const records = await new SessionService(sessionStore).list({ runtime: plan.child.runtime });
+          const child = records.find(record => record.runtimeQualifiedId !== plan.parent.runtimeQualifiedId && record.location.cwd === invocation.cwd && record.nativeBindingRef === plan.launchIdentity.nativeBindingRef);
+          if (child) resolveLifecycle({ runtimeQualifiedId: child.runtimeQualifiedId, nativeSessionRef: child.nativeSessionRef });
+        });
+        const synthetic: ResumePlanV1 = {
+          schemaVersion: 1, newLaunchRequired: true, previousLaunch: { launchKey: plan.launchIdentity.launchKey, descriptorDigest: plan.launchIdentity.descriptorDigest },
+          recordId: plan.child.runtimeQualifiedId, runtimeQualifiedId: plan.child.runtimeQualifiedId, runtime: plan.child.runtime, identity: plan.launchIdentity.identity,
+          nativeBindingRef: plan.launchIdentity.nativeBindingRef, nativeSessionRef: plan.parent.nativeSessionRef, cwd: invocation.cwd,
+          projectId: plan.workspace.projectRef, repositoryId: plan.workspace.repositoryRef,
+          launch: { launchKey: plan.launchIdentity.launchKey, descriptorDigest: plan.launchIdentity.descriptorDigest, mode: plan.launchIdentity.mode, skillPolicy: plan.launchIdentity.skillPolicy, contentScope: plan.launchIdentity.contentScope, executor: { kind: plan.launchIdentity.executor }, workspace: plan.launchIdentity.workspace, networkPolicy: plan.launchIdentity.networkPolicy, grants: plan.launchIdentity.grants, artifactKey: plan.launchIdentity.artifactKey, manifestKey: plan.launchIdentity.manifestKey },
+          confirmationDigest: plan.confirmationDigest,
+        };
+        const exited = executeProductionSessionResume(synthetic, user, { ...context, launchLifecycleBridge: bridge }, invocation).catch(error => { rejectLifecycle(error); throw error; });
+        return { lifecycle: childLifecycle, exited };
+      } });
       branchService = new ConversationBranchService({
         inspectWorkspace: async workspace => { try { const info = await lstat(workspace.cwd); return { exists: info.isDirectory() && !info.isSymbolicLink(), collisionDisclosure: workspace.repositoryRef === null ? [] : ["repository refs and external fixed services remain shared"] }; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { exists: false, collisionDisclosure: [] }; throw error; } },
         createIsolatedWorktree: async workspace => {
@@ -341,7 +363,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
           return root;
         },
         adapters: { claude: runtimeAdapter("claude"), pi: runtimeAdapter("pi") },
-        ...(context.sessionBranchRuntimeAdapter ? { runtime: context.sessionBranchRuntimeAdapter } : {}),
+        runtime: context.sessionBranchRuntimeAdapter ?? productionBranchRuntime,
         ...(context.sessionBranchTerminalAdapter ? { terminal: context.sessionBranchTerminalAdapter } : {}),
         lineage: new BranchLineageStore(path.join(stateRoot(context), "sessions", "v1", "private", "branch-lineage")),
         admitExecutor: async launch => launch.executor === "host" || context.env.MPX_RUNTIME_EXECUTOR === "docker",
@@ -359,7 +381,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       resumeDependencies: context.sessionResumeDependencies ?? productionSessionResumeDependencies(user, sessionStore, context.nativeAccountBindingVerifier ?? account?.verifier, context.env),
       executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
       ...(branchService ? { branchService } : {}),
-      ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ? { terminalExecutable: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE } : {}),
+      ...(terminalAvailability.terminal.available ? { terminalExecutable: terminalAvailability.terminal.executable } : {}),
       ...(context.scheduledCaptureAuthority ? { scheduledCaptureAuthority: context.scheduledCaptureAuthority } : {}),
     });
     return { data: result.data, warnings: [...result.warnings] };
@@ -687,6 +709,9 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       for (const code of [...new Set(sbx.failureCodes)].sort()) diagnostics.push({ code, message: `Standalone sbx diagnostic: ${code}.`, severity: "warning", details: { executor: "docker" } });
       for (const code of await diagnoseConfiguredF2Proof(context.env)) diagnostics.push({code,message:`Standalone sbx proof diagnostic: ${code}.`,severity:"warning",details:{executor:"docker"}});
     }
+    const branchAdapters = await diagnoseSessionBranchAdapters({ runtimeAvailable: true, ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ? { terminalCandidate: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE } : {}), trustedRoots: [context.env.WINDIR, context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : undefined].filter((value): value is string => Boolean(value && path.isAbsolute(value))) });
+    if (!branchAdapters.runtime.available) diagnostics.push({ code: branchAdapters.runtime.code, message: "Production session branch runtime execution is unavailable.", severity: "warning" });
+    if (context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE && !branchAdapters.terminal.available) diagnostics.push({ code: branchAdapters.terminal.code, message: "Configured Windows Terminal is unavailable or untrusted; side-by-side tabs are disabled.", severity: "warning" });
     const services = Object.entries(found.config.development?.services ?? {}).sort(([left], [right]) => left.localeCompare(right));
     for (const [name, service] of services) if (service.port.mode === "fixed-shared") diagnostics.push({ code: "FIXED_SHARED_LIMITATION", message: `Service ${name} uses a fixed-shared port that MPX cannot reserve exclusively.`, severity: "warning", details: { service: name, ...(service.port.preferred === undefined ? {} : { port: service.port.preferred }) } });
     if (services.some(([, service]) => service.port.mode === "managed")) {

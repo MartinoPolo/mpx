@@ -19,6 +19,15 @@ export interface BranchRequestV1 {
     readonly nativeBindingRef: string;
     readonly mode: string;
     readonly executor: "host" | "docker";
+    readonly skillPolicy: string;
+    readonly contentScope: string;
+    readonly workspace: string;
+    readonly networkPolicy: string;
+    readonly grants: readonly { readonly resource: string; readonly access: string }[];
+    readonly artifactKey: string;
+    readonly manifestKey: string;
+    readonly launchKey: string;
+    readonly descriptorDigest: string;
   };
   readonly workspace: {
     readonly selection: "default" | "isolated" | "shared";
@@ -81,7 +90,7 @@ export interface BranchChildProcess {
   readonly lifecycle: Promise<BranchLifecycleEvent>;
   readonly exited: Promise<unknown>;
 }
-export interface BranchArgvExecutionAdapter { launch(plan: NativeBranchInvocation | TerminalTabPlan): Promise<BranchChildProcess> }
+export interface BranchArgvExecutionAdapter { launch(invocation: NativeBranchInvocation | TerminalTabPlan, plan: ConversationBranchPlanV1): Promise<BranchChildProcess> }
 export interface BranchLineagePendingV1 {
   readonly pendingRuntimeQualifiedId: string;
   readonly parentRuntimeQualifiedId: string;
@@ -172,6 +181,8 @@ export class ConversationBranchService {
       throw new SessionError("SESSION_BRANCH_CONFIRMATION_MISMATCH", "branch plan confirmation digest does not match");
     // Binding/auth validation deliberately precedes worktree, lease, terminal, and process effects.
     const validatedRoot = await this.dependencies.validateNativeBinding?.(plan);
+    if (plan.launchIdentity.executor === "docker" && (!this.dependencies.admitExecutor || !await this.dependencies.admitExecutor(plan.launchIdentity)))
+      throw new SessionError("SESSION_BRANCH_EXECUTOR_NOT_ADMITTED", "Docker branching requires current explicit runtime admission");
     if (this.dependencies.lineage && !this.dependencies.runtime) throw new SessionError("SESSION_BRANCH_RUNTIME_UNAVAILABLE", "Native branch execution is unavailable");
     if (plan.terminal.enabled && this.dependencies.lineage && !this.dependencies.terminal) throw new SessionError("SESSION_BRANCH_TERMINAL_UNAVAILABLE", "Windows Terminal execution is unavailable");
     let workspace = { cwd: plan.workspace.cwd, worktreeRef: plan.workspace.worktreeRef };
@@ -199,15 +210,15 @@ export class ConversationBranchService {
       await this.dependencies.lineage.savePending(pending);
       const executor = terminal ? this.dependencies.terminal : this.dependencies.runtime;
       if (!executor) throw new SessionError("SESSION_BRANCH_TERMINAL_UNAVAILABLE", "Windows Terminal execution is unavailable");
-      const childProcess = await executor.launch(terminal ?? invocation); launched = true;
+      const childProcess = await executor.launch(terminal ?? invocation, plan); launched = true;
+      void childProcess.exited.finally(() => writerLease?.release()).catch(() => undefined);
       const child = await childProcess.lifecycle;
       if (!child.runtimeQualifiedId.startsWith(`${plan.child.runtime}:`)) throw new SessionError("SESSION_BRANCH_LIFECYCLE_MISMATCH", "Child lifecycle event has the wrong runtime");
       await this.dependencies.lineage.finalize(plan.child.runtimeQualifiedId, child);
-      void childProcess.exited.finally(() => writerLease?.release()).catch(() => undefined);
       return { schemaVersion: 1, kind: "session-branch-apply", invocation, terminal, workspace, writerLease, child };
     } catch (error) {
       try { await this.dependencies.lineage?.fail(plan.child.runtimeQualifiedId); } catch { /* preserve the launch failure */ }
-      await writerLease?.release();
+      if (!launched) await writerLease?.release();
       try { if (createdWorktree && !launched) await this.dependencies.removeIsolatedWorktree?.(workspace); } catch { /* preserve the launch failure */ }
       throw error;
     }

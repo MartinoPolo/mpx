@@ -251,7 +251,7 @@ export async function executeSessionCommand(input: SessionCommandInput, context:
       schemaVersion: 1,
       parent: { runtimeQualifiedId: parent.runtimeQualifiedId, nativeSessionRef: parent.nativeSessionRef },
       child: { runtimeQualifiedId: childId, runtime: parent.runtime },
-      launchIdentity: { identity: parent.identity, rootDigest: binding.recordedRootDigest, nativeBindingRef: binding.ref, mode: parent.launch.mode, executor: parent.launch.executor.kind },
+      launchIdentity: { identity: parent.identity, rootDigest: binding.recordedRootDigest, nativeBindingRef: binding.ref, mode: parent.launch.mode, executor: parent.launch.executor.kind, skillPolicy: parent.launch.skillPolicy, contentScope: parent.launch.contentScope, workspace: parent.launch.workspace, networkPolicy: parent.launch.networkPolicy, grants: parent.launch.grants, artifactKey: parent.launch.artifactKey, manifestKey: parent.launch.manifestKey, launchKey: parent.launch.launchKey, descriptorDigest: parent.launch.descriptorDigest },
       workspace: {
         selection: selected as "default" | "isolated" | "shared", intent: intent as "read" | "modify", cwd: parent.location.cwd,
         projectRef: parent.location.project, repositoryRef: parent.location.repository,
