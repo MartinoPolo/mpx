@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { mkdir, lstat, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, lstat, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { MpxError, type JsonValue } from "@mpx/core";
 import { ISSUE_CAPABILITIES, LOCAL_ISSUE_CAPABILITIES, ProviderError, type IssueCommentV1, type IssueV1, type ProviderAdapter, type ProviderInvocation } from "@mpx/providers";
@@ -8,7 +8,19 @@ export interface LocalRelationships { parent?: string; children: string[]; relat
 export interface LocalDependencies { dependsOn: string[]; blocks: string[]; frontier: string[]; cycle?: boolean }
 export interface LocalIssue extends IssueV1 { readonly providerData: { readonly local: Readonly<Record<string, JsonValue>> } }
 export interface BoardPromotionAdapter { promote(issue: LocalIssue, destination: string): Promise<LocalIssue | void> }
-export interface LocalIssueStoreOptions { staleLockMilliseconds?: number; promotion?: BoardPromotionAdapter; projectId?: string; onChanged?: (issue: LocalIssue) => Promise<void> }
+export interface LocalIssueStoreOptions {
+  /** Lease duration retained under the historical option name for compatibility. */
+  staleLockMilliseconds?: number;
+  lockTimeoutMilliseconds?: number;
+  lockRetryMilliseconds?: number;
+  lockHeartbeatMilliseconds?: number;
+  now?: () => number;
+  isProcessAlive?: (pid: number) => boolean | Promise<boolean>;
+  lockToken?: () => string;
+  promotion?: BoardPromotionAdapter;
+  projectId?: string;
+  onChanged?: (issue: LocalIssue) => Promise<void>;
+}
 export interface LocalIssueCreate { title:string; body:string; labels?:string[]; localState?:string; kind?:string; priority?:string; assignees?:string[]; plan?:string; effort?:string; capture?:string }
 export interface LocalIssuePatch { title?:string; body?:string; state?:"open"|"finished"; localState?:string; labels?:string[]; relationships?:Partial<LocalRelationships>; kind?:string; priority?:string; assignees?:string[]; plan?:string; effort?:string; capture?:string; blockedBy?:string[]; blocks?:string[]; related?:string[] }
 
@@ -34,11 +46,55 @@ function parseDocument(text:string,expectedId:string):Document { const match=/^-
 function encode(d:Omit<Document,"revision">):string { const fields:[string,unknown][]=[["schemaVersion",2],["id",d.id],["project",d.project],["title",d.title],["kind",d.kind],["priority",d.priority],["labels",d.labels],["assignees",d.assignees],["state",d.state],["localState",d.localState],["createdAt",d.createdAt],["updatedAt",d.updatedAt],...(d.finishedAt?[["finishedAt",d.finishedAt] as [string,unknown]]:[]),["plan",d.plan],["effort",d.effort],["capture",d.capture],["blockedBy",d.blockedBy],["blocks",d.blocks],["related",d.related],["relationships",d.relationships]];const body=d.preservedBody?`${d.body.trimEnd()}\n\n${d.preservedBody}`:d.body;return `---\n${[...fields.map(([k,v])=>`${k}: ${JSON.stringify(v)}`),...d.unknown].join("\n")}\n---\n${body}`; }
 async function atomicWrite(file:string,text:string):Promise<void>{const temporary=`${file}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;try{await writeFile(temporary,text,{encoding:"utf8",flag:"wx"});await rename(temporary,file);}finally{await rm(temporary,{force:true}).catch(()=>undefined);}}
 
+interface LocalLockOwner { schemaVersion:1; token:string; pid:number; acquiredAt:number; heartbeatAt:number }
+const parseLockOwner=(text:string):LocalLockOwner|undefined=>{try{const value=JSON.parse(text) as Partial<LocalLockOwner>;return value.schemaVersion===1&&typeof value.token==="string"&&value.token.length>0&&Number.isSafeInteger(value.pid)&&Number(value.pid)>0&&typeof value.acquiredAt==="number"&&Number.isFinite(value.acquiredAt)&&typeof value.heartbeatAt==="number"&&Number.isFinite(value.heartbeatAt)?value as LocalLockOwner:undefined;}catch{return undefined;}};
+const processAlive=async(pid:number):Promise<boolean>=>{try{process.kill(pid,0);return true;}catch(error){return (error as NodeJS.ErrnoException).code==="EPERM";}};
+const sleep=(milliseconds:number)=>new Promise<void>(resolve=>setTimeout(resolve,milliseconds));
+const windowsContention=(error:unknown)=>["EPERM","EACCES","EBUSY","ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code??"");
+async function boundedRename(source:string,destination:string):Promise<void>{for(let attempt=0;;attempt++){try{await rename(source,destination);return;}catch(error){if(attempt>=4||!windowsContention(error))throw error;await sleep(2);}}}
+async function boundedRemove(target:string,options:{recursive?:boolean;force?:boolean}={}):Promise<void>{for(let attempt=0;;attempt++){try{await rm(target,options);return;}catch(error){if(attempt>=4||!windowsContention(error))throw error;await sleep(2);}}}
+
+class LocalIssueLock {
+  constructor(private readonly lockPath:string,private readonly options:Required<Pick<LocalIssueStoreOptions,"staleLockMilliseconds"|"lockTimeoutMilliseconds"|"lockRetryMilliseconds"|"lockHeartbeatMilliseconds"|"now"|"isProcessAlive"|"lockToken">>){ }
+  private ownerPath(directory=this.lockPath){return path.join(directory,"owner.json");}
+  private async heartbeat(owner:LocalLockOwner,directory=this.lockPath){owner.heartbeatAt=this.options.now();await atomicWrite(this.ownerPath(directory),JSON.stringify(owner));}
+  private async owner(directory=this.lockPath){try{return parseLockOwner(await readFile(this.ownerPath(directory),"utf8"));}catch{return undefined;}}
+  private async expired(owner:LocalLockOwner|undefined,directory=this.lockPath):Promise<boolean>{
+    if(!owner){try{return this.options.now()-(await stat(directory)).mtimeMs>=this.options.staleLockMilliseconds;}catch{return false;}}
+    if(!await this.options.isProcessAlive(owner.pid))return true;
+    return this.options.now()-owner.heartbeatAt>=this.options.staleLockMilliseconds;
+  }
+  private async restore(quarantine:string){try{await boundedRename(quarantine,this.lockPath);}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST"&&!windowsContention(error))throw error;}}
+  private async recover():Promise<boolean>{
+    const expected=await this.owner();if(!await this.expired(expected))return false;
+    const quarantine=`${this.lockPath}.takeover-${this.options.lockToken()}`;
+    try{await boundedRename(this.lockPath,quarantine);}catch(error){if(["ENOENT","EEXIST"].includes((error as NodeJS.ErrnoException).code??"")||windowsContention(error))return false;throw error;}
+    const captured=await this.owner(quarantine);
+    if((captured?.token??null)!==(expected?.token??null)){await this.restore(quarantine);return false;}
+    if(!await this.expired(captured,quarantine)){await this.restore(quarantine);return false;}
+    await boundedRemove(quarantine,{recursive:true,force:true});return true;
+  }
+  async acquire():Promise<()=>Promise<void>>{
+    const started=this.options.now();
+    while(true){
+      const token=this.options.lockToken(),now=this.options.now(),owner:LocalLockOwner={schemaVersion:1,token,pid:process.pid,acquiredAt:now,heartbeatAt:now};
+      let created=false;
+      try{
+        await mkdir(this.lockPath);created=true;await writeFile(this.ownerPath(),JSON.stringify(owner),{encoding:"utf8",flag:"wx"});
+        let publishing:Promise<void>|undefined,stopped=false;
+        const refresh=()=>{if(stopped||publishing)return;publishing=this.heartbeat(owner).catch(()=>undefined).finally(()=>{publishing=undefined;});};
+        const timer=setInterval(refresh,this.options.lockHeartbeatMilliseconds);timer.unref();
+        return async()=>{stopped=true;clearInterval(timer);await publishing;if((await this.owner())?.token!==token)return;const quarantine=`${this.lockPath}.release-${token}`;try{await boundedRename(this.lockPath,quarantine);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return;throw error;}const captured=await this.owner(quarantine);if(captured?.token===token)await boundedRemove(quarantine,{recursive:true,force:true});else await this.restore(quarantine);};
+      }catch(error){if(created)await boundedRemove(this.lockPath,{recursive:true,force:true}).catch(()=>undefined);const code=(error as NodeJS.ErrnoException).code;if(!["EEXIST","ENOTEMPTY","EPERM","EACCES","EBUSY"].includes(code??""))throw error;if(await this.recover())continue;if(this.options.now()-started>=this.options.lockTimeoutMilliseconds)throw new LocalIssueError("LOCAL_ISSUE_LOCK_TIMEOUT","Timed out waiting for the local issue lock.");await sleep(this.options.lockRetryMilliseconds);}
+    }
+  }
+}
+
 export class LocalIssueStore {
-  readonly root:string;readonly options:Required<Pick<LocalIssueStoreOptions,"staleLockMilliseconds"|"projectId">>&LocalIssueStoreOptions;
-  constructor(root:string,options:LocalIssueStoreOptions={}){if(!path.isAbsolute(root))throw new LocalIssueError("LOCAL_ISSUE_ROOT_INVALID","The local issue root must be absolute.");const resolved=path.resolve(root);if(/(?:^|[\\/])(?:\.git|\.mpx|node_modules)(?:[\\/]|$)/ui.test(resolved))throw new LocalIssueError("LOCAL_ISSUE_ROOT_INVALID","The local issue root may not be private native state.");this.root=resolved;this.options={staleLockMilliseconds:options.staleLockMilliseconds??30000,projectId:options.projectId??"local/unknown",...options};}
+  readonly root:string;readonly options:Required<Pick<LocalIssueStoreOptions,"staleLockMilliseconds"|"lockTimeoutMilliseconds"|"lockRetryMilliseconds"|"lockHeartbeatMilliseconds"|"now"|"isProcessAlive"|"lockToken"|"projectId">>&LocalIssueStoreOptions;
+  constructor(root:string,options:LocalIssueStoreOptions={}){if(!path.isAbsolute(root))throw new LocalIssueError("LOCAL_ISSUE_ROOT_INVALID","The local issue root must be absolute.");const resolved=path.resolve(root);if(/(?:^|[\\/])(?:\.git|\.mpx|node_modules)(?:[\\/]|$)/ui.test(resolved))throw new LocalIssueError("LOCAL_ISSUE_ROOT_INVALID","The local issue root may not be private native state.");const lease=options.staleLockMilliseconds??30000;this.root=resolved;this.options={staleLockMilliseconds:lease,lockTimeoutMilliseconds:options.lockTimeoutMilliseconds??4000,lockRetryMilliseconds:options.lockRetryMilliseconds??10,lockHeartbeatMilliseconds:options.lockHeartbeatMilliseconds??Math.max(1,Math.min(1000,Math.floor(lease/3))),now:options.now??Date.now,isProcessAlive:options.isProcessAlive??processAlive,lockToken:options.lockToken??randomUUID,projectId:options.projectId??"local/unknown",...options};}
   async #ready(){await assertNoSymlink(this.root);await mkdir(this.root,{recursive:true});await assertNoSymlink(this.root);}
-  async #locked<T>(operation:()=>Promise<T>):Promise<T>{await this.#ready();const lock=path.join(this.root,".mpx-issues.lock"),deadline=Date.now()+5000;while(true){try{const handle=await open(lock,"wx");await handle.writeFile(JSON.stringify({pid:process.pid,createdAt:Date.now()}));await handle.close();break;}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw error;try{if(Date.now()-(await stat(lock)).mtimeMs>this.options.staleLockMilliseconds){await rm(lock,{force:true});continue;}}catch{continue;}if(Date.now()>deadline)throw new LocalIssueError("LOCAL_ISSUE_LOCK_TIMEOUT","Timed out waiting for the local issue lock.");await new Promise(resolve=>setTimeout(resolve,10));}}try{return await operation();}finally{await rm(lock,{force:true});}}
+  async #locked<T>(operation:()=>Promise<T>):Promise<T>{await this.#ready();const release=await new LocalIssueLock(path.join(this.root,".mpx-issues.lock"),this.options).acquire();try{return await operation();}finally{await release();}}
   async #index():Promise<Index>{await this.#ready();try{const value=JSON.parse(await readFile(path.join(this.root,".mpx-index.json"),"utf8")) as Index;if(value.schemaVersion!==1||!Number.isSafeInteger(value.next)||typeof value.files!=="object")throw malformed();return value;}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;const files:Record<string,string>={};let next=1;for(const name of await readdir(this.root)){const match=filePattern.exec(name);if(match){const id=String(Number(match[1]));files[id]=name;next=Math.max(next,Number(id)+1);}}return {schemaVersion:1,next,files};}}
   async #read(id:string):Promise<Document>{if(!safeId.test(id))throw new LocalIssueError("LOCAL_ISSUE_PATH_UNSAFE","The local issue identifier is unsafe.");const index=await this.#index(),name=index.files[id];if(!name||!filePattern.test(name))throw new LocalIssueError("LOCAL_ISSUE_NOT_FOUND",`Local issue ${id} was not found.`);const file=path.join(this.root,name);await assertNoSymlink(file);try{return parseDocument(await readFile(file,"utf8"),id);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")throw new LocalIssueError("LOCAL_ISSUE_NOT_FOUND",`Local issue ${id} was not found.`);throw error;}}
   async #validate(document:Document):Promise<void>{for(const [relationship,values] of [["blockedBy",document.blockedBy],["blocks",document.blocks],["related",document.related],["parent",document.relationships.parent?[document.relationships.parent]:[]],["children",document.relationships.children]] as const)for(const referenceId of values)try{await this.#read(referenceId);}catch(error){if(error instanceof LocalIssueError&&error.code==="LOCAL_ISSUE_NOT_FOUND")throw new LocalIssueError("LOCAL_ISSUE_REFERENCE_MISSING",`Issue ${document.id} has a missing ${relationship} reference to ${referenceId}.`,{issueId:document.id,referenceId,relationship});throw error;}}

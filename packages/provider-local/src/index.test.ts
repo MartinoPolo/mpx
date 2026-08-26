@@ -1,10 +1,20 @@
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { fork, type ChildProcess } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { LocalIssueError, LocalIssueStore, createLocalIssueAdapter, rebuildObsidianIssueViews, rebuildObsidianSessionViews } from "./index.js";
 
 const root = () => mkdtemp(path.join(tmpdir(), "mpx-local-issues-"));
+const fixture = fileURLToPath(new URL("lock-process-fixture.mjs", import.meta.url));
+const waitFor = (child: ChildProcess, type: string) => new Promise<void>((resolve, reject) => {
+  const timer = setTimeout(() => { cleanup(); reject(new Error(`Timed out waiting for child ${type}`)); }, 2_000);
+  const message = (value: unknown) => { if ((value as { type?: unknown })?.type === type) { cleanup(); resolve(); } };
+  const exit = (code: number | null) => { cleanup(); reject(new Error(`Child exited before ${type}: ${code}`)); };
+  const cleanup = () => { clearTimeout(timer); child.off("message", message); child.off("exit", exit); };
+  child.on("message", message); child.on("exit", exit);
+});
 
 describe("local Markdown issues", () => {
   it("allocates monotonic IDs independently in each configured root", async () => {
@@ -82,11 +92,44 @@ describe("local Markdown issues", () => {
     expect(created.map(issue => issue.id).sort((a,b)=>Number(a)-Number(b))).toEqual(Array.from({ length: 12 }, (_, index) => String(index + 1)));
   });
 
-  it("recovers a stale allocation lock without reusing IDs", async () => {
-    const directory = await root(), store = new LocalIssueStore(directory, { staleLockMilliseconds: 1 });
-    await store.create({ title: "A", body: "" });
-    await writeFile(path.join(directory, ".mpx-issues.lock"), JSON.stringify({ pid: 999999, createdAt: 0 }));
-    expect((await store.create({ title: "B", body: "" })).id).toBe("2");
+  it("refreshes its lease during a two-process long operation so a contender cannot steal it", async () => {
+    const directory = await root(), child = fork(fixture, ["hold", directory], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
+    try {
+      await waitFor(child, "locked");
+      const ownerPath=path.join(directory,".mpx-issues.lock","owner.json"),acquired=JSON.parse(await readFile(ownerPath,"utf8")) as {acquiredAt:number;heartbeatAt:number};
+      const refreshDeadline=Date.now()+2_000;let refreshed=acquired;
+      while(refreshed.heartbeatAt===acquired.heartbeatAt&&Date.now()<refreshDeadline){await new Promise(resolve=>setTimeout(resolve,10));refreshed=JSON.parse(await readFile(ownerPath,"utf8")) as typeof acquired;}
+      expect(refreshed.heartbeatAt).toBeGreaterThan(acquired.heartbeatAt);
+      await expect(new LocalIssueStore(directory, { staleLockMilliseconds: 2_000, lockTimeoutMilliseconds: 40, lockRetryMilliseconds: 2 }).create({ title: "contender", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_TIMEOUT" });
+      child.send("release"); await waitFor(child, "finished");
+      expect((await new LocalIssueStore(directory).create({ title: "next", body: "" })).id).toBe("2");
+    } finally { child.kill(); }
+  });
+
+  it("takes over a crashed process lock without reusing its committed ID", async () => {
+    const directory = await root(), child = fork(fixture, ["crash", directory], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
+    await waitFor(child, "locked");
+    await new Promise<void>(resolve => child.exitCode === null ? child.once("exit", () => resolve()) : resolve());
+    expect((await new LocalIssueStore(directory, { staleLockMilliseconds: 10, lockTimeoutMilliseconds: 500 }).create({ title: "after crash", body: "" })).id).toBe("2");
+  });
+
+  it("uses deterministic lease time and atomic takeover for a dead owner", async () => {
+    const directory = await root(), lock = path.join(directory, ".mpx-issues.lock");
+    await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "dead", pid: 4242, acquiredAt: 10, heartbeatAt: 20 }));
+    let now = 100;
+    const issue = await new LocalIssueStore(directory, { now: () => now++, isProcessAlive: () => false, lockToken: (() => { let value=0; return () => `token-${++value}`; })(), staleLockMilliseconds: 50 }).create({ title: "takeover", body: "" });
+    expect(issue.id).toBe("1");
+  });
+
+  it("does not let a stale releaser remove a replacement lock with another token", async () => {
+    const directory = await root(), lock = path.join(directory, ".mpx-issues.lock");
+    let unblock!:()=>void;const blocked=new Promise<void>(resolve=>{unblock=resolve;});
+    const holding = new LocalIssueStore(directory, { lockToken: () => "old-token", onChanged: async()=>blocked }).create({ title:"old", body:"" });
+    while(true){try{await readFile(path.join(lock,"owner.json"));break;}catch{await new Promise(resolve=>setTimeout(resolve,1));}}
+    await rename(lock,`${lock}.removed`);await mkdir(lock);await writeFile(path.join(lock,"owner.json"),JSON.stringify({schemaVersion:1,token:"replacement",pid:process.pid,acquiredAt:Date.now(),heartbeatAt:Date.now()}));
+    unblock();await holding;
+    expect(JSON.parse(await readFile(path.join(lock,"owner.json"),"utf8"))).toMatchObject({token:"replacement"});
+    await rm(lock,{recursive:true,force:true});await rm(`${lock}.removed`,{recursive:true,force:true});
   });
 
   it("rejects symlink roots and malicious identifiers", async () => {

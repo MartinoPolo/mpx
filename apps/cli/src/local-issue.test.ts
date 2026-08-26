@@ -18,4 +18,4 @@ it("runs local create/show/update/close and dependency commands without an ident
   expect(await command(["issue","show","--id","1"])).toMatchObject({providerData:{local:{dependencies:{frontier:["2"]}}}});
   expect(await command(["issue","update","--id","1","--title","Updated","--body","Body"])).toMatchObject({title:"Updated"});
   expect(await command(["issue","close","--id","1"])).toMatchObject({state:"finished"});
-});
+}, 5_000);
