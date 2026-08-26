@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -86,11 +87,71 @@ describe("conversation branching", () => {
     await expect(leases.acquire("C:/shared repo", "pi:two")).resolves.toBeDefined();
   });
 
+  it("serializes native writer acquisition between two controller processes", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-processes-")), fixture = path.resolve(import.meta.dirname, "../test-fixtures/branch-lease-worker.mjs");
+    const run = (owner: string, hold: number) => spawn(process.execPath, [fixture, root, "C:/shared repo", owner, String(hold)], { stdio: ["ignore", "pipe", "inherit"] });
+    const first = run("claude:one", 3_000);
+    await new Promise<void>((resolve, reject) => { first.stdout.once("data", chunk => chunk.toString().includes("ACQUIRED") ? resolve() : reject(new Error(chunk.toString()))); first.once("error", reject); });
+    const second = run("pi:two", 0); let output = ""; second.stdout.on("data", chunk => { output += chunk; });
+    await new Promise<void>((resolve, reject) => { second.once("exit", () => resolve()); second.once("error", reject); });
+    expect(output).toContain("ERROR:SESSION_BRANCH_DUPLICATE_WRITER");
+    await new Promise<void>((resolve, reject) => { first.once("exit", () => resolve()); first.once("error", reject); });
+  });
+
   it("can restore and release a durable writer lease after controller restart", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-")), firstStore = new BranchLeaseStore(root), first = await firstStore.acquire("C:/shared repo", "claude:child");
     const restored = await new BranchLeaseStore(root).restore(first.workspaceDigest, "claude:child");
     await restored.release();
     await expect(firstStore.acquire("C:/shared repo", "pi:next")).resolves.toBeDefined();
+  });
+
+  it("records controller, heartbeat, launch, session, and workspace identities", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-record-")), now = 10_000;
+    const store = new BranchLeaseStore(root, { processId: 41, controllerStartFingerprint: "start-41", now: () => now, leaseTtlMs: 5_000 });
+    const lease = await store.acquire("C:/shared repo", "claude:child", { launchKey: "launch-1", nativeBindingRef: "binding-1", parentRuntimeQualifiedId: "claude:parent", worktreeRef: "wt-1" });
+    const record = JSON.parse(await readFile(path.join(root, `${lease.workspaceDigest}.writer`, "owner.json"), "utf8"));
+    expect(record).toMatchObject({ schemaVersion: 1, owner: "claude:child", controller: { pid: 41, startFingerprint: "start-41" }, createdAt: 10_000, heartbeatAt: 10_000, expiresAt: 15_000, launch: { launchKey: "launch-1" }, session: { runtimeQualifiedId: "claude:child", parentRuntimeQualifiedId: "claude:parent", nativeBindingRef: "binding-1" }, workspace: { cwd: "C:/shared repo", digest: lease.workspaceDigest, worktreeRef: "wt-1" } });
+    expect(record.token).toEqual(expect.any(String));
+    await lease.release();
+  });
+
+  it("reclaims an expired lease only when its exact controller is dead and no child session is observed", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-recover-")); let now = 1_000;
+    const first = new BranchLeaseStore(root, { processId: 11, controllerStartFingerprint: "old", now: () => now, leaseTtlMs: 100, heartbeatIntervalMs: 1_000 });
+    await first.acquire("C:/shared repo", "claude:old"); now = 1_101;
+    const second = new BranchLeaseStore(root, { processId: 22, controllerStartFingerprint: "new", now: () => now, processInspector: { inspect: async pid => pid === 22 ? { status: "present", pid, startFingerprint: "new" } : { status: "absent" } }, observeSession: async () => "absent" });
+    await expect(second.acquire("C:/shared repo", "pi:new")).resolves.toMatchObject({ owner: "pi:new" });
+  });
+
+  it("treats PID reuse, live controllers, and unknown inspection fail-closed", async () => {
+    const scenarios = [
+      { inspection: { status: "present" as const, pid: 11, startFingerprint: "reused" }, code: undefined },
+      { inspection: { status: "present" as const, pid: 11, startFingerprint: "old" }, code: "SESSION_BRANCH_DUPLICATE_WRITER" },
+      { inspection: { status: "unknown" as const }, code: "SESSION_BRANCH_LEASE_INSPECTION_UNKNOWN" },
+    ];
+    for (const scenario of scenarios) {
+      const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-inspect-")); let now = 1_000;
+      const first = new BranchLeaseStore(root, { processId: 11, controllerStartFingerprint: "old", now: () => now, leaseTtlMs: 100, heartbeatIntervalMs: 1_000 });
+      await first.acquire("C:/shared repo", "claude:old"); now = 1_101;
+      const second = new BranchLeaseStore(root, { processId: 22, controllerStartFingerprint: "new", now: () => now, processInspector: { inspect: async pid => pid === 22 ? { status: "present", pid, startFingerprint: "new" } : scenario.inspection }, observeSession: async () => "absent" });
+      const attempt = second.acquire("C:/shared repo", "pi:new");
+      if (scenario.code) await expect(attempt).rejects.toMatchObject({ code: scenario.code }); else await expect(attempt).resolves.toBeDefined();
+    }
+  });
+
+  it("does not reclaim a crashed controller lease while lifecycle observations show a native child writer", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-child-")); let now = 1_000;
+    await new BranchLeaseStore(root, { processId: 11, controllerStartFingerprint: "old", now: () => now, leaseTtlMs: 100, heartbeatIntervalMs: 1_000 }).acquire("C:/shared repo", "claude:old"); now = 1_101;
+    const store = new BranchLeaseStore(root, { now: () => now, processInspector: { inspect: async pid => pid === process.pid ? { status: "present", pid, startFingerprint: `pid-${pid}` } : { status: "absent" } }, observeSession: async () => "active" });
+    await expect(store.acquire("C:/shared repo", "pi:new")).rejects.toMatchObject({ code: "SESSION_BRANCH_DUPLICATE_WRITER" });
+  });
+
+  it("a stale release cannot remove a token replacement", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-branch-token-")), store = new BranchLeaseStore(root);
+    const lease = await store.acquire("C:/shared repo", "claude:old"), file = path.join(root, `${lease.workspaceDigest}.writer`, "owner.json");
+    const record = JSON.parse(await readFile(file, "utf8")); await writeFile(file, JSON.stringify({ ...record, token: "replacement" }));
+    await lease.release();
+    await expect(readFile(file, "utf8")).resolves.toContain("replacement");
   });
 
   it("uses Claude's native fork/resume argv without copying transcripts", () => {

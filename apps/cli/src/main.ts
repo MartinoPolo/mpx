@@ -382,6 +382,27 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         },
       }) : null;
       const dockerAdmission = context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env);
+      const leaseProcessInspector = context.sessionProcessInspector ?? productionSessionProcessInspector();
+      const controller = await leaseProcessInspector.inspect(process.pid);
+      const branchLeaseStore = new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases"), {
+        processId: process.pid,
+        controllerStartFingerprint: controller.status === "present" ? controller.startFingerprint : `unverified-${process.pid}`,
+        processInspector: leaseProcessInspector,
+        observeSession: async lease => {
+          const records = await new SessionService(sessionStore).list();
+          const candidates = records.filter(record => record.runtimeQualifiedId === lease.session.runtimeQualifiedId || (record.location.cwd === lease.workspace.cwd && record.nativeBindingRef === lease.session.nativeBindingRef && (!lease.launch.launchKey || record.launch?.launchKey === lease.launch.launchKey)));
+          if (candidates.length === 0) return "absent";
+          if (candidates.every(record => record.liveness === "inactive")) return "inactive";
+          for (const record of candidates.filter(value => value.liveness === "active")) {
+            if (!record.process) return "unknown";
+            const observed = await leaseProcessInspector.inspect(record.process.pid);
+            if (observed.status === "unknown") return "unknown";
+            if (observed.status === "present" && observed.startFingerprint === record.process.startFingerprint) return "active";
+          }
+          return "inactive";
+        },
+      });
+      await branchLeaseStore.reconcile();
       branchService = new ConversationBranchService({
         inspectWorkspace: async workspace => { try { const info = await lstat(workspace.cwd); return { exists: info.isDirectory() && !info.isSymbolicLink(), collisionDisclosure: workspace.repositoryRef === null ? [] : ["repository refs and external fixed services remain shared"] }; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { exists: false, collisionDisclosure: [] }; throw error; } },
         createIsolatedWorktree: async workspace => {
@@ -409,7 +430,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         ...((context.sessionBranchTerminalAdapter ?? productionTerminal) ? { terminal: (context.sessionBranchTerminalAdapter ?? productionTerminal)! } : {}),
         lineage: new BranchLineageStore(path.join(stateRoot(context), "sessions", "v1", "private", "branch-lineage")),
         admitExecutor: async branch => branch.launchIdentity.executor === "host" || (await dockerAdmission(branchAdmissionPlan(branch))).admitted,
-      }, new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases")));
+      }, branchLeaseStore);
     }
     const scheduledCaptureAuthority = context.scheduledCaptureAuthority ?? ((context.installOrchestrator || (context.installerOperationAdapter && context.installerTransactionStore)) ? {
       inspect: async () => {

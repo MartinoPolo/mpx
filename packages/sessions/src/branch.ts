@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveConversationWorkspaceSelection } from "@mpx/worktrees";
 import type { NativeSessionRefV1, RuntimeName } from "@mpx/runtime-contracts";
@@ -192,7 +192,7 @@ export class ConversationBranchService {
       if (plan.workspace.provision === "new-worktree") { workspace = await this.dependencies.createIsolatedWorktree(plan.workspace); createdWorktree = true; }
       if (plan.workspace.intent === "modify") {
         if (!this.leases) throw new SessionError("SESSION_BRANCH_LEASE_UNAVAILABLE", "duplicate-writer prevention is unavailable");
-        writerLease = await this.leases.acquire(workspace.cwd, plan.child.runtimeQualifiedId);
+        writerLease = await this.leases.acquire(workspace.cwd, plan.child.runtimeQualifiedId, { launchKey: plan.launchIdentity.launchKey, nativeBindingRef: plan.launchIdentity.nativeBindingRef, parentRuntimeQualifiedId: plan.parent.runtimeQualifiedId, worktreeRef: workspace.worktreeRef });
       }
       const invocation = await this.dependencies.adapters[plan.child.runtime].plan(plan.parent, workspace.cwd, validatedRoot);
       const terminal = planWindowsTerminalTab(plan.terminal, invocation);
@@ -262,37 +262,150 @@ export class BranchLineageStore implements BranchLineagePersistence {
   }
 }
 
-export interface BranchWriterLease { readonly owner: string; readonly workspaceDigest: string; release(): Promise<void> }
+export interface BranchLeaseIdentity {
+  readonly launchKey?: string;
+  readonly nativeBindingRef?: string;
+  readonly parentRuntimeQualifiedId?: string;
+  readonly worktreeRef?: string | null;
+}
+export interface BranchLeaseRecordV1 {
+  readonly schemaVersion: 1;
+  readonly owner: string;
+  readonly token: string;
+  readonly controller: { readonly pid: number; readonly startFingerprint: string };
+  readonly createdAt: number;
+  readonly heartbeatAt: number;
+  readonly expiresAt: number;
+  readonly launch: { readonly launchKey: string | null };
+  readonly session: { readonly runtimeQualifiedId: string; readonly parentRuntimeQualifiedId: string | null; readonly nativeBindingRef: string | null };
+  readonly workspace: { readonly cwd: string; readonly digest: string; readonly worktreeRef: string | null };
+}
+export type BranchLeaseSessionObservation = "active" | "inactive" | "absent" | "unknown";
+export interface BranchLeaseStoreOptions {
+  readonly processId?: number;
+  readonly controllerStartFingerprint?: string;
+  readonly now?: () => number;
+  readonly leaseTtlMs?: number;
+  readonly heartbeatIntervalMs?: number;
+  readonly processInspector?: { inspect(pid: number): Promise<{ readonly status: "present"; readonly pid: number; readonly startFingerprint: string } | { readonly status: "absent" | "unknown" }> };
+  readonly observeSession?: (lease: BranchLeaseRecordV1) => Promise<BranchLeaseSessionObservation>;
+}
+export interface BranchWriterLease { readonly owner: string; readonly workspaceDigest: string; heartbeat(): Promise<void>; release(): Promise<void> }
+
+function parseBranchLease(value: unknown, digest?: string): BranchLeaseRecordV1 {
+  const item = value as Partial<BranchLeaseRecordV1>;
+  if (!item || item.schemaVersion !== 1 || typeof item.owner !== "string" || typeof item.token !== "string" || !item.controller || !Number.isSafeInteger(item.controller.pid) || typeof item.controller.startFingerprint !== "string" || typeof item.createdAt !== "number" || typeof item.heartbeatAt !== "number" || typeof item.expiresAt !== "number" || !item.launch || !item.session || !item.workspace || item.workspace.digest !== (digest ?? item.workspace.digest))
+    throw new SessionError("SESSION_BRANCH_LEASE_INVALID", "writer lease record is invalid");
+  return item as BranchLeaseRecordV1;
+}
+
 export class BranchLeaseStore {
-  constructor(private readonly root: string) {}
-  private lease(owner: string, workspaceDigest: string, token: string): BranchWriterLease {
-    const directory = path.join(this.root, `${workspaceDigest}.writer`);
-    return { owner, workspaceDigest, release: async () => {
-      try { const current = JSON.parse(await readFile(path.join(directory, "owner.json"), "utf8")) as { token?: unknown; owner?: unknown }; if (current.token === token && current.owner === owner) await rm(directory, { recursive: true, force: true }); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    } };
+  private readonly processId: number;
+  private readonly controllerStartFingerprint: string;
+  private readonly now: () => number;
+  private readonly leaseTtlMs: number;
+  private readonly heartbeatIntervalMs: number;
+  constructor(private readonly root: string, private readonly options: BranchLeaseStoreOptions = {}) {
+    this.processId = options.processId ?? process.pid;
+    this.controllerStartFingerprint = options.controllerStartFingerprint ?? `pid-${this.processId}`;
+    this.now = options.now ?? Date.now;
+    this.leaseTtlMs = options.leaseTtlMs ?? 30_000;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? Math.max(1_000, Math.floor(this.leaseTtlMs / 3));
+  }
+  private directory(workspaceDigest: string): string { return path.join(this.root, `${workspaceDigest}.writer`); }
+  private async read(workspaceDigest: string): Promise<BranchLeaseRecordV1> {
+    return parseBranchLease(JSON.parse(await readFile(path.join(this.directory(workspaceDigest), "owner.json"), "utf8")), workspaceDigest);
+  }
+  private async replaceIfToken(workspaceDigest: string, token: string, transform: (record: BranchLeaseRecordV1) => BranchLeaseRecordV1): Promise<boolean> {
+    const directory = this.directory(workspaceDigest), file = path.join(directory, "owner.json");
+    let current: BranchLeaseRecordV1;
+    try { current = await this.read(workspaceDigest); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    if (current.token !== token) return false;
+    const temporary = path.join(directory, `owner.${token}.tmp`);
+    await writeFile(temporary, JSON.stringify(transform(current)), { flag: "wx", mode: 0o600 });
+    try {
+      const confirmed = await this.read(workspaceDigest);
+      if (confirmed.token !== token) return false;
+      await rename(temporary, file);
+      return true;
+    } finally { await rm(temporary, { force: true }); }
+  }
+  private async removeIfToken(workspaceDigest: string, token: string): Promise<boolean> {
+    const directory = this.directory(workspaceDigest), tombstone = `${directory}.released-${token}`;
+    let current: BranchLeaseRecordV1;
+    try { current = await this.read(workspaceDigest); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    if (current.token !== token) return false;
+    try { await rename(directory, tombstone); } catch (error) { if (["ENOENT", "EEXIST"].includes((error as NodeJS.ErrnoException).code ?? "")) return false; throw error; }
+    const moved = await readFile(path.join(tombstone, "owner.json"), "utf8").then(value => parseBranchLease(JSON.parse(value), workspaceDigest));
+    if (moved.token !== token) {
+      try { await rename(tombstone, directory); } catch { /* A successor is authoritative; retain the unexpected tombstone for diagnosis. */ }
+      return false;
+    }
+    await rm(tombstone, { recursive: true, force: true });
+    return true;
+  }
+  private lease(record: BranchLeaseRecordV1): BranchWriterLease {
+    let released = false;
+    const heartbeat = async (): Promise<void> => {
+      if (released) return;
+      const timestamp = this.now();
+      const refreshed = await this.replaceIfToken(record.workspace.digest, record.token, current => ({ ...current, heartbeatAt: timestamp, expiresAt: timestamp + this.leaseTtlMs }));
+      if (!refreshed) { released = true; clearInterval(timer); }
+    };
+    const timer = setInterval(() => { void heartbeat().catch(() => undefined); }, this.heartbeatIntervalMs);
+    timer.unref();
+    return { owner: record.owner, workspaceDigest: record.workspace.digest, heartbeat, release: async () => { if (released) return; released = true; clearInterval(timer); await this.removeIfToken(record.workspace.digest, record.token); } };
+  }
+  private async reconcileDigest(workspaceDigest: string): Promise<"missing" | "retained" | "reclaimed"> {
+    let current: BranchLeaseRecordV1;
+    try { current = await this.read(workspaceDigest); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing"; throw error; }
+    if (current.expiresAt > this.now()) return "retained";
+    if (!this.options.processInspector) throw new SessionError("SESSION_BRANCH_LEASE_INSPECTION_UNKNOWN", "writer lease controller inspection is unavailable");
+    const inspected = await this.options.processInspector.inspect(current.controller.pid);
+    if (inspected.status === "unknown") throw new SessionError("SESSION_BRANCH_LEASE_INSPECTION_UNKNOWN", "writer lease controller inspection is unknown");
+    if (inspected.status === "present" && inspected.startFingerprint === current.controller.startFingerprint) return "retained";
+    const observed = this.options.observeSession ? await this.options.observeSession(current) : "unknown";
+    if (observed === "unknown") throw new SessionError("SESSION_BRANCH_LEASE_OBSERVATION_UNKNOWN", "writer lease child lifecycle is unknown");
+    if (observed === "active") return "retained";
+    return await this.removeIfToken(workspaceDigest, current.token) ? "reclaimed" : "retained";
+  }
+  async reconcile(): Promise<{ readonly reclaimed: readonly string[]; readonly retained: readonly string[] }> {
+    let entries: string[];
+    try { entries = await readdir(this.root); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { reclaimed: [], retained: [] }; throw error; }
+    const reclaimed: string[] = [], retained: string[] = [];
+    for (const entry of entries.sort()) {
+      const match = /^([a-f0-9]{64})\.writer$/u.exec(entry); if (!match) continue;
+      const result = await this.reconcileDigest(match[1]!);
+      (result === "reclaimed" ? reclaimed : retained).push(match[1]!);
+    }
+    return { reclaimed, retained };
   }
   async restore(workspaceDigest: string, owner: string): Promise<BranchWriterLease> {
     if (!/^[a-f0-9]{64}$/u.test(workspaceDigest)) throw new SessionError("SESSION_BRANCH_LEASE_INVALID", "writer lease digest is invalid");
     safeText(owner, "lease.owner", 512);
-    try {
-      const current = JSON.parse(await readFile(path.join(this.root, `${workspaceDigest}.writer`, "owner.json"), "utf8")) as { token?: unknown; owner?: unknown };
-      if (current.owner !== owner || typeof current.token !== "string") throw new Error();
-      return this.lease(owner, workspaceDigest, current.token);
-    } catch { throw new SessionError("SESSION_BRANCH_LEASE_NOT_FOUND", "durable writer lease was not found"); }
+    try { const current = await this.read(workspaceDigest); if (current.owner !== owner) throw new Error(); return this.lease(current); }
+    catch { throw new SessionError("SESSION_BRANCH_LEASE_NOT_FOUND", "durable writer lease was not found"); }
   }
-  async acquire(workspace: string, owner: string): Promise<BranchWriterLease> {
-    absolute(workspace, "lease.workspace"); safeText(owner, "lease.owner", 512);
-    const workspaceDigest = stableDigest({ workspace: path.normalize(workspace).toLowerCase() }), directory = path.join(this.root, `${workspaceDigest}.writer`), token = randomUUID();
+  async acquire(workspace: string, owner: string, identity: BranchLeaseIdentity = {}): Promise<BranchWriterLease> {
+    const canonicalWorkspace = absolute(workspace, "lease.workspace"); safeText(owner, "lease.owner", 512);
+    if (this.options.processInspector) {
+      const controller = await this.options.processInspector.inspect(this.processId);
+      if (controller.status === "unknown") throw new SessionError("SESSION_BRANCH_LEASE_INSPECTION_UNKNOWN", "writer lease controller inspection is unknown");
+      if (controller.status !== "present" || controller.startFingerprint !== this.controllerStartFingerprint) throw new SessionError("SESSION_BRANCH_LEASE_CONTROLLER_INVALID", "writer lease controller identity could not be verified");
+    }
+    const workspaceDigest = stableDigest({ workspace: path.normalize(workspace).toLowerCase() }), directory = this.directory(workspaceDigest), token = randomUUID();
     await mkdir(this.root, { recursive: true });
+    await this.reconcileDigest(workspaceDigest);
     try { await mkdir(directory); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new SessionError("SESSION_BRANCH_DUPLICATE_WRITER", "The selected workspace already has a branch writer");
       throw error;
     }
-    try { await writeFile(path.join(directory, "owner.json"), JSON.stringify({ owner, token }), { flag: "wx" }); }
+    const timestamp = this.now();
+    const record: BranchLeaseRecordV1 = { schemaVersion: 1, owner, token, controller: { pid: this.processId, startFingerprint: this.controllerStartFingerprint }, createdAt: timestamp, heartbeatAt: timestamp, expiresAt: timestamp + this.leaseTtlMs, launch: { launchKey: identity.launchKey ?? null }, session: { runtimeQualifiedId: owner, parentRuntimeQualifiedId: identity.parentRuntimeQualifiedId ?? null, nativeBindingRef: identity.nativeBindingRef ?? null }, workspace: { cwd: canonicalWorkspace, digest: workspaceDigest, worktreeRef: identity.worktreeRef ?? null } };
+    try { await writeFile(path.join(directory, "owner.json"), JSON.stringify(record), { flag: "wx", mode: 0o600 }); }
     catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
-    return this.lease(owner, workspaceDigest, token);
+    return this.lease(record);
   }
 }
 
