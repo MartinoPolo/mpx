@@ -11,6 +11,7 @@ import {
   type MachineObservationV1,
   type MachineSnapshotV1,
   type OwnershipReceiptV1,
+  type ReleaseManifestV1,
   type TransactionJournalV1,
 } from "./immutable-core.js";
 export { installerDigest } from "./immutable-core.js";
@@ -44,7 +45,7 @@ export class MemoryTransactionStore implements TransactionStore {
   async removeTransaction() { this.transaction = undefined; }
   async exclusive<T>(action: () => Promise<T>): Promise<T> { const previous = this.tail; let release!: () => void; this.tail = new Promise<void>((resolve) => { release = resolve; }); await previous; try { return await action(); } finally { release(); } }
 }
-export interface ImmutableInstallerServiceOptions { readonly adapters: readonly SideEffectAdapter[]; readonly store: TransactionStore; readonly now?: () => Date; readonly failureInjection?: (operationId: string, index: number) => void }
+export interface ImmutableInstallerServiceOptions { readonly adapters: readonly SideEffectAdapter[]; readonly store: TransactionStore; readonly manifest?: ReleaseManifestV1; readonly now?: () => Date; readonly failureInjection?: (operationId: string, index: number) => void }
 export class ImmutableInstallerService {
   private readonly adapters: Map<string, SideEffectAdapter>; private readonly now: () => Date;
   constructor(private readonly options: ImmutableInstallerServiceOptions) { this.adapters = new Map(options.adapters.map((x) => [x.name, x])); if (this.adapters.size !== options.adapters.length) fail("INSTALL_ADAPTER_DUPLICATE", "Side effect adapter names must be unique."); this.now = options.now ?? (() => new Date()); }
@@ -72,10 +73,12 @@ export class ImmutableInstallerService {
       try {
         for (let index = 0; index < plan.operations.length; index++) {
           const operation = plan.operations[index]!, observation = plan.observations[index]!;
-          if (!(operation.action === "ensure" && observation.digest === operation.desiredDigest) && !(operation.action === "remove" && observation.digest === null)) { this.options.failureInjection?.(operation.id, index); await this.adapter(operation.adapter).apply(operation); }
+          if (!(operation.action === "ensure" && observation.digest === operation.desiredDigest) && !(operation.action === "remove" && observation.digest === null)) { await this.adapter(operation.adapter).apply(operation); this.options.failureInjection?.(operation.id, index); }
           journal = { ...journal, completedOperationIds: [...journal.completedOperationIds, operation.id] }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations });
         }
-        const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 1, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: [], operations: plan.operations, installedAt: this.now().toISOString() };
+        const manifest = this.options.manifest;
+        if (!priorReceipt && (!manifest || manifest.releaseKey !== plan.intent.releaseKey || manifest.convergenceHash !== plan.intent.convergenceHash)) fail("INSTALL_RELEASE_MANIFEST_REQUIRED", "Exact release manifest is required for ownership.");
+        const receipt: OwnershipReceiptV1 = priorReceipt ?? { schemaVersion: 1, kind: "ownership-receipt", releaseKey: plan.intent.releaseKey, convergenceHash: plan.intent.convergenceHash, files: manifest!.files, operations: plan.operations, installedAt: this.now().toISOString() };
         await this.options.store.writeReceipt(receipt); journal = { ...journal, phase: "committed" }; await this.options.store.writeTransaction({ journal, snapshots, operations: plan.operations }); await this.options.store.removeTransaction(); return receipt;
       } catch (failure) { await this.rollbackStored({ journal, snapshots, operations: plan.operations }, plan.operations); throw failure; }
     });
