@@ -11,7 +11,7 @@ export interface CliDevService {
   restart(id:string):Promise<DevServiceSnapshot|unknown>;
   stop(id:string):Promise<DevServiceSnapshot|unknown>;
 }
-export interface DevPortResolver { resolve(request:{cwd:string;projectRoot:string;config:ProjectConfig;configHash:string}):Promise<{services:Record<string,number>}|{lease:{services:Record<string,number>}}> }
+export interface DevPortResolver { resolve(request:{cwd:string;projectRoot:string;config:ProjectConfig;configHash:string}):Promise<{services:Record<string,number>;ownerRoot?:string}|{lease:{services:Record<string,number>;ownerRoot?:string}}> }
 export function defaultDevService(environment:NodeJS.ProcessEnv,projectRoot:string):CliDevService {
   const local=environment.LOCALAPPDATA;
   if(!local||!path.isAbsolute(local))throw new Error("LOCALAPPDATA is required for durable development-service state.");
@@ -35,10 +35,20 @@ export async function executeDevCommand(input:{action:string;id?:string;cwd:stri
   if(input.action==="stop")return input.service.stop(input.id);
   if(input.action!=="start")throw new Error("dev requires one of: start, status, logs, restart, stop");
   const configured=input.config.development?.services[input.id];if(!configured)throw new Error(`Unknown configured development service '${input.id}'.`);
-  const invocation=packageInvocation(input.config,configured.start.script); // Validate repository-controlled input before any state or process operation.
-  if(configured.scope==="project")throw new Error("Project-scoped development services are not supported until an explicit canonical project root is available.");
+  if(configured.start.type==="package-script")packageInvocation(input.config,configured.start.script); // Validate repository-controlled input before any state or process operation.
   if(!input.portService)throw new Error("Development service start requires the port state service.");
   const resolved=await input.portService.resolve({cwd:input.cwd,projectRoot:input.projectRoot,config:input.config,configHash:sha256Canonical(input.config as unknown as JsonValue)});const services="lease" in resolved?resolved.lease.services:resolved.services;const port=services[input.id];if(port===undefined)throw new Error(`No assigned worktree port exists for service '${input.id}'.`);
-  const cwd=path.resolve(input.projectRoot);
-  return input.service.start({id:input.id,...invocation,cwd,ports:[port],assignment:{worktreeRoot:cwd,ports:[port]},executor:input.executor});
+  const environment:Record<string,string>={};
+  for(const [serviceId,definition] of Object.entries(input.config.development?.services??{})){
+    if(!definition.environmentVariable)continue;
+    const assigned=services[serviceId];if(assigned===undefined)throw new Error(`No assigned worktree port exists for coupled service '${serviceId}'.`);
+    if(environment[definition.environmentVariable]!==undefined)throw new Error(`Development service environment variable '${definition.environmentVariable}' is declared more than once.`);
+    environment[definition.environmentVariable]=`${definition.protocol??"http"}://localhost:${assigned}`;
+  }
+  if(configured.start.type!=="package-script")return Object.freeze({id:input.id,state:configured.start.type,managed:false,port,environment:Object.freeze(environment)});
+  const invocation=packageInvocation(input.config,configured.start.script);
+  const resolvedOwner="lease" in resolved?resolved.lease.ownerRoot:resolved.ownerRoot;
+  if(configured.scope==="project"&&!resolvedOwner)throw new Error("Project-scoped development services require the canonical main-worktree owner root.");
+  const cwd=path.resolve(configured.scope==="project"?resolvedOwner!:input.projectRoot);
+  return input.service.start({id:input.id,...invocation,cwd,ports:[port],assignment:{worktreeRoot:cwd,ports:[port]},executor:input.executor,environment});
 }

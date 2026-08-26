@@ -11,6 +11,7 @@ export interface PortWarning { code: string; message: string; port?: number }
 export interface EnsureRequest { cwd: string; projectRoot?: string; config: ProjectConfig; configHash: string }
 export interface EnsureResult { lease: LeaseRecord; warnings: PortWarning[] }
 export interface LeaseFile { schemaVersion: 1; leaseId: string; projectId: string; worktreeId: string; configHash: string; services: Record<string, number> }
+export interface ResolvedLease extends LeaseFile { readonly ownerRoot:string }
 export interface RebuildRequest { roots: string[] }
 export interface RebuildResult { discovered: number; rebuilt: number; roots: number }
 export interface LeaseReleaseIdentity {
@@ -240,7 +241,7 @@ export class PortService {
     catch { throw new MpxError({code:"PORT_COMPENSATION_FAILED",message:"The exact failed projection could not be compensated."}); }
   }
   private async writeProjection(lease: LeaseRecord): Promise<void> { await this.writer(path.join(lease.worktreePath, ".worktree-ports.json"), `${JSON.stringify(localShape(lease), null, 2)}\n`); }
-  async resolve(request: EnsureRequest): Promise<LeaseFile> {
+  async resolve(request: EnsureRequest): Promise<ResolvedLease> {
     validateRequestHash(request);
     const identity = await this.dependencies.git.identify(request.cwd);
     if (request.projectRoot && path.normalize(await realpath(request.projectRoot)) !== path.normalize(identity.path)) throw new MpxError({ code: "PORT_PROJECT_ROOT_MISMATCH", message: "Port-managed configuration must be located at the Git worktree root." });
@@ -257,7 +258,7 @@ export class PortService {
     if (identity.role === "linked" && matchingMain!.configHash !== request.configHash) throw new MpxError({ code: "PORT_CONFIG_MISMATCH", message: "The linked worktree config does not match the main port reservation." });
     if (!lease || lease.repositoryId !== identity.repositoryId || lease.worktreeId !== identity.worktreeId || lease.projectId !== request.config.project.id || lease.configHash !== request.configHash || projection.projectId !== lease.projectId || projection.worktreeId !== lease.worktreeId || projection.configHash !== lease.configHash || !sameMap(projection.services, lease.services)) throw new MpxError({ code: "PORT_LEASE_MISMATCH", message: "The local lease does not match the authoritative registry." });
     validateLeaseSemantics(lease, request.config, matchingMain);
-    return localShape(lease);
+    return Object.freeze({...localShape(lease),ownerRoot:path.resolve(mainIdentity?.path??identity.path)});
   }
   async list(): Promise<LeaseRecord[]> { return (await this.dependencies.store.read()).leases; }
   async captureReleaseIdentity(request: EnsureRequest): Promise<LeaseReleaseIdentity> {

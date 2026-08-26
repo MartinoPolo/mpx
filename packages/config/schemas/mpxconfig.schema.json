@@ -440,21 +440,34 @@
           ]
         },
         "start": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "script"
-          ],
-          "properties": {
-            "type": {
-              "const": "package-script"
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "script"],
+              "properties": {
+                "type": { "const": "package-script" },
+                "script": { "type": "string", "minLength": 1 }
+              }
             },
-            "script": {
-              "type": "string",
-              "minLength": 1
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "kind"],
+              "properties": {
+                "type": { "const": "external" },
+                "kind": { "const": "database" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type"],
+              "properties": {
+                "type": { "const": "test-only" }
+              }
             }
-          }
+          ]
         }
       }
     },

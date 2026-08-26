@@ -8,7 +8,7 @@ export interface DevServerDependencies {
   publish(event: Readonly<Record<string, unknown>>): void;
 }
 export interface LaunchBoundDevServer { start(input: DevServerStartInput): Promise<unknown>; cleanup(): Promise<void> }
-export interface PiDevServerCapabilityInput extends DevServerLaunchBinding { readonly runtimeAdapter?: RuntimeAdapter; readonly publish?: (event: Readonly<Record<string, unknown>>) => void }
+export interface PiDevServerCapabilityInput extends DevServerLaunchBinding { readonly services?:Readonly<Record<string,StartRequest>>; readonly runtimeAdapter?: RuntimeAdapter; readonly publish?: (event: Readonly<Record<string, unknown>>) => void }
 export interface PiDevServerCapability { readonly tool: DevServerToolAdapter; readonly manager: DevServiceManager; readonly shutdown: () => Promise<void> }
 /** Creates an isolated launch-owned dev_server tool. Docker requires an explicitly selected Docker adapter. */
 export function createPiDevServerCapability(input: PiDevServerCapabilityInput): PiDevServerCapability {
@@ -17,7 +17,7 @@ export function createPiDevServerCapability(input: PiDevServerCapabilityInput): 
   if (!adapter) throw new Error("DOCKER_ADAPTER_REQUIRED: Docker dev_server cannot fall back to host");
   if (adapter.kind !== input.executor) throw new Error("EXECUTOR_MISMATCH: dev_server adapter differs from the selected executor");
   const manager = new DevServiceManager(adapter, event => input.publish?.(Object.freeze({ ...event, launchKey: input.launchKey })));
-  const tool = createDevServerToolAdapter(manager, { launchKey: input.launchKey, executor: input.executor, cwd: input.worktree, assignment: { worktreeRoot: input.worktree, ports: Object.freeze([...input.ports]) } });
+  const tool = createDevServerToolAdapter(manager, { launchKey: input.launchKey, services: input.services??{} });
   const shutdown = async () => { await manager.shutdown(); input.publish?.(Object.freeze({ type: "dev-server:shutdown", launchKey: input.launchKey })); };
   return Object.freeze({ tool, manager, shutdown });
 }

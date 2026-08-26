@@ -71,6 +71,15 @@ describe("cli",()=>{
     expect(calls[0]).toMatchObject({id:"app",cwd:path.resolve(cwd),ports:[4100],assignment:{worktreeRoot:path.resolve(cwd),ports:[4100]},executor:"host"});
   });
 
+  it("injects the complete coupled service URL map from the validated assignment",async()=>{
+    const config=JSON.stringify({schemaVersion:1,project:{id:"sample/coupled"},repository:{provider:"generic",remote:"origin"},tooling:{packageManager:"pnpm"},development:{services:{web:{scope:"checkout",port:{mode:"managed",preferred:4200},environmentVariable:"WEB_URL",protocol:"http",start:{type:"package-script",script:"dev:web"}},api:{scope:"checkout",port:{mode:"managed",preferred:4201},environmentVariable:"API_URL",protocol:"https",start:{type:"package-script",script:"dev:api"}}}}});
+    const cwd=await fixture(config),calls:unknown[]=[];
+    const devService={start:async(request:unknown)=>{calls.push(request);return {}},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+    const portService={resolve:async()=>({services:{web:4210,api:4211}})} as never;
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","web"],captureIo(),{env:{},portService,devService} as never)).toBe(0);
+    expect(calls[0]).toMatchObject({executable:"pnpm",args:["run","dev:web"],environment:{WEB_URL:"http://localhost:4210",API_URL:"https://localhost:4211"}});
+  });
+
   it("observes a service started by an earlier CLI invocation through durable state",async()=>{
     const cwd=await fixture(managed("sample/cross",4107)),stateRoot=await directory("mpx-cli-dev-state-"),runtime=new CliDevRuntime(),portService={resolve:async()=>({services:{app:4107}})} as never;
     const first=Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const});
@@ -134,11 +143,22 @@ describe("cli",()=>{
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"DEV_EXECUTOR_UNSUPPORTED"}});
   });
 
-  it("rejects project-scoped services explicitly before port resolution",async()=>{
+  it("runs project-scoped launchers only from the canonical main owner root",async()=>{
     const config=JSON.stringify({schemaVersion:1,project:{id:"sample/project"},repository:{provider:"generic",remote:"origin"},development:{services:{app:{scope:"project",port:{mode:"managed",preferred:4106},start:{type:"package-script",script:"dev"}}}}});
-    const cwd=await fixture(config),io=captureIo();let resolved=false;
-    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],io,{env:{},portService:{resolve:async()=>{resolved=true}} as never,devService:{start:async()=>({})} as never} as never)).toBe(1);
-    expect(resolved).toBe(false);
+    const cwd=await fixture(config),owner=await directory("mpx-main-owner-"),calls:unknown[]=[];
+    const service={start:async(request:unknown)=>{calls.push(request);return {}},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],captureIo(),{env:{},portService:{resolve:async()=>({services:{app:4106},ownerRoot:owner})} as never,devService:service} as never)).toBe(0);
+    expect(calls[0]).toMatchObject({cwd:path.resolve(owner),assignment:{worktreeRoot:path.resolve(owner)}});
+  });
+
+  it("reports external databases and test-only port consumers without spawning a launcher",async()=>{
+    for(const [type,extra] of [["external",{kind:"database"}],["test-only",{}]] as const){
+      const config=JSON.stringify({schemaVersion:1,project:{id:`sample/${type}`},repository:{provider:"generic",remote:"origin"},development:{services:{port:{scope:"project",port:{mode:"fixed-shared",preferred:5432},start:{type,...extra}}}}});
+      const cwd=await fixture(config),io=captureIo();let spawned=false;
+      const service={start:async()=>{spawned=true},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+      expect(await run(["--json","--cwd",cwd,"dev","start","--id","port"],io,{env:{},portService:{resolve:async()=>({services:{port:5432},ownerRoot:cwd})} as never,devService:service} as never)).toBe(0);
+      expect(JSON.parse(io.out[0]!).data).toMatchObject({state:type,managed:false,port:5432});expect(spawned).toBe(false);
+    }
   });
 
   it("emits exactly one JSON document",async()=>{

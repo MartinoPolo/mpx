@@ -16,6 +16,13 @@ it("interpolates only approved complete MPX root tokens",()=>{
   expect(()=>parseUserConfig(user("${MPX_SECRET}"),{MPX_SECRET:"secret"})).toThrow();
 });
 it("rejects unknown skill packs",()=>expect(()=>parseUserConfig(user("C:/work","unknown"))).toThrow());
+it("accepts the five Phase H service manifest shapes",async()=>{
+  const root=new URL("../test/fixtures/phase-h/",import.meta.url);
+  for(const name of ["checkout.json","coupled.json","project-shared.json","external-database.json","test-consumer.json"]){
+    const value=JSON.parse(await readFile(new URL(name,root),"utf8"));
+    expect(()=>assertValid(validateProject,value),name).not.toThrow();
+  }
+});
 it("requires a preferred port for fixed-shared services",()=>{
   const service={scope:"checkout",port:{mode:"fixed-shared"},start:{type:"package-script",script:"dev"}};
   expect(()=>assertValid(validateProject,{...base(),development:{services:{app:service}}})).toThrow();

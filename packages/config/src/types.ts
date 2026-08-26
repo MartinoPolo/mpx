@@ -28,7 +28,8 @@ export interface PreparationPlan {
   order: readonly string[];
   logging: { readonly maxOutputBytes: 65536; readonly redactEnvironmentValues: true };
 }
-export interface ServiceConfig { scope: "checkout" | "project"; port: { mode: "managed" | "fixed-shared"; preferred?: number; family?: string }; environmentVariable?: string; protocol?: "http" | "https" | "tcp"; start: { type: "package-script"; script: string } }
+export type ServiceLauncher = { type:"package-script"; script:string } | { type:"external"; kind:"database" } | { type:"test-only" };
+export interface ServiceConfig { scope: "checkout" | "project"; port: { mode: "managed" | "fixed-shared"; preferred?: number; family?: string }; environmentVariable?: string; protocol?: "http" | "https" | "tcp"; start: ServiceLauncher }
 export interface ProjectConfig { $schema?: string; schemaVersion: 1; project: { id: string }; repository: { provider: RepositoryProvider; remote: string }; issues?: IssuesConfig; tooling?: { packageManager: "auto"|"pnpm"|"yarn"|"npm"|"bun"|"none" }; workflow?: { branch?: { base?: string; template?: string }; codeReview?: { openAsDraft?: boolean; markReady?: "human"|"agent"; merge?: "human"|"agent" } }; worktrees?: { postCreate?: { execution: "foreground"|"background"|"none"; steps?: PreparationStep[] } }; development?: { services: Record<string, ServiceConfig> } }
 export interface ExposureConfig { default?: Exposure; skills?: Record<string, Exposure> }
 export interface ContentScope { roots: string[]; skillPacks?: SkillPack[]; skillExposure?: ExposureConfig }

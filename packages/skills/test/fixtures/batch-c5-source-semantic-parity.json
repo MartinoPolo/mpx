@@ -341,7 +341,7 @@
         "sha256": "bade962a46f667219b6d5697008ba31d6a767eedfd76b2705fd0e10efaa3ce2c"
       },
       "destination": "content/skills/setup-sveltekit/SKILL.md",
-      "destinationSha256": "6092d6ef283b69b16ffce0449b9a046811bfed6a09c75ab9e622feff5ae0b577",
+      "destinationSha256": "d01ec61b64fce6ef167c57174ba5baa2fa7280954a9f094c2487318897b358d2",
       "flow": [
         {
           "dimension": "trigger",

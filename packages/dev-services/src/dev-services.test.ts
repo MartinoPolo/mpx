@@ -27,6 +27,11 @@ describe("managed development services",()=>{
     expect(systemSpawnInvocation("npm",["run","dev; touch owned"],"linux")).toEqual({file:"npm",args:["run","dev; touch owned"],detached:true});
     expect(systemSpawnInvocation("npm",["run","dev & calc"],"win32")).toEqual({file:"npm",args:["run","dev & calc"],detached:false});
   });
+  it("validates and preserves the complete assigned environment map",()=>{
+    const validated=validateStartRequest({...request,environment:{WEB_URL:"http://localhost:4100",API_URL:"http://localhost:4101"}});
+    expect(validated.environment).toEqual({WEB_URL:"http://localhost:4100",API_URL:"http://localhost:4101"});
+    expect(()=>validateStartRequest({...request,environment:{"BAD-KEY":"x"}})).toThrow(/environment/);
+  });
   it("fails closed rather than executing host runtime for a Docker launch",()=>expect(()=>assertExecutorBoundary("docker","host")).toThrow(/Docker executor/));
   it("rejects ports not assigned to the exact worktree",()=>expect(()=>validateStartRequest({...request,ports:[4100,9999]})).toThrow(/assigned/));
   it("rejects malicious ids and cwd escapes",()=>{
@@ -56,10 +61,11 @@ describe("managed development services",()=>{
     const runtime=new Runtime();const manager=new DevServiceManager(runtime);await manager.start({...request,ports:[],assignment:{...request.assignment,ports:[]}});runtime.children[0]!.fingerprint="reused";
     expect((await manager.reconcile())[0]).toMatchObject({id:"web",state:"crashed",pid:null});expect(runtime.stopped).toEqual([]);
   });
-  it("exposes an isolated launch-bound dev_server adapter without weakening executor or port binding",async()=>{
-    const runtime=new Runtime();runtime.probes.set(4100,[true]);const manager=new DevServiceManager(runtime),tool=createDevServerToolAdapter(manager,{launchKey:"a".repeat(64),executor:"host",cwd:"C:/repo",assignment:{worktreeRoot:"C:/repo",ports:[4100]}});
-    expect(tool.name).toBe("dev_server");await tool.execute({action:"start",id:"web",executable:"npm",args:["run","dev"],ports:[4100]});expect(manager.status("web")).toMatchObject({ports:[4100]});
-    await expect(tool.execute({action:"start",id:"evil",executable:"npm",args:["run","dev"],ports:[9999]})).rejects.toThrow(/assigned/);
+  it("binds dev_server starts to declared services and rejects model-supplied launch authority",async()=>{
+    const runtime=new Runtime();runtime.probes.set(4100,[true]);const manager=new DevServiceManager(runtime),tool=createDevServerToolAdapter(manager,{launchKey:"a".repeat(64),services:{web:{id:"web",executable:"npm",args:["run","dev"],cwd:"C:/repo",ports:[4100],assignment:{worktreeRoot:"C:/repo",ports:[4100]},executor:"host",environment:{WEB_URL:"http://localhost:4100"}}}});
+    expect(tool.name).toBe("dev_server");await tool.execute({action:"start",id:"web"});expect(manager.status("web")).toMatchObject({ports:[4100]});
+    await expect(tool.execute({action:"start",id:"web",executable:"node"} as never)).rejects.toThrow(/model-supplied|undeclared/);
+    await expect(tool.execute({action:"start",id:"evil"})).rejects.toThrow(/undeclared/);
   });
   it("shares durable lifecycle state across manager instances",async()=>{
     const root=await mkdtemp(path.join(tmpdir(),"mpx-dev-state-")),runtime=new Runtime();
