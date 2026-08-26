@@ -8,6 +8,7 @@ import { PassThrough, type Readable } from "node:stream";
 import { WindowsProcessCapabilities } from "@mpx/windows";
 
 export * from "./tool-adapter.js";
+export * from "./docker-runtime.js";
 
 export const DEV_SERVICES_CHANGED_EVENT = "dev-services:changed";
 export type DevServiceState = "starting"|"ready"|"crashed"|"stopped";
@@ -16,7 +17,7 @@ export interface PortAssignment { readonly worktreeRoot:string; readonly ports:r
 export interface StartRequest { readonly id:string; readonly executable:string; readonly args:readonly string[]; readonly cwd:string; readonly ports:readonly number[]; readonly assignment:PortAssignment; readonly executor:ExecutorKind; readonly environment?:Readonly<Record<string,string>>; readonly logFile?:string }
 export interface ProcessExit {readonly code:number|null;readonly signal:string|null}
 export interface ManagedProcess {readonly pid:number;readonly fingerprint:string;readonly stdout:Readable;readonly stderr:Readable;readonly closed:Promise<ProcessExit>;onClose(listener:(exit:ProcessExit)=>void):void;onError?(listener:(error:Error)=>void):void}
-export interface RuntimeAdapter {readonly kind:ExecutorKind;spawn(request:Pick<StartRequest,"executable"|"args"|"cwd"|"environment"|"logFile">):ManagedProcess|Promise<ManagedProcess>;probe(port:number):Promise<boolean>;inspect(pid:number):Promise<{pid:number;fingerprint:string}|undefined>;stop(process:ManagedProcess):Promise<void>;sleep(ms:number):Promise<void>;now():string}
+export interface RuntimeAdapter {readonly kind:ExecutorKind;spawn(request:StartRequest):ManagedProcess|Promise<ManagedProcess>;probe(port:number):Promise<boolean>;inspect(pid:number):Promise<{pid:number;fingerprint:string}|undefined>;stop(process:ManagedProcess):Promise<void>;sleep(ms:number):Promise<void>;now():string}
 export interface DevServiceSnapshot {readonly id:string;readonly state:DevServiceState;readonly pid:number|null;readonly fingerprint:string|null;readonly cwd:string;readonly command:string;readonly ports:readonly number[];readonly readyPorts:readonly number[];readonly run:number;readonly generation:number;readonly createdAt:string;readonly startedAt:string|null;readonly readyAt:string|null;readonly stoppedAt:string|null;readonly exitedAt:string|null;readonly updatedAt:string;readonly exitCode:number|null;readonly exitSignal:string|null;readonly lastError:string|null}
 export interface DevServiceStatusEvent {readonly type:typeof DEV_SERVICES_CHANGED_EVENT;readonly snapshot:DevServiceSnapshot}
 

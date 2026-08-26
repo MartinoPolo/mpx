@@ -108,6 +108,9 @@ importers:
 
   packages/dev-services:
     dependencies:
+      '@mpx/executors':
+        specifier: workspace:*
+        version: link:../executors
       '@mpx/windows':
         specifier: workspace:*
         version: link:../windows
