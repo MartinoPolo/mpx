@@ -19,6 +19,7 @@
     "@mpx/runtime-claude": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/runtime-pi": "workspace:*",
+    "@mpx/runtime-tools": "workspace:*",
     "@mpx/provider-github": "workspace:*",
     "@mpx/provider-gitlab": "workspace:*",
     "@mpx/provider-kanbanflow": "workspace:*",

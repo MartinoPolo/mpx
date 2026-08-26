@@ -59,6 +59,9 @@ importers:
       '@mpx/runtime-pi':
         specifier: workspace:*
         version: link:../../runtimes/pi/runtime-pi
+      '@mpx/runtime-tools':
+        specifier: workspace:*
+        version: link:../../packages/runtime-tools
       '@mpx/skills':
         specifier: workspace:*
         version: link:../../packages/skills

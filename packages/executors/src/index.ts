@@ -26,7 +26,7 @@ export function sameVerificationEvidence(left: unknown, right: unknown): boolean
   };
   return valid(left) && valid(right) && left.status === right.status && left.verifier === right.verifier && left.evidenceDigest === right.evidenceDigest;
 }
-export interface ProcessRequest { readonly executable: string; readonly argv: readonly string[]; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number }
+export interface ProcessRequest { readonly executable: string; readonly argv: readonly string[]; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number; readonly signal?: AbortSignal }
 export interface ProcessResult { readonly exitCode: number; readonly stdout: string; readonly stderr: string; readonly truncated: boolean }
 export interface ExecutorAdapter { readonly name: "docker" | "host"; verify(): Promise<VerificationEvidence>; execute(request: ProcessRequest): Promise<ProcessResult> }
 export class ExecutorRegistry {
@@ -89,7 +89,7 @@ export interface PrivateRuntimeLaunch {
   readonly identity: LaunchDescriptor["identity"];
   readonly nativeRuntimeRoot: string;
 }
-export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly capability?: RuntimeCapabilityManifestV1; readonly runtimeStatusEnvelope?: unknown; readonly runtimeLaunchBinding?: RuntimeLaunchBinding; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
+export interface ExecuteInput { readonly descriptor: LaunchDescriptor; readonly artifact: RuntimeSkillArtifactReferenceV4; readonly capability?: RuntimeCapabilityManifestV1; readonly runtimeStatusEnvelope?: unknown; readonly runtimeLaunchBinding?: RuntimeLaunchBinding; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly signal?: AbortSignal; readonly privateLaunch?: PrivateRuntimeLaunch; readonly expectedLaunchKey?: string; readonly hostApproval?: HostExecutionApproval; readonly tty?: DirectTty; readonly approvalNonce?: string }
 export interface RouteMaterializer { materialize(descriptor: LaunchDescriptor, projectRoot?: string): Promise<Readonly<Record<string, string>>> }
 export interface LaunchAuditStartRecord {
   readonly schemaVersion: 1; readonly phase: "start"; readonly launchKey: string; readonly runtime: "claude" | "pi"; readonly executor: "docker" | "host";
@@ -196,7 +196,7 @@ export class ExecutionService {
       let result: ProcessResult;
       try {
         if ((!path.win32.isAbsolute(prepared.executable) && !path.posix.isAbsolute(prepared.executable)) || prepared.argv.length > 256 || prepared.argv.some((argument) => argument.length > 8192)) fail("PROCESS_REQUEST_INVALID", "Runtime adapter produced an untrusted executable or unbounded argv.");
-        const request = { executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), maxOutputBytes: 65_536 };
+        const request = { executable: prepared.executable, argv: prepared.argv, cwd: input.cwd, environment: Object.freeze({ ...sanitizedEnvironment(input.environment, prepared.environment), ...runtimeRouteEnvironment(routes), ...privateEnvironment }), maxOutputBytes: 65_536, ...(input.signal ? { signal: input.signal } : {}) };
         const executionEvidence = await executor.verify();
         if (!sameVerificationEvidence(executionEvidence, descriptor.executorVerification)) fail("LAUNCH_RESTART_REQUIRED", "Executor verification evidence changed before invocation.", { restartRequired: true });
         result = await executor.execute(request);
