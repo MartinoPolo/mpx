@@ -16,6 +16,14 @@ Native side effects remain behind an application-injected `InstallerOperationAda
 
 A healthy strict Phase I verification supplies the release-key authority digest used to admit Phase G scheduled capture. Without an injected production adapter and durable transaction store, live install/apply remains fail-closed with `INSTALL_ADAPTER_UNAVAILABLE`.
 
+## Immutable runtime registration
+
+Installed registration is a strict, secret-free four-route matrix: `claude-personal`, `claude-work`, `pi-personal`, and `pi-work`. Each entry binds an absolute executable path, SHA-256, version, native-root digest (never the root), route labels, MCP-sharing policy, and a digest of the immutable synthetic projection. Duplicate identities, overlapping roots, cross-domain route labels, unknown fields, and incomplete matrices fail closed.
+
+Claude projections must inventory convergence-owned plugin, hooks, status, settings, canonical content, agents, and licenses. Pi additionally requires its extension, profile, keybindings, themes, status, and settings. Native auth, credentials, sessions, cache, and trust are never projected. Activation remains argv-only through Claude `--plugin-dir` or Pi `--no-extensions --extension --no-skills`; native plugin/extension copies and secondary readers are forbidden.
+
+Static MCP registrations contain only a domain-qualified label, executable path/hash/version, and bounded non-secret argv. Account roots and MCP configuration paths enter only private per-launch `launch-key.json` and `route-bindings.json` material. Synthetic account probes verify enrollment and route binding across all four identities without reading or serializing credentials. The runtime-registration release binding covers both the immutable release convergence hash and exact matrix digest.
+
 ## Simulation matrix
 
 | Machine | Scenario | Expected result |
