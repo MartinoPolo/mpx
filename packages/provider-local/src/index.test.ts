@@ -126,7 +126,7 @@ describe("local Markdown issues", () => {
     await expect(new LocalIssueStore(directory).create({ title: "blocked", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_IO" });
   });
 
-  it("reports heartbeat loss during a post-commit callback as projection rebuild pending without inviting a duplicate retry", async () => {
+  it("reports heartbeat loss during a post-commit release as lock release pending without inviting a duplicate mutation", async () => {
     const directory = await root(), lock = path.join(directory, ".mpx-issues.lock"), displaced = `${lock}.displaced`;
     let unblock!: () => void, callbackStarted!: () => void; const blocked = new Promise<void>(resolve => { unblock = resolve; }), started = new Promise<void>(resolve => { callbackStarted = resolve; });
     const holding = new LocalIssueStore(directory, { staleLockMilliseconds: 15, lockHeartbeatMilliseconds: 1, lockToken: () => "holder", onChanged: async () => { callbackStarted(); await blocked; } }).create({ title: "holder", body: "" });
@@ -135,10 +135,28 @@ describe("local Markdown issues", () => {
     await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "replacement", pid: process.pid, acquiredAt: Date.now(), heartbeatAt: Date.now() }));
     await new Promise(resolve => setTimeout(resolve, 20));
     unblock();
-    expect(await holding).toMatchObject({ id: "1", providerData: { local: { projectionRebuildPending: true, diagnostics: ["LOCAL_ISSUE_PROJECTION_REBUILD_PENDING"] } } });
+    expect(await holding).toMatchObject({ id: "1", providerData: { local: { lockReleasePending: true, diagnostics: ["LOCAL_ISSUE_LOCK_RELEASE_PENDING"] } } });
     expect((await new LocalIssueStore(directory).view("1")).title).toBe("holder");
     expect(JSON.parse(await readFile(path.join(lock, "owner.json"), "utf8"))).toMatchObject({ token: "replacement" });
     await rm(lock, { recursive: true, force: true }); await rm(displaced, { recursive: true, force: true });
+  });
+
+  it("retries transient compare-token release access failures without reporting pending", async () => {
+    const directory = await root(); let attempts = 0;
+    const issue = await new LocalIssueStore(directory, { beforeLockReleaseAttempt: () => { if (++attempts < 3) throw Object.assign(new Error("busy"), { code: "EACCES" }); } }).create({ title: "once", body: "" });
+    expect(issue.providerData.local).not.toHaveProperty("lockReleasePending");
+    expect(attempts).toBe(3);
+  });
+
+  it("durably reconciles a committed pending release on the next operation without duplicating the mutation", async () => {
+    const directory = await root();
+    const committed = await new LocalIssueStore(directory, { beforeLockReleaseAttempt: () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); } }).create({ title: "first", body: "" });
+    expect(committed).toMatchObject({ id: "1", providerData: { local: { lockReleasePending: true, diagnostics: ["LOCAL_ISSUE_LOCK_RELEASE_PENDING"] } } });
+    expect(await readFile(path.join(directory, ".mpx-lock-release-pending.json"), "utf8")).toContain("token");
+    const next = await new LocalIssueStore(directory).create({ title: "second", body: "" });
+    expect(next.id).toBe("2");
+    expect((await new LocalIssueStore(directory).list()).map(issue => issue.id)).toEqual(["1", "2"]);
+    await expect(readFile(path.join(directory, ".mpx-lock-release-pending.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("returns a non-fatal pending projection diagnostic when the post-commit callback fails", async () => {
@@ -162,7 +180,7 @@ describe("local Markdown issues", () => {
     const holding = new LocalIssueStore(directory, { lockToken: () => "old-token", onChanged: async()=>blocked }).create({ title:"old", body:"" });
     while(true){try{await readFile(path.join(lock,"owner.json"));break;}catch{await new Promise(resolve=>setTimeout(resolve,1));}}
     await rename(lock,`${lock}.removed`);await mkdir(lock);await writeFile(path.join(lock,"owner.json"),JSON.stringify({schemaVersion:1,token:"replacement",pid:process.pid,acquiredAt:Date.now(),heartbeatAt:Date.now()}));
-    unblock();expect(await holding).toMatchObject({id:"1",providerData:{local:{projectionRebuildPending:true}}});
+    unblock();expect(await holding).toMatchObject({id:"1",providerData:{local:{lockReleasePending:true,diagnostics:["LOCAL_ISSUE_LOCK_RELEASE_PENDING"]}}});
     expect(JSON.parse(await readFile(path.join(lock,"owner.json"),"utf8"))).toMatchObject({token:"replacement"});
     await rm(lock,{recursive:true,force:true});await rm(`${lock}.removed`,{recursive:true,force:true});
   });

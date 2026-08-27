@@ -1,6 +1,8 @@
 # Phase I immutable installer contracts
 
-`@mpx/installer` exposes strict version-1 contracts for release manifests, install intent and plans, ownership receipts, verification, and machine snapshots. Unknown or missing fields, unsorted collections, unsafe relative paths, and inconsistent convergence/confirmation digests fail closed.
+`@mpx/installer` exposes strict version-1 contracts for release manifests, install intent and plans, verification, and machine snapshots. Ownership receipts use schema v2, binding every operation to a bounded durable locator and locator digest. Unknown or missing fields, unsorted collections, unsafe relative paths, and inconsistent convergence/confirmation digests fail closed.
+
+Schema-v1 ownership receipts are accepted only by a bounded one-time migration path. `install verify` reports `INSTALL_RECEIPT_MIGRATION_REQUIRED`; a current deterministic install plan then matches every legacy operation ID and release file to current intent, verifies actual native state, derives v2 locators, and includes `ownership-receipt-v1-migration` as an exact-confirmation item. Confirmed apply atomically rewrites the receipt before normal convergence. Unknown, forged, ambiguous, foreign, or drifted v1 evidence returns `INSTALL_RECEIPT_MIGRATION_UNSAFE` with manual-recovery guidance. Normal verify, rollback, and uninstall never retain a schema-v1 reader.
 
 Release payloads are content-addressed at `${MPX_APPS}/mpx/releases/<releaseKey>`. The release key is the SHA-256 digest of the canonical, sorted list of every payload file's relative path, byte count, and SHA-256. Publication copies into a sibling staging directory, verifies the copy, then renames it. A matching release converges without writes; a collision or drift is refused. Release APIs never update an existing release.
 

@@ -9,6 +9,7 @@ import {
   parseInstallPlanV1,
   parseInstallOperationV1,
   parseMachineSnapshotV1,
+  parseReleaseManifestV1,
   parseOwnershipReceiptV1,
   type InstallIntentV1,
   type InstallOperationLocatorV1,
@@ -36,8 +37,22 @@ export interface SideEffectAdapter {
 }
 export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[]; priorReceipt?: OwnershipReceiptV1 }
 function durableSnapshots(snapshots:Readonly<Record<string,string|null>>,journal:TransactionJournalV1):Record<string,string|null>{const ids=[...journal.completedOperationIds,...(journal.inFlightOperationId?[journal.inFlightOperationId]:[])];return Object.fromEntries(ids.map(id=>[id,snapshots[id]??null]));}
+export interface LegacyOwnershipReceiptV1 { readonly schemaVersion: 1; readonly kind: "ownership-receipt"; readonly releaseKey: string; readonly convergenceHash: string; readonly files: OwnershipReceiptV1["files"]; readonly operations: readonly InstallOperationV1[]; readonly installedAt: string }
+function parseLegacyOwnershipReceiptForMigration(value: unknown): LegacyOwnershipReceiptV1 {
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail("INSTALL_RECEIPT_MIGRATION_UNSAFE", "Legacy ownership receipt is unknown or ambiguous; use manual recovery guidance before changing native state.");
+  const source = value as Record<string, unknown>, keys = ["schemaVersion", "kind", "releaseKey", "convergenceHash", "files", "operations", "installedAt"];
+  if (Object.keys(source).sort().join("\0") !== keys.sort().join("\0") || source.schemaVersion !== 1 || source.kind !== "ownership-receipt" || !Array.isArray(source.operations) || typeof source.installedAt !== "string" || !Number.isFinite(Date.parse(source.installedAt))) fail("INSTALL_RECEIPT_MIGRATION_UNSAFE", "Legacy ownership receipt is unknown or ambiguous; use manual recovery guidance before changing native state.");
+  try {
+    const manifest = parseReleaseManifestV1({ schemaVersion: 1, kind: "release-manifest", releaseKey: source.releaseKey, convergenceHash: source.convergenceHash, files: source.files });
+    const operations = source.operations.map(parseInstallOperationV1);
+    if (new Set(operations.map(operation => operation.id)).size !== operations.length || operations.some((operation, index) => index > 0 && operations[index - 1]!.id.localeCompare(operation.id) >= 0)) throw new Error();
+    return { schemaVersion: 1, kind: "ownership-receipt", releaseKey: manifest.releaseKey, convergenceHash: manifest.convergenceHash, files: manifest.files, operations, installedAt: source.installedAt };
+  } catch { fail("INSTALL_RECEIPT_MIGRATION_UNSAFE", "Legacy ownership receipt is forged or ambiguous; use manual recovery guidance before changing native state."); }
+}
 export interface TransactionStore {
   readReceipt(): Promise<OwnershipReceiptV1 | undefined>;
+  /** Bounded compatibility seam used only by the explicit v1-to-v2 migration. */
+  readLegacyReceiptForMigration(): Promise<LegacyOwnershipReceiptV1 | undefined>;
   writeReceipt(receipt: OwnershipReceiptV1): Promise<void>;
   removeReceipt(): Promise<void>;
   writeTransaction(value: StoredTransaction): Promise<void>;
@@ -46,8 +61,10 @@ export interface TransactionStore {
   exclusive<T>(action: () => Promise<T>): Promise<T>;
 }
 export class MemoryTransactionStore implements TransactionStore {
-  private receipt: OwnershipReceiptV1 | undefined; private transaction: StoredTransaction | undefined; private tail: Promise<void> = Promise.resolve();
-  async readReceipt() { return this.receipt && structuredClone(this.receipt); }
+  private receipt: OwnershipReceiptV1 | LegacyOwnershipReceiptV1 | undefined; private transaction: StoredTransaction | undefined; private tail: Promise<void> = Promise.resolve();
+  async readReceipt() { if (this.receipt?.schemaVersion === 1) fail("INSTALL_RECEIPT_MIGRATION_REQUIRED", "Ownership receipt schema v1 requires a confirmed migration; use the install plan or manual recovery guidance."); return this.receipt && structuredClone(this.receipt); }
+  async readLegacyReceiptForMigration() { return this.receipt?.schemaVersion === 1 ? structuredClone(this.receipt) : undefined; }
+  async writeLegacyReceiptForMigration(value: unknown) { this.receipt = structuredClone(parseLegacyOwnershipReceiptForMigration(value)); }
   async writeReceipt(value: OwnershipReceiptV1) { this.receipt = structuredClone(value); }
   async removeReceipt() { this.receipt = undefined; }
   async writeTransaction(value: StoredTransaction) { this.transaction = structuredClone(value); }
@@ -75,7 +92,8 @@ export class NodeTransactionStore implements TransactionStore {
     try { return parseStrictJson(await readFile(this.file(name), "utf8")); }
     catch (failure) { if ((failure as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw failure; }
   }
-  async readReceipt(): Promise<OwnershipReceiptV1 | undefined> { const value = await this.read("receipt.json"); return value === undefined ? undefined : parseOwnershipReceiptV1(value); }
+  async readReceipt(): Promise<OwnershipReceiptV1 | undefined> { const value = await this.read("receipt.json"); if ((value as { schemaVersion?: unknown } | undefined)?.schemaVersion === 1) fail("INSTALL_RECEIPT_MIGRATION_REQUIRED", "Ownership receipt schema v1 requires a confirmed migration; use the install plan or manual recovery guidance."); return value === undefined ? undefined : parseOwnershipReceiptV1(value); }
+  async readLegacyReceiptForMigration(): Promise<LegacyOwnershipReceiptV1 | undefined> { const value = await this.read("receipt.json"); return (value as { schemaVersion?: unknown } | undefined)?.schemaVersion === 1 ? parseLegacyOwnershipReceiptForMigration(value) : undefined; }
   async writeReceipt(value: OwnershipReceiptV1): Promise<void> { await this.atomic("receipt.json", parseOwnershipReceiptV1(value)); }
   async removeReceipt(): Promise<void> { await rm(this.file("receipt.json"), { force: true }); }
   async readTransaction(): Promise<StoredTransaction | undefined> {

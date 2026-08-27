@@ -132,6 +132,33 @@ describe("Phase I install orchestration", () => {
     await expect(new InstallOrchestrator({ adapter: fresh, store, releases: f.builder }).verify()).resolves.toMatchObject({ healthy: true, issues: [] });
   });
 
+  it("migrates a confirmed legacy v1 ownership receipt once and leaves a fresh process able to uninstall", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore();
+    await f.builder.publish(f.manifest.releaseKey);
+    adapter.values.set("10-automatic", installerDigest("10-automatic"));
+    await store.writeLegacyReceiptForMigration({ schemaVersion: 1, kind: "ownership-receipt", releaseKey: f.manifest.releaseKey, convergenceHash: f.manifest.convergenceHash, files: f.manifest.files, operations: [operation("10-automatic")], installedAt: "2024-01-01T00:00:00.000Z" });
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    await expect(orchestrator.verify()).rejects.toMatchObject({ code: "INSTALL_RECEIPT_MIGRATION_REQUIRED" });
+    const plan = await orchestrator.plan(f.intent);
+    expect(plan.classifications?.confirmationRequired).toContainEqual(expect.objectContaining({ id: "ownership-receipt-v1-migration" }));
+    const migrated = await orchestrator.apply(plan, plan.confirmationDigest);
+    expect(migrated).toMatchObject({ schemaVersion: 2, installedAt: "2024-01-01T00:00:00.000Z", operationLocators: [{ operationId: "10-automatic" }] });
+    const idempotentPlan = await orchestrator.plan(f.intent);
+    await expect(orchestrator.apply(idempotentPlan, idempotentPlan.confirmationDigest)).resolves.toEqual(migrated);
+    const fresh = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const uninstall = await fresh.planUninstall();
+    await expect(fresh.uninstall(uninstall.confirmationDigest)).resolves.toMatchObject({ removed: true });
+  });
+
+  it("fails closed instead of migrating a drifted legacy receipt", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore();
+    await f.builder.publish(f.manifest.releaseKey);
+    adapter.values.set("10-automatic", installerDigest("drifted"));
+    await store.writeLegacyReceiptForMigration({ schemaVersion: 1, kind: "ownership-receipt", releaseKey: f.manifest.releaseKey, convergenceHash: f.manifest.convergenceHash, files: f.manifest.files, operations: [operation("10-automatic")], installedAt: "2024-01-01T00:00:00.000Z" });
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    await expect(orchestrator.plan(f.intent)).rejects.toMatchObject({ code: "INSTALL_RECEIPT_MIGRATION_UNSAFE", message: expect.stringContaining("manual recovery") });
+  });
+
   it("strict verification reports foreign release entries without deleting them", async () => {
     const f = await fixture(), adapter = new FixtureAdapter([operation("10-automatic")]), store = new MemoryTransactionStore();
     const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });

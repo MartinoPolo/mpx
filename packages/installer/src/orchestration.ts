@@ -17,7 +17,7 @@ import {
   type OwnershipReceiptV1,
   type ReleaseManifestV1,
 } from "./immutable-core.js";
-import { ImmutableInstallerService, installerDigest, type SideEffectAdapter, type TransactionStore } from "./transaction.js";
+import { ImmutableInstallerService, installerDigest, type LegacyOwnershipReceiptV1, type SideEffectAdapter, type TransactionStore } from "./transaction.js";
 
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
 const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException).code === "ENOENT";
@@ -103,6 +103,7 @@ export interface InstallOrchestratorOptions {
 export interface RollbackResultV1 { readonly schemaVersion: 1; readonly kind: "install-rollback"; readonly transactionId: string; readonly rolledBack: true }
 export interface UninstallResultV1 { readonly schemaVersion: 1; readonly kind: "install-uninstall"; readonly releaseKey: string; readonly removed: true }
 
+const RECEIPT_MIGRATION_ID = "ownership-receipt-v1-migration";
 export class InstallOrchestrator {
   private readonly now: () => Date;
   constructor(private readonly options: InstallOrchestratorOptions) { this.now = options.now ?? (() => new Date()); }
@@ -120,18 +121,50 @@ export class InstallOrchestrator {
     if (operations.some((operation, index) => index > 0 && operations[index - 1]!.id.localeCompare(operation.id) >= 0)) fail("INSTALL_OPERATION_ORDER_INVALID", "Automatic operations must sort before scheduled operations.");
     return { intent, manifest, operations, ...(grouped.classifications ? { classifications: grouped.classifications } : {}) };
   }
+  private async migratedReceipt(current: { intent: InstallIntentV1; manifest: ReleaseManifestV1; operations: readonly InstallOperationV1[] }, legacy: LegacyOwnershipReceiptV1): Promise<OwnershipReceiptV1> {
+    if (legacy.releaseKey !== current.manifest.releaseKey || legacy.convergenceHash !== current.manifest.convergenceHash || installerDigest(legacy.files) !== installerDigest(current.manifest.files) || installerDigest(legacy.operations) !== installerDigest(current.operations))
+      fail("INSTALL_RECEIPT_MIGRATION_UNSAFE", "Legacy ownership receipt is foreign or ambiguous; use manual recovery guidance before changing native state.");
+    const operationLocators = [];
+    for (const operation of current.operations) {
+      const actual = await this.options.adapter.observe(operation);
+      if (operation.action === "ensure" ? actual !== operation.desiredDigest : actual !== null) fail("INSTALL_RECEIPT_MIGRATION_UNSAFE", `Legacy ownership target ${operation.id} is drifted; use manual recovery guidance before changing native state.`);
+      const spec = await this.options.adapter.receiptLocator?.(operation) ?? null;
+      operationLocators.push({ operationId: operation.id, adapter: operation.adapter, spec, bindingDigest: installerDigest({ operation, spec }) });
+    }
+    const receipt: OwnershipReceiptV1 = { schemaVersion: 2, kind: "ownership-receipt", releaseKey: legacy.releaseKey, convergenceHash: legacy.convergenceHash, files: legacy.files, operations: current.operations, operationLocators, installIntent: current.intent, installedAt: legacy.installedAt };
+    const releaseIssues = await this.options.releases.verify(receipt, false);
+    if (releaseIssues.length) fail("INSTALL_RECEIPT_MIGRATION_UNSAFE", `Legacy release receipt is drifted (${releaseIssues.join(", ")}); use manual recovery guidance before changing native state.`);
+    return receipt;
+  }
   async plan(intent: InstallIntentV1): Promise<InstallPlanV1> {
-    const current = await this.current(intent);
+    const current = await this.current(intent), legacy = await this.options.store.readLegacyReceiptForMigration();
+    const migration = legacy ? await this.migratedReceipt(current, legacy) : undefined;
     const base = await this.service(current.manifest).plan(current.intent, current.operations);
-    if (!current.classifications) return base;
-    const classified = { schemaVersion: base.schemaVersion, kind: base.kind, intent: base.intent, observations: base.observations, operations: base.operations, classifications: current.classifications };
+    if (!current.classifications && !migration) return base;
+    const classifications: InstallOperationClassificationsV1 = current.classifications ?? { automatic: base.operations.map(operation => operation.id), confirmationRequired: [], manualOnly: [] };
+    const merged = migration ? { ...classifications, confirmationRequired: [...classifications.confirmationRequired, { id: RECEIPT_MIGRATION_ID, planDigest: installerDigest(migration), verifierRef: "installer:ownership-receipt-v2" }] } : classifications;
+    const classified = { schemaVersion: base.schemaVersion, kind: base.kind, intent: base.intent, observations: base.observations, operations: base.operations, classifications: merged };
     return parseInstallPlanV1({ ...classified, confirmationDigest: installerDigest(classified) });
   }
   async apply(planValue: InstallPlanV1, confirmation: string): Promise<OwnershipReceiptV1> {
     const plan = parseInstallPlanV1(planValue);
     if (confirmation !== plan.confirmationDigest) fail("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
     const current = await this.current(plan.intent);
-    if (installerDigest(current.operations) !== installerDigest(plan.operations) || installerDigest(current.classifications ?? null) !== installerDigest(plan.classifications ?? null)) fail("INSTALL_PLAN_STALE", "Install operations changed after planning.");
+    const migrationReference = plan.classifications?.confirmationRequired.find(reference => reference.id === RECEIPT_MIGRATION_ID), legacy = await this.options.store.readLegacyReceiptForMigration();
+    let effectiveClassifications = current.classifications;
+    if (migrationReference) {
+      if (!legacy) fail("INSTALL_PLAN_STALE", "Legacy ownership receipt was already migrated or changed after planning.");
+      const migrated = await this.migratedReceipt(current, legacy);
+      if (migrationReference.planDigest !== installerDigest(migrated)) fail("INSTALL_PLAN_STALE", "Legacy ownership migration changed after planning.");
+      await this.options.store.exclusive(async () => {
+        const lockedLegacy = await this.options.store.readLegacyReceiptForMigration();
+        if (!lockedLegacy || installerDigest(lockedLegacy) !== installerDigest(legacy)) fail("INSTALL_PLAN_STALE", "Legacy ownership receipt changed after planning.");
+        await this.options.store.writeReceipt(migrated);
+      });
+      const baseClassifications = current.classifications ?? { automatic: current.operations.map(operation => operation.id), confirmationRequired: [], manualOnly: [] };
+      effectiveClassifications = { ...baseClassifications, confirmationRequired: [...baseClassifications.confirmationRequired, migrationReference] };
+    } else if (legacy) fail("INSTALL_RECEIPT_MIGRATION_REQUIRED", "Ownership receipt schema v1 requires its confirmation-bound migration plan.");
+    if (installerDigest(current.operations) !== installerDigest(plan.operations) || installerDigest(effectiveClassifications ?? null) !== installerDigest(plan.classifications ?? null)) fail("INSTALL_PLAN_STALE", "Install operations changed after planning.");
     const revalidated = await this.service(current.manifest).plan(current.intent, current.operations);
     if (installerDigest(revalidated.observations) !== installerDigest(plan.observations)) fail("INSTALL_OBSERVATION_CHANGED", "Machine observations changed after planning.");
     if (plan.operations.some((operation, index) => operation.action === "ensure" && plan.observations[index]?.digest !== null && plan.observations[index]?.digest !== operation.desiredDigest))
