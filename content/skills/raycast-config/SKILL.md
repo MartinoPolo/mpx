@@ -137,7 +137,9 @@ literal text, not a path, until it is looked up. Write the rebuilt file to a per
 under `MPX_AI_GENERATED/_RAYCAST/`, and fail with the variable's name when that root is
 unresolvable. Copy the original export alongside it as the rollback.
 
-Then tell the user, in these words: **Raycast → Ctrl+, → Advanced → Import Settings &
+Show the final audit and change summary, then **wait for explicit confirmation before importing**;
+the import replaces the live Quicklinks and Settings categories wholesale. Only after approval,
+tell the user, in these words: **Raycast → Ctrl+, → Advanced → Import Settings &
 Data → pick the rebuilt file → passphrase → tick Quicklinks and Settings only.**
 
 State plainly that the import mirrors the file: anything dropped from it is deleted from

@@ -1,8 +1,10 @@
 ---
 name: mpx-reviewer-error-handling
 description: "Read-only reviewer for error handling, reliability, and resilience."
-model: openai-codex/gpt-5.6-luna
+model: openai-codex/gpt-5.6-terra
+thinking: medium
 tools: read,grep,find,ls,bash
+output_schema: findings
 
 ---
 # Reviewer: Error Handling

@@ -1,8 +1,10 @@
 ---
 name: mpx-git-committer
 description: "Stages, commits, and optionally pushes git changes with conventional commit format. Returns structured JSON result."
-model: openai-codex/gpt-5.6-sol
-tools: read,grep,find,ls,bash,edit,write
+model: openai-codex/gpt-5.6-luna
+thinking: low
+tools: bash
+output_schema: bounded-json
 
 ---
 # Git Committer Agent

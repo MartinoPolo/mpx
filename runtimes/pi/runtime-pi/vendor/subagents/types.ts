@@ -127,8 +127,8 @@ export interface AgentRecord {
    * caller never declared it (e.g. a cross-extension RPC spawn, which is detached
    * and has no inline surface). The widget's background-only filter keys off this
    * — and excludes only explicit `false`, so `undefined` agents stay visible.
-   * Reliable across ALL spawn paths, unlike the UI-only `invocation` snapshot,
-   * which only the Agent-tool path populates.
+   * Reliable across all spawn paths and independent of the invocation snapshot's
+   * display metadata.
    */
   isBackground?: boolean;
   /** Resolved spawn params, captured for UI display. Fixed at spawn time. */
@@ -148,7 +148,7 @@ export interface AgentRecord {
 }
 
 export interface AgentInvocation {
-  /** Short display name, e.g. "haiku" — only set when different from parent. */
+  /** VENDOR EDIT (mpx-pi): Model ID of the actual resolved model. */
   modelName?: string;
   thinking?: ThinkingLevel;
   maxTurns?: number;

@@ -3,7 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json && vitest run && node scripts/generate-agents.mjs --check",
@@ -12,10 +17,19 @@
     "generate": "node scripts/generate-agents.mjs"
   },
   "dependencies": {
+    "@mpx/dev-services": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/runtime-hooks": "workspace:*",
+    "@mpx/runtime-tools": "workspace:*",
     "@mpx/skills": "workspace:*",
-    "@mpx/status": "workspace:*"
+    "@mpx/status": "workspace:*",
+    "@mpx/subagents": "workspace:*"
   },
-  "devDependencies": { "@mpx/windows": "workspace:*", "@types/node": "^22.15.0", "typescript": "^5.8.3", "vitest": "^3.2.4" }
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "esbuild": "0.28.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "@mpx/windows": "workspace:*"
+  }
 }

@@ -1,11 +1,12 @@
 ---
 name: grill
-description: "Interviews the user about a plan, design, or requirements until the design is settled, then records the decisions in project docs."
+description: "Interviews the user about a plan, design, or requirements until the design is settled, then records the decisions in project docs. Use when asked to be grilled, or to pin down requirements or a design."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Grill
 
 Interview the user relentlessly about every aspect of their plan, design, or requirements until reaching shared understanding. Walk down each branch of the decision tree, resolving dependencies one by one.

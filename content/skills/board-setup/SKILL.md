@@ -21,7 +21,7 @@ One-time setup that creates this project's Obsidian **board** and links it into 
 Run the setup script with the resolved paths (PowerShell tool):
 
 ```powershell
-& "$HOME\.runtime\skills\board-setup\scripts\link-board.ps1" -Repo "<repo>" -Vault "<vault>" -Project "<project>"
+& "./scripts/link-board.ps1" -Repo "<repo>" -Vault "<vault>" -Project "<project>"
 ```
 
 The script is idempotent and:

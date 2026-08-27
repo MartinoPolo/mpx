@@ -6,6 +6,27 @@ export * from "./preparation-engine.js";
 export * from "./node-preparation-adapters.js";
 export * from "./trusted-executable.js";
 
+/** Provider-neutral workspace policy used by parallel conversation branches. */
+export function resolveConversationWorkspaceSelection(input: {
+  readonly selection: "default" | "isolated" | "shared";
+  readonly intent: "read" | "modify";
+  readonly riskAcknowledged: boolean;
+}): { readonly selection: "isolated" | "shared"; readonly sharing: "isolated" | "shared"; readonly provision: "new-worktree" | "current-checkout" } {
+  const selection = input.selection === "default"
+    ? (input.intent === "modify" ? "isolated" : "shared")
+    : input.selection;
+  if (selection === "shared" && input.intent === "modify" && !input.riskAcknowledged) {
+    throw new MpxError({
+      code: "SESSION_BRANCH_SHARED_RISK_UNACKNOWLEDGED",
+      message: "A modifying parallel session may share the current checkout only after explicit risk acknowledgement.",
+      retryable: false,
+    });
+  }
+  return selection === "isolated"
+    ? { selection, sharing: "isolated", provision: "new-worktree" }
+    : { selection, sharing: "shared", provision: "current-checkout" };
+}
+
 import path from "node:path";
 import { assertValid, parseStrictJson, validateProject, type ProjectConfig } from "@mpx/config";
 import { isPathWithinRoot, MpxError } from "@mpx/core";

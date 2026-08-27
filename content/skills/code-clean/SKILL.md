@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Code Clean
 
 Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition, and dead/unused code. the invocation input
@@ -35,7 +36,7 @@ Rules:
 
 ### Step 2: Spawn Review Subagents per Group
 
-For each file group, spawn a `general-purpose` review sub-agent with `model: "appropriate runtime class"` (finding duplication and judging risk needs judgment).
+For each file group, spawn a `general-purpose` review sub-agent with the standard model class (finding duplication and judging risk needs judgment).
 
 Use this exact review prompt shape:
 
@@ -65,7 +66,7 @@ Required output:
 
 ### Step 3: Spawn Fix Subagents per Group
 
-For each reviewed group, spawn an `executor` sub-agent with approved findings. The prompt must carry the full pre-analyzed plan with exact files and concrete changes, leaving only mechanical application — `executor` applies, it does not decide. If a finding still needs judgment (unclear plan, cross-module tradeoffs), use a `general-purpose` sub-agent with `model: "appropriate runtime class"` for that group instead, telling it to reason through the tradeoff before editing.
+For each reviewed group, spawn an `mp-executor` sub-agent with approved findings. The prompt must carry the full pre-analyzed plan with exact files and concrete changes, leaving only mechanical application — `mp-executor` applies, it does not decide. If a finding still needs judgment (unclear plan, cross-module tradeoffs), use a `general-purpose` sub-agent with the advanced model class for that group instead, telling it to reason through the tradeoff before editing.
 
 Use this exact fix prompt shape:
 

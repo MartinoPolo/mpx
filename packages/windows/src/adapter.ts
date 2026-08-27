@@ -21,7 +21,7 @@ function nativePowerShellExecutable(): string {
 export class NativePowerShellRunner implements PowerShellRunner {
   async run(script: string, parameters: Readonly<Record<string, string>> = {}): Promise<PowerShellResult> {
     const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script];
-    const names: Readonly<Record<string, string>> = { PortsJson: "MPX_PORTS_JSON", PidValue: "MPX_PID_VALUE", StartedAt: "MPX_STARTED_AT", ScheduledTaskJson: "MPX_SCHEDULED_TASK_JSON" };
+    const names: Readonly<Record<string, string>> = { PortsJson: "MPX_PORTS_JSON", PidValue: "MPX_PID_VALUE", StartedAt: "MPX_STARTED_AT", ScheduledTaskJson: "MPX_SCHEDULED_TASK_JSON", NativeResourceJson: "MPX_NATIVE_RESOURCE_JSON" };
     const environment = { ...process.env };
     for (const key of Object.keys(environment)) if (Object.values(names).includes(key.toUpperCase())) delete environment[key];
     for (const [name, value] of Object.entries(parameters)) {
@@ -66,25 +66,25 @@ $pids = @($connections | Select-Object -ExpandProperty OwningProcess -Unique)
 $byPid = @{}; if ($pids.Count -gt 0) { Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { $pids -contains $_.ProcessId } | ForEach-Object { $byPid[[int]$_.ProcessId] = $_ } }
 @($connections | ForEach-Object {
   $p = $byPid[[int]$_.OwningProcess]
-  [ordered]@{ LocalPort=[int]$_.LocalPort; LocalAddress=[string]$_.LocalAddress; OwningProcess=[int]$_.OwningProcess; Name=if($p){[string]$p.Name}else{$null}; ExecutablePath=if($p){[string]$p.ExecutablePath}else{$null}; StartedAt=if($p -and $p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{$null} }
+  [ordered]@{ LocalPort=[int]$_.LocalPort; LocalAddress=[string]$_.LocalAddress; OwningProcess=[int]$_.OwningProcess; Name=if($p){[string]$p.Name}else{$null}; ExecutablePath=if($p){[string]$p.ExecutablePath}else{$null}; StartedAt=if($p -and $p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{$null} }
 }) | ConvertTo-Json -Compress -Depth 3`;
 
 const PROCESS_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PidValue" -ErrorAction Stop
-if ($null -eq $p) { $null | ConvertTo-Json -Compress } else { [ordered]@{ ProcessId=[int]$p.ProcessId; Name=[string]$p.Name; ExecutablePath=[string]$p.ExecutablePath; StartedAt=if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{$null} } | ConvertTo-Json -Compress }`;
+if ($null -eq $p) { $null | ConvertTo-Json -Compress } else { [ordered]@{ ProcessId=[int]$p.ProcessId; Name=[string]$p.Name; ExecutablePath=[string]$p.ExecutablePath; StartedAt=if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{$null} } | ConvertTo-Json -Compress }`;
 
 const KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $StartedAt = $env:MPX_STARTED_AT
 $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PidValue" -ErrorAction Stop
 if ($null -eq $p) { @{status='missing'} | ConvertTo-Json -Compress; exit 0 }
-$actual = if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString('o')}else{''}
+$actual = if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{''}
 if ($actual -cne $StartedAt) { @{status='mismatch'} | ConvertTo-Json -Compress; exit 0 }
-Stop-Process -Id $PidValue -ErrorAction Stop
+Stop-Process -Id $PidValue -Force -ErrorAction Stop
 @{status='killed'} | ConvertTo-Json -Compress`;
 
 const TREE_KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $StartedAt = $env:MPX_STARTED_AT
-function Get-Fingerprint($Process) { if($Process.CreationDate){$Process.CreationDate.ToUniversalTime().ToString('o')}else{''} }
+function Get-Fingerprint($Process) { if($Process.CreationDate){$Process.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{''} }
 try {
   # Verify the complete root identity, then stop it before inspecting descendants again.
   $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
@@ -156,6 +156,13 @@ export class WindowsProcessCapabilities {
     const item = record(parsed); const actualPid = requiredInteger(item.ProcessId); const startedAt = optionalString(item.StartedAt);
     if (actualPid !== pid || !startedAt) throw malformed();
     return { pid, startFingerprint: startedAt };
+  }
+  async terminate(process: OwnedWindowsProcess): Promise<void> {
+    const parsed = record(await this.invoke(KILL_SCRIPT, { PidValue: String(process.pid), StartedAt: process.startFingerprint }));
+    if (parsed.status === "killed") return;
+    if (parsed.status === "missing") throw new MpxError({ code: "PROCESS_DISAPPEARED", message: "The process disappeared before it could be terminated." });
+    if (parsed.status === "mismatch") throw new MpxError({ code: "PROCESS_FINGERPRINT_MISMATCH", message: "The PID now belongs to a different process." });
+    throw malformed();
   }
   async terminateTree(process: OwnedWindowsProcess): Promise<void> {
     const parsed = record(await this.invoke(TREE_KILL_SCRIPT, { PidValue: String(process.pid), StartedAt: process.startFingerprint }));

@@ -2,7 +2,10 @@
 name: mpx-check-fixer
 description: "Pre-commit gate on the working tree — static checks, reviewers, tests, optional browser verification. Analyzes findings and dispatches fixes. Returns bounded JSON."
 model: openai-codex/gpt-5.6-sol
-tools: read,grep,find,ls,bash,edit,write
+thinking: high
+tools: read,grep,find,ls,bash
+output_schema: bounded-json
+allowed_subagents: mpx-checker,mpx-reviewer-best-practices,mpx-reviewer-code-quality,mpx-reviewer-error-handling,mpx-reviewer-performance,mpx-reviewer-security,mpx-reviewer-spec-alignment,mpx-reviewer-test-quality,mpx-executor,mpx-chrome-devtools-tester
 
 ---
 # Check Fixer Agent

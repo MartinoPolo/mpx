@@ -1,11 +1,12 @@
 ---
 name: design-init
-description: "Bootstraps a project's visual identity — derives a palette, font pairing, density, and motion language from the project's domain, then writes designs/tokens.css and designs/DESIGN_SYSTEM.md."
+description: "Bootstraps a project's visual identity — derives a palette, font pairing, density, and motion language from the project's domain, then writes designs/tokens.css and designs/DESIGN_SYSTEM.md. Use when asked to init or bootstrap a design system, set up design tokens, or establish a project's visual identity. Run once per project."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Design System Initialization
 
 Derive an opinionated visual identity from what the app is, grill the user until it's settled,
@@ -57,7 +58,7 @@ generated custom properties in the global stylesheet), the design tokens **compl
 library owns component-level tokens; the design system owns app-level semantics, the type scale,
 spacing philosophy, radius and shadow values for custom components, and motion standards.
 
-Spawn `context7-docs-fetcher` for the library's theming API before overriding anything.
+Spawn `mp-context7-docs-fetcher` for the library's theming API before overriding anything.
 
 ## Step 5: Write `designs/tokens.css`
 

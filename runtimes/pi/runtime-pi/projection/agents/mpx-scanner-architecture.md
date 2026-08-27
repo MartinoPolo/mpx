@@ -1,8 +1,10 @@
 ---
 name: mpx-scanner-architecture
 description: "Lightweight architecture scanner for epic-end review. Flags structural concerns without designing solutions."
-model: openai-codex/gpt-5.6-luna
+model: openai-codex/gpt-5.6-terra
+thinking: medium
 tools: read,grep,find,ls,bash
+output_schema: findings
 
 ---
 # Scanner: Architecture

@@ -1,29 +1,24 @@
 # Documentation Strategy: CONTEXT.md + DECISIONS.md
 
-Two-document system for project documentation consumed by AI agent skills.
+Two-document system for project context consumed by users and agents. Initial content follows
+[PROJECT_DOC_TEMPLATES.md](PROJECT_DOC_TEMPLATES.md).
 
-## File Roles
+## `.mpx/CONTEXT.md` — what the project is
 
-### `.mpx/CONTEXT.md` — What This Project Is
+Read-heavy; target roughly 250–300 lines. It contains:
 
-Read-heavy. Every skill that needs project understanding reads this file. Target: **250–300 lines**.
+- a three-sentence summary;
+- domain language as one-line definition-list entries;
+- entity relationships and cardinalities;
+- resolved ambiguities with rationale;
+- a core-feature index with status, MPX Issue ID, and design pointer;
+- settled system constraints.
 
-Contains:
+Keep implementation maps, diagrams, stack minutiae, and pixel specifications elsewhere.
 
-- **What This Is** — 3-sentence project summary
-- **Domain Language** — One-line definitions using definition-list format (not tables)
-- **Relationships** — Entity cardinalities (1:N, N:1)
-- **Flagged Ambiguities** — Resolved term conflicts with rationale
-- **Core Features** — Index only: feature name + status + epic# + design file pointer. Detail lives in epic issues
-- **Key Constraints** — Settled facts about the system (SPA mode, single_instance, etc.)
+## `.mpx/DECISIONS.md` — why choices were made
 
-Does NOT contain: implementation details, module maps, mermaid diagrams, tech stack minutiae, pixel specs.
-
-### `.mpx/DECISIONS.md` — Why We Chose What We Chose
-
-Write-heavy. Updated after grill sessions. Target: **200–300 lines**.
-
-Contains settled architectural and design decisions with rationale. Each entry:
+Write-heavy; target roughly 200–300 lines. Group decisions by domain and use:
 
 ```markdown
 ### Decision title
@@ -31,83 +26,36 @@ Contains settled architectural and design decisions with rationale. Each entry:
 Decided: YYYY-MM-DD
 What: One sentence describing the choice.
 Why: One sentence explaining the rationale.
-Rejected: Brief list of alternatives considered and why they lost.
+Rejected: Alternatives considered and why they lost.
 ```
 
-Does NOT contain: requirements, vocabulary, implementation specs, or anything that changes frequently.
+The date is when the decision was made. Everything in the file is accepted; avoid status
+bureaucracy. When reversing a decision, replace the old entry and note the reversal rather than
+leaving contradictory active rules.
 
-## Domain Language Format
-
-Use definition-list style, not tables:
+## Domain language
 
 ```markdown
-## Domain Language
+**Workspace** — Top-level container for one repository, project folder, and window.
+**Issue** — Atomic work unit identified by one MPX Issue ID, worktree, branch, and color.
+**Session** — One agent execution tied to an issue, with transcript, cost, and state.
 
-**Workspace** — Top-level container: one GitHub repo + one project folder + one window.
-**Issue** — Atomic work unit. One GitHub issue, one worktree, one branch, one color.
-**Session** — One AI agent execution tied to an issue. Has transcript, cost, state.
-
-_Avoid_: "task" for Issue, "project" for Workspace, "run" for Session.
+_Avoid_: “task” for Issue, “project” for Workspace, “run” for Session.
 ```
 
-Rules:
+Use one sentence per definition, an em dash, and `_Avoid_` lines after related clusters. Do not use
+a terminology table.
 
-- One sentence max per definition
-- Bold the term, em-dash, definition
-- Group `_Avoid_` lines after each cluster of related terms
-- No table headers, no columns, no "Aliases to Avoid" column
+## Responsibilities
 
-## Decision Entry Format
+Context discovery and vocabulary workflows read/update `CONTEXT.md`. Planning and review workflows
+read both; review may update feature status using explicit MPX Issue IDs. Decision harvesting and
+user-confirmed architecture sessions update `DECISIONS.md`. Setup workflows create only these two
+files. Handoff workflows summarize them without becoming a third source of truth.
 
-```markdown
-## Section (e.g., Platform, UI, Data)
+Older `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, and `.mpx/ARCHITECTURE.md` files are read-only
+history. Never create, update, or fall back to them.
 
-### Single process, multi-window via single_instance
-
-Decided: 2026-04-28
-What: One Tauri process, WebviewWindow per workspace.
-Why: Shared SQLite, IPC between windows, simpler auth.
-Rejected: Electron multi-process (too heavy), separate processes (IPC complexity).
-```
-
-Rules:
-
-- Group by domain: Platform & Infrastructure, UI & Design, Data & State, Session & Providers
-- 3–5 lines per entry (what/why/rejected)
-- Date is when the decision was made, not when it was written down
-- No "Status: Accepted" bureaucracy — everything in this file is accepted
-- If a decision is reversed, delete the old entry and add the new one with a note
-
-## Skill Responsibilities
-
-| Skill                    | Reads                        | Updates                           |
-| ------------------------ | ---------------------------- | --------------------------------- |
-| `mpx grill`               | CONTEXT.md, DECISIONS.md     | Both (after user confirmation)    |
-| `mpx vocabulary`          | CONTEXT.md                   | CONTEXT.md § Domain Language      |
-| `mpx to-epic`             | CONTEXT.md, DECISIONS.md     | —                                 |
-| `mpx epic-review`         | CONTEXT.md, DECISIONS.md     | CONTEXT.md (status updates)       |
-| `mpx consolidate-context` | CONTEXT.md                   | CONTEXT.md (cleanup)              |
-| `mpx harvest-decisions`   | Session JSONL files          | CONTEXT.md, DECISIONS.md          |
-| `mpx init-repo`           | —                            | Creates CONTEXT.md + DECISIONS.md |
-| `mpx setup-sveltekit`     | —                            | Creates CONTEXT.md + DECISIONS.md |
-| `mpx setup-react-native`  | —                            | Creates CONTEXT.md + DECISIONS.md |
-| `mpx handoff`             | CONTEXT.md, DECISIONS.md     | writes HANDOFF.md                 |
-| `mpx bug-report`          | CONTEXT.md § Domain Language | —                                 |
-| `mpx to-issues`           | CONTEXT.md § Domain Language | —                                 |
-
-## Legacy Files
-
-Older projects may still have `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, or `.mpx/ARCHITECTURE.md`. Skills should **not** create, update, or fall back to these files. If encountered in an existing project, treat them as read-only historical context — the canonical sources are CONTEXT.md and DECISIONS.md.
-
-When initializing a new project, only scaffold CONTEXT.md and DECISIONS.md.
-
-## When to Split DECISIONS.md
-
-If the file exceeds ~500 lines, split by domain into a `decisions/` directory:
-
-- `decisions/platform.md`
-- `decisions/ui-design.md`
-- `decisions/data-state.md`
-- `decisions/session-providers.md`
-
-Until then, keep it as one file. Grovekeeper currently has ~50 decisions — well under the threshold.
+When `DECISIONS.md` exceeds about 500 lines, split by stable domains under `decisions/` (for example
+`platform.md`, `ui-design.md`, `data-state.md`, and `session-providers.md`). Until then keep one
+file.

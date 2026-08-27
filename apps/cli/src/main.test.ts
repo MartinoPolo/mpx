@@ -1,4 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { mkdtemp, mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { MpxError, sha256Canonical, type JsonValue } from "@mpx/core";
+import { DurableDevServiceManager, type ManagedProcess, type RuntimeAdapter } from "@mpx/dev-services";
 import { PortService, RegistryStore, type PortPlatformAdapter, type WorktreeIdentity } from "@mpx/ports";
 import { SessionService, SessionStore, type SessionRecordV1 } from "@mpx/sessions";
 import { run } from "./main.js";
@@ -23,6 +26,9 @@ async function directory(prefix="mpx-cli-known-"):Promise<string>{
 }
 const valid=JSON.stringify({schemaVersion:1,project:{id:"sample/app"},repository:{provider:"generic",remote:"origin"}});
 const portPlatform:PortPlatformAdapter={holdAvailablePorts:async()=>({release:async()=>undefined}),inspectListeners:async()=>[],killProcess:async()=>undefined,inspectProcess:async()=>undefined};
+class CliDevChild extends EventEmitter implements ManagedProcess {stdout=new PassThrough();stderr=new PassThrough();fingerprint="start:900";closed:Promise<{code:number|null;signal:string|null}>;resolve!:(exit:{code:number|null;signal:string|null})=>void;constructor(readonly pid=900){super();this.closed=new Promise(resolve=>{this.resolve=resolve})}onClose(listener:(exit:{code:number|null;signal:string|null})=>void){this.on("close",listener)}exit(){const value={code:0,signal:null};this.emit("close",value);this.resolve(value)}}
+class CliDevRuntime implements RuntimeAdapter {kind="host" as const;child=new CliDevChild();tick=0;now=()=>new Date(1700000000000+this.tick++).toISOString();sleep=async()=>{};spawn=async()=>this.child;probe=async()=>true;inspect=async(pid:number)=>this.child.pid===pid?{pid,fingerprint:this.child.fingerprint}:undefined;stop=async()=>{this.child.exit()}}
+
 function mainPortService(stateRoot:string,cwd:string,repositoryId:string):PortService{
   const identity:WorktreeIdentity={repositoryId,worktreeId:`${repositoryId}-main`,path:cwd,role:"main",commonGitPath:path.join(cwd,".git"),gitAdminPath:path.join(cwd,".git"),head:"abc"};
   return new PortService({store:new RegistryStore(stateRoot),git:{identify:async()=>identity,list:async()=>[identity]},platform:portPlatform});
@@ -57,6 +63,105 @@ async function configuredLaunchEnv(cwd:string, options:{classifiedRoot?:string;i
 }
 
 describe("cli",()=>{
+  it("wires mpx dev lifecycle actions through the provider-neutral service",async()=>{
+    const cwd=await fixture(managed("sample/app",4100)), io=captureIo();
+    const calls:unknown[]=[];
+    const devService={start:async(request:unknown)=>{calls.push(request);return {id:"app",state:"starting"}},status:(id?:string)=>id?{id,state:"ready"}:[{id:"app",state:"ready"}],logs:()=>"bounded",restart:async()=>({id:"app",state:"starting"}),stop:async()=>({id:"app",state:"stopped"})};
+    const portService={resolve:async()=>({lease:{worktreePath:cwd,services:{app:4100}}})} as never;
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],io,{env:{},portService,devService} as never)).toBe(0);
+    expect(calls[0]).toMatchObject({id:"app",cwd:path.resolve(cwd),ports:[4100],assignment:{worktreeRoot:path.resolve(cwd),ports:[4100]},executor:"host"});
+  });
+
+  it("injects the complete coupled service URL map from the validated assignment",async()=>{
+    const config=JSON.stringify({schemaVersion:1,project:{id:"sample/coupled"},repository:{provider:"generic",remote:"origin"},tooling:{packageManager:"pnpm"},development:{services:{web:{scope:"checkout",port:{mode:"managed",preferred:4200},environmentVariable:"WEB_URL",protocol:"http",start:{type:"package-script",script:"dev:web"}},api:{scope:"checkout",port:{mode:"managed",preferred:4201},environmentVariable:"API_URL",protocol:"https",start:{type:"package-script",script:"dev:api"}}}}});
+    const cwd=await fixture(config),calls:unknown[]=[];
+    const devService={start:async(request:unknown)=>{calls.push(request);return {}},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+    const portService={resolve:async()=>({services:{web:4210,api:4211}})} as never;
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","web"],captureIo(),{env:{},portService,devService} as never)).toBe(0);
+    expect(calls[0]).toMatchObject({executable:"pnpm",args:["run","dev:web"],environment:{WEB_URL:"http://localhost:4210",API_URL:"https://localhost:4211"}});
+  });
+
+  it("observes a service started by an earlier CLI invocation through durable state",async()=>{
+    const cwd=await fixture(managed("sample/cross",4107)),stateRoot=await directory("mpx-cli-dev-state-"),runtime=new CliDevRuntime(),portService={resolve:async()=>({services:{app:4107}})} as never;
+    const first=Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const});
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],captureIo(),{env:{},portService,devService:first} as never)).toBe(0);await new Promise(resolve=>setImmediate(resolve));
+    let data:Record<string,unknown>={};for(let attempt=0;attempt<20;attempt++){const io=captureIo(),second=Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const});expect(await run(["--json","--cwd",cwd,"dev","status","--id","app"],io,{env:{},devService:second} as never)).toBe(0);data=JSON.parse(io.out[0]!).data;if(data.state==="ready")break;await new Promise(resolve=>setTimeout(resolve,10))}
+    expect(data).toMatchObject({id:"app",state:"ready",pid:900,fingerprint:"start:900"});
+  });
+
+  it("reconciles a stale durable fingerprint during a later CLI invocation",async()=>{
+    const cwd=await fixture(managed("sample/stale",4108)),stateRoot=await directory("mpx-cli-dev-stale-"),runtime=new CliDevRuntime(),portService={resolve:async()=>({services:{app:4108}})} as never;
+    await run(["--json","--cwd",cwd,"dev","start","--id","app"],captureIo(),{env:{},portService,devService:Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const})} as never);runtime.child.fingerprint="reused";
+    const io=captureIo();await run(["--json","--cwd",cwd,"dev","status","--id","app"],io,{env:{},devService:Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const})} as never);
+    expect(JSON.parse(io.out[0]!).data).toMatchObject({state:"crashed",pid:null,lastError:expect.stringContaining("fingerprint")});
+  });
+
+  it("surfaces readiness probe rejection as a crashed durable CLI status",async()=>{
+    const cwd=await fixture(managed("sample/probe",4109)),stateRoot=await directory("mpx-cli-dev-probe-"),runtime=new CliDevRuntime();runtime.probe=async()=>{throw new Error("probe rejected")};
+    await run(["--json","--cwd",cwd,"dev","start","--id","app"],captureIo(),{env:{},portService:{resolve:async()=>({services:{app:4109}})} as never,devService:Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const})} as never);await new Promise(resolve=>setImmediate(resolve));
+    let data:Record<string,unknown>={};for(let attempt=0;attempt<20;attempt++){const io=captureIo();await run(["--json","--cwd",cwd,"dev","status","--id","app"],io,{env:{},devService:Object.assign(new DurableDevServiceManager(runtime,stateRoot),{runtimeKind:"host" as const})} as never);data=JSON.parse(io.out[0]!).data;if(data.lastError)break;await new Promise(resolve=>setTimeout(resolve,10))}
+    expect(data).toMatchObject({state:"crashed",lastError:"Readiness probe failed: probe rejected"});
+  });
+
+  it.each([
+    ["status",[],undefined],
+    ["status",["--id","app"],"app"],
+    ["logs",["--id","app","--lines","7"],"app"],
+    ["restart",["--id","app"],"app"],
+    ["stop",["--id","app"],"app"],
+  ])("wires dev %s with its action contract",async(action,options,id)=>{
+    const cwd=await fixture(managed("sample/actions",4101)),io=captureIo(),calls:string[]=[];
+    const devService={status:async(actual?:string)=>{calls.push(`status:${actual??"all"}`);return []},logs:async(actual:string,value?:{maxLines?:number})=>{calls.push(`logs:${actual}:${value?.maxLines}`);return "log"},restart:async(actual:string)=>{calls.push(`restart:${actual}`);return {}},stop:async(actual:string)=>{calls.push(`stop:${actual}`);return {}},start:async()=>({})};
+    expect(await run(["--json","--cwd",cwd,"dev",action,...options],io,{env:{},devService} as never)).toBe(0);
+    expect(calls[0]).toContain(id??"all");
+  });
+
+  it.each(["start","logs","restart","stop"])("requires --id for dev %s",async(action)=>{
+    const cwd=await fixture(managed("sample/ids",4102)),io=captureIo();
+    expect(await run(["--json","--cwd",cwd,"dev",action],io,{env:{},devService:{} as never} as never)).toBe(2);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"USAGE_ERROR"}});
+  });
+
+  it("rejects dev log line bounds and rejects --lines on other actions",async()=>{
+    const cwd=await fixture(managed("sample/lines",4103));
+    for(const args of [["logs","--id","app","--lines","0"],["logs","--id","app","--lines","501"],["status","--lines","2"]]){
+      const io=captureIo();expect(await run(["--json","--cwd",cwd,"dev",...args],io,{env:{},devService:{} as never} as never)).toBe(2);
+      expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"USAGE_ERROR"}});
+    }
+  });
+
+  it("rejects malicious package script labels before port resolution or spawn",async()=>{
+    const config=JSON.stringify({schemaVersion:1,project:{id:"sample/evil"},repository:{provider:"generic",remote:"origin"},development:{services:{app:{scope:"checkout",port:{mode:"managed",preferred:4104},start:{type:"package-script",script:"dev && echo owned"}}}}});
+    const cwd=await fixture(config),io=captureIo();let resolved=false,spawned=false;
+    const portService={resolve:async()=>{resolved=true;return {services:{app:4104}}}} as never,devService={start:async()=>{spawned=true},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],io,{env:{},portService,devService} as never)).toBe(1);
+    expect(resolved).toBe(false);expect(spawned).toBe(false);
+  });
+
+  it("fails Docker dev commands closed unless a matching adapter is injected",async()=>{
+    const cwd=await fixture(managed("sample/docker",4105)),io=captureIo();
+    expect(await run(["--json","--cwd",cwd,"dev","status"],io,{env:{MPX_RUNTIME_CONTEXT:"{}",MPX_RUNTIME_EXECUTOR:"docker"}} as never)).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"DEV_EXECUTOR_UNSUPPORTED"}});
+  });
+
+  it("runs project-scoped launchers only from the canonical main owner root",async()=>{
+    const config=JSON.stringify({schemaVersion:1,project:{id:"sample/project"},repository:{provider:"generic",remote:"origin"},development:{services:{app:{scope:"project",port:{mode:"managed",preferred:4106},start:{type:"package-script",script:"dev"}}}}});
+    const cwd=await fixture(config),owner=await directory("mpx-main-owner-"),calls:unknown[]=[];
+    const service={start:async(request:unknown)=>{calls.push(request);return {}},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+    expect(await run(["--json","--cwd",cwd,"dev","start","--id","app"],captureIo(),{env:{},portService:{resolve:async()=>({services:{app:4106},ownerRoot:owner})} as never,devService:service} as never)).toBe(0);
+    expect(calls[0]).toMatchObject({cwd:path.resolve(owner),assignment:{worktreeRoot:path.resolve(owner)}});
+  });
+
+  it("reports external databases and test-only port consumers without spawning a launcher",async()=>{
+    for(const [type,extra] of [["external",{kind:"database"}],["test-only",{}]] as const){
+      const config=JSON.stringify({schemaVersion:1,project:{id:`sample/${type}`},repository:{provider:"generic",remote:"origin"},development:{services:{port:{scope:"project",port:{mode:"fixed-shared",preferred:5432},start:{type,...extra}}}}});
+      const cwd=await fixture(config),io=captureIo();let spawned=false;
+      const service={start:async()=>{spawned=true},status:async()=>[],logs:async()=>"",restart:async()=>({}),stop:async()=>({})};
+      expect(await run(["--json","--cwd",cwd,"dev","start","--id","port"],io,{env:{},portService:{resolve:async()=>({services:{port:5432},ownerRoot:cwd})} as never,devService:service} as never)).toBe(0);
+      expect(JSON.parse(io.out[0]!).data).toMatchObject({state:type,managed:false,port:5432});expect(spawned).toBe(false);
+    }
+  });
+
   it("emits exactly one JSON document",async()=>{
     const cwd=await fixture(valid), io=captureIo();
     expect(await run(["--json","--cwd",cwd,"config","validate"],io,{env:{}})).toBe(0);
@@ -479,6 +584,13 @@ describe("cli",()=>{
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"EXECUTOR_GATE_UNVERIFIED",details:{executor:"docker"}}});
   });
 
+  it("launch surfaces injected sbx diagnostics before the unverified Docker gate",async()=>{
+    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
+    const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot,launchRoutes:{materialize:async()=>({})},sbxDiagnostics:async()=>({available:true,failureCodes:["DAEMON_STOPPED"],readOnly:true})})).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"DAEMON_STOPPED",details:{executor:"docker"}}});
+  });
+
   it("doctor reports a missing managed main reservation without allocating",async()=>{
     const config=JSON.stringify({schemaVersion:1,project:{id:"sample/app"},repository:{provider:"generic",remote:"origin"},development:{services:{app:{scope:"checkout",port:{mode:"managed",preferred:4173},start:{type:"package-script",script:"dev"}}}}});
     const cwd=await fixture(config), env=await launchEnv(cwd), io=captureIo(); let ensured=false; let doctorRequest: {config: unknown; configHash: string}|undefined;
@@ -487,6 +599,13 @@ describe("cli",()=>{
     expect(await run(["--json","--cwd",cwd,"doctor"],io,{env,portService,catalogRoot})).toBe(1);
     expect(JSON.parse(io.out[0]!).data.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({code:"PORT_LEASE_INVALID",severity:"error"})]));
     expect(ensured).toBe(false); expect(doctorRequest!.configHash).toBe(sha256Canonical(doctorRequest!.config as JsonValue));
+  });
+
+  it("doctor includes read-only standalone sbx diagnostics without making Docker required",async()=>{
+    const cwd=await fixture(valid), env=await launchEnv(cwd), io=captureIo();
+    const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    expect(await run(["--json","--cwd",cwd,"doctor"],io,{env,catalogRoot,sbxDiagnostics:async()=>({available:false,failureCodes:["SBX_NOT_FOUND"],readOnly:true})})).toBe(0);
+    expect(JSON.parse(io.out[0]!).data.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({code:"SBX_NOT_FOUND",severity:"warning"})]));
   });
 
   it("doctor warns deterministically for fixed-shared services without requiring a reservation",async()=>{

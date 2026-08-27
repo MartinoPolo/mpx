@@ -1,4 +1,3 @@
-import { execFile as execFileCallback } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
@@ -7,22 +6,20 @@ import { mkdir, mkdtemp, open, readFile, readdir, rename, symlink, writeFile } f
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import { createRuntimeContextV1, revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
 import { createRuntimeSkillArtifact, inventoryProjectSkills, loadSkillBody, resolveManifest } from "@mpx/skills";
-import { WindowsProcessCapabilities } from "@mpx/windows";
-import { buildClaudePlugin } from "../../../claude/runtime-claude/src/index.js";
-import { buildPiProjection, createPiRuntimeProjection, planPiInvocation, renderPiStatusLine } from "../src/index.js";
+import { buildPiProjection, createPiRuntimeProjection, planPiInvocation, renderPiRuntimeStatus } from "../src/index.js";
 import { fixture } from "./fixture.js";
 
-const execFile = promisify(execFileCallback);
 const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;
 const originalStatusSnapshotFile = process.env.MPX_STATUS_SNAPSHOT_FILE;
+const originalRuntimeStatusEnvelopeFile = process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE;
 afterEach(() => {
   if (originalRuntimeContext === undefined) delete process.env.MPX_RUNTIME_CONTEXT; else process.env.MPX_RUNTIME_CONTEXT = originalRuntimeContext;
   if (originalProjectionReference === undefined) delete process.env.MPX_RUNTIME_PROJECTION_REFERENCE; else process.env.MPX_RUNTIME_PROJECTION_REFERENCE = originalProjectionReference;
   if (originalStatusSnapshotFile === undefined) delete process.env.MPX_STATUS_SNAPSHOT_FILE; else process.env.MPX_STATUS_SNAPSHOT_FILE = originalStatusSnapshotFile;
+  if (originalRuntimeStatusEnvelopeFile === undefined) delete process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE; else process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE = originalRuntimeStatusEnvelopeFile;
   vi.restoreAllMocks();
   syncBuiltinESMExports();
 });
@@ -146,10 +143,13 @@ describe("production Pi projection", () => {
     expect(Object.isFrozen(first)).toBe(true);
     expect(await revalidateRuntimeArtifact(first.revalidation.directory, first.revalidation.reference)).toMatchObject({ valid: true });
     expect(first.files).toEqual(expect.arrayContaining([
-      "extension.mjs", "runtime-context.json", "projection.json", "settings.json", "keybindings.json", "status/status-snapshot.json",
+      "extension.mjs", "runtime-context.json", "projection.json", "settings.json", "keybindings.json", "status/runtime-status-envelope-v1.json",
       "themes/green.json", "themes/amber.json", "vendor/subagents/VENDORED.md", "vendor/subagents/LICENSE",
     ]));
-    expect(first.files.some((file) => file.startsWith("agents/mpx-") && file.endsWith(".md"))).toBe(true);
+    const projectedAgents = first.files.filter((file) => file.startsWith("agents/") && file.endsWith(".md"));
+    expect(projectedAgents).toHaveLength(22);
+    expect(projectedAgents.filter((file) => file === "agents/Explore.md")).toHaveLength(1);
+    expect(projectedAgents).not.toContain("agents/mpx-explorer.md");
     expect(first.files).not.toEqual(expect.arrayContaining([expect.stringMatching(/(?:^|\/)SKILL\.md$|(?:^|\/)pnpm-lock\.yaml$/u)]));
 
     const descriptor = JSON.parse(await readFile(path.join(first.directory, "projection.json"), "utf8")) as Record<string, unknown>;
@@ -206,46 +206,21 @@ describe("production Pi projection", () => {
     const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-projections-"));
     const projection = await buildPiProjection({ ...f, artifactsRoot });
     const plan = planPiInvocation({ executable: "C:/trusted/pi.cmd", projection, accountRoot: "C:/private/pi/account-a", runtimeContext: f.context, cwd: "C:/repo" });
-    expect(plan.args).toEqual(["--no-extensions", "--extension", projection.extension.replaceAll("\\", "/"), "--no-skills", "--theme", "green"]);
+    expect(plan.args).toEqual(["--no-extensions", "--extension", projection.extension.replaceAll("\\", "/"), "--no-skills", "--theme", "dark"]);
     expect(plan.env).toEqual({ PI_CODING_AGENT_DIR: "C:/private/pi/account-a", MPX_RUNTIME: "pi", MPX_RUNTIME_CONTEXT: JSON.stringify(f.context), MPX_RUNTIME_CONTEXT_FILE: projection.runtimeContextFile.replaceAll("\\", "/"), MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projection.reference) });
     expect(projection.revalidation).toEqual({ directory: projection.directory, reference: projection.reference });
   });
 
-  it("emits ordered prompt-blind Pi lifecycle events with only a root-relative session file", async () => {
-    const f=await fixture(),projection=await buildPiProjection({...f,artifactsRoot:await mkdtemp(path.join(tmpdir(),"pi-lifecycle-projection-"))}),account=await mkdtemp(path.join(tmpdir(),"pi-account-")),eventDirectory=await mkdtemp(path.join(tmpdir(),"pi-events-"));await mkdir(path.join(account,"sessions"));const sessionFile=path.join(account,"sessions","native.jsonl");await writeFile(sessionFile,"SECRET TRANSCRIPT");const module=await import(`${pathToFileURL(projection.extension).href}?lifecycle=${Date.now()}`),events=new Map<string,(...args:any[])=>unknown>();process.env.MPX_RUNTIME_CONTEXT=JSON.stringify(f.context);process.env.MPX_RUNTIME_PROJECTION_REFERENCE=JSON.stringify(projection.reference);process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR=eventDirectory;process.env.MPX_SESSION_LIFECYCLE_BINDING_ID="binding-1";process.env.PI_CODING_AGENT_DIR=account;try{await module.activate({registerCommand(){},on(name:string,handler:(...args:any[])=>unknown){events.set(name,handler);}});const ctx={cwd:"C:/repo",model:{id:"safe-model"},sessionManager:{getSessionId:()=>"native-1",getSessionFile:()=>sessionFile,getSessionName:()=>"Safe name"},ui:{setStatus(){}}};await events.get("session_start")!({},ctx);await events.get("session_info_changed")!({},undefined);await Promise.all([events.get("session_info_changed")!({},ctx),events.get("session_shutdown")!({},ctx)]);const emitted=await Promise.all((await readdir(eventDirectory)).sort().map(async name=>JSON.parse(await readFile(path.join(eventDirectory,name),"utf8"))));expect(emitted.map(event=>[event.sequence,event.type])).toEqual([[1,"start"],[2,"info"],[3,"shutdown"]]);expect(emitted[0].nativeSessionRef).toEqual({kind:"root-relative-file",value:"sessions/native.jsonl"});if(process.platform==="win32"){const inspected=await new WindowsProcessCapabilities().inspect(process.pid);expect(inspected).toBeDefined();expect(emitted[0].startFingerprint).toBe(inspected!.startFingerprint);}else expect(emitted[0].startFingerprint).toBe("unavailable:windows-process-start");expect(JSON.stringify(emitted)).not.toContain("SECRET TRANSCRIPT");}finally{delete process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR;delete process.env.MPX_SESSION_LIFECYCLE_BINDING_ID;delete process.env.PI_CODING_AGENT_DIR;}
-  });
-
-  it("generates a bounded shell-free Windows fingerprint probe with a portable fail-closed fallback", async () => {
+  it("renders the runtime status envelope rather than the legacy port-only footer", async () => {
     const f = await fixture();
-    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-fingerprint-source-")) });
-    const source = await readFile(projection.extension, "utf8");
-    expect(source).toContain('path.join(systemRoot,"System32","WindowsPowerShell","v1.0","powershell.exe")');
-    expect(source).toContain('shell:false');
-    expect(source).toContain('timeout:5000');
-    expect(source).toContain('maxBuffer:65536');
-    expect(source).toContain('ProcessId=$pidValue');
-    expect(source).toContain('unavailable:windows-process-start');
-    expect(source).not.toContain('startFingerprint:`${process.pid}:');
-    expect(source.match(/randomUUID\(\)/gu)).toHaveLength(1);
-  });
-
-  it("matches the generated Claude status script exactly for the same snapshot", async () => {
-    const f = await fixture();
-    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-projections-"));
-    const projection = await buildPiProjection({ ...f, artifactsRoot });
-    const agentsRoot = await mkdtemp(path.join(tmpdir(), "claude-agents-"));
-    await writeFile(path.join(agentsRoot, "mpx-checker.md"), "---\nname: mpx-checker\ndescription: Check things\n---\nAGENT BODY\n");
-    const claudeOutput = path.join(await mkdtemp(path.join(tmpdir(), "claude-projection-")), "plugin");
-    await buildClaudePlugin({ manifest: f.manifest, artifact: createRuntimeSkillArtifact(f.manifest, f.catalog, { runtime: "claude" }), catalog: f.catalog, canonical: f.canonicalRoot, agents: agentsRoot, outputRoot: claudeOutput, statusSnapshot: f.statusSnapshot, launchBanner: f.launchBanner, runtimeContext: f.context });
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-projections-")) });
     const module = await import(pathToFileURL(projection.extension).href);
-    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
-    let piStatus = "";
-    const pi = { registerCommand() {}, registerTool() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, [...(events.get(name) ?? []), handler]); }, sendUserMessage: async () => undefined };
-    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
-    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
-    await module.activate(pi);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>(); let piStatus = "";
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context); process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, [...(events.get(name) ?? []), handler]); } });
     await events.get("session_start")![0]!({}, { ui: { setStatus: (_key: string, text: string) => { piStatus = text; } } });
-    expect(piStatus).toBe((await execFile(process.execPath, [path.join(claudeOutput, "status", "status-line.mjs")])).stdout);
+    expect(piStatus).toContain("Personal · Sol · app@main · 1k/272k");
+    expect(piStatus).not.toMatch(/\bports\b/u);
   });
 
   it("bounds agent-start stats, reads, and hashes below full session validation", async () => {
@@ -395,109 +370,12 @@ describe("production Pi projection", () => {
     await expect(module.activate({ registerCommand() {} })).rejects.toThrow("RESTART_REQUIRED: ARTIFACT_FILE_MAP_CHANGED");
   });
 
-  it("rejects replacement of an external status snapshot after opening its handle", async () => {
+  it("binds the privacy-safe runtime envelope into immutable projection metadata", async () => {
     const f = await fixture();
-    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-status-replacement-"));
-    const projection = await buildPiProjection({ ...f, artifactsRoot });
-    const events = new Map<string, (...args: unknown[]) => unknown>();
-    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
-    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
-    const liveStatus = path.join(artifactsRoot, "external-status.json");
-    const snapshotBytes = JSON.stringify(f.statusSnapshot);
-    const replacementBytes = snapshotBytes.replace('"schemaVersion":1', '"schemaVersion":2');
-    expect(Buffer.byteLength(replacementBytes)).toBe(Buffer.byteLength(snapshotBytes));
-    expect(replacementBytes).not.toBe(snapshotBytes);
-    const replacementFile = path.join(artifactsRoot, "external-status-replacement.json");
-    await writeFile(liveStatus, snapshotBytes);
-    await writeFile(replacementFile, replacementBytes);
-    process.env.MPX_STATUS_SNAPSHOT_FILE = liveStatus;
-    const originalOpen = fs.promises.open;
-    let replaced = false;
-    vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof fs.promises.open>) => {
-      const handle = await originalOpen(...args);
-      if (!replaced && path.resolve(String(args[0])) === path.resolve(liveStatus)) {
-        replaced = true;
-        await rename(liveStatus, `${liveStatus}.replaced`);
-        await rename(replacementFile, liveStatus);
-      }
-      return handle as never;
-    });
-    syncBuiltinESMExports();
-    const module = await import(`${pathToFileURL(projection.extension).href}?status-replacement=${Date.now()}`);
-    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
-
-    await expect(events.get("session_start")!({}, { ui: { setStatus() {} } })).rejects.toThrow("RESTART_REQUIRED: STATUS_SNAPSHOT_INVALID");
-    expect(replaced).toBe(true);
-  });
-
-  it("accepts an identical external status snapshot replacement after opening its handle", async () => {
-    const f = await fixture();
-    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-status-identical-replacement-"));
-    const projection = await buildPiProjection({ ...f, artifactsRoot });
-    const events = new Map<string, (...args: unknown[]) => unknown>();
-    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
-    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
-    const liveStatus = path.join(artifactsRoot, "external-status.json");
-    const replacementFile = path.join(artifactsRoot, "external-status-replacement.json");
-    const snapshotBytes = JSON.stringify(f.statusSnapshot);
-    await writeFile(liveStatus, snapshotBytes);
-    await writeFile(replacementFile, snapshotBytes);
-    process.env.MPX_STATUS_SNAPSHOT_FILE = liveStatus;
-    const originalOpen = fs.promises.open;
-    let replaced = false;
-    vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof fs.promises.open>) => {
-      const handle = await originalOpen(...args);
-      if (!replaced && path.resolve(String(args[0])) === path.resolve(liveStatus)) {
-        replaced = true;
-        await rename(liveStatus, `${liveStatus}.replaced`);
-        await rename(replacementFile, liveStatus);
-      }
-      return handle as never;
-    });
-    syncBuiltinESMExports();
-    const module = await import(`${pathToFileURL(projection.extension).href}?identical-status-replacement=${Date.now()}`);
-    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
-    const statusCalls: string[] = [];
-
-    await expect(events.get("session_start")!({}, { ui: { setStatus: (_key: string, text: string) => statusCalls.push(text) } })).resolves.toBeUndefined();
-    expect(replaced).toBe(true);
-    expect(statusCalls).toEqual([renderPiStatusLine(f.statusSnapshot, { launchBanner: f.launchBanner })]);
-  });
-
-  it("drains an in-flight status refresh without updating UI after shutdown", async () => {
-    const f = await fixture();
-    const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-status-shutdown-"));
-    const projection = await buildPiProjection({ ...f, artifactsRoot });
-    const module = await import(pathToFileURL(projection.extension).href);
-    const events = new Map<string, (...args: unknown[]) => unknown>();
-    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
-    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
-    const liveStatus = path.join(artifactsRoot, "live-status.json");
-    await writeFile(liveStatus, JSON.stringify(f.statusSnapshot));
-    process.env.MPX_STATUS_SNAPSHOT_FILE = liveStatus;
-    await module.activate({ registerCommand() {}, on(name: string, handler: (...args: unknown[]) => unknown) { events.set(name, handler); } });
-
-    const probe = await open(liveStatus, "r");
-    const statusStat = await probe.stat();
-    const fileHandlePrototype = Object.getPrototypeOf(probe) as { read: (...args: unknown[]) => Promise<unknown> };
-    await probe.close();
-    const originalRead = fileHandlePrototype.read;
-    let releaseRead!: () => void;
-    const readBlocked = new Promise<void>((resolve) => { releaseRead = resolve; });
-    let intercepted = false;
-    const readSpy = vi.spyOn(fileHandlePrototype, "read").mockImplementation(async function (this: { stat(): Promise<{ dev: number | bigint; ino: number | bigint }> }, ...args: unknown[]) {
-      const opened = await this.stat();
-      if (!intercepted && opened.dev === statusStat.dev && opened.ino === statusStat.ino) { intercepted = true; await readBlocked; }
-      return originalRead.apply(this, args);
-    });
-    const statusCalls: string[] = [];
-    const sessionStart = events.get("session_start")!({}, { ui: { setStatus: (_key: string, text: string) => statusCalls.push(text) } }) as Promise<void>;
-    while (!intercepted) await new Promise((resolve) => setTimeout(resolve, 0));
-    const shutdown = events.get("session_shutdown")!() as Promise<void>;
-    releaseRead();
-    await Promise.all([sessionStart, shutdown]);
-    expect(statusCalls).toEqual([]);
-    readSpy.mockRestore();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-runtime-status-")) });
+    expect(JSON.parse(await readFile(path.join(projection.directory, "status", "runtime-status-envelope-v1.json"), "utf8"))).toEqual(f.runtimeStatusEnvelope);
+    const source = await readFile(projection.extension, "utf8");
+    expect(source).not.toMatch(/auth\.json|jwt|bearer|credential/iu);
   });
 
   it("rejects embedded Bash policy tamper before classifying a command", async () => {
@@ -528,6 +406,19 @@ describe("production Pi projection", () => {
     await expect(policy({ toolName: "read", input: { command: "rm -rf /" } })).resolves.toBeUndefined();
   });
 
+  it("does not fabricate production gateway or development-service results when no launch adapters are supplied", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-production-no-adapters-")) });
+    const module = await import(`${pathToFileURL(projection.extension).href}?production=${Date.now()}`);
+    const tools = new Map<string, unknown>();
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({ registerCommand() {}, registerTool(tool: { name: string }) { tools.set(tool.name, tool); } });
+    expect([...tools.keys()]).toEqual(["mpx_model_search", "mpx_model_load", "Agent", "get_subagent_result", "steer_subagent"]);
+    const source = await readFile(projection.extension, "utf8");
+    expect(source).not.toMatch(/example\.invalid|Projection result|Fetched \$/u);
+  });
+
   it("activates the generated extension with current tool, disclosure, command, status, and restart semantics", async () => {
     const f = await fixture();
     const artifactsRoot = await mkdtemp(path.join(tmpdir(), "pi-projections-"));
@@ -552,7 +443,7 @@ describe("production Pi projection", () => {
 
     await expect(module.activate(pi)).resolves.toBeUndefined();
     expect([...commands.keys()]).toEqual(["mpx:explicit", "mpx:full", "mpx:named"]);
-    expect([...tools.keys()]).toEqual(["mpx_model_search", "mpx_model_load"]);
+    expect([...tools.keys()]).toEqual(["mpx_model_search", "mpx_model_load", "Agent", "get_subagent_result", "steer_subagent"]);
     expect(events.has("before_agent_start")).toBe(true);
     expect(events.has("session_start")).toBe(true);
     expect(events.has("session_shutdown")).toBe(true);
@@ -565,13 +456,11 @@ describe("production Pi projection", () => {
     await sessionStart({}, { ui: { setStatus: (key: string, text: string) => { statusCalls.push([key, text]); } } });
     await sessionStart({}, { ui: { setStatus: (key: string, text: string) => { statusCalls.push([key, text]); } } });
     expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
-    expect(statusCalls).toEqual([
-      ["mpx", renderPiStatusLine(f.statusSnapshot, { launchBanner: f.launchBanner })],
-      ["mpx", renderPiStatusLine(f.statusSnapshot, { launchBanner: f.launchBanner })],
-    ]);
+    const expectedRuntimeStatus = renderPiRuntimeStatus(f.runtimeStatusEnvelope, "wide");
+    expect(statusCalls).toEqual([["mpx", expectedRuntimeStatus], ["mpx", expectedRuntimeStatus]]);
     await writeFile(liveStatus, JSON.stringify({ ...f.statusSnapshot, portResolution: "missing", services: [] }));
     await beforeAgentStart({ systemPrompt: "BASE" });
-    expect(statusCalls.at(-1)).toEqual(["mpx", `${f.launchBanner} | ports missing`]);
+    expect(statusCalls.at(-1)).toEqual(["mpx", expectedRuntimeStatus]);
     await events.get("session_shutdown")![0]!();
     expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
     clearIntervalSpy.mockRestore();

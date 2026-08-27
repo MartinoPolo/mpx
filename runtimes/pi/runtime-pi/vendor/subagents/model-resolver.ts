@@ -14,6 +14,21 @@ export interface ModelRegistry {
   getAvailable?(): any[];
 }
 
+/** VENDOR EDIT (mpx-pi): Resolve every spawn path with the same fuzzy model policy. */
+export function resolveEffectiveModel<TModel extends ModelEntry>(
+  explicitModel: TModel | undefined,
+  parentModel: TModel | undefined,
+  registry: ModelRegistry,
+  configuredModel?: string,
+): TModel | undefined {
+  if (explicitModel) return explicitModel;
+  if (configuredModel) {
+    const resolved = resolveModel(configuredModel, registry);
+    if (typeof resolved !== "string") return resolved as TModel;
+  }
+  return parentModel;
+}
+
 /**
  * Resolve a model string to a Model instance.
  * Tries exact match first ("provider/modelId"), then fuzzy match against all available models.

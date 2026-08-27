@@ -88,6 +88,38 @@ describe("session command", () => {
     expect(result.data.legacy.quarantine).toEqual([]);
   });
 
+  it("returns a branch plan without applying side effects before confirmation", async () => {
+    const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString();
+    await context.store.saveNativeBinding({ schemaVersion: 1, ref: "binding", identity, runtime: "claude", recordedRootDigest: "b".repeat(64), accountBindingRef: null, createdAt: now, updatedAt: now });
+    await service.save({ ...record("session-one"), launch: { launchKey: "launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [], artifactKey: "artifact", manifestKey: "manifest" } });
+    const plan = vi.fn(async (request: unknown) => ({ schemaVersion: 1 as const, kind: "session-branch-plan" as const, confirmationDigest: "c".repeat(64), request })), apply = vi.fn();
+    const result = await executeSessionCommand({ action: "branch", args: ["session-one"], options: new Map([["workspace", "isolated"]]) }, { ...context, branchService: { plan, apply } as never });
+    expect(result.data).toMatchObject({ kind: "session-branch-plan", confirmationDigest: "c".repeat(64) });
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("applies only the digest-confirmed branch plan", async () => {
+    const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString(), confirmationDigest = "c".repeat(64);
+    await context.store.saveNativeBinding({ schemaVersion: 1, ref: "binding", identity, runtime: "claude", recordedRootDigest: "b".repeat(64), accountBindingRef: null, createdAt: now, updatedAt: now });
+    await service.save({ ...record("session-one"), launch: { launchKey: "launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [], artifactKey: "artifact", manifestKey: "manifest" } });
+    const planned = { schemaVersion: 1 as const, kind: "session-branch-plan" as const, confirmationDigest }, plan = vi.fn(async () => planned), apply = vi.fn(async () => ({ schemaVersion: 1, kind: "session-branch-apply", writerLease: null }));
+    await executeSessionCommand({ action: "branch", args: ["session-one"], options: new Map([["confirm-plan", confirmationDigest]]) }, { ...context, branchService: { plan, apply } as never });
+    expect(apply).toHaveBeenCalledWith(planned, confirmationDigest);
+  });
+
+  it("admits scheduled capture only with Phase I immutable runner authority", async () => {
+    const context = await fixture(), inspect = vi.fn(async () => ({ installed: true, authorityDigest: "a".repeat(64) })), discoveries = vi.fn(async () => []);
+    await expect(executeSessionCommand({ action: "reconcile", args: [], options: new Map([["capture", "scheduled"]]) }, { ...context, discoveries, scheduledCaptureAuthority: { inspect } })).resolves.toMatchObject({ data: { schemaVersion: 1, kind: "session-reconcile" } });
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(discoveries).toHaveBeenCalledOnce();
+  });
+
+  it("keeps scheduled capture fail-closed without immutable runner authority", async () => {
+    const context = await fixture(), discoveries = vi.fn(async () => []);
+    await expect(executeSessionCommand({ action: "reconcile", args: [], options: new Map([["capture", "scheduled"]]) }, { ...context, discoveries })).rejects.toMatchObject({ code: "SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE" });
+    expect(discoveries).not.toHaveBeenCalled();
+  });
+
   it("verifies an existing resume target before consuming pending lifecycle events and then replans", async () => {
     const context = await fixture(), service = new SessionService(context.store), now = new Date().toISOString(), order: string[] = [];
     const launch = { launchKey: "old-launch", descriptorDigest: "a".repeat(64), mode: "interactive", skillPolicy: "standard", contentScope: "repo", executor: { kind: "host" }, workspace: "direct", networkPolicy: "restricted", grants: [{ resource: "repo", access: "read" }], artifactKey: "artifact", manifestKey: "manifest" } as const;
@@ -116,4 +148,23 @@ describe("session command", () => {
     await service.save({ ...await service.show("session-one"), launch: { ...launch, grants: [{ resource: "repo", access: "write" }] } });
     await expect(executeSessionCommand({ action: "resume", args: ["session-one"], options: new Map([["confirm-plan", planned.data.confirmationDigest]]) }, { ...context, resumeDependencies, executeResume: async () => ({}) })).rejects.toMatchObject({ code: "SESSION_RESUME_CONFIRMATION_MISMATCH" });
   });
+});
+
+it("emits structured no-model handoff and completion envelopes with bounded required user text", async () => {
+  const context = await fixture();
+  const handoff = await executeSessionCommand({ action: "handoff", args: ["session-one"], options: new Map([
+    ["identity", "me"], ["summary", "Implementation is ready"], ["next-action", "Run acceptance"], ["disposition", "paused"],
+  ]) }, context);
+  expect(handoff.data).toMatchObject({ schemaVersion: 1, kind: "session-disposition", operation: "handoff", disposition: "paused" });
+
+  const completion = await executeSessionCommand({ action: "complete", args: ["session-one"], options: new Map([
+    ["identity", "me"], ["summary", "Acceptance passed"], ["next-action", "Archive work"], ["disposition", "completed"],
+  ]) }, context);
+  expect(completion.data).toMatchObject({ schemaVersion: 1, kind: "session-disposition", operation: "completion", record: { workflow: { inbox: false } } });
+
+  for (const [name, value] of [["summary", ""], ["summary", "x".repeat(513)], ["next-action", "bad\u0000text"]] as const) {
+    const options = new Map<string, string>([["identity", "me"], ["summary", "ok"], ["next-action", "continue"], ["disposition", "unfinished"]]);
+    options.set(name, value);
+    await expect(executeSessionCommand({ action: "handoff", args: ["session-one"], options }, context)).rejects.toMatchObject({ code: "SESSION_USAGE_ERROR" });
+  }
 });

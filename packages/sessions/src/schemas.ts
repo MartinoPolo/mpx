@@ -71,6 +71,12 @@ export interface SessionRecordV1 {
     relatedIssue: string | null;
     relatedReview: string | null;
     priority: number | null;
+    summary?: string | null;
+    dispositionAt?: string | null;
+    handedOffAt?: string | null;
+    completedAt?: string | null;
+    observationId?: string | null;
+    operation?: "handoff" | "completion" | null;
   }>;
   readonly resume: Readonly<{
     state: "resumable" | "blocked" | "unavailable" | "unknown";
@@ -88,6 +94,17 @@ export interface SessionRecordV1 {
     sequence: number;
     timestamp: string | null;
   }>;
+}
+export interface SessionDispositionObservationV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "session-disposition";
+  readonly eventId: string;
+  readonly operation: "handoff" | "completion";
+  readonly disposition: "paused" | "unfinished" | "completed";
+  readonly occurredAt: string;
+  readonly identity: IdentityV1;
+  readonly runtime: RuntimeName;
+  readonly record: SessionRecordV1;
 }
 export interface SessionRegistryV1 {
   readonly schemaVersion: 1;
@@ -169,6 +186,23 @@ function obj(
   const missing = expected.find((key) => !Object.hasOwn(item, key));
   if (missing)
     fail("SESSION_INVALID_SCHEMA", `${label} is missing '${missing}'`);
+  return item;
+}
+function objOptional(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    fail("SESSION_INVALID_SCHEMA", `${label} must be an object`);
+  const item = value as Record<string, unknown>;
+  const extra = Object.keys(item).find(
+    (key) => !required.includes(key) && !optional.includes(key) || forbiddenKey.test(key),
+  );
+  if (extra) fail("SESSION_UNKNOWN_FIELD", `${label} contains forbidden or unknown field '${extra}'`);
+  const missing = required.find((key) => !Object.hasOwn(item, key));
+  if (missing) fail("SESSION_INVALID_SCHEMA", `${label} is missing '${missing}'`);
   return item;
 }
 function text(value: unknown, label: string, max = 512): string {
@@ -341,9 +375,10 @@ export function parseSessionRecordV1(value: unknown): SessionRecordV1 {
     );
   const metadata = obj(item.metadata, ["title", "model", "effort"], "metadata");
   const process = item.process === null ? null : obj(item.process, ["pid", "startFingerprint"], "process");
-  const workflow = obj(
+  const workflow = objOptional(
     item.workflow,
     ["status", "inbox", "nextAction", "note", "relatedIssue", "relatedReview", "priority"],
+    ["summary", "dispositionAt", "handedOffAt", "completedAt", "observationId", "operation"],
     "workflow",
   );
   if (typeof workflow.inbox !== "boolean")
@@ -416,6 +451,12 @@ export function parseSessionRecordV1(value: unknown): SessionRecordV1 {
       relatedIssue: nullableText(workflow.relatedIssue, "workflow.relatedIssue", 512),
       relatedReview: nullableText(workflow.relatedReview, "workflow.relatedReview", 512),
       priority,
+      ...(Object.hasOwn(workflow, "summary") ? { summary: nullableText(workflow.summary, "workflow.summary", 512) } : {}),
+      ...(Object.hasOwn(workflow, "dispositionAt") ? { dispositionAt: workflow.dispositionAt == null ? null : canonicalTimestamp(workflow.dispositionAt, "workflow.dispositionAt") } : {}),
+      ...(Object.hasOwn(workflow, "handedOffAt") ? { handedOffAt: workflow.handedOffAt == null ? null : canonicalTimestamp(workflow.handedOffAt, "workflow.handedOffAt") } : {}),
+      ...(Object.hasOwn(workflow, "completedAt") ? { completedAt: workflow.completedAt == null ? null : canonicalTimestamp(workflow.completedAt, "workflow.completedAt") } : {}),
+      ...(Object.hasOwn(workflow, "observationId") ? { observationId: nullableText(workflow.observationId, "workflow.observationId", 64) } : {}),
+      ...(Object.hasOwn(workflow, "operation") ? { operation: workflow.operation == null ? null : enumValue(workflow.operation, ["handoff", "completion"] as const, "workflow.operation") } : {}),
     },
     resume: {
       state: enumValue(

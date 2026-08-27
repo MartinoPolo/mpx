@@ -9,7 +9,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSync, rmSync } from "node:fs";
-import { dirname, join, resolve, basename } from "node:path";
+import { dirname, join, resolve, basename, relative, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { parse as parseYaml } from "yaml";
@@ -36,10 +36,15 @@ function fail(message) {
 }
 
 function resolveTutorialsRoot() {
-  if (process.env.TUTORIALS_ROOT) return process.env.TUTORIALS_ROOT;
-  if (process.env.MPX_AI_GENERATED) return join(process.env.MPX_AI_GENERATED, "_TUTORIALS");
-  if (process.env.MPX_ONEDRIVE) return join(process.env.MPX_ONEDRIVE, "AI GENERATED", "_TUTORIALS");
-  fail("cannot locate the tutorials root: set the machine environment variable MPX_AI_GENERATED (or TUTORIALS_ROOT / MPX_ONEDRIVE).");
+  const root = process.env.MPX_AI_GENERATED?.trim();
+  if (root) return resolve(root, "_TUTORIALS");
+  fail("cannot locate the tutorials root: set the machine environment variable MPX_AI_GENERATED.");
+}
+
+function assertOutputContainment(candidate, label) {
+  const child = relative(TUTORIALS_ROOT, resolve(candidate));
+  if (child === "" || (!child.startsWith("..") && !isAbsolute(child))) return;
+  fail(`${label} must stay under MPX_AI_GENERATED/_TUTORIALS: ${candidate}`);
 }
 
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -1195,6 +1200,8 @@ async function main() {
   const skipIndex = args.includes("--no-index");
 
   const sourcePath = resolve(sourceArg);
+  assertOutputContainment(sourcePath, "source");
+  if (outDir) assertOutputContainment(outDir, "output directory");
   if (!existsSync(sourcePath)) fail(`source not found: ${sourcePath}`);
   const raw = readFileSync(sourcePath, "utf8");
   const { meta, sections, quiz } = parseSource(raw);

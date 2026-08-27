@@ -27,7 +27,9 @@ The bundled scanners and the removal helper live in `./scripts/`. Every `scripts
 
 Detect the OS and read the matching platform file. Windows is the verified path; on macOS or Linux, tell the user those commands are unverified and dry-run each one.
 
-Read `~/.runtime/clean-pc/state.json` when it exists:
+Resolve `MPX_ONEDRIVE` from the environment and use
+`<resolved MPX_ONEDRIVE>/.mpx/clean-pc/state.json` when it exists. Never read a runtime's
+private or native state directory:
 
 - **Checkpoint present** → offer to resume from the last completed domain instead of rescanning.
 - **Declined groups** → skip them silently. Re-asking about the same app every sweep is noise.

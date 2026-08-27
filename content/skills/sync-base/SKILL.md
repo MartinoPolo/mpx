@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Sync Base Branch
 
 Merge a target branch into the current branch. the invocation input

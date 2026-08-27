@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Decompose Large Files
 
 Split oversized files into logical modules. Keep functionality unchanged. Enforce DRY and clear organization. the invocation input
@@ -28,7 +29,7 @@ Parse `the invocation input` into explicit targets (files or folders).
 
 ### Step 2: Spawn Decomposition Subagents
 
-Spawn one `general-purpose` sub-agent with `model: "appropriate runtime class"` per large-file unit.
+Spawn one `general-purpose` sub-agent with the advanced model class per large-file unit.
 
 - Use fresh context per unit
 - Keep each large file's decomposition in its own subagent

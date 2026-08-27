@@ -12,9 +12,10 @@ Input format — one turn per line, `Speaker: text`, blank lines ignored:
 
 Usage:
     pip install -U google-genai
-    python gemini-tts-podcast.py script.txt out.mp3 --speakers Alex,Sam --voices Kore,Puck
+    python gemini-tts-podcast.py script.txt _PODCASTS/topic/out.mp3 --speakers Alex,Sam --voices Kore,Puck
 
-Requires the GEMINI_API_KEY environment variable and ffmpeg on PATH.
+The output is resolved under MPX_AI_GENERATED. Requires the GEMINI_API_KEY environment
+variable and ffmpeg on PATH.
 API reference: https://ai.google.dev/gemini-api/docs/generate-content/speech-generation
 """
 
@@ -146,6 +147,20 @@ def stitch(wav_paths: list[Path], output: Path, workdir: Path) -> None:
     )
 
 
+def resolve_output(output: Path) -> Path:
+    """Resolve a media output under the configured AI-generated assets root."""
+    configured = os.environ.get("MPX_AI_GENERATED", "").strip()
+    if not configured:
+        sys.exit("Set MPX_AI_GENERATED before writing podcast media.")
+    root = Path(configured).resolve()
+    candidate = output.resolve() if output.is_absolute() else (root / output).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        sys.exit(f"Output must stay under MPX_AI_GENERATED: {candidate}")
+    return candidate
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("script", type=Path, help="dialogue script, one `Speaker: text` per line")
@@ -153,6 +168,7 @@ def main() -> None:
     parser.add_argument("--speakers", default="Alex,Sam", help="two speaker names as they appear in the script")
     parser.add_argument("--voices", default="Kore,Puck", help="two prebuilt Gemini voice names")
     args = parser.parse_args()
+    args.output = resolve_output(args.output)
 
     speakers = [s.strip() for s in args.speakers.split(",") if s.strip()]
     voices = [v.strip() for v in args.voices.split(",") if v.strip()]

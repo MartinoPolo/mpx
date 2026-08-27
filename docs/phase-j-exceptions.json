@@ -1,0 +1,6 @@
+[
+  {"id":"F2-LIVE-SBX-ATTESTATION","reason":"The implemented F2 contracts and proof foundation still require the pinned live standalone-sbx attestation before Docker can become the default."},
+  {"id":"J-OBSERVATION-WINDOW","reason":"The normal-use observation window has not completed."},
+  {"id":"J-LEGACY-DISABLED-LIVE","reason":"Legacy-disabled acceptance has not passed on the installed four-route runtime matrix."},
+  {"id":"J-POST-CUTOVER-ACCEPTANCE","reason":"The full acceptance suite cannot run after legacy activation removal until a separately confirmed future cutover."}
+]

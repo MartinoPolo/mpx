@@ -1,0 +1,1 @@
+{"schemaVersion":1,"project":{"id":"phase-h/tests"},"repository":{"provider":"generic","remote":"origin"},"development":{"services":{"test-server":{"scope":"checkout","port":{"mode":"managed","preferred":4173},"environmentVariable":"TEST_SERVER_URL","protocol":"http","start":{"type":"test-only"}}}}}

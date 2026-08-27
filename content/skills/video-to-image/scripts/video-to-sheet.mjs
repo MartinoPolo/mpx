@@ -5,6 +5,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   slugify,
@@ -170,22 +171,26 @@ function parseSheet(sheetText) {
  * working-directory fallback: a sheet written into whatever repo the user happened to be
  * standing in is lost work, so an unconfigured machine stops here with the variable to set.
  */
-function resolveOutputDirectory(requestedDirectory, folderName) {
-  if (requestedDirectory) {
-    return path.join(path.resolve(requestedDirectory), folderName);
-  }
+function assertOutputContainment(root, candidate) {
+  const child = path.relative(root, candidate);
+  if (child === "" || (!child.startsWith("..") && !path.isAbsolute(child))) return candidate;
+  throw new Error(`Output must stay under MPX_AI_GENERATED: ${candidate}`);
+}
 
-  const aiGeneratedRoot = (process.env.MPX_AI_GENERATED ?? "").trim();
-  if (aiGeneratedRoot) {
-    return path.join(aiGeneratedRoot, SHEETS_FOLDER_NAME, folderName);
-  }
-
-  exitWithError(
+export function resolveOutputDirectory(requestedDirectory, folderName) {
+  const configuredRoot = (process.env.MPX_AI_GENERATED ?? "").trim();
+  if (!configuredRoot) throw new Error(
     "No output location: set the machine environment variable MPX_AI_GENERATED to the " +
-      "AI-generated assets root, or pass --out <dir>.\n" +
+      "AI-generated assets root.\n" +
       '  setx MPX_AI_GENERATED "<path-to-AI-GENERATED>"\n' +
       "Open a new terminal afterwards so the variable is visible.",
   );
+
+  const root = path.resolve(configuredRoot);
+  const parent = requestedDirectory
+    ? assertOutputContainment(root, path.resolve(requestedDirectory))
+    : path.join(root, SHEETS_FOLDER_NAME);
+  return assertOutputContainment(root, path.join(parent, folderName));
 }
 
 async function main() {
@@ -248,4 +253,6 @@ async function main() {
   );
 }
 
-main().catch((error) => exitWithError(error.message));
+if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+  main().catch((error) => exitWithError(error.message));
+}

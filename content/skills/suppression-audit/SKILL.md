@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Suppression Audit
 
 Audit all code quality suppressions and lint config rule changes across the repository. For each suppression, determine whether a simple fix resolves the underlying issue or the suppression is genuinely needed. Fix unjustified suppressions, verify checks pass, and create a PR.

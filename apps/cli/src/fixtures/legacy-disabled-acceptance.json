@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "legacyDisabled": true,
+  "roots": [],
+  "processLines": [],
+  "environment": {},
+  "expected": {"mode": "legacy-disabled", "passed": true}
+}

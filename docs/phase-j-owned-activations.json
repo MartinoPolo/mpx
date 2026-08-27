@@ -1,0 +1,6 @@
+[
+  {"path":"${USERPROFILE}/.bashrc","startMarker":"# >>> mpx-ports >>>","endMarker":"# <<< mpx-ports <<<"},
+  {"path":"${USERPROFILE}/.bashrc","startMarker":"# >>> mpx-worktrees >>>","endMarker":"# <<< mpx-worktrees <<<"},
+  {"path":"${MPX_ONEDRIVE}/Dokumenty/WindowsPowerShell/Microsoft.PowerShell_profile.ps1","startMarker":"# >>> mpx-ports >>>","endMarker":"# <<< mpx-ports <<<"},
+  {"path":"${MPX_ONEDRIVE}/Dokumenty/WindowsPowerShell/Microsoft.PowerShell_profile.ps1","startMarker":"# >>> mpx-worktrees >>>","endMarker":"# <<< mpx-worktrees <<<"}
+]

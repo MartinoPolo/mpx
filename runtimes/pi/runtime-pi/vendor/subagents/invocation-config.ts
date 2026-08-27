@@ -1,4 +1,22 @@
-import type { AgentConfig, IsolationMode, JoinMode, ThinkingLevel } from "./types.js";
+import type { AgentConfig, AgentInvocation, IsolationMode, JoinMode, ThinkingLevel } from "./types.js";
+
+export interface InvocationModel {
+  provider: string;
+  id: string;
+}
+
+/** VENDOR EDIT (mpx-pi): Keep the actual resolved model ID on every UI snapshot. */
+export function getResolvedModelName(model: InvocationModel | undefined): string | undefined {
+  return model?.id;
+}
+
+/** VENDOR EDIT (mpx-pi): Normalize model display centrally for every spawn path. */
+export function withResolvedModelName(
+  invocation: AgentInvocation | undefined,
+  model: InvocationModel | undefined,
+): AgentInvocation {
+  return { ...invocation, modelName: getResolvedModelName(model) };
+}
 
 interface AgentInvocationParams {
   model?: string;

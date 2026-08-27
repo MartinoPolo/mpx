@@ -31,7 +31,7 @@ import { inChildSessionContext } from "./child-context.js";
 import { type RpcHandle, registerRpcHandlers } from "./cross-extension-rpc.js";
 import { loadCustomAgents } from "./custom-agents.js";
 import { GroupJoinManager } from "./group-join.js";
-import { resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
+import { getResolvedModelName, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
 import { type ModelRegistry, resolveModel } from "./model-resolver.js";
 import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./model-scope.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
@@ -389,60 +389,74 @@ export default function (pi: ExtensionAPI) {
       durationMs,
       tokens,
       // VENDOR EDIT (mpx-pi, Phase 7 row 11): the footer's completed-agent tally
-      // groups by model and shows the thinking gauge, and the shared event bus is
-      // its only view of a finished agent. Both stay undefined when the agent ran
-      // on the parent's model with default thinking, so the payload shape holds.
+      // groups by the actual resolved model and shows the thinking gauge; the
+      // shared event bus is its only view of a finished agent.
       model: record.invocation?.modelName,
       thinking: record.invocation?.thinking,
     };
   }
 
+  // VENDOR EDIT (mpx-pi): hold completion follow-ups until all active background agents settle.
   // Background completion: route through group join or send individual nudge
-  const manager = new AgentManager((record) => {
+  let manager: AgentManager;
+  const syncBackgroundAgentsActive = () => {
+    const backgroundAgentsActive = manager.listAgents().some((agent) =>
+      !agent.parentAgentId &&
+      agent.isBackground !== false &&
+      (agent.status === "running" || agent.status === "queued")
+    );
+    notificationGate.onBackgroundAgentsActiveChanged(backgroundAgentsActive);
+  };
+  manager = new AgentManager((record) => {
     // Nested children report only through their owning parent's scoped tools.
     // Keep them out of top-level lifecycle, transcript, notification, and UI channels.
     if (record.parentAgentId) return;
 
-    // Emit lifecycle event based on terminal status
-    const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
-    const eventData = buildEventData(record);
-    if (isError) {
-      pi.events.emit("subagents:failed", eventData);
-    } else {
-      pi.events.emit("subagents:completed", eventData);
-    }
+    try {
+      // Emit lifecycle event based on terminal status
+      const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
+      const eventData = buildEventData(record);
+      if (isError) {
+        pi.events.emit("subagents:failed", eventData);
+      } else {
+        pi.events.emit("subagents:completed", eventData);
+      }
 
-    // Persist final record for cross-extension history reconstruction
-    pi.appendEntry("subagents:record", {
-      id: record.id, type: record.type, description: record.description,
-      status: record.status, result: record.result, error: record.error,
-      startedAt: record.startedAt, completedAt: record.completedAt,
-    });
+      // Persist final record for cross-extension history reconstruction
+      pi.appendEntry("subagents:record", {
+        id: record.id, type: record.type, description: record.description,
+        status: record.status, result: record.result, error: record.error,
+        startedAt: record.startedAt, completedAt: record.completedAt,
+      });
 
-    // Skip notification if result was already consumed via get_subagent_result
-    if (record.resultConsumed) {
-      agentActivity.delete(record.id);
-      widget.markFinished(record.id);
-      fleet.onAgentFinished(record.id);
+      // Skip notification if result was already consumed via get_subagent_result
+      if (record.resultConsumed) {
+        agentActivity.delete(record.id);
+        widget.markFinished(record.id);
+        fleet.onAgentFinished(record.id);
+        widget.update();
+        return;
+      }
+
+      // If this agent is pending batch finalization (debounce window still open),
+      // don't send an individual nudge — finalizeBatch will pick it up retroactively.
+      if (currentBatchAgents.some(a => a.id === record.id)) {
+        widget.update();
+        return;
+      }
+
+      const result = groupJoin.onAgentComplete(record);
+      if (result === 'pass') {
+        sendIndividualNudge(record);
+      }
+      // 'held' → do nothing, group will fire later
+      // 'delivered' → group callback already fired
       widget.update();
-      return;
+    } finally {
+      syncBackgroundAgentsActive();
     }
-
-    // If this agent is pending batch finalization (debounce window still open),
-    // don't send an individual nudge — finalizeBatch will pick it up retroactively.
-    if (currentBatchAgents.some(a => a.id === record.id)) {
-      widget.update();
-      return;
-    }
-
-    const result = groupJoin.onAgentComplete(record);
-    if (result === 'pass') {
-      sendIndividualNudge(record);
-    }
-    // 'held' → do nothing, group will fire later
-    // 'delivered' → group callback already fired
-    widget.update();
   }, undefined, (record) => {
+    syncBackgroundAgentsActive();
     if (record.parentAgentId) return;
     // Emit started event when agent transitions to running (including from queue)
     pi.events.emit("subagents:started", {
@@ -461,6 +475,10 @@ export default function (pi: ExtensionAPI) {
       tokensBefore: info.tokensBefore,
       compactionCount: record.compactionCount,
     });
+  }, (record) => {
+    currentBatchAgents = currentBatchAgents.filter((agent) => agent.id !== record.id);
+    groupJoin.cancelAgent(record.id);
+    syncBackgroundAgentsActive();
   });
 
   // Expose manager via Symbol.for() global registry for cross-package access.
@@ -967,7 +985,7 @@ Terse command-style prompts produce shallow, generic work.
         return new Text(text, 0, 0);
       }
 
-      // Helper: build "haiku · thinking: high · ↻5≤30 · 3 tool uses · 33.8k tokens" stats string
+      // Helper: build "haiku · thinking: high · turn 5/30 · 3 tool uses · 33.8k tokens" stats string
       const stats = (d: AgentDetails) => {
         const parts: string[] = [];
         if (d.modelName) parts.push(d.modelName);
@@ -1104,11 +1122,9 @@ Terse command-style prompts produce shallow, generic work.
         writeInitialEntry(rec.outputFile, agentId, params.prompt, ctx.cwd);
       };
 
-      const parentModelId = ctx.model?.id;
-      const effectiveModelId = model?.id;
-      const modelName = effectiveModelId && effectiveModelId !== parentModelId
-        ? (model?.name ?? effectiveModelId).replace(/^Claude\s+/i, "").toLowerCase()
-        : undefined;
+      // VENDOR EDIT (mpx-pi): Always surface the actual resolved model. Hiding
+      // it when it matched the parent made pinned and inherited runs ambiguous.
+      const modelName = getResolvedModelName(model);
       const effectiveMaxTurns = normalizeMaxTurns(resolvedConfig.maxTurns ?? getDefaultMaxTurns());
       const agentInvocation: AgentInvocation = {
         modelName,
@@ -1157,7 +1173,7 @@ Terse command-style prompts produce shallow, generic work.
             schedule: params.schedule as string,
             subagent_type: subagentType,
             prompt: params.prompt as string,
-            model: params.model as string | undefined,
+            model: resolvedConfig.modelInput,
             thinking: thinking,
             max_turns: effectiveMaxTurns,
             isolated: isolated,
@@ -1189,12 +1205,16 @@ Terse command-style prompts produce shallow, generic work.
         }
         // A failed resume surfaces the error, plus any partial output THIS
         // resume produced (never the previous turn's answer, #144).
+        const resumedModelName = record.invocation?.modelName ?? detailBase.modelName;
         if (record.status === "error") {
-          return textResult(`Agent failed: ${record.error}${partialOutputSuffix(record)}`, buildDetails(detailBase, record));
+          return textResult(
+            `Agent failed: ${record.error}${partialOutputSuffix(record)}`,
+            buildDetails(detailBase, record, undefined, { modelName: resumedModelName }),
+          );
         }
         return textResult(
           record.result?.trim() || "No output.",
-          buildDetails(detailBase, record),
+          buildDetails(detailBase, record, undefined, { modelName: resumedModelName }),
         );
       }
 

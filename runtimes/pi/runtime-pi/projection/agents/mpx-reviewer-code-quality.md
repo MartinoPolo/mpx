@@ -1,8 +1,10 @@
 ---
 name: mpx-reviewer-code-quality
 description: "Read-only reviewer for DRY, SoC, dead code, duplication, naming, constants, and maintainability."
-model: openai-codex/gpt-5.6-luna
+model: openai-codex/gpt-5.6-terra
+thinking: medium
 tools: read,grep,find,ls,bash
+output_schema: findings
 
 ---
 # Reviewer: Code Quality

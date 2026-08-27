@@ -8,6 +8,17 @@ it("rejects empty or duplicate preparation dependencies",()=>{
   const config={...base(),worktrees:{postCreate:{execution:"foreground",steps:[{id:"",uses:"package-install",dependsOn:["build","build"]}]}}};
   expect(()=>assertValid(validateProject,config)).toThrow();
 });
+it("keeps machine-local issue and vault roots out of committed project config",()=>{
+  expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local",store:"personal-issues",view:"obsidian-issues"}})).not.toThrow();
+  expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local",root:"issues",views:{vaultRoot:"C:/vault",outputRoot:"C:/vault/MPX/Issues",resumeBaseUrl:"mpx://resume"}}})).toThrow();
+  expect(()=>assertValid(validateProject,{...base(),issues:{provider:"local"}})).toThrow();
+});
+it("accepts identity-local logical issue store and view registrations",()=>{
+  const value=JSON.parse(user("C:/work"));
+  value.localIssueStores={"personal-issues":{root:"${MPX_PROJECTS}"}};
+  value.localViews={"obsidian-issues":{vaultRoot:"${MPX_OBSIDIAN_VAULT}",outputRoot:"C:/vault/MPX/Issues",vaultSubtree:"MPX/Issues",resumeBaseUrl:"mpx://resume"}};
+  expect(()=>parseUserConfig(JSON.stringify(value),{MPX_PROJECTS:"C:/projects",MPX_OBSIDIAN_VAULT:"C:/vault"})).not.toThrow();
+});
 describe("strict json",()=>{it.each(['{"a":1,"a":2}','{"__proto__":1}','{"nested":{"constructor":1}}'])("rejects malicious %s",s=>expect(()=>parseStrictJson(s)).toThrow(StrictJsonError));it("schema rejects secret fields",()=>expect(()=>assertValid(validateProject,{...base(),token:"secret"})).toThrow())});
 const user=(root:string,pack="core")=>JSON.stringify({identities:{},domains:{work:[root]},contentScopes:{work:{roots:[root],skillPacks:[pack]}},modes:{},skillPolicies:{},presets:{},launchDefaults:{scopes:{},projects:{}},networkPolicies:{},executors:{host:{}}});
 it("interpolates only approved complete MPX root tokens",()=>{
@@ -16,6 +27,13 @@ it("interpolates only approved complete MPX root tokens",()=>{
   expect(()=>parseUserConfig(user("${MPX_SECRET}"),{MPX_SECRET:"secret"})).toThrow();
 });
 it("rejects unknown skill packs",()=>expect(()=>parseUserConfig(user("C:/work","unknown"))).toThrow());
+it("accepts the five Phase H service manifest shapes",async()=>{
+  const root=new URL("../test/fixtures/phase-h/",import.meta.url);
+  for(const name of ["checkout.json","coupled.json","project-shared.json","external-database.json","test-consumer.json"]){
+    const value=JSON.parse(await readFile(new URL(name,root),"utf8"));
+    expect(()=>assertValid(validateProject,value),name).not.toThrow();
+  }
+});
 it("requires a preferred port for fixed-shared services",()=>{
   const service={scope:"checkout",port:{mode:"fixed-shared"},start:{type:"package-script",script:"dev"}};
   expect(()=>assertValid(validateProject,{...base(),development:{services:{app:service}}})).toThrow();

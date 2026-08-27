@@ -6,6 +6,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Script Discovery
 
 Wrap `./scripts/detect-project-scripts.mjs`. Use this skill when agents need a reliable fallback reference for script discovery behavior.
@@ -54,7 +55,7 @@ Behavior:
 ## Step 1: Run detector (default wrapper mode)
 
 ```bash
-node "$SCRIPT_DETECTOR" <target-path>
+node "$SCRIPT_DETECTOR" <project-directory>
 ```
 
 Default output format:
@@ -68,19 +69,19 @@ If detector returns an error line, report it and stop.
 Recursive scan:
 
 ```bash
-node "$SCRIPT_DETECTOR" <target-path> --recursive
+node "$SCRIPT_DETECTOR" <project-directory> --recursive
 ```
 
 Category filtered scan:
 
 ```bash
-node "$SCRIPT_DETECTOR" <target-path> --category frontend
+node "$SCRIPT_DETECTOR" <project-directory> --category frontend
 ```
 
 JSON scan (automation/debugging):
 
 ```bash
-node "$SCRIPT_DETECTOR" <target-path> --recursive --json
+node "$SCRIPT_DETECTOR" <project-directory> --recursive --json
 ```
 
 ## Example Outputs

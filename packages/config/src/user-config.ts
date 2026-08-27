@@ -55,7 +55,7 @@ function nativeRuntimeRoot(value: unknown, environment: NodeJS.ProcessEnv, point
 
 function rejectUndocumentedInterpolation(value: unknown, pointer = ""): void {
   if (typeof value === "string" && value.includes("${")) {
-    const documentedRoot = /^\/domains\/[^/]+\/\d+$/u.test(pointer) || /^\/contentScopes\/[^/]+\/roots\/\d+$/u.test(pointer);
+    const documentedRoot = /^\/domains\/[^/]+\/\d+$/u.test(pointer) || /^\/contentScopes\/[^/]+\/roots\/\d+$/u.test(pointer) || /^\/localIssueStores\/[^/]+\/root$/u.test(pointer) || /^\/localViews\/[^/]+\/(?:vaultRoot|outputRoot)$/u.test(pointer);
     if (!documentedRoot) throw validationError(pointer || "/", `Environment interpolation is not allowed at ${pointer || "/"}`);
   }
   if (Array.isArray(value)) value.forEach((entry, index) => rejectUndocumentedInterpolation(entry, `${pointer}/${index}`));
@@ -79,6 +79,10 @@ export function interpolateUserConfig(value: unknown, environment: NodeJS.Proces
   for (const [name, roots] of Object.entries(domains ?? {})) roots.forEach((root, index) => { roots[index] = rootToken(root, environment, `/domains/${name}/${index}`); });
   const scopes = result.contentScopes as Record<string, { roots?: unknown[] }> | undefined;
   for (const [name, scope] of Object.entries(scopes ?? {})) scope.roots?.forEach((root, index) => { scope.roots![index] = rootToken(root, environment, `/contentScopes/${name}/roots/${index}`); });
+  const stores = result.localIssueStores as Record<string, { root?: unknown }> | undefined;
+  for (const [name, store] of Object.entries(stores ?? {})) if (store.root !== undefined) store.root = rootToken(store.root, environment, `/localIssueStores/${name}/root`);
+  const views = result.localViews as Record<string, { vaultRoot?: unknown; outputRoot?: unknown }> | undefined;
+  for (const [name, view] of Object.entries(views ?? {})) for (const field of ["vaultRoot", "outputRoot"] as const) if (view[field] !== undefined) view[field] = rootToken(view[field], environment, `/localViews/${name}/${field}`);
   const identities = result.identities as Record<string, { runtimeRoots?: Record<string, unknown> }> | undefined;
   for (const [name, identity] of Object.entries(identities ?? {})) for (const runtime of ["claude", "pi"]) {
     if (identity.runtimeRoots?.[runtime] !== undefined) identity.runtimeRoots[runtime] = nativeRuntimeRoot(identity.runtimeRoots[runtime], environment, `/identities/${name}/runtimeRoots/${runtime}`);
@@ -96,6 +100,11 @@ const builtInModeLimits = {
 const accessRank = { "read-only": 0, "staged-write": 1, "read-write": 2 } as const;
 
 function assertReferences(config: UserConfig): void {
+  for (const [name, view] of Object.entries(config.localViews ?? {})) {
+    const vault = path.resolve(view.vaultRoot), expected = path.resolve(vault, ...view.vaultSubtree.split("/")), output = path.resolve(view.outputRoot);
+    const relative = path.relative(expected, output);
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw validationError(`/localViews/${name}/outputRoot`, "must be contained by the configured MPX vault subtree");
+  }
   for (const [name, identity] of Object.entries(config.identities)) {
     if (!config.domains[identity.domain]) throw validationError(`/identities/${name}/domain`, "references an unknown domain");
     const routes = [identity.gitAuthorRoute, identity.sshRoute, ...Object.values(identity.providerRoutes ?? {}), ...(identity.mcpSharing?.allow ?? [])].filter((route): route is string => route !== undefined);

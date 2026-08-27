@@ -1,26 +1,32 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { access, lstat, mkdir, opendir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MpxError } from "@mpx/core";
-import { isSafeRouteLabel, preparationPlan, type PreparationPlan, type ProjectConfig } from "@mpx/config";
+import { isSafeRouteLabel, loadUserConfig, preparationPlan, type PreparationPlan, type ProjectConfig } from "@mpx/config";
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from "@mpx/ports";
 import { createStatusProvider, type StatusProvider } from "@mpx/status";
 import { createGitHubAdapters } from "@mpx/provider-github";
 import { createGitLabAdapters } from "@mpx/provider-gitlab";
 import { createKanbanFlowAdapter } from "@mpx/provider-kanbanflow";
+import { createLocalIssueAdapter, LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local";
 import { BUILTIN_PROVIDERS, ProviderRegistry, ProviderService, providerRegistry, type ProviderAdapter, type ProviderDescriptor, type ProviderProcessExecutor, type ProviderProcessRequest, type ProviderProcessResult } from "@mpx/providers";
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/windows";
 import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
 import { canonicalNativeRootDigest, parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
-import { FileLaunchAuditStore, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
+import { FileLaunchAuditStore, SBX_V0_39_0_PIN, diagnoseSbx, resolveTrustedSbxExecutable, type BoundedProcessRunner, type F2SandboxSessionResumeAdmission, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
 import type { LaunchExecutionContext } from "./launch-execution.js";
-import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
+import type { SbxExecutionDependencies } from "./sbx-execution.js";
+import type { CliDevService } from "./dev-command.js";
+import { ClaudeActiveScanner, PiV2ActiveRegistryScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ProcessInspector, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
-import { InstallerService, NodeReceiptStore, NodeRunnerFileVerifier } from "@mpx/installer";
+import { activateRelease, InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeInstalledRunnerAuthority, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
 import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
+import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
 
 export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild" | "captureReleaseIdentity" | "releaseLinkedAfterRemoval" | "resolveOrphan">;
 export interface CliWorktreeService {
@@ -61,8 +67,13 @@ export interface CliContext extends LaunchExecutionContext {
   worktreeServiceFactory?: (stateRoot: string, portService: CliPortService, operationCwd: string) => CliWorktreeService;
   preparationRuntimeFactory?: (stateRoot: string, environment: NodeJS.ProcessEnv) => CliPreparationRuntime;
   providerService?: CliProviderService;
+  devService?: CliDevService;
   providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
+  /** Test seam for the standalone-sbx process transport; production requires no injection. */
+  launchSbxExecutionDependencies?: SbxExecutionDependencies;
+  /** Optional read-only standalone sbx probe. It must never start or reset the daemon. */
+  sbxDiagnostics?: () => Promise<{ readonly available: boolean; readonly failureCodes: readonly string[]; readonly readOnly: true }>;
   sessionStore?: SessionStore;
   sessionStoreFactory?: (stateRoot: string) => SessionStore;
   sessionDiscoveries?: () => Promise<readonly { scanner: RuntimeDiscovery; context?: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]>;
@@ -73,10 +84,34 @@ export interface CliContext extends LaunchExecutionContext {
   rootAttestationService?: RootAttestationService;
   accountAuthVerifier?: AccountAuthVerifier;
   sessionResumeExecutor?: (plan: ResumePlanV1) => Promise<unknown>;
+  sessionBranchService?: ConversationBranchService;
+  /** Argv-only process transports. No command strings or shell execution are accepted. */
+  sessionBranchRuntimeAdapter?: BranchArgvExecutionAdapter;
+  sessionBranchTerminalAdapter?: BranchArgvExecutionAdapter;
+  /** Application-owned F2 proof/state adapter. It plans admission before any resume side effect. */
+  sessionDockerResumeAdmission?: (plan: ResumePlanV1) => Promise<F2SandboxSessionResumeAdmission>;
+  scheduledCaptureAuthority?: { inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>> };
   installerService?: InstallerService;
   installerServiceFactory?: (stateRoot: string) => InstallerService;
+  installOrchestrator?: InstallOrchestrator;
+  installerOperationAdapter?: InstallerOperationAdapter;
+  installerTransactionStore?: TransactionStore;
   /** Application-owned trusted extensions; never populated from project configuration. */
   trustedProviderComposition?: Readonly<{ descriptors: readonly ProviderDescriptor[]; adapters: readonly ProviderAdapter[] }>;
+}
+
+async function sha256File(file:string):Promise<string>{const hash=createHash("sha256");for await(const chunk of createReadStream(file))hash.update(chunk);return hash.digest("hex")}
+export async function createDefaultSbxDiagnostics(environment:NodeJS.ProcessEnv,operationCwd:string):Promise<{readonly available:boolean;readonly failureCodes:readonly string[];readonly readOnly:true}>{
+ const value=(name:string):string|undefined=>Object.entries(environment).find(([key])=>key.toLowerCase()===name.toLowerCase())?.[1];
+ const pathDirectories=(value("PATH")??"").split(path.delimiter).filter(directory=>path.isAbsolute(directory));
+ const configured=value("MPX_SBX_EXECUTABLE");
+ const candidates=[...(configured?[configured]:[]),...pathDirectories.flatMap(directory=>[path.join(directory,"sbx.exe")])];
+ const trustedRoots=[...(configured&&path.isAbsolute(configured)?[path.dirname(configured)]:[]),...pathDirectories,...(value("MPX_APPS")?[value("MPX_APPS")!]:[]),...(value("LOCALAPPDATA")?[path.join(value("LOCALAPPDATA")!,"DockerSandboxes","bin")]:[])].filter(root=>path.isAbsolute(root));
+ let executable:string|undefined;
+ try{executable=await resolveTrustedSbxExecutable({candidates,projectRoot:operationCwd,trustedRoots,expectedSha256:SBX_V0_39_0_PIN.windowsBinarySha256,inspect:async file=>{const info=await lstat(file),canonical=await realpath(file);return {file:info.isFile()&&!info.isSymbolicLink(),realpath:canonical,sha256:await sha256File(canonical)}}})}catch{return {available:false,failureCodes:["SBX_NOT_FOUND"],readOnly:true}}
+ const probeEnvironment=Object.fromEntries(["SYSTEMROOT","WINDIR","LOCALAPPDATA","APPDATA","USERPROFILE","TEMP","TMP"].flatMap(name=>value(name)===undefined?[]:[[name,value(name)!]]));
+ const runner:BoundedProcessRunner={run:request=>new Promise((resolve,reject)=>{execFile(request.executable,[...request.argv],{cwd:request.cwd,env:probeEnvironment,timeout:request.timeoutMs,maxBuffer:request.maxOutputBytes,windowsHide:true},(error,stdout,stderr)=>{const code=error&&typeof (error as {code?:unknown}).code==="number"?(error as {code:number}).code:0;if(error&&typeof (error as {code?:unknown}).code!=="number")reject(error);else resolve({exitCode:code,stdout,stderr,truncated:false})})})};
+ return diagnoseSbx({executable,cwd:operationCwd,runner,pin:SBX_V0_39_0_PIN});
 }
 
 const builtInProviderExecutables = new Set(["gh", "glab", "kf"]);
@@ -272,10 +307,25 @@ export async function providerService(context: CliContext, config: ProjectConfig
   const repository = needsForgeRepository
     ? await (context.repositorySelectorResolver ?? new NodeRepositorySelectorResolver(context.env)).resolve({ root: cwd, remote: config.repository.remote })
     : undefined;
+  let localRoot: string | undefined;
+  let localOnChanged: (() => Promise<void>) | undefined;
+  if (selectedProvider === "local" && config.issues?.provider === "local") {
+    const appdata = context.env.APPDATA;
+    if (!appdata || !path.isAbsolute(appdata)) throw new MpxError({ code: "LOCAL_ISSUE_STORE_UNAVAILABLE", message: "Local issues require identity-local user configuration." });
+    const user = await loadUserConfig(path.join(appdata, "mpx", "config.json"), context.env);
+    localRoot = user.localIssueStores?.[config.issues.store ?? ""]?.root;
+    if (!localRoot) throw new MpxError({ code: "LOCAL_ISSUE_STORE_UNAVAILABLE", message: "The selected logical local issue store is not registered in user configuration." });
+    if (config.issues.view) {
+      const view = user.localViews?.[config.issues.view];
+      if (!view) throw new MpxError({ code: "LOCAL_VIEW_UNAVAILABLE", message: "The selected logical local view is not registered in user configuration." });
+      localOnChanged = async () => { await rebuildObsidianIssueViews(new LocalIssueStore(localRoot!, { projectId: config.project.id }), { vaultRoot: view.vaultRoot, outputRoot: view.outputRoot, projectId: config.project.id, resumeBaseUrl: view.resumeBaseUrl }); };
+    }
+  }
   const adapters = [
     ...(selectedProvider === undefined || selectedProvider === "github" ? createGitHubAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
     ...(selectedProvider === undefined || selectedProvider === "gitlab" ? createGitLabAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) }) : []),
     ...(selectedProvider === undefined || selectedProvider === "kanbanflow" ? [createKanbanFlowAdapter(executor, { cwd, ...(config.issues?.provider === "kanbanflow" && config.issues.states !== undefined ? { states: config.issues.states } : {}) })] : []),
+    ...(selectedProvider === "local" && localRoot ? [createLocalIssueAdapter({ root: localRoot, projectId: config.project.id, ...(localOnChanged ? { onChanged: async () => localOnChanged!() } : {}) })] : []),
     ...(context.trustedProviderComposition?.adapters.filter(adapter => selectedProvider === undefined || adapter.providerId === selectedProvider) ?? []),
   ];
   return new ProviderService(configuredProviderRegistry(context), adapters);
@@ -399,7 +449,7 @@ export function stateRoot(context: CliContext): string {
   return path.join(localAppData, "mpx");
 }
 
-export const defaultContext: CliContext = { env: process.env, launchRoutes: new EnvironmentRouteMaterializer(process.env), launchAudit: new EnvironmentLaunchAuditStore(process.env) };
+export const defaultContext: CliContext = { env: process.env, launchRoutes: new EnvironmentRouteMaterializer(process.env), launchAudit: new EnvironmentLaunchAuditStore(process.env), sessionDockerResumeAdmission: createProductionSessionDockerResumeAdmission(process.env) };
 
 export function sessions(context: CliContext): SessionStore {
   if (context.sessionStore) return context.sessionStore;
@@ -443,8 +493,19 @@ export function productionSessionResumeDependencies(user: import("@mpx/config").
   });
 }
 
-export async function productionSessionDiscoveries(user: import("@mpx/config").UserConfig, store: SessionStore, environment: NodeJS.ProcessEnv, accountResolver?: NativeAccountBindingResolver): Promise<readonly { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]> {
+export interface ProductionSessionDiscoveryOptions {
+  readonly piProcessInspector?: ProcessInspector;
+  readonly clock?: () => number;
+}
+
+export async function productionSessionDiscoveries(user: import("@mpx/config").UserConfig, store: SessionStore, environment: NodeJS.ProcessEnv, accountResolver?: NativeAccountBindingResolver, options: ProductionSessionDiscoveryOptions = {}): Promise<readonly { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]> {
   const existing = await store.listNativeBindings();
+  const piProcessInspector = options.piProcessInspector ?? { inspect: async (pid: number) => {
+    try {
+      const inspected = await new WindowsProcessCapabilities().inspect(pid);
+      return inspected ? { startFingerprint: inspected.startFingerprint } : null;
+    } catch { return null; }
+  } };
   const result: { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[] = [];
   for (const [name, configured] of Object.entries(user.identities).sort(([a], [b]) => a.localeCompare(b))) {
     const identity = { domain: configured.domain, name };
@@ -456,20 +517,27 @@ export async function productionSessionDiscoveries(user: import("@mpx/config").U
       if(tupleBindings.length>1)throw new MpxError({code:"SESSION_NATIVE_BINDING_DUPLICATE",message:"Multiple native binding records claim the same identity, runtime, and root."});
       const prior=existing.find(binding=>binding.ref===ref)??tupleBindings[0];
       if (prior && (prior.identity.domain !== identity.domain || prior.identity.name !== identity.name || prior.runtime !== runtime || prior.recordedRootDigest !== recordedRootDigest)) throw new MpxError({ code: "SESSION_BINDING_MISMATCH", message: "A stable native binding reference is inconsistent with its exact identity, runtime, or root." });
-      if (!prior) {
-        const timestamp = new Date().toISOString();
-        await store.saveNativeBinding({ schemaVersion: 1, ref, identity, runtime, recordedRootDigest, accountBindingRef: await accountResolver?.resolve(identity, runtime, root) ?? null, createdAt: timestamp, updatedAt: timestamp });
-      } else if (accountResolver) {
-        const accountBindingRef = await accountResolver.resolve(identity, runtime, root);
-        if (accountBindingRef !== prior.accountBindingRef) await store.saveNativeBinding({ ...prior, accountBindingRef, updatedAt: new Date().toISOString() });
+      const resolvedAccountBindingRef = accountResolver ? await accountResolver.resolve(identity, runtime, root) : prior?.accountBindingRef ?? null;
+      const timestamp = new Date().toISOString();
+      const binding = prior
+        ? (resolvedAccountBindingRef === prior.accountBindingRef ? prior : { ...prior, accountBindingRef: resolvedAccountBindingRef, updatedAt: timestamp })
+        : { schemaVersion: 1 as const, ref, identity, runtime, recordedRootDigest, accountBindingRef: resolvedAccountBindingRef, createdAt: timestamp, updatedAt: timestamp };
+      if (!prior || binding !== prior) await store.saveNativeBinding(binding);
+      if (runtime === "pi") {
+        // Active Pi discovery is admitted only for an enrolled, exact configured root.
+        // The scanner receives that root directly; it never infers or scans a home directory.
+        if (binding.accountBindingRef !== null) result.push({
+          scanner: new PiV2ActiveRegistryScanner(root, path.join(root, "agent-resurrect", "active-sessions"), piProcessInspector, { ...(options.clock ? { clock: options.clock } : {}), missingDirectory: "available-empty" }),
+          context: { identity, nativeBindingRef: binding.ref, runtime },
+        });
+        continue;
       }
-      if (runtime === "pi") continue;
       const scanner: RuntimeDiscovery = new ClaudeActiveScanner(async command => {
             const executable = environment.MPX_CLAUDE_EXECUTABLE;
             if (!executable || !path.isAbsolute(executable) || command.join("\0") !== "claude\0agents\0--json") return { available: false, exitCode: 1, stdout: "" };
             return new Promise(resolve => execFile(executable, ["agents", "--json"], { env: { ...environment, CLAUDE_CONFIG_DIR: root }, shell: false, windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => resolve({ available: !error, exitCode: typeof (error as { code?: unknown } | null)?.code === "number" ? (error as { code: number }).code : error ? 1 : 0, stdout, stderr })));
           });
-      result.push({ scanner, context: { identity, nativeBindingRef: prior?.ref ?? ref, runtime } });
+      result.push({ scanner, context: { identity, nativeBindingRef: binding.ref, runtime } });
     }
   }
   return result;
@@ -481,13 +549,33 @@ export function installer(context: CliContext, cwd: string): InstallerService {
   if (context.installerServiceFactory) return context.installerServiceFactory(root);
   const tasks = new WindowsScheduledTaskAdapter();
   const prohibited = [context.env.MPX_PROJECTS, context.env.MPX_WORK, context.env.MPX_CLONED].filter((value): value is string => Boolean(value));
+  const appsRoot = context.env.MPX_APPS;
+  if (!appsRoot || !path.isAbsolute(appsRoot)) throw new MpxError({ code: "INSTALL_ROOT_UNAVAILABLE", message: "MPX_APPS must be an absolute path for installed runner authority." });
+  const authorityStore = context.installerTransactionStore ?? new NodeTransactionStore(path.join(root, "installer"));
   return new InstallerService({
     tasks,
     store: new NodeReceiptStore(path.join(root, "installer", "receipts")),
     files: new NodeRunnerFileVerifier([cwd, ...prohibited]),
+    authority: new NodeInstalledRunnerAuthority({ appsRoot, localAppData: context.env.LOCALAPPDATA!, store: authorityStore }),
     currentUser: context.env.USERNAME ?? context.env.USER ?? "",
     cwd,
     prohibitedRoots: prohibited,
+  });
+}
+
+export function immutableInstaller(context: CliContext): InstallOrchestrator {
+  if (context.installOrchestrator) return context.installOrchestrator;
+  const appsRoot = context.env.MPX_APPS, appData = context.env.APPDATA, localAppData = context.env.LOCALAPPDATA;
+  if (![appsRoot, appData, localAppData].every(root => root && path.isAbsolute(root))) throw new MpxError({ code: "INSTALL_ROOT_UNAVAILABLE", message: "APPDATA, LOCALAPPDATA, and MPX_APPS must be absolute paths." });
+  const adapter = context.installerOperationAdapter ?? new ProductionInstallerOperationAdapter(context.env, context.env.USERDOMAIN && context.env.USERNAME ? `${context.env.USERDOMAIN}\\${context.env.USERNAME}` : context.env.USERNAME ?? context.env.USER ?? "");
+  const store = context.installerTransactionStore ?? new NodeTransactionStore(path.join(localAppData!, "mpx", "installer"));
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  return new InstallOrchestrator({
+    adapter,
+    store,
+    releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot: appsRoot! }),
+    activate: (releaseKey, expectedPriorReleaseKey) => activateRelease(localAppData!, expectedPriorReleaseKey, releaseKey),
+    deactivate: releaseKey => removeActiveRelease(localAppData!, releaseKey),
   });
 }
 

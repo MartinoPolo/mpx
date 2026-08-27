@@ -1,11 +1,12 @@
 ---
 name: check-fix
-description: "Detects the project's check scripts, runs them, and fixes what fails."
+description: "Detects the project's check scripts, runs them, and fixes what fails. Use when asked to run checks, fix lint or type errors, or get the build green."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
+
 # Check & Fix
 
 Deterministic check execution and fix loop based on `detect-check-scripts.mjs`.

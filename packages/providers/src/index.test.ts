@@ -1,7 +1,7 @@
 import { errorEnvelope } from "@mpx/core";
 import { describe, expect, it } from "vitest";
 import {
-  BUILTIN_PROVIDERS, CI_CAPABILITIES, ISSUE_CAPABILITIES, ProviderError,
+  BUILTIN_PROVIDERS, CI_CAPABILITIES, ISSUE_CAPABILITIES, LOCAL_ISSUE_CAPABILITIES, ProviderError,
   ProviderRegistry, REVIEW_CAPABILITIES, providerRegistry,
   type ProviderDescriptor,
 } from "./index.js";
@@ -32,7 +32,7 @@ describe("provider contracts", () => {
     expect(providerRegistry.get("github", "issues").capabilities).not.toContain("issue.move");
     expect(providerRegistry.get("gitlab", "issues").capabilities).not.toContain("issue.move");
     expect(providerRegistry.get("kanbanflow", "issues").capabilities).toContain("issue.move");
-    expect(providerRegistry.get("local", "issues").capabilities).toEqual([]);
+    expect(providerRegistry.get("local", "issues").capabilities).toEqual([...ISSUE_CAPABILITIES, ...LOCAL_ISSUE_CAPABILITIES]);
   });
 });
 

@@ -1,8 +1,10 @@
 ---
 name: mpx-reviewer-security
 description: "Read-only security reviewer. Confidence-based, OWASP-focused. Reports only HIGH confidence findings with confirmed attacker-controlled input."
-model: openai-codex/gpt-5.6-luna
+model: openai-codex/gpt-5.6-terra
+thinking: medium
 tools: read,grep,find,ls,bash
+output_schema: findings
 
 ---
 # Reviewer: Security

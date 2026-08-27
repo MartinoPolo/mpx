@@ -3,10 +3,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { lstat, open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildConvergenceManifest, compareConvergenceManifests, validateConvergenceManifest } from "./convergence-manifest.mjs";
 
-const TEXT = /\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)$/iu;
+const TEXT = /(?:\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)|(?:^|\/)LICENSE)$/iu;
 const LOCKFILE = /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|pnpm-lock\.yaml)$/iu;
-const PRIVATE_STATE = /(?:^|\/)(?:\.env(?:\..+)?|[^/]*(?:credential|credentials|session|runtime-state)[^/]*)$/iu;
+const PRIVATE_STATE = /(?:^|\/)(?:\.env(?:\..+)?|(?:credentials?|sessions?|runtime-state|runtime-status)(?:\.(?:json|ya?ml|toml))?)$/iu;
 const ACTIVE_ROOT = /^(?:apps|content|packages|runtimes|scripts)\//u;
 const IMPORTED = new Set(["imported-rewritten", "imported-non-normative-history"]);
 const DISPOSITIONS = new Set([...IMPORTED, "deferred-inventory-only", "excluded"]);
@@ -65,8 +66,38 @@ export function validateFiles(files, options = {}) {
     if (/\/(?:mp|mp-gh|kf):[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("LEGACY_PUBLIC_IDENTITY", file, "active public identities must use /mpx:"));
     if (/\/mpx:mpx-[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("DOUBLED_MPX_IDENTITY", file, "canonical identities must not repeat the mpx prefix"));
     if (/(?:[A-Za-z]:[\\/](?:_MP_projects[\\/])?|\/(?:[A-Za-z][\\/])?_MP_projects[\\/])mpx-(?:claude-code|pi)(?:[\\/]|$)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_PATH", file, "active files must not embed absolute legacy source-repository paths"));
+    if (/(?:import|from|require|readFile|open)[^\n]{0,160}(?:['"`](?:\.\.\/)+(?:mpx-(?:claude-code|pi))\/|['"`](?:~\/)?\.codex\/|['"`](?:mpx-(?:claude-code|pi))\/)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_DEPENDENCY", file, "active files must not import or read legacy runtime roots"));
     if (file.startsWith("content/") && /\$\{?CLAUDE_[A-Z0-9_]+\}?/u.test(text) && !permitsClaudeVariable(file)) diagnostics.push(diagnostic("CLAUDE_PLACEHOLDER", file, "canonical content must be runtime-neutral"));
+    if (file.startsWith("content/instructions/shared/") && (
+      /`(?:gh|glab|kf)\s+(?:issue|pr|mr|label|task|comment|auth)\b/iu.test(text)
+      || /(?:^|[\s`'"(])(?:plugins\/mp|mpx-(?:claude-code|pi)\/|~\/\.(?:claude|codex)\/)/imu.test(text)
+      || /\$\{?CLAUDE_[A-Z0-9_]+\}?/u.test(text)
+    )) diagnostics.push(diagnostic("SHARED_INSTRUCTION_LEGACY_REFERENCE", file, "shared instructions must use MPX contracts and runtime-neutral paths and placeholders"));
     if (file.startsWith("runtimes/") && /(?:status-map\.json|mp\.config\.json|legacy[-_. ]?(?:status|config))/iu.test(text)) diagnostics.push(diagnostic("LEGACY_RUNTIME_READER", file, "active runtimes must consume current contracts only"));
+  }
+  return diagnostics;
+}
+
+export function validateSharedInstructionLinks(files) {
+  const diagnostics = [];
+  const sharedRoot = "content/instructions/shared/";
+  const names = new Set([...files.keys()].map(normalized));
+  for (const [rawFile, value] of files) {
+    const file = normalized(rawFile);
+    if (!file.startsWith(sharedRoot) || !file.endsWith(".md")) continue;
+    const text = Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
+    for (const match of text.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
+      const href = match[1].trim().split(/\s+/u, 1)[0].replace(/^<|>$/gu, "");
+      if (!href || href.startsWith("#") || /^[a-z][a-z0-9+.-]*:/iu.test(href)) continue;
+      let target;
+      try { target = decodeURIComponent(href.split("#", 1)[0]); }
+      catch {
+        diagnostics.push(diagnostic("SHARED_INSTRUCTION_LINK_MISSING", file, `relative link target is invalid: ${href}`));
+        continue;
+      }
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
+      if (!names.has(resolved)) diagnostics.push(diagnostic("SHARED_INSTRUCTION_LINK_MISSING", file, `relative link target is absent: ${href}`));
+    }
   }
   return diagnostics;
 }
@@ -141,8 +172,30 @@ export function validateCanonicalScriptSyntax(root, names) {
   return diagnostics;
 }
 
+export function validateConvergenceArtifacts(manifest, files) {
+  const diagnostics = [];
+  for (const entry of manifest?.entries ?? []) {
+    if (entry.completion === "reviewed" && entry.phase === "Phase I") continue;
+    if (!["canonicalized", "Claude-specific", "Pi-specific", "externalized"].includes(entry.disposition)) continue;
+    if (!files.has(entry.destination)) {
+      diagnostics.push(diagnostic("CONVERGENCE_DESTINATION_MISSING", `${entry.source}:${entry.path}`, `destination is absent: ${entry.destination}`));
+      continue;
+    }
+    for (const evidence of entry.evidence ?? []) {
+      if (!["behavior-test", "generated-artifact"].includes(evidence.kind)) continue;
+      const artifact = files.get(evidence.reference);
+      if (artifact === undefined) diagnostics.push(diagnostic("CONVERGENCE_ARTIFACT_MISSING", `${entry.source}:${entry.path}`, `evidence artifact is absent: ${evidence.reference}`));
+      else if (digest(artifact) !== evidence.sha256) diagnostics.push(diagnostic("CONVERGENCE_ARTIFACT_HASH_MISMATCH", `${entry.source}:${entry.path}`, `evidence artifact hash does not match: ${evidence.reference}`));
+    }
+  }
+  return diagnostics;
+}
+
 export async function validateGeneratedRepository({ root, names, tracked, files, generatedPiDiagnostics = [], readSource, verifySources = false, destinationAttributes }) {
-  const diagnostics = validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics });
+  const diagnostics = [
+    ...validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics }),
+    ...validateSharedInstructionLinks(files),
+  ];
   const provenanceFile = "docs/history/SOURCE_PROVENANCE.json";
   const parsed = parseProvenanceManifest(files.get(provenanceFile), provenanceFile);
   diagnostics.push(...parsed.diagnostics);
@@ -244,7 +297,23 @@ async function run() {
 
   const generated = spawnSync(process.execPath, [path.join(root, "runtimes/pi/runtime-pi/scripts/generate-agents.mjs"), "--check"], { cwd: root, encoding: "utf8" });
   const drift = generated.status === 0 ? [] : [generated.stderr.trim() || generated.stdout.trim() || "projection"];
-  const diagnostics = [...files.diagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
+  const toolInventory = spawnSync(process.execPath, [path.join(root, "scripts/generate-runtime-tool-inventory.mjs"), "--check"], { cwd: root, encoding: "utf8" });
+  const toolInventoryDiagnostics = toolInventory.status === 0 ? [] : [diagnostic("RUNTIME_TOOL_INVENTORY_DRIFT", "docs/inventory/PHASE_F1_RUNTIME_TOOL_INVENTORY.json", toolInventory.stderr.trim() || toolInventory.stdout.trim() || "runtime tool inventory is stale")];
+  const convergenceName = "docs/history/CONVERGENCE_MANIFEST.json";
+  let convergence;
+  const convergenceDiagnostics = [];
+  try { convergence = JSON.parse(files.get(convergenceName)?.toString("utf8") ?? ""); }
+  catch { convergenceDiagnostics.push(diagnostic("CONVERGENCE_MANIFEST_INVALID", convergenceName, "committed convergence manifest is missing or invalid JSON")); }
+  if (convergence) convergenceDiagnostics.push(...validateConvergenceManifest(convergence), ...validateConvergenceArtifacts(convergence, files));
+  if (verifySources && convergence && process.env.MPX_PROJECTS) {
+    const current = await buildConvergenceManifest({ sources: [
+      { id: "claude", root: path.join(process.env.MPX_PROJECTS, "mpx-claude-code"), symbolicRoot: "${MPX_PROJECTS}/mpx-claude-code" },
+      { id: "pi", root: path.join(process.env.MPX_PROJECTS, "mpx-pi"), symbolicRoot: "${MPX_PROJECTS}/mpx-pi" },
+    ] });
+    convergenceDiagnostics.push(...compareConvergenceManifests(convergence, current));
+  }
+
+  const diagnostics = [...files.diagnostics, ...toolInventoryDiagnostics, ...convergenceDiagnostics, ...validateCanonicalScriptSyntax(root, names), ...await validateGeneratedRepository({
     root,
     names,
     tracked,
@@ -259,7 +328,7 @@ async function run() {
   if (diagnostics.length) {
     for (const item of diagnostics) console.error(`${item.code}: ${item.file}: ${item.message}`);
     process.exitCode = 1;
-  } else console.log(`Validated ${files.size} active/generated files and ${parsed.manifest.entries.length} provenance entries.`);
+  } else console.log(`Validated ${files.size} active/generated files, ${parsed.manifest.entries.length} provenance entries, and ${convergence.entries.length} convergence entries.`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await run();

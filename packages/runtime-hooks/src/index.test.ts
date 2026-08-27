@@ -1,21 +1,30 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   buildCompactContext,
+  buildMachineContext,
   classifyDangerousCommand,
   dangerousCommandPolicyModuleSource,
   detectProjectEnvironment,
   evaluateFallowGate,
   evaluatePackagePolicy,
+  evaluatePreCommit,
   extractCommitMessage,
   extractPostCommandContext,
+  mergeCompactionInstructions,
+  planCompactionInjection,
   planFileQuality,
+  planNotification,
+  planSessionContext,
   readCompactInstructions,
+  resolveGuardObservations,
   scanAddedSecrets,
   selectPreCommitCheck,
   validateCommitFormat,
+  adaptClaudeHookEvent,
 } from "./index.js";
 
 function project(files: Record<string, string> = {}): string {
@@ -180,14 +189,37 @@ describe("dangerous command classification", () => {
   });
 });
 
+describe("event-order-neutral guard contract", () => {
+  it("resolves shuffled adapter observations with explicit fail-open and fail-closed infrastructure policy", () => {
+    const observations = [
+      { policy: "fallow" as const, infrastructureFailure: "audit timed out" },
+      { policy: "dangerous-command" as const, decision: { action: "allow" as const } },
+      { policy: "package-manager" as const, decision: { action: "block" as const, code: "WRONG_PACKAGE_MANAGER", message: "Use pnpm." } },
+    ];
+    const expected = { action: "block", code: "WRONG_PACKAGE_MANAGER", message: "Use pnpm.", warnings: ["fallow: audit timed out; skipped (fail-open)."] };
+    expect(resolveGuardObservations(observations)).toEqual(expected);
+    expect(resolveGuardObservations([...observations].reverse())).toEqual(expected);
+    expect(resolveGuardObservations([{ policy: "dangerous-command", infrastructureFailure: "classifier unavailable" }])).toMatchObject({ action: "block", code: "GUARD_INFRASTRUCTURE_FAILURE" });
+  });
+});
+
 describe("package and tool policy", () => {
   it("blocks a wrong package manager and directs to the detected manager", () => expect(evaluatePackagePolicy("npm install", "pnpm")).toMatchObject({ action: "block", replacement: "pnpm" }));
+  it("enforces the manager for every command-list segment", () => expect(evaluatePackagePolicy("echo ready && npm install", "pnpm")).toMatchObject({ action: "block", code: "WRONG_PACKAGE_MANAGER", replacement: "pnpm" }));
   it("blocks npx tsc even in a compound command", () => expect(evaluatePackagePolicy("echo ok && npx tsc", "pnpm").action).toBe("block"));
   it("keeps built-in-tool preferences as warnings", () => expect(evaluatePackagePolicy("cd src && grep -r x .", "pnpm")).toMatchObject({ action: "allow", warnings: [expect.stringContaining("Grep")] }));
   it("does not warn for a pipeline consumer", () => expect(evaluatePackagePolicy("cat list | grep x", "pnpm").warnings).toEqual([]));
 });
 
 describe("pre-commit policy", () => {
+  it("produces an argv check plan while hard-blocking staged secrets", () => {
+    const base = { command: "git commit -m 'feat: ship'", packageManager: "pnpm" as const, toolchain: "classic" as const, framework: null, scripts: { typecheck: "tsc" } };
+    expect(evaluatePreCommit({ ...base, staged: [{ file: "src/app.ts", diff: "+export const ok = true" }] })).toEqual({
+      action: "allow", warnings: [], check: { executable: "pnpm", args: ["run", "typecheck"], timeoutMilliseconds: 120000, failure: "block", outputTailLines: 50 },
+    });
+    expect(evaluatePreCommit({ ...base, staged: [{ file: "src/app.ts", diff: "+api_key='1234567890'" }] })).toMatchObject({ action: "block", code: "STAGED_SECRET", findings: [{ name: "Generic Secret", file: "src/app.ts" }] });
+  });
+
   it("scans only added lines for known and generic secrets", () => expect(scanAddedSecrets(" password='not-added'\n+api_key='1234567890'", "app.ts")).toEqual([{ name: "Generic Secret", file: "app.ts" }]));
   it("bounds untrusted diff input and fails closed", () => expect(() => scanAddedSecrets("+" + "x".repeat(1_000_001), "app.ts")).toThrowError(expect.objectContaining({ code: "INPUT_TOO_LARGE" })));
   it("extracts quoted and heredoc commit subjects", () => expect(extractCommitMessage("git commit -m \"$(cat <<'EOF'\nfeat(ui): ship\n\nbody\nEOF\n)\"")).toBe("feat(ui): ship"));
@@ -224,7 +256,58 @@ describe("format and lint dispatch", () => {
   it("dispatches configured ruff for Python", () => expect(planFileQuality({ relativeFile: "app.py", toolchain: "classic", runner: ["npx"], configs: ["pyproject:tool.ruff"] })).toHaveLength(2));
 });
 
+describe("notification planning", () => {
+  it("plans a fail-open top-level notification for equivalent Claude and Pi settled events", () => {
+    const claude = planNotification({ event: "turn-settled", platform: "win32", sessionRole: "top-level" });
+    const pi = planNotification({ event: "turn-settled", platform: "win32", sessionRole: "top-level" });
+    expect(claude).toEqual(pi);
+    expect(claude).toEqual({ action: "flash-beep", delivery: "background", failure: "ignore" });
+    expect(planNotification({ event: "turn-settled", platform: "win32", sessionRole: "child" })).toEqual({ action: "none" });
+    expect(planNotification({ event: "turn-settled", platform: "linux", sessionRole: "top-level" })).toEqual({ action: "none" });
+  });
+});
+
+describe("CODEX mirror disposition", () => {
+  it("inventories only the reviewed non-private hook without private contents or an absolute home path", () => {
+    const inventory = readFileSync(fileURLToPath(new URL("../../../docs/inventory/codex-mirror-disposition.json", import.meta.url)), "utf8");
+    expect(inventory).not.toContain("C:/Users/");
+    expect(inventory).not.toMatch(/auth\.json|sessions|credentials|history|database|cache/i);
+    expect(JSON.parse(inventory)).toMatchObject({ entries: [{ source: "~/.codex/hooks/compact-context.js", disposition: "canonicalized", destination: "@mpx/runtime-hooks" }] });
+  });
+});
+
+describe("runtime-neutral context contracts", () => {
+  it("plans session and compaction context for delivery before the next model turn", () => {
+    const environment = { packageManager: "pnpm" as const, runner: ["pnpm", "exec"] as const, toolchain: "classic" as const, framework: null, python: false };
+    expect(planSessionContext({ MPX_PROJECTS: "C:/projects" })).toMatchObject({ delivery: "before-next-model-turn", context: expect.stringContaining("MPX_PROJECTS") });
+    expect(planCompactionInjection({ manualInstructions: "Keep decision.", canonicalInstructions: "Keep open work.", environment })).toMatchObject({
+      action: "inject", failure: "use-runtime-default", instructions: "Keep decision.\n\nKeep open work.", postCompactContext: expect.stringContaining("pnpm"),
+    });
+    expect(planCompactionInjection({ canonicalInstructions: "", environment })).toMatchObject({ action: "default", failure: "use-runtime-default" });
+  });
+
+  it("keeps injected machine prose free of em dashes", () => expect(buildMachineContext({ MPX_PROJECTS: "C:/projects" }).join("\n")).not.toContain("—"));
+
+  it("builds machine context only from the public MPX root allowlist", () => {
+    expect(buildMachineContext({
+      MPX_PROJECTS: " C:/projects ",
+      MPX_WORK: "",
+      HOME: "C:/private-home",
+      MPX_TOKEN: "private",
+    })).toEqual([
+      "Machine roots (from MPX_* env vars; use these instead of guessing paths):",
+      "- MPX_PROJECTS = C:/projects - personal projects",
+      "Paths outside the working directory should be resolved from these variables.",
+    ]);
+  });
+});
+
 describe("compact instructions and context", () => {
+  it("merges manual instructions before canonical instructions and fails open on missing canonical text", () => {
+    expect(mergeCompactionInstructions("Keep the API decision.", "Preserve unresolved work.")).toBe("Keep the API decision.\n\nPreserve unresolved work.");
+    expect(mergeCompactionInstructions("Keep the API decision.", "  ")).toBeNull();
+  });
+
   it("selects the first non-empty compact instructions with a byte bound", () => {
     const root = project({ "empty.md": "  ", "fallback.md": "Keep decisions." });
     expect(readCompactInstructions([path.join(root, "empty.md"), path.join(root, "fallback.md")])).toBe("Keep decisions.");
@@ -236,5 +319,27 @@ describe("compact instructions and context", () => {
     const env = detectProjectEnvironment(path.join(root, "packages/app"));
     expect(env).toMatchObject({ packageManager: "pnpm", toolchain: "biome", framework: "svelte", python: true });
     expect(buildCompactContext(env).join("\n")).toContain("Use 'pnpm' for all package commands.");
+  });
+});
+
+
+describe("Claude hook adapter", () => {
+  it("runs blocking Bash policies in safety order and stops at the first denial", () => {
+    const result = adaptClaudeHookEvent({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm install && git commit -m \"WIP\"" } }, {
+      environment: { packageManager: "pnpm", runner: ["pnpm", "exec"], toolchain: "classic", framework: null, python: false },
+      staged: [{ file: "src/config.ts", diff: "+api_key='1234567890'" }],
+      preCommit: { check: "typecheck", exitCode: 1 },
+      fallow: { command: "git commit", minimumVersion: "2.46.0" },
+    });
+    expect(result).toMatchObject({ decision: "deny", code: "WRONG_PACKAGE_MANAGER", evaluated: ["package-manager"] });
+  });
+
+  it("maps session, write, command, compact, and notification policies to native Claude events", () => {
+    const context = { environment: { packageManager: "pnpm" as const, runner: ["pnpm", "exec"] as const, toolchain: "biome" as const, framework: null, python: false }, machineContext: "Machine: work", sessionContext: "Session: launch", compactInstructions: "Keep binding.", configs: ["biome.json"] };
+    expect(adaptClaudeHookEvent({ hook_event_name: "SessionStart" }, context)).toMatchObject({ additionalContext: expect.stringContaining("Machine: work"), evaluated: ["machine-context", "session-context", "project-context"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: "src/a.ts" } }, context)).toMatchObject({ quality: [{ executable: "pnpm", args: ["exec", "biome", "format", "--write", "src/a.ts"], reportFailure: false }, { executable: "pnpm", args: ["exec", "biome", "lint", "--fix", "src/a.ts"], reportFailure: true }], evaluated: ["post-write-quality"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "pnpm install" }, tool_response: { exit_code: 0, stderr: "3 vulnerabilities" } }, context)).toMatchObject({ additionalContext: expect.stringContaining("vulnerabilities"), evaluated: ["post-command-context"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "PreCompact" }, context)).toMatchObject({ additionalContext: expect.stringContaining("Keep binding."), evaluated: ["compaction-injection"] });
+    expect(adaptClaudeHookEvent({ hook_event_name: "Notification", notification_type: "permission_prompt", message: "Approval needed" }, context)).toMatchObject({ notification: "Approval needed", evaluated: ["notification"] });
   });
 });

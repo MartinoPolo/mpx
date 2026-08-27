@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { access } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, lstat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -19,25 +20,31 @@ import {
   type UserConfig,
 } from "@mpx/config";
 import { createSkillArtifactReference, errorEnvelope, MpxError, sha256Canonical, successEnvelope, type Diagnostic, type JsonValue } from "@mpx/core";
-import { resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
-import { ExecutionError, sanitizeHostReason } from "@mpx/executors";
+import { canonicalNativeRootDigest, resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
+import { ExecutionError, namedSbxPolicies, sanitizeHostReason } from "@mpx/executors";
 import { probeProvider, type ProviderRegistry } from "@mpx/providers";
+import { LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local";
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
 import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
-import { catalogPath, configuredProviderRegistry, defaultContext, executeInternalPreparationWorker, installer, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
+import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, immutableInstaller, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
 import { executeSessionCommand } from "./session-command.js";
 import { executeInstallCommand } from "./install-command.js";
 import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
 import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js";
-import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence } from "./launch-execution.js";
+import { createProductionSessionBranchRuntimeAdapter, createWindowsTerminalBranchAdapter, diagnoseSessionBranchAdapters } from "./session-branch-adapters.js";
+import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
-import { RootAttestationService, RootAttestationStore, SessionError, type ResumePlanV1 } from "@mpx/sessions";
+import { defaultDevService, executeDevCommand } from "./dev-command.js";
+import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
+import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
+import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, SessionService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRequestV1, type BranchRuntimeAdapter, type ConversationBranchPlanV1, type ResumePlanV1 } from "@mpx/sessions";
+import { executeMigrationCommand } from "./migration.js";
 
 interface Parsed { command: string[]; cwd: string; json: boolean; options: Map<string,string|boolean|string[]> }
 interface ExecuteResult { data: unknown; warnings: Diagnostic[]; exitCode?: number; machinePath?: string; silent?: boolean }
 class UsageError extends Error {}
-const usage = "Usage: mpx [--cwd DIR] [--json] <init|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|issue|review|ci|status|ports|worktree>";
+const usage = "Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|migration reconcile|report|rollback-drill|cutover-plan|view rebuild|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>";
 
 const shortLaunchAliases = new Set<ShortLaunchAlias>(["cc", "ccw", "pi", "piw"]);
 function parse(argv: readonly string[]): Parsed {
@@ -46,9 +53,9 @@ function parse(argv: readonly string[]): Parsed {
     const word=argv[i]!;
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
-    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","source-branch","target-branch","method","run-id","state","status","note","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","component","runner","runner-sha256","runner-version"].includes(name!)) {
-      const value=inline ?? argv[++i]; if (!value || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
+    if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab","legacy-disabled"].includes(name!)) options.set(name!,true);
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","intent","plan","transaction","terminal-title"].includes(name!)) {
+      const value=inline ?? argv[++i]; if (value===undefined || (value.length===0 && name!=="body") || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
     } else throw new UsageError(`Unknown option: --${name}`);
@@ -116,12 +123,13 @@ function requiredOption(parsed:Parsed,name:string):string {
 async function providerBinding(parsed:Parsed,context:CliContext,role:"repository"|"issues",capability:string) {
   const found=await project(parsed);
   const providerId=role==="repository" ? found.config.repository.provider : found.config.issues?.provider??"none";
+  const registry:ProviderRegistry=configuredProviderRegistry(context);
+  registry.assertCapability(providerId,capability);
+  if(providerId==="local") return {found,providerId,route:undefined};
   const identityName=stringOption(parsed,"identity");
   if(identityName===undefined) throw new MpxError({code:"IDENTITY_REQUIRED",message:"Provider commands require an explicit identity."});
   const user=await requiredUserConfig(context), identity=user.identities[identityName];
   if(!identity) throw new MpxError({code:"IDENTITY_UNKNOWN",message:`Unknown identity '${identityName}'.`});
-  const registry:ProviderRegistry=configuredProviderRegistry(context);
-  registry.assertCapability(providerId,capability);
   const route=identity.providerRoutes?.[providerId];
   if(!route) throw new MpxError({code:"PROVIDER_ROUTE_REQUIRED",message:`Identity '${identityName}' has no route for provider '${providerId}'.`,remediation:"Configure identity.providerRoutes for the selected provider."});
   return {found,providerId,route};
@@ -182,7 +190,22 @@ function human(value:unknown):string {
 }
 function asJson(value:unknown):JsonValue { return value as JsonValue }
 
-async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext): Promise<unknown> {
+function branchAdmissionPlan(input: BranchRequestV1 | ConversationBranchPlanV1): ResumePlanV1 {
+  const confirmationDigest = "confirmationDigest" in input ? input.confirmationDigest : sha256Canonical(input as unknown as JsonValue);
+  return {
+    schemaVersion: 1, newLaunchRequired: true,
+    previousLaunch: { launchKey: input.launchIdentity.launchKey, descriptorDigest: input.launchIdentity.descriptorDigest },
+    recordId: input.child.runtimeQualifiedId, runtimeQualifiedId: input.child.runtimeQualifiedId, runtime: input.child.runtime,
+    identity: input.launchIdentity.identity, nativeBindingRef: input.launchIdentity.nativeBindingRef, nativeSessionRef: input.parent.nativeSessionRef,
+    cwd: input.workspace.cwd, projectId: input.workspace.projectRef, repositoryId: input.workspace.repositoryRef,
+    launch: { launchKey: input.launchIdentity.launchKey, descriptorDigest: input.launchIdentity.descriptorDigest, mode: input.launchIdentity.mode, skillPolicy: input.launchIdentity.skillPolicy, contentScope: input.launchIdentity.contentScope, executor: { kind: input.launchIdentity.executor }, workspace: input.launchIdentity.workspace, networkPolicy: input.launchIdentity.networkPolicy, grants: input.launchIdentity.grants, artifactKey: input.launchIdentity.artifactKey, manifestKey: input.launchIdentity.manifestKey },
+    confirmationDigest,
+  };
+}
+
+async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConfig, context: CliContext, branchInvocation?: { readonly executable: string; readonly argv: readonly string[] }): Promise<unknown> {
+  const dockerAdmission = plan.launch.executor.kind === "docker" ? await (context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env))(plan) : undefined;
+  if (dockerAdmission && !dockerAdmission.admitted) throw new SessionError("SESSION_RESUME_F2_ADMISSION_DENIED", "Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.", { hostFallback: false, action: "recreate", admissionCode: dockerAdmission.code });
   const store = sessions(context);
   let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>> | undefined;
   let reverifyPiAccount: (() => Promise<void>) | undefined;
@@ -241,7 +264,17 @@ async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConf
   const scope = user.contentScopes[plan.launch.contentScope], projectOverride = projectId ? user.projects?.[projectId] : undefined;
   if (!scope) throw new MpxError({ code: "SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE", message: "The recorded content scope is no longer configured." });
   const skillArtifact = createSkillArtifactReference({ runtime: plan.runtime, identity: plan.identity.name, skillPolicy: plan.launch.skillPolicy, contentScope: plan.launch.contentScope, projectId: projectId ?? null, catalogHash: sha256Canonical(catalog.map(skill => ({ identity: skill.identity, contentHash: skill.contentHash, ...("directoryHash" in skill ? { origin: "project", directoryHash: skill.directoryHash, realPath: skill.realPath, realProjectRoot: skill.realProjectRoot } : { origin: "canonical" }) })) as unknown as JsonValue), enabledPacks: resolveEffectiveSkillPacks({ contentScopeSkillPacks: scope.skillPacks, projectSkillPacks: projectOverride?.skillPacks, skillPolicySkillPacks: selection.skillPolicy.declaration.skillPacks }), skillPolicyConfig: selection.skillPolicy.declaration as unknown as JsonValue, contentScopeExposure: (scope.skillExposure ?? {}) as unknown as JsonValue, projectExposure: (projectOverride?.skillExposure ?? null) as unknown as JsonValue });
-  const evidence = await executorEvidence(context, plan.launch.executor.kind);
+  let resumeContext=context;
+  if(plan.launch.executor.kind==="docker"&&context.launchExecutorAdapters===undefined&&context.env.LOCALAPPDATA){
+    try{
+      const snapshot=found?await status(context).snapshot({cwd,projectRoot:found.root,config:found.config,configHash:sha256Canonical(found.config as unknown as JsonValue)}):parseStatusSnapshotV1({schemaVersion:1,project:{id:repositoryId,cwd},worktree:{id:null,path:null,role:null,branch:null},portResolution:"missing",services:[],diagnostics:[]});
+      const configured=user.identities[plan.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"];
+      const adapter=await createProductionSbxExecutionAdapter({environment:context.env,cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:plan.runtime,identity:{name:plan.identity.name,domain:plan.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:cwd,gitCommonDir:path.join(cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:snapshot.services.flatMap(service=>service.port===null?[]:[service.port])},context.launchSbxExecutionDependencies);
+      if(dockerAdmission?.admitted) adapter.setResumeAction(dockerAdmission.action);
+      resumeContext={...context,launchExecutorAdapters:[adapter],...(adapter.bridge?{launchSbxBridge:adapter.bridge}:{})};
+    }catch{/* Exact production proof remains unavailable and the typed Docker gate denies resume. */}
+  }
+  const evidence = await executorEvidence(resumeContext, plan.launch.executor.kind);
   const descriptor = await resolveLaunch({ ...selectionInput, grants: plan.launch.grants.map(grant => `${grant.access}:${grant.resource}`), ...(plan.launch.executor.kind === "host" ? { reason: "confirmed session resume", hostApproval: { reason: "confirmed session resume", approvalKey: sha256Canonical({ confirmationDigest: plan.confirmationDigest } as unknown as JsonValue) } } : {}), skillArtifact, selectedNativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], ...(projectId ? { projectId } : {}), repositoryId, dockerAvailability: evidence.status === "verified" ? "available" : evidence.status === "unavailable" ? "unavailable" : "unverified", executorVerification: evidence, policyInputs: { schemaVersion: 1, manifestKey: manifest.manifestKey, skillArtifactKey: skillArtifact.artifactKey } });
   const descriptorDigest = sha256Canonical(descriptor as unknown as JsonValue);
   const currentLaunch = {
@@ -266,9 +299,9 @@ async function executeProductionSessionResume(plan: ResumePlanV1, user: UserConf
   if (!appData || !localAppData) throw new MpxError({ code: "STATE_ROOT_UNAVAILABLE", message: "APPDATA and LOCALAPPDATA are required for resume execution." });
   nativeBinding = nativeBinding ?? await store.readNativeBinding(plan.nativeBindingRef);
   const beforeChildExecution = reverifyPiAccount;
-  const launchContext = context.launchLifecycleBridge || context.launchRuntimeAdapters ? context : { ...context, launchLifecycleBridge: new ProductionSessionLifecycleBridge(store, context.nativeAccountBindingResolver ? (name, runtime) => context.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined) };
+  const launchContext = resumeContext.launchLifecycleBridge || resumeContext.launchRuntimeAdapters ? resumeContext : { ...resumeContext, launchLifecycleBridge: new ProductionSessionLifecycleBridge(store, resumeContext.nativeAccountBindingResolver ? (name, runtime) => resumeContext.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined) };
   const snapshot = found ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) }) : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
-  const result = await executeResolvedLaunch({ descriptor, manifest, artifact, catalog, canonicalRoot, agentsRoot: path.join(path.dirname(canonicalRoot), "agents"), artifactsRoot: path.join(appData, "mpx", "runtime-artifacts"), stateRoot: path.join(localAppData, "mpx"), cwd, environment: context.env, context: launchContext, tty: context.launchTty ?? directProcessTty(), nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], statusSnapshot: snapshot, resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef }, ...(beforeChildExecution ? { beforeChildExecution } : {}) });
+  const result = await executeResolvedLaunch({ descriptor, manifest, artifact, catalog, canonicalRoot, agentsRoot: path.join(path.dirname(canonicalRoot), "agents"), artifactsRoot: path.join(appData, "mpx", "runtime-artifacts"), stateRoot: path.join(localAppData, "mpx"), cwd, environment: context.env, context: launchContext, tty: context.launchTty ?? directProcessTty(), nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime], statusSnapshot: snapshot, ...(branchInvocation ? { branch: { nativeBinding, invocation: branchInvocation } } : { resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef } }), ...(beforeChildExecution ? { beforeChildExecution } : {}) });
   return { ...result, resumeLaunch: { previousLaunchKey, previousDescriptorDigest, newLaunchKey: currentLaunchKey, newDescriptorDigest: currentDescriptorDigest } };
 }
 
@@ -276,6 +309,10 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   const [group,action,...args]=parsed.command;
   if (!group) throw new UsageError(usage);
   if (parsed.options.get("rebuild") === true && (group !== "ports" || action !== "reconcile")) throw new UsageError("--rebuild is valid only for ports reconcile");
+  if (group==="migration") {
+    if (!action || !["reconcile","report","rollback-drill","cutover-plan"].includes(action) || args.length) throw new UsageError(usage);
+    return {data:await executeMigrationCommand({action,repoRoot:parsed.cwd,env:context.env,legacyDisabled:parsed.options.get("legacy-disabled")===true}),warnings:[]};
+  }
   if (parsed.options.get("confirm") === true && (group !== "init" || action !== undefined)) throw new UsageError("--confirm is valid only for init");
   let data: unknown;
   let warnings: Diagnostic[] = [];
@@ -292,7 +329,115 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
   if (group === "session") {
     const user = await userConfig(context);
     const sessionStore = sessions(context);
+    const trustedTerminalRoots = [context.env.WINDIR, context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : undefined].filter((value): value is string => Boolean(value && path.isAbsolute(value)));
+    const terminalCandidate = context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ?? (context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps", "wt.exe") : undefined);
+    const terminalAvailability = await diagnoseSessionBranchAdapters({ runtimeAvailable: true, ...(terminalCandidate ? { terminalCandidate } : {}), trustedRoots: trustedTerminalRoots });
     const account = context.env.LOCALAPPDATA ? productionAccountServices(user, context, parsed.cwd) : undefined;
+    let branchService = context.sessionBranchService;
+    if (action === "branch" && !branchService) {
+      const runtimeAdapter = (runtime: "claude" | "pi"): BranchRuntimeAdapter => ({ plan: async (parent, cwd, selectedRoot) => {
+        const trusted = await resolveTrustedRuntimeExecutable({ runtime, cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+        if (trusted.argvPrefix.length !== 0) throw new SessionError("SESSION_BRANCH_EXECUTABLE_WRAPPER_UNSUPPORTED", "Native branch adapters require a direct trusted runtime executable.");
+        return (runtime === "claude" ? createClaudeBranchAdapter(trusted.executable) : createPiBranchAdapter(trusted.executable)).plan(parent, cwd, selectedRoot);
+      } });
+      const lifecycle = worktrees(context);
+      const productionBranchRuntime = createProductionSessionBranchRuntimeAdapter({ executeNormalLaunch: async ({ invocation, plan }) => {
+        let resolveLifecycle!: (event: { runtimeQualifiedId: string; nativeSessionRef: typeof plan.parent.nativeSessionRef }) => void;
+        let rejectLifecycle!: (error: unknown) => void;
+        const childLifecycle = new Promise<{ runtimeQualifiedId: string; nativeSessionRef: typeof plan.parent.nativeSessionRef }>((resolve, reject) => { resolveLifecycle = resolve; rejectLifecycle = reject; });
+        const bridge = new ProductionSessionLifecycleBridge(sessionStore, context.nativeAccountBindingResolver ? (name, runtime) => context.nativeAccountBindingResolver!.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) : undefined, async () => {
+          const records = await new SessionService(sessionStore).list({ runtime: plan.child.runtime });
+          const child = records.find(record => record.runtimeQualifiedId !== plan.parent.runtimeQualifiedId && record.location.cwd === invocation.cwd && record.nativeBindingRef === plan.launchIdentity.nativeBindingRef);
+          if (child) resolveLifecycle({ runtimeQualifiedId: child.runtimeQualifiedId, nativeSessionRef: child.nativeSessionRef });
+        });
+        const synthetic: ResumePlanV1 = {
+          schemaVersion: 1, newLaunchRequired: true, previousLaunch: { launchKey: plan.launchIdentity.launchKey, descriptorDigest: plan.launchIdentity.descriptorDigest },
+          recordId: plan.child.runtimeQualifiedId, runtimeQualifiedId: plan.child.runtimeQualifiedId, runtime: plan.child.runtime, identity: plan.launchIdentity.identity,
+          nativeBindingRef: plan.launchIdentity.nativeBindingRef, nativeSessionRef: plan.parent.nativeSessionRef, cwd: invocation.cwd,
+          projectId: plan.workspace.projectRef, repositoryId: plan.workspace.repositoryRef,
+          launch: { launchKey: plan.launchIdentity.launchKey, descriptorDigest: plan.launchIdentity.descriptorDigest, mode: plan.launchIdentity.mode, skillPolicy: plan.launchIdentity.skillPolicy, contentScope: plan.launchIdentity.contentScope, executor: { kind: plan.launchIdentity.executor }, workspace: plan.launchIdentity.workspace, networkPolicy: plan.launchIdentity.networkPolicy, grants: plan.launchIdentity.grants, artifactKey: plan.launchIdentity.artifactKey, manifestKey: plan.launchIdentity.manifestKey },
+          confirmationDigest: plan.confirmationDigest,
+        };
+        const exited = executeProductionSessionResume(synthetic, user, { ...context, launchLifecycleBridge: bridge }, invocation).catch(error => { rejectLifecycle(error); throw error; });
+        return { lifecycle: childLifecycle, exited };
+      } });
+      const productionTerminal = !context.sessionBranchTerminalAdapter && terminalAvailability.terminal.available ? await createWindowsTerminalBranchAdapter({
+        candidate: terminalAvailability.terminal.executable,
+        trustedRoots: trustedTerminalRoots,
+        run: async request => {
+          const before = new Set((await new SessionService(sessionStore).list()).map(record => record.runtimeQualifiedId));
+          let settleExit!: (value: unknown) => void, rejectExit!: (error: unknown) => void;
+          const exited = new Promise<unknown>((resolve, reject) => { settleExit = resolve; rejectExit = reject; });
+          execFile(request.executable, [...request.argv], { cwd: request.cwd, env: context.env, shell: false, windowsHide: true }, (error, stdout, stderr) => error ? rejectExit(error) : settleExit({ exitCode: 0, stdout, stderr }));
+          const lifecycle = (async () => {
+            const deadline = Date.now() + 120_000;
+            while (Date.now() < deadline) {
+              const child = (await new SessionService(sessionStore).list()).find(record => !before.has(record.runtimeQualifiedId) && record.location.cwd === request.cwd);
+              if (child) return { runtimeQualifiedId: child.runtimeQualifiedId, nativeSessionRef: child.nativeSessionRef };
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            throw new SessionError("SESSION_BRANCH_LIFECYCLE_TIMEOUT", "The terminal child did not publish a lifecycle event.");
+          })();
+          return { lifecycle, exited };
+        },
+      }) : null;
+      const dockerAdmission = context.sessionDockerResumeAdmission ?? createProductionSessionDockerResumeAdmission(context.env);
+      const leaseProcessInspector = context.sessionProcessInspector ?? productionSessionProcessInspector();
+      const controller = await leaseProcessInspector.inspect(process.pid);
+      const branchLeaseStore = new BranchLeaseStore(path.join(stateRoot(context), "session-branch-leases"), {
+        processId: process.pid,
+        controllerStartFingerprint: controller.status === "present" ? controller.startFingerprint : `unverified-${process.pid}`,
+        processInspector: leaseProcessInspector,
+        observeSession: async lease => {
+          const records = await new SessionService(sessionStore).list();
+          const candidates = records.filter(record => record.runtimeQualifiedId === lease.session.runtimeQualifiedId || (record.location.cwd === lease.workspace.cwd && record.nativeBindingRef === lease.session.nativeBindingRef && (!lease.launch.launchKey || record.launch?.launchKey === lease.launch.launchKey)));
+          if (candidates.length === 0) return "absent";
+          if (candidates.every(record => record.liveness === "inactive")) return "inactive";
+          for (const record of candidates.filter(value => value.liveness === "active")) {
+            if (!record.process) return "unknown";
+            const observed = await leaseProcessInspector.inspect(record.process.pid);
+            if (observed.status === "unknown") return "unknown";
+            if (observed.status === "present" && observed.startFingerprint === record.process.startFingerprint) return "active";
+          }
+          return "inactive";
+        },
+      });
+      await branchLeaseStore.reconcile();
+      branchService = new ConversationBranchService({
+        inspectWorkspace: async workspace => { try { const info = await lstat(workspace.cwd); return { exists: info.isDirectory() && !info.isSymbolicLink(), collisionDisclosure: workspace.repositoryRef === null ? [] : ["repository refs and external fixed services remain shared"] }; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return { exists: false, collisionDisclosure: [] }; throw error; } },
+        createIsolatedWorktree: async workspace => {
+          if (!workspace.branch) throw new SessionError("SESSION_BRANCH_WORKTREE_BRANCH_REQUIRED", "An isolated branch requires a worktree branch ref.");
+          const created = await lifecycle.create({ cwd: workspace.cwd, branch: workspace.branch, execution: "none" }) as { worktreePath?: unknown };
+          if (typeof created.worktreePath !== "string" || !path.isAbsolute(created.worktreePath)) throw new SessionError("SESSION_BRANCH_WORKTREE_CREATE_FAILED", "The worktree service did not return a canonical worktree path.");
+          return { cwd: created.worktreePath, worktreeRef: workspace.branch };
+        },
+        removeIsolatedWorktree: async workspace => { await lifecycle.remove({ cwd: parsed.cwd, worktreePath: workspace.cwd }); },
+        validateNativeBinding: async plan => {
+          const configured = user.identities[plan.launchIdentity.identity.name];
+          if (!configured || configured.domain !== plan.launchIdentity.identity.domain) throw new SessionError("SESSION_BRANCH_IDENTITY_MISMATCH", "The branch identity is no longer configured.");
+          const binding = await sessionStore.readNativeBinding(plan.launchIdentity.nativeBindingRef);
+          const root = configured.runtimeRoots[plan.child.runtime];
+          if (binding.ref !== plan.launchIdentity.nativeBindingRef || binding.runtime !== plan.child.runtime || binding.identity.domain !== plan.launchIdentity.identity.domain || binding.identity.name !== plan.launchIdentity.identity.name || binding.recordedRootDigest !== plan.launchIdentity.rootDigest || canonicalNativeRootDigest(root) !== binding.recordedRootDigest) throw new SessionError("SESSION_BRANCH_NATIVE_BINDING_MISMATCH", "The recorded session binding no longer matches the configured identity root.");
+          if (plan.child.runtime === "pi") {
+            const attestation = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+            await attestation.verify(plan.launchIdentity.identity, root, binding.accountBindingRef ?? undefined);
+            await (context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) })).verify(root);
+          }
+          return root;
+        },
+        adapters: { claude: runtimeAdapter("claude"), pi: runtimeAdapter("pi") },
+        runtime: context.sessionBranchRuntimeAdapter ?? productionBranchRuntime,
+        ...((context.sessionBranchTerminalAdapter ?? productionTerminal) ? { terminal: (context.sessionBranchTerminalAdapter ?? productionTerminal)! } : {}),
+        lineage: new BranchLineageStore(path.join(stateRoot(context), "sessions", "v1", "private", "branch-lineage")),
+        admitExecutor: async branch => branch.launchIdentity.executor === "host" || (await dockerAdmission(branchAdmissionPlan(branch))).admitted,
+      }, branchLeaseStore);
+    }
+    const scheduledCaptureAuthority = context.scheduledCaptureAuthority ?? ((context.installOrchestrator || (context.installerOperationAdapter && context.installerTransactionStore)) ? {
+      inspect: async () => {
+        const verification = await immutableInstaller(context).verify(true);
+        return { installed: verification.healthy, authorityDigest: verification.healthy && verification.releaseKey ? verification.releaseKey : null };
+      },
+    } : undefined);
     const result = await executeSessionCommand({ action, args, options: parsed.options }, {
       store: sessionStore,
       resolveIdentity: async name => {
@@ -304,11 +449,14 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
       resumeDependencies: context.sessionResumeDependencies ?? productionSessionResumeDependencies(user, sessionStore, context.nativeAccountBindingVerifier ?? account?.verifier, context.env),
       executeResume: context.sessionResumeExecutor ?? (plan => executeProductionSessionResume(plan, user, context)),
+      ...(branchService ? { branchService } : {}),
+      ...(terminalAvailability.terminal.available ? { terminalExecutable: terminalAvailability.terminal.executable } : {}),
+      ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
     });
     return { data: result.data, warnings: [...result.warnings] };
   }
   if (group === "install") {
-    const result = await executeInstallCommand({ action, args, options: parsed.options }, { service: installer(context, parsed.cwd) });
+    const result = await executeInstallCommand({ action, args, options: parsed.options }, { orchestrator: immutableInstaller(context) });
     return { data: result.data, warnings };
   }
   if (["identity","mode","skill-policy","preset"].includes(group) && ["list","show"].includes(action ?? "")) {
@@ -330,15 +478,41 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     }
     return {data,warnings};
   }
+  if (group==="dev") {
+    if (!action || !["start","status","logs","restart","stop"].includes(action) || args.length) throw new UsageError("dev requires one of: start, status, logs, restart, stop");
+    const found=await project(parsed), id=stringOption(parsed,"id"), rawLines=stringOption(parsed,"lines");
+    if(action!=="status"&&id===undefined)throw new UsageError(`--id is required for dev ${action}`);
+    const lines=rawLines===undefined?undefined:Number(rawLines); if(lines!==undefined&&(!Number.isInteger(lines)||lines<1||lines>500))throw new UsageError("--lines must be an integer from 1 through 500");
+    if(lines!==undefined&&action!=="logs")throw new UsageError("--lines is valid only for dev logs");
+    let executor:"host"|"docker"="host";
+    if(context.env.MPX_RUNTIME_CONTEXT!==undefined){const selected=context.env.MPX_RUNTIME_EXECUTOR;if(selected!=="host"&&selected!=="docker")throw new MpxError({code:"DEV_EXECUTOR_BINDING_REQUIRED",message:"Launch-bound development services require an exact executor binding and never fall back to host."});executor=selected;}
+    const service=context.devService??(executor==="docker"?undefined:defaultDevService(context.env,found.root));
+    if(!service||(executor==="docker"&&service.runtimeKind!=="docker"))throw new MpxError({code:"DEV_EXECUTOR_UNSUPPORTED",message:"Docker development services require an injected matching Docker runtime adapter; host fallback is forbidden."});
+    if(service.runtimeKind!==undefined&&service.runtimeKind!==executor)throw new MpxError({code:"DEV_EXECUTOR_BINDING_REQUIRED",message:"The development-service adapter does not match the selected executor."});
+    data=await executeDevCommand({action,...(id?{id}:{}),cwd:parsed.cwd,config:found.config,projectRoot:found.root,...(action==="start"?{portService:ports(context) as never}:{}),service,executor,...(lines===undefined?{}:{lines})});
+    return {data,warnings};
+  }
+  if (group === "view") {
+    if (action !== "rebuild" || args.length) throw new UsageError("view requires rebuild");
+    const found = await project(parsed), issues = found.config.issues;
+    if (issues?.provider !== "local" || !issues.store || !issues.view) throw new MpxError({ code: "LOCAL_VIEW_UNAVAILABLE", message: "The project must select logical local store and view registrations." });
+    const user = await requiredUserConfig(context), storeRegistration = user.localIssueStores?.[issues.store], view = user.localViews?.[issues.view];
+    if (!storeRegistration || !view) throw new MpxError({ code: "LOCAL_VIEW_UNAVAILABLE", message: "The selected logical local store or view is not registered." });
+    data = await rebuildObsidianIssueViews(new LocalIssueStore(storeRegistration.root, { projectId: found.config.project.id }), { vaultRoot: view.vaultRoot, outputRoot: view.outputRoot, projectId: found.config.project.id, resumeBaseUrl: view.resumeBaseUrl });
+    return { data, warnings };
+  }
   if (["issue","review","ci"].includes(group)) {
     const actions=group==="issue"
-      ? ["list","view","create","edit","comment","label","move","finish"]
+      ? ["list","view","show","create","edit","update","comment","label","move","finish","close","dependency"]
       : group==="review"
         ? ["view","create","update","comment","ready","merge"]
         : ["status","watch","logs","retry"];
     if(!action || !actions.includes(action)) throw new UsageError(`${group} requires one of: ${actions.join(", ")}`);
-    if(args.length) throw new UsageError(`${group} ${action} accepts only explicit flags`);
-    const capability=`${group}.${action}`;
+    if(args.length && action!=="dependency") throw new UsageError(`${group} ${action} accepts only explicit flags`);
+    const dependencyAction=group==="issue"&&action==="dependency"?args[0]:undefined;
+    if(action==="dependency"&&(!dependencyAction||!["add","remove"].includes(dependencyAction)||args.length!==1)) throw new UsageError("issue dependency requires add or remove");
+    const normalizedAction=group==="issue" ? ({show:"view",update:"edit",close:"finish"} as Record<string,string>)[action]??action : action;
+    const capability=action==="dependency"?`issue.dependency.${dependencyAction}`:`${group}.${normalizedAction}`;
     const role=group==="issue"?"issues":"repository";
     const binding=await providerBinding(parsed,context,role,capability);
     if(group==="review" && action==="ready" && binding.found.config.workflow?.codeReview?.markReady==="human") throw new MpxError({code:"WORKFLOW_POLICY_DENIED",message:"Project workflow policy requires a human to mark reviews ready.",capability});
@@ -346,12 +520,13 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     let input:Record<string,unknown>={};
     if(group==="issue") {
       if(action==="list") { const state=stringOption(parsed,"state"); if(state!==undefined && state!=="open" && state!=="finished") throw new UsageError("--state must be open or finished"); input=state===undefined?{}:{state}; }
-      else if(action==="view"||action==="finish") input={id:requiredOption(parsed,"id")};
+      else if(action==="view"||action==="show"||action==="finish"||action==="close") input={id:requiredOption(parsed,"id"),...(stringOption(parsed,"revision")?{revision:stringOption(parsed,"revision")}:{})};
       else if(action==="create") input={title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body")};
-      else if(action==="edit") input={id:requiredOption(parsed,"id"),title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body")};
+      else if(action==="edit"||action==="update") input={id:requiredOption(parsed,"id"),title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body"),...(stringOption(parsed,"revision")?{revision:stringOption(parsed,"revision")}:{})};
       else if(action==="comment") input={id:requiredOption(parsed,"id"),body:requiredOption(parsed,"body")};
       else if(action==="label") input={id:requiredOption(parsed,"id"),label:requiredOption(parsed,"label")};
       else if(action==="move") input={id:requiredOption(parsed,"id"),destination:requiredOption(parsed,"destination")};
+      else if(action==="dependency") input={id:requiredOption(parsed,"id"),dependencyId:requiredOption(parsed,"dependency-id"),...(stringOption(parsed,"revision")?{revision:stringOption(parsed,"revision")}:{})};
     } else if(group==="review") {
       if(action==="view"||action==="ready") input={id:requiredOption(parsed,"id")};
       else if(action==="create") input={title:requiredOption(parsed,"title"),body:requiredOption(parsed,"body"),sourceBranch:requiredOption(parsed,"source-branch"),targetBranch:requiredOption(parsed,"target-branch"),draft:binding.found.config.workflow?.codeReview?.openAsDraft??false};
@@ -360,7 +535,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       else if(action==="merge") { const method=stringOption(parsed,"method")??"merge"; if(!["merge","squash","rebase"].includes(method)) throw new UsageError("--method must be merge, squash, or rebase"); input={id:requiredOption(parsed,"id"),method}; }
     } else if(action==="status"||action==="watch") input={id:requiredOption(parsed,"id")};
     else { const id=requiredOption(parsed,"run-id"); input={id,runId:id}; }
-    data=await (await providerService(context,binding.found.config,binding.found.root,{providerId:binding.providerId,capability})).invoke({providerId:binding.providerId,capability,route:binding.route,input:asJson(input)});
+    data=await (await providerService(context,binding.found.config,binding.found.root,{providerId:binding.providerId,capability})).invoke({providerId:binding.providerId,capability,...(binding.route===undefined?{}:{route:binding.route}),input:asJson(input)});
     return {data,warnings};
   }
   if (group==="launch" && action==="resolve") throw new UsageError("launch resolve was replaced by 'mpx launch explain'");
@@ -417,20 +592,18 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const selection=await resolveLaunchSelection(launchInput);
     let piAttestation: Awaited<ReturnType<RootAttestationService["verify"]>> | undefined;
     let beforeChildExecution: (() => Promise<void>) | undefined;
-    if (action !== "explain" && selection.runtime === "pi") {
-      const accountService = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-      const configured = user.identities[selection.identity.name]!, auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
-      piAttestation = await accountService.verify(selection.identity, configured.runtimeRoots.pi);
-      await auth.verify(configured.runtimeRoots.pi);
-      const attestationRef = piAttestation.ref;
-      beforeChildExecution = async () => { await accountService.verify(selection.identity, configured.runtimeRoots.pi, attestationRef); await auth.verify(configured.runtimeRoots.pi); };
-    }
+    const requirePiAccountPreflight = context.env.LOCALAPPDATA !== undefined && (context.launchExecutorAdapters === undefined || context.rootAttestationService !== undefined || context.accountAuthVerifier !== undefined);
     if (action==="explain" && runtimeOption===undefined) {
       if (projectId && selection.identity.domain!==selection.cwdClassification.domain) throw new MpxError({
         code:"IDENTITY_DOMAIN_MISMATCH",
         message:`Identity '${selection.identity.name}' cannot launch in domain '${selection.cwdClassification.domain}' without an explicit grant.`,
       });
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
+    }
+    if(action!=="explain"&&selection.executor==="docker"&&context.sbxDiagnostics){
+      const sbx=await context.sbxDiagnostics(),code=sbx.failureCodes[0];
+      if(sbx.readOnly!==true)throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
+      if(code)throw new MpxError({code,message:`Standalone sbx launch diagnostic: ${code}.`,details:{executor:"docker"}});
     }
     const opts=resolveOptions(user,{identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,repositoryId,...(projectId ? {projectId} : {})});
     const canonicalRoot=await catalogPath(context,parsed.cwd), canonicalCatalog=await inventoryCanonical(canonicalRoot);
@@ -440,7 +613,18 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     const manifest=resolveManifest(catalog,opts), artifact=createRuntimeSkillArtifact(manifest,catalog,{runtime:selection.runtime});
     const scope=user.contentScopes[selection.contentScope.name]!, projectOverride=projectId?user.projects?.[projectId]:undefined;
     const skillArtifact=createSkillArtifactReference({runtime:selection.runtime,identity:selection.identity.name,skillPolicy:selection.skillPolicy.name,contentScope:selection.contentScope.name,projectId:projectId??null,catalogHash:sha256Canonical(catalog.map(skill=>({identity:skill.identity,contentHash:skill.contentHash,...("directoryHash" in skill?{origin:"project",directoryHash:skill.directoryHash,realPath:skill.realPath,realProjectRoot:skill.realProjectRoot}:{origin:"canonical"})})) as unknown as JsonValue),enabledPacks:resolveEffectiveSkillPacks({contentScopeSkillPacks:scope.skillPacks,projectSkillPacks:projectOverride?.skillPacks,skillPolicySkillPacks:selection.skillPolicy.declaration.skillPacks}),skillPolicyConfig:selection.skillPolicy.declaration as unknown as JsonValue,contentScopeExposure:(scope.skillExposure??{}) as unknown as JsonValue,projectExposure:(projectOverride?.skillExposure??null) as unknown as JsonValue});
-    const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(context,selection.executor), tty=context.launchTty??directProcessTty();
+    const statusSnapshot = found
+      ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
+      : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
+    let executionContext=context;
+    if(action!=="explain"&&selection.executor==="docker"&&context.launchExecutorAdapters===undefined&&context.env.LOCALAPPDATA){
+      try{
+        const snapshot=await statusSnapshot(),configured=user.identities[selection.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"];
+        const adapter=await createProductionSbxExecutionAdapter({environment:context.env,cwd:parsed.cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:selection.runtime,identity:{name:selection.identity.name,domain:selection.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:parsed.cwd,gitCommonDir:path.join(parsed.cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:snapshot.services.flatMap(service=>service.port===null?[]:[service.port])},context.launchSbxExecutionDependencies);
+        executionContext={...context,launchExecutorAdapters:[adapter],...(adapter.bridge?{launchSbxBridge:adapter.bridge}:{})};
+      }catch{/* The existing typed unverified Docker gate remains authoritative. */}
+    }
+    const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(executionContext,selection.executor), tty=context.launchTty??directProcessTty();
     let hostApproval:{reason:string;approvalKey:string}|undefined;
     if(selection.executor==="host" && action!=="explain") {
       if(parsed.json || !tty.direct) throw new MpxError({code:"HOST_TTY_REQUIRED",message:"Host approval requires a current direct interactive TTY.",remediation:"Run the explicit host launch interactively, or use Docker."});
@@ -456,13 +640,18 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       policyInputs:{schemaVersion:1,manifestKey:manifest.manifestKey,skillArtifactKey:skillArtifact.artifactKey},
     });
     if(action==="explain") return {data:serializeLaunchPublic(descriptor),warnings};
+    if (selection.runtime === "pi" && evidence.status === "verified" && requirePiAccountPreflight) {
+      const accountService = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+      const configured = user.identities[selection.identity.name]!, auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
+      piAttestation = await accountService.verify(selection.identity, configured.runtimeRoots.pi);
+      await auth.verify(configured.runtimeRoots.pi);
+      const attestationRef = piAttestation.ref;
+      beforeChildExecution = async () => { await accountService.verify(selection.identity, configured.runtimeRoots.pi, attestationRef); await auth.verify(configured.runtimeRoots.pi); };
+    }
     const appData=context.env.APPDATA;
     if(!appData) throw new MpxError({code:"USER_CONFIG_ROOT_MISSING",message:"APPDATA is required to publish immutable runtime projections."});
-    const statusSnapshot = found
-      ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
-      : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
-    const launchContext = context.launchLifecycleBridge || context.launchRuntimeAdapters || !context.env.LOCALAPPDATA ? context : { ...context, launchLifecycleBridge: new ProductionSessionLifecycleBridge(sessions(context), async (name, runtime) => runtime === "pi" && piAttestation && name === piAttestation.identity.name ? piAttestation.ref : context.nativeAccountBindingResolver?.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) ?? null) };
-    const processResult=await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,environment:context.env,context:launchContext,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(beforeChildExecution?{beforeChildExecution}:{})});
+    const launchContext = executionContext.launchLifecycleBridge || executionContext.launchRuntimeAdapters || !executionContext.env.LOCALAPPDATA ? executionContext : { ...executionContext, launchLifecycleBridge: new ProductionSessionLifecycleBridge(sessions(executionContext), async (name, runtime) => runtime === "pi" && piAttestation && name === piAttestation.identity.name ? piAttestation.ref : executionContext.nativeAccountBindingResolver?.resolve({ domain: user.identities[name]!.domain, name }, runtime, user.identities[name]!.runtimeRoots[runtime]) ?? null) };
+    const processResult=await executeResolvedLaunch({descriptor,manifest,artifact,catalog,canonicalRoot,agentsRoot:path.join(path.dirname(canonicalRoot),"agents"),artifactsRoot:path.join(appData,"mpx","runtime-artifacts"),stateRoot:context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA,"mpx") : "",cwd:parsed.cwd,environment:context.env,context:launchContext,tty,nativeRuntimeRoot:user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],statusSnapshot,...(found?{projectConfig:found.config,projectRoot:found.root}:{}),...(beforeChildExecution?{beforeChildExecution}:{})});
     return {data:null,warnings,silent:true,exitCode:processResult.exitCode};
   }
   if (group === "worktree" && ["create","remove","list","select","status","prepare","cancel","reconcile"].includes(action ?? "")) {
@@ -582,6 +771,16 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       ...configDoctor(found.config,user).map(({ code, message, severity, pointer }) => ({ code, message, severity, ...(pointer ? { details: { pointer } } : {}) })),
       ...skillDoctor(catalog,local).map(({ code, message, path: diagnosticPath }) => ({ code, message, severity: "error" as const, ...(diagnosticPath ? { details: { path: diagnosticPath } } : {}) })),
     ];
+    const sbxProbe=context.sbxDiagnostics??(context===defaultContext?()=>createDefaultSbxDiagnostics(context.env,parsed.cwd):undefined);
+    if (sbxProbe) {
+      const sbx = await sbxProbe();
+      if (sbx.readOnly !== true) throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
+      for (const code of [...new Set(sbx.failureCodes)].sort()) diagnostics.push({ code, message: `Standalone sbx diagnostic: ${code}.`, severity: "warning", details: { executor: "docker" } });
+      for (const code of await diagnoseConfiguredF2Proof(context.env)) diagnostics.push({code,message:`Standalone sbx proof diagnostic: ${code}.`,severity:"warning",details:{executor:"docker"}});
+    }
+    const branchAdapters = await diagnoseSessionBranchAdapters({ runtimeAvailable: true, ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ? { terminalCandidate: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE } : {}), trustedRoots: [context.env.WINDIR, context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, "Microsoft", "WindowsApps") : undefined].filter((value): value is string => Boolean(value && path.isAbsolute(value))) });
+    if (!branchAdapters.runtime.available) diagnostics.push({ code: branchAdapters.runtime.code, message: "Production session branch runtime execution is unavailable.", severity: "warning" });
+    if (context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE && !branchAdapters.terminal.available) diagnostics.push({ code: branchAdapters.terminal.code, message: "Configured Windows Terminal is unavailable or untrusted; side-by-side tabs are disabled.", severity: "warning" });
     const services = Object.entries(found.config.development?.services ?? {}).sort(([left], [right]) => left.localeCompare(right));
     for (const [name, service] of services) if (service.port.mode === "fixed-shared") diagnostics.push({ code: "FIXED_SHARED_LIMITATION", message: `Service ${name} uses a fixed-shared port that MPX cannot reserve exclusively.`, severity: "warning", details: { service: name, ...(service.port.preferred === undefined ? {} : { port: service.port.preferred }) } });
     if (services.some(([, service]) => service.port.mode === "managed")) {

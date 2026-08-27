@@ -47,9 +47,9 @@ is literal text until it is looked up (see [`../shared/EXPLORATION.md`](../share
 § "Paths outside the working directory"), and checking now catches an unset variable before
 Step 3 spends the Gemini call on a run that would fail to write anyway. Every run gets its
 own folder, `$MPX_AI_GENERATED\_VIDEO_SHEETS\[<channel>] <video title>\`, holding a single
-`prompt.md`; the user saves the generated image there by hand. With neither
-`MPX_AI_GENERATED` nor `MPX_ONEDRIVE` set the script stops and names the variable to set —
-pass `--out` to override it.
+`prompt.md`; the user saves the generated image there by hand. When `MPX_AI_GENERATED` is unset the script stops and names the variable to set. `--out`
+may select a child directory inside that root, but containment is enforced and it cannot
+redirect AI-generated deliverables elsewhere.
 
 **The folder carries the video's own full title and its channel**, read from YouTube's
 keyless oEmbed endpoint rather than from the sheet. Gemini writes a short title for the

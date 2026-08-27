@@ -1,101 +1,71 @@
 # Design Pipeline
 
-Conventions shared by `mpx design-init`, `mpx design-brief`, `mpx mockup`, and `mpx design-refine`.
-Those skills link here instead of restating any of it.
+Shared conventions for design initialization, briefs, variants, and refinement.
 
-## Pipeline
+## Pipeline and layout
 
-| Skill | Runs | Produces |
-| ------------------ | -------------------- | --------------------------------------------- |
-| `mpx design-init` | once per project | `designs/DESIGN_SYSTEM.md`, `designs/tokens.css` |
-| `mpx design-brief` | once per component | `DESIGN_BRIEF_<NAME>.md`, `Design needed` labels |
-| `mpx mockup` | after the brief | `variants/variant-<letter>.html` |
-| `mpx design-refine` | after variant chosen | `refined.html`, `SUMMARY.md`, labels removed |
+| Stage | Runs | Produces |
+| --- | --- | --- |
+| design initialization | once per project | `designs/DESIGN_SYSTEM.md`, `designs/tokens.css` |
+| design brief | once per component | brief and semantic `Design needed` label |
+| mockup | after the brief | `variants/variant-<letter>.html` |
+| refinement | after selection | `refined.html`, `SUMMARY.md`, label removal |
 
-## Folder layout
-
-```
+```text
 designs/
-├── DESIGN_SYSTEM.md                    ← design language reference
-├── tokens.css                          ← CSS custom properties
-└── <component-name>/                   ← kebab-case
-    ├── DESIGN_BRIEF_<COMPONENT_NAME>.md  ← authoritative requirements (always kept current)
-    ├── refined.html                      ← authoritative visual design (post-refine)
-    ├── SUMMARY.md                        ← component map + implementation notes
+├── DESIGN_SYSTEM.md
+├── tokens.css
+└── <component-name>/
+    ├── DESIGN_BRIEF_<COMPONENT_NAME>.md
+    ├── refined.html
+    ├── SUMMARY.md
     └── variants/
-        ├── variant-a.html                ← kept for reference
-        ├── variant-b.html
-        └── DECISION.md                   ← user's variant choice + refinement notes
+        ├── variant-a.html
+        └── DECISION.md
 ```
 
-## Project discovery
+The brief remains the authoritative requirements; `refined.html` is the authoritative visual
+design after refinement. Keep rejected variants and the decision record for context.
 
-Assume nothing about the project's stack. Discover it once, at the start of each skill, and
-carry the answers through.
+## Discover project specifics
 
-**Design language** — `designs/DESIGN_SYSTEM.md` and `designs/tokens.css` when they exist.
-Otherwise infer from the project's global stylesheet (`src/app.css`, `src/styles/global.css`,
-`app/globals.css` — glob for it) and from existing components.
+Assume nothing about the stack. At the start of each stage discover:
 
-**Fonts and palette** — read them from the tokens file or the global stylesheet. Never carry a
-palette or font pairing over from another project.
+1. Design language and tokens from `designs/`, then global styles and existing components.
+2. Fonts and palette from project sources; never carry them from another project.
+3. Component directories from framework configuration, then repository search. Distinguish
+   vendored primitives from project compositions.
+4. Real component APIs from source, variant definitions, or stories.
+5. Framework from dependencies and package manager from lockfiles, then `packageManager`.
+6. Third-party API details through the approved documentation route; do not rely on memory.
 
-**Component directories** — discover, do not assume. In order:
+Use [EXPLORATION.md](EXPLORATION.md) for search boundaries and spawn
+`mpx-context7-docs-fetcher` for library documentation.
 
-1. `components.json` → `aliases.ui` / `aliases.components` (shadcn projects)
-2. Glob for directories holding component files: `src/**/components/*/`, `app/components/*/`,
-   `lib/components/*/`
-3. Note which directory holds vendored primitives and which holds project-specific compositions
+## Mockup HTML
 
-**Component APIs** — read the component source, its variants file (`*-variants.ts`), or its
-story (`*.stories.*`) to get real prop and variant names.
+Every variant and refined HTML file:
 
-**Framework** — from `package.json` dependencies (svelte, react, vue, …).
+- links `tokens.css` with the correct relative path, or inlines discovered project custom
+  properties only when no token file exists;
+- loads the project's actual fonts and uses its classes;
+- limits custom CSS to component layout rather than duplicating token values;
+- uses realistic data and an eyebrow naming the variant and its design angle;
+- renders at approximately 1440×900 proportions.
 
-**Package manager** — lockfile first (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn,
-`bun.lock*` → bun, `package-lock.json` → npm), else `package.json` → `packageManager`.
+When a brief requests surrounding context, render finished neighbors at full fidelity and
+unfinished neighbors as muted, non-editable context. The designed component owns only its area;
+parent chrome stays with the parent. A standalone component owns its complete chrome.
 
-**Library docs** — spawn `context7-docs-fetcher` (omit `model`; it declares its own).
-Use it for any framework or component-library API question rather than recalling from memory.
+## Design gate
 
-## Mockup HTML rules
-
-Every generated `.html` (variants and `refined.html`) must:
-
-- Link the tokens file rather than inlining it — `<link rel="stylesheet" href="../../tokens.css">`
-  from `variants/`, `href="../tokens.css"` from the component folder. With no tokens file, inline
-  the project's CSS custom properties in a `<style>` block.
-- Load the project's actual fonts (Google Fonts link plus system fallbacks).
-- Use the project's own utility and design-system classes throughout.
-- Keep `<style>` to component-specific layout — token *values* live in the tokens file.
-- Use realistic mock data: real-looking paths, plausible metrics, believable copy.
-- Carry an eyebrow label at the top naming the variant and its angle
-  (e.g. `VARIANT A — DENSE, DEVELOPER-FOCUSED`), styled with the project's eyebrow/overline class
-  or a small uppercase letter-spaced rule.
-- Render at ~1440×900 viewport proportions.
-
-### Container context
-
-When the brief specifies surrounding context, reproduce it:
-
-- Elements already in final state render at full fidelity and at their real proportions.
-- Elements still being designed render at reduced opacity as non-editable context.
-- The designed component fills only its own area — parent chrome (tab bars, panel borders,
-  navigation) belongs to the parent and is never duplicated inside the component.
-- A standalone component owns its full chrome.
-
-## Design gating label
-
-`Design needed` gates implementation issues on an unfinished design.
-`mpx design-brief` creates the label and applies it; `mpx design-refine` removes it.
-
-Match the repo's actual label if it differs — discover with `mpx label list --search design`.
-With no GitHub remote or no `gh`, skip the gating steps and say so in the report.
+`Design needed` is a semantic MPX Issue label. Apply it through
+[ISSUE_TRACKER.md](ISSUE_TRACKER.md) when the brief starts and remove it after refinement. First
+read the issue to discover whether an equivalent semantic label is already mapped. Unsupported
+label operations produce a structured manual handoff; never silently skip the gate.
 
 ## Model policy
 
-Design work runs on appropriate runtime class, always. Every agent these skills spawn is an `mp-*` agent declaring its
-own model and effort, so no call site passes `model`. Adding a `general-purpose` or `runtime` spawn
-would require `model: appropriate runtime class` — prefer a declaring agent, since the `Agent` tool has no `effort`
-parameter and generative design must not inherit a low session effort.
-See [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md) § 8.
+Design and architecture require the `advanced` model class with task-matched effort. Canonical
+agent definitions declare classes; call sites omit concrete model IDs. If a generic agent has no
+class declaration, the caller must pass `advanced`. See [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md).

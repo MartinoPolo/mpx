@@ -72,7 +72,9 @@ describe("ProductionSessionLifecycleBridge", () => {
         startFingerprint: "unavailable:test-process-start",
       });
       await writeFile(path.join(prepared.eventDirectory, "000000000001-event-1.json"), `${JSON.stringify(event)}\n`);
-      await expect(bridge.consume(prepared.binding.bindingId)).resolves.toBe(1);
+      const observation = await bridge.observe(prepared.binding.bindingId);
+      expect(observation).toMatchObject({ runtime: "pi", runtimeQualifiedId: "pi:native-1", title: "Session title", lifecycleState: "active", source: "sessions:lifecycle" });
+      await expect(bridge.consume(prepared.binding.bindingId)).resolves.toBe(0);
       const partitions = await store.partitions();
       expect(partitions).toHaveLength(1);
       expect(partitions[0]!.records[0]).toMatchObject({ runtimeQualifiedId: "pi:native-1", nativeBindingRef: nativeBindings[0]!.ref, lifecycle: { bindingId: prepared.binding.bindingId, sequence: 1 } });

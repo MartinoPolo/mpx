@@ -16,7 +16,9 @@ export type Executor = "host" | "docker";
 export type WorkspaceStrategy = "clone" | "host-worktree" | "direct";
 export type NetworkPolicyPreset = "allow-all" | "balanced" | "deny-all";
 export interface IssueStates { todo: string; wip: string; review: string; done: string; archive?: string }
-export interface IssuesConfig { provider: IssueProvider; boardId?: string; boardName?: string; states?: IssueStates }
+export interface IssuesConfig { provider: IssueProvider; store?: string; view?: string; boardId?: string; boardName?: string; states?: IssueStates }
+export interface LocalIssueStoreRegistration { root: string }
+export interface LocalViewRegistration { vaultRoot: string; outputRoot: string; vaultSubtree: string; resumeBaseUrl: string }
 export interface PreparationStepBase { id: string; dependsOn?: string[]; required?: boolean; timeoutSeconds?: number; cwd?: string; environment?: string[] }
 export type PreparationStep =
   | (PreparationStepBase & { uses: "package-install" })
@@ -28,7 +30,8 @@ export interface PreparationPlan {
   order: readonly string[];
   logging: { readonly maxOutputBytes: 65536; readonly redactEnvironmentValues: true };
 }
-export interface ServiceConfig { scope: "checkout" | "project"; port: { mode: "managed" | "fixed-shared"; preferred?: number; family?: string }; environmentVariable?: string; protocol?: "http" | "https" | "tcp"; start: { type: "package-script"; script: string } }
+export type ServiceLauncher = { type:"package-script"; script:string } | { type:"external"; kind:"database" } | { type:"test-only" };
+export interface ServiceConfig { scope: "checkout" | "project"; port: { mode: "managed" | "fixed-shared"; preferred?: number; family?: string }; environmentVariable?: string; protocol?: "http" | "https" | "tcp"; start: ServiceLauncher }
 export interface ProjectConfig { $schema?: string; schemaVersion: 1; project: { id: string }; repository: { provider: RepositoryProvider; remote: string }; issues?: IssuesConfig; tooling?: { packageManager: "auto"|"pnpm"|"yarn"|"npm"|"bun"|"none" }; workflow?: { branch?: { base?: string; template?: string }; codeReview?: { openAsDraft?: boolean; markReady?: "human"|"agent"; merge?: "human"|"agent" } }; worktrees?: { postCreate?: { execution: "foreground"|"background"|"none"; steps?: PreparationStep[] } }; development?: { services: Record<string, ServiceConfig> } }
 export interface ExposureConfig { default?: Exposure; skills?: Record<string, Exposure> }
 export interface ContentScope { roots: string[]; skillPacks?: SkillPack[]; skillExposure?: ExposureConfig }
@@ -76,6 +79,8 @@ export interface UserConfig {
   networkPolicies: Record<string, NetworkPolicyConfig>;
   executors: Partial<Record<Executor, Record<string, never>>>;
   projects?: Record<string, ProjectOverride>;
+  localIssueStores?: Record<string, LocalIssueStoreRegistration>;
+  localViews?: Record<string, LocalViewRegistration>;
 }
 export type CwdClassification = { status: "known"; domain: string; root: string } | { status: "unknown" };
 export type ContentScopeClassification = { status: "known"; contentScope: string; root: string } | { status: "unknown" };

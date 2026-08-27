@@ -73,6 +73,8 @@ export interface ProviderCapabilityInputMap {
   readonly "issue.label": Readonly<{ id: string; label: string }>;
   readonly "issue.move": Readonly<{ id: string; destination: string }>;
   readonly "issue.finish": Readonly<{ id: string }>;
+  readonly "issue.dependency.add": Readonly<{ id: string; dependencyId: string; revision?: string }>;
+  readonly "issue.dependency.remove": Readonly<{ id: string; dependencyId: string; revision?: string }>;
   readonly "review.view": Readonly<{ id: string }>;
   readonly "review.create": Readonly<{ title: string; body: string; sourceBranch: string; targetBranch: string; draft?: boolean }>;
   readonly "review.update": Readonly<{ id: string; title: string; body: string }>;
@@ -94,6 +96,8 @@ export interface ProviderCapabilityOutputMap {
   readonly "issue.label": IssueV1;
   readonly "issue.move": IssueV1;
   readonly "issue.finish": IssueV1;
+  readonly "issue.dependency.add": IssueV1;
+  readonly "issue.dependency.remove": IssueV1;
   readonly "review.view": ReviewV1;
   readonly "review.create": ReviewV1;
   readonly "review.update": ReviewV1;
