@@ -23,7 +23,7 @@ import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
 import { ClaudeActiveScanner, PiV2ActiveRegistryScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ProcessInspector, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
-import { activateRelease, InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
+import { activateRelease, InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeInstalledRunnerAuthority, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
 import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
@@ -549,10 +549,14 @@ export function installer(context: CliContext, cwd: string): InstallerService {
   if (context.installerServiceFactory) return context.installerServiceFactory(root);
   const tasks = new WindowsScheduledTaskAdapter();
   const prohibited = [context.env.MPX_PROJECTS, context.env.MPX_WORK, context.env.MPX_CLONED].filter((value): value is string => Boolean(value));
+  const appsRoot = context.env.MPX_APPS;
+  if (!appsRoot || !path.isAbsolute(appsRoot)) throw new MpxError({ code: "INSTALL_ROOT_UNAVAILABLE", message: "MPX_APPS must be an absolute path for installed runner authority." });
+  const authorityStore = context.installerTransactionStore ?? new NodeTransactionStore(path.join(root, "installer"));
   return new InstallerService({
     tasks,
     store: new NodeReceiptStore(path.join(root, "installer", "receipts")),
     files: new NodeRunnerFileVerifier([cwd, ...prohibited]),
+    authority: new NodeInstalledRunnerAuthority({ appsRoot, localAppData: context.env.LOCALAPPDATA!, store: authorityStore }),
     currentUser: context.env.USERNAME ?? context.env.USER ?? "",
     cwd,
     prohibitedRoots: prohibited,

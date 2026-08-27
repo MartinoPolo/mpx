@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { FakeJsonResourceStore } from "@mpx/windows";
-import { installerDigest, type InstallIntentV1 } from "./immutable-core.js";
+import { activateRelease, installerDigest, type InstallIntentV1 } from "./immutable-core.js";
+import { NodeInstalledRunnerAuthority } from "./installed-runner-authority.js";
 import { InstallOrchestrator, NodeCurrentReleaseBuilder } from "./orchestration.js";
 import { NodeBinaryFileSystem, ProductionInstallerOperationAdapter } from "./production-operation.js";
 import { buildWindowsIntegrationSpecs } from "./windows-integration.js";
@@ -47,6 +48,17 @@ async function simulation(existing: boolean) {
   ] };
   return { root, repositoryRoot, appsRoot, localAppData, userProfile, fixtureFiles, before, adapter, store, releases, intent, native };
 }
+
+it("plans, applies, and verifies a fresh scheduled install with active immutable runner authority", async () => {
+  const f = await simulation(false);
+  const orchestrator = new InstallOrchestrator({ adapter: f.adapter, store: f.store, releases: f.releases, activate: (releaseKey, prior) => activateRelease(f.localAppData, prior, releaseKey) });
+  const plan = await orchestrator.plan(f.intent);
+  expect(plan.operations.at(-1)?.id).toBe("90-scheduled-capture");
+  const receipt = await orchestrator.apply(plan, plan.confirmationDigest);
+  await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: true, releaseKey: receipt.releaseKey });
+  const authority = new NodeInstalledRunnerAuthority({ appsRoot: f.appsRoot, localAppData: f.localAppData, store: f.store });
+  await expect(authority.resolveInstalled()).resolves.toMatchObject({ path: path.join(f.appsRoot, "mpx", "releases", receipt.releaseKey, "bin", "mpx.mjs"), version: receipt.releaseKey });
+}, 30_000);
 
 it("runs clean and existing-machine production-backed simulations without live writes", async () => {
   let successfulSimulations = 0, rollbackSimulations = 0;

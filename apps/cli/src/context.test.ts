@@ -9,7 +9,7 @@ import { createNodeWorktreeIncludeDependencies, deriveLifecycleKey, deriveWorktr
 import type { PreparationPlan, ProjectConfig } from "@mpx/config";
 import type { ProviderProcessRequest } from "@mpx/providers";
 import { afterEach, expect, it, vi } from "vitest";
-import { catalogPath, classifyProviderProcessResult, defaultContext, immutableInstaller, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
+import { catalogPath, classifyProviderProcessResult, defaultContext, immutableInstaller, installer, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
 import { SessionService, SessionStore } from "@mpx/sessions";
 
 const exec = promisify(execFile);
@@ -21,6 +21,12 @@ it("constructs the production installer without injected test adapters", () => {
   const root = path.resolve("C:/temp/mpx-installer-context");
   const orchestrator = immutableInstaller({ env: { MPX_APPS: path.join(root, "apps"), APPDATA: path.join(root, "roaming"), LOCALAPPDATA: path.join(root, "local"), USERPROFILE: path.join(root, "profile"), USERNAME: "tester" } });
   expect(orchestrator).toBeDefined();
+});
+
+it("wires production session capture to structured installed-runner authority before install", async () => {
+  const root = path.resolve("C:/temp/mpx-runner-authority-context"), apps = path.join(root, "apps");
+  const service = installer({ env: { MPX_APPS: apps, LOCALAPPDATA: path.join(root, "local"), USERNAME: "tester" } }, path.join(root, "source"));
+  await expect(service.plan({ componentId: "session-capture", runner: { path: path.join(apps, "mpx", "releases", "a".repeat(64), "bin", "mpx.mjs"), sha256: "b".repeat(64), version: "a".repeat(64) } })).rejects.toMatchObject({ code: "INSTALL_RUNNER_UNAVAILABLE", details: { status: "uninstalled" } });
 });
 
 it("provides fail-closed Docker resume admission in the production CLI context", async () => {

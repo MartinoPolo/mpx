@@ -148,15 +148,45 @@ describe("local Markdown issues", () => {
     expect(attempts).toBe(3);
   });
 
-  it("durably reconciles a committed pending release on the next operation without duplicating the mutation", async () => {
-    const directory = await root();
-    const committed = await new LocalIssueStore(directory, { beforeLockReleaseAttempt: () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); } }).create({ title: "first", body: "" });
+  it("records the exact quarantine obligation before a successful release rename and survives owner-read EACCES", async () => {
+    const directory = await root(), token = "read-denied", pending = path.join(directory, ".mpx-lock-release-pending.json");
+    let recorded: { schemaVersion: number; token: string; quarantinePath: string } | undefined;
+    const committed = await new LocalIssueStore(directory, {
+      lockToken: () => token,
+      beforeLockQuarantineReadAttempt: async () => {
+        recorded = JSON.parse(await readFile(pending, "utf8")) as typeof recorded;
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      },
+    }).create({ title: "first", body: "" });
     expect(committed).toMatchObject({ id: "1", providerData: { local: { lockReleasePending: true, diagnostics: ["LOCAL_ISSUE_LOCK_RELEASE_PENDING"] } } });
-    expect(await readFile(path.join(directory, ".mpx-lock-release-pending.json"), "utf8")).toContain("token");
-    const next = await new LocalIssueStore(directory).create({ title: "second", body: "" });
-    expect(next.id).toBe("2");
-    expect((await new LocalIssueStore(directory).list()).map(issue => issue.id)).toEqual(["1", "2"]);
-    await expect(readFile(path.join(directory, ".mpx-lock-release-pending.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(recorded).toEqual({ schemaVersion: 1, token, quarantinePath: path.join(directory, `.mpx-issues.lock.release-${token}`) });
+    await expect(readFile(recorded!.quarantinePath, "utf8")).rejects.toBeDefined();
+    await new LocalIssueStore(directory).view("1");
+    await expect(readFile(pending, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("preserves a failed quarantine removal across process restart until exact cleanup succeeds", async () => {
+    const directory = await root(), pending = path.join(directory, ".mpx-lock-release-pending.json");
+    const committed = await new LocalIssueStore(directory, {
+      lockToken: () => "remove-denied",
+      beforeLockQuarantineRemoveAttempt: () => { throw Object.assign(new Error("busy"), { code: "EPERM" }); },
+    }).create({ title: "first", body: "" });
+    expect(committed).toMatchObject({ providerData: { local: { lockReleasePending: true } } });
+    const obligation = JSON.parse(await readFile(pending, "utf8")) as { quarantinePath: string };
+    expect(await readFile(path.join(obligation.quarantinePath, "owner.json"), "utf8")).toContain("remove-denied");
+    expect((await new LocalIssueStore(directory).create({ title: "second", body: "" })).id).toBe("2");
+    await expect(readFile(obligation.quarantinePath, "utf8")).rejects.toBeDefined();
+    await expect(readFile(pending, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("never clears a pending release when restarted quarantine cleanup still fails", async () => {
+    const directory = await root(), pending = path.join(directory, ".mpx-lock-release-pending.json");
+    await new LocalIssueStore(directory, { lockToken: () => "held", beforeLockQuarantineRemoveAttempt: () => { throw Object.assign(new Error("busy"), { code: "EACCES" }); } }).create({ title: "first", body: "" });
+    const obligation = await readFile(pending, "utf8");
+    await expect(new LocalIssueStore(directory, { beforeLockQuarantineRemoveAttempt: () => { throw Object.assign(new Error("busy"), { code: "EACCES" }); } }).view("1")).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_IO" });
+    expect(await readFile(pending, "utf8")).toBe(obligation);
+    expect((await new LocalIssueStore(directory).view("1")).id).toBe("1");
+    await expect(readFile(pending, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("returns a non-fatal pending projection diagnostic when the post-commit callback fails", async () => {

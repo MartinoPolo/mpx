@@ -5,6 +5,7 @@ export * from "./orchestration.js";
 export * from "./runtime-registration.js";
 export * from "./production-operation.js";
 export * from "./external-integrations.js";
+export * from "./installed-runner-authority.js";
 
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -77,6 +78,7 @@ export interface RunnerFileVerifier {
 /** Phase-I trust seam: implementations attest immutable installed-file authority. */
 export interface ImmutableRunnerAuthority {
   verifyInstalled(evidence: InstalledRunnerEvidence): Promise<InstalledRunnerEvidence>;
+  resolveInstalled?(): Promise<InstalledRunnerEvidence>;
 }
 export interface ReceiptStore {
   read(componentId: string): Promise<OwnershipReceipt | undefined>;
@@ -449,19 +451,21 @@ export class InstallerService {
     if (componentId !== SESSION_CAPTURE_COMPONENT)
       error("INSTALL_COMPONENT_UNSUPPORTED", "Only session-capture is supported.");
   }
-  private async runner(evidence: InstalledRunnerEvidence): Promise<InstalledRunnerEvidence> {
+  private async runner(evidence?: InstalledRunnerEvidence): Promise<InstalledRunnerEvidence> {
     const authority = this.options.authority;
+    const resolved = evidence ?? await authority?.resolveInstalled?.();
     if (
-      !evidenceValid(evidence) ||
-      this.forbidden.some((root) => within(evidence.path, root)) ||
+      !resolved ||
+      !evidenceValid(resolved) ||
+      this.forbidden.some((root) => within(resolved.path, root)) ||
       !authority
     )
       error(
         "INSTALL_RUNNER_UNAVAILABLE",
         "Immutable installed runner authority is unavailable.",
       );
-    const actual = await authority.verifyInstalled(evidence);
-    if (stable(actual) !== stable(evidence))
+    const actual = await authority.verifyInstalled(resolved);
+    if (stable(actual) !== stable(resolved))
       error("INSTALL_RUNNER_STALE", "Runner evidence is stale.");
     return actual;
   }
@@ -490,7 +494,7 @@ export class InstallerService {
   }
   async plan(input: {
     componentId: string;
-    runner: InstalledRunnerEvidence;
+    runner?: InstalledRunnerEvidence;
   }): Promise<InstallPlan> {
     this.component(input.componentId);
     if (!this.options.tasks.available)
