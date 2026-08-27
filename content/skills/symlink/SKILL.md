@@ -1,84 +1,60 @@
 ---
 name: symlink
-description: "Creates and verifies Windows symlinks and directory junctions through PowerShell New-Item."
+description: "Creates, verifies, and safely removes real Windows symbolic links from Git Bash."
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: name-only
 ---
-# Windows Symlinks & Junctions (the active runtime)
+# Windows Symlinks
 
-Create and verify links that survive Git and resolve everywhere on this Windows machine.
+Create links that survive Git and resolve consistently on Windows.
 
-**The one rule:** In the active runtime, create links with the **PowerShell tool** (`New-Item`). Git Bash `ln -s` copies the target instead of linking (`core.symlinks=false`), and `cmd.exe //c "mklink ..."` from the Bash tool fails with "syntax is incorrect" (quote mangling).
+**The one rule:** create every link from Git Bash with `cmd //c mklink`. The doubled slash prevents MSYS from rewriting `/c`, and `cygpath -w` supplies the Windows paths required by `mklink`.
 
-If `the invocation input` supplies a link path and a target: detect the type (target is a directory → junction, a file → symlink) and run Step 3 directly. Otherwise treat this as the how-to reference below.
+Git Bash `ln -s` may copy the target instead of creating a link when `core.symlinks=false`.
 
-## Step 1: Pick the link type
+## Create
 
-| Target    | Type    | Command                          | Admin? |
-| --------- | ------- | -------------------------------- | ------ |
-| Directory | Junction | `New-Item -ItemType Junction`     | No     |
-| File      | Symlink  | `New-Item -ItemType SymbolicLink` | Yes\*  |
+Files take no type flag. Directories take `//D`.
 
-\* File symlinks need **Developer Mode** on (Settings → Privacy & security → For developers) **or** an elevated process. Junctions never need admin — prefer them for directories.
+```bash
+# file
+cmd //c mklink "$(cygpath -w "$LINK")" "$(cygpath -w "$TARGET")"
 
-## Step 2: One-time git prerequisite
+# directory
+cmd //c mklink //D "$(cygpath -w "$LINK")" "$(cygpath -w "$TARGET")"
+```
 
-Git for Windows defaults to `core.symlinks=false`, which rewrites real symlinks into plain text files on `checkout`/`clone`/`merge`. Enable once per machine:
+Guard creation so reruns are idempotent. Match the command to the target type:
+
+```bash
+[ -e "$LINK" ] || cmd //c mklink "$(cygpath -w "$LINK")" "$(cygpath -w "$TARGET")"
+[ -e "$LINK" ] || cmd //c mklink //D "$(cygpath -w "$LINK")" "$(cygpath -w "$TARGET")"
+```
+
+## One-time Git prerequisite
+
+Git for Windows can rewrite checked-out symlinks as plain text when `core.symlinks=false`. Enable symlink checkout once per machine:
 
 ```bash
 git config --global core.symlinks true
 ```
 
-## Step 3: Create the link (PowerShell tool)
+## Verify
 
-Directory junction (no admin):
-
-```powershell
-New-Item -ItemType Junction -Path "<drive>:\link\path\name" -Target "<drive>:\repo\real\dir"
+```bash
+ls -la "$(dirname "$LINK")"  # real links show name -> target
+readlink -f "$LINK"          # resolves the target path
+MPX_SYMLINK_PATH="$(cygpath -w "$LINK")" powershell.exe -NoProfile -Command 'Get-Item -LiteralPath $env:MPX_SYMLINK_PATH | Select-Object Name,LinkType,Target'
 ```
 
-File symlink (Developer Mode or elevated):
+`LinkType = SymbolicLink` confirms a real link. A blank `LinkType`, or no `->` in `ls -la`, indicates a copy rather than a link.
 
-```powershell
-New-Item -ItemType SymbolicLink -Path "<drive>:\link\path\file.md" -Target "<drive>:\repo\real\file.md"
+## Remove only the link
+
+```bash
+rm "$LINK"
 ```
 
-Make it idempotent — guard before creating so a re-run skips silently:
-
-```powershell
-if (-not (Test-Path "<drive>:\link\path\file.md")) { New-Item -ItemType SymbolicLink -Path "<drive>:\link\path\file.md" -Target "<drive>:\repo\real\file.md" }
-```
-
-If a file symlink throws "You do not have sufficient privilege" (no Developer Mode), retry that single op elevated — accept the UAC prompt:
-
-```powershell
-$mk = "New-Item -ItemType SymbolicLink -Path '<drive>:\link\path\file.md' -Target '<drive>:\repo\real\file.md' | Out-Null"
-Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-Command',$mk
-```
-
-## Step 4: Verify
-
-```powershell
-Get-ChildItem "<drive>:\link\path" | Format-Table Name, LinkType, Target -AutoSize
-```
-
-- `LinkType` = `SymbolicLink` or `Junction` and `Target` = where it resolves → the link is real.
-- A plain file here (blank `LinkType`) means it was **copied, not linked** — delete it and recreate via the PowerShell tool.
-- In Git Bash, `ls -la "C:/link/path"` shows `->` arrows for real links.
-
-Confirm the link resolves to real content:
-
-```powershell
-Test-Path "<drive>:\link\path\name"   # True → target reachable through the link
-```
-
-## Removing links
-
-- **Directory junction:** `(Get-Item "<drive>:\link\path\name").Delete()` — removes the link only. Never `Remove-Item -Recurse` on a junction; PowerShell 5.1 can follow it and delete the target's contents.
-- **File symlink:** `Remove-Item "<drive>:\link\path\file.md"` (or Git Bash `rm`).
-
-## Full reference
-
-`WINDOWS-SETUP.md` (repo root) covers the whole `~/.runtime` link set, running multiple accounts side-by-side, per-project framework rules, and a troubleshooting table.
+`rm` removes file and directory symlinks without removing the target. Keep the path free of a trailing slash, and do not use `rm -rf`, because either can reach through a directory link into its target.

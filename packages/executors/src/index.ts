@@ -294,7 +294,11 @@ function runtimeRouteEnvironment(routes: Readonly<Record<string, string>>): Read
   return Object.freeze(environment);
 }
 export interface FileInspection { readonly file: boolean; readonly realpath: string; readonly content?: string }
-export async function locateTrustedExecutable(input: { candidates: readonly string[]; projectRoot: string; trustedRoots: readonly string[]; nodeExecutable: string; inspect(file: string): Promise<FileInspection> }): Promise<{ executable: string; argvPrefix: readonly string[] }> {
+const piCliRelative = "node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js";
+const simpleFnmPiWrapper = `#!/bin/sh\nbasedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")\nexec "$basedir/node" "$basedir/${piCliRelative}" "$@"\n`;
+const npmFnmPiWrapper = `#!/bin/sh\nbasedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")\n\ncase \`uname\` in\n    *CYGWIN*|*MINGW*|*MSYS*)\n        if command -v cygpath > /dev/null 2>&1; then\n            basedir=\`cygpath -w "$basedir"\`\n        fi\n    ;;\nesac\n\nif [ -x "$basedir/node" ]; then\n  exec "$basedir/node"  "$basedir/${piCliRelative}" "$@"\nelse \n  exec node  "$basedir/${piCliRelative}" "$@"\nfi\n`;
+function knownFnmPiWrapper(content: string): boolean { const normalized = content.replaceAll("\r\n", "\n"); return normalized === simpleFnmPiWrapper || normalized === npmFnmPiWrapper; }
+export async function locateTrustedExecutable(input: { candidates: readonly string[]; projectRoot: string; trustedRoots: readonly string[]; nodeExecutable: string; knownWrapper?: "pi-fnm"; inspect(file: string): Promise<FileInspection> }): Promise<{ executable: string; argvPrefix: readonly string[] }> {
   const project = canonicalPath(input.projectRoot); const roots = input.trustedRoots.map(canonicalPath);
   for (const candidate of input.candidates) {
     if (!path.win32.isAbsolute(candidate) && !path.posix.isAbsolute(candidate)) continue;
@@ -306,6 +310,13 @@ export async function locateTrustedExecutable(input: { candidates: readonly stri
       const node = canonicalPath(input.nodeExecutable); if (!path.win32.isAbsolute(input.nodeExecutable) || !roots.some((root) => within(node, root)) || within(node, project)) continue;
       const inspectedNode = await input.inspect(input.nodeExecutable).catch(() => undefined); if (!inspectedNode?.file || canonicalPath(inspectedNode.realpath) !== node) continue;
       return Object.freeze({ executable: inspectedNode.realpath, argvPrefix: [inspected.realpath] });
+    }
+    if (inspected.content?.startsWith("#!")) {
+      if (input.knownWrapper !== "pi-fnm" || Buffer.byteLength(inspected.content) > 4096 || !knownFnmPiWrapper(inspected.content)) continue;
+      const directory = path.win32.dirname(inspected.realpath), nodeFile = path.win32.join(directory, "node").replaceAll("\\", "/"), cliFile = path.win32.join(directory, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js").replaceAll("\\", "/");
+      const [nodeInspection, cliInspection] = await Promise.all([input.inspect(nodeFile).catch(() => undefined), input.inspect(cliFile).catch(() => undefined)]);
+      if (!nodeInspection?.file || !cliInspection?.file || canonicalPath(nodeInspection.realpath) !== canonicalPath(nodeFile) || canonicalPath(cliInspection.realpath) !== canonicalPath(cliFile) || !roots.some(root => within(canonicalPath(nodeFile), root) && within(canonicalPath(cliFile), root)) || within(canonicalPath(nodeFile), project) || within(canonicalPath(cliFile), project)) continue;
+      return Object.freeze({ executable: nodeInspection.realpath, argvPrefix: [cliInspection.realpath] });
     }
     return Object.freeze({ executable: inspected.realpath, argvPrefix: [] });
   }

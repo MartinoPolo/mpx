@@ -82,6 +82,18 @@ describe("generated repository validation", () => {
     expect(validateFiles(files(file, marker))).toEqual([]);
   });
 
+  it.each(["corrupt â€” dash", "corrupt â†’ arrow", "corrupt Â§ section", "corrupt \uFFFD replacement"])('rejects canonical content mojibake signature in "%s"', (content) => {
+    expect(messages(validateFiles(files("content/skills/demo/SKILL.md", content)))).toContain("MOJIBAKE");
+  });
+
+  it.each(["scripts/intentional-fixture.mjs", "packages/demo/src/intentional-fixture.test.ts"])('allows intentional replacement characters in source/test fixture %s', (file) => {
+    expect(validateFiles(files(file, "const fixture = '\uFFFD';"))).toEqual([]);
+  });
+
+  it.each(["docs/history/archive.md", "docs/history/nested/import.md"])('allows mojibake in historical path %s', (file) => {
+    expect(validateFiles(files(file, "archived â€” text \uFFFD"))).toEqual([]);
+  });
+
   it("rejects doubled canonical public identities", () => {
     expect(messages(validateFiles(files("apps/cli/src/example.ts", 'const command = "/mpx:mpx-ship";')))).toContain("DOUBLED_MPX_IDENTITY");
   });

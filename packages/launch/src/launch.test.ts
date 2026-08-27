@@ -91,6 +91,11 @@ afterEach(() => {
 });
 
 describe("launch resolution", () => {
+  it("uses one exported canonical native-root digest", async () => {
+    const { canonicalNativeRootDigest } = await import("./index.js");
+    expect(canonicalNativeRootDigest("C:\\Native\\Pi\\")).toBe(canonicalNativeRootDigest("c:/native/pi"));
+    expect(() => canonicalNativeRootDigest("relative/root")).toThrowError(/absolute/u);
+  });
   it("creates and strictly parses schema v2 while recomputing its immutable launch key", async () => {
     const descriptor = await resolveLaunch({ ...base, identity: "personal", repositoryId: "sample/repository", executorVerification: { status: "verified", verifier: "docker-probe", evidenceDigest: hash("e") } });
     expect(descriptor).toMatchObject({ schemaVersion: 2, binding: { projectId: "sample/app", repositoryId: "sample/repository" }, executorVerification: { status: "verified" } });

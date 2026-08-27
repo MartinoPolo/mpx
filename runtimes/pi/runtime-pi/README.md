@@ -13,11 +13,26 @@ on the provenance repository and does not project credentials, sessions, trust, 
 - `generatePiAgents` — deterministic canonical-agent projection/drift check.
 - `guardPiCommand` — shared runtime hook classification.
 
+## Root-attested account gate
+
+Pi uses explicit local enrollment: `mpx account enroll --identity NAME` first returns a
+no-write plan proving only the configured root and registry state; it deliberately defers
+the live-auth probe. Re-run the same command with its `--confirm-plan` digest to re-plan,
+live-probe OAuth, and write only if both checks still match. Use `re-enroll` only after an intentional
+configured-root change. `list`, `status --identity NAME`, and `verify --identity NAME`
+return privacy-safe versioned output. Production launch and resume require the enrolled
+identity/root digest and a live exact `openai-codex` OAuth-ready probe. No root path,
+opaque reference, account identifier, credential, token, executable path, or probe output
+is public or persisted. Because Pi exposes no supported stable account subject, this mode
+cannot detect an account switch within the same root.
+
 ## Deliberately unsupported
 
-Pi has no equivalent projection here for session resurrection (Phase G), F2 host
-replacement, installer/account symlink mutation, credential copying, or nested subagent
-orchestration by default. Pi also has no documented native MCP client/configuration flag;
+Phase G lifecycle capture and resume are supported only through validated MPX lifecycle
+and session bindings. Pi resume remains fail-closed unless root attestation and live auth
+verify. The runtime does not support unbound native
+session resurrection, installer/account symlink mutation, credential copying, or nested
+subagent orchestration by default. Pi also has no documented native MCP client/configuration flag;
 MCP-selected launches fail with structured `RUNTIME_CAPABILITY_UNSUPPORTED` before
 projection, runtime preparation, or process execution. Account profiles are
 native-account-root selection data only.

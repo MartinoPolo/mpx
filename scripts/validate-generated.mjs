@@ -61,6 +61,7 @@ export function validateFiles(files, options = {}) {
       if (staleFullStatusClaim) diagnostics.push(diagnostic("STALE_CLAUDE_FULL_STATUS_REVALIDATION", file, "Claude status validates live StatusSnapshotV1, not the full projection"));
     }
     if (isHistorical(file) || file.endsWith(".test.mjs") || !ACTIVE_ROOT.test(file)) continue;
+    if (/^content\/.*\.md$/u.test(file) && /(?:\u00e2\u20ac|\u00e2\u2020|\u00c2\u00a7|\uFFFD)/u.test(text)) diagnostics.push(diagnostic("MOJIBAKE", file, "canonical content contains a known encoding-corruption signature"));
     if (/\/(?:mp|mp-gh|kf):[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("LEGACY_PUBLIC_IDENTITY", file, "active public identities must use /mpx:"));
     if (/\/mpx:mpx-[a-z0-9]/iu.test(text)) diagnostics.push(diagnostic("DOUBLED_MPX_IDENTITY", file, "canonical identities must not repeat the mpx prefix"));
     if (/(?:[A-Za-z]:[\\/](?:_MP_projects[\\/])?|\/(?:[A-Za-z][\\/])?_MP_projects[\\/])mpx-(?:claude-code|pi)(?:[\\/]|$)/iu.test(text)) diagnostics.push(diagnostic("LEGACY_SOURCE_PATH", file, "active files must not embed absolute legacy source-repository paths"));

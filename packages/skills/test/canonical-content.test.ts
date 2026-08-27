@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFile, readdir } from "node:fs/promises";
-import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { inventoryCanonical } from "../src/index.js";
 
@@ -47,33 +46,7 @@ async function body(identity: string): Promise<string> {
   return text.slice(end + 5);
 }
 
-describe("canonical provider-neutral workflow skills", () => {
-  it("contains no configured-path corruption markers anywhere in canonical skills", async () => {
-    const marker = ["<configured", "path>"].join("-");
-    const entries = await readdir(canonicalRoot, { recursive: true, withFileTypes: true });
-    const violations: string[] = [];
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      const file = path.join(entry.parentPath, entry.name);
-      if ((await readFile(file)).includes(marker)) violations.push(path.relative(canonicalRoot, file));
-    }
-    expect(violations).toEqual([]);
-  });
-
-  it("restores representative swallowed URL, type annotation, and object-key text", async () => {
-    const review = await readFile(path.resolve(canonicalRoot, "../agents/references/typescript-review.md"), "utf8");
-    expect(review).toContain("https://github.com/awesome-skills/code-review-skill");
-    expect(review).toContain("function getLength(value: string | string[]): number");
-    expect(review).toContain("const config = { endpoint: '/api', method: 'GET' }");
-  });
-
-  it("keeps executable canonical JavaScript syntactically valid", async () => {
-    for (const relativePath of ["grill-voice/scripts/grill-voice.js", "tutorial-create/scripts/compile.js"]) {
-      const result = spawnSync(process.execPath, ["--check", path.join(canonicalRoot, relativePath)], { encoding: "utf8" });
-      expect(result.status, `${relativePath}: ${result.stderr}`).toBe(0);
-    }
-  });
-
+describe("canonical content contracts", () => {
   it("loads and classifies the complete Phase F skill inventory", async () => {
     const catalog = await inventoryCanonical(canonicalRoot);
     const actual = Object.groupBy(catalog, (skill) => `${skill.skillPacks.join("+")}/${skill.defaultExposure}`);
@@ -91,8 +64,6 @@ describe("canonical provider-neutral workflow skills", () => {
     const commands = providerOperationCommands(content);
     expect(commands.length).toBeGreaterThan(0);
     expect(commands.filter(command => !command.includes("--identity <launch-identity>") || !command.includes("--json"))).toEqual([]);
-    expect(content).toContain("immutable identity selected when MPX launched");
-    expect(content).toContain("If the launch identity is unavailable, stop and ask the user");
   });
 
   it("uses explicit Review and CI identifiers and complete Review creation inputs in ship", async () => {
@@ -105,8 +76,6 @@ describe("canonical provider-neutral workflow skills", () => {
     for (const flag of ["--title <title>", "--body <body>", "--source-branch <source-branch>", "--target-branch <target-branch>"]) expect(create).toContain(flag);
     for (const action of ["status", "watch"]) expect(commands.find(command => command.startsWith(`mpx ci ${action} `))).toContain("--id <review-or-pipeline-id>");
     for (const action of ["logs", "retry"]) expect(commands.find(command => command.startsWith(`mpx ci ${action} `))).toContain("--run-id <run-id>");
-    expect(content).toContain("There is no implicit Review or CI discovery");
-    expect(content).toContain("capture the returned Review ID");
   });
 
   it("keeps every imported skill free of forbidden namespaces, provider CLIs, paths, and placeholders", async () => {

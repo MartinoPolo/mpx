@@ -5,12 +5,18 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { ExecutionError, compactLaunchBanner, createLaunchExecutionAudit, type ExecutorAdapter, type RuntimeAdapter } from "@mpx/executors";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
-import type { LaunchDescriptor } from "@mpx/launch";
-import { revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
-import { run } from "./main.js";
+import { canonicalNativeRootDigest, type LaunchDescriptor } from "@mpx/launch";
+import { createSessionLifecycleBindingV1, revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
+import { SessionService, SessionStore, type SessionRecordV1 } from "@mpx/sessions";
+import { run as runCli } from "./main.js";
 import { captureIo } from "./io.js";
-import { NodeLaunchStatusSnapshotMaterializer, resolveLaunchStatusSnapshotPath, type LaunchExecutionContext } from "./launch-execution.js";
+import { NodeLaunchStatusSnapshotMaterializer, resolveLaunchStatusSnapshotPath, resolveTrustedRuntimeExecutable, runWithLifecycleConsumption, type LaunchExecutionContext } from "./launch-execution.js";
 import { NodePrivateRouteMaterializer, defaultContext } from "./context.js";
+
+function run(...[argv, io, context]: Parameters<typeof runCli>): ReturnType<typeof runCli> {
+  const rootAttestationService = { verify: async (identity: { domain: string; name: string }) => ({ schemaVersion: 1 as const, ref: `test-${identity.name}`, identity, runtime: "pi" as const, rootDigest: "a".repeat(64), mode: "root-attested" as const, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() }) };
+  return runCli(argv, io, { rootAttestationService: rootAttestationService as never, accountAuthVerifier: { verify: async () => undefined }, ...context, env: context?.env ?? process.env });
+}
 
 async function launchFixture(): Promise<{ cwd: string; env: NodeJS.ProcessEnv; catalogRoot: string }> {
   const cwd = await mkdtemp(path.join(tmpdir(), "mpx-cli-launch-f-"));
@@ -56,6 +62,23 @@ async function explainedDescriptor(fixture: Awaited<ReturnType<typeof launchFixt
   const io = captureIo();
   expect(await run(["--json", "--cwd", fixture.cwd, "launch", "explain", "--runtime", "pi", "--identity", identity], io, { env: fixture.env, catalogRoot: fixture.catalogRoot })).toBe(0);
   return JSON.parse(io.out[0]!).data as LaunchDescriptor;
+}
+async function configurePiRoot(fixture: Awaited<ReturnType<typeof launchFixture>>, root: string): Promise<void> {
+  fixture.env.MPX_PI_EXECUTABLE = process.execPath;
+  const file = path.join(fixture.env.APPDATA!, "mpx", "config.json"), config = JSON.parse(await readFile(file, "utf8"));
+  config.identities.work.runtimeRoots.pi = root;
+  await writeFile(file, JSON.stringify(config));
+}
+async function recordedPiLaunch(fixture: Awaited<ReturnType<typeof launchFixture>>): Promise<{ descriptor: LaunchDescriptor; launch: SessionRecordV1["launch"] }> {
+  let captured: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0] | undefined;
+  const execute = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }));
+  const executor: ExecutorAdapter = { name: "docker", verify: async () => ({ status: "verified", verifier: "resume-fixture", evidenceDigest: "a".repeat(64) }), execute };
+  const builder = async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => { captured = input; return { directory: path.join(fixture.cwd, "prior-projection"), reference: publishedReference(input), extension: path.join(fixture.cwd, "prior-projection", "extension.mjs"), runtimeContextFile: path.join(fixture.cwd, "prior-projection", "runtime-context.json"), theme: "green" as const }; };
+  const snapshot = { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "worktree", path: fixture.cwd, role: "main" as const, branch: "main" }, portResolution: "valid" as const, services: [], diagnostics: [] };
+  const io = captureIo();
+  expect(await run(["--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, launchExecutorAdapters: [executor], launchExecutableResolver: async () => ({ executable: process.execPath, argvPrefix: [] }), launchProjectionBuilder: builder, launchProjectionValidator: async () => undefined, launchRoutes: { materialize: async descriptor => materializeRoutes(descriptor) }, statusProvider: { snapshot: async () => snapshot } }), JSON.stringify(io)).toBe(0);
+  const input = captured!, descriptor = input.descriptor;
+  return { descriptor, launch: { launchKey: descriptor.launchKey, descriptorDigest: sha256Canonical(descriptor as unknown as JsonValue), mode: descriptor.mode, skillPolicy: descriptor.skillPolicy, contentScope: descriptor.contentScope.name, executor: { kind: descriptor.executor.name }, workspace: descriptor.workspace, networkPolicy: descriptor.networkPolicy.name, grants: descriptor.grants, artifactKey: input.artifact.reference.artifactKey, manifestKey: input.manifest.manifestKey } };
 }
 function withRoutes(descriptor: LaunchDescriptor, routes: LaunchDescriptor["routes"]): LaunchDescriptor {
   const { launchKey: _discarded, ...tuple } = { ...descriptor, routes };
@@ -156,7 +179,131 @@ describe("production private launch services", () => {
   });
 });
 
+describe("production runtime executable resolution", () => {
+  const fnmWrapper = `#!/bin/sh\nbasedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")\nexec "$basedir/node" "$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" "$@"\n`;
+
+  it("resolves a real exact FNM Pi wrapper through its sibling Node and CLI entry", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-fnm-production-")), project = await mkdtemp(path.join(tmpdir(), "mpx-fnm-project-"));
+    const wrapper = path.join(root, "pi"), node = path.join(root, "node"), entry = path.join(root, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
+    await mkdir(path.dirname(entry), { recursive: true }); await writeFile(wrapper, fnmWrapper); await cp(process.execPath, node); await writeFile(entry, "export {};\n");
+    await expect(resolveTrustedRuntimeExecutable({ runtime: "pi", cwd: project, environment: { MPX_PI_EXECUTABLE: wrapper, PATH: root } })).resolves.toEqual({ executable: node, argvPrefix: [entry] });
+  });
+
+  it("rejects a real near-match FNM Pi wrapper even when its sibling tree exists", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-fnm-near-")), project = await mkdtemp(path.join(tmpdir(), "mpx-fnm-project-"));
+    const wrapper = path.join(root, "pi"), node = path.join(root, "node"), entry = path.join(root, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
+    await mkdir(path.dirname(entry), { recursive: true }); await writeFile(wrapper, fnmWrapper.replace('"$@"', '"$@"; echo injected')); await cp(process.execPath, node); await writeFile(entry, "export {};\n");
+    await expect(resolveTrustedRuntimeExecutable({ runtime: "pi", cwd: project, environment: { MPX_PI_EXECUTABLE: wrapper, PATH: root } })).rejects.toMatchObject({ code: "TRUSTED_EXECUTABLE_NOT_FOUND" });
+  });
+});
+
 describe("Phase F launch execution", () => {
+  it("orchestrates a confirmed production resume through reconstruction, verification, lifecycle binding, and launch handoff", async () => {
+    const fixture = await launchFixture(), nativeRoot = path.join(fixture.env.APPDATA!, "native", "work", "pi");
+    await configurePiRoot(fixture, nativeRoot);
+    const prior = await recordedPiLaunch(fixture), descriptor = prior.descriptor, launch = prior.launch!;
+    const sessionFile = path.join(nativeRoot, "sessions", "resume.jsonl");
+    await mkdir(path.dirname(sessionFile), { recursive: true }); await writeFile(sessionFile, "{}\n");
+    const store = new SessionStore(path.join(fixture.env.LOCALAPPDATA!, "mpx")), service = new SessionService(store);
+    const descriptorDigest = sha256Canonical(descriptor as unknown as JsonValue);
+    const now = new Date().toISOString(), bindingRef = "resume-native", accountRef = "resume-account";
+    await store.saveNativeBinding({ schemaVersion: 1, ref: bindingRef, identity: { domain: "work", name: "work" }, runtime: "pi", recordedRootDigest: canonicalNativeRootDigest(nativeRoot), accountBindingRef: accountRef, createdAt: now, updatedAt: now });
+    const saved: SessionRecordV1 = { schemaVersion: 1, recordId: "resume-production", runtimeQualifiedId: "pi:resume-production", runtime: "pi", identity: { domain: "work", name: "work" }, nativeBindingRef: bindingRef, nativeSessionRef: { kind: "root-relative-file", value: "sessions/resume.jsonl" }, launch, location: { cwd: fixture.cwd, project: "sample/app", repository: descriptor.binding.repositoryId, worktree: null }, metadata: { title: null, model: null, effort: null }, liveness: "inactive", process: null, workflow: { status: "unfinished", inbox: true, nextAction: null, priority: null, note: null, relatedIssue: null, relatedReview: null }, resume: { state: "unknown", diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null }, timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null }, lifecycle: { bindingId: null, sequence: 0, timestamp: null } };
+    await service.save(saved);
+    const resumeDependencies = async () => ({ resolveConfiguredRoot: async () => ({ root: nativeRoot, canonicalRootDigest: canonicalNativeRootDigest(nativeRoot), identity: saved.identity, runtime: "pi" as const }), verifyAccountBinding: async () => "verified" as const, verifyNativeTarget: async () => ({ valid: true, activity: "inactive" as const }) });
+    const plannedIo = captureIo(), baseContext = { env: fixture.env, catalogRoot: fixture.catalogRoot, sessionStore: store, sessionResumeDependencies: resumeDependencies };
+    expect(await runCli(["--json", "--cwd", fixture.cwd, "session", "resume", saved.recordId], plannedIo, baseContext)).toBe(0);
+    const confirmationDigest = JSON.parse(plannedIo.out[0]!).data.confirmationDigest as string;
+    const execute = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }));
+    const executor: ExecutorAdapter = { name: "docker", verify: async () => descriptor.executorVerification, execute };
+    const prepareLifecycle = vi.fn(async (input: Parameters<NonNullable<LaunchExecutionContext["launchLifecycleBridge"]>["prepare"]>[0]) => ({ binding: createSessionLifecycleBindingV1({ bindingId: "resume-lifecycle", bindingRef: "opaque", runtime: "pi", identityRef: "work:work", launchKey: input.runtimeContext.launchKey, launchDescriptorDigest: input.runtimeContext.launchDescriptor.digest, artifactKey: input.runtimeContext.runtimeArtifact.artifactKey, manifestKey: input.runtimeContext.manifestKey, projectRef: descriptor.binding.projectId ?? "sample/app", repositoryRef: descriptor.binding.repositoryId, worktreeRef: "direct", createdAt: now, expiresAt: "2099-01-01T00:00:00.000Z" }), eventDirectory: path.join(store.stateRoot, "events") }));
+    const rootVerify = vi.fn(async () => ({ schemaVersion: 1 as const, ref: accountRef, identity: saved.identity, runtime: "pi" as const, rootDigest: canonicalNativeRootDigest(nativeRoot), mode: "root-attested" as const, createdAt: now, updatedAt: now }));
+    const authVerify = vi.fn(async () => undefined), confirmedIo = captureIo();
+    const projection = async (input: Parameters<NonNullable<LaunchExecutionContext["launchProjectionBuilder"]>>[0]) => ({ directory: path.join(fixture.cwd, "projection"), reference: publishedReference(input), extension: path.join(fixture.cwd, "projection", "extension.mjs"), runtimeContextFile: path.join(fixture.cwd, "projection", "runtime-context.json"), theme: "green" as const });
+    const statusSnapshot = { schemaVersion: 1 as const, project: { id: "sample/app", cwd: fixture.cwd }, worktree: { id: "worktree", path: fixture.cwd, role: "main" as const, branch: "main" }, portResolution: "valid" as const, services: [], diagnostics: [] };
+    expect(await runCli(["--json", "--cwd", fixture.cwd, "session", "resume", saved.recordId, "--confirm-plan", confirmationDigest], confirmedIo, { ...baseContext, rootAttestationService: { verify: rootVerify } as never, accountAuthVerifier: { verify: authVerify }, launchExecutorAdapters: [executor], launchExecutableResolver: async () => ({ executable: process.execPath, argvPrefix: [] }), launchProjectionBuilder: projection, launchProjectionValidator: async () => undefined, launchRoutes: { materialize: async value => materializeRoutes(value) }, launchLifecycleBridge: { prepare: prepareLifecycle, consume: vi.fn(async () => 0) }, statusProvider: { snapshot: async () => statusSnapshot } }), JSON.stringify({ confirmedIo, root: rootVerify.mock.calls, auth: authVerify.mock.calls, lifecycle: prepareLifecycle.mock.calls.length, execute: execute.mock.calls.length })).toBe(0);
+    expect(rootVerify).toHaveBeenCalledTimes(2);
+    expect(rootVerify).toHaveBeenCalledWith(saved.identity, nativeRoot, accountRef);
+    expect(authVerify).toHaveBeenCalledTimes(2);
+    expect(authVerify).toHaveBeenCalledWith(nativeRoot);
+    expect(prepareLifecycle).toHaveBeenCalledWith(expect.objectContaining({ nativeRuntimeRoot: nativeRoot, nativeSessionRef: saved.nativeSessionRef, nativeBinding: expect.objectContaining({ ref: bindingRef }) }));
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("blocks a changed Pi account before confirmed-resume discovery or launch effects", async () => {
+    const fixture = await launchFixture(), nativeRoot = path.join(fixture.env.APPDATA!, "native", "work", "pi");
+    await configurePiRoot(fixture, nativeRoot);
+    const prior = await recordedPiLaunch(fixture), descriptor = prior.descriptor, launch = prior.launch!;
+    const store = new SessionStore(path.join(fixture.env.LOCALAPPDATA!, "mpx")), service = new SessionService(store);
+    const now = new Date().toISOString(), bindingRef = "changed-account-native", accountRef = "changed-account-ref";
+    await store.saveNativeBinding({ schemaVersion: 1, ref: bindingRef, identity: { domain: "work", name: "work" }, runtime: "pi", recordedRootDigest: canonicalNativeRootDigest(nativeRoot), accountBindingRef: accountRef, createdAt: now, updatedAt: now });
+    const saved: SessionRecordV1 = { schemaVersion: 1, recordId: "changed-account", runtimeQualifiedId: "pi:changed-account", runtime: "pi", identity: { domain: "work", name: "work" }, nativeBindingRef: bindingRef, nativeSessionRef: { kind: "root-relative-file", value: "sessions/resume.jsonl" }, launch, location: { cwd: fixture.cwd, project: "sample/app", repository: descriptor.binding.repositoryId, worktree: null }, metadata: { title: null, model: null, effort: null }, liveness: "inactive", process: null, workflow: { status: "unfinished", inbox: true, nextAction: null, priority: null, note: null, relatedIssue: null, relatedReview: null }, resume: { state: "unknown", diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null }, timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null }, lifecycle: { bindingId: null, sequence: 0, timestamp: null } };
+    await service.save(saved);
+    const resumeDependencies = async () => ({ resolveConfiguredRoot: async () => ({ root: nativeRoot, canonicalRootDigest: canonicalNativeRootDigest(nativeRoot), identity: saved.identity, runtime: "pi" as const }), verifyAccountBinding: async () => "verified" as const, verifyNativeTarget: async () => ({ valid: true, activity: "inactive" as const }) });
+    const planningIo = captureIo(), baseContext = { env: fixture.env, catalogRoot: fixture.catalogRoot, sessionStore: store, sessionResumeDependencies: resumeDependencies };
+    expect(await runCli(["--json", "--cwd", fixture.cwd, "session", "resume", saved.recordId], planningIo, baseContext)).toBe(0);
+    await writeFile(path.join(fixture.cwd, "mpxconfig.json"), "not-json");
+    const effects: string[] = [], rootVerify = vi.fn(async () => { throw Object.assign(new Error("changed"), { code: "ACCOUNT_ROOT_CHANGED" }); }), authVerify = vi.fn(async () => undefined);
+    const effect = (name: string) => vi.fn(async () => { effects.push(name); throw new Error(`${name} should not run`); });
+    const io = captureIo();
+    expect(await runCli(["--json", "--cwd", fixture.cwd, "session", "resume", saved.recordId, "--confirm-plan", JSON.parse(planningIo.out[0]!).data.confirmationDigest], io, { ...baseContext, rootAttestationService: { verify: rootVerify } as never, accountAuthVerifier: { verify: authVerify }, launchExecutorAdapters: [{ name: "docker", verify: effect("audit"), execute: effect("child") } as never], launchProjectionBuilder: effect("projection"), launchRoutes: { materialize: effect("routes") }, launchLifecycleBridge: { prepare: effect("lifecycle"), consume: vi.fn(async () => 0) }, statusProvider: { snapshot: effect("status") } })).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ error: { code: "SESSION_RESUME_ACCOUNT_MISMATCH" } });
+    expect(rootVerify).toHaveBeenCalledWith(saved.identity, nativeRoot, accountRef);
+    expect(authVerify).not.toHaveBeenCalled();
+    expect(effects).toEqual([]);
+  });
+
+  it("rejects a confirmed resume after its configured native root crosses roots", async () => {
+    const fixture = await launchFixture(), oldRoot = path.join(fixture.env.APPDATA!, "native", "work", "pi");
+    await configurePiRoot(fixture, oldRoot);
+    const prior = await recordedPiLaunch(fixture), descriptor = prior.descriptor, launch = prior.launch!, store = new SessionStore(path.join(fixture.env.LOCALAPPDATA!, "mpx"));
+    const now = new Date().toISOString();
+    await store.saveNativeBinding({ schemaVersion: 1, ref: "cross-root-binding", identity: { domain: "work", name: "work" }, runtime: "pi", recordedRootDigest: canonicalNativeRootDigest(oldRoot), accountBindingRef: "account", createdAt: now, updatedAt: now });
+    const saved = { schemaVersion: 1, recordId: "cross-root", runtimeQualifiedId: "pi:cross-root", runtime: "pi", identity: { domain: "work", name: "work" }, nativeBindingRef: "cross-root-binding", nativeSessionRef: { kind: "root-relative-file", value: "sessions/resume.jsonl" }, launch, location: { cwd: fixture.cwd, project: "sample/app", repository: descriptor.binding.repositoryId, worktree: null }, metadata: { title: null, model: null, effort: null }, liveness: "inactive", process: null, workflow: { status: "unfinished", inbox: true, nextAction: null, priority: null, note: null, relatedIssue: null, relatedReview: null }, resume: { state: "unknown", diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null }, timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null }, lifecycle: { bindingId: null, sequence: 0, timestamp: null } } as SessionRecordV1;
+    await new SessionService(store).save(saved);
+    const dependencies = async () => ({ resolveConfiguredRoot: async () => ({ root: oldRoot, canonicalRootDigest: canonicalNativeRootDigest(oldRoot), identity: saved.identity, runtime: "pi" as const }), verifyAccountBinding: async () => "verified" as const, verifyNativeTarget: async () => ({ valid: true, activity: "inactive" as const }) });
+    const planningIo = captureIo(); expect(await runCli(["--json", "session", "resume", saved.recordId], planningIo, { env: fixture.env, catalogRoot: fixture.catalogRoot, sessionStore: store, sessionResumeDependencies: dependencies })).toBe(0);
+    const configFile = path.join(fixture.env.APPDATA!, "mpx", "config.json"), config = JSON.parse(await readFile(configFile, "utf8"));
+    config.identities.work.runtimeRoots.pi = path.join(fixture.env.APPDATA!, "attacker-root"); await writeFile(configFile, JSON.stringify(config));
+    const execute = vi.fn(); const io = captureIo();
+    expect(await runCli(["--json", "session", "resume", saved.recordId, "--confirm-plan", JSON.parse(planningIo.out[0]!).data.confirmationDigest], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, sessionStore: store, nativeAccountBindingVerifier: { verify: async () => "verified" }, launchExecutorAdapters: [{ name: "docker", verify: async () => descriptor.executorVerification, execute } as ExecutorAdapter] })).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ error: { code: "SESSION_RESUME_ROOT_MISMATCH" } });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("gates Pi account verification before launch side effects while leaving Claude unaffected", async () => {
+    const fixture = await launchFixture(), io = captureIo(), effects: string[] = [];
+    const rootAttestationService = { verify: vi.fn(async () => { throw Object.assign(new Error("missing"), { code: "ACCOUNT_ENROLLMENT_MISSING" }); }) };
+    const context = { env: fixture.env, catalogRoot: fixture.catalogRoot, rootAttestationService: rootAttestationService as never, accountAuthVerifier: { verify: vi.fn(async () => undefined) }, launchExecutorAdapters: [{ name: "docker" as const, verify: async () => { effects.push("executor"); return { status: "verified" as const, verifier: "fake", evidenceDigest: "a".repeat(64) }; }, execute: vi.fn() }], launchProjectionBuilder: vi.fn(async () => { effects.push("projection"); throw new Error(); }), launchRoutes: { materialize: vi.fn(async () => { effects.push("routes"); return {}; }) }, statusProvider: { snapshot: vi.fn(async () => { effects.push("status"); throw new Error(); }) } };
+    expect(await runCli(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, context)).toBe(1);
+    expect(effects).toEqual([]);
+    const claude = verifiedExecution(), claudeIo = captureIo();
+    expect(await runCli(["--cwd", fixture.cwd, "launch", "claude", "--identity", "work"], claudeIo, { ...context, ...claude.context })).toBe(0);
+    expect(rootAttestationService.verify).toHaveBeenCalledTimes(1);
+  });
+  it("revalidates the exact Pi root after runtime preparation and blocks a swapped root before child execution", async () => {
+    const fixture = await launchFixture(), io = captureIo(), fake = verifiedExecution(), order: string[] = [];
+    fake.prepare.mockImplementation(async () => { order.push("prepare"); return { executable: "C:/trusted/pi.exe", argv: [], environment: {} }; });
+    const changed = Object.assign(new Error("root changed"), { code: "ACCOUNT_ROOT_CHANGED" });
+    const verify = vi.fn(async () => { order.push("verify"); if (verify.mock.calls.length === 2) throw changed; return { schemaVersion: 1, ref: "opaque", identity: { domain: "work", name: "work" }, runtime: "pi", rootDigest: "a".repeat(64), mode: "root-attested", createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() }; });
+    expect(await runCli(["--json", "--cwd", fixture.cwd, "launch", "pi", "--identity", "work"], io, { env: fixture.env, catalogRoot: fixture.catalogRoot, ...fake.context, rootAttestationService: { verify } as never, accountAuthVerifier: { verify: async () => undefined } })).toBe(1);
+    expect(order).toEqual(["verify", "prepare", "verify"]);
+    expect(fake.execute).not.toHaveBeenCalled();
+  });
+
+  it("preserves the runtime execution error when lifecycle consumption also fails", async () => {
+    const execution = new ExecutionError("RUNTIME_EXECUTION_FAILED", "runtime failed");
+    const lifecycle = new Error("lifecycle failed");
+    const failure = await runWithLifecycleConsumption(async () => { throw execution; }, async () => { throw lifecycle; }).catch(error => error);
+    expect(failure).toBe(execution);
+    expect(failure).toMatchObject({ code: "RUNTIME_EXECUTION_FAILED", cause: lifecycle });
+  });
+
+  it("fails with lifecycle consumption when runtime execution succeeds", async () => {
+    const lifecycle = new Error("lifecycle failed");
+    await expect(runWithLifecycleConsumption(async () => ({ exitCode: 0, stdout: "", stderr: "", truncated: false }), async () => { throw lifecycle; })).rejects.toBe(lifecycle);
+  });
+
   it.each([
     ["pi", "MPX_PI_EXECUTABLE"],
     ["claude", "MPX_CLAUDE_EXECUTABLE"],

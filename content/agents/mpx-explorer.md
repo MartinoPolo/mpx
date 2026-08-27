@@ -31,11 +31,16 @@ repos · `MPX_APPS` local apps · `MPX_ONEDRIVE` OneDrive root · `MPX_AI_GENERA
 AI-generated assets · `MPX_OBSIDIAN_VAULT` Obsidian vault. Any that is unset is simply
 unavailable — say so instead of guessing.
 
-## Library documentation
+## External tools and libraries
 
-For third-party library or framework behaviour, the answer is not in this repo.
-Use the Context7 MCP tools (`resolve-library-id`, then `query-docs`) rather than
-inferring an API from local `node_modules` or from memory.
+For questions or root-cause analysis about an external tool or library, resolve
+`MPX_CLONED` at runtime and check that configured repository collection first. If a
+clone matches the relevant project and version or source, use its code as the primary
+implementation evidence.
+
+Use the Context7 MCP tools (`resolve-library-id`, then `query-docs`) or web
+documentation for current public API and version facts, and when no matching clone
+exists. Do not infer an API from local `node_modules` or from memory.
 
 ## Report
 

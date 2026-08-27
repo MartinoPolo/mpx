@@ -6,12 +6,118 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createNodeWorktreeIncludeDependencies, deriveLifecycleKey, deriveWorktreePath, planWorktreeIncludes } from "@mpx/worktrees";
-import type { PreparationPlan, ProjectConfig } from "@mpx/config";
+import type { PreparationPlan, ProjectConfig, UserConfig } from "@mpx/config";
+import { SessionStore } from "@mpx/sessions";
+import { PiResumeTargetError } from "@mpx/runtime-pi";
 import type { ProviderProcessRequest } from "@mpx/providers";
 import { afterEach, expect, it, vi } from "vitest";
-import { catalogPath, classifyProviderProcessResult, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
+import { catalogPath, classifyProviderProcessResult, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, productionSessionResumeDependencies, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
 
 const exec = promisify(execFile);
+
+it("fails closed when the production Claude active probe is not configured", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-resume-active-probe-")); roots.push(root);
+  const identity = { domain: "personal", name: "personal" }, nativeRoot = path.join(root, "claude");
+  const user = { identities: { personal: { domain: identity.domain, runtimeRoots: { claude: nativeRoot, pi: path.join(root, "pi") } } } } as unknown as UserConfig;
+  const store = new SessionStore(path.join(root, "state"));
+  const ref = "native-ref", digest = (await import("@mpx/launch")).canonicalNativeRootDigest(nativeRoot), now = new Date().toISOString();
+  await store.saveNativeBinding({ schemaVersion: 1, ref, identity, runtime: "claude", recordedRootDigest: digest, accountBindingRef: null, createdAt: now, updatedAt: now });
+  const dependencies = await productionSessionResumeDependencies(user, store, undefined, {} as NodeJS.ProcessEnv)({ runtime: "claude", liveness: "inactive" } as never);
+  await expect(dependencies.verifyNativeTarget(nativeRoot, { kind: "native-id", value: "abc" }, "claude:abc")).resolves.toEqual({ valid: true, activity: "unavailable" });
+});
+
+it("uses the native Claude activity probe instead of cached active liveness", async () => {
+  if (process.platform !== "win32") return;
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-resume-dead-claude-")); roots.push(root);
+  const nativeRoot = path.join(root, "claude"), executable = path.join(root, "claude.exe");
+  await mkdir(nativeRoot); await copyFile(process.execPath, executable);
+  await writeFile(path.join(root, "agents"), "process.stdout.write('[]')");
+  const identity = { domain: "personal", name: "personal" };
+  const user = { identities: { personal: { domain: identity.domain, runtimeRoots: { claude: nativeRoot, pi: path.join(root, "pi") } } } } as unknown as UserConfig;
+  const store = new SessionStore(path.join(root, "state")), now = new Date().toISOString();
+  const digest = (await import("@mpx/launch")).canonicalNativeRootDigest(nativeRoot);
+  await store.saveNativeBinding({ schemaVersion: 1, ref: "native-ref", identity, runtime: "claude", recordedRootDigest: digest, accountBindingRef: null, createdAt: now, updatedAt: now });
+  const dependencies = await productionSessionResumeDependencies(user, store, undefined, { MPX_CLAUDE_EXECUTABLE: executable })({ runtime: "claude", liveness: "active" } as never);
+  const previous = process.cwd();
+  try {
+    process.chdir(root);
+    await expect(dependencies.verifyNativeTarget(nativeRoot, { kind: "native-id", value: "dead" }, "claude:dead")).resolves.toEqual({ valid: true, activity: "inactive" });
+  } finally { process.chdir(previous); }
+});
+
+it("classifies Pi process identity using exact PID and start-fingerprint evidence", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-resume-dead-pi-")); roots.push(root);
+  const nativeRoot = path.join(root, "pi"), sessionFile = path.join(nativeRoot, "sessions", "dead.jsonl");
+  await mkdir(path.dirname(sessionFile), { recursive: true }); await writeFile(sessionFile, "{}");
+  const identity = { domain: "personal", name: "personal" };
+  const user = { identities: { personal: { domain: identity.domain, runtimeRoots: { claude: path.join(root, "claude"), pi: nativeRoot } } } } as unknown as UserConfig;
+  const store = new SessionStore(path.join(root, "state")), now = new Date().toISOString();
+  const digest = (await import("@mpx/launch")).canonicalNativeRootDigest(nativeRoot);
+  await store.saveNativeBinding({ schemaVersion: 1, ref: "native-ref", identity, runtime: "pi", recordedRootDigest: digest, accountBindingRef: "account", createdAt: now, updatedAt: now });
+  const inspect = vi.fn();
+  const target = { kind: "root-relative-file", value: "sessions/dead.jsonl" } as const;
+  const dependencies = async () => productionSessionResumeDependencies(user, store, undefined, {}, { inspect })({ runtime: "pi", liveness: "active", process: { pid: 42, startFingerprint: "stored-start" } } as never);
+
+  inspect.mockResolvedValueOnce(undefined);
+  await expect((await dependencies()).verifyNativeTarget(nativeRoot, target, "pi:dead")).resolves.toEqual({ valid: true, activity: "inactive" });
+  inspect.mockResolvedValueOnce({ startFingerprint: "stored-start" });
+  await expect((await dependencies()).verifyNativeTarget(nativeRoot, target, "pi:dead")).resolves.toEqual({ valid: true, activity: "active" });
+  inspect.mockResolvedValueOnce({ startFingerprint: "different-start" });
+  await expect((await dependencies()).verifyNativeTarget(nativeRoot, target, "pi:dead")).resolves.toEqual({ valid: true, activity: "unavailable" });
+  inspect.mockRejectedValueOnce(new Error("inspection unavailable"));
+  await expect((await dependencies()).verifyNativeTarget(nativeRoot, target, "pi:dead")).resolves.toEqual({ valid: true, activity: "unavailable" });
+});
+
+it("maps only definitive Pi target failures to invalid without leaking inspection details", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-resume-pi-errors-")); roots.push(root);
+  const nativeRoot = path.join(root, "pi"), identity = { domain: "personal", name: "personal" };
+  const user = { identities: { personal: { domain: identity.domain, runtimeRoots: { claude: path.join(root, "claude"), pi: nativeRoot } } } } as unknown as UserConfig;
+  const store = new SessionStore(path.join(root, "state"));
+  const record = { runtime: "pi", liveness: "inactive" } as never;
+  const target = { kind: "root-relative-file", value: "sessions/native.jsonl" } as const;
+  for (const [code, expected] of [
+    ["PI_RESUME_TARGET_INVALID", { valid: false, activity: "unavailable" }],
+    ["PI_RESUME_TARGET_INSPECTION_UNAVAILABLE", { valid: true, activity: "unavailable" }],
+  ] as const) {
+    const verifier = vi.fn(async () => { throw new PiResumeTargetError(code); });
+    const dependencies = await productionSessionResumeDependencies(user, store, undefined, {}, { inspect: vi.fn() }, verifier as never)(record);
+    await expect(dependencies.verifyNativeTarget(nativeRoot, target, "pi:native")).resolves.toEqual(expected);
+  }
+  const operational = vi.fn(async () => { throw new Error(`permission denied at ${nativeRoot}`); });
+  const dependencies = await productionSessionResumeDependencies(user, store, undefined, {}, { inspect: vi.fn() }, operational as never)(record);
+  await expect(dependencies.verifyNativeTarget(nativeRoot, target, "pi:native")).resolves.toEqual({ valid: true, activity: "unavailable" });
+});
+
+it("invokes every production Claude scanner with its exact identity config root and no Pi legacy scanner", async () => {
+  if (process.platform !== "win32") return;
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-discovery-invoke-")); roots.push(root);
+  const capture = path.join(root, "capture.txt"), executable = path.join(root, "claude.exe");
+  await copyFile(process.execPath, executable);
+  await writeFile(path.join(root, "agents"), `require('node:fs').appendFileSync(${JSON.stringify(capture)}, process.env.CLAUDE_CONFIG_DIR+'\\n'); process.stdout.write('[]')`);
+  const personal = path.join(root, "personal claude"), work = path.join(root, "work claude");
+  const user = { identities: { personal: { domain: "personal", runtimeRoots: { claude: personal, pi: path.join(root, "personal pi") } }, work: { domain: "work", runtimeRoots: { claude: work, pi: path.join(root, "work pi") } } } } as unknown as UserConfig;
+  const discoveries = await productionSessionDiscoveries(user, new SessionStore(path.join(root, "state")), { MPX_CLAUDE_EXECUTABLE: executable });
+  expect(discoveries).toHaveLength(2);
+  const previous = process.cwd();
+  try { process.chdir(root); await Promise.all(discoveries.map(item => item.scanner.scan())); }
+  finally { process.chdir(previous); }
+  expect((await readFile(capture, "utf8")).trim().split(/\r?\n/u).sort()).toEqual([personal, work].sort());
+  expect(discoveries.every(item => item.scanner.runtime === "claude")).toBe(true);
+});
+
+it("builds identity-scoped Claude production discovery while Pi remains lifecycle-authoritative", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mpx-discovery-matrix-")); roots.push(root);
+  const native = (label: string) => path.join(root, label);
+  const user = { identities: {
+    personal: { domain: "personal", runtimeRoots: { claude: native("pc"), pi: native("pp") } },
+    work: { domain: "work", runtimeRoots: { claude: native("wc"), pi: native("wp") } },
+  } } as unknown as UserConfig;
+  const store = new SessionStore(path.join(root, "state"));
+  const discoveries = await productionSessionDiscoveries(user, store, { MPX_CLAUDE_EXECUTABLE: path.join(root, "claude.exe") });
+  expect(discoveries.map(item => `${item.context.identity.domain}:${item.context.runtime}`)).toEqual(["personal:claude", "work:claude"]);
+  const bindings = await store.listNativeBindings();
+  expect(new Set(bindings.map(binding => binding.ref)).size).toBe(4);
+});
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

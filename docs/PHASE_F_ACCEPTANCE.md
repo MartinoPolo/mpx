@@ -35,4 +35,4 @@ git diff --check
 
 ## Explicit non-claims
 
-This slice does not establish F2 Docker/container isolation, Phase G session continuation/resurrection, Phase I route/MCP provisioning or installation/cutover, or Phase J legacy retirement. A passing integration slice must not be interpreted as acceptance of those phases.
+This slice does not establish F2 Docker/container isolation, Phase I route/MCP provisioning or installation/cutover, or Phase J legacy retirement. Phase G session continuation/resume is supplied by lifecycle/session components outside this Phase F projection slice. A passing integration slice must not be interpreted as acceptance of the remaining phases.

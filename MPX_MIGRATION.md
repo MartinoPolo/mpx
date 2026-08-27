@@ -1,6 +1,6 @@
 # MPX Unified System Migration
 
-**Status:** Sole authoritative active migration plan; Phases B–F implemented, Phase F2 Docker isolation proof and later phases pending
+**Status:** Sole authoritative active migration plan; Phases A–F complete at their accepted boundaries; Phase F1 source/capability convergence, Phase F2 isolation proof, and Phases G–J remain pending
 **Destination:** `C:/_MP_projects/mpx`  
 **Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates  
 **Canonical project manifest:** `mpxconfig.json`
@@ -21,7 +21,7 @@ Keep these independent:
 - Grovekeeper and any future desktop app: optional external consumers of MPX contracts, never dependencies or authorities for MPX.
 - Voice Grill and other domain applications unless a later decision explicitly moves a shared contract into MPX.
 
-Deliver one installed `mpx` CLI, one canonical skill/agent source, one Claude Code plugin named `mpx`, one Pi runtime adapter, and stable versioned JSON/library contracts that a future GUI can consume. `mpx-pi` is a migration source, not a permanent product or independent plan; after Phase J no `mpx-pi` checkout remains active, while native Claude/Pi account state remains in harness-owned roots outside the MPX repository as designed.
+Deliver one installed `mpx` CLI, one canonical skill/agent source, one Claude Code plugin named `mpx`, one Pi runtime adapter, and stable versioned JSON/library contracts that a future GUI can consume. `mpx-claude-code` and `mpx-pi` are active migration sources, not permanent products or independent plans; after Phase J neither checkout remains active, while native Claude/Pi account state remains in harness-owned roots outside the MPX repository as designed.
 
 The new and old systems coexist at the installation level during migration. New MPX code does not carry runtime fallbacks for `.worktree-hub.json`, `.mpx/kanbanflow.json`, `statusline-projects.json`, or old command namespaces. One-time migration tools and rollback snapshots are allowed; permanent compatibility branches are not.
 
@@ -56,6 +56,12 @@ The new and old systems coexist at the installation level during migration. New 
 - `AGENTS.md` remains the canonical project instruction document; large prose policy does not move into JSON.
 - Existing package scripts, CI jobs, and framework configuration remain authoritative; `mpxconfig.json` references them rather than duplicating their command bodies.
 
+### Credential ownership and agent access
+
+MPX routes identity-bound capabilities and does not own or copy service secrets. GitHub remains authenticated through `gh`, GitLab through `glab`, KanbanFlow through `kf` and the OS keyring, Cloudflare and Sentry through their approved native CLI or MCP integration, and Claude/Pi through their isolated native roots. An installed CLI or host credential does not by itself grant model authority.
+
+Every provider operation requires the selected identity, an identity-owned route, an authenticated native tool, a trusted adapter with the requested capability, and an executor/network policy that admits the route. Unsupported or mismatched combinations fail structurally and never borrow the opposite identity. Host execution is explicit elevation because a raw host shell may reach native credentials. Docker receives narrow routed capabilities rather than mounted credential stores. Pi's host control plane keeps OAuth while all model-visible file, shell, browser, process, Git, and provider actions cross the launch-bound executor.
+
 ### Workflow
 
 - Git is the only VCS in scope.
@@ -86,11 +92,15 @@ This approved amendment is normative where older scope/account wording conflicts
 
 A launch has independent dimensions: **identity** (personal/work native principal), **mode** (capability/resource policy), **skill policy** (packs and exposure), **executor** (`host`/`docker`), **sandbox workspace strategy**, **network policy**, **preset** (user-local composition), **CWD classification**, additive **grants**, and the resolved **skill artifact**. The complete tuple and a separate opaque `launchKey` are immutable for the process/session lifetime. Presets provide inputs, while the tuple records resolved values. Any change or elevation requires relaunch. In-harness UI may browse and select only the next launch; it cannot widen current rights.
 
-Normal interactive use must not require remembering this tuple. A terminal already opened in a project is the primary selector. `cc`, `ccw`, `pi`, and `piw` pass only their explicit harness and personal/work identity choice to MPX; `mpx launch` resolves every other value from the current CWD and user-local launch defaults. A Windows Terminal project profile continues to set its starting directory and invokes the same short launcher, so opening a project tab and typing `ccw` or `pi` remains the fast path.
+Normal interactive use must not require remembering this tuple. A terminal already opened in a project is the primary selector. `cc`, `ccw`, `pi`, and `piw` pass only their explicit harness and personal/work identity choice to MPX; `mpx launch` resolves every other value from the current CWD and user-local launch defaults. For Pi, `pi` selects the native personal root authenticated to the designated personal ChatGPT account, while `piw` selects the native work root authenticated to a separate designated work ChatGPT account. The aliases do not provide account-switching fallback or add a preset, grant, or other launch authority. A Windows Terminal project profile continues to set its starting directory and invokes the same short launcher, so opening a project tab and typing `ccw` or `pi` remains the fast path.
 
 Launch-default precedence is: explicit command argument; user-local project launch default keyed by canonical `project.id`; user-local longest-root scope launch default; built-in safe default. A committed project manifest may declare required development endpoints and services but never chooses identity, grants, executor, credential route, or a permission-widening default. A launcher with an explicit identity must fail closed when the selected project does not belong to that identity domain; it must not silently switch identities. The resolved default must be displayed compactly before the first turn and be inspectable with `mpx launch explain --cwd . --json`.
 
-Identity selects native Claude/Pi roots and their auth/history/sessions/trust/cache, Git author routing, provider CLI routes, SSH route, and explicit MCP sharing. Native stores remain authoritative: MPX config contains no secret values, private keys, or copied native credentials/auth paths. CWD classification never selects identity and grants no filesystem rights. Provider `connections` move from scopes/projects to identities. Identities, modes, presets, and connections never enter committed `mpxconfig.json`.
+Identity selects native Claude/Pi roots and their auth/history/sessions/trust/cache, Git author routing, provider CLI routes, SSH route, and explicit MCP sharing. Pi's personal and work identities use separate native roots authenticated to two separate ChatGPT accounts; auth, history, sessions, trust, caches, and account selection are never shared or copied between them. Native stores remain authoritative: MPX config contains no secret values, private keys, raw account identifiers, or copied native credentials/auth paths.
+
+Pi account enrollment uses the accepted local `root-attested` mode after native `/login`. `mpx account enroll --identity NAME` produces a no-write plan proving only the configured root and registry state; it does not live-probe auth. Confirmation with the exact `--confirm-plan` digest re-plans, performs the live supported OAuth probe, and commits only if both checks still match; changing a configured root requires the equivalent explicit `re-enroll` flow. One globally locked atomic private registry stores only schema version, opaque reference, identity, runtime `pi`, canonical root digest, mode, and timestamps. The configured identity root is the sole root input. Every production Pi launch and resume verifies the enrollment tuple and live supported OAuth availability before route, status, projection, lifecycle, native-target, or process effects; missing, changed, duplicate, malformed, unavailable, or mismatched state fails closed. Re-enrollment preserves the opaque reference and never auto-rebinds sessions. The supported probe is exactly `auth check --provider openai-codex --json --no-refresh` under that root and stores no probe output. This local mode deliberately cannot detect an account switch performed within the same native root; Pi exposes no supported stable non-secret account subject, so MPX makes no stronger designated-account claim.
+
+CWD classification never selects identity and grants no filesystem rights. Provider `connections` move from scopes/projects to identities. Identities, modes, presets, and connections never enter committed `mpxconfig.json`.
 
 Native account roots separate storage but do not enforce filesystem boundaries. Path classification, intended read/write policy, and effective enforcement are separate reported facts. Host/raw shell policy can be advisory and must never be called sandbox isolation; hooks report exactly what they intercept and known bypasses. Docker mounts are stronger enforcement but retain documented host, service, mount, and confidentiality limitations.
 
@@ -405,7 +415,7 @@ mpx review view|create|update|ready
 mpx ci status|watch|logs|retry
 
 mpx package detect|install|run
-mpx dev start|stop|status
+mpx dev start|status|logs|restart|stop
 
 mpx ports ensure|list|inspect|kill|release|reconcile
 mpx worktree create|remove|list|select|prepare|status|reconcile
@@ -844,6 +854,18 @@ The repository provider normally owns code review and CI. `workflow.codeReview` 
 
 KanbanFlow board columns map to canonical issue states. Generic MPX skills replace provider-specific KanbanFlow workflow skills where semantics are equivalent. Keep only genuinely KanbanFlow-specific capabilities, such as attachment behavior, inside the adapter or separate `kf` CLI.
 
+### Local Markdown issue provider
+
+`issues.provider: local` is a first-class alternative to GitHub, GitLab, or KanbanFlow. A project selects one authoritative Issue provider. Local issues use an independent project-local, monotonically increasing positive-number namespace; IDs are never reused or renumbered and do not preserve a hosted provider's sequence. Switching or round-tripping to a hosted provider is not a requirement.
+
+The provider stores one human-editable Markdown file per refined issue under a configurable project Issue root. The root may be a normal filesystem folder, a dedicated folder inside an Obsidian vault, or a folder used by an existing task plugin, but the provider depends on no plugin or dashboard. A committed path must be project-relative; an external root is selected through an identity-owned logical store so no absolute vault path enters `mpxconfig.json`. `Boards/<project>.md` is optional fast capture, not the Issue store. If board promotion is enabled, MPX creates exactly one issue, confirms it, then archives the capture with the issue link; it never keeps a second active issue copy on the board.
+
+Each file is named `<zero-padded-id>-<slug>.md`. Versioned YAML frontmatter owns `schemaVersion`, numeric `id`, canonical project ID, `title`, local `state`, `kind`, `priority`, labels, assignees, `createdAt`, `updatedAt`, optional `finishedAt`, optional plan/effort membership, optional capture source, and canonical outbound `parent`, `blockedBy`, and `related` IDs. `children` and `blocks` are derived. The ready frontier is derived from unresolved blockers instead of stored separately. Local states cover draft, ready, claimed, blocked, and finished while the provider-neutral API derives open or finished. Kinds cover bug, enhancement, task, implementation, research, decision, prototype, and grilling. AFK, HITL, size, area, and design-needed remain semantic labels rather than hard-coded workflow fields.
+
+The readable body uses `Outcome`, optional `Current behavior`, `Desired behavior`, `Requirements`, independently verifiable `Acceptance criteria`, `Out of scope`, and `Notes or decision record`. Following Matt Pocock's local-ticket patterns, implementation issues are narrow end-to-end vertical slices; large mechanical refactors may use expand, migrate, and contract tickets. Criteria describe durable behavior rather than implementation steps, file paths, or line numbers. A question becomes an issue once it can be stated precisely even when its answer is still unknown. Plan or effort maps contain only destination, linked issue IDs with one-line gists, not-yet-specified work, and out-of-scope boundaries; decisions stay in each issue rather than being duplicated in the map.
+
+Unknown frontmatter and body sections survive edits. Allocation and mutation use a store lock, content-hash compare-and-swap, same-directory temporary file, and atomic replacement; duplicates, broken relationships, external edits, and synchronization conflicts fail visibly. `list`, `view`, `create`, `edit`, `label`, `move`, and `finish` are required capabilities; comments are enabled only when authorship and time can be represented faithfully. Markdown files, CLI table/JSON output, optional Obsidian views, and a future GUI share the same authority. SQLite may be a disposable rebuildable index for search and sorting, never the Issue authority or a second editable projection.
+
 ## 14. Claude and Pi runtime architecture
 
 ### Canonical content and catalog
@@ -859,6 +881,26 @@ KanbanFlow board columns map to canonical issue states. Generic MPX skills repla
 - The artifact key covers runtime, resolved scope, canonical project ID when present, canonical metadata/content hash, effective pack/exposure config hash, and runtime mapping version. Builders publish atomically and reuse an identical immutable artifact.
 - A runtime session is bound to that resolved scope/project artifact at process launch. Moving within the same repository or its worktrees preserves the binding; changing to a different project or scope requires a runtime restart so initial context and command availability cannot become stale mid-session.
 - User-config or canonical-content changes produce a different artifact key. Runtime launchers rebuild or select the new artifact before starting; `mpx doctor` reports sessions or installed launch targets that reference an obsolete key.
+
+### Standard agent roles and routing
+
+The interactive main agent is the orchestrator and evaluator, not a spawnable worker. It owns intent, decomposition, user decisions, role selection, integration, acceptance, and verification of subagent claims against actual changes.
+
+| Work shape | Canonical role |
+| --- | --- |
+| Broad codebase location or tracing | `Explore`, read-only, with explicit breadth |
+| Open-ended research, design, or issue analysis | `general-purpose`, `Plan`, or `mpx-issue-analyzer` with an explicit model class |
+| Pre-analysed bounded implementation | `mpx-executor` |
+| Behavior suited to red-green-refactor | `mpx-tdd-executor` |
+| Known verification commands | `mpx-checker` |
+| Concrete failed checks requiring fix and recheck | `mpx-check-fixer` |
+| Acceptance and risk review | relevant read-only `mpx-reviewer-*` specialists in parallel |
+| Docs, browser evidence, or UI alternatives | Context7, Chrome DevTools, or UI-variant specialist |
+| Commit, review, CI, or unresolved handoff | dedicated delivery or tracking agent |
+
+Routing is deterministic: broad searches go to `Explore`; TDD is used when behavior can be expressed as a failing test; other implementation is analysed before a bounded executor receives it; executors never approve their own output; reviewers remain read-only; fixing starts from concrete checker or reviewer evidence. Generated runtime definitions preserve each role's tools, model, and thinking and cannot widen the parent launch tuple.
+
+User questions are plain inline text, not structured question-tool calls. Group independent, non-blocking decisions into concise numbered batches, separate true blockers, and state a recommendation for every decision. The structured ask-user integration is retired from the installed model tool surface.
 
 ### Claude Code
 
@@ -885,9 +927,35 @@ KanbanFlow board columns map to canonical issue states. Generic MPX skills repla
 - Do not register canonical MPX skills as native Pi resources: that would create `/skill:*` aliases, duplicate discovery metadata, and bypass the namespace adapter's policy.
 - Generate Pi agent metadata/tool mappings from canonical agents.
 - Keep Pi provider/model/thinking settings runtime-specific. Claude-only skill fields that Pi cannot reproduce produce compatibility diagnostics; they are never silently claimed as equivalent.
-- Preserve real `auth.json`, sessions, and caches outside Git.
+- Preserve real per-account `auth.json`, sessions, trust, and caches outside Git. The personal and work Pi roots must be authenticated to separate designated ChatGPT accounts and must never share or copy this native state.
 - Replace every absolute import from `mpx-claude-code` with workspace package or artifact resolution.
 - Make Pi footer consume the same status snapshot and current-worktree port resolver as Claude.
+
+### Shared runtime observability and status presentation
+
+Evolve the Phase C status snapshot into a provider-neutral runtime-observability contract. Shared packages own normalized data and derivation; the Claude status-line and Pi footer own only harness event capture, terminal layout, color, width, and supported interactive actions. One harness must not be reduced to the other's lowest common denominator: shared fields use the same meaning, while genuinely harness-only fields remain typed optional additions in that renderer.
+
+Define a versioned `RuntimeStatusEnvelopeV1` that composes the validated project/worktree/service data from `StatusSnapshotV1`. It contains runtime, launch identity reference, capture time, a schema-validated adapter capability map, and typed field groups for identity, session, model, location/actions, Git/worktree, token/context usage, cost, provider quota, compaction, subagents, and development services/ports. Every field group carries `state` (`current`, `stale`, `unavailable`, or `error`), `source` (`native`, `provider`, `derived`, or `cache`), capture/freshness metadata, and a stable diagnostic code when no current value exists. Unknown envelope versions fail closed. Values use explicit units/currencies/time zones, and estimated cost is structurally distinct from provider-reported cost.
+
+Each immutable runtime projection declares its capability map. A renderer may omit a shared field only when the adapter declares it unsupported with a stable reason; transient failures render `stale` or `error`, not unsupported. Harness-only additions live under validated `claude` or `pi` namespaces and cannot redefine shared fields. Shared snapshot/envelope fixtures, capability snapshots, and renderer tests enforce these rules.
+
+The following are required in both harnesses whenever the native API or a safe MPX-owned adapter can supply them:
+
+- visible `personal` or `work` identity without exposing an account identifier, token, or native auth path;
+- session title and runtime-qualified session ID, with an unambiguous shortened display and full inspectable value;
+- provider/model and effective effort or thinking level;
+- current folder, canonical repository, main checkout or linked worktree, branch, and dirty/ahead/behind state where available;
+- safe OSC-8 or equivalent actions for the current folder, terminal, and VS Code target, with escaped/validated paths and a plain-text fallback;
+- current context/token consumption, context-window percentage, input/output/cache totals where available, estimated and provider-reported price kept distinct, and an explicit `unavailable` state rather than fabricated cost;
+- account usage/quota windows, remaining allowance, reset time, throttling, and stale/error state without reading or logging raw credentials;
+- compaction count, last reason/time, and current post-compaction context state;
+- active, queued, background, completed, and failed subagent counts plus compact progress/fleet state;
+- current-worktree development ports and listener health; and
+- freshness/provenance so cached, inferred, provider-reported, and native values cannot be confused.
+
+Retain additional useful runtime-specific fields such as Claude review/CI links or Pi extension/provider state when there is no honest cross-harness equivalent. Missing native APIs require a documented capability finding and the narrowest safe adapter; a field may be absent from one renderer only when neither native data nor a secure derivation exists. Usage polling must be bounded, asynchronous, cached, and non-blocking. Status adapters never parse or copy raw credential stores when a native command/API can provide the value, and status logs/snapshots exclude prompts, secrets, account identifiers, and unnecessary absolute paths.
+
+Acceptance uses fixture and live-session matrices for personal/work Claude and personal/work Pi, narrow/wide terminals, repositories and worktrees with spaces, unavailable/stale usage services, pre/post compaction, and foreground/background subagents. Semantic parity is tested at the shared snapshot; renderer snapshots may differ only for declared harness capabilities and layout.
 
 ## 15. Sessions and unfinished-work inbox
 
@@ -895,7 +963,7 @@ Replace snapshot-only resurrection with a provider-neutral session domain.
 
 Session identity includes runtime plus native session ID. Track:
 
-- Runtime, identity, immutable launch tuple/hash and `launchKey`.
+- Runtime, identity, selected native account root, immutable launch tuple/hash and `launchKey`.
 - Session ID/file reference.
 - CWD, canonical repository, and worktree.
 - Title/model/reasoning where available.
@@ -908,14 +976,19 @@ Commands:
 
 ```text
 mpx session list
-mpx session mark <id> unfinished --note ...
+mpx session mark <id> unfinished --note ... --next-action ...
+mpx session handoff <id> --summary ... --next-action ...
+mpx session complete <id> --disposition completed|abandoned
 mpx session inbox
 mpx session resume <id>
+mpx session branch <id> --files shared|worktree [--terminal-tab]
 mpx session save
 mpx session reconcile
 ```
 
-Claude/Pi lifecycle adapters update state. A future GUI may display and mutate this through stable contracts, but MPX remains fully usable without any GUI.
+`handoff`, pause-on-exit metadata capture, and inbox mutation are deterministic no-model operations. A generated summary is a separate explicit action and never runs merely because a terminal closes. Resume and branch links show runtime, identity, project, worktree, and file mode before launch.
+
+Claude/Pi lifecycle adapters update state. Native branching uses Pi `/clone`, `/fork`, CLI `--fork`, or the supported in-process fork API, and Claude `/branch` or `--resume <id> --fork-session`; MPX adds lineage, account-root validation, file-workspace selection, and safe terminal launch rather than reimplementing transcripts. A Pi session is discoverable, resumable, and branchable only within its recorded personal or work native root and designated ChatGPT account. MPX never searches the opposite root as a fallback and fails closed when the recorded root is missing, mismatched, or authenticated to the wrong account. A future GUI or optional Obsidian projection may display and mutate this through stable contracts, but MPX remains fully usable without either.
 
 Existing `agent-resurrect` saves and Pi active-session records receive a one-time, non-destructive import command. The new runtime does not continuously read legacy stores.
 
@@ -924,6 +997,18 @@ Existing `agent-resurrect` saves and Pi active-session records receive a one-tim
 ### Core rule
 
 Keep old repositories, installations, and data untouched while building and verifying the new system. Do not activate old and new hook/plugin stacks simultaneously in the same session unless a specific coexistence test requires it.
+
+`mpx-claude-code` and `mpx-pi` remain active migration sources until final convergence. Migration defaults to preserving current behavior, not preserving provider-specific implementation. Every maintained skill, agent, extension, hook, script, rule, instruction, reference, template, theme, keybinding, package integration, status feature, and account workflow receives one recorded disposition:
+
+- **canonicalized:** generalized into a provider-neutral MPX package or content workflow;
+- **Claude-specific:** retained in the immutable Claude projection because the capability is genuinely Claude-only;
+- **Pi-specific:** retained in the immutable Pi projection because the capability is genuinely Pi-only;
+- **externalized:** version-pinned and wrapped behind an MPX contract, with provenance, license, capability, and credential review;
+- **retired:** removed only with an explicit rationale showing that it is obsolete, redundant after an equivalent replacement, unsafe, or impossible on the target harness.
+
+Unclassified omission is a migration failure. Canonicalization is the default. Every `Claude-specific`, `Pi-specific`, `externalized`, or `retired` disposition is an exception that requires a documented capability reason showing why canonicalization is unsuitable, independent review, and enumeration in the final parity report. A provider-specific skill may be rewritten, merged, or renamed, but its triggers, decision points, safety gates, provider actions, review/CI behavior, and handoff semantics must remain testable through the canonical workflow.
+
+Because both source repositories may continue changing during implementation, record source commit IDs, dirty-state file hashes, package versions, and the disposition map at the convergence baseline. Re-run the same inventory immediately before cutover, reconcile every added, changed, deleted, or renamed source, regenerate projections, and block retirement while any drift is unexplained.
 
 ### Source history
 
@@ -982,20 +1067,21 @@ Target:
 
 - Personal and work account config roots.
 - Live `--plugin-dir` launch paths.
-- Plugin marketplace IDs and caches.
-- Global instructions/settings/output-style/status-line links.
-- Historical project/session path keys.
+- Plugin marketplace IDs, enabled MCP/LSP/browser integrations, and caches.
+- Global instructions, language/project rules, settings, output style, hook wiring, status-line/action assets, notifications, templates, and personal/local skills.
+- Historical project/session path keys and usage/subagent transcript adapters.
 - Current Claude-managed worktrees.
 
 Validate both accounts separately and preserve native credential/history directories.
 
 ### Pi
 
-- `~/.pi/agent` entry-by-entry symlinks.
-- Extensions, agents, prompts, themes, and selected skills.
-- Native auth/models/sessions left real.
-- Themed launcher.
-- Generated agent drift checks.
+- `~/.pi/agent` and `~/.pi/agent-work` entry-by-entry symlinks and account setup behavior.
+- Settings, packages, extensions, agents/subagents, prompts, themes, keybindings, selected skills, and appended instructions.
+- MCP/web/question/tool-display integrations and their private configuration boundaries.
+- Native auth/models/sessions/trust/package state/caches left real and isolated per account.
+- Themed launcher, terminal canvas/progress, footer, title, compaction, and notification behavior.
+- Generated agent and immutable projection drift checks.
 
 ### Windows Terminal
 
@@ -1015,7 +1101,9 @@ Re-run the Raycast generation/import process and validate every resulting action
 
 ### Obsidian
 
-Update project dashboards and issue references under the MPX project area and mini-project boards. Decide whether to rename the `MpxClaudeCode` project folder to `Mpx`; update inbound links, dashboard queries, URI targets, and board metadata atomically. Do not read or rewrite unrelated private notes.
+Update project dashboards and issue references under the MPX project area and mini-project boards only where they remain useful. Decide whether to rename the `MpxClaudeCode` project folder to `Mpx`; update inbound links, dashboard queries, URI targets, and board metadata atomically. Do not read or rewrite unrelated private notes.
+
+The local Issue provider is plugin-independent. Its root may be inside or outside Obsidian, and it does not inject issues into the existing Tasks dashboard. Optional board promotion and Obsidian issue/session views are rebuildable adapters over the canonical Markdown store, not additional authorities.
 
 ### Scheduled Tasks, shortcuts, and session data
 
@@ -1031,111 +1119,72 @@ Update bootstrap variables such as `MPX_SKILLS_DIR` only after the new path exis
 
 ## 18. Phased execution
 
-### Phase A — Baseline and safety
+### Completed phases — compact regression summary
 
-- Create the new Git repository at `C:/_MP_projects/mpx` without moving old sources.
-- Add root instructions, workspace tooling, this plan, and ADRs.
-- Capture integration snapshots and source commit inventory.
-- Run a secret/path/publication audit.
-- Define rollback commands and artifact locations.
+Implementation detail and review history stay in the package documentation, ADRs, Git history, and [`docs/PHASE_F_ACCEPTANCE.md`](docs/PHASE_F_ACCEPTANCE.md). The accepted contracts remain regression obligations for every pending phase.
 
-**Gate:** destination is reproducible; every mutable integration has a backup and restore test.
+| Phase | Delivered boundary | Regression contract retained |
+| --- | --- | --- |
+| A | Reproducible monorepo baseline, source/integration inventory, safety audit, and rollback evidence. | Destination and snapshots remain reproducible and secret-free. |
+| B | Versioned config, provider/result envelopes, canonical skill catalog, pack/exposure resolution, provenance, bounded search, and read-only CLI foundations. | Deterministic schema/manifest resolution, collision and malicious-input rejection, and no secrets in resolved output. |
+| B2 | Immutable launch tuple/key, identity/mode/preset/grant/routes, four exposure states, launch defaults, alias fast paths, and fail-closed selection. | Explicit/project/scope/built-in precedence, identity-domain checks, route safety, audit behavior, and four-state provenance/hash/path fixtures. |
+| C | Global port leases, main/worktree allocation, reconciliation, Windows inspection, CLI operations, and the initial provider-neutral status snapshot. | Arithmetic, exclusivity, fixed-shared warnings, concurrency, crash recovery, and snapshot conformance. |
+| D | Safe Windows-capable worktree create/prepare/remove/reconcile lifecycle with durable continuation and thin shell integration. | Paths with spaces, dirty/locked state, failure, cancellation, preparation, and removal safety. |
+| E | Trusted provider registry, GitHub/GitLab/KanbanFlow adapters, provider-neutral Issue/Review/CI contracts, CLI operations, and generalized delivery skills. | Backend conformance and structured unsupported/error behavior. |
+| F | Immutable Claude/Pi projections, launch-bound four-state skill loading/search, generated agents, runtime launch and host approval, gated Docker resolution, shared dangerous-command policy, basic hooks/status ports, audits, and selected source provenance. | Cross-runtime exposure and lazy-loading behavior, artifact integrity, alias resolution, canonical-skill equivalence, and validated current-worktree ports. |
 
-### Phase B — Contracts first
+The **completed regression suite** is the retained executable evidence for every row: `pnpm run build`, `pnpm run check`, `pnpm run typecheck`, `pnpm test`, `pnpm run validate:generated`, source verification where provenance inputs are available, and `git diff --check`. The behavioral obligations in the table are normative even if test files move; [`docs/CONFIG.md`](docs/CONFIG.md), [`docs/LAUNCH.md`](docs/LAUNCH.md), [`docs/PORTS.md`](docs/PORTS.md), [`docs/WORKTREES.md`](docs/WORKTREES.md), [`docs/PROVIDERS.md`](docs/PROVIDERS.md), and [`docs/RUNTIME_ADAPTERS.md`](docs/RUNTIME_ADAPTERS.md) map them to current package contracts.
 
-This completed baseline implemented the original scope/config/provider contracts and four exposure states. Phase B2 preserves that four-state contract and adds user-local project and scope launch defaults.
+Phase F accepted a deliberately reduced runtime slice. It did **not** establish complete parity with the live `mpx-claude-code` and `mpx-pi` setups: the Pi extensions tree was excluded, vendored subagents remained inactive, several Claude hooks/rules/local skills were not migrated, and rich status, MCP/web/question tools, managed development servers, sessions, installation, and F2 isolation remained outside that gate. Phase F1 closes this planning and implementation gap without reopening the accepted Phase F contracts.
 
-- Implement config schema/resolver/provenance.
-- Implement result/error envelopes.
-- Implement user scope/provider registry contracts.
-- Define the baseline canonical skill-catalog metadata, pack membership, scope/project pack and exposure precedence, project-extension boundary, identity/collision rules, artifact key, runtime binding, and resolved-manifest schema.
-- Implement read-only skill inventory, exposure explanation, and bounded search over fixtures before importing runtime content.
-- Add GitHub/GitLab/KanbanFlow fixture configs.
-- Implement `mpx config`, `mpx skill`, `mpx init`, and `mpx doctor` read-only paths.
+### Phase F1 — Source convergence and Claude/Pi capability parity
 
-**Gate:** schema fixtures, skill scope/exposure fixtures, collision tests, deterministic manifest snapshots, bounded search tests, and malicious-config tests pass; no secret enters resolved output.
+Treat the current maintained source trees, including dirty and untracked work, as active migration inputs rather than relying only on the earlier provenance selection.
 
-### Phase B2 — Launch contracts and fast defaults (implemented)
+- Build a machine-readable convergence manifest by traversing both source repository roots, not a hand-selected directory list. Classify every tracked, dirty, and untracked path except `.git`, generated caches/build output, dependency stores, native private account state, and known accidental filesystem artifacts; every exclusion still receives a reason. Coverage includes root and nested settings, package/lock/workspace manifests, marketplace/editor/CI/installer/environment configuration, README/handoff/docs, skills and supporting files, agents, extensions, package integrations, hooks, scripts, instructions, rules, references, templates, prompts, output styles, status assets/configuration, themes, keybindings, account setup, assets/sounds, tests, licenses, and vendor records. Record source commit, dirty-file hash, destination, disposition, adaptation notes, and verification evidence without capturing credentials or private session content.
+- Rescan all canonical, GitHub-specific, personal/local, Pi-adapted, and dynamically projected skills. Import recent changes before editing canonical copies. Generalize provider selection behind MPX Issue/Review/CI and tool contracts while preserving each workflow's triggers, decisions, safety gates, concurrency, provider actions, privacy constraints, fallback/manual handoffs, and referenced assets. Include previously excluded or deferred workflows such as continuation/decision harvesting, GitHub delivery and repository setup, personal workstation/content skills, and Sentry guidance unless an explicit reviewed retirement replaces them equivalently.
+- Migrate shared skill contracts and references as first-class content, including subagent/reviewer/executor protocols, commit workflow, tracker resolution, exploration, testing, design, documentation, and authoring guidance. Preserve skill-version/drift rules and ensure generated runtime frontmatter never becomes a second maintained source.
+- Converge canonical agent intent and every active Claude/Pi agent. Preserve model/effort/thinking mappings, tool restrictions, output schemas, `Explore` semantics, the small approved nesting boundary, provider-specific delivery behavior, review specializations, language references, and generated-agent drift checks.
+- Port all active instruction and rule surfaces: root/global `AGENTS.md` and `CLAUDE.md` intent, `APPEND_SYSTEM.md`, compaction-only instructions, language and project/framework rules, output style, machine-path/worktree/port discipline, and runtime-specific loading/trust behavior. Keep project-targeted rules scoped rather than broadening them globally. Canonical authoring forbids em dashes in generated prose, keeps `AGENTS.md` edits extremely concise, removes a rule when the underlying issue is resolved instead of appending a success comment, batches independent user decisions inline with recommendations, and makes skill creation reference canonical agent vocabulary and shared writing-for-agents guidance.
+- Port the complete guard/hook behavior through shared policy plus harness adapters: package-manager enforcement, dangerous-command blocking, pre-commit/secret checks, Fallow audit, post-write format/lint, post-command context, machine/session context, compaction injection, and notifications. Preserve fail-closed versus fail-open behavior intentionally and test event-order differences.
+- Activate a supported subagent system in Pi rather than shipping inactive provenance. Preserve `Agent`, result retrieval, steering, background groups, scheduling when requested, worktree isolation, memory/transcripts, completion notifications, widgets/fleet view, and canonical agent discovery. Child agents inherit and may only narrow the parent launch tuple, routes, mounts, network, skills, and executor; nested delegation remains explicit and bounded.
+- Provide immutable, policy-bound Pi equivalents for current `pi-mcp-adapter`, `pi-web-access`, compact tool display, auto-title, compaction instructions, terminal activity state, fullscreen behavior, and extension event coordination; retire the structured ask-user UI in favor of canonical inline batched questions. Preserve the Firecrawl search provider and scrape fallback already present in `pi-web-access` behind shared `web_search` and `fetch_content`, not duplicate Pi tools; keep it unavailable until identity-specific configuration exists and define paid-credit, fallback, caching, SSRF, and credential policy. Pin or vendor external packages only after provenance, license, update, tool-authority, credential, and sandbox review; replace mutable absolute package/worktree paths with MPX-owned resolution.
+- Implement the provider-neutral managed development-service domain and Pi adapter for `start`, `status`, `logs`, `restart`, and `stop`, including bounded logs, configured-port readiness, process-tree ownership, lifecycle cleanup, status events, and Windows behavior. Expose it through `mpx dev ...` and a launch-bound `dev_server` tool; it must use assigned worktree ports and must not silently execute on the host when the selected executor is Docker.
+- Replace the reduced runtime status with the shared observability contract in Section 14. Both Claude and Pi must show identity, title/session ID, model/effort, folder/editor/terminal actions, repository/worktree/branch, tokens/context/cost, provider usage, compactions, subagents, and ports. Preserve Claude's Task panel and review/CI actions and Pi's fleet/widgets or other true harness-specific surfaces instead of deleting them for superficial uniformity.
+- Preserve account-specific settings, themes, keybindings, package/model choices, trust behavior, and terminal canvas/progress where they are part of the current workflow. Compare repository declarations with a privacy-safe live personal/work inventory of enabled plugin/package IDs, versions, capability routes, and source locations; classify differences without reading package credentials or private configuration. Keep native credentials, package state, sessions, trust decisions, and caches in their designated personal/work roots; generated projections and installers must never copy them.
+- Eliminate active runtime imports from old repositories and `~/.codex`. Move required implementations such as compact-context behavior into canonical packages; retain old files only as attributed history or final-cutover input.
 
-The corrected contract retains read-only identity, mode, preset, grant, descriptor/key, provider/SSH/MCP routing, split-search, and `--content-scope` work. It uses exactly four exposure states with no marker or activation-minting surface, and implements project/scope launch-default resolution, workspace/network policy axes, alias fast-path resolution, and provenance explaining every default.
-
-Actual harness spawning, trusted interactive confirmation and approval minting, persistent audit storage, runtime imports/integration, and Docker execution remain deferred to Phase F/F2.
-
-**Gate:** fail-closed CWD, identity-domain mismatch, deterministic explicit/project/scope/built-in default precedence, tuple immutability, route/secret safety, elevation audit, and four-state manifest/provenance/hash/path/rejection fixtures pass. `cc`, `ccw`, `pi`, and `piw` resolve a known project without additional launch arguments.
-
-### Phase C — Ports and state
-
-This baseline is implemented; the tasks below record delivered scope and remain acceptance obligations for later integration.
-
-- Implement port families, global registry, main reservation, local lease file, concurrency, and reconciliation.
-- Add Windows process-inspection adapter and JSON output.
-- Implement `mpx ports` commands.
-- Build provider-neutral status snapshots and fixture renderers against the shared resolver; do not modify or import the old Claude/Pi runtime sources yet.
-
-**Gate:** exact family arithmetic, cross-repo exclusivity, fixed-shared warnings, concurrent allocation, crash recovery, and status-snapshot fixture parity pass.
-
-### Phase D — Worktree lifecycle
-
-**Status: complete.** Production preparation, cancellation, worker restart reconciliation, and the Windows-path gate are implemented and verified. Durable creation continuation records content-bound include and preparation evidence and resumes Git → includes → ports → preparation after any persisted boundary; prunable/manual deletion reconciliation and explicit `--cwd` removal safety are covered.
-
-- Port worktree picker/lifecycle from Bash and plugin-local scripts into packages.
-- Implement standard sibling path, `.worktreeinclude`, no-editor behavior, lifecycle state, and background preparation worker.
-- Add remove/reconcile safety.
-- Implement shell `cd` integration as a thin wrapper.
-
-**Gate:** create/prepare/remove/reconcile tests pass on Windows paths, spaces, dirty/locked worktrees, failure, and cancellation.
-
-### Phase E — Provider-neutral issues and delivery
-
-**Status: complete.** Final review and verification are green for the trusted provider registry and adapters, the KanbanFlow Issue/`mpxconfig.json` cutover in its dedicated worktree, provider-neutral CLI and canonical skills, identical fake-backend Issue conformance, and structured unsupported-capability and error results.
-
-- Implement provider registry and built-in adapters.
-- Rename KanbanFlow’s public Task vocabulary to Issue in its separate repo.
-- Make `kf` read `mpxconfig.json` only.
-- Rewrite generic skills to `mpx issue`, `mpx review`, and `mpx ci`.
-- Remove GitHub/GitLab/Kanban command tables from canonical skills.
-
-**Gate:** identical issue contract tests pass across fake GitHub, GitLab, and KanbanFlow backends; unsupported capabilities fail structurally.
-
-### Phase F — Docker-first launch integration, runtime unification, and four-state skill projection
-
-**Status: complete.** Spec, security, reliability, and performance reviews are clean, and the full Phase F tests and gates pass. Evidence includes launch-bound neutral manifests and Claude/Pi projections; the exact `full`, `name-only`, `explicit-only`, and `off` states with separate model/human discovery; alias and runtime execution with default Docker safely gated pending F2, no fallback, and explicit host approval; canonical content and provenance; shared policy, hooks, and status with live runtime parity; project skills; read-only routes with Claude MCP support and structured Pi incompatibility; launch audits; and source verification.
-
-Phase F2 isolation and authentication proof remains pending. Docker does not become the default until that gate passes, and Phase F2 or any later phase is not marked complete here.
-
-- Implement Docker-first launch resolution, identity-native runtime roots, Git/provider/SSH/MCP routing, mode/skill-policy/workspace/network/grant reporting, launch banners/audits, and immutable `launchKey` validation. Host filesystem execution is explicit elevation only.
-- Make account aliases delegate to the launch resolver while preserving fast personal/work selection and requiring relaunch for any rights change. From a known project directory, the aliases need no profile arguments beyond their built-in harness and identity selection.
-- Fully import the maintained `mpx-pi` runtime/config tree and the Claude sources; move shared content into one canonical tree while Pi-only extensions, settings projections, themes, account setup, and vendor provenance move under `runtimes/pi/`.
-- Classify every canonical skill by pack and default exposure; migrate personal skills into canonical content and rewrite or retire provider-specific duplicates.
-- Build one `mpx` Claude plugin implementation plus immutable scope/project-resolved artifacts and launch-time artifact selection.
-- Convert skills to bare identities and `/mpx:*`.
-- Generate Claude exposure metadata and the Pi command/catalog/loader manifest from the same resolver output.
-- Implement separate search contracts: bounded artifact-bound model search for `full`/`name-only`, and explicit human CLI/TUI slash autocomplete/search across all user-invocable states without implicit model disclosure.
-- Rename canonical agents and regenerate Pi agents.
-- Replace all absolute cross-repository imports and Claude-specific placeholders in canonical content.
-- Port hooks/status/footer through package APIs and connect both runtime renderers to the Phase C status snapshot.
-- Inventory the hand-maintained `~/.codex` mirror, move any still-required Pi dependency such as `compact-context.js` into canonical MPX packages, and mark obsolete mirror content for Phase J removal.
-
-**Gate:** Claude personal, Claude work, and Pi resolve the same intended skill availability and exposure; `full`, `name-only`, `explicit-only`, and `off` behave as specified; skill bodies remain lazy; a canonical skill behaves equivalently in both harnesses; fast aliases resolve the project defaults; and Claude and Pi render equivalent validated current-worktree ports.
+**Gate:** the convergence manifest has no unclassified active source; every `canonicalized`, `Claude-specific`, `Pi-specific`, `externalized`, or `retired` entry has evidence; every current skill and agent has semantic mapping and generated-runtime coverage; both harnesses pass the hook/tool/status/subagent/development-service capability matrix; external dependencies are pinned and reviewed; no active projection imports an old checkout; and the completed regression suite remains green.
 
 ### Phase F2 — Required Docker isolation and authentication proof
 
+Run the proof against the complete Phase F1 runtime and tool inventory, not the earlier reduced adapter. Adding or widening any model-triggerable file, shell, process, browser, Git, MCP, web, subagent, or development-service path invalidates the affected evidence and requires the proof to run again.
+
 Use standalone `sbx`; ignore the legacy `docker sandbox` plugin and do not attempt state migration without a documented conversion path. Pin the runtime version and every kit by immutable version/digest or source commit. Generate state-local unmounted sandbox environment files; prove both clone-mode sandbox-remote fetch and direct provider push/PR/MR/merge paths; use RO reference/opposite-domain mounts and no shared mutable skill store; document mount/confidentiality limits and environment recreation rules. Prove that clone mode is launched from a main checkout rather than a linked host worktree, and that host-worktree compatibility keeps Git operations on the host.
 
-For Pi, do not claim proxy-managed OAuth through a third-party kit: Docker currently documents that this is unsupported. Prove the host-side Pi/sandbox-executor split with the ChatGPT/Codex subscription: native host file/shell/process/browser/Git tools are absent, every model-triggerable operation crosses the launch-bound MPX executor, and no OAuth token or native `auth.json` enters the VM. Keep personal/work auth and session state separate. A fully in-sandbox Pi remains blocked until Docker or another executor can provide an equivalent OAuth-isolation contract.
+For Pi, do not claim proxy-managed OAuth through a third-party kit: Docker currently documents that this is unsupported. Prove the host-side Pi/sandbox-executor split with the ChatGPT/Codex subscription: native host file/shell/process/browser/Git tools are absent, every model-triggerable operation crosses the launch-bound MPX executor, and no OAuth token or native `auth.json` enters the VM. Keep personal/work Pi OAuth, `auth.json`, native sessions/history, trust, and caches in separate roots authenticated to two separate ChatGPT accounts; neither account's native state may be copied, mounted, or exposed to the other root or the VM. A fully in-sandbox Pi remains blocked until Docker or another executor can provide an equivalent OAuth-isolation contract.
 
-**Gate:** the selected `sbx` client/daemon satisfy the pinned feature contract and diagnostics; built-in Claude/Codex credential isolation works; the Pi split-executor proof shows no host-capability bypass and no token in the VM; clone fetch/direct-provider delivery, no-shared-skills, mount, named network policies, local-service, and resume behavior pass. Docker becomes the default only after this gate.
+**Gate:** the selected `sbx` client/daemon satisfy the pinned feature contract and diagnostics; built-in Claude/Codex credential isolation works; every Phase F1 tool and subagent path is exercised through the intended executor; the Pi split-executor proof shows no host-capability bypass and no token in the VM; clone fetch/direct-provider delivery, no-shared-skills, mount, named network policies, managed local-service, and resume behavior pass. Docker becomes the default only after this gate.
 
-### Phase G — Sessions
+### Phase G — Sessions and local workflow records
 
 - Import session schemas/scanners/resume planning.
-- Add unfinished state and inbox.
-- Persist identity, mode, executor, resolved grants, skill artifact key, and `launchKey` without copying native credentials or prompt content.
-- Wire Claude/Pi lifecycle events.
+- Add paused and unfinished state, a no-model handoff command, concise summary and next action, completion disposition, and durable inbox. Runtime exit hooks may capture metadata and mark a session paused without invoking a model; richer summaries are explicit user actions.
+- Add provider-neutral conversation branching with native Claude and Pi adapters. Record parent and child runtime-qualified IDs, immutable launch identity/root, and whether files are shared or isolated. Prevent duplicate writers to one native transcript.
+- Support safe optional side-by-side Windows Terminal tabs without shell interpolation. Conversation branching does not imply file isolation: shared mode reports collision risk, while modifying parallel work defaults to a new MPX worktree unless the user selects the current checkout.
+- Persist identity, opaque native binding/account references, canonical root digest, mode, executor, resolved grants, skill artifact key, `launchKey`, repository, and worktree without persisting a root path, native credentials, account identifiers, or prompt content.
+- Wire Claude/Pi lifecycle events and feed durable title, runtime-qualified session ID, resume state, branching lineage, and freshness into the shared observability envelope without making status rendering the session authority.
+- Resume or branch Pi only through the recorded `pi` or `piw` identity/root and fail closed on a missing, mismatched, or differently authenticated root.
+- Implement the local Markdown Issue provider with a configurable plugin-independent root, independent project-local numbering, the versioned frontmatter/body codec, derived dependency frontier, conflict-safe writes, and normalized CLI contract. Keep board promotion and Obsidian/task-dashboard views optional adapters rather than provider dependencies.
+- Generate privacy-safe rebuildable Obsidian issue/session views when configured and validated resume links.
 - Add one-time session-save import without merging personal and work histories.
 - Replace old scheduled autosave with MPX-owned installation.
 
-**Gate:** active discovery, mark unfinished, restart, inbox persistence, and resume into the correct identity/mode/executor for both runtimes; personal/work native history remains isolated and rollback leaves old saves usable.
+**Gate:** local Issue conformance covers independent monotonic IDs, the complete frontmatter/body schema, labels, local and normalized state, dependency frontier and relationships, unknown-content preservation, concurrent/external edits, optional board promotion, and rebuildable configured views; active session discovery, no-model handoff, mark unfinished, restart, branch lineage, file-workspace disclosure, side-by-side launch, inbox persistence, and resume use the correct identity/native root/mode/executor in both runtimes; personal/work Pi histories and sessions remain isolated, cross-root operations are rejected, and rollback preserves old saves and local Markdown issues.
+
+**Implementation status:** the provider-neutral session contracts/store, partitioned captures and inbox, CLI commands, Claude discovery, Claude/Pi lifecycle ingestion, confirmation-bound relaunch planning, globally serialized root-attested Pi enrollment/re-enrollment, supported live OAuth availability probing, pre-side-effect launch/resume gates, one-time legacy save and Pi-registry import, session observation contribution, and MPX-owned scheduled-capture installer component are implemented. Root-attested local mode is accepted for Phase G. The remaining gate work includes no-model handoff and completion disposition, native branch adapters and lineage, shared/worktree selection and terminal tabs, the local Markdown Issue provider and optional projections, Phase F1 composition into `RuntimeStatusEnvelopeV1`, Phase F2 Docker resume admission, and Phase I immutable installed-runner authority. MPX does not continuously read the legacy Pi registry, substitute host execution, or schedule a mutable checkout runner.
+
+**Accepted limitation:** the supported Pi auth command reports availability, provider, and auth type but no stable non-secret account subject. Root-attested mode therefore detects missing/changed roots and unavailable or wrong-provider/wrong-auth-type state, but cannot detect an account switch within the same root. MPX does not export credentials, decode JWTs, read `auth.json`, run token/credential commands, or claim stable-subject verification.
 
 ### Phase H — Project and template rollout
 
@@ -1147,41 +1196,64 @@ Parallelize independent repository adaptations:
 - Grovekeeper as a normal project
 - `template-sveltekit` and its setup skill
 
-Do not include React Native.
+Do not add a React Native application to the rollout matrix; this does not exempt an active React Native setup skill or reference from Phase F1 convergence.
 
-**Gate:** each target runs its dev/test surfaces on assigned non-default ports with coupled URLs correct.
+**Gate:** each target runs its dev/test surfaces on assigned non-default ports with coupled URLs correct; `mpx dev` and the launch-bound development-service tool start, observe, restart, and stop the declared services without orphaning processes or crossing executor boundaries.
 
 ### Phase I — Installation and system registration
 
 - Install new CLI and user config; detect standalone `sbx` independently from Docker Desktop and report unsupported, legacy-only, unauthenticated, or client/daemon-mismatch states without making Docker a required dependency.
-- Register Claude plugin and Pi runtime.
+- Register immutable Claude and Pi runtime projections, all approved runtime-specific hooks/extensions/packages, MCP routes, web adapters, inline question policy, status actions, themes/keybindings, and managed development-service integration from the Phase F1 convergence manifest; do not register the retired structured question adapter.
 - Replace shell blocks with one managed launcher block that preserves `cc`/`ccd`/`ccw`/`ccwd` and `pi`/`piw` identity shortcuts.
-- Verify each native Claude/Pi account root, Git/provider/SSH route, MCP-sharing choice, and session/history boundary independently.
+- Verify each native Claude/Pi account root, Git/provider/SSH route, MCP-sharing choice, and session/history boundary independently. For Pi, verify that `pi` and `piw` select their fixed personal/work roots, that root-attested probes fail closed on missing enrollment, root drift, unavailable authentication, wrong provider, or wrong auth type, and that neither root exposes the other's native auth or session state. Do not claim that this mode distinguishes accounts switched within one unchanged root.
 - Update Windows Terminal, Raycast, Obsidian, scheduled tasks, shortcuts, environment paths, and repository remotes.
 - Run clean-machine and existing-machine installation simulations.
+- After the CLI, user config, immutable runtime files, and managed launchers are installed, complete Pi enrollment before the Phase I gate: sign in through native Pi separately in each configured personal/work root; run the no-write `mpx account enroll --identity NAME --json` plan; review the identity and canonical root; commit that exact plan with `--confirm-plan DIGEST`; then require `mpx account list`, `status`, and `verify` to report both bindings ready. Exercise cross-root rejection and unavailable-auth failure. If native `/login` changes the account inside an unchanged root, or if a configured root changes, require explicit `mpx account re-enroll` planning and confirmation before launch or resume.
 
-**Gate:** `mpx install verify`, every identity/harness routing matrix, and the external integration checklist pass with old system still recoverable.
+**Gate:** `mpx install verify`, every identity/harness routing matrix, the full convergence-manifest installation matrix, the completed personal/work Pi enrollment and verification sequence, and the external integration checklist pass with the old system still recoverable. Fresh personal/work Claude and Pi launches expose their intended complete capability and status surfaces without reading code from either source checkout.
 
-### Phase J — Cutover and retirement
+### Phase J — Final source reconciliation, cutover, and retirement
 
-- Observe normal use through a deliberate validation period.
-- Confirm no old path/config/namespace is accessed.
-- Remove old activation and marker blocks, then retire the hand-maintained `~/.codex` mirror after the Phase F inventory proves no required runtime dependency remains.
-- Archive or rename old repositories and update redirects/remotes. Archive `mpx-pi` only after its complete maintained tree, vendor/license provenance, and historical journal are present in MPX and no runtime path references the old checkout.
-- Retain immutable migration snapshots for a defined rollback window.
+- Keep `mpx-claude-code` and `mpx-pi` active and recoverable through the validation period. Immediately before cutover, recapture each source commit and dirty/untracked inventory and compare it with the Phase F1 convergence baseline.
+- Reconcile every added, changed, deleted, renamed, or newly referenced skill, agent, extension, hook, script, instruction, rule, reference, template, package, setting, status feature, test, license, and vendor record. Import and re-generalize late skill/workflow changes; do not waive drift because an earlier generated/provenance check passed.
+- Re-run semantic skill and agent comparisons, generated projection checks, hook/tool capability tests, status matrices, external package/version checks, and personal/work runtime smoke tests. Produce a final parity report listing every source item, destination/disposition, behavior evidence, and the small set of explicitly reviewed exceptions.
+- Observe normal use with legacy activation available as rollback, then disable old launchers/plugins/extensions without deleting source or native state. Repeat the complete acceptance suite with legacy activation disabled and monitor for old path/config/namespace access.
+- Remove old activation and marker blocks only after the disabled-legacy run passes. Retire the hand-maintained `~/.codex` mirror only after no required runtime dependency remains.
+- Archive or rename old repositories and update redirects/remotes only after their maintained trees, reachable history, vendor/license provenance, and historical journals are represented in MPX and no installed/runtime/generated path references an old checkout.
+- Retain immutable migration snapshots and the final source/convergence manifests for the defined rollback window.
 
-**Gate:** full acceptance suite passes after old activation is removed; rollback drill succeeds from snapshots.
+**Gate:** the final source-drift scan is empty or fully reconciled; the parity report has no unclassified or unexplained exception; all runtime, source-convergence, project, installer, identity/account, status, session, executor, and rollback matrices pass with legacy activation disabled; no old checkout is required; and the rollback drill succeeds from snapshots.
+
+### Post-migration standalone backlog
+
+These are not migration completion gates and must target installed MPX rather than old repositories:
+
+- audit and refine Playwright verification without memory-only project configuration;
+- refine interactive tutorials and `${MPX_AI_GENERATED}` project/category layout;
+- decide whether podcast, slides, and mind-map need thin dedicated NotebookLM entry skills;
+- add `notes-triage` for recent-note classification, load-bearing emphasis, and `#p/` checks with confirmation before rewrites;
+- compare and handpick capabilities from Cursor's MIT-licensed `pstack` by semantics, not wholesale copying, including `how`, `why`, `recall`, `blast-radius`, `architect`, `teach`, verification maintenance, `unslop`, technical writing, orchestration playbooks, agents, and principles. Adapt or reject Cursor/Graphite-specific commands, model panels, transcript-mining privacy risks, duplicate orchestrators, and rules that conflict with MPX safety policy;
+- adopt a tiny explicit-only `wait-what` skill after comparing Matt Pocock's source: re-pitch only the last answer with missing context, ASD-STE100 plain English, and the project's canonical vocabulary when `CONTEXT.md` or `CONTEXT-MAP.md` exists;
+- audit Dietrich Gebert's MIT-licensed `ponytail` against MPX `code-clean`, reviewers, instructions, and Caveman provenance. Preserve validation, security, accessibility, and error handling while importing only the smallest non-duplicated rule or skill; and
+- define any remaining unclear simplification, skill-trigger, and writing-for-agents ideas before adoption.
+
+A separate Firecrawl extension is retired because maintained `pi-web-access` already supplies search and scrape integration. Phase F1 migrates that implementation behind the shared web contract.
 
 ## 19. Rigorous validation plan
 
 ### Static repository validation
 
+- Capture commit plus dirty/untracked file hashes for `mpx-claude-code` and `mpx-pi`; compare them with the convergence manifest at Phase F1 baseline and again immediately before Phase J cutover.
+- Require a destination/disposition and behavior evidence for every active source item. Excluded/deferred provenance entries do not count as parity, and a source hash check cannot substitute for an executable capability test.
+- Traverse every tracked, dirty, and untracked path in both source repository roots under the Phase F1 inclusion/exclusion rules; recursively follow trusted skill/reference/package links and require a reason for every excluded path.
+- Fail on unexplained source additions, changes, deletions, renames, mutable external package paths, duplicated maintained sources, stale generated projections, or active dependencies on old checkouts and `~/.codex`.
 - Search tracked files for old absolute roots and repository names.
 - Search active content for `/mp:`, `/mp-gh:`, `mp-*` public skill identities, `agent-resurrect`, old CLI names, `.worktree-hub.json`, `.mpx/kanbanflow.json`, and `statusline-projects.json`.
 - Allow old names only in migration history/docs explicitly marked historical.
 - Validate package licenses, `private` flags, publish allowlists, and generated artifacts.
 - Verify no credential/session/state file is tracked.
-- Verify generated Pi agents and runtime artifacts are reproducible and drift-free.
+- Verify generated Claude/Pi agents and runtime artifacts are reproducible and drift-free.
+- Permit a retired source item only when the final parity report includes its explicit rationale, replacement or non-goal, and approval evidence.
 
 ### Config and trust
 
@@ -1260,6 +1332,22 @@ Do not include React Native.
 - Agent model/tool/thinking mappings generate correctly.
 - Claude hooks and Pi adapters produce equivalent blocking/context behavior where intended.
 - Plugin install from cache contains all required files and no outside symlink dependency.
+- Compare every source skill and agent with its canonical mapping for behavior, not filename identity: triggers, decisions, safety gates, provider actions, concurrency, fallback/manual handoff, model/tool policy, output schema, and referenced assets remain covered.
+- Tracker-neutral resolution, unified commit workflow, compaction-only instruction injection, `Explore` read-only breadth, reviewer/executor contracts, and GitHub/GitLab/KanbanFlow delivery semantics pass dedicated regressions.
+- Personal/local workflows and runtime-specific skills are present only in their intended identity packs and preserve their privacy, machine-root, external-provider, and manual-action constraints.
+
+### Runtime capabilities and status parity
+
+- Run the capability matrix for personal/work Claude and personal/work Pi from immutable installed projections, not source checkouts.
+- Shared guard policy plus Claude/Pi lifecycle adapters cover package-manager enforcement, dangerous commands, pre-commit/secrets, Fallow, post-write format/lint, post-command context, machine/session context, compaction, and notifications with documented fail-open/fail-closed behavior.
+- Canonical subagents execute in both harnesses with correct model/effort/thinking and tools; routing tests prove broad search uses `Explore`, test-shaped implementation uses `mpx-tdd-executor`, other pre-analysed implementation uses `mpx-executor`, executors never self-review, known checks use `mpx-checker`, and independent reviewers stay read-only. Background/result/steer, bounded nesting, worktree isolation, scheduling when requested, lifecycle cleanup, completion notifications, and harness-specific Task/fleet displays are verified.
+- Pi MCP, web access, inline batched questions, compact tool display, auto-title, terminal activity, compaction instructions, fullscreen behavior, themes, keybindings, and extension-event coordination work from pinned or MPX-owned implementations; the structured question tool is absent from installed model authority. Firecrawl remains one identity-configured provider or fallback behind shared web tools, has no duplicate model tool, and follows explicit paid-credit, security, and fallback policy. Claude keeps equivalent native/plugin capabilities where available.
+- Context7 and Chrome DevTools routes work in every intended identity/runtime combination; unsupported routes fail structurally and never borrow credentials or configuration from the opposite identity.
+- `mpx dev` and `dev_server` start/status/logs/restart/stop use assigned ports, bounded logs, readiness probes, owned process trees, cleanup, and the selected executor without implicit host fallback.
+- The shared runtime-observability envelope validates identity, session title/ID, model/effort, repository/worktree/branch, link actions, tokens/context/cost, provider usage, compactions, subagents, development services/ports, freshness, and provenance without secrets.
+- Both renderers display every shared field supported by their safe adapter. Tests cover missing/stale/error data, narrow/wide terminals, long/escaped paths, main/worktree state, manual/automatic compaction, provider changes, and running/queued/background/completed/failed agents.
+- Claude-specific Task/review/CI/Windows actions and Pi-specific fleet/widget/provider details remain present and are declared adapter capabilities rather than removed for visual sameness.
+- Synchronous status rendering performs no network, process, or socket work; asynchronous polling is bounded, cached, identity-bound, and visibly stale on failure.
 
 ### Launch, identity, and executor validation
 
@@ -1286,11 +1374,12 @@ Use strict ports so silent framework auto-increment cannot masquerade as success
 
 ### Sessions
 
-- Discover active Claude personal/work and Pi sessions.
-- Stable runtime-qualified identity.
-- Mark unfinished with note/next action.
-- Restart machine/process and preserve inbox.
-- Resume into correct account, cwd, worktree, model/reasoning policy, and session file.
+- Discover active Claude personal/work sessions and discover Pi sessions separately in the personal and work native roots.
+- Stable runtime-qualified identity and selected native account root; resume each Pi session only through its recorded `pi` or `piw` root and designated ChatGPT account, and reject cross-root resume.
+- Mark unfinished with note and next action, create a no-model handoff, and record completion disposition.
+- Restart machine or process and preserve inbox.
+- Resume into the correct account, cwd, worktree, model/reasoning policy, and session file.
+- Branch through the correct native adapter, preserve lineage, reject duplicate transcript writers, disclose shared versus isolated files, and safely open optional side-by-side terminal tabs.
 - Reconcile dead processes without losing unfinished state.
 - One-time legacy save import is idempotent and non-destructive.
 - Scheduled capture runs and reports a healthy last result.
@@ -1302,7 +1391,7 @@ Use strict ports so silent framework auto-increment cannot masquerade as success
 - Verify checks actual targets rather than source intentions.
 - Uninstall removes only MPX-owned entries and preserves credentials/data.
 - Claude personal and work launchers load correct account/plugin combinations.
-- Pi auth/session data remain real files.
+- Pi auth/session data remain real files in separate personal/work native roots authenticated to separate designated ChatGPT accounts.
 - Windows Terminal profile opens at new repo and uses the intended icon.
 - Raycast repo/editor/terminal/Obsidian/CLI links all execute.
 - Obsidian dashboards and inbound links resolve after folder/page rename.
@@ -1322,31 +1411,39 @@ Use strict ports so silent framework auto-increment cannot masquerade as success
 The migration is complete only when:
 
 - New `mpx` repository is the canonical source.
+- README and complete user, operator, and reference docs cover installation, identities, credentials, skills, agent routing, providers, local issues, sessions, ports, worktrees, runtime differences, rollback, and common workflows; documented commands are exercised against the installed system.
 - `mpxconfig.json` is documented, validated, and used by target projects.
 - Main and linked checkout port invariants pass across repositories.
 - Claude and Pi use `/mpx:*`, shared canonical content, and the same resolved skill availability/exposure manifest.
+- Every active skill, agent, hook, extension, script, instruction, rule, reference, template, package integration, and user-visible runtime workflow from the final `mpx-claude-code` and `mpx-pi` scan is canonicalized, retained in the correct runtime, safely externalized, or explicitly retired with evidence; no source drift remains unexplained.
 - Skill packs, named skill policies including zero-initial-context `clean`, user-local content/project overrides, four-state exposure, split human/model search, lean initial context, and lazy body loading pass cross-runtime tests.
 - Generic Issue terminology and adapters replace Task/ticket/provider command prose.
+- Local Markdown issues pass schema, numbering, relationship, concurrency, and optional projection tests without depending on an Obsidian task plugin; SQLite, if enabled, is rebuildable and non-authoritative.
 - Worktree creation is safe, standard, no-editor, port-aware, and preparation-aware.
-- `mpx session inbox` provides durable unfinished-work tracking.
+- Both harnesses provide the required shared status/observability fields and retain useful harness-specific status surfaces; Pi subagents, MCP/web tools, inline batched questions, managed development services, hook guards, titles, compaction behavior, terminal activity, and runtime UI reach verified current-workflow parity.
+- The main agent remains orchestrator/evaluator and deterministic routing selects canonical exploration, implementation/TDD, checking, review, specialist, and delivery roles without self-approval or authority widening.
+- `mpx session inbox`, no-model handoff, and native conversation branching provide durable unfinished-work tracking and safe parallel continuation.
 - Target projects and Svelte scaffolding run on assigned ports.
 - Required Docker launch, identity routing, mode/workspace/network/grant reporting, Pi split-executor isolation, machine installation, and all external integrations validate; host filesystem execution remains explicitly elevated.
-- No old system component is required for normal operation.
+- No old system component, checkout, mutable external worktree path, or `~/.codex` implementation is required for normal operation.
 - Rollback snapshots and drills have passed before old repositories/installations are retired.
 
 ## 21. Evidence used for this plan
 
 Primary inspected sources include:
 
+- Active `C:/_MP_projects/mpx-claude-code/plugins/mp/`, `plugins/gh/`, `local/skills/`, `instructions/`, `rules/`, `rules-per-project/`, settings, templates, assets, sounds, setup, handoff, and package/test configuration, including dirty and untracked migration inputs.
+- Active `C:/_MP_projects/mpx-pi/extensions/`, `agents/`, `skills/`, `prompts/`, `themes/`, settings, keybindings, subagent configuration, account/terminal scripts, package/vendor records, historical journal, and tests, including dirty and untracked migration inputs.
 - `C:/_MP_projects/mpx-claude-code/docs/WORKTREE_HUB.md`
 - `C:/_MP_projects/mpx-claude-code/docs/PLUGIN_CONVERSION.md`
 - `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/lib/worktree-hub.mts`
 - `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/setup-worktree.mts`
-- `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/status-line.mts`
+- `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/status-line.mts`, its status/compaction/subagent helpers and tests, and `plugins/mp/hooks/`.
 - `C:/_MP_projects/mpx-pi/README.md`
 - `C:/_MP_projects/mpx-pi/PI_MIGRATION.md` (historical Pi implementation journal/provenance; not an active plan)
-- `C:/_MP_projects/mpx-pi/extensions/footer.ts`
-- `C:/_MP_projects/mpx-pi/extensions/mp-namespace-commands.ts`
+- `C:/_MP_projects/mpx-pi/extensions/footer.ts`, `guard-hooks.ts`, `auto-title.ts`, `compact-instructions.ts`, `agent-resurrect.ts`, terminal-progress/fullscreen adapters, and namespace commands.
+- `C:/_MP_projects/mpx-pi/extensions/subagents/` and `extensions/dev-server/`, including their event contracts, UI, dependencies, provenance, and tests.
+- Current Pi package integrations for web access, MCP, structured questions, and compact tool display as declared by the maintained settings source.
 - `C:/_MP_projects/kanbanflow-cli/src/config.rs`
 - `C:/_MP_projects/kanbanflow-cli/src/token.rs`
 - `C:/_MP_projects/kanbanflow-cli/skills/shared/KF_WORKFLOW.md`

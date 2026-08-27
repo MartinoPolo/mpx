@@ -27,6 +27,10 @@ snapshot only as a compatibility fallback for older launchers; it is not refresh
 Current launchers pass `statusSnapshotPath` to `createClaudeInvocationPlan`, so status
 refreshes from the live snapshot.
 
+Phase G lifecycle capture and resume are supported only when the launcher supplies a
+validated MPX lifecycle/session binding. Native identifiers are accepted only through
+that private binding and validated runtime invocation plan.
+
 Selected MCP routes are read-only, launch-bound stdio configurations. The launcher passes
 each validated file with a separate `--mcp-config` argument and adds
 `--strict-mcp-config`; it does not mutate Claude account/project MCP configuration or

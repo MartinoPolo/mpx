@@ -13,9 +13,14 @@ import { BUILTIN_PROVIDERS, ProviderRegistry, ProviderService, providerRegistry,
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from "@mpx/windows";
 import { FileMruStore, NodePreparationEvidenceAdapter, NodePreparationExecutionAdapter, NodePreparationProcessAdapter, NodePreparationStore, PreparationEngine, WorktreeLifecycleService, awaitBackgroundPreparationActivation, createNodeLifecycleFoundation, createNodeWorktreeIncludeDependencies, assertLifecycleStateIdentity, deriveLifecycleKey, sameLifecyclePath, createPreparationApproval, executeWorktreeIncludePlan, listWorktrees, nodePreparationPaths, planWorktreeIncludes, preparationApprovalPhrases, resolvePreparationPackageManager, resolveRepository, selectWorktree, type ConfiguredPackageManager, type FileSystemAdapter, type GitAdapter, type PackageManager, type PreparationAdapters } from "@mpx/worktrees";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
-import { parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
+import { canonicalNativeRootDigest, parseLaunchDescriptorV2, type LaunchDescriptor } from "@mpx/launch";
 import { FileLaunchAuditStore, type LaunchAuditStartRecord, type LaunchAuditStore, type LaunchAuditTerminalRecord, type RouteMaterializer } from "@mpx/executors";
 import type { LaunchExecutionContext } from "./launch-execution.js";
+import { ClaudeActiveScanner, SessionStore, deriveNativeBindingRef, type IdentityV1, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
+import type { AccountAuthVerifier } from "./account-command.js";
+import { InstallerService, NodeReceiptStore, NodeRunnerFileVerifier } from "@mpx/installer";
+import { WindowsScheduledTaskAdapter } from "@mpx/windows";
+import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
 
 export type CliPortService = Pick<PortService, "ensure" | "resolve" | "list" | "inspect" | "kill" | "release" | "reconcile" | "rebuild" | "captureReleaseIdentity" | "releaseLinkedAfterRemoval" | "resolveOrphan">;
 export interface CliWorktreeService {
@@ -37,6 +42,13 @@ export interface CliRepositorySelectorResolver {
   resolve(request: { root: string; remote: string }): Promise<string>;
 }
 
+export interface NativeAccountBindingVerifier {
+  verify(accountBindingRef: string): Promise<"verified" | "unavailable" | "mismatch" | "duplicate">;
+}
+export interface NativeAccountBindingResolver {
+  resolve(identity: IdentityV1, runtime: "claude" | "pi", nativeRoot: string): Promise<string | null>;
+}
+
 export interface CliContext extends LaunchExecutionContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
@@ -51,6 +63,18 @@ export interface CliContext extends LaunchExecutionContext {
   providerService?: CliProviderService;
   providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
+  sessionStore?: SessionStore;
+  sessionStoreFactory?: (stateRoot: string) => SessionStore;
+  sessionDiscoveries?: () => Promise<readonly { scanner: RuntimeDiscovery; context?: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]>;
+  sessionProcessInspector?: SessionProcessInspector;
+  sessionResumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
+  nativeAccountBindingVerifier?: NativeAccountBindingVerifier;
+  nativeAccountBindingResolver?: NativeAccountBindingResolver;
+  rootAttestationService?: RootAttestationService;
+  accountAuthVerifier?: AccountAuthVerifier;
+  sessionResumeExecutor?: (plan: ResumePlanV1) => Promise<unknown>;
+  installerService?: InstallerService;
+  installerServiceFactory?: (stateRoot: string) => InstallerService;
   /** Application-owned trusted extensions; never populated from project configuration. */
   trustedProviderComposition?: Readonly<{ descriptors: readonly ProviderDescriptor[]; adapters: readonly ProviderAdapter[] }>;
 }
@@ -377,6 +401,96 @@ export function stateRoot(context: CliContext): string {
 
 export const defaultContext: CliContext = { env: process.env, launchRoutes: new EnvironmentRouteMaterializer(process.env), launchAudit: new EnvironmentLaunchAuditStore(process.env) };
 
+export function sessions(context: CliContext): SessionStore {
+  if (context.sessionStore) return context.sessionStore;
+  const root = stateRoot(context);
+  return context.sessionStoreFactory?.(root) ?? new SessionStore(root);
+}
+
+export function productionSessionResumeDependencies(user: import("@mpx/config").UserConfig, store: SessionStore, verifier?: NativeAccountBindingVerifier, environment: NodeJS.ProcessEnv = process.env, processes: Pick<WindowsProcessCapabilities, "inspect"> = new WindowsProcessCapabilities(), piTargetVerifier: typeof verifyPiResumeTarget = verifyPiResumeTarget): (record: SessionRecordV1) => Promise<ResumeDependencies> {
+  return async record => ({
+    resolveConfiguredRoot: async nativeBindingRef => {
+      const binding = await store.readNativeBinding(nativeBindingRef);
+      const configured = user.identities[binding.identity.name];
+      if (!configured || configured.domain !== binding.identity.domain) throw new MpxError({ code: "SESSION_RESUME_IDENTITY_MISMATCH", message: "The recorded identity is not configured." });
+      const root = configured.runtimeRoots[binding.runtime];
+      return { root, canonicalRootDigest: canonicalNativeRootDigest(root), identity: binding.identity, runtime: binding.runtime };
+    },
+    ...(verifier ? { verifyAccountBinding: (accountBindingRef: string) => verifier.verify(accountBindingRef) } : {}),
+    verifyNativeTarget: async (root, ref, runtimeQualifiedId) => {
+      if (record.runtime === "pi") {
+        try {
+          await piTargetVerifier(root, ref);
+        } catch (failure) {
+          if (failure instanceof PiResumeTargetError && failure.code === "PI_RESUME_TARGET_INVALID") return { valid: false, activity: "unavailable" as const };
+          return { valid: true, activity: "unavailable" as const };
+        }
+        if (!record.process) return { valid: true, activity: "unavailable" as const };
+        let inspected;
+        try { inspected = await processes.inspect(record.process.pid); }
+        catch { return { valid: true, activity: "unavailable" as const }; }
+        if (inspected === undefined) return { valid: true, activity: "inactive" as const };
+        return { valid: true, activity: inspected.startFingerprint === record.process.startFingerprint ? "active" as const : "unavailable" as const };
+      }
+      const expected = runtimeQualifiedId.slice("claude:".length);
+      const valid=ref.kind === "native-id" && ref.value === expected && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(ref.value);
+      if (!valid) return { valid: false, activity: "unavailable" as const };
+      const executable=environment.MPX_CLAUDE_EXECUTABLE;
+      if(!executable||!path.isAbsolute(executable)) return { valid: true, activity: "unavailable" as const };
+      const activity=await new Promise<"active"|"inactive"|"unavailable">(resolve=>execFile(executable,["agents","--json"],{env:{...environment,CLAUDE_CONFIG_DIR:root},shell:false,windowsHide:true,timeout:15_000,maxBuffer:4*1024*1024},(failure,stdout)=>{if(failure){resolve("unavailable");return;}try{const value=JSON.parse(stdout) as unknown;const entries=Array.isArray(value)?value:typeof value==="object"&&value!==null&&Array.isArray((value as {agents?:unknown}).agents)?(value as {agents:unknown[]}).agents:[];resolve(entries.some(item=>typeof item==="object"&&item!==null&&(item as {sessionId?:unknown}).sessionId===ref.value)?"active":"inactive");}catch{resolve("unavailable");}}));
+      return { valid: true, activity };
+    },
+  });
+}
+
+export async function productionSessionDiscoveries(user: import("@mpx/config").UserConfig, store: SessionStore, environment: NodeJS.ProcessEnv, accountResolver?: NativeAccountBindingResolver): Promise<readonly { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[]> {
+  const existing = await store.listNativeBindings();
+  const result: { scanner: RuntimeDiscovery; context: { identity: IdentityV1; nativeBindingRef: string; runtime: "claude" | "pi" } }[] = [];
+  for (const [name, configured] of Object.entries(user.identities).sort(([a], [b]) => a.localeCompare(b))) {
+    const identity = { domain: configured.domain, name };
+    for (const runtime of ["claude", "pi"] as const) {
+      const root = configured.runtimeRoots[runtime];
+      const recordedRootDigest = canonicalNativeRootDigest(root);
+      const ref = deriveNativeBindingRef(identity, runtime, recordedRootDigest);
+      const tupleBindings=existing.filter(binding=>binding.identity.domain===identity.domain&&binding.identity.name===identity.name&&binding.runtime===runtime&&binding.recordedRootDigest===recordedRootDigest);
+      if(tupleBindings.length>1)throw new MpxError({code:"SESSION_NATIVE_BINDING_DUPLICATE",message:"Multiple native binding records claim the same identity, runtime, and root."});
+      const prior=existing.find(binding=>binding.ref===ref)??tupleBindings[0];
+      if (prior && (prior.identity.domain !== identity.domain || prior.identity.name !== identity.name || prior.runtime !== runtime || prior.recordedRootDigest !== recordedRootDigest)) throw new MpxError({ code: "SESSION_BINDING_MISMATCH", message: "A stable native binding reference is inconsistent with its exact identity, runtime, or root." });
+      if (!prior) {
+        const timestamp = new Date().toISOString();
+        await store.saveNativeBinding({ schemaVersion: 1, ref, identity, runtime, recordedRootDigest, accountBindingRef: await accountResolver?.resolve(identity, runtime, root) ?? null, createdAt: timestamp, updatedAt: timestamp });
+      } else if (accountResolver) {
+        const accountBindingRef = await accountResolver.resolve(identity, runtime, root);
+        if (accountBindingRef !== prior.accountBindingRef) await store.saveNativeBinding({ ...prior, accountBindingRef, updatedAt: new Date().toISOString() });
+      }
+      if (runtime === "pi") continue;
+      const scanner: RuntimeDiscovery = new ClaudeActiveScanner(async command => {
+            const executable = environment.MPX_CLAUDE_EXECUTABLE;
+            if (!executable || !path.isAbsolute(executable) || command.join("\0") !== "claude\0agents\0--json") return { available: false, exitCode: 1, stdout: "" };
+            return new Promise(resolve => execFile(executable, ["agents", "--json"], { env: { ...environment, CLAUDE_CONFIG_DIR: root }, shell: false, windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => resolve({ available: !error, exitCode: typeof (error as { code?: unknown } | null)?.code === "number" ? (error as { code: number }).code : error ? 1 : 0, stdout, stderr })));
+          });
+      result.push({ scanner, context: { identity, nativeBindingRef: prior?.ref ?? ref, runtime } });
+    }
+  }
+  return result;
+}
+
+export function installer(context: CliContext, cwd: string): InstallerService {
+  if (context.installerService) return context.installerService;
+  const root = stateRoot(context);
+  if (context.installerServiceFactory) return context.installerServiceFactory(root);
+  const tasks = new WindowsScheduledTaskAdapter();
+  const prohibited = [context.env.MPX_PROJECTS, context.env.MPX_WORK, context.env.MPX_CLONED].filter((value): value is string => Boolean(value));
+  return new InstallerService({
+    tasks,
+    store: new NodeReceiptStore(path.join(root, "installer", "receipts")),
+    files: new NodeRunnerFileVerifier([cwd, ...prohibited]),
+    currentUser: context.env.USERNAME ?? context.env.USER ?? "",
+    cwd,
+    prohibitedRoots: prohibited,
+  });
+}
+
 export function ports(context: CliContext): CliPortService {
   if (context.portService) return context.portService;
   const root = stateRoot(context);
@@ -404,6 +518,10 @@ export function windowsProcessIdentityInspector(windows: Pick<WindowsProcessCapa
     try { const identity = await windows.inspect(pid); return identity ? { status: "present" as const, pid, startFingerprint: identity.startFingerprint } : { status: "absent" as const, pid }; }
     catch { return { status: "unknown" as const, pid }; }
   } };
+}
+
+export function productionSessionProcessInspector(): SessionProcessInspector {
+  return windowsProcessIdentityInspector(new WindowsProcessCapabilities());
 }
 
 export function preparationRuntime(root: string, environment: NodeJS.ProcessEnv, workerEntry = fileURLToPath(new URL("./main.js", import.meta.url))): PreparationRuntime {

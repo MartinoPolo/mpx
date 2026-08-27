@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { MpxError, sha256Canonical, type JsonValue } from "@mpx/core";
 import { PortService, RegistryStore, type PortPlatformAdapter, type WorktreeIdentity } from "@mpx/ports";
+import { SessionService, SessionStore, type SessionRecordV1 } from "@mpx/sessions";
 import { run } from "./main.js";
 import { captureIo } from "./io.js";
 
@@ -61,6 +62,27 @@ describe("cli",()=>{
     expect(await run(["--json","--cwd",cwd,"config","validate"],io,{env:{}})).toBe(0);
     expect(io.err).toEqual([]); expect(io.out).toHaveLength(1);
     expect(JSON.parse(io.out[0]!)).toMatchObject({apiVersion:1,ok:true,data:{valid:true}});
+  });
+
+  it("persists session mark relationship metadata through the real CLI parser",async()=>{
+    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
+    const store=new SessionStore(await directory("mpx-cli-session-mark-"));
+    const identity={domain:"work",name:"work"};
+    const record:SessionRecordV1={schemaVersion:1,recordId:"session-mark",runtimeQualifiedId:"claude:session-mark",runtime:"claude",identity,nativeBindingRef:"binding",nativeSessionRef:{kind:"native-id",value:"session-mark"},launch:null,location:{cwd,project:null,repository:null,worktree:null},metadata:{title:null,model:null,effort:null},liveness:"inactive",process:null,workflow:{status:"unfinished",inbox:true,nextAction:null,priority:null,note:null,relatedIssue:null,relatedReview:null},resume:{state:"unknown",diagnostic:null,lastVerifiedAt:null,lastPlanDigest:null},timestamps:{createdAt:"2025-01-01T00:00:00.000Z",updatedAt:"2025-01-01T00:00:00.000Z",lastActivityAt:null},lifecycle:{bindingId:null,sequence:0,timestamp:null}};
+    await new SessionService(store).save(record);
+    expect(await run(["--json","--cwd",cwd,"session","mark","session-mark","needs-review","--related-issue","GH-42","--related-review","PR-17"],io,{env,sessionStore:store})).toBe(0);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:true,data:{record:{workflow:{relatedIssue:"GH-42",relatedReview:"PR-17"}}}});
+    await expect(new SessionService(store).show("session-mark")).resolves.toMatchObject({workflow:{relatedIssue:"GH-42",relatedReview:"PR-17"}});
+  });
+
+  it("passes an injected Pi process inspector through the real session reconcile path",async()=>{
+    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
+    const store=new SessionStore(await directory("mpx-cli-session-reconcile-"));
+    const identity={domain:"work",name:"work"};
+    const record:SessionRecordV1={schemaVersion:1,recordId:"pi-active",runtimeQualifiedId:"pi:active",runtime:"pi",identity,nativeBindingRef:"binding",nativeSessionRef:{kind:"root-relative-file",value:"sessions/active.jsonl"},launch:null,location:{cwd,project:null,repository:null,worktree:null},metadata:{title:null,model:null,effort:null},liveness:"active",process:{pid:42,startFingerprint:"start"},workflow:{status:"unfinished",inbox:true,nextAction:null,priority:null,note:null,relatedIssue:null,relatedReview:null},resume:{state:"unknown",diagnostic:null,lastVerifiedAt:null,lastPlanDigest:null},timestamps:{createdAt:"2025-01-01T00:00:00.000Z",updatedAt:"2025-01-01T00:00:00.000Z",lastActivityAt:null},lifecycle:{bindingId:null,sequence:0,timestamp:null}};
+    await new SessionService(store).save(record);
+    expect(await run(["--json","--cwd",cwd,"session","reconcile"],io,{env,sessionStore:store,sessionDiscoveries:async()=>[],sessionProcessInspector:{inspect:async()=>({status:"absent"})}})).toBe(0);
+    await expect(new SessionService(store).show("pi:active")).resolves.toMatchObject({liveness:"inactive",process:null});
   });
 
   it("binds explicit --cwd into production worktree removal in-use detection",async()=>{
@@ -452,7 +474,8 @@ describe("cli",()=>{
   it("resolves runnable launch syntax before returning an actionable non-spawning Docker gate",async()=>{
     const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
-    expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot,launchRoutes:{materialize:async()=>({})}})).toBe(1);
+    const rootAttestationService={verify:async(identity:{domain:string;name:string})=>({schemaVersion:1 as const,ref:"test-work",identity,runtime:"pi" as const,rootDigest:"a".repeat(64),mode:"root-attested" as const,createdAt:new Date(0).toISOString(),updatedAt:new Date(0).toISOString()})};
+    expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot,rootAttestationService:rootAttestationService as never,accountAuthVerifier:{verify:async()=>undefined},launchRoutes:{materialize:async()=>({})}})).toBe(1);
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"EXECUTOR_GATE_UNVERIFIED",details:{executor:"docker"}}});
   });
 

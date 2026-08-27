@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { createRuntimeContextV1, revalidateRuntimeArtifact } from "@mpx/runtime-contracts";
 import { createRuntimeSkillArtifact, inventoryProjectSkills, loadSkillBody, resolveManifest } from "@mpx/skills";
+import { WindowsProcessCapabilities } from "@mpx/windows";
 import { buildClaudePlugin } from "../../../claude/runtime-claude/src/index.js";
 import { buildPiProjection, createPiRuntimeProjection, planPiInvocation, renderPiStatusLine } from "../src/index.js";
 import { fixture } from "./fixture.js";
@@ -208,6 +209,24 @@ describe("production Pi projection", () => {
     expect(plan.args).toEqual(["--no-extensions", "--extension", projection.extension.replaceAll("\\", "/"), "--no-skills", "--theme", "green"]);
     expect(plan.env).toEqual({ PI_CODING_AGENT_DIR: "C:/private/pi/account-a", MPX_RUNTIME: "pi", MPX_RUNTIME_CONTEXT: JSON.stringify(f.context), MPX_RUNTIME_CONTEXT_FILE: projection.runtimeContextFile.replaceAll("\\", "/"), MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projection.reference) });
     expect(projection.revalidation).toEqual({ directory: projection.directory, reference: projection.reference });
+  });
+
+  it("emits ordered prompt-blind Pi lifecycle events with only a root-relative session file", async () => {
+    const f=await fixture(),projection=await buildPiProjection({...f,artifactsRoot:await mkdtemp(path.join(tmpdir(),"pi-lifecycle-projection-"))}),account=await mkdtemp(path.join(tmpdir(),"pi-account-")),eventDirectory=await mkdtemp(path.join(tmpdir(),"pi-events-"));await mkdir(path.join(account,"sessions"));const sessionFile=path.join(account,"sessions","native.jsonl");await writeFile(sessionFile,"SECRET TRANSCRIPT");const module=await import(`${pathToFileURL(projection.extension).href}?lifecycle=${Date.now()}`),events=new Map<string,(...args:any[])=>unknown>();process.env.MPX_RUNTIME_CONTEXT=JSON.stringify(f.context);process.env.MPX_RUNTIME_PROJECTION_REFERENCE=JSON.stringify(projection.reference);process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR=eventDirectory;process.env.MPX_SESSION_LIFECYCLE_BINDING_ID="binding-1";process.env.PI_CODING_AGENT_DIR=account;try{await module.activate({registerCommand(){},on(name:string,handler:(...args:any[])=>unknown){events.set(name,handler);}});const ctx={cwd:"C:/repo",model:{id:"safe-model"},sessionManager:{getSessionId:()=>"native-1",getSessionFile:()=>sessionFile,getSessionName:()=>"Safe name"},ui:{setStatus(){}}};await events.get("session_start")!({},ctx);await events.get("session_info_changed")!({},undefined);await Promise.all([events.get("session_info_changed")!({},ctx),events.get("session_shutdown")!({},ctx)]);const emitted=await Promise.all((await readdir(eventDirectory)).sort().map(async name=>JSON.parse(await readFile(path.join(eventDirectory,name),"utf8"))));expect(emitted.map(event=>[event.sequence,event.type])).toEqual([[1,"start"],[2,"info"],[3,"shutdown"]]);expect(emitted[0].nativeSessionRef).toEqual({kind:"root-relative-file",value:"sessions/native.jsonl"});if(process.platform==="win32"){const inspected=await new WindowsProcessCapabilities().inspect(process.pid);expect(inspected).toBeDefined();expect(emitted[0].startFingerprint).toBe(inspected!.startFingerprint);}else expect(emitted[0].startFingerprint).toBe("unavailable:windows-process-start");expect(JSON.stringify(emitted)).not.toContain("SECRET TRANSCRIPT");}finally{delete process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR;delete process.env.MPX_SESSION_LIFECYCLE_BINDING_ID;delete process.env.PI_CODING_AGENT_DIR;}
+  });
+
+  it("generates a bounded shell-free Windows fingerprint probe with a portable fail-closed fallback", async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({ ...f, artifactsRoot: await mkdtemp(path.join(tmpdir(), "pi-fingerprint-source-")) });
+    const source = await readFile(projection.extension, "utf8");
+    expect(source).toContain('path.join(systemRoot,"System32","WindowsPowerShell","v1.0","powershell.exe")');
+    expect(source).toContain('shell:false');
+    expect(source).toContain('timeout:5000');
+    expect(source).toContain('maxBuffer:65536');
+    expect(source).toContain('ProcessId=$pidValue');
+    expect(source).toContain('unavailable:windows-process-start');
+    expect(source).not.toContain('startFingerprint:`${process.pid}:');
+    expect(source.match(/randomUUID\(\)/gu)).toHaveLength(1);
   });
 
   it("matches the generated Claude status script exactly for the same snapshot", async () => {

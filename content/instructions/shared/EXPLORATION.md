@@ -59,11 +59,16 @@ trade-offs, anything requiring taste or outside knowledge.
 
 Used by `mpx grill`, `mpx hitl`, and any skill that interviews the user.
 
-## Library documentation is not in this repo
+## Research external tools and libraries from configured clones first
 
-For third-party library or framework behaviour, spawn `context7-docs-fetcher`
-(Context7 MCP: `resolve-library-id`, then `query-docs`). Do not infer an API from
-local `node_modules` or from memory.
+For questions or root-cause analysis about an external tool or library, check the
+repository collection configured by `MPX_CLONED` first. Resolve the variable at
+runtime and look for a clone matching the relevant project and version or source.
+When one exists, use its code as the primary implementation evidence.
+
+Use `context7-docs-fetcher` (Context7 MCP: `resolve-library-id`, then `query-docs`)
+or web documentation for current public API and version facts, and when no matching
+clone exists. Do not infer an API from local `node_modules` or from memory.
 
 ## Paths outside the working directory
 

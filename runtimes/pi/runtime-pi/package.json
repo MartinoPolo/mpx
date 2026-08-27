@@ -17,5 +17,5 @@
     "@mpx/skills": "workspace:*",
     "@mpx/status": "workspace:*"
   },
-  "devDependencies": { "@types/node": "^22.15.0", "typescript": "^5.8.3", "vitest": "^3.2.4" }
+  "devDependencies": { "@mpx/windows": "workspace:*", "@types/node": "^22.15.0", "typescript": "^5.8.3", "vitest": "^3.2.4" }
 }

@@ -155,6 +155,17 @@ describe("trust and privacy boundaries", () => {
     await expect(locateTrustedExecutable({ candidates: ["pi"], projectRoot: "C:/project", trustedRoots: ["C:/trusted"], nodeExecutable: "C:/trusted/node.exe", inspect })).rejects.toMatchObject({ code: "TRUSTED_EXECUTABLE_NOT_FOUND" });
   });
 
+  it("recognizes only the exact bounded FNM Pi POSIX wrapper", async () => {
+    const wrapper = `#!/bin/sh\nbasedir=$(dirname \"$(echo \"$0\" | sed -e 's,\\\\,/,g')\")\nexec \"$basedir/node\" \"$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js\" \"$@\"\n`;
+    const npmStyleWrapper = `#!/bin/sh\nbasedir=$(dirname \"$(echo \"$0\" | sed -e 's,\\\\,/,g')\")\n\ncase \`uname\` in\n    *CYGWIN*|*MINGW*|*MSYS*)\n        if command -v cygpath > /dev/null 2>&1; then\n            basedir=\`cygpath -w \"$basedir\"\`\n        fi\n    ;;\nesac\n\nif [ -x \"$basedir/node\" ]; then\n  exec \"$basedir/node\"  \"$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js\" \"$@\"\nelse \n  exec node  \"$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js\" \"$@\"\nfi\n`;
+    const inspectWrapper = (content: string) => async (file: string) => ({ file: true, realpath: file, content: file === "C:/fnm/pi" ? content : undefined });
+    await expect(locateTrustedExecutable({ candidates: ["C:/fnm/pi"], projectRoot: "C:/project", trustedRoots: ["C:/fnm"], nodeExecutable: "C:/fnm/node.exe", inspect: inspectWrapper(wrapper) })).rejects.toMatchObject({ code: "TRUSTED_EXECUTABLE_NOT_FOUND" });
+    for (const accepted of [wrapper, npmStyleWrapper]) await expect(locateTrustedExecutable({ candidates: ["C:/fnm/pi"], projectRoot: "C:/project", trustedRoots: ["C:/fnm"], nodeExecutable: "C:/fnm/node.exe", knownWrapper: "pi-fnm", inspect: inspectWrapper(accepted) })).resolves.toEqual({ executable: "C:/fnm/node", argvPrefix: ["C:/fnm/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"] });
+    for (const malicious of [wrapper.replace("\"$@\"", "\"$@\"; calc"), npmStyleWrapper.replace("exec node  ", "exec calc  "), "#!/bin/sh\nexec node evil.js \"$@\"\n"]) {
+      await expect(locateTrustedExecutable({ candidates: ["C:/fnm/pi"], projectRoot: "C:/project", trustedRoots: ["C:/fnm"], nodeExecutable: "C:/fnm/node.exe", knownWrapper: "pi-fnm", inspect: inspectWrapper(malicious) })).rejects.toMatchObject({ code: "TRUSTED_EXECUTABLE_NOT_FOUND" });
+    }
+  });
+
   it("does not publish obsolete private-route writer APIs", async () => {
     const exports = await import("./index.js");
     expect(exports).not.toHaveProperty("materializePrivateRoutes");

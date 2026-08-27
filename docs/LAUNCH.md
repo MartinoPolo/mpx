@@ -33,4 +33,4 @@ The child receives immutable launch bindings including the logical artifact and 
 
 Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime, executor, and a short launch key without private roots. Audit output paths are hardened and records are bounded safe projections of outcome and error code. Records do not authorize a later launch. Any policy or artifact change requires relaunch and process restart; in-process rights expansion is rejected.
 
-This surface does not claim F2 isolation, Phase G session continuation/resurrection, Phase I provisioning or installation, or Phase J legacy retirement.
+This surface does not claim F2 isolation, Phase I provisioning or installation, or Phase J legacy retirement. Session continuation/resume is delivered by the separate Phase G lifecycle and sessions components, not by the immutable runtime projection itself.
