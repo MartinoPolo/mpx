@@ -92,6 +92,20 @@ describe("local Markdown issues", () => {
     expect(created.map(issue => issue.id).sort((a,b)=>Number(a)-Number(b))).toEqual(Array.from({ length: 12 }, (_, index) => String(index + 1)));
   });
 
+  it("waits for in-flight release cleanup but fails closed on a persistent replacement lock", async () => {
+    const directory = await root(), issue = await new LocalIssueStore(directory).create({ title: "existing", body: "" });
+    const lock = path.join(directory, ".mpx-issues.lock"), pending = path.join(directory, ".mpx-lock-release-pending.json"), token = "prior";
+    await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "replacement", pid: process.pid, acquiredAt: Date.now(), heartbeatAt: Date.now() }));
+    const obligation = JSON.stringify({ schemaVersion: 1, token, quarantinePath: `${lock}.release-${token}` });
+    await writeFile(pending, obligation);
+    const clearing = (async () => { await new Promise(resolve => setTimeout(resolve, 20)); await rm(pending); })();
+    await expect(new LocalIssueStore(directory, { lockTimeoutMilliseconds: 500, lockRetryMilliseconds: 2 }).view(issue.id)).resolves.toMatchObject({ id: issue.id });
+    await clearing;
+    await writeFile(pending, obligation);
+    await expect(new LocalIssueStore(directory, { lockTimeoutMilliseconds: 20, lockRetryMilliseconds: 2 }).view(issue.id)).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_LOST" });
+    await rm(lock, { recursive: true, force: true }); await rm(pending, { force: true });
+  });
+
   it("refreshes its lease during a two-process long operation so a contender cannot steal it", async () => {
     const directory = await root(), child = fork(fixture, ["hold", directory], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
     try {
