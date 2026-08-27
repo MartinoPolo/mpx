@@ -34,6 +34,7 @@ import {
 } from "@mpx/skills";
 import { parseRuntimeStatusEnvelopeV1, parseStatusSnapshotV1, renderPiPortSegment, type RuntimeStatusEnvelopeV1, type StatusSnapshotV1 } from "@mpx/status";
 import { createPiRuntimeProfileV1, profileSettings } from "./profile.js";
+import { emitProductionBundles } from "./projection-bundles.js";
 import { renderPiRuntimeStatus } from "./runtime-status.js";
 import { PI_CAPABILITY_IDS } from "./runtime-capabilities.js";
 
@@ -453,9 +454,7 @@ export async function buildPiProjection(input: PiProjectionBuildInput): Promise<
     await emit(staging, "runtime-context.json", jsonFile(context));
     const runtimeStatusLine = renderPiRuntimeStatus(runtimeStatusEnvelope, "wide");
     await emit(staging, "extension.mjs", piExtensionSource({ manifestKey: manifest.manifestKey, artifactKey: input.artifact.reference.artifactKey, launchBanner: input.launchBanner, runtimeStatusLine, commandAllowlist, modelSearchAllowlist, ...(productionCapability && productionLaunch ? { productionCapability, productionLaunch } : {}), entries }));
-    await emit(staging, "production-subagents.mjs", await bundledSource("production-subagents.ts", "production subagent"));
-    await emit(staging, "production-runtime.mjs", await bundledSource("production-runtime.ts", "production runtime"));
-    await emit(staging, "launch-private-client.mjs", await bundledSource("launch-private-client.ts", "launch-private client"));
+    await emitProductionBundles((filename, content) => emit(staging, filename, content), bundledSource);
     await emit(staging, "dangerous-command-policy.mjs", `${dangerousCommandPolicyModuleSource}\n`);
     await emit(staging, "status/status-snapshot.json", jsonFile(statusSnapshot));
     await emit(staging, "status/runtime-status-envelope-v1.json", jsonFile(runtimeStatusEnvelope));
