@@ -576,7 +576,30 @@ export class InstallerService {
     const issues: string[] = [];
     if (!receipt) issues.push("receipt-missing");
     if (!task) issues.push("task-missing");
-    if (task && receipt && scheduledTaskSpecDigest(task) !== receipt.taskSpecDigest)
+    let activeRunner: InstalledRunnerEvidence | undefined;
+    if (task || receipt) {
+      try {
+        activeRunner = await this.runner();
+      } catch (failure) {
+        if ((failure as { code?: unknown }).code === "INSTALL_RUNNER_UNAVAILABLE")
+          throw failure;
+        issues.push("runner-drift");
+      }
+    }
+    if (
+      activeRunner &&
+      receipt &&
+      stable(activeRunner) !== stable(receipt.runner) &&
+      !issues.includes("runner-drift")
+    )
+      issues.push("runner-drift");
+    if (
+      task &&
+      ((receipt && scheduledTaskSpecDigest(task) !== receipt.taskSpecDigest) ||
+        (activeRunner &&
+          stable(taskComparable(task)) !==
+            stable(taskComparable(this.spec(activeRunner)))))
+    )
       issues.push("task-drift");
     if (task && task.lastRunAt === undefined) issues.push("task-never-ran");
     if (task?.lastRunAt !== undefined) {
@@ -588,15 +611,6 @@ export class InstallerService {
     }
     if (task?.lastResult !== undefined && task.lastResult !== 0)
       issues.push("task-last-run-failed");
-    if (receipt) {
-      try {
-        await this.runner(receipt.runner);
-      } catch (failure) {
-        if ((failure as { code?: unknown }).code === "INSTALL_RUNNER_UNAVAILABLE")
-          throw failure;
-        issues.push("runner-drift");
-      }
-    }
     return {
       schemaVersion: 1,
       componentId: SESSION_CAPTURE_COMPONENT,

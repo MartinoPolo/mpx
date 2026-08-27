@@ -31,5 +31,5 @@ it("resolves only the active receipt-bound direct release runner and rejects tam
   expect(evidence).toEqual({ path: path.join(f.appsRoot, "mpx", "releases", manifest.releaseKey, "bin", "mpx.mjs"), sha256: manifest.files.find(file => file.path === "bin/mpx.mjs")!.sha256, version: manifest.releaseKey });
   await expect(f.authority.verifyInstalled(evidence)).resolves.toEqual(evidence);
   await writeFile(evidence.path, `${await readFile(evidence.path, "utf8")}tampered`);
-  await expect(f.authority.verifyInstalled(evidence)).rejects.toMatchObject({ code: "INSTALL_RUNNER_STALE" });
+  await expect(f.authority.verifyInstalled(evidence)).rejects.toMatchObject({ code: "INSTALL_RUNNER_STALE", message: expect.stringContaining("size") });
 });

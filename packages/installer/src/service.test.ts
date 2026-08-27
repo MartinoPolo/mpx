@@ -7,7 +7,14 @@ import type { ScheduledTaskAdapter, ScheduledTaskInspection } from "@mpx/windows
 const runner: InstalledRunnerEvidence={path:"C:\\_MP_apps\\mpx\\runner.exe",sha256:"a".repeat(64),version:"1.0.0"};
 class Tasks implements ScheduledTaskAdapter { available=true; task?:ScheduledTaskInspection; calls:string[]=[]; async inspect(){this.calls.push("inspect");return this.task} async install(s:any){this.calls.push("install");this.task={...s,exists:true}} async remove(){this.calls.push("remove");this.task=undefined} }
 const files:RunnerFileVerifier={verify:async()=>runner};
-const authority:ImmutableRunnerAuthority={verifyInstalled:async()=>runner};
+const authority:ImmutableRunnerAuthority={resolveInstalled:async()=>runner,verifyInstalled:async()=>runner};
+class MutableAuthority implements ImmutableRunnerAuthority {
+ current=runner;
+ calls:string[]=[];
+ tampered=false;
+ async resolveInstalled(){this.calls.push("resolve");return this.current}
+ async verifyInstalled(evidence:InstalledRunnerEvidence){this.calls.push("verify");if(this.tampered)throw Object.assign(new Error("tampered"),{code:"INSTALL_RUNNER_STALE"});return evidence}
+}
 async function verifyInstalledTask(metadata:Partial<Pick<ScheduledTaskInspection,"lastRunAt"|"lastResult">>,now="2025-01-01T00:10:00.000Z"){
  const tasks=new Tasks(),store=new MemoryReceiptStore(),service=new InstallerService({tasks,store,files,authority,currentUser:"me",cwd:"C:\\repo",now:()=>new Date(now)});
  const plan=await service.plan({componentId:"session-capture",runner});await service.apply(plan,plan.confirmationDigest);
@@ -17,7 +24,36 @@ async function verifyInstalledTask(metadata:Partial<Pick<ScheduledTaskInspection
 describe("InstallerService",()=>{
  it("fails closed without immutable runner authority",async()=>{const service=new InstallerService({tasks:new Tasks(),store:new MemoryReceiptStore(),files,currentUser:"me",cwd:"C:\\repo"});await expect(service.plan({componentId:"session-capture",runner})).rejects.toMatchObject({code:"INSTALL_RUNNER_UNAVAILABLE"})});
  it("creates deterministic session-capture plans and applies idempotently",async()=>{const tasks=new Tasks(),store=new MemoryReceiptStore();const service=new InstallerService({tasks,store,files,authority,currentUser:"DOMAIN\\me",cwd:"C:\\repo"});const a=await service.plan({componentId:"session-capture",runner}),b=await service.plan({componentId:"session-capture",runner});expect(a).toEqual(b);await service.apply(a,a.confirmationDigest);await service.apply(a,a.confirmationDigest);expect(tasks.calls.filter(x=>x==="install")).toHaveLength(1)});
+ it("reports an uninstalled capture as structured verification",async()=>{
+  const installed=new MutableAuthority(),service=new InstallerService({tasks:new Tasks(),store:new MemoryReceiptStore(),authority:installed,currentUser:"me",cwd:"C:\\repo"});
+  await expect(service.verify("session-capture")).resolves.toMatchObject({installed:false,healthy:false,issues:["receipt-missing","task-missing"]});
+  expect(installed.calls).toEqual([]);
+ });
  it("reports a successfully run scheduled capture as healthy",async()=>{await expect(verifyInstalledTask({lastRunAt:"2025-01-01T00:00:00.000Z",lastResult:0})).resolves.toMatchObject({installed:true,healthy:true,issues:[]})});
+ it("re-resolves the active runner during verification after the selector switches",async()=>{
+  const tasks=new Tasks(),store=new MemoryReceiptStore(),installed=new MutableAuthority();
+  const service=new InstallerService({tasks,store,authority:installed,currentUser:"me",cwd:"C:\\repo"});
+  const plan=await service.plan({componentId:"session-capture",runner});await service.apply(plan,plan.confirmationDigest);
+  installed.calls=[];installed.current={...runner,path:"C:\\_MP_apps\\mpx\\releases\\replacement\\runner.exe",sha256:"b".repeat(64),version:"replacement"};
+  await expect(service.verify("session-capture")).resolves.toMatchObject({installed:true,healthy:false,issues:expect.arrayContaining(["runner-drift"])});
+  expect(installed.calls.slice(0,2)).toEqual(["resolve","verify"]);
+ });
+ it("reports runner drift when the installed runner is tampered after installation",async()=>{
+  const tasks=new Tasks(),store=new MemoryReceiptStore(),installed=new MutableAuthority();
+  const service=new InstallerService({tasks,store,authority:installed,currentUser:"me",cwd:"C:\\repo",now:()=>new Date("2025-01-01T00:10:00.000Z")});
+  const plan=await service.plan({componentId:"session-capture",runner});await service.apply(plan,plan.confirmationDigest);
+  tasks.task={...tasks.task!,lastRunAt:"2025-01-01T00:00:00.000Z",lastResult:0};installed.tampered=true;
+  await expect(service.verify("session-capture")).resolves.toMatchObject({installed:true,healthy:false,issues:["runner-drift"]});
+ });
+ it("rejects a stale task action even when its digest matches the ownership receipt",async()=>{
+  const tasks=new Tasks(),store=new MemoryReceiptStore(),installed=new MutableAuthority();
+  const service=new InstallerService({tasks,store,authority:installed,currentUser:"me",cwd:"C:\\repo",now:()=>new Date("2025-01-01T00:10:00.000Z")});
+  const plan=await service.plan({componentId:"session-capture",runner});const receipt=await service.apply(plan,plan.confirmationDigest);
+  tasks.task={...tasks.task!,lastRunAt:"2025-01-01T00:00:00.000Z",lastResult:0};
+  installed.current={...runner,path:"C:\\_MP_apps\\mpx\\releases\\replacement\\runner.exe",sha256:"b".repeat(64),version:"replacement"};
+  await store.write({...receipt,runner:installed.current});
+  await expect(service.verify("session-capture")).resolves.toMatchObject({installed:true,healthy:false,issues:["task-drift"]});
+ });
  it("reports a capture older than two cadence intervals as stale",async()=>{await expect(verifyInstalledTask({lastRunAt:"2025-01-01T00:09:59.999Z",lastResult:0},"2025-01-01T00:30:00.000Z")).resolves.toMatchObject({installed:true,healthy:false,issues:["task-last-run-stale"]})});
  it("reports an implausibly future capture as stale",async()=>{await expect(verifyInstalledTask({lastRunAt:"2025-01-01T00:30:00.001Z",lastResult:0},"2025-01-01T00:10:00.000Z")).resolves.toMatchObject({installed:true,healthy:false,issues:["task-last-run-stale"]})});
  it("does not mark a run at the two-cadence boundary stale",async()=>{await expect(verifyInstalledTask({lastRunAt:"2025-01-01T00:00:00.000Z",lastResult:0},"2025-01-01T00:20:00.000Z")).resolves.toMatchObject({installed:true,healthy:true,issues:[]})});

@@ -8,7 +8,7 @@ Release payloads are content-addressed at `${MPX_APPS}/mpx/releases/<releaseKey>
 
 The stable selector is `%LOCALAPPDATA%/mpx/active-release`. Receipts, journals, and snapshots are mutable installer state and belong only below `%APPDATA%` or `%LOCALAPPDATA%`. Native runtime roots, credentials, configuration, sessions, caches, project roots, work roots, and clone roots are not release payloads and are not implicitly operated on.
 
-Immediately before scheduled plan/apply/verify use, `NodeInstalledReleaseAuthority` opens the selected runner and proves that it is a regular file below the receipt's exact release, with the receipt's path, size, and hash. Project, work, and cloned roots can be supplied as prohibited roots. The existing `ImmutableRunnerAuthority` session-capture seam remains structurally compatible.
+Immediately before scheduled plan/apply/verify use, `NodeInstalledRunnerAuthority` opens the selected runner and proves that it is a regular file below the receipt's exact release, with the receipt's path, size, and hash. Project, work, and cloned roots can be supplied as prohibited roots. The existing `ImmutableRunnerAuthority` session-capture seam remains structurally compatible.
 
 ## CLI orchestration
 

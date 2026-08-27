@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { MpxError, parseStrictJson } from "@mpx/core";
 import { canonicalJson, parseReleaseManifestV1, readActiveRelease, type ReleaseManifestV1 } from "./immutable-core.js";
@@ -53,11 +53,18 @@ export class NodeInstalledRunnerAuthority implements ImmutableRunnerAuthority {
   async verifyInstalled(evidence: InstalledRunnerEvidence): Promise<InstalledRunnerEvidence> {
     const active = await this.active();
     if (canonicalJson(active.evidence) !== canonicalJson(evidence)) stale("Runner evidence is not the active immutable release runner.");
-    let info;
-    try { info = await lstat(evidence.path); } catch (failure) { if (missing(failure)) unavailable("The active immutable runner file is unavailable."); throw failure; }
-    if (!info.isFile() || info.isSymbolicLink()) unavailable("The active immutable runner file is unsafe.");
-    const actual = createHash("sha256").update(await readFile(evidence.path)).digest("hex");
-    if (actual !== evidence.sha256) stale("The active immutable runner file was tampered with.");
-    return evidence;
+    let linkInfo;
+    try { linkInfo = await lstat(evidence.path); } catch (failure) { if (missing(failure)) unavailable("The active immutable runner file is unavailable."); throw failure; }
+    if (!linkInfo.isFile() || linkInfo.isSymbolicLink()) unavailable("The active immutable runner file is unsafe.");
+    const expected = active.manifest.files.find(candidate => candidate.path === this.runnerRelativePath)!;
+    const handle = await open(evidence.path, "r").catch((failure) => { if (missing(failure)) unavailable("The active immutable runner file is unavailable."); throw failure; });
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) unavailable("The active immutable runner file is unsafe.");
+      if (info.size !== expected.bytes) stale("The active immutable runner file size changed.");
+      const actual = createHash("sha256").update(await handle.readFile()).digest("hex");
+      if (actual !== evidence.sha256) stale("The active immutable runner file was tampered with.");
+      return evidence;
+    } finally { await handle.close(); }
   }
 }
