@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { captureDirectoryCandidate, captureFileCandidate } from "./capture-baseline-files.mjs";
+import { buildDirectoryCandidates, buildFileCandidates } from "./capture-baseline-candidates.mjs";
 
 const sourceNames = [
   "mpx-claude-code",
@@ -103,41 +105,27 @@ for (const name of sourceNames) {
 }
 
 const userHome = homedir();
-const candidates = [
-  path.join(userHome, ".bashrc"),
-  path.join(userHome, ".bash_profile"),
-  path.join(userHome, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"),
-  path.join(userHome, "Documents", "WindowsPowerShell", "profile.ps1"),
-  path.join(userHome, ".claude", "settings.json"),
-  path.join(userHome, ".claude", "plugins", "installed_plugins.json"),
-  path.join(userHome, ".claude", "plugins", "known_marketplaces.json"),
-  path.join(userHome, ".claude-work", "settings.json"),
-  path.join(userHome, ".claude-work", "plugins", "installed_plugins.json"),
-  path.join(userHome, ".claude-work", "plugins", "known_marketplaces.json"),
-  path.join(localAppData, "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "settings.json"),
-  path.join(localAppData, "Microsoft", "Windows Terminal", "settings.json"),
-  path.join(process.env.MPX_OBSIDIAN_VAULT ?? "", "_Projekty", "Mini Projekty", "Issues", "Active", "mpx-ports.md"),
-  path.join(process.env.MPX_OBSIDIAN_VAULT ?? "", "_Projekty", "Mini Projekty", "Issues", "Active", "claude-resurrect.md"),
-];
+const candidates = buildFileCandidates({
+  userHome,
+  localAppData,
+  projectRoot,
+  obsidianVault: process.env.MPX_OBSIDIAN_VAULT,
+});
 
-const directoryCandidates = [
-  path.join(localAppData, "Packages", "Microsoft.WindowsTerminal_8wekyb3d8bbwe", "LocalState", "icons"),
-  path.join(process.env.MPX_AI_GENERATED ?? "", "_RAYCAST"),
-  path.join(process.env.MPX_OBSIDIAN_VAULT ?? "", "_Projekty", "MpxClaudeCode"),
-  path.join(projectRoot, "agent-resurrect", "saves"),
-  path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Resurrect Agent Sessions.lnk"),
-  path.join(process.env.APPDATA ?? "", "Microsoft", "Windows", "Start Menu", "Programs", "Save Agent Sessions.lnk"),
-];
+const directoryCandidates = buildDirectoryCandidates({
+  localAppData,
+  projectRoot,
+  aiGenerated: process.env.MPX_AI_GENERATED,
+  obsidianVault: process.env.MPX_OBSIDIAN_VAULT,
+  appData: process.env.APPDATA,
+});
 
 const files = [];
-for (const sourcePath of candidates) {
+for (const candidate of candidates) {
   try {
-    const sourceStat = await stat(sourcePath);
-    if (!sourceStat.isFile()) continue;
-    const safeName = sourcePath.replace(/^([A-Za-z]):/, "$1").replaceAll(/[\\/:]/g, "_");
-    const destinationPath = path.join(filesRoot, safeName);
-    await cp(sourcePath, destinationPath, { errorOnExist: true });
-    files.push({ sourcePath, destinationPath, sha256: await hashFile(destinationPath) });
+    await lstat(candidate.sourcePath);
+    const safeName = candidate.sourcePath.replace(/^([A-Za-z]):/, "$1").replaceAll(/[\\/:]/g, "_");
+    files.push(await captureFileCandidate({ ...candidate, destinationPath: path.join(filesRoot, safeName) }));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -146,11 +134,9 @@ for (const sourcePath of candidates) {
 const directories = [];
 for (const sourcePath of directoryCandidates) {
   try {
-    await stat(sourcePath);
+    await lstat(sourcePath);
     const safeName = sourcePath.replace(/^([A-Za-z]):/, "$1").replaceAll(/[\\/:]/g, "_");
-    const destinationPath = path.join(filesRoot, safeName);
-    await cp(sourcePath, destinationPath, { recursive: true, verbatimSymlinks: true, errorOnExist: true });
-    directories.push({ sourcePath, destinationPath });
+    directories.push(await captureDirectoryCandidate({ sourcePath, destinationPath: path.join(filesRoot, safeName) }));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -207,7 +193,7 @@ const environment = Object.fromEntries(
 );
 
 const manifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   createdAt: new Date().toISOString(),
   machine: process.env.COMPUTERNAME,
   repositories,

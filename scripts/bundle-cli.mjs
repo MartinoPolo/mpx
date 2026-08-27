@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { commandSelectorBytes } from "./windows-command.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(root, "bin");
@@ -36,14 +37,4 @@ await build({
   legalComments: "none",
   banner: { js: 'import { createRequire as __mpxCreateRequire } from "node:module"; const require = __mpxCreateRequire(import.meta.url);' },
 });
-const selector = String.raw`@echo off
-setlocal
-if not defined LOCALAPPDATA exit /b 2
-if not defined MPX_APPS exit /b 2
-if not defined MPX_NODE_EXECUTABLE exit /b 2
-set /p "MPX_RELEASE_KEY="<"%LOCALAPPDATA%\mpx\active-release"
-if not defined MPX_RELEASE_KEY exit /b 2
-"%MPX_NODE_EXECUTABLE%" "%MPX_APPS%\mpx\releases\%MPX_RELEASE_KEY%\bin\mpx.mjs" %*
-exit /b %ERRORLEVEL%
-`;
-await writeFile(path.join(output, "mpx.cmd"), selector, "utf8");
+await writeFile(path.join(output, "mpx.cmd"), commandSelectorBytes());

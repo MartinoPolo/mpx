@@ -6810,7 +6810,7 @@
             "path": "plugins/mp/scripts/__tests__/worktree-hub.test.ts",
             "sha256": "d9193789ede7e5ff342bac3061b5c4857a2cbbddae63c7ddea6eb99ccd194c2e"
           },
-          "sha256": "44ef5373cff71317d367c080d96ddda6a26d7185b434aa6057aafe2e6b37d884",
+          "sha256": "ac9aa66c3a30640f4a15a57c26908888e54279d5727081764297a59760aa38cc",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -6913,7 +6913,7 @@
             "path": "plugins/mp/scripts/deprecated/remove-worktree.sh",
             "sha256": "5797c66504b6d13f772a1efb5bb577ab996961fadf636229cc2869157fbfaf59"
           },
-          "sha256": "44ef5373cff71317d367c080d96ddda6a26d7185b434aa6057aafe2e6b37d884",
+          "sha256": "ac9aa66c3a30640f4a15a57c26908888e54279d5727081764297a59760aa38cc",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -6951,7 +6951,7 @@
             "path": "plugins/mp/scripts/deprecated/setup-worktree.sh",
             "sha256": "070db76ff885c5eb9275073f52853c0d216b53c814340adcad1f0b785bb38113"
           },
-          "sha256": "44ef5373cff71317d367c080d96ddda6a26d7185b434aa6057aafe2e6b37d884",
+          "sha256": "ac9aa66c3a30640f4a15a57c26908888e54279d5727081764297a59760aa38cc",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -7309,7 +7309,7 @@
             "path": "plugins/mp/scripts/lib/worktree-hub.mts",
             "sha256": "7d9178539a1880f223a91a29ce04e1fcb293f655dc768d3421130dc4af4dd60f"
           },
-          "sha256": "44ef5373cff71317d367c080d96ddda6a26d7185b434aa6057aafe2e6b37d884",
+          "sha256": "ac9aa66c3a30640f4a15a57c26908888e54279d5727081764297a59760aa38cc",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -7347,7 +7347,7 @@
             "path": "plugins/mp/scripts/remove-worktree.mts",
             "sha256": "5b7140e049694e883c3d991daedc8766101380fdbf595d3692b6a10de660b1c8"
           },
-          "sha256": "44ef5373cff71317d367c080d96ddda6a26d7185b434aa6057aafe2e6b37d884",
+          "sha256": "ac9aa66c3a30640f4a15a57c26908888e54279d5727081764297a59760aa38cc",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -7385,7 +7385,7 @@
             "path": "plugins/mp/scripts/setup-worktree.mts",
             "sha256": "9c14fd84354737e3479a55558dbb26c5b983ad2d0f77507218ae063281f24d10"
           },
-          "sha256": "44ef5373cff71317d367c080d96ddda6a26d7185b434aa6057aafe2e6b37d884",
+          "sha256": "ac9aa66c3a30640f4a15a57c26908888e54279d5727081764297a59760aa38cc",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
