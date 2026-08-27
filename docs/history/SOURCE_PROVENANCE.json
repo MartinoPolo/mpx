@@ -1288,12 +1288,12 @@
       "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
       "sourceDirty": false,
       "originalSha256": "ab4fc9115d08c6a257236c633d16fbe9553d8565ca5a3fdd95640cba28b1562e",
-      "destinationSha256": "a1103b0d7af31ed2dd208c68802a003222f7e87ce0de210aa61aec58daa21ca6",
+      "destinationSha256": "7989f6348ac6cea6776469750e1e74f682db0427885d2e3c8e341e933ddd5f0a",
       "disposition": "imported-rewritten",
       "license": "repository license; provenance retained",
       "evidence": {
         "kind": "destination-hash",
-        "sha256": "a1103b0d7af31ed2dd208c68802a003222f7e87ce0de210aa61aec58daa21ca6",
+        "sha256": "7989f6348ac6cea6776469750e1e74f682db0427885d2e3c8e341e933ddd5f0a",
         "verification": "pnpm run validate:generated -- --verify-sources"
       }
     },

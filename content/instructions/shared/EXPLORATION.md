@@ -31,10 +31,14 @@ intent, priorities, taste, outside facts, or a trade-off that requires ownership
 
 ## External documentation
 
-Repository exploration is not library documentation. For a framework, SDK, API, CLI, or cloud
-service, use the identity-owned approved documentation route, normally
-`mpx-context7-docs-fetcher`. If that route is unavailable, return a structured unsupported/manual
-handoff rather than inventing an API from memory or local dependencies.
+For questions or root-cause analysis about an external tool or library, resolve `MPX_CLONED` at
+runtime and check that configured repository collection first. When a matching clone represents
+the relevant project and version or source, use its code as the primary implementation evidence.
+
+For current public API and version facts, or when no matching clone exists, use the identity-owned
+approved documentation route, normally `mpx-context7-docs-fetcher`. If neither source is available,
+return a structured unsupported/manual handoff rather than inventing an API from memory or local
+dependencies.
 
 ## Paths outside the working directory
 
