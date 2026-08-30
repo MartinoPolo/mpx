@@ -1,3 +1,4 @@
+import type { PreparationPlan } from '@mpx/config';
 import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -171,11 +172,11 @@ it('makes an existing preparation approval stale when the approved executable by
   const { command, file, environment } = executableEnvironment(trusted);
   const executable = path.join(trusted, file);
   await writeFile(executable, 'first bytes', { mode: 0o755 });
-  const preparationPlan = {
-    execution: 'foreground' as const,
-    steps: [{ id: 'run', uses: 'executable' as const, argv: [command] }],
+  const preparationPlan: PreparationPlan = {
+    execution: 'foreground',
+    steps: [{ id: 'run', uses: 'executable', argv: [command], required: true }],
     order: ['run'],
-    logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
+    logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
   };
   const states = new Map<string, PreparationState>();
   const adapters: PreparationAdapters = {

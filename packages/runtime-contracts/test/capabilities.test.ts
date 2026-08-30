@@ -14,6 +14,7 @@ import {
 
 const digest = (character: string) => character.repeat(64);
 const tool = {
+  schemaVersion: 1 as const,
   name: 'search',
   executors: ['docker' as const],
   routes: ['mcp:search'],

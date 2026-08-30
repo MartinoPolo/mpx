@@ -81,9 +81,13 @@ describe('runtime-neutral resolved skill manifest v4', () => {
     for (const variant of variants) {
       expect(resolveManifest(catalog, variant).manifestKey).not.toBe(base.manifestKey);
     }
+    const alpha = catalog[0];
+    const beta = catalog[1];
+    if (!alpha || !beta) {
+      throw new Error('fixture did not produce both catalog skills');
+    }
     expect(
-      resolveManifest([{ ...catalog[0], contentHash: 'changed' }, catalog[1]], options())
-        .manifestKey,
+      resolveManifest([{ ...alpha, contentHash: 'changed' }, beta], options()).manifestKey,
     ).not.toBe(base.manifestKey);
   });
 

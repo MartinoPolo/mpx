@@ -9,9 +9,10 @@
   "scripts": {
     "prebuild": "node ../../scripts/prepare-cli-build.mjs",
     "build": "tsc -p tsconfig.json && node ../../scripts/bundle-cli.mjs",
-    "check": "pnpm run build && tsc -p tsconfig.json --noEmit && vitest run",
-    "test": "pnpm run build && vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:unit": "pnpm --filter mpx... build && vitest run",
+    "test": "pnpm run test:unit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "check": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
     "@mpx/core": "workspace:*",

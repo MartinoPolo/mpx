@@ -100,6 +100,9 @@ describe('Batch C3 canonical content', () => {
         const content = await readFile(file, 'utf8');
         for (const match of content.matchAll(/\[[^\]]*\]\((?!https?:|#)([^)#]+)(?:#[^)]+)?\)/gu)) {
           const reference = match[1];
+          if (!reference) {
+            continue;
+          }
           const candidate = reference.startsWith('../shared/')
             ? path.join(instructions, reference.slice(3))
             : path.resolve(path.dirname(file), reference);

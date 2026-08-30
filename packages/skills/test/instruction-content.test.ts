@@ -174,7 +174,12 @@ describe('canonical instruction selectors', () => {
         (content) => content.match(/Do not use em dashes in generated prose\./gu) ?? [],
       ),
     ).toHaveLength(1);
-    expect(contents[1].trim()).toBe('@../../global/AGENTS.md');
-    expect(contents[2]).not.toContain('Repository and worktree discipline');
+    const claudeAdapter = contents[1];
+    const piAdapter = contents[2];
+    if (!claudeAdapter || !piAdapter) {
+      throw new Error('runtime adapter fixture is incomplete');
+    }
+    expect(claudeAdapter.trim()).toBe('@../../global/AGENTS.md');
+    expect(piAdapter).not.toContain('Repository and worktree discipline');
   });
 });

@@ -116,7 +116,11 @@ describe('diagnoseSbx failure classification', () => {
             }
             return scenario.result;
           }
-          return defaults[command];
+          const result = defaults[command];
+          if (!result) {
+            throw new Error(`missing default result for ${command}`);
+          }
+          return result;
         }),
       };
 

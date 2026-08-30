@@ -103,15 +103,16 @@ async function body(identity: string): Promise<string> {
 describe('canonical content contracts', () => {
   it('loads and classifies the complete Phase F skill inventory', async () => {
     const catalog = await inventoryCanonical(canonicalRoot);
-    const actual = Object.groupBy(
-      catalog,
-      (skill) => `${skill.skillPacks.join('+')}/${skill.defaultExposure}`,
-    );
+    const actual = new Map<string, typeof catalog>();
+    for (const skill of catalog) {
+      const classification = `${skill.skillPacks.join('+')}/${skill.defaultExposure}`;
+      actual.set(classification, [...(actual.get(classification) ?? []), skill]);
+    }
     expect(
       Object.fromEntries(
-        Object.entries(actual).map(([classification, skills]) => [
+        [...actual].map(([classification, skills]) => [
           classification,
-          skills!.map((skill) => skill.identity).sort(),
+          skills.map((skill) => skill.identity).sort(),
         ]),
       ),
     ).toEqual(

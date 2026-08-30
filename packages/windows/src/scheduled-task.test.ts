@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MpxError } from '@mpx/core';
-import {
-  WindowsScheduledTaskAdapter,
-  type PowerShellRunner,
-  type ScheduledTaskSpec,
-} from './scheduled-task.js';
+import type { PowerShellRunner } from './adapter.js';
+import { WindowsScheduledTaskAdapter, type ScheduledTaskSpec } from './scheduled-task.js';
 
 const spec: ScheduledTaskSpec = {
   taskPath: '\\MPX\\',
@@ -26,10 +22,10 @@ const spec: ScheduledTaskSpec = {
 
 describe('WindowsScheduledTaskAdapter', () => {
   it('passes dynamic task values as JSON environment data, never script interpolation', async () => {
-    let call: { script: string; parameters?: Readonly<Record<string, string>> } | undefined;
+    const calls: Array<{ script: string; parameters?: Readonly<Record<string, string>> }> = [];
     const runner: PowerShellRunner = {
-      run: async (script, parameters) => {
-        call = { script, parameters };
+      run: async (script: string, parameters?: Readonly<Record<string, string>>) => {
+        calls.push(parameters === undefined ? { script } : { script, parameters });
         return { stdout: JSON.stringify({ ok: true }), stderr: '', exitCode: 0 };
       },
     };
@@ -37,15 +33,21 @@ describe('WindowsScheduledTaskAdapter', () => {
       ...spec,
       taskName: "x'; Write-Error pwn; '",
     });
-    expect(call!.script).not.toContain('Write-Error pwn');
-    expect(JSON.parse(call!.parameters!.ScheduledTaskJson)).toMatchObject({
-      taskName: "x'; Write-Error pwn; '",
-    });
+    const call = calls[0];
+    if (!call) {
+      throw new Error('Expected scheduled-task PowerShell call');
+    }
+    const scheduledTaskJson = call.parameters?.ScheduledTaskJson;
+    if (scheduledTaskJson === undefined) {
+      throw new Error('Expected ScheduledTaskJson parameter');
+    }
+    expect(call.script).not.toContain('Write-Error pwn');
+    expect(JSON.parse(scheduledTaskJson)).toMatchObject({ taskName: "x'; Write-Error pwn; '" });
   });
   it('honors disabled settings and round-trips Windows argv', async () => {
     const calls: string[] = [];
     const runner: PowerShellRunner = {
-      run: async (script) => {
+      run: async (script: string) => {
         calls.push(script);
         if (script.includes('Get-ScheduledTask ')) {
           return {
@@ -67,7 +69,11 @@ describe('WindowsScheduledTaskAdapter', () => {
     };
     const adapter = new WindowsScheduledTaskAdapter({ platform: 'win32', runner });
     await adapter.install({ ...spec, settings: { ...spec.settings, enabled: false } });
-    expect(calls[0]).toContain('Disable-ScheduledTask');
+    const installScript = calls[0];
+    if (installScript === undefined) {
+      throw new Error('Expected install PowerShell call');
+    }
+    expect(installScript).toContain('Disable-ScheduledTask');
     expect((await adapter.inspect(spec.taskPath, spec.taskName))?.action.argv).toEqual([
       'a b',
       'c\\"d',
@@ -134,6 +140,6 @@ describe('WindowsScheduledTaskAdapter', () => {
   it('reports unavailable away from Windows', async () => {
     await expect(
       new WindowsScheduledTaskAdapter({ platform: 'linux' }).inspect('\\MPX\\', 'Session Capture'),
-    ).rejects.toMatchObject<MpxError>({ code: 'SCHEDULED_TASK_UNAVAILABLE' });
+    ).rejects.toMatchObject({ code: 'SCHEDULED_TASK_UNAVAILABLE' });
   });
 });

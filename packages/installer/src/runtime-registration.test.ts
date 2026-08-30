@@ -9,11 +9,22 @@ import {
   registerStaticMcp,
   verifyAccountEnrollment,
   verifyRuntimeRegistrationMatrix,
+  type ImmutableProjectionV1,
+  type ProjectionFileV1,
+  type ProjectionRole,
+  type RuntimeRegistrationInput,
 } from './runtime-registration.js';
 
+function required<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`Expected ${label}`);
+  }
+  return value;
+}
+
 const sha = (value: string) => installerDigest(value);
-const projection = (runtime: 'claude' | 'pi') => {
-  const roles =
+const projection = (runtime: 'claude' | 'pi'): ImmutableProjectionV1 => {
+  const roles: readonly ProjectionRole[] =
     runtime === 'claude'
       ? ['plugin', 'hooks', 'status', 'settings', 'canonical-content', 'agents', 'licenses']
       : [
@@ -27,7 +38,7 @@ const projection = (runtime: 'claude' | 'pi') => {
           'agents',
           'licenses',
         ];
-  const files = roles.map((role) => ({
+  const files: ProjectionFileV1[] = roles.map((role) => ({
     path: `${role}/owned`,
     sha256: sha(role),
     bytes: role.length,
@@ -41,7 +52,11 @@ const projection = (runtime: 'claude' | 'pi') => {
     activation: 'argv-only' as const,
   };
 };
-const input = (runtime: 'claude' | 'pi', domain: 'personal' | 'work', root: string) => ({
+const input = (
+  runtime: 'claude' | 'pi',
+  domain: 'personal' | 'work',
+  root: string,
+): RuntimeRegistrationInput => ({
   runtime,
   domain,
   nativeRoot: root,
@@ -116,14 +131,14 @@ describe('immutable runtime registration', () => {
       input('pi', 'work', 'C:\\native\\pi-work'),
     ]);
     const claude = materializePrivateRuntimeLaunch({
-      registration: matrix.registrations[0],
+      registration: required(matrix.registrations[0], 'Claude personal registration'),
       launchKey: sha('launch'),
       nativeRoot: 'C:\\native\\claude-personal',
       projectionRoot: 'C:\\immutable\\claude',
       mcpBindings: [{ label: descriptor.label, privateConfigPath: 'C:\\private\\mcp.json' }],
     });
     const pi = materializePrivateRuntimeLaunch({
-      registration: matrix.registrations[2],
+      registration: required(matrix.registrations[2], 'Pi personal registration'),
       launchKey: sha('pi-launch'),
       nativeRoot: 'C:\\native\\pi-personal',
       projectionRoot: 'C:\\immutable\\pi',

@@ -12,9 +12,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json && vitest run --testTimeout=15000",
-    "test": "vitest run --testTimeout=15000",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:unit": "pnpm --filter @mpx/dev-services... build && vitest run",
+    "test": "pnpm run test:unit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "check": "pnpm run build && pnpm run typecheck"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

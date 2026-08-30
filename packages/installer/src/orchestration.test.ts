@@ -165,12 +165,22 @@ describe('Phase I install orchestration', () => {
       },
     });
     const plan = await orchestrator.plan(f.intent);
-    const failure = await orchestrator
-      .apply(plan, plan.confirmationDigest)
-      .catch((error) => error as AggregateError);
+    let failure: unknown;
+    try {
+      await orchestrator.apply(plan, plan.confirmationDigest);
+    } catch (error) {
+      failure = error;
+    }
     expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure.cause as { code: string }).code).toBe('INSTALL_POST_ACTIVATION_VERIFY_FAILED');
-    expect(failure.errors.map((error) => (error as Error).message)).toEqual([
+    if (!(failure instanceof AggregateError)) {
+      throw new Error('Expected installation to fail with an AggregateError.');
+    }
+    expect(failure.cause).toMatchObject({ code: 'INSTALL_POST_ACTIVATION_VERIFY_FAILED' });
+    expect(
+      Array.from(failure.errors, (error: unknown) =>
+        error instanceof Error ? error.message : String(error),
+      ),
+    ).toEqual([
       'Activated installation failed actual-state verification.',
       'selector rollback failed',
       'service rollback failed',
@@ -346,13 +356,22 @@ describe('Phase I install orchestration', () => {
   it('fails closed when scheduled-task status inspection is unavailable', async () => {
     const f = await fixture(),
       adapter = new FixtureAdapter([], [operation('90-scheduled-capture')]),
-      store = new MemoryTransactionStore();
-    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+      store = new MemoryTransactionStore(),
+      adapterWithoutTaskInspection: InstallerOperationAdapter = {
+        name: adapter.name,
+        operations: adapter.operations.bind(adapter),
+        observe: adapter.observe.bind(adapter),
+        capture: adapter.capture.bind(adapter),
+        apply: adapter.apply.bind(adapter),
+        restore: adapter.restore.bind(adapter),
+      };
+    const orchestrator = new InstallOrchestrator({
+      adapter: adapterWithoutTaskInspection,
+      store,
+      releases: f.builder,
+    });
     const plan = await orchestrator.plan(f.intent);
     await orchestrator.apply(plan, plan.confirmationDigest);
-    (
-      adapter as { inspectScheduledTaskStatus?: FixtureAdapter['inspectScheduledTaskStatus'] }
-    ).inspectScheduledTaskStatus = undefined;
     await expect(orchestrator.verify()).resolves.toMatchObject({
       healthy: false,
       issues: ['scheduled-task-status-unavailable:90-scheduled-capture'],

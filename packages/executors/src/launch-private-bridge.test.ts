@@ -157,21 +157,23 @@ describe('launch-private Pi remote executor bridge', () => {
           client: handle.client,
           dependencies: {
             listen,
-            writeState:
-              stage === 'state-write'
-                ? async () => {
+            ...(stage === 'state-write'
+              ? {
+                  writeState: async () => {
                     throw new Error('injected state write failure');
-                  }
-                : undefined,
-            restrictAcl:
-              stage === 'acl'
-                ? async () => {
+                  },
+                }
+              : {}),
+            ...(stage === 'acl'
+              ? {
+                  restrictAcl: async () => {
                     aclCalls++;
                     if (aclCalls === 2) {
                       throw new Error('injected ACL failure');
                     }
-                  }
-                : undefined,
+                  },
+                }
+              : {}),
           },
         }),
       ).rejects.toThrow(/injected/iu);

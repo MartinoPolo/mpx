@@ -415,27 +415,24 @@ describe('sandbox policy evidence', () => {
         { target: 'example.com:443', decision: 'allow', count: 1 },
       ],
     });
-    expect(() =>
-      parsePolicyEvidence({
-        ...({
-          sandboxName: 'mpx-proof-test',
-          expected: [{ target: 'x:443', decision: 'deny' }],
-          checks: [
-            {
-              target: 'x:443',
-              exitCode: 1,
-              stdout: JSON.stringify({
-                action: 'net:connect:tcp',
-                allowed: false,
-                resource_value: 'x:443',
-                type: 'network',
-              }),
-            },
-          ],
-          logs: [{ host: 'x', count: 1 }],
-        } as never),
-      }),
-    ).toThrow(/POLICY_EVIDENCE_INVALID/u);
+    const invalidEvidence = {
+      sandboxName: 'mpx-proof-test',
+      expected: [{ target: 'x:443', decision: 'deny' as const }],
+      checks: [
+        {
+          target: 'x:443',
+          exitCode: 1,
+          stdout: JSON.stringify({
+            action: 'net:connect:tcp',
+            allowed: false,
+            resource_value: 'x:443',
+            type: 'network',
+          }),
+        },
+      ],
+      logs: [{ host: 'x', count: 1 }],
+    };
+    expect(() => parsePolicyEvidence(invalidEvidence)).toThrow(/POLICY_EVIDENCE_INVALID/u);
   });
 
   const allowed = {

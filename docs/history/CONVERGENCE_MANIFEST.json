@@ -273,7 +273,7 @@
             "path": "AGENTS.md",
             "sha256": "d6d6d32fb9db4c65e4134ff85b6cf06528c5b68b29c561d2b5a9d6383e92e430"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -419,7 +419,7 @@
             "path": "CLAUDE.md",
             "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -1860,7 +1860,7 @@
             "path": "instructions/AGENTS.md",
             "sha256": "0054de9c595c4050a3ef70b7f098bd717ea65b87eb016092606890c7bd03c2d8"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -1898,7 +1898,7 @@
             "path": "instructions/CLAUDE.md",
             "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -1974,7 +1974,7 @@
             "path": "instructions/css-color-guide.instructions.md",
             "sha256": "cba2070f6f05e39007a1dec0bad6c5a2e2d45ea343cc55b448ef119c0cd0d54c"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -2012,7 +2012,7 @@
             "path": "instructions/update-docs.instructions.md",
             "sha256": "6aa5290c1b750dbaf6d70475263abcbfcd845afdddd54d4c16da4777b18c8ee1"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -6810,7 +6810,7 @@
             "path": "plugins/mp/scripts/__tests__/worktree-hub.test.ts",
             "sha256": "d9193789ede7e5ff342bac3061b5c4857a2cbbddae63c7ddea6eb99ccd194c2e"
           },
-          "sha256": "8487011deae9b8c0c043f80a304c417611f96887ab64a9e8b839da8b0e8e3485",
+          "sha256": "4d50419555f4dcc73747f5ee75d5c9b744bf035c439f401056d9e3fe47ac649d",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -6913,7 +6913,7 @@
             "path": "plugins/mp/scripts/deprecated/remove-worktree.sh",
             "sha256": "5797c66504b6d13f772a1efb5bb577ab996961fadf636229cc2869157fbfaf59"
           },
-          "sha256": "8487011deae9b8c0c043f80a304c417611f96887ab64a9e8b839da8b0e8e3485",
+          "sha256": "4d50419555f4dcc73747f5ee75d5c9b744bf035c439f401056d9e3fe47ac649d",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -6951,7 +6951,7 @@
             "path": "plugins/mp/scripts/deprecated/setup-worktree.sh",
             "sha256": "070db76ff885c5eb9275073f52853c0d216b53c814340adcad1f0b785bb38113"
           },
-          "sha256": "8487011deae9b8c0c043f80a304c417611f96887ab64a9e8b839da8b0e8e3485",
+          "sha256": "4d50419555f4dcc73747f5ee75d5c9b744bf035c439f401056d9e3fe47ac649d",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -7309,7 +7309,7 @@
             "path": "plugins/mp/scripts/lib/worktree-hub.mts",
             "sha256": "7d9178539a1880f223a91a29ce04e1fcb293f655dc768d3421130dc4af4dd60f"
           },
-          "sha256": "8487011deae9b8c0c043f80a304c417611f96887ab64a9e8b839da8b0e8e3485",
+          "sha256": "4d50419555f4dcc73747f5ee75d5c9b744bf035c439f401056d9e3fe47ac649d",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -7347,7 +7347,7 @@
             "path": "plugins/mp/scripts/remove-worktree.mts",
             "sha256": "5b7140e049694e883c3d991daedc8766101380fdbf595d3692b6a10de660b1c8"
           },
-          "sha256": "8487011deae9b8c0c043f80a304c417611f96887ab64a9e8b839da8b0e8e3485",
+          "sha256": "4d50419555f4dcc73747f5ee75d5c9b744bf035c439f401056d9e3fe47ac649d",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -7385,7 +7385,7 @@
             "path": "plugins/mp/scripts/setup-worktree.mts",
             "sha256": "9c14fd84354737e3479a55558dbb26c5b983ad2d0f77507218ae063281f24d10"
           },
-          "sha256": "8487011deae9b8c0c043f80a304c417611f96887ab64a9e8b839da8b0e8e3485",
+          "sha256": "4d50419555f4dcc73747f5ee75d5c9b744bf035c439f401056d9e3fe47ac649d",
           "reference": "packages/worktrees/src/lifecycle.test.ts",
           "verification": "passed"
         }
@@ -9952,7 +9952,7 @@
             "path": "rules-per-project/react.md",
             "sha256": "9f542666e19403dbd421effb6266fd91943e9487ce6b8dbd36ad54605fe3f1f0"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -9990,7 +9990,7 @@
             "path": "rules-per-project/references/shadcn-svelte-component-catalog.md",
             "sha256": "0b274de8bd5a86572bd4bfd7b87b3f74948516161b0e5af01e0db29f938593a4"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10028,7 +10028,7 @@
             "path": "rules-per-project/shadcn-svelte.md",
             "sha256": "20a73ff71e2e59f613ca6cb9fb620bd111515ef6fd6ca803ace808684bf61f51"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10066,7 +10066,7 @@
             "path": "rules-per-project/solid.md",
             "sha256": "8693b762a4b8cb1603cc8d485cfc3b8c50c9569370c587f28a0344bcf0fb274e"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10104,7 +10104,7 @@
             "path": "rules-per-project/storybook.md",
             "sha256": "5925ad281bcdd644eccfbc4216c77b93d9642e5b72b80ab0a961bb95330725c1"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10142,7 +10142,7 @@
             "path": "rules-per-project/svelte-context.md",
             "sha256": "c1d88c5df046472172892df4c7bf1671f68f86676293a664975fd0b9465ea8ee"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10180,7 +10180,7 @@
             "path": "rules-per-project/sveltekit-dev-warmup.md",
             "sha256": "6a21faf5632f36e781b24108f310dd17223e9172325eedd21b5e00d54eb5125f"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10218,7 +10218,7 @@
             "path": "rules-per-project/sveltekit-paths-server.md",
             "sha256": "1cf6b23b566d4662c2ba07903999fab9866ce4ee43a5433c9297f4d82b94c69d"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10256,7 +10256,7 @@
             "path": "rules-per-project/sveltekit-paths.md",
             "sha256": "644d422d797ff571df99f377d1855a1cd2b24c1053cda293beb6586be5f18fef"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10294,7 +10294,7 @@
             "path": "rules/css.md",
             "sha256": "d0a55afc8de7812dcd318746fd79996931402018c97bf57419ada6f709fe71b8"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10332,7 +10332,7 @@
             "path": "rules/python.md",
             "sha256": "cb55c02446f8e8ed59a5b9f079e0d03aa22fb0df26e2c6b606019a430ece9385"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10370,7 +10370,7 @@
             "path": "rules/rust.md",
             "sha256": "2b4cb4bc80d959dd383567fbf341e7aee2df140a860ffaab34bda6ae008f679b"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10408,7 +10408,7 @@
             "path": "rules/svelte.md",
             "sha256": "38b0d7b7a8c9da97323c22c677e2ec4dc5d7527df0435abb6915b9bb9217a344"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10446,7 +10446,7 @@
             "path": "rules/typescript.md",
             "sha256": "0403128bc6b9133a2710e68f6f35cc681e04838f27fe86dba7cf62c5fcb663b9"
           },
-          "sha256": "dcde8652acc76d965028e5c0d509525d5dd395cdbad0703d330f41067d0fe010",
+          "sha256": "9401739bce108b6e6acf19c077c512cb23da71dbef197918553a8dbc22f1a659",
           "reference": "packages/skills/test/instruction-content.test.ts",
           "verification": "passed"
         }
@@ -10859,7 +10859,7 @@
             "path": ".gitignore",
             "sha256": "63ef5be1dbaf6333248a868520088beb4e6fdc50647bab02a30f6e35e7b942a9"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -10897,7 +10897,7 @@
             "path": ".vscode/settings.json",
             "sha256": "22dc002f491b6d836a1f966ed4a9b68adebfb59692bbcac70161843f0cec8879"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -11798,7 +11798,7 @@
             "path": "APPEND_SYSTEM.md",
             "sha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -12707,7 +12707,7 @@
             "path": "extensions/subagents/abortable.ts",
             "sha256": "3bdbbdd2a6faee9f4b908184bc66d0fb4fc1419e820c7fcdba45a073540035a0"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12745,7 +12745,7 @@
             "path": "extensions/subagents/agent-manager.ts",
             "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12784,7 +12784,7 @@
             "path": "extensions/subagents/agent-runner.ts",
             "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12823,7 +12823,7 @@
             "path": "extensions/subagents/agent-types.ts",
             "sha256": "8dfe097db687140d8dc732c7f170f267864674b2c062e9459f31be4d059fab9b"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12861,7 +12861,7 @@
             "path": "extensions/subagents/child-context.ts",
             "sha256": "72eaa951726bd406c829e0415f0f7beba8d5845cc594f2d3aaef15b4408f5d82"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12899,7 +12899,7 @@
             "path": "extensions/subagents/context.ts",
             "sha256": "3d0728d9cb8f308e289e0caa7afb64037d887288104ee25542f49e103281a11e"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12937,7 +12937,7 @@
             "path": "extensions/subagents/cross-extension-rpc.ts",
             "sha256": "f1d186b6c22a459df5ac211cbe6e0ac010ad787101bb4074b3c96372c2c14f88"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12975,7 +12975,7 @@
             "path": "extensions/subagents/custom-agents.ts",
             "sha256": "004d71a5a9012822a9270471f9c2b9e577ad7bf4d29443875f66bc6f39714f06"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13013,7 +13013,7 @@
             "path": "extensions/subagents/default-agents.ts",
             "sha256": "3ac0953f884d9906dd5be005b2e59b2a5c6808f9fd83b553b0921f8f38509d02"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13051,7 +13051,7 @@
             "path": "extensions/subagents/enabled-models.ts",
             "sha256": "ce3af5df01159c089d83986a1dfc84a2e4f8ff3c0054fc753f6d0df7af3a88f6"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13089,7 +13089,7 @@
             "path": "extensions/subagents/env.ts",
             "sha256": "8bc1ce780715660da3143bba30b966fd9e34bad501836376b07825cb42bf5c3b"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13127,7 +13127,7 @@
             "path": "extensions/subagents/group-join.test.ts",
             "sha256": "773b1d2717725253faef4bdc2188e76afb79c0cdb53813a65e562fa764d1481a"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13165,7 +13165,7 @@
             "path": "extensions/subagents/group-join.ts",
             "sha256": "38c424e4775b5bf2190f6926ff91192ff6ca7e9c7a235fa70c21c143efe5c3af"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13203,7 +13203,7 @@
             "path": "extensions/subagents/index.ts",
             "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13242,7 +13242,7 @@
             "path": "extensions/subagents/invocation-config.test.ts",
             "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13280,7 +13280,7 @@
             "path": "extensions/subagents/invocation-config.ts",
             "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13319,7 +13319,7 @@
             "path": "extensions/subagents/LICENSE",
             "sha256": "e7d9d11c28cce34f09dc7d2b0a3a6609ccba5fbc8e926e6d1bfdf060930e9f05"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13357,7 +13357,7 @@
             "path": "extensions/subagents/memory.ts",
             "sha256": "d2a7684fa950a186705061d8e2903e464746b88d049a05d7e5a2c12523f378c3"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13395,7 +13395,7 @@
             "path": "extensions/subagents/model-resolver.ts",
             "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13434,7 +13434,7 @@
             "path": "extensions/subagents/model-scope.ts",
             "sha256": "012dca4854bd59958a47fdf50e40d06fb86945c03f785d95dfec6c5479f8ddc8"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13472,7 +13472,7 @@
             "path": "extensions/subagents/nested-tools.ts",
             "sha256": "4f5e742c351bf1edb9d0b0edfb69b125f3ee37e47f27465de8855aea8202c0c7"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13537,7 +13537,7 @@
             "path": "extensions/subagents/notification-gate.test.ts",
             "sha256": "f3a6073e74fcf3c6b5f9c35e76a617c7fb25d014275eb8a4219fd8448138f1e0"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13575,7 +13575,7 @@
             "path": "extensions/subagents/notification-gate.ts",
             "sha256": "81b6a05b8eab30dd79b78b5407db3abb0fa846a7fe540763a0ce79cc038e3aea"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13613,7 +13613,7 @@
             "path": "extensions/subagents/output-file.ts",
             "sha256": "ca71b7e1262701db2293eac21cf880c83fadfdda6d85d2c31ca78b7989a24e95"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13705,7 +13705,7 @@
             "path": "extensions/subagents/prompts.ts",
             "sha256": "67d58e1aae6dd8b4337037955eaae74ef1075f722d5170a4a2818be7bfecc116"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13743,7 +13743,7 @@
             "path": "extensions/subagents/schedule-store.ts",
             "sha256": "565166b50098550a3574d583b6fc4c30756d0b1e4a32245a9f2577d27edf0357"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13781,7 +13781,7 @@
             "path": "extensions/subagents/schedule.ts",
             "sha256": "1911e6f6c7d8266b2ef2dff5dfd48e1880d620b3ec4407618280da104788f7e6"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13819,7 +13819,7 @@
             "path": "extensions/subagents/settings.ts",
             "sha256": "83a44bc37e41d6077aa053015828ef97885740318a816b8dddbebf1eec5bc478"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13857,7 +13857,7 @@
             "path": "extensions/subagents/skill-loader.ts",
             "sha256": "64d0a915ba6cdef899894d330caf8539e222c67646d60da81fcb6a2ac0d90043"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13895,7 +13895,7 @@
             "path": "extensions/subagents/status-note.ts",
             "sha256": "48c318ee289af5b5694c7f07daeda630d54a8b14f708b00024b2dec5e14488a9"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13933,7 +13933,7 @@
             "path": "extensions/subagents/types.ts",
             "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13972,7 +13972,7 @@
             "path": "extensions/subagents/ui/agent-widget.ts",
             "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14011,7 +14011,7 @@
             "path": "extensions/subagents/ui/conversation-viewer.ts",
             "sha256": "91fa419a674ad5e8db95d73b3091c470dc6b78225f3737a44b70b2453432237e"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14049,7 +14049,7 @@
             "path": "extensions/subagents/ui/fleet-list.ts",
             "sha256": "e5984b04501e33d8dacd51b3861b5f9df26e8095aee75f182486651cb2fca7af"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14087,7 +14087,7 @@
             "path": "extensions/subagents/ui/schedule-menu.ts",
             "sha256": "e2f1971e6e7d63a6a8ea711134c00b0fa3584aa15ad8247b1910ca85ab13557a"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14125,7 +14125,7 @@
             "path": "extensions/subagents/ui/viewer-keys.ts",
             "sha256": "b89cf023e89855a3d8351366963855b401507aff1452216da83f6577db6d7204"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14163,7 +14163,7 @@
             "path": "extensions/subagents/usage.ts",
             "sha256": "faf27d43429c90fcf52d84ab2ea5a2ee5c9e59f372d953da7aaf72fab82bca44"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14201,7 +14201,7 @@
             "path": "extensions/subagents/VENDORED.md",
             "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14240,7 +14240,7 @@
             "path": "extensions/subagents/worktree.ts",
             "sha256": "b0b4c596fddd1859a095a0d845005dfa62da6d02114c938ee1ef88ab445e3452"
           },
-          "sha256": "af315a1affa52f272d24f78dbc48e8b776d14a904a92655d71a3ba15b09d3d37",
+          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
           "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14468,7 +14468,7 @@
             "path": "keybindings.json",
             "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -14638,7 +14638,7 @@
             "path": "scripts/generate-agents.mjs",
             "sha256": "6ef74d7cb0a4e8c528c38a2456791326f279ec55296d2eac5a809fded05f774f"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -14730,7 +14730,7 @@
             "path": "scripts/setup-account-profile.sh",
             "sha256": "3a744ec6bc24e119574182f5d611296346404189bd3e973f546d169dd2f25dfb"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -14768,7 +14768,7 @@
             "path": "scripts/terminal-color.mjs",
             "sha256": "401c92adce1fb1f2a06c9b726670da2aa786376c9fd0ca22944c80b1a4c806c2"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -14806,7 +14806,7 @@
             "path": "settings.json",
             "sha256": "0e2a111ff1a6ca56d2baf757a8e38e9fd396c0161047d7eab00faf2f5ef6c56b"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }
@@ -14921,7 +14921,7 @@
             "path": "subagents.json",
             "sha256": "26efb1903b193857b297e0e3cb8cb8aab2cfd79ae66e5d84478d2bd83e541e43"
           },
-          "sha256": "82cf75827865e40588c637af0fd3ec393171aabffcca39cf2286a17a5f4f6a44",
+          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
           "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
           "verification": "passed"
         }

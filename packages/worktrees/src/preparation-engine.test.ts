@@ -73,7 +73,14 @@ function harness(
       capture: async () => ({ ...evidence, lockfileHashes: [...evidence.lockfileHashes] }),
     },
     execution: {
-      resolveExecutable: async (command) => ({ path: command, sha256: 'executable-hash' }),
+      resolveExecutable: async (command) => ({
+        path: command,
+        sha256: 'executable-hash',
+        size: 1,
+        modifiedMs: 1,
+        trustedPrefixArguments: [],
+        supportFiles: [],
+      }),
       spawn: async (request) => {
         spawns.push(request);
         const result = results.shift() ?? { exitCode: 0, output: '' };
@@ -223,6 +230,9 @@ describe('preparation approval and execution', () => {
       h.adapters,
     );
     const phrases = preparationApprovalPhrases(approval);
+    if (!phrases.packageAutomationApproval) {
+      throw new Error('package approval phrase was not generated');
+    }
     await expect(
       new PreparationEngine(h.adapters).prepare({
         ...request(p, approval),
@@ -423,11 +433,15 @@ describe('preparation approval and execution', () => {
       request(p, approval, { VISIBLE: secret }),
     );
     const log = [...h.logs.values()][0];
+    const step = state.steps[0];
+    if (!log || !step?.logTail) {
+      throw new Error('preparation log fixture is incomplete');
+    }
     expect(Buffer.byteLength(log)).toBeLessThanOrEqual(65536);
     expect(log).not.toContain(secret);
     expect(log).toContain('[REDACTED]');
-    expect(Buffer.byteLength(state.steps[0].logTail!)).toBeLessThanOrEqual(4096);
-    expect(state.steps[0].logTail).not.toContain(secret);
+    expect(Buffer.byteLength(step.logTail)).toBeLessThanOrEqual(4096);
+    expect(step.logTail).not.toContain(secret);
   });
 
   it('times out and terminates only the matching MPX-owned process fingerprint', async () => {
@@ -694,12 +708,20 @@ describe('preparation approval and execution', () => {
     );
     const engine = new PreparationEngine(h.adapters);
     const failed = await engine.prepare(request(p, approval));
-    const oldLogPath = failed.steps[0].logPath!;
+    const failedStep = failed.steps[0];
+    if (!failedStep?.logPath) {
+      throw new Error('failed preparation did not retain its log path');
+    }
+    const oldLogPath = failedStep.logPath;
     expect(failed.status).toBe('failed');
     expect(h.logs.get(oldLogPath)).toBe('old diagnostics');
 
     const retried = await engine.retry(request(p, approval));
-    const currentLogPath = retried.steps[0].logPath!;
+    const retriedStep = retried.steps[0];
+    if (!retriedStep?.logPath) {
+      throw new Error('retried preparation did not retain its log path');
+    }
+    const currentLogPath = retriedStep.logPath;
 
     expect(retried.status).toBe('ready');
     expect(retried.runId).not.toBe(failed.runId);

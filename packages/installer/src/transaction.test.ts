@@ -13,6 +13,25 @@ import {
   type StoredTransaction,
 } from './transaction.js';
 
+async function captureAggregateError(action: () => Promise<unknown>): Promise<AggregateError> {
+  try {
+    await action();
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error('Expected operation to reject with AggregateError');
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  throw new Error('Expected aggregate entry to be an Error');
+}
+
 class BytesAdapter implements SideEffectAdapter {
   readonly name = 'files';
   constructor(
@@ -481,12 +500,9 @@ describe('installer transactions', () => {
         desiredDigest: 'b'.repeat(64),
       },
     ]);
-    const failure = await service
-      .apply(plan, plan.confirmationDigest)
-      .catch((error) => error as AggregateError);
-    expect(failure).toBeInstanceOf(AggregateError);
+    const failure = await captureAggregateError(() => service.apply(plan, plan.confirmationDigest));
     expect(failure.message).toBe('injected');
-    expect(failure.errors.map((error) => (error as Error).message)).toEqual([
+    expect(failure.errors.map((error: unknown) => errorMessage(error))).toEqual([
       'injected',
       'restore failed',
     ]);
@@ -530,10 +546,10 @@ describe('installer transactions', () => {
       throw new Error('uninstall failed');
     };
     adapter.restoreFailure = new Error('restore failed');
-    const failure = await service
-      .uninstall(uninstallPlan, uninstallPlan.confirmationDigest)
-      .catch((error) => error as AggregateError);
-    expect(failure.errors.map((error) => (error as Error).message)).toEqual([
+    const failure = await captureAggregateError(() =>
+      service.uninstall(uninstallPlan, uninstallPlan.confirmationDigest),
+    );
+    expect(failure.errors.map((error: unknown) => errorMessage(error))).toEqual([
       'uninstall failed',
       'restore failed',
     ]);

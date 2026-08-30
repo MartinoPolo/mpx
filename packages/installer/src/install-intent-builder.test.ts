@@ -362,7 +362,7 @@ function externalBuildResult(
       verifierRef: `${entry.adapter}:${entry.id}:${planDigest}`,
     };
   });
-  return {
+  return parseInstallIntentBuildResultV1({
     schemaVersion: 1,
     kind: 'install-intent-build-result',
     intent: {
@@ -374,7 +374,7 @@ function externalBuildResult(
       externalIntegrations: externalPlans.map(({ plan: _plan, ...entry }) => entry),
     },
     externalPlans,
-  } as InstallIntentBuildResultV1;
+  });
 }
 
 function verificationBuilder(adapters: {

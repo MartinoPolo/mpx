@@ -34,6 +34,15 @@ const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;
 const originalStatusSnapshotFile = process.env.MPX_STATUS_SNAPSHOT_FILE;
 const originalRuntimeStatusEnvelopeFile = process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE;
+
+function required<T>(value: T | undefined, label: string): T {
+  expect(value, label).toBeDefined();
+  if (value === undefined) {
+    throw new Error(`${label} was not registered`);
+  }
+  return value;
+}
+
 afterEach(() => {
   if (originalRuntimeContext === undefined) {
     delete process.env.MPX_RUNTIME_CONTEXT;
@@ -92,7 +101,9 @@ describe('production Pi projection', () => {
     process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
     process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
     await module.activate(pi);
-    const projected = await loadTool!.execute('load', { identity: 'full' });
+    const projected = await required(loadTool, 'model load tool').execute('load', {
+      identity: 'full',
+    });
     const canonical = await loadSkillBody({
       canonicalRoot: f.canonicalRoot,
       manifest: f.manifest,
@@ -110,7 +121,7 @@ describe('production Pi projection', () => {
       identity: 'full',
       invocation: 'model',
     });
-    expect(projected.content[0].text).toBe(canonical.wrappedBody);
+    expect(required(projected.content[0], 'projected content').text).toBe(canonical.wrappedBody);
     expect(projected.details.provenance).toEqual(canonical.provenance);
     expect({
       body: canonical.body,
@@ -192,7 +203,10 @@ describe('production Pi projection', () => {
         }
       },
     });
-    expect((await loadTool!.execute('load', { identity: 'local' })).content[0].text).toContain(
+    const loaded = await required(loadTool, 'model load tool').execute('load', {
+      identity: 'local',
+    });
+    expect(required(loaded.content[0], 'loaded project content').text).toContain(
       'EXACT PROJECT BODY',
     );
   });
@@ -494,7 +508,11 @@ describe('production Pi projection', () => {
         events.set(name, [...(events.get(name) ?? []), handler]);
       },
     });
-    await events.get('session_start')![0](
+    const sessionStart = required(
+      required(events.get('session_start'), 'session start handlers')[0],
+      'session start handler',
+    );
+    await sessionStart(
       {},
       {
         ui: {
@@ -533,7 +551,12 @@ describe('production Pi projection', () => {
     openSpy.mockClear();
     lstatSpy.mockClear();
     hashSpy.mockClear();
-    await events.get('before_agent_start')!({ systemPrompt: 'BASE' });
+    await required(
+      events.get('before_agent_start'),
+      'before agent start handler',
+    )({
+      systemPrompt: 'BASE',
+    });
     const hot = {
       opens: openSpy.mock.calls.length,
       stats: lstatSpy.mock.calls.length,
@@ -542,7 +565,10 @@ describe('production Pi projection', () => {
     openSpy.mockClear();
     lstatSpy.mockClear();
     hashSpy.mockClear();
-    await events.get('session_start')!({}, { ui: { setStatus() {} } });
+    await required(events.get('session_start'), 'session start handler')(
+      {},
+      { ui: { setStatus() {} } },
+    );
     const full = {
       opens: openSpy.mock.calls.length,
       stats: lstatSpy.mock.calls.length,
@@ -581,17 +607,29 @@ describe('production Pi projection', () => {
     });
     await writeFile(path.join(projection.directory, 'skills', 'full', 'guide.txt'), 'altered\n');
     await expect(
-      tools.get('mpx_model_search')!.execute('search', { query: 'full' }),
+      required(tools.get('mpx_model_search'), 'model search tool').execute('search', {
+        query: 'full',
+      }),
     ).resolves.toBeDefined();
     await expect(
-      events.get('before_agent_start')!({ systemPrompt: 'BASE' }),
+      required(
+        events.get('before_agent_start'),
+        'before agent start handler',
+      )({
+        systemPrompt: 'BASE',
+      }),
     ).resolves.toBeDefined();
     await expect(
-      tools.get('mpx_model_load')!.execute('load', { identity: 'full' }),
+      required(tools.get('mpx_model_load'), 'model load tool').execute('load', {
+        identity: 'full',
+      }),
     ).rejects.toThrow('RESTART_REQUIRED');
-    await expect(events.get('session_start')!({}, { ui: { setStatus() {} } })).rejects.toThrow(
-      'RESTART_REQUIRED',
-    );
+    await expect(
+      required(events.get('session_start'), 'session start handler')(
+        {},
+        { ui: { setStatus() {} } },
+      ),
+    ).rejects.toThrow('RESTART_REQUIRED');
   });
 
   it('rejects same-size pathname replacement of a selected skill body', async () => {
@@ -616,7 +654,9 @@ describe('production Pi projection', () => {
     const original = await readFile(body);
     await rename(body, `${body}.old`);
     await writeFile(body, Buffer.alloc(original.length, 88));
-    await expect(load!.execute('load', { identity: 'full' })).rejects.toThrow('RESTART_REQUIRED');
+    await expect(
+      required(load, 'model load tool').execute('load', { identity: 'full' }),
+    ).rejects.toThrow('RESTART_REQUIRED');
   });
 
   it('rejects pathname replacement of a selected skill body after opening its handle', async () => {
@@ -662,9 +702,9 @@ describe('production Pi projection', () => {
       return originalRead.apply(this, args);
     });
 
-    await expect(load!.execute('load', { identity: 'full' })).rejects.toThrow(
-      'RESTART_REQUIRED: SKILL_BODY_INVALID',
-    );
+    await expect(
+      required(load, 'model load tool').execute('load', { identity: 'full' }),
+    ).rejects.toThrow('RESTART_REQUIRED: SKILL_BODY_INVALID');
     expect(replaced).toBe(true);
   });
 
@@ -689,7 +729,9 @@ describe('production Pi projection', () => {
     const body = path.join(projection.directory, 'skills', 'full', 'body.md');
     const original = await readFile(body);
     await writeFile(body, Buffer.alloc(original.length, 89));
-    await expect(load!.execute('load', { identity: 'full' })).rejects.toThrow('RESTART_REQUIRED');
+    await expect(
+      required(load, 'model load tool').execute('load', { identity: 'full' }),
+    ).rejects.toThrow('RESTART_REQUIRED');
   });
 
   it('rejects bounded-metadata violations before projection traversal', async () => {
@@ -821,7 +863,13 @@ describe('production Pi projection', () => {
       "export const classifyDangerousCommand=()=>({action:'allow'});\n",
     );
     await expect(
-      events.get('tool_call')!({ toolName: 'bash', input: { command: 'rm -rf /' } }),
+      required(
+        events.get('tool_call'),
+        'tool call handler',
+      )({
+        toolName: 'bash',
+        input: { command: 'rm -rf /' },
+      }),
     ).rejects.toThrow('RESTART_REQUIRED');
   });
 
@@ -842,7 +890,7 @@ describe('production Pi projection', () => {
         events.set(name, handler);
       },
     });
-    const policy = events.get('tool_call')!;
+    const policy = required(events.get('tool_call'), 'tool call handler');
     await expect(policy({ toolName: 'bash', input: { command: 'rm -rf /' } })).resolves.toEqual({
       block: true,
       reason:
@@ -937,7 +985,7 @@ describe('production Pi projection', () => {
         events.set(name, [...(events.get(name) ?? []), handler]);
       },
       sendUserMessage: async (content: readonly { type: 'text'; text: string }[]) => {
-        sent.push(content[0].text);
+        sent.push(required(content[0], 'sent user message').text);
       },
     };
     process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
@@ -959,13 +1007,19 @@ describe('production Pi projection', () => {
     expect(events.has('session_start')).toBe(true);
     expect(events.has('session_shutdown')).toBe(true);
 
-    const beforeAgentStart = events.get('before_agent_start')![0];
+    const beforeAgentStart = required(
+      required(events.get('before_agent_start'), 'before agent start handlers')[0],
+      'before agent start handler',
+    );
     expect(await beforeAgentStart({ systemPrompt: 'BASE' })).toEqual({
       systemPrompt:
         'BASE\n\nMPX skills:\n- /mpx:full: Full skill (triggers: full trigger)\n- /mpx:named',
     });
 
-    const sessionStart = events.get('session_start')![0];
+    const sessionStart = required(
+      required(events.get('session_start'), 'session start handlers')[0],
+      'session start handler',
+    );
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
     await sessionStart(
       {},
@@ -999,11 +1053,18 @@ describe('production Pi projection', () => {
     );
     await beforeAgentStart({ systemPrompt: 'BASE' });
     expect(statusCalls.at(-1)).toEqual(['mpx', expectedRuntimeStatus]);
-    await events.get('session_shutdown')![0]();
+    await required(
+      required(events.get('session_shutdown'), 'session shutdown handlers')[0],
+      'session shutdown handler',
+    )();
     expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
     clearIntervalSpy.mockRestore();
 
-    await expect(tools.get('mpx_model_search')!.execute('tool-1', { query: '' })).resolves.toEqual({
+    await expect(
+      required(tools.get('mpx_model_search'), 'model search tool').execute('tool-1', {
+        query: '',
+      }),
+    ).resolves.toEqual({
       content: [
         {
           type: 'text',
@@ -1033,23 +1094,31 @@ describe('production Pi projection', () => {
       },
     });
     await expect(
-      tools.get('mpx_model_load')!.execute('tool-2', { identity: 'full' }),
+      required(tools.get('mpx_model_load'), 'model load tool').execute('tool-2', {
+        identity: 'full',
+      }),
     ).resolves.toMatchObject({
       content: [{ type: 'text', text: expect.stringContaining('identity=full') }],
       details: { identity: 'full', provenance: { invocation: 'model' } },
     });
     await expect(
-      tools.get('mpx_model_load')!.execute('tool-3', { identity: 'explicit' }),
+      required(tools.get('mpx_model_load'), 'model load tool').execute('tool-3', {
+        identity: 'explicit',
+      }),
     ).rejects.toThrow(/SKILL_INVOCATION_DENIED|RESTART_REQUIRED/u);
 
-    await commands.get('mpx:explicit')!.handler('ignore /mpx:full prose');
+    await required(commands.get('mpx:explicit'), 'explicit command').handler(
+      'ignore /mpx:full prose',
+    );
     expect(sent).toHaveLength(1);
     expect(sent[0]).toContain('identity=explicit');
     expect(sent[0]).toContain('origin=human-explicit');
 
     await writeFile(path.join(projection.directory, 'skills', 'full', 'body.md'), 'changed\n');
     await expect(
-      tools.get('mpx_model_load')!.execute('tool-4', { identity: 'full' }),
+      required(tools.get('mpx_model_load'), 'model load tool').execute('tool-4', {
+        identity: 'full',
+      }),
     ).rejects.toThrow(/RESTART_REQUIRED/u);
 
     await writeFile(
@@ -1064,7 +1133,9 @@ describe('production Pi projection', () => {
     delete process.env.MPX_RUNTIME_CONTEXT;
     delete process.env.MPX_STATUS_SNAPSHOT_FILE;
     await expect(
-      tools.get('mpx_model_search')!.execute('tool-5', { query: 'full' }),
+      required(tools.get('mpx_model_search'), 'model search tool').execute('tool-5', {
+        query: 'full',
+      }),
     ).rejects.toThrow(/RESTART_REQUIRED/u);
   });
 });

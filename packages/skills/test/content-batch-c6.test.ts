@@ -59,6 +59,9 @@ describe('Batch C6 personal skills', () => {
           /\[[^\]]*\]\((?!https?:|file:|#)([^)#]+)(?:#[^)]+)?\)/gu,
         )) {
           const reference = match[1];
+          if (!reference) {
+            continue;
+          }
           const candidate = reference.includes('../shared/')
             ? path.resolve(
                 root,

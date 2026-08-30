@@ -1,2 +1,3 @@
-import { defineConfig } from 'vitest/config';
-export default defineConfig({ test: { include: ['test/**/*.test.ts'] } });
+import { createWorkspaceUnitConfig } from '../../../vitest.shared.ts';
+
+export default createWorkspaceUnitConfig(import.meta.dirname);

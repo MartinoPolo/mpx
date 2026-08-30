@@ -557,6 +557,7 @@ describe('Phase F launch execution', () => {
       });
       return { promise, resolve, reject };
     };
+    const executionStarted = deferred<void>();
     const processExit = deferred<{
       exitCode: number;
       stdout: string;
@@ -592,7 +593,10 @@ describe('Phase F launch execution', () => {
         return cancel;
       }),
     };
-    const execute = vi.fn(async () => processExit.promise);
+    const execute = vi.fn(async () => {
+      executionStarted.resolve();
+      return processExit.promise;
+    });
     const executor: ExecutorAdapter = {
       name: 'docker',
       verify: async () => ({
@@ -628,7 +632,7 @@ describe('Phase F launch execution', () => {
       launchStatusRefreshClock: clock,
       statusProvider,
     });
-    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+    await executionStarted.promise;
     const refresh = scheduled!();
     await vi.waitFor(() => expect(materializer.materialize).toHaveBeenCalledTimes(2));
     processExit.resolve({ exitCode: 0, stdout: '', stderr: '', truncated: false });

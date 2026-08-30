@@ -121,10 +121,8 @@ describe('four-state v4 policy', () => {
 
   it('rejects v3, stale hashes, runtime mismatches, and excluded requests', async () => {
     const value = await fixture({ named: 'name-only', excluded: 'name-only' });
-    const stale = structuredClone(value.artifact) as typeof value.artifact & {
-      schemaVersion: number;
-    };
-    stale.schemaVersion = 3;
+    const stale = structuredClone(value.artifact);
+    Object.defineProperty(stale, 'schemaVersion', { value: 3 });
     expect(() =>
       modelSearchSkills(stale, value.catalog, 'named', {
         artifactKey: stale.reference.artifactKey,

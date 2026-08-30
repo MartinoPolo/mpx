@@ -131,14 +131,17 @@ const artifactFacts: SkillArtifactFacts = {
 };
 const artifact = (overrides: Partial<SkillArtifactFacts> = {}) =>
   createSkillArtifactReference({ ...artifactFacts, ...overrides });
-const base = {
+const unboundBase = {
   userConfig: config,
   cwd: 'C:/projects/repo',
   runtime: 'pi',
   selectedNativeRuntimeRoot: 'C:/native/pi',
+  policyInputs: { policyVersion: 1 },
+} as const;
+const base = {
+  ...unboundBase,
   projectId: 'sample/app',
   skillArtifact: artifact(),
-  policyInputs: { policyVersion: 1 },
 } as const;
 
 afterEach(() => {
@@ -500,10 +503,9 @@ describe('launch resolution', () => {
 
   it('does not require cross-domain grants for inferred personal-assistant and developer modes, but still requires them for inferred project mode', async () => {
     const assistant = await resolveLaunch({
-      ...base,
+      ...unboundBase,
       identity: 'personal',
       cwd: 'C:/assistant/input/note',
-      projectId: undefined,
       skillArtifact: artifact({ contentScope: 'assistant-input', projectId: null }),
     });
     expect(assistant).toMatchObject({
@@ -513,10 +515,9 @@ describe('launch resolution', () => {
     });
 
     const developer = await resolveLaunch({
-      ...base,
+      ...unboundBase,
       identity: 'personal',
       cwd: 'C:/cloned/repo',
-      projectId: undefined,
       skillArtifact: artifact({
         contentScope: 'cloned-repositories',
         projectId: null,
@@ -551,9 +552,8 @@ describe('launch resolution', () => {
   it('requires a canonical project id for project mode', async () => {
     await expect(
       resolveLaunch({
-        ...base,
+        ...unboundBase,
         identity: 'personal',
-        projectId: undefined,
         skillArtifact: artifact({ projectId: null }),
       }),
     ).rejects.toMatchObject({ code: 'PROJECT_REQUIRED' });
@@ -815,7 +815,7 @@ describe('launch resolution', () => {
   it('derives a deterministic launchKey while varying each resolved tuple input one axis at a time', async () => {
     const enabled = structuredClone(config);
     enabled.executors.docker = {};
-    enabled.identities.alternate = structuredClone(enabled.identities.personal);
+    enabled.identities.alternate = structuredClone(enabled.identities.personal!);
     enabled.presets.equivalent = {
       identity: 'personal',
       mode: 'project',
@@ -941,11 +941,11 @@ describe('launch resolution', () => {
     const reasonVariant = await resolveLaunch({
       ...elevated,
       reason: 'Reason two',
-      grantApprovals: [{ ...elevated.grantApprovals[0], reason: 'Reason two' }],
+      grantApprovals: [{ ...elevated.grantApprovals[0]!, reason: 'Reason two' }],
     });
     const approvalVariant = await resolveLaunch({
       ...elevated,
-      grantApprovals: [{ ...elevated.grantApprovals[0], approvalKey: hash('b') }],
+      grantApprovals: [{ ...elevated.grantApprovals[0]!, approvalKey: hash('b') }],
     });
     expect(reasonVariant.launchKey).not.toBe(elevatedOriginal.launchKey);
     expect(approvalVariant.launchKey).not.toBe(elevatedOriginal.launchKey);

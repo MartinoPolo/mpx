@@ -111,7 +111,10 @@ describe('conversation branching', () => {
 
   it('rejects a missing or deleted repository/worktree during read-only planning', async () => {
     const deps = dependencies();
-    deps.inspectWorkspace.mockResolvedValue({ exists: false, collisionDisclosure: [] });
+    deps.inspectWorkspace.mockResolvedValue({
+      exists: false,
+      collisionDisclosure: ['same repository history'],
+    });
     await expect(new ConversationBranchService(deps).plan(base)).rejects.toMatchObject({
       code: 'SESSION_BRANCH_WORKSPACE_MISSING',
     });

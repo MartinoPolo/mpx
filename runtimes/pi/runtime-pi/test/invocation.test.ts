@@ -2,7 +2,11 @@ import { expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createRuntimeContextV1, createSessionLifecycleBindingV1 } from '@mpx/runtime-contracts';
+import {
+  createRuntimeContextV1,
+  createSessionLifecycleBindingV1,
+  type PublishedRuntimeArtifactReference,
+} from '@mpx/runtime-contracts';
 import { planPiInvocation, verifyPiResumeTarget } from '../src/index.js';
 
 const runtimeContext = createRuntimeContextV1({
@@ -48,7 +52,12 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
       MPX_RUNTIME_CONTEXT_FILE: 'C:/launch/context.json',
     },
   });
-  expect(JSON.parse(plan.env.MPX_RUNTIME_CONTEXT)).toEqual(runtimeContext);
+  const serializedRuntimeContext = plan.env.MPX_RUNTIME_CONTEXT;
+  expect(serializedRuntimeContext).toBeDefined();
+  if (!serializedRuntimeContext) {
+    throw new Error('runtime context was not serialized');
+  }
+  expect(JSON.parse(serializedRuntimeContext)).toEqual(runtimeContext);
   expect(Object.keys(plan.env)).not.toEqual(
     expect.arrayContaining(['AUTH', 'SESSION', 'TRUST', 'CACHE']),
   );
@@ -175,8 +184,13 @@ it('passes only the launch-private bridge attestation to the generated Pi extens
     cwd: 'C:/repo',
     bridge,
   });
-  expect(JSON.parse(plan.env.MPX_PI_LAUNCH_PRIVATE_BRIDGE)).toEqual(bridge);
-  expect(plan.env.MPX_PI_LAUNCH_PRIVATE_BRIDGE).not.toMatch(/oauth|auth\.json|accountRoot|token/iu);
+  const serializedBridge = plan.env.MPX_PI_LAUNCH_PRIVATE_BRIDGE;
+  expect(serializedBridge).toBeDefined();
+  if (!serializedBridge) {
+    throw new Error('launch-private bridge was not serialized');
+  }
+  expect(JSON.parse(serializedBridge)).toEqual(bridge);
+  expect(serializedBridge).not.toMatch(/oauth|auth\.json|accountRoot|token/iu);
 });
 
 it('binds the live status snapshot path only in the Pi child environment', () => {
@@ -195,6 +209,17 @@ it('binds the live status snapshot path only in the Pi child environment', () =>
 });
 
 it('propagates the exact published projection reference as JSON', () => {
+  const projectionReference: PublishedRuntimeArtifactReference = {
+    projectionKey: 'f'.repeat(64),
+    launchBinding: {
+      launchKey: runtimeContext.launchKey,
+      descriptorDigest: runtimeContext.launchDescriptor.digest,
+      runtimeArtifactKey: runtimeContext.runtimeArtifact.artifactKey,
+      runtime: 'pi',
+      manifestKey: runtimeContext.manifestKey,
+    },
+    fileMapHash: 'e'.repeat(64),
+  };
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
     accountRoot: 'C:/native/pi/account-a',
@@ -204,15 +229,13 @@ it('propagates the exact published projection reference as JSON', () => {
       directory: 'C:/artifacts/pi',
       extension: 'C:/artifacts/pi/extension.mjs',
       runtimeContextFile: 'C:/artifacts/pi/runtime-context.json',
-      theme: 'green',
+      theme: 'dark',
       artifactKey: 'd'.repeat(64),
-      reference: runtimeContext.runtimeArtifact,
+      reference: projectionReference,
       files: Object.freeze([]),
       reused: false,
-      revalidation: { directory: 'C:/artifacts/pi', reference: runtimeContext.runtimeArtifact },
+      revalidation: { directory: 'C:/artifacts/pi', reference: projectionReference },
     },
   });
-  expect(plan.env.MPX_RUNTIME_PROJECTION_REFERENCE).toBe(
-    JSON.stringify(runtimeContext.runtimeArtifact),
-  );
+  expect(plan.env.MPX_RUNTIME_PROJECTION_REFERENCE).toBe(JSON.stringify(projectionReference));
 });

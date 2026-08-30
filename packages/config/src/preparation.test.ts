@@ -3,19 +3,32 @@ import { describe, expect, it } from 'vitest';
 import { doctor } from './doctor.js';
 import { preparationPlan } from './preparation.js';
 import { assertValid, validateProject } from './schema.js';
+import type { PreparationStep, ProjectConfig } from './types.js';
 
 const base = () => ({
   schemaVersion: 1 as const,
   project: { id: 'acme/app' },
   repository: { provider: 'github' as const, remote: 'origin' },
 });
-const configured = (
+type ConfiguredProject = ProjectConfig & {
+  worktrees: {
+    postCreate: { execution: 'foreground' | 'background' | 'none'; steps: PreparationStep[] };
+  };
+};
+function configured(
+  steps: PreparationStep[],
+  execution?: 'foreground' | 'background' | 'none',
+): ConfiguredProject;
+function configured(steps: unknown[], execution?: 'foreground' | 'background' | 'none'): unknown;
+function configured(
   steps: unknown[],
   execution: 'foreground' | 'background' | 'none' = 'foreground',
-) => ({
-  ...base(),
-  worktrees: { postCreate: { execution, steps } },
-});
+): unknown {
+  return {
+    ...base(),
+    worktrees: { postCreate: { execution, steps } },
+  };
+}
 const malicious = JSON.parse(
   readFileSync(new URL('../test/fixtures/preparation-malicious.json', import.meta.url), 'utf8'),
 ) as {

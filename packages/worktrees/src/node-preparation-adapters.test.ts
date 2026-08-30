@@ -33,10 +33,19 @@ import {
   type PreparationAdapters,
   type PreparationState,
 } from './preparation-engine.js';
-import { resolveTrustedExecutable } from './trusted-executable.js';
+import { resolveTrustedExecutable, type ResolvedExecutable } from './trusted-executable.js';
+import type { PreparationPlan } from '@mpx/config';
 
 const exec = promisify(execFile);
 const roots: string[] = [];
+const resolvedExecutable = (command: string): ResolvedExecutable => ({
+  path: command,
+  sha256: 'executable',
+  size: 1,
+  modifiedMs: 1,
+  trustedPrefixArguments: [],
+  supportFiles: [],
+});
 const children: ChildProcess[] = [];
 afterEach(async () => {
   for (const child of children.splice(0)) {
@@ -152,7 +161,7 @@ it('makes a nested cwd lockfile mutation stale an otherwise valid preparation ap
   const adapters: PreparationAdapters = {
     evidence,
     execution: {
-      resolveExecutable: async (command) => ({ path: command, sha256: 'executable' }),
+      resolveExecutable: async (command) => resolvedExecutable(command),
       spawn: async () => ({ exitCode: 0, output: '' }),
       startBackground: async () => ({ pid: 1, startFingerprint: 'unused', ownerToken: 'unused' }),
     },
@@ -172,8 +181,8 @@ it('makes a nested cwd lockfile mutation stale an otherwise valid preparation ap
     process: { inspect: async () => undefined, terminateTree: async () => undefined },
     paths: { canonicalize: realpath },
   };
-  const plan = {
-    execution: 'foreground' as const,
+  const plan: PreparationPlan = {
+    execution: 'foreground',
     steps: [
       {
         id: 'build',
@@ -184,16 +193,20 @@ it('makes a nested cwd lockfile mutation stale an otherwise valid preparation ap
       },
     ],
     order: ['build'],
-    logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
+    logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
   };
   const approval = await createPreparationApproval(
     { plan, worktreeRoot: repository, packageManager: 'pnpm', environment: {} },
     adapters,
   );
   expect(approval.steps).toHaveLength(1);
+  const buildStep = plan.steps[0];
+  if (!buildStep) {
+    throw new Error('preparation plan fixture is empty');
+  }
   expect(
     (
-      await evidence.capture({ worktreeRoot: repository, cwd: nested, step: plan.steps[0] })
+      await evidence.capture({ worktreeRoot: repository, cwd: nested, step: buildStep })
     ).lockfileHashes.map((item) => item.path),
   ).toEqual(['npm-shrinkwrap.json', 'packages/web/package-lock.json', 'pnpm-lock.yaml']);
   await writeFile(nestedLockfile, 'nested-lock-v2\n');
@@ -244,7 +257,7 @@ it('reclaims a preparation CAS lock when its PID has been reused', async () => {
     lockTimeoutMs: 100,
     lockRetryMs: 1,
   });
-  const state = {
+  const state: PreparationState = {
     schemaVersion: 2,
     owner: 'mpx',
     key,
@@ -254,9 +267,9 @@ it('reclaims a preparation CAS lock when its PID has been reused', async () => {
     execution: 'foreground',
     createdAt: 1,
     updatedAt: 1,
-    steps: [],
+    steps: [] as PreparationState['steps'],
     finishedAt: 1,
-  } as const;
+  };
   await expect(store.compareAndSwap(key, undefined, state)).resolves.toBe(true);
 });
 
@@ -264,7 +277,7 @@ it('refuses to publish a preparation CAS lock without its own inspected start fi
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare own unknown '));
   roots.push(root);
   const key = 'own-unknown';
-  const state = {
+  const state: PreparationState = {
     schemaVersion: 2,
     owner: 'mpx',
     key,
@@ -274,7 +287,7 @@ it('refuses to publish a preparation CAS lock without its own inspected start fi
     execution: 'foreground',
     createdAt: 1,
     updatedAt: 1,
-    steps: [],
+    steps: [] as PreparationState['steps'],
     finishedAt: 1,
   } as const;
   const store = new NodePreparationStore(root, {
@@ -312,7 +325,7 @@ it('fails closed on unknown preparation lock inspection and times out for a live
       lockTimeoutMs: 5,
       lockRetryMs: 1,
     });
-    const state = {
+    const state: PreparationState = {
       schemaVersion: 2,
       owner: 'mpx',
       key,
@@ -324,7 +337,7 @@ it('fails closed on unknown preparation lock inspection and times out for a live
       updatedAt: 1,
       steps: [],
       finishedAt: 1,
-    } as const;
+    };
     await expect(store.compareAndSwap(key, undefined, state)).rejects.toMatchObject({
       code: 'PREPARATION_STATE_LOCK_TIMEOUT',
     });
@@ -349,7 +362,7 @@ it('reclaims ownerless and malformed preparation locks only after their bounded 
     const modifiedAt = (await stat(malformed ? path.join(lockPath, 'owner.json') : lockPath))
       .mtimeMs;
     let now = modifiedAt + 1;
-    const state = {
+    const state: PreparationState = {
       schemaVersion: 2,
       owner: 'mpx',
       key,
@@ -361,7 +374,7 @@ it('reclaims ownerless and malformed preparation locks only after their bounded 
       updatedAt: 1,
       steps: [],
       finishedAt: 1,
-    } as const;
+    };
     await expect(
       new NodePreparationStore(root, {
         processIdentityInspector: presentInspector(),
@@ -432,7 +445,7 @@ it('waits out ownerless grace after a process crashes before publishing CAS owne
   const lockPath = preparationLockPath(root, 'ownerless-crash');
   const currentLockTime = new Date();
   await utimes(lockPath, currentLockTime, currentLockTime);
-  const state = {
+  const state: PreparationState = {
     schemaVersion: 2,
     owner: 'mpx',
     key: 'ownerless-crash',
@@ -442,9 +455,9 @@ it('waits out ownerless grace after a process crashes before publishing CAS owne
     execution: 'foreground',
     createdAt: 1,
     updatedAt: 1,
-    steps: [],
+    steps: [] as PreparationState['steps'],
     finishedAt: 1,
-  } as const;
+  };
   await expect(
     new NodePreparationStore(root, {
       processIdentityInspector: presentInspector(),
@@ -485,7 +498,7 @@ it('recovers a real cross-process CAS lock after its owner crashes', async () =>
         ? { status: 'present', pid, startFingerprint: `process-${pid}` }
         : { status: 'absent', pid },
   };
-  const state = {
+  const state: PreparationState = {
     schemaVersion: 2,
     owner: 'mpx',
     key: 'crash-key',
@@ -495,9 +508,9 @@ it('recovers a real cross-process CAS lock after its owner crashes', async () =>
     execution: 'foreground',
     createdAt: 1,
     updatedAt: 1,
-    steps: [],
+    steps: [] as PreparationState['steps'],
     finishedAt: 1,
-  } as const;
+  };
   await expect(
     new NodePreparationStore(root, {
       processIdentityInspector: inspector,
@@ -531,7 +544,7 @@ it('serializes concurrent compare-and-swap writers across store instances', asyn
   roots.push(root);
   const first = new NodePreparationStore(root);
   const second = new NodePreparationStore(root);
-  const base = {
+  const base: PreparationState = {
     schemaVersion: 2,
     owner: 'mpx',
     key: 'shared',
@@ -541,8 +554,8 @@ it('serializes concurrent compare-and-swap writers across store instances', asyn
     execution: 'foreground',
     createdAt: 1,
     updatedAt: 1,
-    steps: [],
-  } as const;
+    steps: [] as PreparationState['steps'],
+  };
   expect(await first.compareAndSwap('shared', undefined, base)).toBe(true);
   const outcomes = await Promise.all([
     first.compareAndSwap('shared', 1, {
@@ -573,18 +586,18 @@ it('resolves package-manager selection for auto, none, and mismatch cases', asyn
   const yarnRoot = path.join(parent, 'yarn');
   await mkdir(yarnRoot);
   await writeFile(path.join(yarnRoot, 'yarn.lock'), 'lock');
-  const executableOnly = {
+  const executableOnly: PreparationPlan = {
     execution: 'foreground',
-    steps: [{ id: 'run', uses: 'executable', argv: ['tool'] }],
+    steps: [{ id: 'run', uses: 'executable', argv: ['tool'], required: true }],
     order: ['run'],
-    logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
-  } as const;
-  const installPlan = {
+    logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
+  };
+  const installPlan: PreparationPlan = {
     execution: 'foreground',
-    steps: [{ id: 'install', uses: 'package-install' }],
+    steps: [{ id: 'install', uses: 'package-install', required: true }],
     order: ['install'],
-    logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
-  } as const;
+    logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
+  };
 
   expect(await resolvePreparationPackageManager(npmRoot, installPlan, 'auto')).toBe('npm');
   expect(await resolvePreparationPackageManager(yarnRoot, installPlan, undefined)).toBe('yarn');
@@ -918,7 +931,7 @@ it('activates an acknowledged worker only after its verified identity is durably
       execution: 'background',
       steps: [],
       order: [],
-      logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
+      logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
     },
     worktreeRoot: root,
     packageManager: 'pnpm',
@@ -965,7 +978,7 @@ it('bounds inert-worker cleanup when durable verification persistence fails and 
       execution: 'background',
       steps: [],
       order: [],
-      logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
+      logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
     },
     worktreeRoot: root,
     packageManager: 'pnpm',
@@ -1006,7 +1019,7 @@ it('removes the request when trusted worker resolution fails before spawn', asyn
       execution: 'background',
       steps: [],
       order: [],
-      logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
+      logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
     },
     worktreeRoot: root,
     packageManager: 'pnpm',
@@ -1045,7 +1058,7 @@ it('removes the request and waits for actual child exit when an acknowledged wor
       execution: 'background',
       steps: [],
       order: [],
-      logging: { maxOutputBytes: 1024, redactEnvironmentValues: true },
+      logging: { maxOutputBytes: 65536, redactEnvironmentValues: true },
     },
     worktreeRoot: root,
     packageManager: 'pnpm',

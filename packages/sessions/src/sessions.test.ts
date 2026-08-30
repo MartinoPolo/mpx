@@ -1666,8 +1666,12 @@ it('quarantines a conflicting duplicate legacy record id clearly', async () => {
   });
 
   expect(plan.records).toHaveLength(1);
+  const plannedSource = plan.sources[0];
+  if (!plannedSource) {
+    throw new Error('legacy import plan did not retain its source');
+  }
   expect(plan.quarantine).toEqual([
-    { sourceKey: plan.sources[0].sourceKey, index: 1, code: 'LEGACY_DUPLICATE_CONFLICT' },
+    { sourceKey: plannedSource.sourceKey, index: 1, code: 'LEGACY_DUPLICATE_CONFLICT' },
   ]);
 });
 
@@ -1741,8 +1745,13 @@ it('preserves write-ahead dispositions across a crash before committed progress'
   const plan = await importer.planFiles([source], {
     acct: { identity, nativeBindingRef: 'native:opaque' },
   });
-  await store.put(plan.records[0]);
-  crashRecordId = plan.records[1].recordId;
+  const existingRecord = plan.records[0];
+  const newRecord = plan.records[1];
+  if (!existingRecord || !newRecord) {
+    throw new Error('legacy import plan did not contain both records');
+  }
+  await store.put(existingRecord);
+  crashRecordId = newRecord.recordId;
   await expect(importer.import(plan, plan.confirmationDigest)).rejects.toThrow(
     'crash before committed progress',
   );

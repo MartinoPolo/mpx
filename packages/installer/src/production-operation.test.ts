@@ -15,6 +15,13 @@ import {
 } from './production-operation.js';
 import { ImmutableInstallerService, MemoryTransactionStore } from './transaction.js';
 
+function required<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`Expected ${label}`);
+  }
+  return value;
+}
+
 const userConfigContent = (extra: Record<string, unknown> = {}) =>
   canonicalJson({
     identities: {},
@@ -159,7 +166,7 @@ it('creates absent user config exactly and accepts exact existing bytes', async 
       withUserConfig(releaseKey),
       releaseManifest(releaseKey),
     ),
-    config = operations.automatic[0];
+    config = required(operations.automatic[0], 'user-config operation');
   expect(config).toMatchObject({ id: '01-user-config', target });
   await adapter.apply(config);
   expect((await files.read(target))?.toString('utf8')).toBe(userConfigContent());
@@ -182,8 +189,11 @@ it('refuses different existing user-config bytes during planning and after obser
     'me',
     { files, resources: new FakeJsonResourceStore() },
   );
-  const config = (await adapter.operations(withUserConfig(releaseKey), releaseManifest(releaseKey)))
-    .automatic[0];
+  const config = required(
+    (await adapter.operations(withUserConfig(releaseKey), releaseManifest(releaseKey)))
+      .automatic[0],
+    'user-config operation',
+  );
   await files.write(target, Buffer.from('foreign'));
   await expect(adapter.apply(config)).rejects.toMatchObject({ code: 'INSTALL_FOREIGN_OR_DRIFTED' });
   await expect(
@@ -213,8 +223,11 @@ it('preserves a different user config created concurrently during apply', async 
     'me',
     { files, resources: new FakeJsonResourceStore() },
   );
-  const config = (await adapter.operations(withUserConfig(releaseKey), releaseManifest(releaseKey)))
-    .automatic[0];
+  const config = required(
+    (await adapter.operations(withUserConfig(releaseKey), releaseManifest(releaseKey)))
+      .automatic[0],
+    'user-config operation',
+  );
   await expect(adapter.apply(config)).rejects.toMatchObject({ code: 'INSTALL_FOREIGN_OR_DRIFTED' });
   expect(await files.read(target)).toEqual(concurrent);
 });
@@ -256,7 +269,9 @@ it('hash-verifies user-config drift and rolls back its creation when a later ope
     store,
     manifest: releaseManifest(releaseKey),
   });
-  const secondPlan = await stable.plan(withUserConfig(releaseKey), [operations.automatic[0]]);
+  const secondPlan = await stable.plan(withUserConfig(releaseKey), [
+    required(operations.automatic[0], 'user-config operation'),
+  ]);
   await stable.apply(secondPlan, secondPlan.confirmationDigest);
   await files.write(target, Buffer.from('drift'));
   await expect(stable.verify()).resolves.toMatchObject({
@@ -280,8 +295,11 @@ it('fails closed without overwriting a concurrent post-apply user-config change 
     'me',
     { files, resources: new FakeJsonResourceStore() },
   );
-  const config = (await adapter.operations(withUserConfig(releaseKey), releaseManifest(releaseKey)))
-      .automatic[0],
+  const config = required(
+      (await adapter.operations(withUserConfig(releaseKey), releaseManifest(releaseKey)))
+        .automatic[0],
+      'user-config operation',
+    ),
     snapshot = await adapter.capture(config);
   await adapter.apply(config);
   await files.write(target, concurrent);
@@ -448,14 +466,16 @@ it('inspects managed scheduled-task status through the read-only production port
     files: [{ path: 'bin/mpx.mjs', bytes: 3, sha256: 'b'.repeat(64) }],
   } as ReleaseManifestV1;
   const operations = await adapter.operations(intent, manifest),
-    task = operations.scheduled[0];
+    task = required(operations.scheduled[0], 'scheduled capture operation');
   await expect(adapter.inspectScheduledTaskStatus(task)).resolves.toMatchObject({
     exists: true,
     lastResult: 0,
   });
   expect(inspect).toHaveBeenCalledExactlyOnceWith(task.target);
   await expect(
-    adapter.inspectScheduledTaskStatus(operations.automatic[0]),
+    adapter.inspectScheduledTaskStatus(
+      required(operations.automatic[0], 'automatic installer operation'),
+    ),
   ).resolves.toBeUndefined();
   expect(inspect).toHaveBeenCalledTimes(1);
 });
@@ -502,7 +522,7 @@ it('plans from explicit roots without writes and applies managed profile and Ter
     theme: 'native',
   });
   expect(operations.scheduled.map((x) => x.id)).toEqual(['90-scheduled-capture']);
-  const task = operations.scheduled[0];
+  const task = required(operations.scheduled[0], 'scheduled capture operation');
   expect(task.desiredDigest).not.toBeNull();
   for (const operation of operations.automatic.filter(
     (x) => x.id === '05-cli-selector' || x.id === '10-profile-0' || x.id === '20-terminal-profile',

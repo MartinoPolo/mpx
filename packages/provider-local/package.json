@@ -11,9 +11,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json && vitest run --testTimeout=30000",
-    "test": "vitest run --testTimeout=30000",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:unit": "pnpm --filter @mpx/provider-local... build && vitest run",
+    "test": "pnpm run test:unit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "check": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
     "@mpx/core": "workspace:*",

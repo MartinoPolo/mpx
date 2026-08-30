@@ -7,9 +7,27 @@ import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
 import { createNodeLifecycleFoundation, WorktreeLifecycleService } from './index.js';
+import type { LifecycleDependencies, LifecycleReleaseIdentity } from './lifecycle.js';
 
 const exec = promisify(execFile);
+
 const roots: string[] = [];
+function releaseIdentity(
+  overrides: Partial<LifecycleReleaseIdentity> = {},
+): LifecycleReleaseIdentity {
+  return {
+    schemaVersion: 1,
+    leaseId: 'lease',
+    projectId: 'integration/project',
+    repositoryId: 'repository',
+    worktreeId: 'linked-worktree',
+    worktreePath: 'C:/linked-worktree',
+    role: 'linked',
+    configHash: 'hash',
+    ...overrides,
+  };
+}
+
 const children: ChildProcess[] = [];
 afterEach(async () => {
   for (const child of children.splice(0)) {
@@ -154,7 +172,7 @@ it('serializes simultaneous real creates so only one worktree and lease are muta
       ...foundation,
       ports: {
         ensure: async () => ({ lease: { leaseId: `lease-${++leases}` } }),
-        captureReleaseIdentity: async () => ({}),
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => ({ orphaned: [] }),
       },
@@ -163,7 +181,7 @@ it('serializes simultaneous real creates so only one worktree and lease are muta
         cancel: async () => ({ status: 'cancelled' }),
         reconcile: async () => ({ status: 'ready' }),
       },
-      configHash: (value) => sha256Canonical(value as unknown as JsonValue),
+      configHash: (value) => sha256Canonical(JSON.parse(JSON.stringify(value)) as JsonValue),
     });
   const firstService = service(createNodeLifecycleFoundation(stateRoot));
   const secondService = service(createNodeLifecycleFoundation(stateRoot));
@@ -209,11 +227,13 @@ it('restarts from durable pre-Git intent without adding a second worktree after 
       await firstFoundation.state.writeAtomic(key, state);
     },
   };
-  const dependencies = (foundation: ReturnType<typeof createNodeLifecycleFoundation>) => ({
+  const dependencies = (
+    foundation: ReturnType<typeof createNodeLifecycleFoundation>,
+  ): LifecycleDependencies => ({
     ...foundation,
     ports: {
       ensure: async () => ({ lease: { leaseId: 'lease' } }),
-      captureReleaseIdentity: async () => ({}),
+      captureReleaseIdentity: async () => releaseIdentity(),
       releaseLinkedAfterRemoval: async () => ({}),
       reconcile: async () => ({ orphaned: [] }),
     },
@@ -222,7 +242,7 @@ it('restarts from durable pre-Git intent without adding a second worktree after 
       cancel: async () => ({ status: 'cancelled' }),
       reconcile: async () => ({ status: 'ready' }),
     },
-    configHash: (value) => sha256Canonical(value as unknown as JsonValue),
+    configHash: (value) => sha256Canonical(JSON.parse(JSON.stringify(value)) as JsonValue),
   });
   await expect(
     new WorktreeLifecycleService({ ...dependencies(firstFoundation), state: failingState }).create({
@@ -269,7 +289,7 @@ async function realRemovalFixture(label: string) {
     ...foundation,
     ports: {
       ensure: async () => ({ lease: { leaseId: 'lease' } }),
-      captureReleaseIdentity: async () => ({ leaseId: 'lease' }),
+      captureReleaseIdentity: async () => releaseIdentity(),
       releaseLinkedAfterRemoval: async () => ({ released: (++releases, true) }),
       reconcile: async () => ({ orphaned: [] }),
     },
@@ -278,7 +298,7 @@ async function realRemovalFixture(label: string) {
       cancel: async () => ({ status: 'cancelled' }),
       reconcile: async () => ({ status: 'ready' }),
     },
-    configHash: (value) => sha256Canonical(value as unknown as JsonValue),
+    configHash: (value) => sha256Canonical(JSON.parse(JSON.stringify(value)) as JsonValue),
   });
   const created = await service.create({ cwd: main, branch: `feature/${label}`, base: 'main' });
   return { main, service, worktreePath: created.worktreePath!, releases: () => releases };
@@ -329,7 +349,7 @@ it('preserves a real linked worktree and lease when the operation cwd is inside 
       cancel: async () => ({ status: 'cancelled' }),
       reconcile: async () => ({ status: 'ready' }),
     },
-    configHash: (value) => sha256Canonical(value as unknown as JsonValue),
+    configHash: (value) => sha256Canonical(JSON.parse(JSON.stringify(value)) as JsonValue),
   });
 
   await expect(
@@ -452,7 +472,7 @@ it('reconciles a manually removed real worktree and permits explicit identity-bo
   });
 
   await expect(
-    freshDependencies.ports.releaseLinkedAfterRemoval({ repositoryCwd: main, identity }),
+    freshDependencies.ports.releaseLinkedAfterRemoval({ identity }),
   ).resolves.toMatchObject({ released: true });
   await expect(readFile(leaseFile)).rejects.toMatchObject({ code: 'ENOENT' });
   const history = (
@@ -510,7 +530,7 @@ it('creates and removes a slash branch in a spaced real-repository path without 
       cancel: async () => ({ status: 'cancelled' }),
       reconcile: async () => ({ status: 'ready' }),
     },
-    configHash: (value) => sha256Canonical(value as unknown as JsonValue),
+    configHash: (value) => sha256Canonical(JSON.parse(JSON.stringify(value)) as JsonValue),
   });
   const previousEditor = process.env.GIT_EDITOR;
   const previousSequenceEditor = process.env.GIT_SEQUENCE_EDITOR;

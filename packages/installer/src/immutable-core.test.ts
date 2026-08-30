@@ -328,6 +328,9 @@ describe('immutable installer core', () => {
     await writeFile(path.join(source, 'runner.js'), 'runner');
     const manifest = await publishRelease({ sourceDirectory: source, appsRoot: apps });
     const entry = manifest.files[0];
+    if (!entry) {
+      throw new Error('Published release fixture has no files.');
+    }
     const receipt: OwnershipReceiptV1 = {
       schemaVersion: 2,
       kind: 'ownership-receipt',

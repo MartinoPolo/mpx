@@ -241,17 +241,21 @@ describe('selection MRU', () => {
     await expect(
       selectWorktree({ repository: 'acme/widgets', inventory, store }),
     ).rejects.toMatchObject({ code: 'WORKTREE_PATH_REQUIRED' });
+    const worktree = inventory[0];
+    if (!worktree) {
+      throw new Error('worktree fixture is empty');
+    }
     const selected = await selectWorktree({
       repository: 'acme/widgets',
-      path: inventory[0].path,
+      path: worktree.path,
       inventory,
       store,
     });
-    expect(selected.path).toBe(inventory[0].path);
+    expect(selected.path).toBe(worktree.path);
     expect(JSON.parse(await readFile(path.join(root, 'worktrees-mru.json'), 'utf8'))).toEqual({
       schemaVersion: 1,
       owner: 'mpx',
-      repositories: { 'acme/widgets': inventory[0].path },
+      repositories: { 'acme/widgets': worktree.path },
     });
   });
 });

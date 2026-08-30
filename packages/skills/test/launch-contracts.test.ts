@@ -49,7 +49,11 @@ describe('v4 lazy body validation', () => {
     await writeFile(path.join(outside, 'SKILL.md'), 'outside');
     const link = path.join(value.root, 'link');
     await symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
-    value.artifact.entries[0].source.path = path.join(link, 'SKILL.md');
+    const entry = value.artifact.entries[0];
+    if (!entry) {
+      throw new Error('fixture did not produce a runtime entry');
+    }
+    entry.source.path = path.join(link, 'SKILL.md');
     await expect(
       loadSkillBody({
         canonicalRoot: value.root,

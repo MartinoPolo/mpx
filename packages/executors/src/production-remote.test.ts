@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { JsonValue } from '@mpx/core';
 import {
   FakeSandboxWorker,
   PHASE_F2_REMOTE_TOOL_PATHS,
@@ -23,7 +24,7 @@ describe('production remote executor', () => {
       Object.fromEntries(
         PHASE_F2_REMOTE_TOOL_PATHS.map((path) => [
           path,
-          async (input: unknown) => ({ path, input }),
+          async (input: JsonValue): Promise<JsonValue> => ({ path, input }),
         ]),
       ),
     );

@@ -6,8 +6,9 @@ import {
   deriveLifecycleKey,
   type LifecycleDependencies,
   type LifecycleState,
-  type WorktreeInventoryEntry,
+  type LifecycleReleaseIdentity,
 } from './lifecycle.js';
+import type { WorktreeInventoryEntry } from './index.js';
 
 const config: ProjectConfig = {
   schemaVersion: 1,
@@ -17,6 +18,23 @@ const config: ProjectConfig = {
 };
 const main = 'C:\\MP Projects\\widget repo';
 const target = 'C:\\MP Projects\\widget repo.worktrees\\feature\\issue-42';
+
+function releaseIdentity(
+  overrides: Partial<LifecycleReleaseIdentity> = {},
+): LifecycleReleaseIdentity {
+  return {
+    schemaVersion: 1,
+    leaseId: 'lease-1',
+    projectId: 'acme/widgets',
+    repositoryId: 'repository',
+    worktreeId: 'linked-worktree',
+    worktreePath: target,
+    role: 'linked',
+    configHash: 'hash',
+    ...overrides,
+  };
+}
+
 const linked: WorktreeInventoryEntry = {
   path: target,
   branch: 'feature/issue-42',
@@ -150,7 +168,7 @@ describe('worktree lifecycle create', () => {
           value.events.push('ports:ensure');
           return { lease: { leaseId: 'lease-1' } };
         },
-        captureReleaseIdentity: async () => ({}),
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => ({ orphaned: [] }),
       },
@@ -464,7 +482,7 @@ describe('worktree lifecycle create', () => {
           effects.push('ports');
           return { lease: { leaseId: 'lease-1' } };
         },
-        captureReleaseIdentity: async () => ({}) as never,
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => ({ orphaned: [] }),
       },
@@ -623,6 +641,9 @@ describe('worktree lifecycle create', () => {
     });
     await value.service.remove({ cwd: main, worktreePath: first.worktreePath! });
     const removed = [...value.states.values()][0];
+    if (!removed) {
+      throw new Error('removed lifecycle state was not persisted');
+    }
     value.dependencies.state.list = async () => [removed];
 
     await value.service.reconcile({ cwd: main });
@@ -746,7 +767,7 @@ describe('worktree lifecycle create', () => {
           ensured += 1;
           throw new Error('ports failed');
         },
-        captureReleaseIdentity: async () => ({}),
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => ({ orphaned: [] }),
       },
@@ -871,7 +892,7 @@ describe('worktree lifecycle safety and resume', () => {
       },
       ports: {
         ensure: async () => ({}),
-        captureReleaseIdentity: async () => ({}),
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => {
           value.events.push('ports:reconcile');
@@ -889,41 +910,44 @@ describe('worktree lifecycle safety and resume', () => {
   it.each([
     ['missing inventory', undefined, 'ready'],
     ['reused path with a different branch', 'other-branch', 'ready'],
-  ])('fails closed for an existing %s state', async (_description, inventoryBranch, status) => {
-    const value = fixture(
-      inventoryBranch === undefined
-        ? {}
-        : {
-            git: {
-              run: async () => Buffer.alloc(0),
-              list: async () => [{ ...linked, branch: inventoryBranch }],
-              isDirty: async () => false,
-              isInUse: async () => false,
+  ] as const)(
+    'fails closed for an existing %s state',
+    async (_description, inventoryBranch, status) => {
+      const value = fixture(
+        inventoryBranch === undefined
+          ? {}
+          : {
+              git: {
+                run: async () => Buffer.alloc(0),
+                list: async () => [{ ...linked, branch: inventoryBranch }],
+                isDirty: async () => false,
+                isInUse: async () => false,
+              },
             },
-          },
-    );
-    const key = deriveLifecycleKey(value.repositoryIdentity, 'feature/issue-42');
-    value.states.set(key, {
-      schemaVersion: 1,
-      owner: 'mpx',
-      key,
-      repositoryId: 'acme/widgets',
-      repositoryIdentity: value.repositoryIdentity,
-      mainRoot: main,
-      worktreePath: target,
-      branch: 'feature/issue-42',
-      base: 'durable-base',
-      configHash: 'hash',
-      status,
-      createdAt: 1,
-      updatedAt: 2,
-    });
-    await expect(
-      value.service.create({ cwd: main, branch: 'feature/issue-42' }),
-    ).rejects.toMatchObject({
-      code: expect.stringMatching(/WORKTREE_(?:LIFECYCLE_INVENTORY|RESUME_BRANCH)_MISMATCH/u),
-    });
-  });
+      );
+      const key = deriveLifecycleKey(value.repositoryIdentity, 'feature/issue-42');
+      value.states.set(key, {
+        schemaVersion: 1,
+        owner: 'mpx',
+        key,
+        repositoryId: 'acme/widgets',
+        repositoryIdentity: value.repositoryIdentity,
+        mainRoot: main,
+        worktreePath: target,
+        branch: 'feature/issue-42',
+        base: 'durable-base',
+        configHash: 'hash',
+        status,
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      await expect(
+        value.service.create({ cwd: main, branch: 'feature/issue-42' }),
+      ).rejects.toMatchObject({
+        code: expect.stringMatching(/WORKTREE_(?:LIFECYCLE_INVENTORY|RESUME_BRANCH)_MISMATCH/u),
+      });
+    },
+  );
 
   it.each(['approval-required', 'failed'] as const)(
     'resumes a %s state with its durable base',
@@ -1013,7 +1037,9 @@ describe('worktree lifecycle safety and resume', () => {
       },
       state: {
         load: async () => state,
-        writeAtomic: async (_key, next) => Object.assign(state, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(state, structuredClone(next));
+        },
         list: async () => [state],
       },
       ports: {
@@ -1022,7 +1048,7 @@ describe('worktree lifecycle safety and resume', () => {
           expect(request.configHash).toBe(state.configHash);
           return { lease: { leaseId: 'existing-lease' } };
         },
-        captureReleaseIdentity: async () => ({}) as never,
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => ({ orphaned: [] }),
       },
@@ -1053,7 +1079,9 @@ describe('worktree lifecycle safety and resume', () => {
     const value = fixture({
       state: {
         load: async () => state,
-        writeAtomic: async (_key, next) => Object.assign(state, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(state, structuredClone(next));
+        },
         list: async () => [state],
       },
       preparation: {
@@ -1068,7 +1096,7 @@ describe('worktree lifecycle safety and resume', () => {
       },
       ports: {
         ensure: async () => ({}),
-        captureReleaseIdentity: async () => ({}),
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => {
           portsReconciled = true;
@@ -1089,7 +1117,8 @@ describe('worktree lifecycle safety and resume', () => {
 
 describe('worktree lifecycle remove and reconcile', () => {
   it('fails closed for detached inventory without repository-and-branch lifecycle identity', async () => {
-    const detached = { ...linked, branch: undefined, detached: true };
+    const { branch: _branch, ...linkedWithoutBranch } = linked;
+    const detached: WorktreeInventoryEntry = { ...linkedWithoutBranch, detached: true };
     const value = fixture({
       git: {
         run: async (args) => {
@@ -1135,7 +1164,9 @@ describe('worktree lifecycle remove and reconcile', () => {
       },
       state: {
         load: async () => state,
-        writeAtomic: async (_key, next) => Object.assign(state, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(state, structuredClone(next));
+        },
         list: async () => [state],
       },
     });
@@ -1171,7 +1202,9 @@ describe('worktree lifecycle remove and reconcile', () => {
       },
       state: {
         load: async () => pending,
-        writeAtomic: async (_key, next) => Object.assign(pending, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(pending, structuredClone(next));
+        },
         list: async () => [pending],
       },
       preparation: {
@@ -1223,7 +1256,9 @@ describe('worktree lifecycle remove and reconcile', () => {
       },
       state: {
         load: async () => pending,
-        writeAtomic: async (_key, next) => Object.assign(pending, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(pending, structuredClone(next));
+        },
         list: async () => [pending],
       },
       preparation: {
@@ -1271,7 +1306,9 @@ describe('worktree lifecycle remove and reconcile', () => {
       },
       state: {
         load: async () => preparing,
-        writeAtomic: async (_key, next) => Object.assign(preparing, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(preparing, structuredClone(next));
+        },
         list: async () => [preparing],
       },
       preparation: {
@@ -1324,7 +1361,9 @@ describe('worktree lifecycle remove and reconcile', () => {
       },
       state: {
         load: async () => failed,
-        writeAtomic: async (_key, next) => Object.assign(failed, structuredClone(next)),
+        writeAtomic: async (_key, next) => {
+          Object.assign(failed, structuredClone(next));
+        },
       },
       preparation: {
         prepare: async () => {
@@ -1685,7 +1724,7 @@ describe('worktree lifecycle remove and reconcile', () => {
       },
       ports: {
         ensure: async () => ({}),
-        captureReleaseIdentity: async () => ({}),
+        captureReleaseIdentity: async () => releaseIdentity(),
         releaseLinkedAfterRemoval: async () => ({}),
         reconcile: async () => ({ orphaned: [{ leaseId: 'orphan' }] }),
       },

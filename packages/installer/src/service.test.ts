@@ -30,7 +30,7 @@ class Tasks implements ScheduledTaskAdapter {
   }
   async remove() {
     this.calls.push('remove');
-    this.task = undefined;
+    delete this.task;
   }
 }
 const files: RunnerFileVerifier = { verify: async () => runner };
@@ -269,7 +269,7 @@ describe('InstallerService', () => {
     const installPlan = await service.plan({ componentId: 'session-capture', runner });
     await service.apply(installPlan, installPlan.confirmationDigest);
     const uninstallPlan = await service.planUninstall('session-capture');
-    tasks.task = undefined;
+    delete tasks.task;
     let releaseInstall!: () => void;
     const installStarted = new Promise<void>((resolve) => {
       releaseInstall = resolve;

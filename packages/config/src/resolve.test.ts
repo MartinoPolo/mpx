@@ -27,6 +27,8 @@ const launchContracts = (contentScopes: UserConfig['contentScopes']): UserConfig
   modes: {},
   skillPolicies: {},
   presets: {},
+  launchDefaults: { scopes: {}, projects: {} },
+  networkPolicies: {},
   executors: { host: {} },
 });
 

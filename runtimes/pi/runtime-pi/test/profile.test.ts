@@ -18,7 +18,8 @@ it('publishes an immutable account-safe Sol profile without native state', () =>
     'openai-codex/gpt-5.6-sol',
     'openai-codex/gpt-5.6-terra',
   ]);
-  expect(profile.nativeState).toBeUndefined();
+  expect(profile.capabilityIds).toEqual([]);
+  expect(Object.hasOwn(profile, 'nativeState')).toBe(false);
   expect(JSON.stringify(profile)).not.toMatch(/auth|credential|sessionDir|accountRoot|jwt/iu);
   expect(Object.isFrozen(profile)).toBe(true);
   expect(() => {

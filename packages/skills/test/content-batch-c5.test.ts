@@ -113,10 +113,14 @@ describe('Batch C5 canonical workflows', () => {
         }
         const markdown = await readFile(file, 'utf8');
         for (const match of markdown.matchAll(/\[[^\]]*\]\((?!https?:|#)([^)#]+)(?:#[^)]+)?\)/gu)) {
+          const reference = match[1];
+          if (!reference) {
+            continue;
+          }
           try {
-            await stat(path.resolve(path.dirname(file), match[1]));
+            await stat(path.resolve(path.dirname(file), reference));
           } catch {
-            missing.push(`${path.relative(root, file)} -> ${match[1]}`);
+            missing.push(`${path.relative(root, file)} -> ${reference}`);
           }
         }
       }

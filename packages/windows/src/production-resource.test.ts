@@ -4,17 +4,38 @@ import { describe, expect, it } from 'vitest';
 import type { PowerShellResult, PowerShellRunner } from './adapter.js';
 import { ProductionWindowsResourceStore } from './production-resource.js';
 
+interface RunnerCall {
+  script: string;
+  parameters?: Readonly<Record<string, string>>;
+}
+
 class Runner implements PowerShellRunner {
-  calls: { script: string; parameters?: Readonly<Record<string, string>> }[] = [];
+  calls: RunnerCall[] = [];
   outputs: string[] = [];
   async run(
     script: string,
     parameters?: Readonly<Record<string, string>>,
   ): Promise<PowerShellResult> {
-    this.calls.push({ script, parameters });
+    this.calls.push(parameters === undefined ? { script } : { script, parameters });
     return { stdout: this.outputs.shift() ?? '{"ok":true}', stderr: '', exitCode: 0 };
   }
 }
+
+const callAt = (runner: Runner, index: number): RunnerCall => {
+  const call = runner.calls[index];
+  if (!call) {
+    throw new Error(`Expected PowerShell call at index ${index}`);
+  }
+  return call;
+};
+
+const resourceJson = (call: RunnerCall): string => {
+  const value = call.parameters?.NativeResourceJson;
+  if (value === undefined) {
+    throw new Error('Expected NativeResourceJson parameter');
+  }
+  return value;
+};
 
 describe('ProductionWindowsResourceStore', () => {
   it('passes registry values only through structured JSON instead of interpolating shell text', async () => {
@@ -27,8 +48,9 @@ describe('ProductionWindowsResourceStore', () => {
     const store = new ProductionWindowsResourceStore({ platform: 'win32', runner });
     expect(await store.read('HKCU\\Environment')).toEqual({ owner: 'mpx', MPX_APPS: 'C:\\Apps' });
     await store.write('HKCU\\Environment', { owner: 'mpx', MPX_APPS: 'C:\\Apps; Write-Host pwn' });
-    expect(runner.calls[1].script).not.toContain('Write-Host pwn');
-    expect(JSON.parse(runner.calls[1].parameters!.NativeResourceJson)).toEqual({
+    const writeCall = callAt(runner, 1);
+    expect(writeCall.script).not.toContain('Write-Host pwn');
+    expect(JSON.parse(resourceJson(writeCall))).toEqual({
       target: 'HKCU\\Environment',
       value: { owner: 'mpx', MPX_APPS: 'C:\\Apps; Write-Host pwn' },
     });
@@ -45,8 +67,8 @@ describe('ProductionWindowsResourceStore', () => {
     const store = new ProductionWindowsResourceStore({ platform: 'win32', runner });
     await store.write('HKCU\\Environment', { owner: 'mpx', MPX_APPS: 'C:\\Apps' });
     await store.remove('HKCU\\Environment');
-    expect(runner.calls[0].script).toContain("$ErrorActionPreference='Stop'");
-    expect(runner.calls[2].script).toContain("$ErrorActionPreference='Stop'");
+    expect(callAt(runner, 0).script).toContain("$ErrorActionPreference='Stop'");
+    expect(callAt(runner, 2).script).toContain("$ErrorActionPreference='Stop'");
     expect(runner.calls).toHaveLength(4);
   });
 
@@ -84,11 +106,17 @@ describe('ProductionWindowsResourceStore', () => {
     );
     await store.write(task, taskValue);
     await store.runScheduledTask(task);
-    expect(
-      runner.calls.map((call) => JSON.parse(call.parameters!.NativeResourceJson).target),
-    ).toEqual([shortcut, shortcut, shortcut, shortcut, task, task, task]);
-    expect(runner.calls[4].script).toContain('Register-ScheduledTask');
-    expect(runner.calls[6].script).toContain('Start-ScheduledTask');
+    expect(runner.calls.map((call) => JSON.parse(resourceJson(call)).target)).toEqual([
+      shortcut,
+      shortcut,
+      shortcut,
+      shortcut,
+      task,
+      task,
+      task,
+    ]);
+    expect(callAt(runner, 4).script).toContain('Register-ScheduledTask');
+    expect(callAt(runner, 6).script).toContain('Start-ScheduledTask');
     expect(
       runner.calls.every(
         (call) => !call.script.includes(shortcut) && !call.script.includes('DOMAIN\\me'),
@@ -126,7 +154,7 @@ describe('ProductionWindowsResourceStore', () => {
       lastResult: 0,
       lastRunAt: '2025-01-01T00:00:00.000Z',
     });
-    expect(runner.calls[0].script).toContain('Get-ScheduledTaskInfo');
+    expect(callAt(runner, 0).script).toContain('Get-ScheduledTaskInfo');
   });
 
   it('rejects unsupported targets before invoking PowerShell', async () => {

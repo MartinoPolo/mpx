@@ -12,7 +12,11 @@ describe('Pi skill adapter', () => {
         commands.set(name, spec.handler),
       ),
       sendUserMessage: vi.fn(async (content: readonly { type: 'text'; text: string }[]) => {
-        sent.push(content[0].text);
+        const [message] = content;
+        expect(message).toBeDefined();
+        if (message) {
+          sent.push(message.text);
+        }
       }),
     };
     const adapter = await createPiRuntimeAdapter({ ...f, pi });
@@ -31,7 +35,12 @@ describe('Pi skill adapter', () => {
     ]);
     expect(adapter.modelSearch('skill').map((x) => x.identity)).toEqual(['full', 'named']);
     await expect(adapter.loadForModel('explicit')).rejects.toThrow('SKILL_INVOCATION_DENIED');
-    await commands.get('mpx:explicit')!('ignore this prose /mpx:full');
+    const explicitCommand = commands.get('mpx:explicit');
+    expect(explicitCommand).toBeTypeOf('function');
+    if (!explicitCommand) {
+      throw new Error('explicit command was not registered');
+    }
+    await explicitCommand('ignore this prose /mpx:full');
     expect(pi.sendUserMessage).toHaveBeenCalledOnce();
     expect(sent[0]).toContain('identity=explicit');
     expect(sent[0]).toContain('origin=human-explicit');

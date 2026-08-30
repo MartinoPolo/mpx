@@ -14,6 +14,8 @@ import {
   parseSandboxPlanV1,
   parseSbxPinV1,
   validateF2ProofReportV1,
+  type F2PolicyProfileV1,
+  type F2ProofDecisionV2,
 } from '../src/index.js';
 
 const h = (character: string) => character.repeat(64);
@@ -126,7 +128,7 @@ describe('Phase F2 proof contracts', () => {
   });
 
   it('represents an open default with allow probes and forbids claimed deny evidence', () => {
-    const input = {
+    const input: Parameters<typeof createSbxLaunchPlanExportV1>[0] = {
       launchKey: h('1'),
       descriptorSha256: h('2'),
       runtime: 'pi' as const,
@@ -167,7 +169,7 @@ describe('Phase F2 proof contracts', () => {
   });
 
   it('strictly binds a canonical production sandbox export without private paths or auth argv', () => {
-    const matrix = [
+    const matrix: readonly F2PolicyProfileV1[] = [
       {
         profile: 'implementation',
         default: 'deny' as const,
@@ -241,7 +243,7 @@ describe('Phase F2 proof contracts', () => {
   });
 
   it('unwraps only the exact warning-free CLI success envelope for a plan export', () => {
-    const matrix = [
+    const matrix: readonly F2PolicyProfileV1[] = [
       {
         profile: 'implementation',
         default: 'deny' as const,
@@ -282,7 +284,7 @@ describe('Phase F2 proof contracts', () => {
   });
 
   it('requires exact V2 export binding and complete bounded policy decisions', () => {
-    const policyMatrix = [
+    const policyMatrix: readonly F2PolicyProfileV1[] = [
       {
         profile: 'implementation',
         default: 'deny' as const,
@@ -308,7 +310,7 @@ describe('Phase F2 proof contracts', () => {
       },
       policyMatrix,
     });
-    const decisions = policyMatrix.flatMap(({ profile, targets }) =>
+    const decisions: F2ProofDecisionV2[] = policyMatrix.flatMap(({ profile, targets }) =>
       targets.map(({ target, decision }) => ({ profile, target, decision, count: 1 })),
     );
     const report = createF2ProofReportV2({

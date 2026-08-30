@@ -12,6 +12,7 @@ import {
 const sha = (c: string) => c.repeat(64);
 function manifest(identity = 'personal') {
   const authority = (name: string, routes: string[], paid = false) => ({
+    schemaVersion: 1 as const,
     name,
     executors: ['docker' as const],
     routes,
@@ -117,11 +118,12 @@ describe('launch-bound runtime tool projection', () => {
     ]);
     expect(tools.diagnostics).toEqual([]);
 
-    const withoutMcp = structuredClone(capability);
-    withoutMcp.tools = withoutMcp.tools.filter((tool) => tool.name !== 'mcp');
-    withoutMcp.routes = withoutMcp.routes.filter((route) => route !== 'mcp:docs');
-    delete (withoutMcp as { manifestKey?: string }).manifestKey;
-    const selected = createRuntimeCapabilityManifestV1(withoutMcp);
+    const { manifestKey: _manifestKey, ...withoutKey } = structuredClone(capability);
+    const selected = createRuntimeCapabilityManifestV1({
+      ...withoutKey,
+      tools: withoutKey.tools.filter((tool) => tool.name !== 'mcp'),
+      routes: withoutKey.routes.filter((route) => route !== 'mcp:docs'),
+    });
     const projected = createLaunchBoundRuntimeTools({ capability: selected, gateway: {} as never });
     expect(projected.available).not.toContain('mcp');
     expect(projected.diagnostics).toContainEqual({

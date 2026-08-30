@@ -190,7 +190,7 @@ describe('project skill inventory aggregate limits', () => {
 
   it('stops at aggregate overflow without duplicate or later candidate reads', async () => {
     const bytesPerSkill = MAX_PROJECT_SKILL_INVENTORY_BYTES / 128;
-    const enumerateDirectory = vi.fn(async (directory: string) => [
+    const enumerateDirectory = vi.fn(async (directory: string, _bytesRemaining: number) => [
       { relativePath: 'SKILL.md', bytes: skillBytes(path.basename(directory), bytesPerSkill) },
     ]);
     const filesystem: ProjectSkillFileSystem = {
@@ -210,7 +210,7 @@ describe('project skill inventory aggregate limits', () => {
 
   it('accepts the exact aggregate boundary in deterministic identity order', async () => {
     const bytesPerSkill = MAX_PROJECT_SKILL_INVENTORY_BYTES / 128;
-    const enumerateDirectory = vi.fn(async (directory: string) => [
+    const enumerateDirectory = vi.fn(async (directory: string, _bytesRemaining: number) => [
       { relativePath: 'SKILL.md', bytes: skillBytes(path.basename(directory), bytesPerSkill) },
     ]);
     const filesystem: ProjectSkillFileSystem = {
@@ -231,7 +231,11 @@ describe('project skill inventory aggregate limits', () => {
   });
 
   it('detects a duplicate in a large list without scanning accepted skills', async () => {
-    const entries = [...directories(MAX_PROJECT_SKILL_CANDIDATES - 1), directories(1)[0]];
+    const duplicate = directories(1)[0];
+    if (!duplicate) {
+      throw new Error('directory fixture did not produce a duplicate');
+    }
+    const entries = [...directories(MAX_PROJECT_SKILL_CANDIDATES - 1), duplicate];
     const filesystem: ProjectSkillFileSystem = {
       opendir: vi.fn(async () => streamed(entries.reverse())),
       realpath: vi.fn(async (file) => file),

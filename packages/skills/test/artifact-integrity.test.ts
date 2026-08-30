@@ -97,7 +97,10 @@ describe('bound runtime artifact integrity', () => {
   it('rejects self-consistent exposure, permission, identity, inclusion, omission, duplicate, source, and metadata mutations', async () => {
     const { catalog, manifest, artifact } = await fixture();
     const shown = artifact.entries[0];
-    const mutations = [
+    if (!shown) {
+      throw new Error('fixture did not produce the shown runtime entry');
+    }
+    const mutations: Array<typeof artifact.entries> = [
       [{ ...shown, exposure: 'full' as const, description: 'forged' }],
       [{ ...shown, permissions: { humanInvocation: true, modelInvocation: false } }],
       [{ ...shown, publicName: '/mpx:forged' }],

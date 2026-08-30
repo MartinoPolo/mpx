@@ -152,7 +152,7 @@ describe('PortService multi-process allocation', () => {
     expect((await new RegistryStore(stateRoot).read()).leases).toHaveLength(1);
     expect(
       JSON.parse(await readFile(path.join(cwd, '.worktree-ports.json'), 'utf8')),
-    ).toMatchObject({ leaseId: results[0].lease.leaseId, services: { web: 5100 } });
+    ).toMatchObject({ leaseId: results[0]!.lease.leaseId, services: { web: 5100 } });
   }, 30_000);
 
   it('serializes concurrent post-removal release across processes', async () => {
@@ -175,7 +175,7 @@ describe('PortService multi-process allocation', () => {
         repositoryId: 'repository',
         worktreeId: 'linked',
         worktreePath: linkedPath,
-        role: 'linked',
+        role: 'linked' as const,
         slot: 1,
         configHash,
         services: { web: 5101 },

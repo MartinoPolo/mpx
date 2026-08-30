@@ -625,7 +625,7 @@ describe('trust and privacy boundaries', () => {
     const inspectWrapper = (content: string) => async (file: string) => ({
       file: true,
       realpath: file,
-      content: file === 'C:/fnm/pi' ? content : undefined,
+      ...(file === 'C:/fnm/pi' ? { content } : {}),
     });
     await expect(
       locateTrustedExecutable({
@@ -1180,6 +1180,14 @@ describe('trust and privacy boundaries', () => {
       .catch((reason: unknown) => reason);
 
     expect(error).toMatchObject({ code: 'PRIVATE_LAUNCH_BINDING_MISMATCH' });
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      !('code' in error) ||
+      typeof error.code !== 'string'
+    ) {
+      throw new Error('launch failure did not expose an error code');
+    }
     expect(effects).toEqual([]);
     expect(
       JSON.stringify({
@@ -1493,10 +1501,18 @@ describe('persistent launch audit sequencing', () => {
           const index = level === 'launch-audits' ? 0 : level === 'prefix' ? 1 : 2;
           let directory = root;
           for (let segment = 0; segment < index; segment += 1) {
-            directory = path.join(directory, segments[segment]);
+            const name = segments[segment];
+            if (!name) {
+              throw new Error('audit path fixture is incomplete');
+            }
+            directory = path.join(directory, name);
             await mkdir(directory);
           }
-          await symlink(outside, path.join(directory, segments[index]), 'dir');
+          const linkName = segments[index];
+          if (!linkName) {
+            throw new Error('audit link fixture is incomplete');
+          }
+          await symlink(outside, path.join(directory, linkName), 'dir');
         }
         await expect(new FileLaunchAuditStore(root).start(start)).rejects.toMatchObject({
           code: 'AUDIT_PATH_INVALID',

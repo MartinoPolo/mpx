@@ -16,6 +16,13 @@ import { createRuntimeRegistrationMatrix, type ProjectionFileV1 } from './runtim
 import { NodeTransactionStore } from './transaction.js';
 import type { InstallExternalVerificationResultV1 } from './install-intent-builder.js';
 
+function required<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`Expected ${label}`);
+  }
+  return value;
+}
+
 const sha = (value: string) => installerDigest(value);
 const externalVerification = (intent: InstallIntentV1): InstallExternalVerificationResultV1 => ({
   schemaVersion: 1,
@@ -210,10 +217,10 @@ async function simulation(existing: boolean) {
     });
   const manifest = await releases.build();
   runtimeRegistrations = createRuntimeRegistrationMatrix([
-    registration('claude', 'personal', fixtureRoots[0]),
-    registration('claude', 'work', fixtureRoots[1]),
-    registration('pi', 'personal', fixtureRoots[2]),
-    registration('pi', 'work', fixtureRoots[3]),
+    registration('claude', 'personal', required(fixtureRoots[0], 'Claude personal fixture root')),
+    registration('claude', 'work', required(fixtureRoots[1], 'Claude work fixture root')),
+    registration('pi', 'personal', required(fixtureRoots[2], 'Pi personal fixture root')),
+    registration('pi', 'work', required(fixtureRoots[3], 'Pi work fixture root')),
   ]);
   const intent: InstallIntentV1 = {
     schemaVersion: 1,
@@ -335,7 +342,9 @@ it('runs clean and existing-machine production-backed simulations without live w
       ],
     });
     for (let index = 0; index < f.fixtureFiles.length; index++) {
-      expect(await readFile(f.fixtureFiles[index])).toEqual(f.before[index]);
+      expect(await readFile(required(f.fixtureFiles[index], `fixture file ${index}`))).toEqual(
+        required(f.before[index], `fixture snapshot ${index}`),
+      );
     }
     expect(
       (await readFile(path.join(f.userProfile, '.bashrc'), 'utf8')).includes(
@@ -394,7 +403,9 @@ it('runs clean and existing-machine production-backed simulations without live w
     releases: baseline.releases,
   }).plan(baseline.intent);
   const mutatingOperations = baselinePlan.operations.filter(
-    (operation, index) => baselinePlan.observations[index].digest !== operation.desiredDigest,
+    (operation, index) =>
+      required(baselinePlan.observations[index], `operation observation ${index}`).digest !==
+      operation.desiredDigest,
   );
   for (let failedIndex = 0; failedIndex < mutatingOperations.length; failedIndex++) {
     const f = await simulation(true),
@@ -448,7 +459,9 @@ it('runs clean and existing-machine production-backed simulations without live w
       theme: 'native',
     });
     for (let index = 0; index < f.fixtureFiles.length; index++) {
-      expect(await readFile(f.fixtureFiles[index])).toEqual(f.before[index]);
+      expect(await readFile(required(f.fixtureFiles[index], `fixture file ${index}`))).toEqual(
+        required(f.before[index], `fixture snapshot ${index}`),
+      );
     }
     rollbackSimulations += 1;
   }

@@ -10,6 +10,10 @@ describe('subagent vendor provenance', () => {
     const manifest = await readFile(path.join(root, 'SHA256SUMS'), 'utf8');
     for (const line of manifest.trim().split(/\r?\n/u)) {
       const [expected, relative] = line.split('  ');
+      expect(relative).toBeDefined();
+      if (!relative) {
+        throw new Error(`invalid SHA-256 manifest line: ${line}`);
+      }
       const content = await readFile(path.join(root, relative));
       expect(createHash('sha256').update(content).digest('hex'), relative).toBe(expected);
       expect(content.toString('utf8'), relative).not.toMatch(

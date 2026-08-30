@@ -314,7 +314,7 @@ describe('interprocess lock', () => {
           version === 1 && token.length > 0 && Number.isFinite(heartbeatAt),
       ),
     ).toBe(true);
-    expect(observed.at(-1)!.heartbeatAt).toBeGreaterThan(observed[0].heartbeatAt);
+    expect(observed.at(-1)!.heartbeatAt).toBeGreaterThan(observed[0]!.heartbeatAt);
   });
   it('serializes simultaneous registry transactions', async () => {
     const root = await temporaryRoot();
@@ -358,7 +358,7 @@ describe('interprocess lock', () => {
     );
     expect(ordered).toHaveLength(workers.length);
     for (let index = 1; index < ordered.length; index += 1) {
-      expect(ordered[index].enteredAt).toBeGreaterThanOrEqual(ordered[index - 1].leavingAt!);
+      expect(ordered[index]!.enteredAt).toBeGreaterThanOrEqual(ordered[index - 1]!.leavingAt!);
     }
     expect((await new RegistryStore(root).read()).leases.map(({ leaseId }) => leaseId)).toEqual([
       'worker-a',

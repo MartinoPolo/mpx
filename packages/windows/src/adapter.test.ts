@@ -55,17 +55,21 @@ describe('WindowsPortPlatformAdapter', () => {
     const calls: Array<{ script: string; parameters?: Readonly<Record<string, string>> }> = [];
     const capturing: PowerShellRunner = {
       run: async (script, parameters) => {
-        calls.push({ script, parameters });
+        calls.push(parameters === undefined ? { script } : { script, parameters });
         return calls.length === 1 ? result('[]') : result('{"status":"killed"}');
       },
     };
     const adapter = new WindowsPortPlatformAdapter({ runner: capturing });
     await adapter.inspectListeners([5001, 5002]);
     await adapter.killProcess({ pid: 42, startedAt: 'fingerprint-value' });
-    expect(calls[0].parameters).toEqual({ PortsJson: '[5001,5002]' });
-    expect(calls[1].parameters).toEqual({ PidValue: '42', StartedAt: 'fingerprint-value' });
-    expect(calls[0].script).not.toContain('[5001,5002]');
-    expect(calls[1].script).not.toContain('fingerprint-value');
+    const [inspectCall, killCall] = calls;
+    if (!inspectCall || !killCall) {
+      throw new Error('Expected inspect and kill PowerShell calls');
+    }
+    expect(inspectCall.parameters).toEqual({ PortsJson: '[5001,5002]' });
+    expect(killCall.parameters).toEqual({ PidValue: '42', StartedAt: 'fingerprint-value' });
+    expect(inspectCall.script).not.toContain('[5001,5002]');
+    expect(killCall.script).not.toContain('fingerprint-value');
   });
 
   it.each([
@@ -301,7 +305,7 @@ describe('WindowsPortPlatformAdapter', () => {
     const capabilities = new WindowsProcessCapabilities({
       runner: {
         run: async (script, parameters) => {
-          calls.push({ script, parameters });
+          calls.push(parameters === undefined ? { script } : { script, parameters });
           return calls.length === 1
             ? result('{"ProcessId":41,"StartedAt":"birth-41"}')
             : result('{"status":"killed","count":3}');
@@ -310,12 +314,16 @@ describe('WindowsPortPlatformAdapter', () => {
     });
     expect(await capabilities.inspect(41)).toEqual({ pid: 41, startFingerprint: 'birth-41' });
     await capabilities.terminateTree({ pid: 41, startFingerprint: 'birth-41' });
-    expect(calls[1].parameters).toEqual({ PidValue: '41', StartedAt: 'birth-41' });
-    expect(calls[1].script).toContain('ParentProcessId');
-    expect(calls[1].script).toContain('Get-CimInstance Win32_Process -Filter');
-    expect(calls[1].script).toContain('$rootCurrent');
-    expect(calls[1].script).toContain('-ErrorAction Stop');
-    expect(calls[1].script).not.toContain('SilentlyContinue');
-    expect(calls[1].script).not.toContain('taskkill');
+    const terminateCall = calls[1];
+    if (!terminateCall) {
+      throw new Error('Expected terminate PowerShell call');
+    }
+    expect(terminateCall.parameters).toEqual({ PidValue: '41', StartedAt: 'birth-41' });
+    expect(terminateCall.script).toContain('ParentProcessId');
+    expect(terminateCall.script).toContain('Get-CimInstance Win32_Process -Filter');
+    expect(terminateCall.script).toContain('$rootCurrent');
+    expect(terminateCall.script).toContain('-ErrorAction Stop');
+    expect(terminateCall.script).not.toContain('SilentlyContinue');
+    expect(terminateCall.script).not.toContain('taskkill');
   });
 });
