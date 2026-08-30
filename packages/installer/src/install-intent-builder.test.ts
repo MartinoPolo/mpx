@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  INSTALL_EXECUTABLE_MAX_BYTES,
   InstallIntentBuilder,
   canonicalJson,
   installerDigest,
@@ -88,7 +89,7 @@ describe("InstallIntentBuildResultV1", () => {
   });
 });
 
-it("builds a deterministic four-registration intent without publishing or external mutation", async () => {
+async function createBuildFixture() {
   const root = await mkdtemp(path.join(tmpdir(), "mpx-intent-builder-"));
   const configPath = path.join(root, "config.json");
   const claude = path.join(root, "claude.exe"), pi = path.join(root, "pi.exe");
@@ -121,6 +122,11 @@ it("builds a deterministic four-registration intent without publishing or extern
   };
   const never = { inspect: vi.fn(), plan: vi.fn() };
   const builder = new InstallIntentBuilder({ releases, environment: { MPX_PROJECTS: path.join(root, "projects"), MPX_WORK: path.join(root, "work") }, gitRemotes: never as never, obsidian: never as never, raycast: never as never });
+  return { builder, configSource, never, releases, request };
+}
+
+it("builds a deterministic four-registration intent without publishing or external mutation", async () => {
+  const { builder, configSource, never, releases, request } = await createBuildFixture();
   const first = await builder.build(request), second = await builder.build(request);
   expect(first).toEqual(second);
   expect(first.intent.runtimeRegistrations?.registrations.map(item => item.identity)).toEqual(["claude-personal", "claude-work", "pi-personal", "pi-work"]);
@@ -133,6 +139,22 @@ it("builds a deterministic four-registration intent without publishing or extern
   expect(first.intent.userConfigArtifact?.content).toBe(configSource);
   expect(releases.publish).not.toHaveBeenCalled();
   expect(never.inspect).not.toHaveBeenCalled();
+});
+
+it("accepts a regular non-symlink executable at the current Claude Code size", async () => {
+  const { builder, request } = await createBuildFixture();
+  await truncate(request.executables.claude.path, 315 * 1024 * 1024);
+
+  const result = await builder.build(request);
+
+  expect(result.intent.runtimeRegistrations?.registrations[0]?.executable.path).toBe(request.executables.claude.path);
+});
+
+it("rejects an executable above the bounded security limit", async () => {
+  const { builder, request } = await createBuildFixture();
+  await truncate(request.executables.claude.path, INSTALL_EXECUTABLE_MAX_BYTES + 1);
+
+  await expect(builder.build(request)).rejects.toMatchObject({ code: "INSTALL_EXECUTABLE_INVALID" });
 });
 
 function externalBuildResult(entries: readonly { id: string; adapter: "git-remotes" | "obsidian" | "raycast"; classification: "confirmation-required" | "manual-only"; plan: Record<string, unknown> }[]): InstallIntentBuildResultV1 {

@@ -29,6 +29,7 @@ import type { CurrentReleaseBuilder } from "./orchestration.js";
 
 const MAX_REQUEST_ITEMS = 128;
 const MAX_TEXT = 4_096;
+export const INSTALL_EXECUTABLE_MAX_BYTES = 512 * 1024 * 1024;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SHA = /^[a-f0-9]{64}$/u;
 const PROJECTION_ROLES = new Set<ProjectionRole>(["plugin", "hooks", "extension", "profile", "keybindings", "themes", "status", "settings", "canonical-content", "agents", "licenses"]);
@@ -213,7 +214,7 @@ export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBu
 
 async function regularFileEvidence(request: InstallExecutableRequestV1): Promise<{ path: string; sha256: string; version: string }> {
   const info = await lstat(request.path).catch(() => fail("Executable is unavailable.", "INSTALL_EXECUTABLE_INVALID"));
-  if (!info.isFile() || info.isSymbolicLink() || info.size > 256 * 1024 * 1024) fail("Executable must be a bounded regular non-symlink file.", "INSTALL_EXECUTABLE_INVALID");
+  if (!info.isFile() || info.isSymbolicLink() || info.size > INSTALL_EXECUTABLE_MAX_BYTES) fail("Executable must be a regular non-symlink file of at most 512 MiB.", "INSTALL_EXECUTABLE_INVALID");
   return { path: request.path, sha256: createHash("sha256").update(await readFile(request.path)).digest("hex"), version: request.version };
 }
 function selectedIdentity(config: UserConfig, name: string, domain: "personal" | "work") {
