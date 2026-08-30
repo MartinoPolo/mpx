@@ -599,7 +599,7 @@ export function directProcessTty(): DirectTty {
   };
 }
 
-export function executorAdapter(
+function executorAdapter(
   context: LaunchExecutionContext,
   name: 'docker' | 'host',
 ): ExecutorAdapter {
@@ -616,7 +616,7 @@ export async function executorEvidence(
   return executorAdapter(context, name).verify();
 }
 
-export function runtimeContextFor(
+function runtimeContextFor(
   descriptor: LaunchDescriptor,
   manifest: ResolvedManifest,
   artifact: RuntimeSkillArtifact,
@@ -941,7 +941,7 @@ export interface RuntimeLaunchWiring {
   readonly launchBinding: RuntimeLaunchBinding;
   readonly piProfile?: PiRuntimeProfileV1;
 }
-export function validateRuntimeLaunchWiring(
+function validateRuntimeLaunchWiring(
   descriptor: LaunchDescriptor,
   snapshotInput: StatusSnapshotV1,
   wiring: RuntimeLaunchWiring,
@@ -1453,7 +1453,7 @@ function registries(
   return { executors, runtimes };
 }
 
-export async function runWithLifecycleConsumption<T>(
+async function runWithLifecycleConsumption<T>(
   execute: () => Promise<T>,
   consume: () => Promise<unknown>,
 ): Promise<T> {

@@ -87,7 +87,7 @@ export class PiAuthAvailabilityProbe implements AccountAuthVerifier {
     }
   }
 }
-export function nodeProbeRunner(request: ProbeRequest): Promise<ProcessResult> {
+function nodeProbeRunner(request: ProbeRequest): Promise<ProcessResult> {
   return new Promise((resolve, reject) =>
     execFile(
       request.executable,

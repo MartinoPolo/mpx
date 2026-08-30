@@ -75,7 +75,7 @@ function contained(root: string, relative: string): string {
   }
   return candidate;
 }
-export function resolveProductionReleaseRoot(
+function resolveProductionReleaseRoot(
   environment: NodeJS.ProcessEnv = process.env,
   moduleUrl: string = import.meta.url,
 ): string {

@@ -22,7 +22,7 @@ export interface LaunchLifecyclePreparation {
   readonly binding: SessionLifecycleBindingV1;
   readonly eventDirectory: string;
 }
-export function reconcileAccountBindingRef(
+function reconcileAccountBindingRef(
   existing: string | null,
   resolved: string | null,
 ): string | null {

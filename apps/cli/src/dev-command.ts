@@ -55,7 +55,7 @@ export function defaultDevService(
   return Object.assign(manager, { runtimeKind: 'host' as const });
 }
 const safeScript = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
-export function packageInvocation(
+function packageInvocation(
   config: ProjectConfig,
   script: string,
 ): { executable: string; args: string[] } {
