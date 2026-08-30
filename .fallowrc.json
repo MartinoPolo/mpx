@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": ["scripts/**/*.{js,mjs,ts}", "evidence/**/*.ts"],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/coverage/**",
+    "artifacts/**",
+    "bin/mpx.mjs",
+    "runtimes/pi/runtime-pi/projection/agents/**",
+    "runtimes/pi/runtime-pi/vendor/**"
+  ],
+  "includeEntryExports": true,
+  "duplicates": {
+    "minOccurrences": 3,
+    "ignore": ["**/*.test.ts", "**/test-fixtures/**"]
+  },
+  "rules": {
+    "unused-files": "error",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "unused-dependencies": "error",
+    "unused-dev-dependencies": "error",
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "circular-dependencies": "error",
+    "re-export-cycle": "error",
+    "duplicate-exports": "error",
+    "type-only-dependencies": "warn",
+    "test-only-dependencies": "warn",
+    "dev-dependencies-in-production": "error",
+    "stale-suppressions": "error"
+  }
+}

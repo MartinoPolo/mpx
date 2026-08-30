@@ -1,12 +1,13 @@
 ---
 name: mpx-tdd-executor
-description: "Executes TDD red-green-refactor cycles. Receives behaviors to implement, writes tests first, then minimal code to pass."
+description: 'Executes TDD red-green-refactor cycles. Receives behaviors to implement, writes tests first, then minimal code to pass.'
 model: openai-codex/gpt-5.6-sol
 thinking: medium
 tools: read,grep,find,ls,bash,edit,write
 output_schema: text
 
 ---
+
 # TDD Executor Agent
 
 Implement assigned behaviors using strict red-green-refactor.

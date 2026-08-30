@@ -6,6 +6,7 @@ metadata:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # Topic to Personalized Podcast
 
 Produce a walk-listenable MP3 that teaches a topic **through the listener's own code**. You
@@ -18,12 +19,12 @@ rules for both: [`reference/BRIEF_FORMAT.md`](reference/BRIEF_FORMAT.md).
 
 ## Step 1: Parse the request
 
-| Input | Source | Default |
-| ------------- | ------------------------------------------------- | ----------- |
-| Topic | everything in `the invocation input` that is not a flag | required |
-| Length | `length short`, `length default`, `length long` | `default` |
-| Work repos | `--include-work` | excluded |
-| Backend | `--backend` | `notebooklm` |
+| Input      | Source                                                  | Default      |
+| ---------- | ------------------------------------------------------- | ------------ |
+| Topic      | everything in `the invocation input` that is not a flag | required     |
+| Length     | `length short`, `length default`, `length long`         | `default`    |
+| Work repos | `--include-work`                                        | excluded     |
+| Backend    | `--backend`                                             | `notebooklm` |
 
 Derive `<slug>` as kebab-case from the topic (`Shadow DOM` → `shadow-dom`); it names both
 artifacts, the final MP3 and the folder it lands in.
@@ -64,12 +65,12 @@ from this thread ([`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL
 own model, so pass no `model`
 ([`../shared/EXPLORATION.md`](../shared/EXPLORATION.md) § Never pass `model`).
 
-| Root | Looking for |
-| -------------------------------- | ----------------------------------------------- |
-| `MPX_PROJECTS` | where the topic already appears in his own code |
-| `MPX_OBSIDIAN_VAULT/Programming/` | his own notes on the topic |
-| `MPX_CLONED` | how the topic is done well in OSS he studies |
-| `MPX_WORK` | **only** when `--include-work` was passed |
+| Root                              | Looking for                                     |
+| --------------------------------- | ----------------------------------------------- |
+| `MPX_PROJECTS`                    | where the topic already appears in his own code |
+| `MPX_OBSIDIAN_VAULT/Programming/` | his own notes on the topic                      |
+| `MPX_CLONED`                      | how the topic is done well in OSS he studies    |
+| `MPX_WORK`                        | **only** when `--include-work` was passed       |
 
 `Explore` skips repository instructions and is one-shot, so each delegation prompt carries everything it
 needs: the root to search, an instruction to resolve it at runtime with `env | grep '^MPX_'`
@@ -115,11 +116,11 @@ the brief as a source → wait → `generate audio --prompt-file <prompt> --form
 
 Length maps straight through, and the same choice sets the prompt's closing duration line:
 
-| Argument | `--length` | Prompt line | Measured |
-| --------- | ---------- | ------------------------------ | ---------------------------- |
-| `short` | `short` | `Target duration: 10 minutes.` | — |
-| `default` | `default` | `Target duration: 15 minutes.` | — |
-| `long` | `long` | `Target duration: 25 minutes.` | 33.5 min from a 15-min line |
+| Argument  | `--length` | Prompt line                    | Measured                    |
+| --------- | ---------- | ------------------------------ | --------------------------- |
+| `short`   | `short`    | `Target duration: 10 minutes.` | —                           |
+| `default` | `default`  | `Target duration: 15 minutes.` | —                           |
+| `long`    | `long`     | `Target duration: 25 minutes.` | 33.5 min from a 15-min line |
 
 Lengths are hints rather than contracts, and overshoot is acceptable.
 

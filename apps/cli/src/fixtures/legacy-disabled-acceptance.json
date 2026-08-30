@@ -4,5 +4,5 @@
   "roots": [],
   "processLines": [],
   "environment": {},
-  "expected": {"mode": "legacy-disabled", "passed": true}
+  "expected": { "mode": "legacy-disabled", "passed": true }
 }

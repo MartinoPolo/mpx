@@ -1,6 +1,6 @@
 ---
 name: consolidate-context
-description: "Consolidates CONTEXT.md by removing duplicates and outdated items and tightening the language."
+description: 'Consolidates CONTEXT.md by removing duplicates and outdated items and tightening the language.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -23,16 +23,16 @@ See `skills/shared/DOCUMENTATION_STRATEGY.md` for format details.
 
 Read every line of the full file against each issue type and build a classified findings list:
 
-| Issue Type | What to Look For |
-|---|---|
-| **Duplicates** | Terms or features covering the same concept (keep the most current/complete version) |
-| **Superseded** | Content explicitly marked as superseded, replaced, or overridden by newer entries |
-| **Negative framing** | "must not", "cannot", "never" — convert to positive imperative |
-| **Non-content noise** | Implementation notes, deviation notes, historical provenance, issue-tracking meta, "Plan vN" / date labels |
-| **Outdated** | Struck-through items, removed parameters still referenced, resolved issue references |
-| **Inconsistencies** | Conflicting definitions or specifications |
-| **Bloated definitions** | Domain Language definitions exceeding one sentence |
-| **Misplaced content** | Architectural decisions that belong in DECISIONS.md, implementation details that belong in epics |
+| Issue Type              | What to Look For                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Duplicates**          | Terms or features covering the same concept (keep the most current/complete version)                       |
+| **Superseded**          | Content explicitly marked as superseded, replaced, or overridden by newer entries                          |
+| **Negative framing**    | "must not", "cannot", "never" — convert to positive imperative                                             |
+| **Non-content noise**   | Implementation notes, deviation notes, historical provenance, issue-tracking meta, "Plan vN" / date labels |
+| **Outdated**            | Struck-through items, removed parameters still referenced, resolved issue references                       |
+| **Inconsistencies**     | Conflicting definitions or specifications                                                                  |
+| **Bloated definitions** | Domain Language definitions exceeding one sentence                                                         |
+| **Misplaced content**   | Architectural decisions that belong in DECISIONS.md, implementation details that belong in epics           |
 
 ### Step 2: Rewrite
 
@@ -45,6 +45,7 @@ Apply all changes directly and automatically. Produce the consolidated file:
 - Target 250–300 lines total
 
 **Content rules:**
+
 - Remove implementation/deviation notes (belong in PRs or commit messages)
 - Fix inconsistent values (use the most recent/authoritative source)
 - Merge sections that were split by version history into unified topics
@@ -58,6 +59,7 @@ Write the consolidated file to the original path (overwrite), then re-read it to
 ## Report
 
 After writing, summarize:
+
 - Line count: original vs. consolidated (and lines saved)
 - Items removed, merged, or rewritten (counts)
 - Inconsistencies fixed

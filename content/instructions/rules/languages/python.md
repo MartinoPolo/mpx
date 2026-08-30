@@ -2,8 +2,8 @@
 scope: language
 selector: python
 paths:
-  - "**/*.py"
-applyTo: "**/*.py"
+  - '**/*.py'
+applyTo: '**/*.py'
 ---
 
 # Python

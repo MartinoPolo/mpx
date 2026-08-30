@@ -1,12 +1,13 @@
 ---
 name: mpx-executor
-description: "Executes a small grouped task chunk with clear scope. Implementation only; no review role."
+description: 'Executes a small grouped task chunk with clear scope. Implementation only; no review role.'
 model: openai-codex/gpt-5.6-sol
 thinking: low
 tools: read,grep,find,ls,bash,edit,write
 output_schema: text
 
 ---
+
 # Executor Agent
 
 Apply pre-analyzed edits to a tightly scoped task chunk.

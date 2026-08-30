@@ -7,6 +7,7 @@ metadata:
     skillPacks: [core]
     defaultExposure: name-only
 ---
+
 # Refine an Issue
 
 Turn an existing Issue into a concise, verifiable specification while preserving confirmed intent.

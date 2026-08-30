@@ -1,11 +1,12 @@
 ---
 name: board-to-issues
-description: "Converts Obsidian board notes from the To Process lane into labelled GitHub issues, deduping against existing ones."
+description: 'Converts Obsidian board notes from the To Process lane into labelled GitHub issues, deduping against existing ones.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # board-to-issues
 
 Turn board notes into well-formed GitHub issues. the invocation input

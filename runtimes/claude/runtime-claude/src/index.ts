@@ -1,35 +1,147 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { enumerateSkillDirectory, loadSkillBody, verifyRuntimeSkillArtifact, type CatalogSkill, type ResolvedManifest, type RuntimeSkillArtifact } from "@mpx/skills";
-import { parseResolvedSkillManifestV4, parseRuntimeCapabilityManifestV1, parseRuntimeContextV1, publishRuntimeArtifact, validateRuntimeContext, validateSessionLifecycleBindingV1, RuntimeContractError, type NativeSessionRefV1, type PublishedRuntimeArtifactReference, type RuntimeContextV1, type RuntimeContractDiagnostic } from "@mpx/runtime-contracts";
-import { classifyDangerousCommand, dangerousCommandPolicyModuleSource, evaluatePackagePolicy, type PackageManager } from "@mpx/runtime-hooks";
-import { composeRuntimeStatusEnvelopeV1, createRuntimeStatusRefreshController, parseRuntimeStatusEnvelopeV1, parseStatusSnapshotV1, renderClaudePortSegment, type RuntimeStatusBindingV1, type RuntimeStatusEnvelopeReader, type RuntimeStatusEnvelopeV1, type StatusSnapshotV1 } from "@mpx/status";
-import { createDevServerToolAdapter, createSystemRuntime, DevServiceManager, type DevServerToolAdapter, type ExecutorKind, type RuntimeAdapter as DevServiceRuntimeAdapter, type StartRequest } from "@mpx/dev-services";
-import { registerClaudeRuntimeTools, type ClaudeRuntimeToolRegistrationInput } from "./runtime-tools.js";
-export * from "./runtime-tools.js";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import path from 'node:path';
+import {
+  enumerateSkillDirectory,
+  loadSkillBody,
+  verifyRuntimeSkillArtifact,
+  type CatalogSkill,
+  type ResolvedManifest,
+  type RuntimeSkillArtifact,
+} from '@mpx/skills';
+import {
+  parseResolvedSkillManifestV4,
+  parseRuntimeCapabilityManifestV1,
+  parseRuntimeContextV1,
+  publishRuntimeArtifact,
+  validateRuntimeContext,
+  validateSessionLifecycleBindingV1,
+  RuntimeContractError,
+  type NativeSessionRefV1,
+  type PublishedRuntimeArtifactReference,
+  type RuntimeContextV1,
+  type RuntimeContractDiagnostic,
+} from '@mpx/runtime-contracts';
+import {
+  classifyDangerousCommand,
+  dangerousCommandPolicyModuleSource,
+  evaluatePackagePolicy,
+  type PackageManager,
+} from '@mpx/runtime-hooks';
+import {
+  composeRuntimeStatusEnvelopeV1,
+  createRuntimeStatusRefreshController,
+  parseRuntimeStatusEnvelopeV1,
+  parseStatusSnapshotV1,
+  renderClaudePortSegment,
+  type RuntimeStatusBindingV1,
+  type RuntimeStatusEnvelopeReader,
+  type RuntimeStatusEnvelopeV1,
+  type StatusSnapshotV1,
+} from '@mpx/status';
+import {
+  createDevServerToolAdapter,
+  createSystemRuntime,
+  DevServiceManager,
+  type DevServerToolAdapter,
+  type ExecutorKind,
+  type RuntimeAdapter as DevServiceRuntimeAdapter,
+  type StartRequest,
+} from '@mpx/dev-services';
+import {
+  registerClaudeRuntimeTools,
+  type ClaudeRuntimeToolRegistrationInput,
+} from './runtime-tools.js';
+export * from './runtime-tools.js';
 
-export class ClaudeRuntimeError extends Error { constructor(readonly code:string,message:string){super(`${code}: ${message}`);this.name="ClaudeRuntimeError";} }
-export interface ClaudeBuildInput { readonly manifest:ResolvedManifest; readonly artifact:RuntimeSkillArtifact; readonly catalog:readonly CatalogSkill[]; readonly canonical:string; readonly agents:string; readonly outputRoot:string; readonly statusSnapshot:StatusSnapshotV1; readonly runtimeStatusEnvelope?:RuntimeStatusEnvelopeV1; readonly launchBanner:string; readonly runtimeContext:RuntimeContextV1 }
-export interface ClaudeProjection { readonly directory:string; readonly artifactKey:string; readonly files:readonly string[] }
-export interface ClaudePublishedProjection extends ClaudeProjection { readonly pluginDirectory:string; readonly reference:PublishedRuntimeArtifactReference; readonly reused:boolean }
-export interface ClaudePublishInput extends Omit<ClaudeBuildInput,"outputRoot"> { readonly artifactsRoot:string; readonly artifactRevalidator?:Parameters<typeof publishRuntimeArtifact>[0]["revalidate"] }
-const q=(value:string)=>JSON.stringify(value);
-function skillText(entry:RuntimeSkillArtifact["entries"][number],skill:CatalogSkill,body:string):string {
- const description=entry.exposure==="full"?skill.description:`mpx skill ${entry.identity}`;
- const lines=["---",`name: ${entry.identity}`,`description: ${q(description)}`];
- const triggers="triggers" in skill?skill.triggers:undefined;
- if(entry.exposure==="full"&&triggers)lines.push(`triggers: ${q(triggers)}`);
- lines.push("user-invocable: true",...(entry.exposure==="explicit-only"?["disable-model-invocation: true"]:[]),"---",body);
- return `${lines.join("\n")}${body.endsWith("\n")?"":"\n"}`;
+export class ClaudeRuntimeError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(`${code}: ${message}`);
+    this.name = 'ClaudeRuntimeError';
+  }
 }
-async function write(root:string,relative:string,text:string|Uint8Array,files:string[]):Promise<void>{const target=path.join(root,...relative.split("/"));await mkdir(path.dirname(target),{recursive:true});await writeFile(target,text);files.push(relative);}
-function pluginJson(){return `${JSON.stringify({name:"mpx",version:"0.0.0",description:"MPX Claude runtime projection"},null,2)}\n`;}
-function statusSnapshotFile(snapshot: unknown): string { return `${JSON.stringify(parseStatusSnapshotV1(snapshot), null, 2)}\n`; }
-function runtimeStatusFile(envelope: unknown): string { return `${JSON.stringify(parseRuntimeStatusEnvelopeV1(envelope), null, 2)}\n`; }
-const hookCommand='node "${CLAUDE_PLUGIN_ROOT}/hooks/runtime-guard.mjs"';
-const hook=(timeout=5)=>({type:"command",command:hookCommand,timeout});
-const hooksJson=`${JSON.stringify({hooks:{SessionStart:[{hooks:[hook()]}],UserPromptSubmit:[{hooks:[hook()]}],PreToolUse:[{matcher:"Skill|Agent|Task|Bash",hooks:[hook(125)]}],PostToolUse:[{matcher:"Write|Edit|MultiEdit|NotebookEdit|Bash",hooks:[hook(125)]}],PostToolUseFailure:[{matcher:"Bash",hooks:[hook()]}],PreCompact:[{hooks:[hook()]}],Notification:[{hooks:[hook()]}],Stop:[{hooks:[hook()]}]}},null,2)}\n`;
-function runtimeGuard():string{return String.raw`import {spawnSync} from "node:child_process";
+export interface ClaudeBuildInput {
+  readonly manifest: ResolvedManifest;
+  readonly artifact: RuntimeSkillArtifact;
+  readonly catalog: readonly CatalogSkill[];
+  readonly canonical: string;
+  readonly agents: string;
+  readonly outputRoot: string;
+  readonly statusSnapshot: StatusSnapshotV1;
+  readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
+  readonly launchBanner: string;
+  readonly runtimeContext: RuntimeContextV1;
+}
+export interface ClaudeProjection {
+  readonly directory: string;
+  readonly artifactKey: string;
+  readonly files: readonly string[];
+}
+export interface ClaudePublishedProjection extends ClaudeProjection {
+  readonly pluginDirectory: string;
+  readonly reference: PublishedRuntimeArtifactReference;
+  readonly reused: boolean;
+}
+export interface ClaudePublishInput extends Omit<ClaudeBuildInput, 'outputRoot'> {
+  readonly artifactsRoot: string;
+  readonly artifactRevalidator?: Parameters<typeof publishRuntimeArtifact>[0]['revalidate'];
+}
+const q = (value: string) => JSON.stringify(value);
+function skillText(
+  entry: RuntimeSkillArtifact['entries'][number],
+  skill: CatalogSkill,
+  body: string,
+): string {
+  const description = entry.exposure === 'full' ? skill.description : `mpx skill ${entry.identity}`;
+  const lines = ['---', `name: ${entry.identity}`, `description: ${q(description)}`];
+  const triggers = 'triggers' in skill ? skill.triggers : undefined;
+  if (entry.exposure === 'full' && triggers) {
+    lines.push(`triggers: ${q(triggers)}`);
+  }
+  lines.push(
+    'user-invocable: true',
+    ...(entry.exposure === 'explicit-only' ? ['disable-model-invocation: true'] : []),
+    '---',
+    body,
+  );
+  return `${lines.join('\n')}${body.endsWith('\n') ? '' : '\n'}`;
+}
+async function write(
+  root: string,
+  relative: string,
+  text: string | Uint8Array,
+  files: string[],
+): Promise<void> {
+  const target = path.join(root, ...relative.split('/'));
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, text);
+  files.push(relative);
+}
+function pluginJson() {
+  return `${JSON.stringify({ name: 'mpx', version: '0.0.0', description: 'MPX Claude runtime projection' }, null, 2)}\n`;
+}
+function statusSnapshotFile(snapshot: unknown): string {
+  return `${JSON.stringify(parseStatusSnapshotV1(snapshot), null, 2)}\n`;
+}
+function runtimeStatusFile(envelope: unknown): string {
+  return `${JSON.stringify(parseRuntimeStatusEnvelopeV1(envelope), null, 2)}\n`;
+}
+const hookCommand = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/runtime-guard.mjs"';
+const hook = (timeout = 5) => ({ type: 'command', command: hookCommand, timeout });
+const hooksJson = `${JSON.stringify({ hooks: { SessionStart: [{ hooks: [hook()] }], UserPromptSubmit: [{ hooks: [hook()] }], PreToolUse: [{ matcher: 'Skill|Agent|Task|Bash', hooks: [hook(125)] }], PostToolUse: [{ matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash', hooks: [hook(125)] }], PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook()] }], PreCompact: [{ hooks: [hook()] }], Notification: [{ hooks: [hook()] }], Stop: [{ hooks: [hook()] }] } }, null, 2)}\n`;
+function runtimeGuard(): string {
+  return String.raw`import {spawnSync} from "node:child_process";
 import {createHash,randomUUID} from "node:crypto";
 import {existsSync,readFileSync} from "node:fs";
 import {lstat,open,opendir,realpath,rename,writeFile} from "node:fs/promises";
@@ -140,111 +252,933 @@ function fallow(command){if(!process.env.MPX_FALLOW_EXECUTABLE||!/(^|[\s;|&()])g
 function quality(input){const candidate=input.tool_input?.file_path??input.tool_input?.notebook_path;if(typeof candidate!=="string"||candidate.length>4096||path.isAbsolute(candidate)||candidate.split(/[\\/]/u).includes(".."))return;const ext=path.extname(candidate).slice(1).toLowerCase(),selected=manager(),runner=selected==="pnpm"?["pnpm",["exec"]]:selected==="yarn"?["yarn",["exec"]]:selected==="bun"?["bunx",[]]:["npx",[]],plans=[],js=["js","jsx","ts","tsx","mjs","cjs","mts","cts","svelte","vue"].includes(ext),data=["json","jsonc","css","scss","less","html","md","yaml","yml"].includes(ext),vp=["vp","vp.cmd","vp.ps1"].some(name=>existsSync(path.join(process.cwd(),"node_modules",".bin",name)));if(ext==="py"&&existsSync(path.join(process.cwd(),"pyproject.toml"))&&/\[tool\.ruff/u.test(readFileSync(path.join(process.cwd(),"pyproject.toml"),"utf8").slice(0,1024*1024))){plans.push(["ruff",["format"],false],["ruff",["check","--fix"],true])}else if(vp&&(js||data)){plans.push(["vp",["fmt"],false]);if(js)plans.push(["vp",["lint","--fix"],true])}else if(existsSync(path.join(process.cwd(),"biome.json"))&&(js||["json","jsonc","css"].includes(ext))){plans.push(["biome",["format","--write"],false]);if(js)plans.push(["biome",["lint","--fix"],true])}else{const prettier=[".prettierrc","prettier.config.js","prettier.config.mjs"].some(name=>existsSync(path.join(process.cwd(),name))),eslint=["eslint.config.js","eslint.config.mjs","eslint.config.ts",".eslintrc"].some(name=>existsSync(path.join(process.cwd(),name)));if(prettier)plans.push(["prettier",["--write"],false]);if(eslint&&/[jt]sx?/u.test(ext))plans.push(["eslint",["--fix"],true])}const failures=[];for(const [tool,args,report] of plans){const result=run(runner[0],[...runner[1],tool,...args,candidate]);if(report&&result.status!==0)failures.push((result.stderr||result.stdout).split("\n").slice(-20).join("\n"))}if(failures.length)outputContext("PostToolUse","Post-write lint failed:\n"+failures.join("\n"))}
 async function main(){let input;try{input=await readHookInput()}catch{restart("HOOK_INPUT_INVALID")}const metadata=await validateBinding(),event=input.hook_event_name,tool=input.tool_name;if(event==="SessionStart"){await verifyTree(metadata);await emitLifecycle(input,"start",true);const context=[process.env.MPX_SESSION_CONTEXT,process.env.MPX_MACHINE_CONTEXT??machineContext(),process.env.MPX_PROJECT_CONTEXT??projectContext()].filter(Boolean).join("\n");if(context)outputContext("SessionStart",context);}else if(event==="PreCompact"){const context=[process.env.MPX_COMPACT_INSTRUCTIONS,process.env.MPX_PROJECT_CONTEXT??projectContext()].filter(Boolean).join("\n");if(context)outputContext("PreCompact",context);}else if(event==="Notification"||event==="Stop"){if(event==="Notification")await emitLifecycle(input,"info",false);else await emitLifecycle(input,"shutdown",true);if(process.platform==="win32"&&process.env.MPX_SESSION_ROLE!=="child")process.stderr.write("\\x07");}else if(event==="PreToolUse"&&tool==="Skill"){const identity=input.tool_input?.skill??input.tool_input?.name;if(typeof identity!=="string"||!/^[a-z0-9][a-z0-9-]*$/u.test(identity))restart("SKILL_BODY_INVALID");const prefix="skills/"+identity+"/";let matched=0;for(const item of metadata.fileMap)if(item.path.startsWith(prefix)){matched+=1;await validateExpected(metadata,item.path)}if(!matched)restart("SKILL_BODY_INVALID");}else if(event==="PreToolUse"&&(tool==="Agent"||tool==="Task")){const identity=input.tool_input?.subagent_type??input.tool_input?.agent;if(typeof identity==="string"&&/^[A-Za-z0-9][A-Za-z0-9-]*$/u.test(identity))await validateExpected(metadata,"agents/"+identity+".md");else for(const item of metadata.fileMap)if(item.path.startsWith("agents/")&&!item.path.startsWith("agents/references/"))await validateExpected(metadata,item.path);}else if(event==="PreToolUse"&&tool==="Bash"){const command=input.tool_input?.command,packaging=packageDecision(command);if(packaging){deny(packaging);return}const commit=preCommit(command);if(commit?.block){deny(commit.block);return}await validateExpected(metadata,"hooks/dangerous-command-policy.mjs");const {classifyDangerousCommand}=await import("./dangerous-command-policy.mjs");const decision=classifyDangerousCommand(command);if(decision.action==="block"){deny(decision);return}const gate=fallow(command);if(gate?.block){deny(gate.block);return}const warnings=[commit?.warning,gate?.warning].filter(Boolean);if(warnings.length)outputContext("PreToolUse",warnings.join("\n"));}else if(event==="PostToolUse"&&["Write","Edit","MultiEdit","NotebookEdit"].includes(tool)){await emitLifecycle(input,"activity",false);quality(input);}else if((event==="PostToolUse"||event==="PostToolUseFailure")&&tool==="Bash"){if(event==="PostToolUse")await emitLifecycle(input,"activity",false);const command=input.tool_input?.command??"",stderr=input.tool_response?.stderr??"";if(/\b(?:npm|pnpm|yarn|bun)\s+(?:install|add)\b/u.test(command)&&/vulnerabilit(?:y|ies)/iu.test(String(stderr).slice(0,65536)))outputContext(event,"Package install detected vulnerabilities. Consider running the project audit policy.");else if(event==="PostToolUse"&&/\bgit\s+push\b/u.test(command)&&process.env.MPX_PULL_REQUEST_STATE==="missing")outputContext(event,"Pushed to remote. No pull request exists for this branch yet.");else if(event==="PostToolUse"&&/\bmpx\s+review\s+create\b/u.test(command)){const match=String(input.tool_response?.stdout??"").match(/https:\/\/[^\s]+/u);if(match&&match[0].length<=2048)outputContext(event,"Pull request created: "+match[0]);}}}
 if(process.argv[1]===fileURLToPath(import.meta.url))main().catch(error=>{process.stderr.write(JSON.stringify({schemaVersion:1,code:error.code??"RUNTIME_ARTIFACT_TAMPERED",restartRequired:true,message:error.message})+"\n");process.exitCode=2});
-`;}
-const statusParser=`const control=/[\\0-\\x1F\\x7F-\\x9F]/u,id=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u,safe=(x,n)=>typeof x==="string"&&x.length<=n&&!control.test(x),keys=(x,k)=>x&&typeof x==="object"&&!Array.isArray(x)&&Object.keys(x).sort().join()===k.slice().sort().join();function parse(x){if(!keys(x,["schemaVersion","project","worktree","portResolution","services","diagnostics"])||x.schemaVersion!==1||!keys(x.project,["id","cwd"])||!safe(x.project.id,256)||!safe(x.project.cwd,4096)||!keys(x.worktree,["id","path","role","branch"])||!(x.worktree.id===null||safe(x.worktree.id,256))||!(x.worktree.path===null||safe(x.worktree.path,4096))||!(x.worktree.branch===null||safe(x.worktree.branch,512))||![null,"main","linked"].includes(x.worktree.role)||!["valid","missing","invalid","stale"].includes(x.portResolution)||!Array.isArray(x.services)||x.services.length>256||!Array.isArray(x.diagnostics)||x.diagnostics.length>256)throw Error("STATUS_SNAPSHOT_INVALID");const ids=new Set;for(const s of x.services){if(!keys(s,["id","mode","scope","protocol","port","listening","conflict","pid"])||!id.test(s.id)||ids.has(s.id)||!["managed","fixed-shared"].includes(s.mode)||!["checkout","project"].includes(s.scope)||!["http","https","tcp"].includes(s.protocol)||!(s.port===null||Number.isInteger(s.port)&&s.port>=1&&s.port<=65535)||typeof s.listening!=="boolean"||!["none","external","unknown"].includes(s.conflict)||!(s.pid===null||Number.isSafeInteger(s.pid)&&s.pid>=1))throw Error("STATUS_SNAPSHOT_INVALID");ids.add(s.id)}for(const d of x.diagnostics)if(!keys(d,["code","severity","message","serviceId"])||!id.test(d.code)||!["info","warning","error"].includes(d.severity)||!safe(d.message,1024)||!(d.serviceId===null||id.test(d.serviceId)))throw Error("STATUS_SNAPSHOT_INVALID");return x}`;
-function statusScript(launchBanner: string, runtimeEnvelope=false): string {
- return `import {lstat,open} from "node:fs/promises";import path from "node:path";import {fileURLToPath} from "node:url";${statusParser}function ports(x){if(x.portResolution!=="valid")return "ports "+x.portResolution;if(!x.services.length)return "ports none";return "ports "+[...x.services].sort((a,b)=>a.id.localeCompare(b.id)).map(s=>s.id+":"+(s.port??"?")+(s.conflict==="external"?"!":s.conflict==="unknown"?"?":s.listening?"*":"")).join(" ")}const bounded=x=>typeof x==="string"&&x.length>0&&x.length<=256&&!/[\\0-\\x1f\\x7f-\\x9f]/u.test(x)&&!/(?:[A-Za-z]:[\\\\/]|Bearer\\s|PRIVATE KEY)/iu.test(x),num=x=>Number.isSafeInteger(x)&&x>=0,compact=x=>!num(x)?"?":x>=1e6?Math.round(x/1e5)/10+"m":x>=1e3?Math.round(x/100)/10+"k":String(x);function runtime(x){const context=JSON.parse(process.env.MPX_RUNTIME_CONTEXT??"null");if(x?.schemaVersion!==1||x?.harness?.kind!=="claude"||x?.harness?.surface!=="statusline"||x?.binding?.launchKey!==context?.launchKey||x?.binding?.repositoryId!==context?.binding?.repositoryId)throw Error("RUNTIME_STATUS_INVALID");const text=v=>bounded(v)?v:null,parts=[text(x.identity?.label),text(x.session?.title),text(x.model?.label)?x.model.label+(text(x.model?.effort)?"/"+x.model.effort:""):null,compact(x.model?.contextUsedTokens)+"/"+compact(x.model?.contextLimitTokens),num(x.cost?.amountMicros)?"$"+(x.cost.amountMicros/1e6).toFixed(2):null,text(x.providerUsage?.provider),text(x.repository?.name)?x.repository.name+(text(x.location?.label)?"/"+x.location.label:"")+(text(x.repository?.branch)?"@"+x.repository.branch:""):text(x.location?.label),"compact:"+(num(x.compactions?.count)?x.compactions.count:"?"),"agents:"+(num(x.subagents?.active)?x.subagents.active:"?")+"/"+(num(x.subagents?.completed)?x.subagents.completed:"?"),Array.isArray(x.development?.services)?x.development.services.slice(0,64).map(s=>bounded(s.id)&&(!s.port||num(s.port))?s.id+":"+(s.port??"?")+(s.state==="listening"?"*":s.state==="conflict"?"!":""):"").filter(Boolean).join(" "):null,...(Array.isArray(x.actions?.items)?x.actions.items.slice(0,8).filter(a=>a.enabled).map(a=>text(a.wideLabel)):[])];return parts.filter(Boolean).join(" | ")}const MAX_STATUS_SNAPSHOT_BYTES=1024*1024,sameIdentity=(a,b)=>a.dev===b.dev&&a.ino===b.ino;async function exactRead(file){let handle;try{handle=await open(file,"r");const initial=await handle.stat(),named=await lstat(file);if(!initial.isFile()||!named.isFile()||named.isSymbolicLink()||!sameIdentity(initial,named)||initial.size!==named.size||initial.size>MAX_STATUS_SNAPSHOT_BYTES)throw Error("STATUS_SNAPSHOT_INVALID");const content=Buffer.alloc(initial.size);let offset=0;while(offset<content.length){const result=await handle.read(content,offset,content.length-offset,offset);if(result.bytesRead===0)throw Error("STATUS_SNAPSHOT_INVALID");offset+=result.bytesRead}if((await handle.read(Buffer.alloc(1),0,1,initial.size)).bytesRead!==0)throw Error("STATUS_SNAPSHOT_INVALID");const final=await handle.stat(),finalNamed=await lstat(file);if(!final.isFile()||!finalNamed.isFile()||finalNamed.isSymbolicLink()||!sameIdentity(initial,final)||!sameIdentity(final,finalNamed)||final.size!==initial.size||finalNamed.size!==initial.size)throw Error("STATUS_SNAPSHOT_INVALID");return content}finally{await handle?.close().catch(()=>{})}}async function nativeInput(){const chunks=[];let bytes=0;for await(const chunk of process.stdin){bytes+=chunk.length;if(bytes>1024*1024)throw Error("NATIVE_STATUS_INVALID");chunks.push(chunk)}if(!bytes)return{};return JSON.parse(Buffer.concat(chunks,bytes).toString("utf8"))}function adaptClaudeNativeStatus(base,n){const capturedAt=new Date().toISOString();if(Date.parse(capturedAt)<Date.parse(base.generatedAt))throw Error("NATIVE_STATUS_INVALID");const metadata={source:"native",state:"current",capturedAt,freshUntil:new Date(Date.parse(capturedAt)+60000).toISOString(),diagnostic:null,unavailable:null},preserve=g=>g?.state==="current"&&Date.parse(g.freshUntil)<Date.parse(capturedAt)?{...g,state:"stale"}:g,title=bounded(n.title)?n.title:null,effort=["low","medium","high","max"].includes(n.effort)?n.effort:null,input=num(n.context_window?.total_input_tokens)?n.context_window.total_input_tokens:null,output=num(n.context_window?.total_output_tokens)?n.context_window.total_output_tokens:null,limit=num(n.context_window?.context_window_size)?n.context_window.context_window_size:null,cost=typeof n.cost?.total_cost_usd==="number"&&Number.isFinite(n.cost.total_cost_usd)&&n.cost.total_cost_usd>=0?Math.round(n.cost.total_cost_usd*1e6):null,duration=num(n.cost?.total_duration_ms)?n.cost.total_duration_ms:null,result={...base,generatedAt:capturedAt};for(const group of ["identity","session","model","location","repository","usage","cost","providerUsage","compactions","subagents","development","actions"])result[group]=preserve(base[group]);result.session={...base.session,...(title?{title}:{}),...(duration!==null?{elapsedMs:duration}:{}),...metadata};result.model={...base.model,...(bounded(n.model?.id)?{modelId:n.model.id}:{}),...(bounded(n.model?.display_name)?{label:n.model.display_name}:{}),...(effort?{effort}:{}),...(input!==null||output!==null?{contextUsedTokens:(input??0)+(output??0)}:{}),...(limit!==null?{contextLimitTokens:limit}:{}),...metadata};result.usage={...base.usage,...(input!==null?{inputTokens:input}:{}),...(output!==null?{outputTokens:output}:{}),...(input!==null||output!==null?{totalTokens:(input??0)+(output??0)}:{}),...metadata};result.cost={...base.cost,...(cost!==null?{amountMicros:cost}:{}),...metadata};return result}const file=process.env.MPX_RUNTIME_STATUS_FILE??process.env.MPX_STATUS_SNAPSHOT_FILE??path.join(path.dirname(fileURLToPath(import.meta.url)),${q(runtimeEnvelope?"runtime-status-envelope.json":"status-snapshot.json")});let segment=${q(runtimeEnvelope?"status invalid":"ports invalid")};try{let value=JSON.parse((await exactRead(file)).toString("utf8"));if(value?.binding)value=adaptClaudeNativeStatus(value,await nativeInput());segment=value?.binding?runtime(value):ports(parse(value))}catch{}process.stdout.write(${q(launchBanner)}+" | "+segment);\n`;
+`;
 }
-function stable(value:unknown):string{if(Array.isArray(value))return`[${value.map(stable).join(",")}]`;if(value&&typeof value==="object")return`{${Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;return JSON.stringify(value);}
-async function verifiedDirectory(root:string,code:string,message:string):Promise<string>{const stat=await lstat(root).catch(()=>undefined);if(!stat?.isDirectory()||stat.isSymbolicLink())throw new ClaudeRuntimeError(code,message);return realpath(root);}
-function contained(root:string,candidate:string):boolean{const relative=path.relative(root,candidate);return relative===""||(!relative.startsWith(`..${path.sep}`)&&relative!==".."&&!path.isAbsolute(relative));}
-type AgentClass="sol"|"terra"|"luna";type AgentCapability="read"|"search"|"shell"|"write"|"browser"|"context"|"web";interface AgentMetadata{modelClass:AgentClass;thinking:"low"|"medium"|"high";capabilities:AgentCapability[];nesting:string[];outputSchema:string}interface AgentCatalog{schemaVersion:1;agents:Record<string,AgentMetadata>}
-const claudeModels:Record<AgentClass,string>={sol:"opus",terra:"sonnet",luna:"haiku"};const claudeTools:Record<AgentCapability,string[]>={read:["Read"],search:["Grep","Glob"],shell:["Bash"],write:["Edit","Write"],browser:["mcp__mpx_gateway__mcp"],context:["mcp__mpx_gateway__mcp"],web:["mcp__mpx_gateway__web_search","mcp__mpx_gateway__fetch_content","mcp__mpx_gateway__get_search_content","mcp__mpx_gateway__source_check"]};
-function expandAgentNesting(selectors:readonly string[],identities:readonly string[]):string[]{const expanded=selectors.flatMap(selector=>{const matches=selector.includes("*")?identities.filter(identity=>new RegExp(`^${selector.split("*").map(part=>part.replace(/[.*+?^${}()|[\]\\]/gu,"\\$&")).join(".*")}$`,"u").test(identity)):identities.filter(identity=>identity===selector);if(matches.length===0)throw new ClaudeRuntimeError("AGENT_METADATA_INVALID",`agent nesting selector '${selector}' does not resolve to a canonical identity`);return matches;});return[...new Set(expanded)];}
-function adaptClaudeAgent(text:string,identity:string,metadata:AgentMetadata):[string,string]{const marker=text.indexOf("\n---\n",4);if(!text.startsWith("---\n")||marker<0||!text.includes(`\nname: ${identity}\n`))throw new ClaudeRuntimeError("AGENT_INVALID",`invalid canonical agent ${identity}`);const projectedName=identity==="mpx-explorer"?"Explore":identity,tools=[...new Set(metadata.capabilities.flatMap(capability=>claudeTools[capability]??[])),...(metadata.nesting.length?["Agent"]:[])];const nesting=metadata.nesting.length?`\nallowed-subagents: ${metadata.nesting.join(",")}`:"";const frontmatter=text.slice(0,marker).replace(`\nname: ${identity}\n`,`\nname: ${projectedName}\n`);return [`${projectedName}.md`,`${frontmatter}\nmodel: ${claudeModels[metadata.modelClass]}\neffort: ${metadata.thinking}\ntools: ${tools.join(", ")}\noutput-schema: ${metadata.outputSchema}${nesting}\n${text.slice(marker)}`];}
-async function canonicalAgents(root:string):Promise<Array<[string,string]>>{const verifiedRoot=await verifiedDirectory(root,"AGENT_ROOT_INVALID","canonical agents root must be a real non-symlink directory"),metadataFile=path.join(verifiedRoot,"metadata.json"),metadataStat=await lstat(metadataFile).catch(()=>undefined);if(metadataStat&&(!metadataStat.isFile()||metadataStat.isSymbolicLink()))throw new ClaudeRuntimeError("AGENT_METADATA_INVALID","agent metadata must be a regular file");let catalog:AgentCatalog={schemaVersion:1,agents:{}};if(metadataStat)try{catalog=JSON.parse(await readFile(metadataFile,"utf8"))}catch{throw new ClaudeRuntimeError("AGENT_METADATA_INVALID","agent metadata must be valid JSON")}const classes=new Set(["sol","terra","luna"]),thinking=new Set(["low","medium","high"]),capabilities=new Set(Object.keys(claudeTools));if(catalog.schemaVersion!==1||!catalog.agents||Array.isArray(catalog.agents)||!Object.entries(catalog.agents).every(([identity,agent])=>/^mpx-[a-z0-9-]+$/u.test(identity)&&classes.has(agent?.modelClass)&&thinking.has(agent?.thinking)&&Array.isArray(agent?.capabilities)&&agent.capabilities.length>0&&agent.capabilities.every(item=>capabilities.has(item))&&Array.isArray(agent?.nesting)&&agent.nesting.every(item=>typeof item==="string")&&typeof agent?.outputSchema==="string"&&agent.outputSchema.length>0))throw new ClaudeRuntimeError("AGENT_METADATA_INVALID","agent metadata schema is invalid");const result:Array<[string,string]>=[],identities:string[]=[];for(const entry of (await readdir(verifiedRoot,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){if(!entry.isFile()||!/^mpx-[a-z0-9-]+\.md$/.test(entry.name))continue;const file=path.join(verifiedRoot,entry.name),stat=await lstat(file);if(stat.isSymbolicLink())throw new ClaudeRuntimeError("AGENT_SYMLINK","canonical agent may not be a symlink");const resolved=await realpath(file);if(!contained(verifiedRoot,resolved))throw new ClaudeRuntimeError("AGENT_ESCAPE","canonical agent escapes its verified root");const identity=entry.name.slice(0,-3),agentMetadata=catalog.agents[identity];if(!agentMetadata)throw new ClaudeRuntimeError("AGENT_METADATA_INVALID",`missing metadata for ${identity}`);identities.push(identity);result.push(adaptClaudeAgent(await readFile(file,"utf8"),identity,{...agentMetadata,nesting:expandAgentNesting(agentMetadata.nesting,Object.keys(catalog.agents).sort())}));}if(Object.keys(catalog.agents).sort().join()!==identities.sort().join())throw new ClaudeRuntimeError("AGENT_METADATA_INVALID","agent metadata must exactly cover canonical agents");const references=path.join(verifiedRoot,"references");if(await lstat(references).catch(()=>undefined)){const verifiedReferences=await verifiedDirectory(references,"AGENT_REFERENCE_INVALID","agent references root must be a real non-symlink directory");for(const entry of (await readdir(verifiedReferences,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){const file=path.join(verifiedReferences,entry.name),stat=await lstat(file);if(!entry.isFile()||stat.isSymbolicLink())throw new ClaudeRuntimeError("AGENT_REFERENCE_INVALID","agent references must be regular files");const resolved=await realpath(file);if(!contained(verifiedReferences,resolved))throw new ClaudeRuntimeError("AGENT_REFERENCE_INVALID","agent references must remain within the verified references root");result.push([`references/${entry.name}`,await readFile(file,"utf8")]);}}return result;}
-export async function buildClaudePlugin(input:ClaudeBuildInput):Promise<ClaudeProjection>{
- const manifest=parseResolvedSkillManifestV4(input.manifest);try{verifyRuntimeSkillArtifact(input.artifact,manifest,input.catalog,{runtime:"claude"});}catch(error){if(error instanceof RuntimeContractError&&error.details?.reason==="file-map-binding")throw new ClaudeRuntimeError("STALE_ARTIFACT","runtime operation requires the current exact v4 artifact");throw error;}
- if(input.artifact.runtime!=="claude"||input.artifact.manifestKey!==manifest.manifestKey)throw new ClaudeRuntimeError("ARTIFACT_BINDING_MISMATCH","Claude projection requires its exact v4 Claude artifact");
- if(await lstat(input.outputRoot).catch(()=>undefined))throw new ClaudeRuntimeError("OUTPUT_EXISTS","immutable projection destination already exists");
- const catalog=new Map(input.catalog.map(x=>[x.identity,x]));const projected:Array<[string,string|Uint8Array]>=[];
- for(const entry of input.artifact.entries){const skill=catalog.get(entry.identity);if(!skill)throw new ClaudeRuntimeError("STALE_CATALOG",`missing ${entry.identity}`);const invocation=entry.permissions.modelInvocation?"model":"human-explicit";const loaded=await loadSkillBody({canonicalRoot:input.canonical,manifest:input.manifest,artifact:input.artifact,runtime:"claude",identity:entry.identity,invocation});projected.push([`skills/${entry.identity}/SKILL.md`,skillText(entry,skill,loaded.body)]);for(const support of await enumerateSkillDirectory(path.dirname(skill.sourcePath)))if(support.relativePath!=="SKILL.md")projected.push([`skills/${entry.identity}/${support.relativePath}`,support.bytes]);}
- const agents=await canonicalAgents(input.agents);const runtimeContext=parseRuntimeContextV1(input.runtimeContext),runtimeStatus=input.runtimeStatusEnvelope?parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope):undefined;if(runtimeStatus&&(runtimeStatus.binding.launchKey!==runtimeContext.launchKey||runtimeStatus.binding.repositoryId!==runtimeContext.binding.repositoryId||runtimeStatus.harness.kind!=="claude"))throw new ClaudeRuntimeError("STATUS_BINDING_MISMATCH","runtime status must match the Claude launch and repository binding");const files:string[]=[];await mkdir(input.outputRoot,{recursive:false});try{
-  await write(input.outputRoot,".claude-plugin/plugin.json",pluginJson(),files);
-  for(const [relative,text] of projected)await write(input.outputRoot,relative,text,files);
-  for(const [name,text] of agents)await write(input.outputRoot,`agents/${name}`,text,files);
-  await write(input.outputRoot,"hooks/hooks.json",hooksJson,files);await write(input.outputRoot,"hooks/dangerous-command-policy.mjs",`${dangerousCommandPolicyModuleSource}\n`,files);await write(input.outputRoot,"hooks/runtime-guard.mjs",runtimeGuard(),files);if(runtimeStatus)await write(input.outputRoot,"status/runtime-status-envelope.json",runtimeStatusFile(runtimeStatus),files);else await write(input.outputRoot,"status/status-snapshot.json",statusSnapshotFile(input.statusSnapshot),files);await write(input.outputRoot,"status/status-line.mjs",statusScript(input.launchBanner,Boolean(input.runtimeStatusEnvelope)),files);await write(input.outputRoot,"runtime-context.json",`${JSON.stringify(runtimeContext,null,2)}\n`,files);
-  await write(input.outputRoot,"settings.json",`${JSON.stringify({statusLine:{type:"command",command:"node \"${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs\""},mpxArtifactKey:input.artifact.reference.artifactKey},null,2)}\n`,files);
-  return {directory:input.outputRoot,artifactKey:input.artifact.reference.artifactKey,files:files.sort()};
- }catch(error){await rm(input.outputRoot,{recursive:true,force:true});throw error;}
+const statusParser = `const control=/[\\0-\\x1F\\x7F-\\x9F]/u,id=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u,safe=(x,n)=>typeof x==="string"&&x.length<=n&&!control.test(x),keys=(x,k)=>x&&typeof x==="object"&&!Array.isArray(x)&&Object.keys(x).sort().join()===k.slice().sort().join();function parse(x){if(!keys(x,["schemaVersion","project","worktree","portResolution","services","diagnostics"])||x.schemaVersion!==1||!keys(x.project,["id","cwd"])||!safe(x.project.id,256)||!safe(x.project.cwd,4096)||!keys(x.worktree,["id","path","role","branch"])||!(x.worktree.id===null||safe(x.worktree.id,256))||!(x.worktree.path===null||safe(x.worktree.path,4096))||!(x.worktree.branch===null||safe(x.worktree.branch,512))||![null,"main","linked"].includes(x.worktree.role)||!["valid","missing","invalid","stale"].includes(x.portResolution)||!Array.isArray(x.services)||x.services.length>256||!Array.isArray(x.diagnostics)||x.diagnostics.length>256)throw Error("STATUS_SNAPSHOT_INVALID");const ids=new Set;for(const s of x.services){if(!keys(s,["id","mode","scope","protocol","port","listening","conflict","pid"])||!id.test(s.id)||ids.has(s.id)||!["managed","fixed-shared"].includes(s.mode)||!["checkout","project"].includes(s.scope)||!["http","https","tcp"].includes(s.protocol)||!(s.port===null||Number.isInteger(s.port)&&s.port>=1&&s.port<=65535)||typeof s.listening!=="boolean"||!["none","external","unknown"].includes(s.conflict)||!(s.pid===null||Number.isSafeInteger(s.pid)&&s.pid>=1))throw Error("STATUS_SNAPSHOT_INVALID");ids.add(s.id)}for(const d of x.diagnostics)if(!keys(d,["code","severity","message","serviceId"])||!id.test(d.code)||!["info","warning","error"].includes(d.severity)||!safe(d.message,1024)||!(d.serviceId===null||id.test(d.serviceId)))throw Error("STATUS_SNAPSHOT_INVALID");return x}`;
+function statusScript(launchBanner: string, runtimeEnvelope = false): string {
+  return `import {lstat,open} from "node:fs/promises";import path from "node:path";import {fileURLToPath} from "node:url";${statusParser}function ports(x){if(x.portResolution!=="valid")return "ports "+x.portResolution;if(!x.services.length)return "ports none";return "ports "+[...x.services].sort((a,b)=>a.id.localeCompare(b.id)).map(s=>s.id+":"+(s.port??"?")+(s.conflict==="external"?"!":s.conflict==="unknown"?"?":s.listening?"*":"")).join(" ")}const bounded=x=>typeof x==="string"&&x.length>0&&x.length<=256&&!/[\\0-\\x1f\\x7f-\\x9f]/u.test(x)&&!/(?:[A-Za-z]:[\\\\/]|Bearer\\s|PRIVATE KEY)/iu.test(x),num=x=>Number.isSafeInteger(x)&&x>=0,compact=x=>!num(x)?"?":x>=1e6?Math.round(x/1e5)/10+"m":x>=1e3?Math.round(x/100)/10+"k":String(x);function runtime(x){const context=JSON.parse(process.env.MPX_RUNTIME_CONTEXT??"null");if(x?.schemaVersion!==1||x?.harness?.kind!=="claude"||x?.harness?.surface!=="statusline"||x?.binding?.launchKey!==context?.launchKey||x?.binding?.repositoryId!==context?.binding?.repositoryId)throw Error("RUNTIME_STATUS_INVALID");const text=v=>bounded(v)?v:null,parts=[text(x.identity?.label),text(x.session?.title),text(x.model?.label)?x.model.label+(text(x.model?.effort)?"/"+x.model.effort:""):null,compact(x.model?.contextUsedTokens)+"/"+compact(x.model?.contextLimitTokens),num(x.cost?.amountMicros)?"$"+(x.cost.amountMicros/1e6).toFixed(2):null,text(x.providerUsage?.provider),text(x.repository?.name)?x.repository.name+(text(x.location?.label)?"/"+x.location.label:"")+(text(x.repository?.branch)?"@"+x.repository.branch:""):text(x.location?.label),"compact:"+(num(x.compactions?.count)?x.compactions.count:"?"),"agents:"+(num(x.subagents?.active)?x.subagents.active:"?")+"/"+(num(x.subagents?.completed)?x.subagents.completed:"?"),Array.isArray(x.development?.services)?x.development.services.slice(0,64).map(s=>bounded(s.id)&&(!s.port||num(s.port))?s.id+":"+(s.port??"?")+(s.state==="listening"?"*":s.state==="conflict"?"!":""):"").filter(Boolean).join(" "):null,...(Array.isArray(x.actions?.items)?x.actions.items.slice(0,8).filter(a=>a.enabled).map(a=>text(a.wideLabel)):[])];return parts.filter(Boolean).join(" | ")}const MAX_STATUS_SNAPSHOT_BYTES=1024*1024,sameIdentity=(a,b)=>a.dev===b.dev&&a.ino===b.ino;async function exactRead(file){let handle;try{handle=await open(file,"r");const initial=await handle.stat(),named=await lstat(file);if(!initial.isFile()||!named.isFile()||named.isSymbolicLink()||!sameIdentity(initial,named)||initial.size!==named.size||initial.size>MAX_STATUS_SNAPSHOT_BYTES)throw Error("STATUS_SNAPSHOT_INVALID");const content=Buffer.alloc(initial.size);let offset=0;while(offset<content.length){const result=await handle.read(content,offset,content.length-offset,offset);if(result.bytesRead===0)throw Error("STATUS_SNAPSHOT_INVALID");offset+=result.bytesRead}if((await handle.read(Buffer.alloc(1),0,1,initial.size)).bytesRead!==0)throw Error("STATUS_SNAPSHOT_INVALID");const final=await handle.stat(),finalNamed=await lstat(file);if(!final.isFile()||!finalNamed.isFile()||finalNamed.isSymbolicLink()||!sameIdentity(initial,final)||!sameIdentity(final,finalNamed)||final.size!==initial.size||finalNamed.size!==initial.size)throw Error("STATUS_SNAPSHOT_INVALID");return content}finally{await handle?.close().catch(()=>{})}}async function nativeInput(){const chunks=[];let bytes=0;for await(const chunk of process.stdin){bytes+=chunk.length;if(bytes>1024*1024)throw Error("NATIVE_STATUS_INVALID");chunks.push(chunk)}if(!bytes)return{};return JSON.parse(Buffer.concat(chunks,bytes).toString("utf8"))}function adaptClaudeNativeStatus(base,n){const capturedAt=new Date().toISOString();if(Date.parse(capturedAt)<Date.parse(base.generatedAt))throw Error("NATIVE_STATUS_INVALID");const metadata={source:"native",state:"current",capturedAt,freshUntil:new Date(Date.parse(capturedAt)+60000).toISOString(),diagnostic:null,unavailable:null},preserve=g=>g?.state==="current"&&Date.parse(g.freshUntil)<Date.parse(capturedAt)?{...g,state:"stale"}:g,title=bounded(n.title)?n.title:null,effort=["low","medium","high","max"].includes(n.effort)?n.effort:null,input=num(n.context_window?.total_input_tokens)?n.context_window.total_input_tokens:null,output=num(n.context_window?.total_output_tokens)?n.context_window.total_output_tokens:null,limit=num(n.context_window?.context_window_size)?n.context_window.context_window_size:null,cost=typeof n.cost?.total_cost_usd==="number"&&Number.isFinite(n.cost.total_cost_usd)&&n.cost.total_cost_usd>=0?Math.round(n.cost.total_cost_usd*1e6):null,duration=num(n.cost?.total_duration_ms)?n.cost.total_duration_ms:null,result={...base,generatedAt:capturedAt};for(const group of ["identity","session","model","location","repository","usage","cost","providerUsage","compactions","subagents","development","actions"])result[group]=preserve(base[group]);result.session={...base.session,...(title?{title}:{}),...(duration!==null?{elapsedMs:duration}:{}),...metadata};result.model={...base.model,...(bounded(n.model?.id)?{modelId:n.model.id}:{}),...(bounded(n.model?.display_name)?{label:n.model.display_name}:{}),...(effort?{effort}:{}),...(input!==null||output!==null?{contextUsedTokens:(input??0)+(output??0)}:{}),...(limit!==null?{contextLimitTokens:limit}:{}),...metadata};result.usage={...base.usage,...(input!==null?{inputTokens:input}:{}),...(output!==null?{outputTokens:output}:{}),...(input!==null||output!==null?{totalTokens:(input??0)+(output??0)}:{}),...metadata};result.cost={...base.cost,...(cost!==null?{amountMicros:cost}:{}),...metadata};return result}const file=process.env.MPX_RUNTIME_STATUS_FILE??process.env.MPX_STATUS_SNAPSHOT_FILE??path.join(path.dirname(fileURLToPath(import.meta.url)),${q(runtimeEnvelope ? 'runtime-status-envelope.json' : 'status-snapshot.json')});let segment=${q(runtimeEnvelope ? 'status invalid' : 'ports invalid')};try{let value=JSON.parse((await exactRead(file)).toString("utf8"));if(value?.binding)value=adaptClaudeNativeStatus(value,await nativeInput());segment=value?.binding?runtime(value):ports(parse(value))}catch{}process.stdout.write(${q(launchBanner)}+" | "+segment);\n`;
 }
-export async function publishClaudeProjection(input:ClaudePublishInput):Promise<ClaudePublishedProjection>{
- const context=parseRuntimeContextV1(input.runtimeContext),manifest=parseResolvedSkillManifestV4(input.manifest);await mkdir(input.artifactsRoot,{recursive:true});const staging=await mkdtemp(path.join(input.artifactsRoot,".claude-build-"));await rm(staging,{recursive:true,force:true});try{
-  await buildClaudePlugin({...input,outputRoot:staging});
-  const published=await publishRuntimeArtifact({sourceRoot:staging,artifactsRoot:input.artifactsRoot,launchBinding:{launchKey:context.launchKey,descriptorDigest:context.launchDescriptor.digest,runtimeArtifactKey:input.artifact.reference.artifactKey,runtime:"claude",manifestKey:manifest.manifestKey},...(input.artifactRevalidator?{revalidate:input.artifactRevalidator}:{})});
-  const validation=await validateRuntimeContext({context,expectedLaunch:{launchKey:context.launchKey,descriptorDigest:context.launchDescriptor.digest},expectedManifestKey:manifest.manifestKey,expectedRuntimeArtifact:input.artifact.reference,currentBinding:manifest.binding});if(!validation.valid)throw new ClaudeRuntimeError("PUBLISHED_ARTIFACT_INVALID",validation.diagnostics.map(item=>item.code).join(","));
-  const directory=path.resolve(published.directory),reference=Object.freeze({...published.reference,launchBinding:Object.freeze({...published.reference.launchBinding})});return Object.freeze({directory,pluginDirectory:directory,reference,artifactKey:reference.projectionKey,files:Object.freeze(published.fileMap.map(file=>file.path)),reused:published.reused});
- }finally{await rm(staging,{recursive:true,force:true});}
+function stable(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stable).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
-export function adaptClaudePreBash(command:string,manager:PackageManager|null){const danger=classifyDangerousCommand(command);return danger.action==="block"?danger:evaluatePackagePolicy(command,manager);}
-export interface ClaudeRuntimeStatusProducer { readonly refresh:()=>Promise<void>; readonly render:(input:{launchBanner:string;width?:"narrow"|"wide"})=>string; readonly current:()=>RuntimeStatusEnvelopeV1|undefined; readonly abort:()=>void }
-export function createClaudeRuntimeStatusProducer(reader:RuntimeStatusEnvelopeReader,binding:RuntimeStatusBindingV1,initial?:RuntimeStatusEnvelopeV1):ClaudeRuntimeStatusProducer{
- const controller=createRuntimeStatusRefreshController({read:async signal=>{const value=parseRuntimeStatusEnvelopeV1(await reader.read(signal));if(value.binding.launchKey!==binding.launchKey||value.binding.runtimeId!==binding.runtimeId||value.binding.repositoryId!==binding.repositoryId||value.harness.kind!=="claude")throw new ClaudeRuntimeError("STATUS_BINDING_MISMATCH","status refresh belongs to another launch/runtime/repository");return value;}},{...(initial?{initial}:{}),timeoutMs:1000});
- return Object.freeze({refresh:()=>controller.refresh(),current:()=>controller.current(),abort:()=>controller.abort(),render:(input:{launchBanner:string;width?:"narrow"|"wide"})=>{const value=controller.current();return value?renderClaudeStatusLine(value,input):`${input.launchBanner} | status unavailable`;}});
+async function verifiedDirectory(root: string, code: string, message: string): Promise<string> {
+  const stat = await lstat(root).catch(() => undefined);
+  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
+    throw new ClaudeRuntimeError(code, message);
+  }
+  return realpath(root);
 }
-export interface ClaudeNativeStatusInput { readonly title?: unknown; readonly effort?: unknown; readonly model?: { readonly id?: unknown; readonly display_name?: unknown }; readonly cost?: { readonly total_cost_usd?: unknown; readonly total_duration_ms?: unknown }; readonly context_window?: { readonly total_input_tokens?: unknown; readonly total_output_tokens?: unknown; readonly context_window_size?: unknown } }
-const safeText=(value:unknown,maximum:number):string|undefined=>typeof value==="string"&&value.trim().length>0&&value.trim().length<=maximum&&!/[\0-\x1f\x7f-\x9f]/u.test(value)?value.trim():undefined;
-const safeCount=(value:unknown):number|undefined=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0?value:undefined;
-export interface ClaudeNativeStatusAdaptOptions { readonly capturedAt?: string; readonly freshnessMs?: number }
+function contained(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === '' ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+  );
+}
+type AgentClass = 'sol' | 'terra' | 'luna';
+type AgentCapability = 'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
+interface AgentMetadata {
+  modelClass: AgentClass;
+  thinking: 'low' | 'medium' | 'high';
+  capabilities: AgentCapability[];
+  nesting: string[];
+  outputSchema: string;
+}
+interface AgentCatalog {
+  schemaVersion: 1;
+  agents: Record<string, AgentMetadata>;
+}
+const claudeModels: Record<AgentClass, string> = { sol: 'opus', terra: 'sonnet', luna: 'haiku' };
+const claudeTools: Record<AgentCapability, string[]> = {
+  read: ['Read'],
+  search: ['Grep', 'Glob'],
+  shell: ['Bash'],
+  write: ['Edit', 'Write'],
+  browser: ['mcp__mpx_gateway__mcp'],
+  context: ['mcp__mpx_gateway__mcp'],
+  web: [
+    'mcp__mpx_gateway__web_search',
+    'mcp__mpx_gateway__fetch_content',
+    'mcp__mpx_gateway__get_search_content',
+    'mcp__mpx_gateway__source_check',
+  ],
+};
+function expandAgentNesting(selectors: readonly string[], identities: readonly string[]): string[] {
+  const expanded = selectors.flatMap((selector) => {
+    const matches = selector.includes('*')
+      ? identities.filter((identity) =>
+          new RegExp(
+            `^${selector
+              .split('*')
+              .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
+              .join('.*')}$`,
+            'u',
+          ).test(identity),
+        )
+      : identities.filter((identity) => identity === selector);
+    if (matches.length === 0) {
+      throw new ClaudeRuntimeError(
+        'AGENT_METADATA_INVALID',
+        `agent nesting selector '${selector}' does not resolve to a canonical identity`,
+      );
+    }
+    return matches;
+  });
+  return [...new Set(expanded)];
+}
+function adaptClaudeAgent(
+  text: string,
+  identity: string,
+  metadata: AgentMetadata,
+): [string, string] {
+  const marker = text.indexOf('\n---\n', 4);
+  if (!text.startsWith('---\n') || marker < 0 || !text.includes(`\nname: ${identity}\n`)) {
+    throw new ClaudeRuntimeError('AGENT_INVALID', `invalid canonical agent ${identity}`);
+  }
+  const projectedName = identity === 'mpx-explorer' ? 'Explore' : identity,
+    tools = [
+      ...new Set(metadata.capabilities.flatMap((capability) => claudeTools[capability] ?? [])),
+      ...(metadata.nesting.length ? ['Agent'] : []),
+    ];
+  const nesting = metadata.nesting.length
+    ? `\nallowed-subagents: ${metadata.nesting.join(',')}`
+    : '';
+  const frontmatter = text
+    .slice(0, marker)
+    .replace(`\nname: ${identity}\n`, `\nname: ${projectedName}\n`);
+  return [
+    `${projectedName}.md`,
+    `${frontmatter}\nmodel: ${claudeModels[metadata.modelClass]}\neffort: ${metadata.thinking}\ntools: ${tools.join(', ')}\noutput-schema: ${metadata.outputSchema}${nesting}\n${text.slice(marker)}`,
+  ];
+}
+async function canonicalAgents(root: string): Promise<Array<[string, string]>> {
+  const verifiedRoot = await verifiedDirectory(
+      root,
+      'AGENT_ROOT_INVALID',
+      'canonical agents root must be a real non-symlink directory',
+    ),
+    metadataFile = path.join(verifiedRoot, 'metadata.json'),
+    metadataStat = await lstat(metadataFile).catch(() => undefined);
+  if (metadataStat && (!metadataStat.isFile() || metadataStat.isSymbolicLink())) {
+    throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be a regular file');
+  }
+  let catalog: AgentCatalog = { schemaVersion: 1, agents: {} };
+  if (metadataStat) {
+    try {
+      catalog = JSON.parse(await readFile(metadataFile, 'utf8'));
+    } catch {
+      throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be valid JSON');
+    }
+  }
+  const classes = new Set(['sol', 'terra', 'luna']),
+    thinking = new Set(['low', 'medium', 'high']),
+    capabilities = new Set(Object.keys(claudeTools));
+  if (
+    catalog.schemaVersion !== 1 ||
+    !catalog.agents ||
+    Array.isArray(catalog.agents) ||
+    !Object.entries(catalog.agents).every(
+      ([identity, agent]) =>
+        /^mpx-[a-z0-9-]+$/u.test(identity) &&
+        classes.has(agent?.modelClass) &&
+        thinking.has(agent?.thinking) &&
+        Array.isArray(agent?.capabilities) &&
+        agent.capabilities.length > 0 &&
+        agent.capabilities.every((item) => capabilities.has(item)) &&
+        Array.isArray(agent?.nesting) &&
+        agent.nesting.every((item) => typeof item === 'string') &&
+        typeof agent?.outputSchema === 'string' &&
+        agent.outputSchema.length > 0,
+    )
+  ) {
+    throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata schema is invalid');
+  }
+  const result: Array<[string, string]> = [],
+    identities: string[] = [];
+  for (const entry of (await readdir(verifiedRoot, { withFileTypes: true })).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    if (!entry.isFile() || !/^mpx-[a-z0-9-]+\.md$/.test(entry.name)) {
+      continue;
+    }
+    const file = path.join(verifiedRoot, entry.name),
+      stat = await lstat(file);
+    if (stat.isSymbolicLink()) {
+      throw new ClaudeRuntimeError('AGENT_SYMLINK', 'canonical agent may not be a symlink');
+    }
+    const resolved = await realpath(file);
+    if (!contained(verifiedRoot, resolved)) {
+      throw new ClaudeRuntimeError('AGENT_ESCAPE', 'canonical agent escapes its verified root');
+    }
+    const identity = entry.name.slice(0, -3),
+      agentMetadata = catalog.agents[identity];
+    if (!agentMetadata) {
+      throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', `missing metadata for ${identity}`);
+    }
+    identities.push(identity);
+    result.push(
+      adaptClaudeAgent(await readFile(file, 'utf8'), identity, {
+        ...agentMetadata,
+        nesting: expandAgentNesting(agentMetadata.nesting, Object.keys(catalog.agents).sort()),
+      }),
+    );
+  }
+  if (Object.keys(catalog.agents).sort().join() !== identities.sort().join()) {
+    throw new ClaudeRuntimeError(
+      'AGENT_METADATA_INVALID',
+      'agent metadata must exactly cover canonical agents',
+    );
+  }
+  const references = path.join(verifiedRoot, 'references');
+  if (await lstat(references).catch(() => undefined)) {
+    const verifiedReferences = await verifiedDirectory(
+      references,
+      'AGENT_REFERENCE_INVALID',
+      'agent references root must be a real non-symlink directory',
+    );
+    for (const entry of (await readdir(verifiedReferences, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const file = path.join(verifiedReferences, entry.name),
+        stat = await lstat(file);
+      if (!entry.isFile() || stat.isSymbolicLink()) {
+        throw new ClaudeRuntimeError(
+          'AGENT_REFERENCE_INVALID',
+          'agent references must be regular files',
+        );
+      }
+      const resolved = await realpath(file);
+      if (!contained(verifiedReferences, resolved)) {
+        throw new ClaudeRuntimeError(
+          'AGENT_REFERENCE_INVALID',
+          'agent references must remain within the verified references root',
+        );
+      }
+      result.push([`references/${entry.name}`, await readFile(file, 'utf8')]);
+    }
+  }
+  return result;
+}
+export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<ClaudeProjection> {
+  const manifest = parseResolvedSkillManifestV4(input.manifest);
+  try {
+    verifyRuntimeSkillArtifact(input.artifact, manifest, input.catalog, { runtime: 'claude' });
+  } catch (error) {
+    if (error instanceof RuntimeContractError && error.details?.reason === 'file-map-binding') {
+      throw new ClaudeRuntimeError(
+        'STALE_ARTIFACT',
+        'runtime operation requires the current exact v4 artifact',
+      );
+    }
+    throw error;
+  }
+  if (input.artifact.runtime !== 'claude' || input.artifact.manifestKey !== manifest.manifestKey) {
+    throw new ClaudeRuntimeError(
+      'ARTIFACT_BINDING_MISMATCH',
+      'Claude projection requires its exact v4 Claude artifact',
+    );
+  }
+  if (await lstat(input.outputRoot).catch(() => undefined)) {
+    throw new ClaudeRuntimeError(
+      'OUTPUT_EXISTS',
+      'immutable projection destination already exists',
+    );
+  }
+  const catalog = new Map(input.catalog.map((x) => [x.identity, x]));
+  const projected: Array<[string, string | Uint8Array]> = [];
+  for (const entry of input.artifact.entries) {
+    const skill = catalog.get(entry.identity);
+    if (!skill) {
+      throw new ClaudeRuntimeError('STALE_CATALOG', `missing ${entry.identity}`);
+    }
+    const invocation = entry.permissions.modelInvocation ? 'model' : 'human-explicit';
+    const loaded = await loadSkillBody({
+      canonicalRoot: input.canonical,
+      manifest: input.manifest,
+      artifact: input.artifact,
+      runtime: 'claude',
+      identity: entry.identity,
+      invocation,
+    });
+    projected.push([`skills/${entry.identity}/SKILL.md`, skillText(entry, skill, loaded.body)]);
+    for (const support of await enumerateSkillDirectory(path.dirname(skill.sourcePath))) {
+      if (support.relativePath !== 'SKILL.md') {
+        projected.push([`skills/${entry.identity}/${support.relativePath}`, support.bytes]);
+      }
+    }
+  }
+  const agents = await canonicalAgents(input.agents);
+  const runtimeContext = parseRuntimeContextV1(input.runtimeContext),
+    runtimeStatus = input.runtimeStatusEnvelope
+      ? parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope)
+      : undefined;
+  if (
+    runtimeStatus &&
+    (runtimeStatus.binding.launchKey !== runtimeContext.launchKey ||
+      runtimeStatus.binding.repositoryId !== runtimeContext.binding.repositoryId ||
+      runtimeStatus.harness.kind !== 'claude')
+  ) {
+    throw new ClaudeRuntimeError(
+      'STATUS_BINDING_MISMATCH',
+      'runtime status must match the Claude launch and repository binding',
+    );
+  }
+  const files: string[] = [];
+  await mkdir(input.outputRoot, { recursive: false });
+  try {
+    await write(input.outputRoot, '.claude-plugin/plugin.json', pluginJson(), files);
+    for (const [relative, text] of projected) {
+      await write(input.outputRoot, relative, text, files);
+    }
+    for (const [name, text] of agents) {
+      await write(input.outputRoot, `agents/${name}`, text, files);
+    }
+    await write(input.outputRoot, 'hooks/hooks.json', hooksJson, files);
+    await write(
+      input.outputRoot,
+      'hooks/dangerous-command-policy.mjs',
+      `${dangerousCommandPolicyModuleSource}\n`,
+      files,
+    );
+    await write(input.outputRoot, 'hooks/runtime-guard.mjs', runtimeGuard(), files);
+    if (runtimeStatus) {
+      await write(
+        input.outputRoot,
+        'status/runtime-status-envelope.json',
+        runtimeStatusFile(runtimeStatus),
+        files,
+      );
+    } else {
+      await write(
+        input.outputRoot,
+        'status/status-snapshot.json',
+        statusSnapshotFile(input.statusSnapshot),
+        files,
+      );
+    }
+    await write(
+      input.outputRoot,
+      'status/status-line.mjs',
+      statusScript(input.launchBanner, Boolean(input.runtimeStatusEnvelope)),
+      files,
+    );
+    await write(
+      input.outputRoot,
+      'runtime-context.json',
+      `${JSON.stringify(runtimeContext, null, 2)}\n`,
+      files,
+    );
+    await write(
+      input.outputRoot,
+      'settings.json',
+      `${JSON.stringify({ statusLine: { type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"' }, mpxArtifactKey: input.artifact.reference.artifactKey }, null, 2)}\n`,
+      files,
+    );
+    return {
+      directory: input.outputRoot,
+      artifactKey: input.artifact.reference.artifactKey,
+      files: files.sort(),
+    };
+  } catch (error) {
+    await rm(input.outputRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+export async function publishClaudeProjection(
+  input: ClaudePublishInput,
+): Promise<ClaudePublishedProjection> {
+  const context = parseRuntimeContextV1(input.runtimeContext),
+    manifest = parseResolvedSkillManifestV4(input.manifest);
+  await mkdir(input.artifactsRoot, { recursive: true });
+  const staging = await mkdtemp(path.join(input.artifactsRoot, '.claude-build-'));
+  await rm(staging, { recursive: true, force: true });
+  try {
+    await buildClaudePlugin({ ...input, outputRoot: staging });
+    const published = await publishRuntimeArtifact({
+      sourceRoot: staging,
+      artifactsRoot: input.artifactsRoot,
+      launchBinding: {
+        launchKey: context.launchKey,
+        descriptorDigest: context.launchDescriptor.digest,
+        runtimeArtifactKey: input.artifact.reference.artifactKey,
+        runtime: 'claude',
+        manifestKey: manifest.manifestKey,
+      },
+      ...(input.artifactRevalidator ? { revalidate: input.artifactRevalidator } : {}),
+    });
+    const validation = await validateRuntimeContext({
+      context,
+      expectedLaunch: {
+        launchKey: context.launchKey,
+        descriptorDigest: context.launchDescriptor.digest,
+      },
+      expectedManifestKey: manifest.manifestKey,
+      expectedRuntimeArtifact: input.artifact.reference,
+      currentBinding: manifest.binding,
+    });
+    if (!validation.valid) {
+      throw new ClaudeRuntimeError(
+        'PUBLISHED_ARTIFACT_INVALID',
+        validation.diagnostics.map((item) => item.code).join(','),
+      );
+    }
+    const directory = path.resolve(published.directory),
+      reference = Object.freeze({
+        ...published.reference,
+        launchBinding: Object.freeze({ ...published.reference.launchBinding }),
+      });
+    return Object.freeze({
+      directory,
+      pluginDirectory: directory,
+      reference,
+      artifactKey: reference.projectionKey,
+      files: Object.freeze(published.fileMap.map((file) => file.path)),
+      reused: published.reused,
+    });
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+export function adaptClaudePreBash(command: string, manager: PackageManager | null) {
+  const danger = classifyDangerousCommand(command);
+  return danger.action === 'block' ? danger : evaluatePackagePolicy(command, manager);
+}
+export interface ClaudeRuntimeStatusProducer {
+  readonly refresh: () => Promise<void>;
+  readonly render: (input: { launchBanner: string; width?: 'narrow' | 'wide' }) => string;
+  readonly current: () => RuntimeStatusEnvelopeV1 | undefined;
+  readonly abort: () => void;
+}
+export function createClaudeRuntimeStatusProducer(
+  reader: RuntimeStatusEnvelopeReader,
+  binding: RuntimeStatusBindingV1,
+  initial?: RuntimeStatusEnvelopeV1,
+): ClaudeRuntimeStatusProducer {
+  const controller = createRuntimeStatusRefreshController(
+    {
+      read: async (signal) => {
+        const value = parseRuntimeStatusEnvelopeV1(await reader.read(signal));
+        if (
+          value.binding.launchKey !== binding.launchKey ||
+          value.binding.runtimeId !== binding.runtimeId ||
+          value.binding.repositoryId !== binding.repositoryId ||
+          value.harness.kind !== 'claude'
+        ) {
+          throw new ClaudeRuntimeError(
+            'STATUS_BINDING_MISMATCH',
+            'status refresh belongs to another launch/runtime/repository',
+          );
+        }
+        return value;
+      },
+    },
+    { ...(initial ? { initial } : {}), timeoutMs: 1000 },
+  );
+  return Object.freeze({
+    refresh: () => controller.refresh(),
+    current: () => controller.current(),
+    abort: () => controller.abort(),
+    render: (input: { launchBanner: string; width?: 'narrow' | 'wide' }) => {
+      const value = controller.current();
+      return value
+        ? renderClaudeStatusLine(value, input)
+        : `${input.launchBanner} | status unavailable`;
+    },
+  });
+}
+export interface ClaudeNativeStatusInput {
+  readonly title?: unknown;
+  readonly effort?: unknown;
+  readonly model?: { readonly id?: unknown; readonly display_name?: unknown };
+  readonly cost?: { readonly total_cost_usd?: unknown; readonly total_duration_ms?: unknown };
+  readonly context_window?: {
+    readonly total_input_tokens?: unknown;
+    readonly total_output_tokens?: unknown;
+    readonly context_window_size?: unknown;
+  };
+}
+const safeText = (value: unknown, maximum: number): string | undefined =>
+  typeof value === 'string' &&
+  value.trim().length > 0 &&
+  value.trim().length <= maximum &&
+  !/[\0-\x1f\x7f-\x9f]/u.test(value)
+    ? value.trim()
+    : undefined;
+const safeCount = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+export interface ClaudeNativeStatusAdaptOptions {
+  readonly capturedAt?: string;
+  readonly freshnessMs?: number;
+}
 /** Adapts Claude's native statusline stdin as a runtime contribution without changing launch/repository binding. */
-export function adaptClaudeNativeStatus(base:unknown,native:ClaudeNativeStatusInput,options:ClaudeNativeStatusAdaptOptions={}):RuntimeStatusEnvelopeV1{
- const envelope=parseRuntimeStatusEnvelopeV1(base),capturedAt=options.capturedAt??new Date().toISOString(),freshnessMs=options.freshnessMs??60_000;
- if(!Number.isSafeInteger(freshnessMs)||freshnessMs<0||Date.parse(capturedAt)<Date.parse(envelope.generatedAt))throw new ClaudeRuntimeError("NATIVE_STATUS_CAPTURE_INVALID","native status capture must be canonical and no earlier than the cached envelope");
- const nativeMetadata={source:"native" as const,state:"current" as const,capturedAt,freshUntil:new Date(Date.parse(capturedAt)+freshnessMs).toISOString(),diagnostic:null,unavailable:null},title=safeText(native.title,128),effort=["low","medium","high","max"].includes(String(native.effort))?native.effort as "low"|"medium"|"high"|"max":undefined,modelId=safeText(native.model?.id,128),modelLabel=safeText(native.model?.display_name,64),input=safeCount(native.context_window?.total_input_tokens),output=safeCount(native.context_window?.total_output_tokens),limit=safeCount(native.context_window?.context_window_size),duration=safeCount(native.cost?.total_duration_ms),cost=typeof native.cost?.total_cost_usd==="number"&&Number.isFinite(native.cost.total_cost_usd)&&native.cost.total_cost_usd>=0?Math.round(native.cost.total_cost_usd*1_000_000):undefined;
- const preserve=<T extends {state:string;freshUntil:string|null}>(group:T):T=>group.state==="current"&&group.freshUntil!==null&&Date.parse(group.freshUntil)<Date.parse(capturedAt)?{...group,state:"stale"}:group;
- const cached={identity:preserve(envelope.identity),session:preserve(envelope.session),model:preserve(envelope.model),location:preserve(envelope.location),repository:preserve(envelope.repository),usage:preserve(envelope.usage),cost:preserve(envelope.cost),providerUsage:preserve(envelope.providerUsage),compactions:preserve(envelope.compactions),subagents:preserve(envelope.subagents),development:preserve(envelope.development),actions:preserve(envelope.actions)};
- return composeRuntimeStatusEnvelopeV1({generatedAt:capturedAt,binding:envelope.binding,harness:envelope.harness,contributions:[{source:"cache",binding:envelope.binding,groups:cached},{source:"runtime",binding:envelope.binding,groups:{session:{...envelope.session,...(title?{title}:{}),...(duration!==undefined?{elapsedMs:duration}:{}),...nativeMetadata},model:{...envelope.model,...(modelId?{modelId}:{}),...(modelLabel?{label:modelLabel}:{}),...(effort?{effort}:{}),...(input!==undefined||output!==undefined?{contextUsedTokens:(input??0)+(output??0)}:{}),...(limit!==undefined?{contextLimitTokens:limit}:{}),...nativeMetadata},usage:{...envelope.usage,...(input!==undefined?{inputTokens:input}:{}),...(output!==undefined?{outputTokens:output}:{}),...(input!==undefined||output!==undefined?{totalTokens:(input??0)+(output??0)}:{}),...nativeMetadata},cost:{...envelope.cost,...(cost!==undefined?{amountMicros:cost}:{}),...nativeMetadata}}}]});
+export function adaptClaudeNativeStatus(
+  base: unknown,
+  native: ClaudeNativeStatusInput,
+  options: ClaudeNativeStatusAdaptOptions = {},
+): RuntimeStatusEnvelopeV1 {
+  const envelope = parseRuntimeStatusEnvelopeV1(base),
+    capturedAt = options.capturedAt ?? new Date().toISOString(),
+    freshnessMs = options.freshnessMs ?? 60_000;
+  if (
+    !Number.isSafeInteger(freshnessMs) ||
+    freshnessMs < 0 ||
+    Date.parse(capturedAt) < Date.parse(envelope.generatedAt)
+  ) {
+    throw new ClaudeRuntimeError(
+      'NATIVE_STATUS_CAPTURE_INVALID',
+      'native status capture must be canonical and no earlier than the cached envelope',
+    );
+  }
+  const nativeMetadata = {
+      source: 'native' as const,
+      state: 'current' as const,
+      capturedAt,
+      freshUntil: new Date(Date.parse(capturedAt) + freshnessMs).toISOString(),
+      diagnostic: null,
+      unavailable: null,
+    },
+    title = safeText(native.title, 128),
+    effort = ['low', 'medium', 'high', 'max'].includes(String(native.effort))
+      ? (native.effort as 'low' | 'medium' | 'high' | 'max')
+      : undefined,
+    modelId = safeText(native.model?.id, 128),
+    modelLabel = safeText(native.model?.display_name, 64),
+    input = safeCount(native.context_window?.total_input_tokens),
+    output = safeCount(native.context_window?.total_output_tokens),
+    limit = safeCount(native.context_window?.context_window_size),
+    duration = safeCount(native.cost?.total_duration_ms),
+    cost =
+      typeof native.cost?.total_cost_usd === 'number' &&
+      Number.isFinite(native.cost.total_cost_usd) &&
+      native.cost.total_cost_usd >= 0
+        ? Math.round(native.cost.total_cost_usd * 1_000_000)
+        : undefined;
+  const preserve = <T extends { state: string; freshUntil: string | null }>(group: T): T =>
+    group.state === 'current' &&
+    group.freshUntil !== null &&
+    Date.parse(group.freshUntil) < Date.parse(capturedAt)
+      ? { ...group, state: 'stale' }
+      : group;
+  const cached = {
+    identity: preserve(envelope.identity),
+    session: preserve(envelope.session),
+    model: preserve(envelope.model),
+    location: preserve(envelope.location),
+    repository: preserve(envelope.repository),
+    usage: preserve(envelope.usage),
+    cost: preserve(envelope.cost),
+    providerUsage: preserve(envelope.providerUsage),
+    compactions: preserve(envelope.compactions),
+    subagents: preserve(envelope.subagents),
+    development: preserve(envelope.development),
+    actions: preserve(envelope.actions),
+  };
+  return composeRuntimeStatusEnvelopeV1({
+    generatedAt: capturedAt,
+    binding: envelope.binding,
+    harness: envelope.harness,
+    contributions: [
+      { source: 'cache', binding: envelope.binding, groups: cached },
+      {
+        source: 'runtime',
+        binding: envelope.binding,
+        groups: {
+          session: {
+            ...envelope.session,
+            ...(title ? { title } : {}),
+            ...(duration !== undefined ? { elapsedMs: duration } : {}),
+            ...nativeMetadata,
+          },
+          model: {
+            ...envelope.model,
+            ...(modelId ? { modelId } : {}),
+            ...(modelLabel ? { label: modelLabel } : {}),
+            ...(effort ? { effort } : {}),
+            ...(input !== undefined || output !== undefined
+              ? { contextUsedTokens: (input ?? 0) + (output ?? 0) }
+              : {}),
+            ...(limit !== undefined ? { contextLimitTokens: limit } : {}),
+            ...nativeMetadata,
+          },
+          usage: {
+            ...envelope.usage,
+            ...(input !== undefined ? { inputTokens: input } : {}),
+            ...(output !== undefined ? { outputTokens: output } : {}),
+            ...(input !== undefined || output !== undefined
+              ? { totalTokens: (input ?? 0) + (output ?? 0) }
+              : {}),
+            ...nativeMetadata,
+          },
+          cost: {
+            ...envelope.cost,
+            ...(cost !== undefined ? { amountMicros: cost } : {}),
+            ...nativeMetadata,
+          },
+        },
+      },
+    ],
+  });
 }
-const compactNumber=(value:number|null):string=>value===null?"?":value>=1_000_000?`${Math.round(value/100_000)/10}m`:value>=1_000?`${Math.round(value/100)/10}k`:String(value);
-export function renderClaudeStatusLine(value:unknown,input:{launchBanner:string;width?:"narrow"|"wide"}):string{
- try{const status=parseRuntimeStatusEnvelopeV1(value),wide=input.width!=="narrow",parts=[input.launchBanner,status.identity.label,status.session.title,status.model.label?`${status.model.label}${status.model.effort?`/${status.model.effort}`:""}`:null,`${compactNumber(status.model.contextUsedTokens)}/${compactNumber(status.model.contextLimitTokens)}`,status.cost.amountMicros===null?null:`$${(status.cost.amountMicros/1_000_000).toFixed(2)}`,status.providerUsage.provider,status.repository.name?`${status.repository.name}${status.location.label?`/${status.location.label}`:""}${status.repository.branch?`@${status.repository.branch}`:""}`:status.location.label,`compact:${status.compactions.count??"?"}`,`agents:${status.subagents.active??"?"}/${status.subagents.completed??"?"}`,status.development.services.map(service=>`${service.id}:${service.port??"?"}${service.state==="listening"?"*":service.state==="conflict"?"!":""}`).join(" "),...status.actions.items.filter(action=>action.enabled).map(action=>wide?action.wideLabel:action.narrowLabel)];return parts.filter(Boolean).join(" | ");}catch{const snapshot=parseStatusSnapshotV1(value);return `${input.launchBanner} | ${renderClaudePortSegment(snapshot)}`;}
+const compactNumber = (value: number | null): string =>
+  value === null
+    ? '?'
+    : value >= 1_000_000
+      ? `${Math.round(value / 100_000) / 10}m`
+      : value >= 1_000
+        ? `${Math.round(value / 100) / 10}k`
+        : String(value);
+export function renderClaudeStatusLine(
+  value: unknown,
+  input: { launchBanner: string; width?: 'narrow' | 'wide' },
+): string {
+  try {
+    const status = parseRuntimeStatusEnvelopeV1(value),
+      wide = input.width !== 'narrow',
+      parts = [
+        input.launchBanner,
+        status.identity.label,
+        status.session.title,
+        status.model.label
+          ? `${status.model.label}${status.model.effort ? `/${status.model.effort}` : ''}`
+          : null,
+        `${compactNumber(status.model.contextUsedTokens)}/${compactNumber(status.model.contextLimitTokens)}`,
+        status.cost.amountMicros === null
+          ? null
+          : `$${(status.cost.amountMicros / 1_000_000).toFixed(2)}`,
+        status.providerUsage.provider,
+        status.repository.name
+          ? `${status.repository.name}${status.location.label ? `/${status.location.label}` : ''}${status.repository.branch ? `@${status.repository.branch}` : ''}`
+          : status.location.label,
+        `compact:${status.compactions.count ?? '?'}`,
+        `agents:${status.subagents.active ?? '?'}/${status.subagents.completed ?? '?'}`,
+        status.development.services
+          .map(
+            (service) =>
+              `${service.id}:${service.port ?? '?'}${service.state === 'listening' ? '*' : service.state === 'conflict' ? '!' : ''}`,
+          )
+          .join(' '),
+        ...status.actions.items
+          .filter((action) => action.enabled)
+          .map((action) => (wide ? action.wideLabel : action.narrowLabel)),
+      ];
+    return parts.filter(Boolean).join(' | ');
+  } catch {
+    const snapshot = parseStatusSnapshotV1(value);
+    return `${input.launchBanner} | ${renderClaudePortSegment(snapshot)}`;
+  }
 }
-export interface ClaudeDevServerCapabilityInput { readonly launchKey:string; readonly executor:ExecutorKind; readonly worktreeRoot:string; readonly assignedPorts:readonly number[]; readonly services?:Readonly<Record<string,StartRequest>>; readonly runtimeAdapter?:DevServiceRuntimeAdapter; readonly publish?:(event:Readonly<Record<string,unknown>>)=>void }
-export interface ClaudeDevServerCapability { readonly tool:DevServerToolAdapter; readonly manager:DevServiceManager; readonly shutdown:()=>Promise<void> }
+export interface ClaudeDevServerCapabilityInput {
+  readonly launchKey: string;
+  readonly executor: ExecutorKind;
+  readonly worktreeRoot: string;
+  readonly assignedPorts: readonly number[];
+  readonly services?: Readonly<Record<string, StartRequest>>;
+  readonly runtimeAdapter?: DevServiceRuntimeAdapter;
+  readonly publish?: (event: Readonly<Record<string, unknown>>) => void;
+}
+export interface ClaudeDevServerCapability {
+  readonly tool: DevServerToolAdapter;
+  readonly manager: DevServiceManager;
+  readonly shutdown: () => Promise<void>;
+}
 /** Creates one isolated manager per immutable launch; Docker never falls back to host. */
-export function createClaudeDevServerCapability(input:ClaudeDevServerCapabilityInput):ClaudeDevServerCapability{
- if(!/^[a-f0-9]{64}$/u.test(input.launchKey))throw new ClaudeRuntimeError("DEV_SERVER_BINDING_INVALID","dev_server requires the exact launch key");
- const adapter=input.runtimeAdapter??(input.executor==="host"?createSystemRuntime():undefined);if(!adapter)throw new ClaudeRuntimeError("DOCKER_ADAPTER_REQUIRED","Docker dev_server requires a Docker runtime adapter; host fallback is forbidden");if(adapter.kind!==input.executor)throw new ClaudeRuntimeError("EXECUTOR_MISMATCH","dev_server runtime adapter does not match the selected executor");
- const manager=new DevServiceManager(adapter,event=>input.publish?.(Object.freeze({...event,launchKey:input.launchKey}))),tool=createDevServerToolAdapter(manager,{launchKey:input.launchKey,services:input.services??{}});const shutdown=async()=>{await manager.shutdown();input.publish?.(Object.freeze({type:"dev-server:shutdown",launchKey:input.launchKey}));};return Object.freeze({tool,manager,shutdown});
+export function createClaudeDevServerCapability(
+  input: ClaudeDevServerCapabilityInput,
+): ClaudeDevServerCapability {
+  if (!/^[a-f0-9]{64}$/u.test(input.launchKey)) {
+    throw new ClaudeRuntimeError(
+      'DEV_SERVER_BINDING_INVALID',
+      'dev_server requires the exact launch key',
+    );
+  }
+  const adapter =
+    input.runtimeAdapter ?? (input.executor === 'host' ? createSystemRuntime() : undefined);
+  if (!adapter) {
+    throw new ClaudeRuntimeError(
+      'DOCKER_ADAPTER_REQUIRED',
+      'Docker dev_server requires a Docker runtime adapter; host fallback is forbidden',
+    );
+  }
+  if (adapter.kind !== input.executor) {
+    throw new ClaudeRuntimeError(
+      'EXECUTOR_MISMATCH',
+      'dev_server runtime adapter does not match the selected executor',
+    );
+  }
+  const manager = new DevServiceManager(adapter, (event) =>
+      input.publish?.(Object.freeze({ ...event, launchKey: input.launchKey })),
+    ),
+    tool = createDevServerToolAdapter(manager, {
+      launchKey: input.launchKey,
+      services: input.services ?? {},
+    });
+  const shutdown = async () => {
+    await manager.shutdown();
+    input.publish?.(Object.freeze({ type: 'dev-server:shutdown', launchKey: input.launchKey }));
+  };
+  return Object.freeze({ tool, manager, shutdown });
 }
-export interface ClaudePluginRuntimeActivationInput extends Omit<ClaudeRuntimeToolRegistrationInput,"devServer"|"shutdown"> {
- readonly devServer: Omit<ClaudeDevServerCapabilityInput,"launchKey"|"publish">;
- readonly status: { readonly reader:RuntimeStatusEnvelopeReader; readonly binding:RuntimeStatusBindingV1; readonly initial?:RuntimeStatusEnvelopeV1 };
+export interface ClaudePluginRuntimeActivationInput extends Omit<
+  ClaudeRuntimeToolRegistrationInput,
+  'devServer' | 'shutdown'
+> {
+  readonly devServer: Omit<ClaudeDevServerCapabilityInput, 'launchKey' | 'publish'>;
+  readonly status: {
+    readonly reader: RuntimeStatusEnvelopeReader;
+    readonly binding: RuntimeStatusBindingV1;
+    readonly initial?: RuntimeStatusEnvelopeV1;
+  };
 }
 export interface ClaudePluginRuntimeActivation {
- readonly tools:ReturnType<typeof registerClaudeRuntimeTools>;
- readonly devServer:ClaudeDevServerCapability;
- readonly status:ClaudeRuntimeStatusProducer;
- readonly shutdown:()=>Promise<void>;
+  readonly tools: ReturnType<typeof registerClaudeRuntimeTools>;
+  readonly devServer: ClaudeDevServerCapability;
+  readonly status: ClaudeRuntimeStatusProducer;
+  readonly shutdown: () => Promise<void>;
 }
 /** Activates all mutable launch-owned Claude services behind the immutable generated plugin surface. */
-export function activateClaudePluginRuntime(input:ClaudePluginRuntimeActivationInput):ClaudePluginRuntimeActivation {
- const capability=parseRuntimeCapabilityManifestV1(input.capability);
- const devServer=createClaudeDevServerCapability({...input.devServer,launchKey:capability.launchKey,publish:input.publish});
- const status=createClaudeRuntimeStatusProducer(input.status.reader,input.status.binding,input.status.initial);
- let stopped=false;
- const stopOwned=async()=>{status.abort();await devServer.shutdown();};
- const tools=registerClaudeRuntimeTools({...input,devServer:devServer.tool,shutdown:stopOwned});
- const shutdown=async()=>{if(stopped)return;stopped=true;await tools.shutdown();};
- return Object.freeze({tools,devServer,status,shutdown});
+export function activateClaudePluginRuntime(
+  input: ClaudePluginRuntimeActivationInput,
+): ClaudePluginRuntimeActivation {
+  const capability = parseRuntimeCapabilityManifestV1(input.capability);
+  const devServer = createClaudeDevServerCapability({
+    ...input.devServer,
+    launchKey: capability.launchKey,
+    publish: input.publish,
+  });
+  const status = createClaudeRuntimeStatusProducer(
+    input.status.reader,
+    input.status.binding,
+    input.status.initial,
+  );
+  let stopped = false;
+  const stopOwned = async () => {
+    status.abort();
+    await devServer.shutdown();
+  };
+  const tools = registerClaudeRuntimeTools({
+    ...input,
+    devServer: devServer.tool,
+    shutdown: stopOwned,
+  });
+  const shutdown = async () => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    await tools.shutdown();
+  };
+  return Object.freeze({ tools, devServer, status, shutdown });
 }
-export function diagnoseLegacyNamespaceConflicts(pluginNames:readonly string[]):RuntimeContractDiagnostic[]{const conflicts=pluginNames.filter(x=>x==="mp"||x==="mp-gh"||x.startsWith("mp:")||x.startsWith("mp-gh:"));if(conflicts.length)throw new ClaudeRuntimeError("LEGACY_NAMESPACE_CONFLICT",`legacy Claude namespace conflicts with mpx: ${conflicts.sort().join(", ")}`);return [];}
-export interface ClaudeInvocationInput {readonly executable:string;readonly pluginDirectory?:string;readonly projection?:ClaudePublishedProjection;readonly accountRoot:string;readonly runtimeContext:unknown;readonly projectionReference?:PublishedRuntimeArtifactReference;readonly statusSnapshotPath?:string;readonly runtimeStatusEnvelopePath?:string;readonly packageManager?:PackageManager|null;readonly sessionContext?:string;readonly compactInstructions?:string;readonly preCommitCheck?:string;readonly fallowExecutable?:string;readonly gatewayMcpConfigPath?:string;readonly mcpConfigPaths?:readonly string[];readonly environment:Readonly<Record<string,string|undefined>>;readonly legacyPluginNames?:readonly string[];readonly lifecycle?:{readonly eventDirectory:string;readonly binding:unknown};readonly resumeTarget?:NativeSessionRefV1}
-export interface ClaudeInvocationPlan {readonly executable:string;readonly args:readonly string[];readonly env:Readonly<Record<string,string>>}
-function absolute(value:string|undefined,label:string):string{if(typeof value!=="string"||!value.trim()||(!path.win32.isAbsolute(value)&&!path.posix.isAbsolute(value)))throw new ClaudeRuntimeError("UNTRUSTED_PATH",`${label} must be absolute`);return value;}
-function boundedContext(value:string|undefined,label:string):string|undefined{if(value===undefined)return undefined;if(value.length<1||value.length>65_536||/[\0]/u.test(value))throw new ClaudeRuntimeError("HOOK_CONTEXT_INVALID",`${label} must be bounded text`);return value;}
-function samePath(left:string,right:string):boolean{const canonical=(value:string)=>path.win32.isAbsolute(value)?path.win32.normalize(value).toLowerCase():path.posix.normalize(value);return canonical(left)===canonical(right);}
-export function createClaudeInvocationPlan(input:ClaudeInvocationInput):ClaudeInvocationPlan{
- if(typeof input.accountRoot!=="string"||!input.accountRoot.trim())throw new ClaudeRuntimeError("NATIVE_ROOT_REQUIRED","privately selected Claude account root is required");
- if(!path.win32.isAbsolute(input.accountRoot)&&!path.posix.isAbsolute(input.accountRoot))throw new ClaudeRuntimeError("NATIVE_ROOT_NOT_ABSOLUTE","privately selected Claude account root must be absolute");
- const executable=absolute(input.executable,"trusted Claude executable"),pluginDirectory=absolute(input.projection?.pluginDirectory??input.pluginDirectory,"immutable Claude plugin directory"),accountRoot=input.accountRoot,projectionReference=input.projection?.reference??input.projectionReference;
- if(!projectionReference)throw new ClaudeRuntimeError("PROJECTION_REFERENCE_REQUIRED","published Claude projection reference is required");
- if(input.projection&&(!samePath(input.projection.directory,pluginDirectory)||input.projection.artifactKey!==projectionReference.projectionKey))throw new ClaudeRuntimeError("PROJECTION_BINDING_INVALID","published Claude projection binding is invalid");
- diagnoseLegacyNamespaceConflicts(input.legacyPluginNames??[]);
- const inheritedRoot=input.environment.CLAUDE_CONFIG_DIR;if(inheritedRoot!==undefined&&!samePath(accountRoot,absolute(inheritedRoot,"inherited Claude account root")))throw new ClaudeRuntimeError("NATIVE_ROOT_MISMATCH","selected Claude account root conflicts with the inherited Claude config root");
- if(input.mcpConfigPaths?.length)throw new ClaudeRuntimeError("MCP_CONFIG_INVALID","direct MCP route exposure is forbidden; use the launch-private aggregate gateway");
- const gatewayConfig=input.gatewayMcpConfigPath?absolute(input.gatewayMcpConfigPath,"private aggregate gateway configuration"):undefined;
- const resume=input.resumeTarget;if(resume&&(resume.kind!=="native-id"||typeof resume.value!=="string"||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(resume.value)))throw new ClaudeRuntimeError("RESUME_TARGET_INVALID","Claude resume requires a validated native session id");
- const lifecycle=input.lifecycle,lifecycleBinding=lifecycle?validateSessionLifecycleBindingV1({binding:lifecycle.binding,context:input.runtimeContext,runtime:"claude",projectionReference}):undefined;
- return {executable,args:["--plugin-dir",pluginDirectory,...(gatewayConfig?["--mcp-config",gatewayConfig,"--strict-mcp-config"]:[]),...(resume?["--resume",resume.value]:[])],env:{CLAUDE_CONFIG_DIR:accountRoot,MPX_RUNTIME_CONTEXT:stable(input.runtimeContext),MPX_RUNTIME_PROJECTION_REFERENCE:stable(projectionReference),...(input.runtimeStatusEnvelopePath?{MPX_RUNTIME_STATUS_FILE:absolute(input.runtimeStatusEnvelopePath,"runtime status envelope")}:input.statusSnapshotPath?{MPX_STATUS_SNAPSHOT_FILE:absolute(input.statusSnapshotPath,"status snapshot")}:{ }),...(input.packageManager?{MPX_PACKAGE_MANAGER:input.packageManager}:{}),...(boundedContext(input.sessionContext,"session context")?{MPX_SESSION_CONTEXT:boundedContext(input.sessionContext,"session context")!}:{}),...(boundedContext(input.compactInstructions,"compact instructions")?{MPX_COMPACT_INSTRUCTIONS:boundedContext(input.compactInstructions,"compact instructions")!}:{}),...(input.preCommitCheck?{MPX_PRECOMMIT_CHECK:(/^[A-Za-z0-9:_-]{1,64}$/u.test(input.preCommitCheck)?input.preCommitCheck:(()=>{throw new ClaudeRuntimeError("HOOK_POLICY_INVALID","pre-commit check must be a safe package script name")})())}:{}),...(input.fallowExecutable?{MPX_FALLOW_EXECUTABLE:absolute(input.fallowExecutable,"trusted fallow executable")}:{ }),...(lifecycle&&lifecycleBinding?{MPX_SESSION_LIFECYCLE_EVENT_DIR:absolute(lifecycle.eventDirectory,"lifecycle event directory"),MPX_SESSION_LIFECYCLE_BINDING_ID:lifecycleBinding.bindingId}:{})}};
+export function diagnoseLegacyNamespaceConflicts(
+  pluginNames: readonly string[],
+): RuntimeContractDiagnostic[] {
+  const conflicts = pluginNames.filter(
+    (x) => x === 'mp' || x === 'mp-gh' || x.startsWith('mp:') || x.startsWith('mp-gh:'),
+  );
+  if (conflicts.length) {
+    throw new ClaudeRuntimeError(
+      'LEGACY_NAMESPACE_CONFLICT',
+      `legacy Claude namespace conflicts with mpx: ${conflicts.sort().join(', ')}`,
+    );
+  }
+  return [];
+}
+export interface ClaudeInvocationInput {
+  readonly executable: string;
+  readonly pluginDirectory?: string;
+  readonly projection?: ClaudePublishedProjection;
+  readonly accountRoot: string;
+  readonly runtimeContext: unknown;
+  readonly projectionReference?: PublishedRuntimeArtifactReference;
+  readonly statusSnapshotPath?: string;
+  readonly runtimeStatusEnvelopePath?: string;
+  readonly packageManager?: PackageManager | null;
+  readonly sessionContext?: string;
+  readonly compactInstructions?: string;
+  readonly preCommitCheck?: string;
+  readonly fallowExecutable?: string;
+  readonly gatewayMcpConfigPath?: string;
+  readonly mcpConfigPaths?: readonly string[];
+  readonly environment: Readonly<Record<string, string | undefined>>;
+  readonly legacyPluginNames?: readonly string[];
+  readonly lifecycle?: { readonly eventDirectory: string; readonly binding: unknown };
+  readonly resumeTarget?: NativeSessionRefV1;
+}
+export interface ClaudeInvocationPlan {
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
+}
+function absolute(value: string | undefined, label: string): string {
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    (!path.win32.isAbsolute(value) && !path.posix.isAbsolute(value))
+  ) {
+    throw new ClaudeRuntimeError('UNTRUSTED_PATH', `${label} must be absolute`);
+  }
+  return value;
+}
+function boundedContext(value: string | undefined, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value.length < 1 || value.length > 65_536 || /[\0]/u.test(value)) {
+    throw new ClaudeRuntimeError('HOOK_CONTEXT_INVALID', `${label} must be bounded text`);
+  }
+  return value;
+}
+function samePath(left: string, right: string): boolean {
+  const canonical = (value: string) =>
+    path.win32.isAbsolute(value)
+      ? path.win32.normalize(value).toLowerCase()
+      : path.posix.normalize(value);
+  return canonical(left) === canonical(right);
+}
+export function createClaudeInvocationPlan(input: ClaudeInvocationInput): ClaudeInvocationPlan {
+  if (typeof input.accountRoot !== 'string' || !input.accountRoot.trim()) {
+    throw new ClaudeRuntimeError(
+      'NATIVE_ROOT_REQUIRED',
+      'privately selected Claude account root is required',
+    );
+  }
+  if (!path.win32.isAbsolute(input.accountRoot) && !path.posix.isAbsolute(input.accountRoot)) {
+    throw new ClaudeRuntimeError(
+      'NATIVE_ROOT_NOT_ABSOLUTE',
+      'privately selected Claude account root must be absolute',
+    );
+  }
+  const executable = absolute(input.executable, 'trusted Claude executable'),
+    pluginDirectory = absolute(
+      input.projection?.pluginDirectory ?? input.pluginDirectory,
+      'immutable Claude plugin directory',
+    ),
+    accountRoot = input.accountRoot,
+    projectionReference = input.projection?.reference ?? input.projectionReference;
+  if (!projectionReference) {
+    throw new ClaudeRuntimeError(
+      'PROJECTION_REFERENCE_REQUIRED',
+      'published Claude projection reference is required',
+    );
+  }
+  if (
+    input.projection &&
+    (!samePath(input.projection.directory, pluginDirectory) ||
+      input.projection.artifactKey !== projectionReference.projectionKey)
+  ) {
+    throw new ClaudeRuntimeError(
+      'PROJECTION_BINDING_INVALID',
+      'published Claude projection binding is invalid',
+    );
+  }
+  diagnoseLegacyNamespaceConflicts(input.legacyPluginNames ?? []);
+  const inheritedRoot = input.environment.CLAUDE_CONFIG_DIR;
+  if (
+    inheritedRoot !== undefined &&
+    !samePath(accountRoot, absolute(inheritedRoot, 'inherited Claude account root'))
+  ) {
+    throw new ClaudeRuntimeError(
+      'NATIVE_ROOT_MISMATCH',
+      'selected Claude account root conflicts with the inherited Claude config root',
+    );
+  }
+  if (input.mcpConfigPaths?.length) {
+    throw new ClaudeRuntimeError(
+      'MCP_CONFIG_INVALID',
+      'direct MCP route exposure is forbidden; use the launch-private aggregate gateway',
+    );
+  }
+  const gatewayConfig = input.gatewayMcpConfigPath
+    ? absolute(input.gatewayMcpConfigPath, 'private aggregate gateway configuration')
+    : undefined;
+  const resume = input.resumeTarget;
+  if (
+    resume &&
+    (resume.kind !== 'native-id' ||
+      typeof resume.value !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(resume.value))
+  ) {
+    throw new ClaudeRuntimeError(
+      'RESUME_TARGET_INVALID',
+      'Claude resume requires a validated native session id',
+    );
+  }
+  const lifecycle = input.lifecycle,
+    lifecycleBinding = lifecycle
+      ? validateSessionLifecycleBindingV1({
+          binding: lifecycle.binding,
+          context: input.runtimeContext,
+          runtime: 'claude',
+          projectionReference,
+        })
+      : undefined;
+  return {
+    executable,
+    args: [
+      '--plugin-dir',
+      pluginDirectory,
+      ...(gatewayConfig ? ['--mcp-config', gatewayConfig, '--strict-mcp-config'] : []),
+      ...(resume ? ['--resume', resume.value] : []),
+    ],
+    env: {
+      CLAUDE_CONFIG_DIR: accountRoot,
+      MPX_RUNTIME_CONTEXT: stable(input.runtimeContext),
+      MPX_RUNTIME_PROJECTION_REFERENCE: stable(projectionReference),
+      ...(input.runtimeStatusEnvelopePath
+        ? {
+            MPX_RUNTIME_STATUS_FILE: absolute(
+              input.runtimeStatusEnvelopePath,
+              'runtime status envelope',
+            ),
+          }
+        : input.statusSnapshotPath
+          ? { MPX_STATUS_SNAPSHOT_FILE: absolute(input.statusSnapshotPath, 'status snapshot') }
+          : {}),
+      ...(input.packageManager ? { MPX_PACKAGE_MANAGER: input.packageManager } : {}),
+      ...(boundedContext(input.sessionContext, 'session context')
+        ? { MPX_SESSION_CONTEXT: boundedContext(input.sessionContext, 'session context')! }
+        : {}),
+      ...(boundedContext(input.compactInstructions, 'compact instructions')
+        ? {
+            MPX_COMPACT_INSTRUCTIONS: boundedContext(
+              input.compactInstructions,
+              'compact instructions',
+            )!,
+          }
+        : {}),
+      ...(input.preCommitCheck
+        ? {
+            MPX_PRECOMMIT_CHECK: /^[A-Za-z0-9:_-]{1,64}$/u.test(input.preCommitCheck)
+              ? input.preCommitCheck
+              : (() => {
+                  throw new ClaudeRuntimeError(
+                    'HOOK_POLICY_INVALID',
+                    'pre-commit check must be a safe package script name',
+                  );
+                })(),
+          }
+        : {}),
+      ...(input.fallowExecutable
+        ? { MPX_FALLOW_EXECUTABLE: absolute(input.fallowExecutable, 'trusted fallow executable') }
+        : {}),
+      ...(lifecycle && lifecycleBinding
+        ? {
+            MPX_SESSION_LIFECYCLE_EVENT_DIR: absolute(
+              lifecycle.eventDirectory,
+              'lifecycle event directory',
+            ),
+            MPX_SESSION_LIFECYCLE_BINDING_ID: lifecycleBinding.bindingId,
+          }
+        : {}),
+    },
+  };
 }

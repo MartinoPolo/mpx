@@ -1,6 +1,6 @@
 ---
 name: mpx-ci-fixer
-description: "Fixes a failing CI run on a PR branch. Fetches logs, diagnoses, fixes, pushes, re-watches. Returns bounded JSON."
+description: 'Fixes a failing CI run on a PR branch. Fetches logs, diagnoses, fixes, pushes, re-watches. Returns bounded JSON.'
 ---
 
 # CI Fixer Agent

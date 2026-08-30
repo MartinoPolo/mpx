@@ -1,4 +1,4 @@
-import { parseStrictJson as parseCoreStrictJson } from "@mpx/core";
+import { parseStrictJson as parseCoreStrictJson } from '@mpx/core';
 
 export const StrictJsonError = SyntaxError;
 

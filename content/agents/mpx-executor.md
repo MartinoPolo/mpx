@@ -1,7 +1,8 @@
 ---
 name: mpx-executor
-description: "Executes a small grouped task chunk with clear scope. Implementation only; no review role."
+description: 'Executes a small grouped task chunk with clear scope. Implementation only; no review role.'
 ---
+
 # Executor Agent
 
 Apply pre-analyzed edits to a tightly scoped task chunk.

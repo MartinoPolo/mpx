@@ -4,7 +4,16 @@
   "worktree": { "id": "main", "path": "C:/repo", "role": "main", "branch": "main" },
   "portResolution": "valid",
   "services": [
-    { "id": "web", "mode": "fixed-shared", "scope": "checkout", "protocol": "https", "port": 4102, "listening": true, "conflict": "unknown", "pid": 77 }
+    {
+      "id": "web",
+      "mode": "fixed-shared",
+      "scope": "checkout",
+      "protocol": "https",
+      "port": 4102,
+      "listening": true,
+      "conflict": "unknown",
+      "pid": 77
+    }
   ],
   "diagnostics": []
 }

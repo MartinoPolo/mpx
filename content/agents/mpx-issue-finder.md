@@ -1,6 +1,6 @@
 ---
 name: mpx-issue-finder
-description: "Finds the issue that a PR branch closes. Given branch diff/commits, searches repo issues and returns the best match."
+description: 'Finds the issue that a PR branch closes. Given branch diff/commits, searches repo issues and returns the best match.'
 ---
 
 # Issue Finder Agent

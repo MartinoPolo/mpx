@@ -7,6 +7,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # Setup React Native
 
 Read [the platform reference](PLATFORM_REFERENCE.md) before framework-rule setup.

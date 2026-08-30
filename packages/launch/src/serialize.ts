@@ -1,4 +1,4 @@
-import type { LaunchDescriptor } from "./types.js";
+import type { LaunchDescriptor } from './types.js';
 
 export type SerializedLaunchDescriptor = LaunchDescriptor;
 

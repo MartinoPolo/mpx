@@ -1,6 +1,6 @@
 ---
 name: script-discovery
-description: "Discovers runnable scripts across package.json files and identifies the frontend, backend, and database run commands."
+description: 'Discovers runnable scripts across package.json files and identifies the frontend, backend, and database run commands.'
 metadata:
   mpx:
     skillPacks: [work]

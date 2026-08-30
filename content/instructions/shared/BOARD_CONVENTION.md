@@ -6,10 +6,10 @@ Issues.
 
 ## Link layout
 
-| Repository path | Type | Target below `MPX_OBSIDIAN_VAULT` |
-| --- | --- | --- |
-| `.mpx/BOARD.md` | file symlink | `Boards/<project>.md` |
-| `.mpx/board-files/` | directory link | `Files/` |
+| Repository path     | Type           | Target below `MPX_OBSIDIAN_VAULT` |
+| ------------------- | -------------- | --------------------------------- |
+| `.mpx/BOARD.md`     | file symlink   | `Boards/<project>.md`             |
+| `.mpx/board-files/` | directory link | `Files/`                          |
 
 Both links are per-machine and gitignored. If an editor refuses to write through the file symlink,
 resolve its real target and edit that file. A wikilink such as `![[Pasted image.png|639]]` contains
@@ -28,12 +28,12 @@ optional display width.
 # Archive
 ```
 
-| Lane | Meaning | Transition owner |
-| --- | --- | --- |
-| `To Process` | raw notes | user intake |
-| `Ready to implement` | an MPX Issue exists | board-to-issues workflow |
-| `Manual testing` | implemented, awaiting human verification | batch execution workflow |
-| `Archive` | manually verified | user |
+| Lane                 | Meaning                                  | Transition owner         |
+| -------------------- | ---------------------------------------- | ------------------------ |
+| `To Process`         | raw notes                                | user intake              |
+| `Ready to implement` | an MPX Issue exists                      | board-to-issues workflow |
+| `Manual testing`     | implemented, awaiting human verification | batch execution workflow |
+| `Archive`            | manually verified                        | user                     |
 
 Every new note starts under `To Process`. Workflows move the original note; they do not delete or
 retype it. Only unchecked top-level items in `To Process` are intake candidates. Other lanes are

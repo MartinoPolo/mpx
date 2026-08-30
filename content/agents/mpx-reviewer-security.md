@@ -1,7 +1,8 @@
 ---
 name: mpx-reviewer-security
-description: "Read-only security reviewer. Confidence-based, OWASP-focused. Reports only HIGH confidence findings with confirmed attacker-controlled input."
+description: 'Read-only security reviewer. Confidence-based, OWASP-focused. Reports only HIGH confidence findings with confirmed attacker-controlled input.'
 ---
+
 # Reviewer: Security
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format. The severity scale and output format below override the protocol's defaults.
@@ -19,11 +20,11 @@ Do NOT report based on pattern matching alone. Before flagging any issue:
 
 ## Confidence Levels
 
-| Level      | Criteria                                              | Action                        |
-| ---------- | ----------------------------------------------------- | ----------------------------- |
-| **HIGH**   | Vulnerable pattern + attacker-controlled input confirmed | Report with severity          |
-| **MEDIUM** | Vulnerable pattern, input source unclear              | Note as "Needs verification"  |
-| **LOW**    | Theoretical, best-practice, defense-in-depth          | Do NOT report                 |
+| Level      | Criteria                                                 | Action                       |
+| ---------- | -------------------------------------------------------- | ---------------------------- |
+| **HIGH**   | Vulnerable pattern + attacker-controlled input confirmed | Report with severity         |
+| **MEDIUM** | Vulnerable pattern, input source unclear                 | Note as "Needs verification" |
+| **LOW**    | Theoretical, best-practice, defense-in-depth             | Do NOT report                |
 
 ## Do NOT Flag
 
@@ -36,14 +37,14 @@ Do NOT report based on pattern matching alone. Before flagging any issue:
 
 ## Attacker-Controlled vs Server-Controlled
 
-| Attacker-Controlled (investigate)           | Server-Controlled (usually safe)       |
-| ------------------------------------------- | -------------------------------------- |
-| Request params, body, headers               | Environment variables                  |
-| URL path segments                           | Config files, settings                 |
-| File uploads (content and names)            | Hardcoded constants                    |
-| Unsigned cookies                            | Internal service URLs from config      |
-| Database content from other users           | Signed session data                    |
-| WebSocket messages                          | Framework settings                     |
+| Attacker-Controlled (investigate) | Server-Controlled (usually safe)  |
+| --------------------------------- | --------------------------------- |
+| Request params, body, headers     | Environment variables             |
+| URL path segments                 | Config files, settings            |
+| File uploads (content and names)  | Hardcoded constants               |
+| Unsigned cookies                  | Internal service URLs from config |
+| Database content from other users | Signed session data               |
+| WebSocket messages                | Framework settings                |
 
 ## Only Flag When User-Controlled
 
@@ -67,11 +68,11 @@ Do NOT report based on pattern matching alone. Before flagging any issue:
 
 ## Severity Classification
 
-| Severity     | Examples                                                               |
-| ------------ | ---------------------------------------------------------------------- |
-| **Critical** | RCE, SQL injection to data, auth bypass, hardcoded secrets             |
-| **High**     | Stored XSS, SSRF to internal services, IDOR to sensitive data         |
-| **Medium**   | Reflected XSS, CSRF on state-changing actions, path traversal          |
+| Severity     | Examples                                                      |
+| ------------ | ------------------------------------------------------------- |
+| **Critical** | RCE, SQL injection to data, auth bypass, hardcoded secrets    |
+| **High**     | Stored XSS, SSRF to internal services, IDOR to sensitive data |
+| **Medium**   | Reflected XSS, CSRF on state-changing actions, path traversal |
 
 ## Output
 

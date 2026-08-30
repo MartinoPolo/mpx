@@ -4,8 +4,26 @@
   "worktree": { "id": "main", "path": "C:/repo", "role": "main", "branch": "main" },
   "portResolution": "valid",
   "services": [
-    { "id": "api", "mode": "managed", "scope": "checkout", "protocol": "http", "port": 3000, "listening": false, "conflict": "none", "pid": null },
-    { "id": "web", "mode": "managed", "scope": "checkout", "protocol": "https", "port": 4102, "listening": false, "conflict": "none", "pid": null }
+    {
+      "id": "api",
+      "mode": "managed",
+      "scope": "checkout",
+      "protocol": "http",
+      "port": 3000,
+      "listening": false,
+      "conflict": "none",
+      "pid": null
+    },
+    {
+      "id": "web",
+      "mode": "managed",
+      "scope": "checkout",
+      "protocol": "https",
+      "port": 4102,
+      "listening": false,
+      "conflict": "none",
+      "pid": null
+    }
   ],
   "diagnostics": []
 }

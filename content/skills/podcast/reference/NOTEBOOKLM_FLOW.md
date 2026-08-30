@@ -51,24 +51,24 @@ no model of its own ([`../../shared/SUBAGENT_PROTOCOL.md`](../../shared/SUBAGENT
 
 ## Quirks the test run exposed
 
-| Quirk | What to do |
-| ------------------------------------------------------ | ------------------------------------------------ |
+| Quirk                                                                               | What to do                                                                                       |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `artifact wait` exits 1 with `Timeout after Ns` while the artifact is still pending | Confirm with `artifact list --json` and wait again — a timeout is a status report, not a failure |
-| `download audio` rejects `--yes` (no such flag) | Call it without the flag |
-| Partial UUIDs go ambiguous once a few notebooks exist | Pass full UUIDs everywhere in automation |
-| `--length` is a hint | `long` plus a 15-minute prompt line produced 33.5 minutes; overshoot is fine |
-| `notebooklm status` reports notebook context, not auth | Verify auth only with `auth check --test --json` |
+| `download audio` rejects `--yes` (no such flag)                                     | Call it without the flag                                                                         |
+| Partial UUIDs go ambiguous once a few notebooks exist                               | Pass full UUIDs everywhere in automation                                                         |
+| `--length` is a hint                                                                | `long` plus a 15-minute prompt line produced 33.5 minutes; overshoot is fine                     |
+| `notebooklm status` reports notebook context, not auth                              | Verify auth only with `auth check --test --json`                                                 |
 
 ## Failure handling
 
-| Symptom | Cause | Action |
-| ------------------------------------------- | ---------------------- | ----------------------------------------------------------- |
-| `auth check --test` gives `token_fetch: false` | Google rotated the session cookies | `notebooklm auth refresh`; still failing → ask the user for one interactive `notebooklm login`, then re-check |
-| `No result found for RPC ID` | Rate limiting | Wait 5-10 minutes, retry once |
-| `GENERATION_FAILED` | Google-side rate limit | `--retry 3` already backs off; on repeat failure switch backends |
-| Third generation of the day refused | Free tier allows 3 audio overviews per day | Offer [`GEMINI_TTS.md`](GEMINI_TTS.md) now, or tomorrow's quota |
-| `notebooklm` not found on PATH | Shell predates the install | Use `$LOCALAPPDATA\Python\pythoncore-3.14-64\Scripts\notebooklm.exe` |
-| Download fails right after generation | Artifact incomplete | Check `artifact list --json` before retrying |
+| Symptom                                        | Cause                                      | Action                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `auth check --test` gives `token_fetch: false` | Google rotated the session cookies         | `notebooklm auth refresh`; still failing → ask the user for one interactive `notebooklm login`, then re-check |
+| `No result found for RPC ID`                   | Rate limiting                              | Wait 5-10 minutes, retry once                                                                                 |
+| `GENERATION_FAILED`                            | Google-side rate limit                     | `--retry 3` already backs off; on repeat failure switch backends                                              |
+| Third generation of the day refused            | Free tier allows 3 audio overviews per day | Offer [`GEMINI_TTS.md`](GEMINI_TTS.md) now, or tomorrow's quota                                               |
+| `notebooklm` not found on PATH                 | Shell predates the install                 | Use `$LOCALAPPDATA\Python\pythoncore-3.14-64\Scripts\notebooklm.exe`                                          |
+| Download fails right after generation          | Artifact incomplete                        | Check `artifact list --json` before retrying                                                                  |
 
 Every one of these gets reported to the user as a plain sentence naming the cause and the
 concrete next command — including which backend to switch to.

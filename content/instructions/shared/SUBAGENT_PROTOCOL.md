@@ -8,12 +8,12 @@ resolve these policies to concrete harness fields and model IDs.
 Only structured runtime configuration selects a model; prose model names do not. Canonical call
 sites use model classes:
 
-| Class | Best for |
-| --- | --- |
-| `mechanical` | bounded checks, commits, lookups with no judgment |
-| `standard` | exploration, review, documentation, bounded judgment |
-| `advanced` | implementation, design, architecture, deep analysis |
-| `frontier` | deliberate manual escalation for large orchestration only |
+| Class        | Best for                                                  |
+| ------------ | --------------------------------------------------------- |
+| `mechanical` | bounded checks, commits, lookups with no judgment         |
+| `standard`   | exploration, review, documentation, bounded judgment      |
+| `advanced`   | implementation, design, architecture, deep analysis       |
+| `frontier`   | deliberate manual escalation for large orchestration only |
 
 An agent definition should declare its class and effort policy. Callers omit model selection for a
 declaring agent. Generic agents with no declaration require an explicit class at every call site.
@@ -76,18 +76,18 @@ changes; stale measured claims are defects.
 
 ## Task-shape defaults
 
-| Task | Class / effort |
-| --- | --- |
-| multi-phase orchestration | `advanced` high; `frontier` only by manual escalation |
-| issue/codebase analysis | `advanced` high |
-| design/architecture/interface | `advanced` medium |
-| implementation to green | `advanced` medium |
-| pre-analyzed implementation | `advanced` low |
-| interactive browser loop | `advanced` high |
-| review | `standard` medium |
-| codebase exploration | `standard` low |
-| bounded composition/finding | `standard` low |
-| deterministic check/commit/docs lookup | `mechanical` |
+| Task                                   | Class / effort                                        |
+| -------------------------------------- | ----------------------------------------------------- |
+| multi-phase orchestration              | `advanced` high; `frontier` only by manual escalation |
+| issue/codebase analysis                | `advanced` high                                       |
+| design/architecture/interface          | `advanced` medium                                     |
+| implementation to green                | `advanced` medium                                     |
+| pre-analyzed implementation            | `advanced` low                                        |
+| interactive browser loop               | `advanced` high                                       |
+| review                                 | `standard` medium                                     |
+| codebase exploration                   | `standard` low                                        |
+| bounded composition/finding            | `standard` low                                        |
+| deterministic check/commit/docs lookup | `mechanical`                                          |
 
 Two contracts are load-bearing: `mpx-executor` receives a pre-analyzed bounded scope, while
 `mpx-tdd-executor` owns red/green iteration. A vague executor prompt violates

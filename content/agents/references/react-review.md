@@ -14,13 +14,13 @@ Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skill
 function Bad({ items }) {
   const [filtered, setFiltered] = useState([]);
   useEffect(() => {
-    setFiltered(items.filter(i => i.active));
+    setFiltered(items.filter((i) => i.active));
   }, [items]);
 }
 
 // ✅ Compute inline or with useMemo
 function Good({ items }) {
-  const filtered = useMemo(() => items.filter(i => i.active), [items]);
+  const filtered = useMemo(() => items.filter((i) => i.active), [items]);
 }
 ```
 
@@ -45,8 +45,12 @@ const handleSearch = (q: string) => {
 // ✅ Cancel stale requests, clear timers, unsubscribe
 useEffect(() => {
   let cancelled = false;
-  fetchUser(userId).then(data => { if (!cancelled) setUser(data); });
-  return () => { cancelled = true; };
+  fetchUser(userId).then((data) => {
+    if (!cancelled) setUser(data);
+  });
+  return () => {
+    cancelled = true;
+  };
 }, [userId]);
 ```
 
@@ -78,16 +82,22 @@ function Parent({ rawItems }) {
 ```tsx
 // ❌ Component defined inside — new instance every render
 function BadParent() {
-  function ChildComponent() { return <div>child</div>; }
+  function ChildComponent() {
+    return <div>child</div>;
+  }
   return <ChildComponent />;
 }
 
 // ✅ Define components externally
-function ChildComponent() { return <div>child</div>; }
-function GoodParent() { return <ChildComponent />; }
+function ChildComponent() {
+  return <div>child</div>;
+}
+function GoodParent() {
+  return <ChildComponent />;
+}
 
 // ❌ Inline objects/functions as props to memoized components
-<MemoizedComponent style={{ color: 'red' }} onClick={() => {}} />
+<MemoizedComponent style={{ color: 'red' }} onClick={() => {}} />;
 
 // ✅ Stable references
 const style = { color: 'red' };
@@ -133,20 +143,25 @@ function BadServerComponent() {
 }
 
 // ✅ Extract interactive logic to 'use client' leaf components
-'use client';
+('use client');
 function Counter() {
   const [count, setCount] = useState(0);
-  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
+  return <button onClick={() => setCount((c) => c + 1)}>{count}</button>;
 }
 
 // Server Component fetches data, delegates interaction
 async function Page() {
   const data = await fetchData();
-  return <div><h1>{data.title}</h1><Counter /></div>;
+  return (
+    <div>
+      <h1>{data.title}</h1>
+      <Counter />
+    </div>
+  );
 }
 
 // ❌ 'use client' too high — entire tree becomes client
-'use client'; // in layout.tsx — makes ALL children client components
+('use client'); // in layout.tsx — makes ALL children client components
 
 // ✅ Push 'use client' to leaf components that need interactivity
 ```
@@ -167,7 +182,7 @@ const [state, formAction, isPending] = useActionState(
       return { success: false, error: e.message };
     }
   },
-  { success: false, data: null, error: null }
+  { success: false, data: null, error: null },
 );
 ```
 
@@ -183,7 +198,11 @@ function SubmitButton() {
 // ❌ Calling useFormStatus at the same level as <form> — won't work
 function BadForm() {
   const { pending } = useFormStatus(); // can't access form state here
-  return <form><button disabled={pending}>Submit</button></form>;
+  return (
+    <form>
+      <button disabled={pending}>Submit</button>
+    </form>
+  );
 }
 ```
 
@@ -192,7 +211,7 @@ function BadForm() {
 ```tsx
 const [optimisticLikes, addOptimisticLike] = useOptimistic(
   likes,
-  (current, increment: number) => current + increment
+  (current, increment: number) => current + increment,
 );
 
 const handleLike = async () => {
@@ -232,19 +251,23 @@ useQuery({ queryKey: ['items', filters], queryFn: () => fetchItems(filters) });
 
 ### useSuspenseQuery constraints
 
-| Feature         | useQuery        | useSuspenseQuery     |
-| --------------- | --------------- | -------------------- |
-| `enabled`       | supported       | NOT supported        |
-| `placeholderData`| supported      | NOT supported        |
-| `data` type     | `T \| undefined`| `T` (guaranteed)     |
-| Error handling  | `error` prop    | throws to ErrorBoundary |
+| Feature           | useQuery         | useSuspenseQuery        |
+| ----------------- | ---------------- | ----------------------- |
+| `enabled`         | supported        | NOT supported           |
+| `placeholderData` | supported        | NOT supported           |
+| `data` type       | `T \| undefined` | `T` (guaranteed)        |
+| Error handling    | `error` prop     | throws to ErrorBoundary |
 
 ```tsx
 // ❌ useSuspenseQuery with enabled — not supported
 // ✅ Use conditional rendering in parent instead
 function Parent({ userId }) {
   if (!userId) return <NoUserSelected />;
-  return <Suspense fallback={<Skeleton />}><UserData userId={userId} /></Suspense>;
+  return (
+    <Suspense fallback={<Skeleton />}>
+      <UserData userId={userId} />
+    </Suspense>
+  );
 }
 ```
 

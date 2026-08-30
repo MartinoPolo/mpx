@@ -4,9 +4,23 @@
   "worktree": { "id": "main", "path": "C:/repo", "role": "main", "branch": "main" },
   "portResolution": "valid",
   "services": [
-    { "id": "web", "mode": "managed", "scope": "checkout", "protocol": "https", "port": 4102, "listening": true, "conflict": "external", "pid": 77 }
+    {
+      "id": "web",
+      "mode": "managed",
+      "scope": "checkout",
+      "protocol": "https",
+      "port": 4102,
+      "listening": true,
+      "conflict": "external",
+      "pid": 77
+    }
   ],
   "diagnostics": [
-    { "code": "PORT_EXTERNAL_CONFLICT", "severity": "warning", "message": "Port 4102 for service web is occupied by an external listener.", "serviceId": "web" }
+    {
+      "code": "PORT_EXTERNAL_CONFLICT",
+      "severity": "warning",
+      "message": "Port 4102 for service web is occupied by an external listener.",
+      "serviceId": "web"
+    }
   ]
 }

@@ -30,23 +30,42 @@ A minimal shape is:
 ```json
 {
   "identities": {
-    "personal": { "domain": "personal", "runtimeRoots": { "claude": "~/.claude", "pi": "~/.pi/agent" }, "gitAuthorRoute": "personal" }
+    "personal": {
+      "domain": "personal",
+      "runtimeRoots": { "claude": "~/.claude", "pi": "~/.pi/agent" },
+      "gitAuthorRoute": "personal"
+    }
   },
   "domains": { "personal": ["${MPX_PROJECTS}"] },
   "contentScopes": { "personal": { "roots": ["${MPX_PROJECTS}"], "skillPacks": ["core"] } },
   "modes": {
     "project": { "resources": { "selected-project": "read-write" } },
-    "developer": { "resources": { "identity-domain": "read-write", "cloned-repositories": "read-only" } }
+    "developer": {
+      "resources": { "identity-domain": "read-write", "cloned-repositories": "read-only" }
+    }
   },
   "skillPolicies": {
     "clean": { "skillExposure": { "default": "explicit-only" } },
-    "developer": { "skillPacks": ["core"], "skillExposure": { "default": "name-only", "skills": { "execute": "full" } } }
+    "developer": {
+      "skillPacks": ["core"],
+      "skillExposure": { "default": "name-only", "skills": { "execute": "full" } }
+    }
   },
   "presets": {
-    "personal-dev": { "identity": "personal", "mode": "developer", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation" }
+    "personal-dev": {
+      "identity": "personal",
+      "mode": "developer",
+      "skillPolicy": "developer",
+      "contentScope": "personal",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "implementation"
+    }
   },
   "launchDefaults": { "scopes": { "personal": { "personal": "personal-dev" } }, "projects": {} },
-  "networkPolicies": { "implementation": { "preset": "balanced", "approvedProjectAdditions": true } },
+  "networkPolicies": {
+    "implementation": { "preset": "balanced", "approvedProjectAdditions": true }
+  },
   "executors": { "host": {}, "docker": {} },
   "projects": {}
 }

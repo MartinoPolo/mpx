@@ -1,6 +1,6 @@
 ---
 name: grill-voice
-description: "Voice-enabled variant of mp-grill: publishes each interview round as a JSON file for the companion mobile voice app, waits for the spoken answers, and continues until the design is settled and recorded in project docs."
+description: 'Voice-enabled variant of mp-grill: publishes each interview round as a JSON file for the companion mobile voice app, waits for the spoken answers, and continues until the design is settled and recorded in project docs.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -67,6 +67,7 @@ Voice changes only the delivery:
    Exit 0 prints the answers JSON. Exit 2 means still waiting — run `wait` again,
    indefinitely; the user answers at walking pace, and each `wait` call polls for
    several minutes before returning.
+
 4. Treat each `transcript` as the user's answer. Transcripts are speech: read them
    charitably (homophones, spelled-out identifiers) and carry any genuinely ambiguous
    transcript into the next round as a clarification question. A `skipped` question is

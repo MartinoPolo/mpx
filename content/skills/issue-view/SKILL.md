@@ -7,6 +7,7 @@ metadata:
     skillPacks: [core]
     defaultExposure: full
 ---
+
 # View an Issue
 
 Retrieve one Issue through MPX and present its current provider-neutral state.

@@ -14,8 +14,7 @@ const DEFAULT_WAIT_TIMEOUT_SECONDS = 540;
 
 function sessionsRoot() {
   return (
-    process.env.MPX_VOICE_GRILL_ROOT ||
-    path.join(os.homedir(), '.mpx-voice-grill', 'sessions')
+    process.env.MPX_VOICE_GRILL_ROOT || path.join(os.homedir(), '.mpx-voice-grill', 'sessions')
   );
 }
 
@@ -100,7 +99,11 @@ function commandPublish(positional) {
   if (round.sessionId !== sessionId) {
     fail(`Round file sessionId '${round.sessionId}' does not match '${sessionId}'`);
   }
-  if (!Number.isInteger(round.round) || !Array.isArray(round.questions) || round.questions.length === 0) {
+  if (
+    !Number.isInteger(round.round) ||
+    !Array.isArray(round.questions) ||
+    round.questions.length === 0
+  ) {
     fail('Round file needs an integer "round" and a non-empty "questions" array — see CONTRACT.md');
   }
   for (const question of round.questions) {
@@ -158,10 +161,18 @@ function commandComplete(positional) {
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseArgs(rest);
-  if (command === 'init') return commandInit(flags);
-  if (command === 'publish') return commandPublish(positional);
-  if (command === 'wait') return commandWait(positional, flags);
-  if (command === 'complete') return commandComplete(positional);
+  if (command === 'init') {
+    return commandInit(flags);
+  }
+  if (command === 'publish') {
+    return commandPublish(positional);
+  }
+  if (command === 'wait') {
+    return commandWait(positional, flags);
+  }
+  if (command === 'complete') {
+    return commandComplete(positional);
+  }
   fail('Usage: grill-voice.js <init|publish|wait|complete> ...');
 }
 

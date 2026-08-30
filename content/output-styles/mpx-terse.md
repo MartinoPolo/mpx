@@ -2,6 +2,7 @@
 name: mpx-terse
 description: Concise, structured, action-first output
 ---
+
 # Response style
 
 Keep responses focused, brief, and concise.
@@ -43,6 +44,7 @@ step, end the response with one numbered entry each:
 
 ```markdown
 # HITL
+
 1. **Short title:** the decision or manual step, concise but complete.
    💡 rec: your recommendation, one line.
 ```

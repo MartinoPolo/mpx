@@ -1,14 +1,14 @@
-export * from "./immutable-core.js";
-export * from "./transaction.js";
-export * from "./windows-integration.js";
-export * from "./orchestration.js";
-export * from "./runtime-registration.js";
-export * from "./production-operation.js";
-export * from "./external-integrations.js";
-export * from "./installed-runner-authority.js";
-export * from "./install-intent-builder.js";
+export * from './immutable-core.js';
+export * from './transaction.js';
+export * from './windows-integration.js';
+export * from './orchestration.js';
+export * from './runtime-registration.js';
+export * from './production-operation.js';
+export * from './external-integrations.js';
+export * from './installed-runner-authority.js';
+export * from './install-intent-builder.js';
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from 'node:crypto';
 import {
   chmod,
   lstat,
@@ -19,19 +19,19 @@ import {
   rm,
   stat,
   writeFile,
-} from "node:fs/promises";
-import path from "node:path";
-import { MpxError, parseStrictJson } from "@mpx/core";
+} from 'node:fs/promises';
+import path from 'node:path';
+import { MpxError, parseStrictJson } from '@mpx/core';
 import type {
   ScheduledTaskAdapter,
   ScheduledTaskInspection,
   ScheduledTaskSpec,
-} from "@mpx/windows";
+} from '@mpx/windows';
 
 export const INSTALLER_PROTOCOL_VERSION = 1 as const;
-export const SESSION_CAPTURE_COMPONENT = "session-capture" as const;
-export const SESSION_CAPTURE_TASK_PATH = "\\MPX\\" as const;
-export const SESSION_CAPTURE_TASK_NAME = "Session Capture" as const;
+export const SESSION_CAPTURE_COMPONENT = 'session-capture' as const;
+export const SESSION_CAPTURE_TASK_PATH = '\\MPX\\' as const;
+export const SESSION_CAPTURE_TASK_NAME = 'Session Capture' as const;
 const SESSION_CAPTURE_CADENCE_MINUTES = 10;
 
 type ComponentId = typeof SESSION_CAPTURE_COMPONENT;
@@ -43,7 +43,7 @@ export interface InstalledRunnerEvidence {
 }
 export interface InstallPlan {
   schemaVersion: 1;
-  kind: "install";
+  kind: 'install';
   componentId: ComponentId;
   task: ScheduledTaskSpec;
   taskSpecDigest: string;
@@ -52,7 +52,7 @@ export interface InstallPlan {
 }
 export interface UninstallPlan {
   schemaVersion: 1;
-  kind: "uninstall";
+  kind: 'uninstall';
   componentId: ComponentId;
   taskSpecDigest: string;
   confirmationDigest: string;
@@ -93,17 +93,15 @@ function error(code: string, message: string): never {
 }
 function stable(value: unknown): string {
   return JSON.stringify(value, (_, current) =>
-    current && typeof current === "object" && !Array.isArray(current)
+    current && typeof current === 'object' && !Array.isArray(current)
       ? Object.fromEntries(
-          Object.entries(current).sort(([left], [right]) =>
-            left.localeCompare(right),
-          ),
+          Object.entries(current).sort(([left], [right]) => left.localeCompare(right)),
         )
       : current,
   );
 }
 function digest(value: unknown): string {
-  return createHash("sha256").update(stable(value)).digest("hex");
+  return createHash('sha256').update(stable(value)).digest('hex');
 }
 function evidenceValid(value: InstalledRunnerEvidence): boolean {
   return (
@@ -115,7 +113,7 @@ function evidenceValid(value: InstalledRunnerEvidence): boolean {
 function normalize(value: string): string {
   return path.win32
     .normalize(value)
-    .replace(/[\\]+$/u, " ")
+    .replace(/[\\]+$/u, ' ')
     .trim()
     .toLowerCase();
 }
@@ -145,26 +143,24 @@ export class NodeRunnerFileVerifier implements RunnerFileVerifier {
   constructor(private readonly prohibitedRoots: readonly string[] = []) {}
 
   async verify(evidence: InstalledRunnerEvidence): Promise<InstalledRunnerEvidence> {
-    if (!evidenceValid(evidence))
-      error("INSTALL_RUNNER_UNAVAILABLE", "Installed runner evidence is invalid.");
-    if (this.prohibitedRoots.some((root) => root && within(evidence.path, root)))
-      error(
-        "INSTALL_RUNNER_UNAVAILABLE",
-        "Runner is in a mutable or source location.",
-      );
+    if (!evidenceValid(evidence)) {
+      error('INSTALL_RUNNER_UNAVAILABLE', 'Installed runner evidence is invalid.');
+    }
+    if (this.prohibitedRoots.some((root) => root && within(evidence.path, root))) {
+      error('INSTALL_RUNNER_UNAVAILABLE', 'Runner is in a mutable or source location.');
+    }
     const info = await lstat(evidence.path).catch(() =>
-      error("INSTALL_RUNNER_UNAVAILABLE", "Installed runner is unavailable."),
+      error('INSTALL_RUNNER_UNAVAILABLE', 'Installed runner is unavailable.'),
     );
-    if (!info.isFile() || info.isSymbolicLink())
-      error(
-        "INSTALL_RUNNER_UNAVAILABLE",
-        "Runner must be a regular non-symlink file.",
-      );
-    const actual = createHash("sha256")
+    if (!info.isFile() || info.isSymbolicLink()) {
+      error('INSTALL_RUNNER_UNAVAILABLE', 'Runner must be a regular non-symlink file.');
+    }
+    const actual = createHash('sha256')
       .update(await readFile(evidence.path))
-      .digest("hex");
-    if (actual.toLowerCase() !== evidence.sha256.toLowerCase())
-      error("INSTALL_RUNNER_STALE", "Installed runner hash changed.");
+      .digest('hex');
+    if (actual.toLowerCase() !== evidence.sha256.toLowerCase()) {
+      error('INSTALL_RUNNER_STALE', 'Installed runner hash changed.');
+    }
     return { ...evidence, path: path.win32.normalize(evidence.path), sha256: actual };
   }
 }
@@ -174,15 +170,15 @@ export class MemoryReceiptStore implements ReceiptStore {
   private readonly pending = new Map<string, Promise<void>>();
 
   async read(componentId: string): Promise<OwnershipReceipt | undefined> {
-    return this.value?.componentId === componentId
-      ? structuredClone(this.value)
-      : undefined;
+    return this.value?.componentId === componentId ? structuredClone(this.value) : undefined;
   }
   async write(receipt: OwnershipReceipt): Promise<void> {
     this.value = structuredClone(receipt);
   }
   async remove(componentId: string): Promise<void> {
-    if (this.value?.componentId === componentId) this.value = undefined;
+    if (this.value?.componentId === componentId) {
+      this.value = undefined;
+    }
   }
   async transaction<T>(componentId: string, action: () => Promise<T>): Promise<T> {
     const previous = this.pending.get(componentId) ?? Promise.resolve();
@@ -197,15 +193,16 @@ export class MemoryReceiptStore implements ReceiptStore {
       return await action();
     } finally {
       release();
-      if (this.pending.get(componentId) === tail) this.pending.delete(componentId);
+      if (this.pending.get(componentId) === tail) {
+        this.pending.delete(componentId);
+      }
     }
   }
 }
 
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
-const missing = (failure: unknown): boolean =>
-  (failure as NodeJS.ErrnoException).code === "ENOENT";
+const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException).code === 'ENOENT';
 
 export interface NodeReceiptStoreOptions {
   readonly now?: () => number;
@@ -225,24 +222,28 @@ export class NodeReceiptStore implements ReceiptStore {
   }
 
   private file(componentId: string): string {
-    if (componentId !== SESSION_CAPTURE_COMPONENT)
-      error("INSTALL_COMPONENT_UNSUPPORTED", "Unsupported component.");
+    if (componentId !== SESSION_CAPTURE_COMPONENT) {
+      error('INSTALL_COMPONENT_UNSUPPORTED', 'Unsupported component.');
+    }
     return path.join(this.directory, `${componentId}.json`);
   }
   private async owner(lock: string): Promise<{ pid: number; token: string } | undefined> {
     try {
-      const value = parseStrictJson(await readFile(path.join(lock, "owner.json"), "utf8"));
+      const value = parseStrictJson(await readFile(path.join(lock, 'owner.json'), 'utf8'));
       if (
         !value ||
-        typeof value !== "object" ||
+        typeof value !== 'object' ||
         Array.isArray(value) ||
-        typeof (value as { pid?: unknown }).pid !== "number" ||
-        typeof (value as { token?: unknown }).token !== "string"
-      )
+        typeof (value as { pid?: unknown }).pid !== 'number' ||
+        typeof (value as { token?: unknown }).token !== 'string'
+      ) {
         return undefined;
+      }
       return value as { pid: number; token: string };
     } catch (failure) {
-      if (missing(failure)) return undefined;
+      if (missing(failure)) {
+        return undefined;
+      }
       return undefined;
     }
   }
@@ -251,7 +252,7 @@ export class NodeReceiptStore implements ReceiptStore {
       process.kill(pid, 0);
       return true;
     } catch (failure) {
-      return (failure as NodeJS.ErrnoException).code !== "ESRCH";
+      return (failure as NodeJS.ErrnoException).code !== 'ESRCH';
     }
   }
   private initializer(lock: string, token: string): string {
@@ -259,45 +260,93 @@ export class NodeReceiptStore implements ReceiptStore {
   }
   private async ownsInitializer(lock: string, token: string): Promise<boolean> {
     try {
-      const value = parseStrictJson(await readFile(this.initializer(lock, token), "utf8"));
-      return Boolean(value && typeof value === "object" && !Array.isArray(value) && (value as { token?: unknown }).token === token);
-    } catch { return false; }
+      const value = parseStrictJson(await readFile(this.initializer(lock, token), 'utf8'));
+      return Boolean(
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        (value as { token?: unknown }).token === token,
+      );
+    } catch {
+      return false;
+    }
   }
   private async removeInitializingLock(lock: string, token: string): Promise<void> {
-    const marker = this.initializer(lock, token), claim = path.join(lock, `.initializer-claimed-${token}`);
-    try { await rename(marker, claim); } catch { return; }
+    const marker = this.initializer(lock, token),
+      claim = path.join(lock, `.initializer-claimed-${token}`);
+    try {
+      await rename(marker, claim);
+    } catch {
+      return;
+    }
     const tombstone = `${lock}.initialization-failed-${token}`;
-    try { await rename(lock, tombstone); }
-    catch (failure) { if (!missing(failure)) throw failure; return; }
+    try {
+      await rename(lock, tombstone);
+    } catch (failure) {
+      if (!missing(failure)) {
+        throw failure;
+      }
+      return;
+    }
     await rm(tombstone, { recursive: true, force: true });
   }
   private async removeOrphanedInitialization(lock: string): Promise<boolean> {
-    let names: string[], ageSource = lock;
-    try { names = await readdir(lock); } catch { return false; }
-    const markers = names.filter(name => /^initializer-[0-9a-f-]+\.json$/u.test(name));
-    if (markers.length > 1) return false;
-    if (markers.length === 1) ageSource = path.join(lock, markers[0]!);
-    let info;
-    try { info = await stat(ageSource); } catch { return false; }
-    if (this.now() - info.mtimeMs <= this.staleInitializationMilliseconds) return false;
-    const claim = path.join(lock, ".orphan-initialization-claim");
+    let names: string[],
+      ageSource = lock;
     try {
-      if (markers.length === 1) await rename(ageSource, claim);
-      else await writeFile(claim, "", { flag: "wx", mode: 0o600 });
-    } catch { return false; }
+      names = await readdir(lock);
+    } catch {
+      return false;
+    }
+    const markers = names.filter((name) => /^initializer-[0-9a-f-]+\.json$/u.test(name));
+    if (markers.length > 1) {
+      return false;
+    }
+    if (markers.length === 1) {
+      ageSource = path.join(lock, markers[0]!);
+    }
+    let info;
+    try {
+      info = await stat(ageSource);
+    } catch {
+      return false;
+    }
+    if (this.now() - info.mtimeMs <= this.staleInitializationMilliseconds) {
+      return false;
+    }
+    const claim = path.join(lock, '.orphan-initialization-claim');
+    try {
+      if (markers.length === 1) {
+        await rename(ageSource, claim);
+      } else {
+        await writeFile(claim, '', { flag: 'wx', mode: 0o600 });
+      }
+    } catch {
+      return false;
+    }
     const tombstone = `${lock}.orphan-${randomUUID()}`;
-    try { await rename(lock, tombstone); }
-    catch (failure) { if (missing(failure)) return false; throw failure; }
+    try {
+      await rename(lock, tombstone);
+    } catch (failure) {
+      if (missing(failure)) {
+        return false;
+      }
+      throw failure;
+    }
     await rm(tombstone, { recursive: true, force: true });
     return true;
   }
   private async removeOwnedLock(lock: string, token: string): Promise<void> {
-    if ((await this.owner(lock))?.token !== token) return;
+    if ((await this.owner(lock))?.token !== token) {
+      return;
+    }
     const tombstone = `${lock}.released-${token}`;
     try {
       await rename(lock, tombstone);
     } catch (failure) {
-      if (missing(failure) || (failure as NodeJS.ErrnoException).code === "EEXIST") return;
+      if (missing(failure) || (failure as NodeJS.ErrnoException).code === 'EEXIST') {
+        return;
+      }
       throw failure;
     }
     await rm(tombstone, { recursive: true, force: true });
@@ -306,14 +355,19 @@ export class NodeReceiptStore implements ReceiptStore {
     lock: string,
     owner: { pid: number; token: string },
   ): Promise<boolean> {
-    if (this.processIsLive(owner.pid)) return false;
-    if ((await this.owner(lock))?.token !== owner.token) return false;
+    if (this.processIsLive(owner.pid)) {
+      return false;
+    }
+    if ((await this.owner(lock))?.token !== owner.token) {
+      return false;
+    }
     const tombstone = `${lock}.dead-${owner.token}-${randomUUID()}`;
     try {
       await rename(lock, tombstone);
     } catch (failure) {
-      if (missing(failure) || (failure as NodeJS.ErrnoException).code === "EEXIST")
+      if (missing(failure) || (failure as NodeJS.ErrnoException).code === 'EEXIST') {
         return false;
+      }
       throw failure;
     }
     await rm(tombstone, { recursive: true, force: true });
@@ -330,14 +384,22 @@ export class NodeReceiptStore implements ReceiptStore {
         await mkdir(lock);
         try {
           const marker = this.initializer(lock, token);
-          await writeFile(marker, JSON.stringify({ token }), { encoding: "utf8", mode: 0o600, flag: "wx" });
+          await writeFile(marker, JSON.stringify({ token }), {
+            encoding: 'utf8',
+            mode: 0o600,
+            flag: 'wx',
+          });
           await this.options.afterLockInitializerCreated?.(lock, token);
-          if (!await this.ownsInitializer(lock, token))
-            error("INSTALL_LOCK_OWNERSHIP_LOST", "Component ownership lock initialization was superseded.");
+          if (!(await this.ownsInitializer(lock, token))) {
+            error(
+              'INSTALL_LOCK_OWNERSHIP_LOST',
+              'Component ownership lock initialization was superseded.',
+            );
+          }
           await writeFile(
-            path.join(lock, "owner.json"),
+            path.join(lock, 'owner.json'),
             JSON.stringify({ pid: process.pid, token }),
-            { encoding: "utf8", mode: 0o600, flag: "wx" },
+            { encoding: 'utf8', mode: 0o600, flag: 'wx' },
           );
           await rm(marker);
         } catch (failure) {
@@ -346,13 +408,19 @@ export class NodeReceiptStore implements ReceiptStore {
         }
         break;
       } catch (failure) {
-        if ((failure as NodeJS.ErrnoException).code !== "EEXIST") throw failure;
+        if ((failure as NodeJS.ErrnoException).code !== 'EEXIST') {
+          throw failure;
+        }
         const currentOwner = await this.owner(lock);
-        if (currentOwner && (await this.removeDeadOwnerLock(lock, currentOwner)))
+        if (currentOwner && (await this.removeDeadOwnerLock(lock, currentOwner))) {
           continue;
-        if (!currentOwner && await this.removeOrphanedInitialization(lock)) continue;
-        if (this.now() >= deadline)
-          error("INSTALL_LOCK_TIMEOUT", "Timed out waiting for component ownership lock.");
+        }
+        if (!currentOwner && (await this.removeOrphanedInitialization(lock))) {
+          continue;
+        }
+        if (this.now() >= deadline) {
+          error('INSTALL_LOCK_TIMEOUT', 'Timed out waiting for component ownership lock.');
+        }
         await wait(10);
       }
     }
@@ -364,13 +432,15 @@ export class NodeReceiptStore implements ReceiptStore {
   }
   async read(componentId: string): Promise<OwnershipReceipt | undefined> {
     try {
-      return parseOwnershipReceipt(
-        parseStrictJson(await readFile(this.file(componentId), "utf8")),
-      );
+      return parseOwnershipReceipt(parseStrictJson(await readFile(this.file(componentId), 'utf8')));
     } catch (failure) {
-      if (missing(failure)) return undefined;
-      if (failure instanceof MpxError) throw failure;
-      error("INSTALL_RECEIPT_INVALID", "Ownership receipt is invalid.");
+      if (missing(failure)) {
+        return undefined;
+      }
+      if (failure instanceof MpxError) {
+        throw failure;
+      }
+      error('INSTALL_RECEIPT_INVALID', 'Ownership receipt is invalid.');
     }
   }
   async write(receipt: OwnershipReceipt): Promise<void> {
@@ -379,9 +449,9 @@ export class NodeReceiptStore implements ReceiptStore {
     const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(temporary, JSON.stringify(receipt), {
-        encoding: "utf8",
+        encoding: 'utf8',
         mode: 0o600,
-        flag: "wx",
+        flag: 'wx',
       });
       await chmod(temporary, 0o600);
       await rename(temporary, file);
@@ -395,31 +465,39 @@ export class NodeReceiptStore implements ReceiptStore {
 }
 
 function exactRecord(value: unknown, keys: readonly string[]): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    error("INSTALL_SCHEMA_INVALID", "Invalid protocol object.");
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    error('INSTALL_SCHEMA_INVALID', 'Invalid protocol object.');
+  }
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).sort().join() !== [...keys].sort().join())
-    error("INSTALL_SCHEMA_INVALID", "Unknown or missing protocol field.");
+  if (Object.keys(record).sort().join() !== [...keys].sort().join()) {
+    error('INSTALL_SCHEMA_INVALID', 'Unknown or missing protocol field.');
+  }
   return record;
 }
 export function parseOwnershipReceipt(value: unknown): OwnershipReceipt {
   const receipt = exactRecord(value, [
-    "schemaVersion",
-    "componentId",
-    "taskSpecDigest",
-    "runner",
-    "installedAt",
+    'schemaVersion',
+    'componentId',
+    'taskSpecDigest',
+    'runner',
+    'installedAt',
   ]);
   if (
     receipt.schemaVersion !== 1 ||
     receipt.componentId !== SESSION_CAPTURE_COMPONENT ||
-    typeof receipt.taskSpecDigest !== "string" ||
-    typeof receipt.installedAt !== "string"
-  )
-    error("INSTALL_RECEIPT_INVALID", "Ownership receipt is invalid.");
-  const runner = exactRecord(receipt.runner, ["path", "sha256", "version"]) as unknown as InstalledRunnerEvidence;
-  if (!evidenceValid(runner))
-    error("INSTALL_RECEIPT_INVALID", "Ownership receipt is invalid.");
+    typeof receipt.taskSpecDigest !== 'string' ||
+    typeof receipt.installedAt !== 'string'
+  ) {
+    error('INSTALL_RECEIPT_INVALID', 'Ownership receipt is invalid.');
+  }
+  const runner = exactRecord(receipt.runner, [
+    'path',
+    'sha256',
+    'version',
+  ]) as unknown as InstalledRunnerEvidence;
+  if (!evidenceValid(runner)) {
+    error('INSTALL_RECEIPT_INVALID', 'Ownership receipt is invalid.');
+  }
   return receipt as unknown as OwnershipReceipt;
 }
 
@@ -449,25 +527,25 @@ export class InstallerService {
     ].filter((value): value is string => Boolean(value));
   }
   private component(componentId: string): asserts componentId is ComponentId {
-    if (componentId !== SESSION_CAPTURE_COMPONENT)
-      error("INSTALL_COMPONENT_UNSUPPORTED", "Only session-capture is supported.");
+    if (componentId !== SESSION_CAPTURE_COMPONENT) {
+      error('INSTALL_COMPONENT_UNSUPPORTED', 'Only session-capture is supported.');
+    }
   }
   private async runner(evidence?: InstalledRunnerEvidence): Promise<InstalledRunnerEvidence> {
     const authority = this.options.authority;
-    const resolved = evidence ?? await authority?.resolveInstalled?.();
+    const resolved = evidence ?? (await authority?.resolveInstalled?.());
     if (
       !resolved ||
       !evidenceValid(resolved) ||
       this.forbidden.some((root) => within(resolved.path, root)) ||
       !authority
-    )
-      error(
-        "INSTALL_RUNNER_UNAVAILABLE",
-        "Immutable installed runner authority is unavailable.",
-      );
+    ) {
+      error('INSTALL_RUNNER_UNAVAILABLE', 'Immutable installed runner authority is unavailable.');
+    }
     const actual = await authority.verifyInstalled(resolved);
-    if (stable(actual) !== stable(resolved))
-      error("INSTALL_RUNNER_STALE", "Runner evidence is stale.");
+    if (stable(actual) !== stable(resolved)) {
+      error('INSTALL_RUNNER_STALE', 'Runner evidence is stale.');
+    }
     return actual;
   }
   private spec(evidence: InstalledRunnerEvidence): ScheduledTaskSpec {
@@ -476,17 +554,17 @@ export class InstallerService {
       taskName: SESSION_CAPTURE_TASK_NAME,
       action: {
         executable: evidence.path,
-        argv: ["session", "reconcile", "--capture", "scheduled", "--json"],
+        argv: ['session', 'reconcile', '--capture', 'scheduled', '--json'],
       },
       principal: {
         userId: this.options.currentUser,
-        logonType: "InteractiveToken",
-        runLevel: "LeastPrivilege",
+        logonType: 'InteractiveToken',
+        runLevel: 'LeastPrivilege',
       },
       trigger: { cadenceMinutes: SESSION_CAPTURE_CADENCE_MINUTES },
       settings: {
         startWhenAvailable: true,
-        multipleInstances: "IgnoreNew",
+        multipleInstances: 'IgnoreNew',
         executionTimeLimitSeconds: 300,
         hidden: true,
         enabled: true,
@@ -498,14 +576,15 @@ export class InstallerService {
     runner?: InstalledRunnerEvidence;
   }): Promise<InstallPlan> {
     this.component(input.componentId);
-    if (!this.options.tasks.available)
-      error("INSTALL_CAPABILITY_UNAVAILABLE", "Scheduled tasks are unavailable.");
+    if (!this.options.tasks.available) {
+      error('INSTALL_CAPABILITY_UNAVAILABLE', 'Scheduled tasks are unavailable.');
+    }
     const runner = await this.runner(input.runner);
     const task = this.spec(runner);
     const taskSpecDigest = scheduledTaskSpecDigest(task);
     const base = {
       schemaVersion: 1 as const,
-      kind: "install" as const,
+      kind: 'install' as const,
       componentId: SESSION_CAPTURE_COMPONENT,
       task,
       taskSpecDigest,
@@ -526,15 +605,17 @@ export class InstallerService {
     if (
       confirmationDigest !== plan.confirmationDigest ||
       digest(base) !== plan.confirmationDigest
-    )
-      error("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
+    ) {
+      error('INSTALL_CONFIRMATION_MISMATCH', 'Exact plan confirmation is required.');
+    }
     const runner = await this.runner(plan.runner);
     const expected = this.spec(runner);
     if (
       scheduledTaskSpecDigest(expected) !== plan.taskSpecDigest ||
       stable(taskComparable(expected)) !== stable(taskComparable(plan.task))
-    )
-      error("INSTALL_PLAN_STALE", "Install plan is stale.");
+    ) {
+      error('INSTALL_PLAN_STALE', 'Install plan is stale.');
+    }
 
     return this.options.store.transaction(plan.componentId, async () => {
       const existing = await this.options.tasks.inspect(
@@ -546,13 +627,12 @@ export class InstallerService {
         existing &&
         (receipt?.taskSpecDigest !== plan.taskSpecDigest ||
           stable(taskComparable(existing)) !== stable(taskComparable(expected)))
-      )
-        error(
-          "INSTALL_FOREIGN_TASK",
-          "Refusing to overwrite a foreign or drifted task.",
-        );
-      if (receipt && receipt.taskSpecDigest !== plan.taskSpecDigest)
-        error("INSTALL_OWNERSHIP_MISMATCH", "Ownership receipt does not match.");
+      ) {
+        error('INSTALL_FOREIGN_TASK', 'Refusing to overwrite a foreign or drifted task.');
+      }
+      if (receipt && receipt.taskSpecDigest !== plan.taskSpecDigest) {
+        error('INSTALL_OWNERSHIP_MISMATCH', 'Ownership receipt does not match.');
+      }
       const next: OwnershipReceipt = receipt ?? {
         schemaVersion: 1,
         componentId: SESSION_CAPTURE_COMPONENT,
@@ -561,57 +641,76 @@ export class InstallerService {
         installedAt: this.now().toISOString(),
       };
       // Receipt-before-install keeps a failed task creation safely retryable.
-      if (!receipt) await this.options.store.write(next);
-      if (!existing) await this.options.tasks.install(expected);
+      if (!receipt) {
+        await this.options.store.write(next);
+      }
+      if (!existing) {
+        await this.options.tasks.install(expected);
+      }
       return next;
     });
   }
   async verify(componentId: string): Promise<ComponentVerification> {
     this.component(componentId);
-    if (!this.options.tasks.available)
-      error("INSTALL_CAPABILITY_UNAVAILABLE", "Scheduled tasks are unavailable.");
+    if (!this.options.tasks.available) {
+      error('INSTALL_CAPABILITY_UNAVAILABLE', 'Scheduled tasks are unavailable.');
+    }
     const [task, receipt] = await Promise.all([
       this.options.tasks.inspect(SESSION_CAPTURE_TASK_PATH, SESSION_CAPTURE_TASK_NAME),
       this.options.store.read(componentId),
     ]);
     const issues: string[] = [];
-    if (!receipt) issues.push("receipt-missing");
-    if (!task) issues.push("task-missing");
+    if (!receipt) {
+      issues.push('receipt-missing');
+    }
+    if (!task) {
+      issues.push('task-missing');
+    }
     let activeRunner: InstalledRunnerEvidence | undefined;
     if (task || receipt) {
       try {
         activeRunner = await this.runner();
       } catch (failure) {
-        if ((failure as { code?: unknown }).code === "INSTALL_RUNNER_UNAVAILABLE")
+        if ((failure as { code?: unknown }).code === 'INSTALL_RUNNER_UNAVAILABLE') {
           throw failure;
-        issues.push("runner-drift");
+        }
+        issues.push('runner-drift');
       }
     }
     if (
       activeRunner &&
       receipt &&
       stable(activeRunner) !== stable(receipt.runner) &&
-      !issues.includes("runner-drift")
-    )
-      issues.push("runner-drift");
+      !issues.includes('runner-drift')
+    ) {
+      issues.push('runner-drift');
+    }
     if (
       task &&
       ((receipt && scheduledTaskSpecDigest(task) !== receipt.taskSpecDigest) ||
         (activeRunner &&
-          stable(taskComparable(task)) !==
-            stable(taskComparable(this.spec(activeRunner)))))
-    )
-      issues.push("task-drift");
-    if (task && task.lastRunAt === undefined) issues.push("task-never-ran");
+          stable(taskComparable(task)) !== stable(taskComparable(this.spec(activeRunner)))))
+    ) {
+      issues.push('task-drift');
+    }
+    if (task && task.lastRunAt === undefined) {
+      issues.push('task-never-ran');
+    }
     if (task?.lastRunAt !== undefined) {
       const lastRunAt = Date.parse(task.lastRunAt);
       const now = this.now().getTime();
       const allowedDistance = SESSION_CAPTURE_CADENCE_MINUTES * 2 * 60_000;
-      if (!Number.isFinite(lastRunAt) || now - lastRunAt > allowedDistance || lastRunAt - now > allowedDistance)
-        issues.push("task-last-run-stale");
+      if (
+        !Number.isFinite(lastRunAt) ||
+        now - lastRunAt > allowedDistance ||
+        lastRunAt - now > allowedDistance
+      ) {
+        issues.push('task-last-run-stale');
+      }
     }
-    if (task?.lastResult !== undefined && task.lastResult !== 0)
-      issues.push("task-last-run-failed");
+    if (task?.lastResult !== undefined && task.lastResult !== 0) {
+      issues.push('task-last-run-failed');
+    }
     return {
       schemaVersion: 1,
       componentId: SESSION_CAPTURE_COMPONENT,
@@ -625,10 +724,12 @@ export class InstallerService {
   async planUninstall(componentId: string): Promise<UninstallPlan> {
     this.component(componentId);
     const receipt = await this.options.store.read(componentId);
-    if (!receipt) error("INSTALL_NOT_OWNED", "No owned installation exists.");
+    if (!receipt) {
+      error('INSTALL_NOT_OWNED', 'No owned installation exists.');
+    }
     const base = {
       schemaVersion: 1 as const,
-      kind: "uninstall" as const,
+      kind: 'uninstall' as const,
       componentId: SESSION_CAPTURE_COMPONENT,
       taskSpecDigest: receipt.taskSpecDigest,
     };
@@ -642,11 +743,9 @@ export class InstallerService {
       componentId: plan.componentId,
       taskSpecDigest: plan.taskSpecDigest,
     };
-    if (confirmation !== plan.confirmationDigest || digest(base) !== confirmation)
-      error(
-        "INSTALL_CONFIRMATION_MISMATCH",
-        "Exact uninstall confirmation is required.",
-      );
+    if (confirmation !== plan.confirmationDigest || digest(base) !== confirmation) {
+      error('INSTALL_CONFIRMATION_MISMATCH', 'Exact uninstall confirmation is required.');
+    }
 
     await this.options.store.transaction(plan.componentId, async () => {
       const receipt = await this.options.store.read(plan.componentId);
@@ -654,18 +753,15 @@ export class InstallerService {
         SESSION_CAPTURE_TASK_PATH,
         SESSION_CAPTURE_TASK_NAME,
       );
-      if (!receipt || receipt.taskSpecDigest !== plan.taskSpecDigest)
-        error("INSTALL_NOT_OWNED", "Ownership does not match.");
-      if (task && scheduledTaskSpecDigest(task) !== receipt.taskSpecDigest)
-        error(
-          "INSTALL_FOREIGN_TASK",
-          "Refusing to remove a foreign or drifted task.",
-        );
-      if (task)
-        await this.options.tasks.remove(
-          SESSION_CAPTURE_TASK_PATH,
-          SESSION_CAPTURE_TASK_NAME,
-        );
+      if (!receipt || receipt.taskSpecDigest !== plan.taskSpecDigest) {
+        error('INSTALL_NOT_OWNED', 'Ownership does not match.');
+      }
+      if (task && scheduledTaskSpecDigest(task) !== receipt.taskSpecDigest) {
+        error('INSTALL_FOREIGN_TASK', 'Refusing to remove a foreign or drifted task.');
+      }
+      if (task) {
+        await this.options.tasks.remove(SESSION_CAPTURE_TASK_PATH, SESSION_CAPTURE_TASK_NAME);
+      }
       await this.options.store.remove(plan.componentId);
     });
   }

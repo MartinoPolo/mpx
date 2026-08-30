@@ -7,6 +7,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # HITL Resolution
 
 ## Launch identity

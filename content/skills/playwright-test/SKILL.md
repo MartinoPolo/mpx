@@ -1,6 +1,6 @@
 ---
 name: playwright-test
-description: "Verifies UI changes with raw Playwright over a defined scope and reports a per-surface PASS/FAIL table with screenshots. Use when asked to visually verify UI changes or run a Playwright test."
+description: 'Verifies UI changes with raw Playwright over a defined scope and reports a per-surface PASS/FAIL table with screenshots. Use when asked to visually verify UI changes or run a Playwright test.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -34,7 +34,7 @@ If mapping yields zero UI surfaces, stop and report that there is nothing to vis
 
 ## Step 3: Discover project specifics
 
-Per `../shared/PLAYWRIGHT_TESTING.md` § *Discover project specifics*, read the project's `AGENTS.md` / `repository instructions` / memory for: the Playwright runner/helper (e.g. `scripts/shot.mjs`), the dev-server start command and **exact port**, the sign-in API + seed users, and where credentials live (`.local/`, `.env.local`). If no runner script exists, the verifier writes a minimal one from the shared skeleton.
+Per `../shared/PLAYWRIGHT_TESTING.md` § _Discover project specifics_, read the project's `AGENTS.md` / `repository instructions` / memory for: the Playwright runner/helper (e.g. `scripts/shot.mjs`), the dev-server start command and **exact port**, the sign-in API + seed users, and where credentials live (`.local/`, `.env.local`). If no runner script exists, the verifier writes a minimal one from the shared skeleton.
 
 ## Step 4: Verify in a sub-agent
 

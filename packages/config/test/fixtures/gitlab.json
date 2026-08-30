@@ -1,1 +1,6 @@
-{"schemaVersion":1,"project":{"id":"acme/gitlab"},"repository":{"provider":"gitlab","remote":"origin"},"issues":{"provider":"gitlab"}}
+{
+  "schemaVersion": 1,
+  "project": { "id": "acme/gitlab" },
+  "repository": { "provider": "gitlab", "remote": "origin" },
+  "issues": { "provider": "gitlab" }
+}

@@ -1,1 +1,1 @@
-export { generatePiAgents } from "../dist/agent-generator.js";
+export { generatePiAgents } from '../dist/agent-generator.js';

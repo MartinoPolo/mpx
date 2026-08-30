@@ -1,7 +1,8 @@
 ---
 name: mpx-reviewer-test-quality
-description: "Read-only reviewer for test correctness, anti-patterns, redundancy, and mocking discipline."
+description: 'Read-only reviewer for test correctness, anti-patterns, redundancy, and mocking discipline.'
 ---
+
 # Reviewer: Test Quality
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.

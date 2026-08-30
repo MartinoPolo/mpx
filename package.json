@@ -8,7 +8,15 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "check": "pnpm -r check",
+    "check": "pnpm run check:quality && pnpm -r check",
+    "check:quality": "pnpm run format:check && pnpm run lint && pnpm run check:fallow",
+    "check:fallow": "fallow --regression-baseline fallow-baselines/regression.json --fail-on-regression --format json --quiet --output-file .fallow/check.json",
+    "fallow:audit": "fallow audit --base main --gate new-only",
+    "fallow:baseline": "fallow --save-regression-baseline fallow-baselines/regression.json --format json --quiet --output-file .fallow/baseline.json",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "oxlint . --deny-warnings --report-unused-disable-directives",
+    "lint:fix": "oxlint . --fix --report-unused-disable-directives && prettier --write .",
     "test": "pnpm run build && pnpm run test:convergence && pnpm run test:integration && pnpm -r test",
     "test:convergence": "node scripts/required-convergence.mjs",
     "test:integration": "vitest run scripts/validate-generated.test.mjs scripts/convergence-manifest.test.mjs scripts/required-convergence.test.mjs scripts/native-capability-inventory.test.mjs scripts/build-preparation.test.mjs scripts/capture-migration-baseline.test.mjs scripts/run-f2-live-proof.test.mjs",
@@ -22,6 +30,9 @@
   "devDependencies": {
     "@types/node": "^22.15.0",
     "esbuild": "0.25.12",
+    "fallow": "^3.20.0",
+    "oxlint": "^1.80.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

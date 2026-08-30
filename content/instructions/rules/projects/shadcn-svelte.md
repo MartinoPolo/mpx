@@ -2,11 +2,11 @@
 scope: project
 selector: shadcn-svelte
 paths:
-    - '**/*.svelte'
-    - '**/*.svelte.ts'
-    - '**/*.svelte.js'
-    - '**/*_variants.ts'
-    - '**/*.stories.svelte'
+  - '**/*.svelte'
+  - '**/*.svelte.ts'
+  - '**/*.svelte.js'
+  - '**/*_variants.ts'
+  - '**/*.stories.svelte'
 applyTo: '**/*.svelte,**/*.svelte.ts,**/*.svelte.js,**/*_variants.ts,**/*.stories.svelte'
 ---
 
@@ -36,8 +36,8 @@ Reach for a Base component before writing custom markup.
 Multi-part (dialog, select, card, tabs…) → namespace. Single-component (button, input, badge…) → named. Derived have no barrel — import the `.svelte` directly.
 
 ```ts
-import * as Dialog from "$lib/components/base/dialog/index.js";
-import { Button } from "$lib/components/base/button/index.js";
+import * as Dialog from '$lib/components/base/dialog/index.js';
+import { Button } from '$lib/components/base/button/index.js';
 ```
 
 ## Styling

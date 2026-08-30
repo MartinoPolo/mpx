@@ -34,19 +34,19 @@ surface and avoid re-verifying untouched pages.
 ## Runner shape
 
 ```js
-import { chromium } from "playwright";
+import { chromium } from 'playwright';
 
-const base = process.env.BASE_URL ?? "http://localhost:5173";
+const base = process.env.BASE_URL ?? 'http://localhost:5173';
 const browser = await chromium.launch();
 const context = await browser.newContext();
 
 const gate = await context.newPage();
-await gate.goto(base, { waitUntil: "load" });
+await gate.goto(base, { waitUntil: 'load' });
 // Assert one fact unique to the checkout under test.
 
 for (const surface of surfaces) {
   const page = await context.newPage();
-  await page.goto(base + surface.path, { waitUntil: "load" });
+  await page.goto(base + surface.path, { waitUntil: 'load' });
   await page.waitForSelector(surface.ready);
   const measured = await page.evaluate(surface.measure);
   surface.assert(measured);

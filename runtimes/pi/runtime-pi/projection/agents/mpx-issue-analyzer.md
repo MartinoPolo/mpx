@@ -1,12 +1,13 @@
 ---
 name: mpx-issue-analyzer
-description: "Analyzes issues and codebase exploration results to create fix plans. Use after gathering issue data and codebase context."
+description: 'Analyzes issues and codebase exploration results to create fix plans. Use after gathering issue data and codebase context.'
 model: openai-codex/gpt-5.6-sol
 thinking: high
 tools: read,grep,find,ls,bash,web_search,fetch_content,get_search_content,source_check
 output_schema: plan
 
 ---
+
 # Issue Analyzer Agent
 
 You analyze GitHub issues combined with codebase exploration results to produce actionable fix plans.

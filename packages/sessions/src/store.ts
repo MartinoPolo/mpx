@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -11,9 +11,9 @@ import {
   stat,
   utimes,
   writeFile,
-} from "node:fs/promises";
-import path from "node:path";
-import type { RuntimeName } from "@mpx/runtime-contracts";
+} from 'node:fs/promises';
+import path from 'node:path';
+import type { RuntimeName } from '@mpx/runtime-contracts';
 import {
   SessionError,
   parseLegacyImportJournalV1,
@@ -31,16 +31,13 @@ import {
   type SessionLifecycleBindingRecordV1,
   type SessionRecordV1,
   type SessionRegistryV1,
-} from "./schemas.js";
+} from './schemas.js';
 
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
-const encode = (value: string): string =>
-  Buffer.from(value, "utf8").toString("base64url");
-const decode = (value: string): string =>
-  Buffer.from(value, "base64url").toString("utf8");
-const missing = (error: unknown): boolean =>
-  (error as NodeJS.ErrnoException).code === "ENOENT";
+const encode = (value: string): string => Buffer.from(value, 'utf8').toString('base64url');
+const decode = (value: string): string => Buffer.from(value, 'base64url').toString('utf8');
+const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export interface StoreOptions {
   readonly lockWaitMs?: number;
@@ -54,7 +51,8 @@ export class SessionStore {
   private readonly lockWaitMs: number;
   private readonly staleLockMs: number;
   private readonly now: () => number;
-  private readonly afterLockInitializerCreated: ((lock: string, token: string) => Promise<void>) | undefined;
+  private readonly afterLockInitializerCreated:
+    ((lock: string, token: string) => Promise<void>) | undefined;
   private readonly isPidAlive: (pid: number) => boolean | undefined | Promise<boolean | undefined>;
   private readonly processId: number;
   constructor(
@@ -65,73 +63,81 @@ export class SessionStore {
     this.staleLockMs = options.staleLockMs ?? 30_000;
     this.now = options.now ?? Date.now;
     this.afterLockInitializerCreated = options.afterLockInitializerCreated;
-    this.isPidAlive = options.isPidAlive ?? ((pid) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH" ? false : undefined; } });
+    this.isPidAlive =
+      options.isPidAlive ??
+      ((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch (error) {
+          return (error as NodeJS.ErrnoException).code === 'ESRCH' ? false : undefined;
+        }
+      });
     this.processId = options.processId ?? process.pid;
   }
 
   partitionDirectory(identity: IdentityV1, runtime: RuntimeName): string {
     return path.join(
       this.stateRoot,
-      "sessions",
-      "v1",
-      "identities",
+      'sessions',
+      'v1',
+      'identities',
       `d-${encode(identity.domain)}`,
       `n-${encode(identity.name)}`,
       runtime,
     );
   }
   registryPath(identity: IdentityV1, runtime: RuntimeName): string {
-    return path.join(
-      this.partitionDirectory(identity, runtime),
-      "registry.json",
-    );
+    return path.join(this.partitionDirectory(identity, runtime), 'registry.json');
   }
-  capturePath(
-    identity: IdentityV1,
-    runtime: RuntimeName,
-    captureId: string,
-  ): string {
+  capturePath(identity: IdentityV1, runtime: RuntimeName, captureId: string): string {
     return path.join(
       this.partitionDirectory(identity, runtime),
-      "captures",
+      'captures',
       `${encode(captureId)}.json`,
     );
   }
   nativeBindingPath(ref: string): string {
     return path.join(
       this.stateRoot,
-      "sessions",
-      "v1",
-      "private",
-      "native-bindings",
+      'sessions',
+      'v1',
+      'private',
+      'native-bindings',
       `${encode(ref)}.json`,
     );
   }
   lifecycleBindingPath(bindingId: string): string {
     return path.join(
       this.stateRoot,
-      "sessions",
-      "v1",
-      "private",
-      "lifecycle-bindings",
+      'sessions',
+      'v1',
+      'private',
+      'lifecycle-bindings',
       `${encode(bindingId)}.json`,
     );
   }
   eventDirectory(bindingId: string): string {
     return path.join(
       this.stateRoot,
-      "sessions",
-      "v1",
-      "private",
-      "lifecycle-events",
+      'sessions',
+      'v1',
+      'private',
+      'lifecycle-events',
       encode(bindingId),
     );
   }
   async validateEventDirectory(bindingId: string): Promise<boolean> {
     const expected = path.resolve(this.eventDirectory(bindingId));
     let linked;
-    try { linked = await lstat(expected); }
-    catch (error) { if (missing(error)) return false; throw error; }
+    try {
+      linked = await lstat(expected);
+    } catch (error) {
+      if (missing(error)) {
+        return false;
+      }
+      throw error;
+    }
     const [resolvedRoot, resolvedDirectory] = await Promise.all([
       realpath(this.stateRoot),
       realpath(expected),
@@ -140,61 +146,57 @@ export class SessionStore {
     if (
       linked.isSymbolicLink() ||
       !linked.isDirectory() ||
-      path.relative(expected, resolvedDirectory) !== "" ||
-      relative === ".." ||
+      path.relative(expected, resolvedDirectory) !== '' ||
+      relative === '..' ||
       relative.startsWith(`..${path.sep}`) ||
       path.isAbsolute(relative)
-    ) throw new SessionError(
-      "SESSION_UNSAFE_EVENT_DIRECTORY",
-      "lifecycle event directory must remain the expected real non-symlink directory under the session store",
-    );
+    ) {
+      throw new SessionError(
+        'SESSION_UNSAFE_EVENT_DIRECTORY',
+        'lifecycle event directory must remain the expected real non-symlink directory under the session store',
+      );
+    }
     return true;
   }
   journalPath(digest: string): string {
-    return path.join(this.stateRoot,"sessions","v1","private","imports",`${digest}.journal.json`);
-  }
-  receiptPath(digest: string): string {
     return path.join(
       this.stateRoot,
-      "sessions",
-      "v1",
-      "private",
-      "imports",
-      `${digest}.json`,
+      'sessions',
+      'v1',
+      'private',
+      'imports',
+      `${digest}.journal.json`,
     );
+  }
+  receiptPath(digest: string): string {
+    return path.join(this.stateRoot, 'sessions', 'v1', 'private', 'imports', `${digest}.json`);
   }
 
   private async assertRegular(file: string): Promise<void> {
     const linked = await lstat(file);
-    if (linked.isSymbolicLink() || !linked.isFile())
+    if (linked.isSymbolicLink() || !linked.isFile()) {
       throw new SessionError(
-        "SESSION_UNSAFE_FILE",
-        "session state must be a regular non-symlink file",
+        'SESSION_UNSAFE_FILE',
+        'session state must be a regular non-symlink file',
       );
+    }
   }
-  private async readJson(
-    file: string,
-    maximumBytes = 8 * 1024 * 1024,
-  ): Promise<unknown> {
+  private async readJson(file: string, maximumBytes = 8 * 1024 * 1024): Promise<unknown> {
     await this.assertRegular(file);
     const info = await stat(file);
-    if (info.size > maximumBytes)
-      throw new SessionError(
-        "SESSION_FILE_TOO_LARGE",
-        "session state exceeds its size bound",
-      );
-    return JSON.parse(await readFile(file, "utf8")) as unknown;
+    if (info.size > maximumBytes) {
+      throw new SessionError('SESSION_FILE_TOO_LARGE', 'session state exceeds its size bound');
+    }
+    return JSON.parse(await readFile(file, 'utf8')) as unknown;
   }
   private async atomicJson(file: string, value: unknown): Promise<void> {
     await mkdir(path.dirname(file), { recursive: true });
     const existing = await lstat(file).catch(() => undefined);
-    if (existing?.isSymbolicLink() || (existing && !existing.isFile()))
-      throw new SessionError(
-        "SESSION_UNSAFE_FILE",
-        "refusing to replace unsafe session state",
-      );
+    if (existing?.isSymbolicLink() || (existing && !existing.isFile())) {
+      throw new SessionError('SESSION_UNSAFE_FILE', 'refusing to replace unsafe session state');
+    }
     const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
-    const handle = await open(temporary, "wx", 0o600);
+    const handle = await open(temporary, 'wx', 0o600);
     try {
       await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
       await handle.sync();
@@ -210,9 +212,7 @@ export class SessionStore {
       await rm(temporary, { force: true });
       throw error;
     }
-    const directory = await open(path.dirname(file), "r").catch(
-      () => undefined,
-    );
+    const directory = await open(path.dirname(file), 'r').catch(() => undefined);
     if (directory) {
       try {
         await directory.sync();
@@ -228,80 +228,175 @@ export class SessionStore {
   }
   private async ownsInitializer(lock: string, token: string): Promise<boolean> {
     try {
-      const value = JSON.parse(await readFile(this.initializer(lock, token), "utf8")) as unknown;
-      return Boolean(value && typeof value === "object" && (value as { token?: unknown }).token === token);
-    } catch { return false; }
+      const value = JSON.parse(await readFile(this.initializer(lock, token), 'utf8')) as unknown;
+      return Boolean(
+        value && typeof value === 'object' && (value as { token?: unknown }).token === token,
+      );
+    } catch {
+      return false;
+    }
   }
   private async removeInitializingLock(lock: string, token: string): Promise<void> {
-    const marker = this.initializer(lock, token), claim = path.join(lock, `.initializer-claimed-${token}`);
-    try { await rename(marker, claim); } catch { return; }
+    const marker = this.initializer(lock, token),
+      claim = path.join(lock, `.initializer-claimed-${token}`);
+    try {
+      await rename(marker, claim);
+    } catch {
+      return;
+    }
     const tombstone = `${lock}.initialization-failed-${token}`;
-    try { await rename(lock, tombstone); }
-    catch (error) { if (!missing(error)) throw error; return; }
+    try {
+      await rename(lock, tombstone);
+    } catch (error) {
+      if (!missing(error)) {
+        throw error;
+      }
+      return;
+    }
     await rm(tombstone, { recursive: true, force: true });
   }
   private async removeOrphanedInitialization(lock: string): Promise<boolean> {
-    let names: string[], ageSource = lock;
-    try { names = await readdir(lock); } catch { return false; }
-    const markers = names.filter(name => /^initializer-[0-9a-f-]+\.json$/u.test(name));
-    if (markers.length > 1) return false;
-    if (markers.length === 1) ageSource = path.join(lock, markers[0]!);
+    let names: string[],
+      ageSource = lock;
+    try {
+      names = await readdir(lock);
+    } catch {
+      return false;
+    }
+    const markers = names.filter((name) => /^initializer-[0-9a-f-]+\.json$/u.test(name));
+    if (markers.length > 1) {
+      return false;
+    }
+    if (markers.length === 1) {
+      ageSource = path.join(lock, markers[0]!);
+    }
     let info;
-    try { info = await stat(ageSource); } catch { return false; }
+    try {
+      info = await stat(ageSource);
+    } catch {
+      return false;
+    }
     if (markers.length === 1) {
       try {
-        const marker = JSON.parse(await readFile(ageSource, "utf8")) as { pid?: unknown; token?: unknown };
-        if (Number.isSafeInteger(marker.pid) && (marker.pid as number) > 0 && typeof marker.token === "string" && markers[0] === `initializer-${marker.token}.json`) {
-          if (await this.isPidAlive(marker.pid as number) !== false) return false;
-        } else if (this.now() - info.mtimeMs <= this.staleLockMs) return false;
-      } catch { if (this.now() - info.mtimeMs <= this.staleLockMs) return false; }
-    } else if (this.now() - info.mtimeMs <= this.staleLockMs) return false;
-    const claim = path.join(lock, ".orphan-initialization-claim");
+        const marker = JSON.parse(await readFile(ageSource, 'utf8')) as {
+          pid?: unknown;
+          token?: unknown;
+        };
+        if (
+          Number.isSafeInteger(marker.pid) &&
+          (marker.pid as number) > 0 &&
+          typeof marker.token === 'string' &&
+          markers[0] === `initializer-${marker.token}.json`
+        ) {
+          if ((await this.isPidAlive(marker.pid as number)) !== false) {
+            return false;
+          }
+        } else if (this.now() - info.mtimeMs <= this.staleLockMs) {
+          return false;
+        }
+      } catch {
+        if (this.now() - info.mtimeMs <= this.staleLockMs) {
+          return false;
+        }
+      }
+    } else if (this.now() - info.mtimeMs <= this.staleLockMs) {
+      return false;
+    }
+    const claim = path.join(lock, '.orphan-initialization-claim');
     try {
-      if (markers.length === 1) await rename(ageSource, claim);
-      else await writeFile(claim, "", { flag: "wx", mode: 0o600 });
-    } catch { return false; }
+      if (markers.length === 1) {
+        await rename(ageSource, claim);
+      } else {
+        await writeFile(claim, '', { flag: 'wx', mode: 0o600 });
+      }
+    } catch {
+      return false;
+    }
     const tombstone = `${lock}.orphan-${randomUUID()}`;
-    try { await rename(lock, tombstone); }
-    catch (error) { if (missing(error)) return false; throw error; }
+    try {
+      await rename(lock, tombstone);
+    } catch (error) {
+      if (missing(error)) {
+        return false;
+      }
+      throw error;
+    }
     await rm(tombstone, { recursive: true, force: true });
     return true;
   }
   private async removeOwnedLock(lock: string, ownerToken: string): Promise<void> {
     let owner: unknown;
-    try { owner = await this.readJson(path.join(lock, "owner.json"), 16_384); }
-    catch (error) { if (missing(error)) return; throw error; }
-    if (!owner || typeof owner !== "object" || (owner as { ownerToken?: unknown }).ownerToken !== ownerToken) return;
-    const tombstone = `${lock}.released-${ownerToken}`, releaseDeadline = Date.now() + 2_000;
+    try {
+      owner = await this.readJson(path.join(lock, 'owner.json'), 16_384);
+    } catch (error) {
+      if (missing(error)) {
+        return;
+      }
+      throw error;
+    }
+    if (
+      !owner ||
+      typeof owner !== 'object' ||
+      (owner as { ownerToken?: unknown }).ownerToken !== ownerToken
+    ) {
+      return;
+    }
+    const tombstone = `${lock}.released-${ownerToken}`,
+      releaseDeadline = Date.now() + 2_000;
     while (true) {
-      try { await rename(lock, tombstone); break; }
-      catch (error) {
-        if (missing(error) || (error as NodeJS.ErrnoException).code === "EEXIST") return;
-        if ((error as NodeJS.ErrnoException).code === "EPERM" && Date.now() < releaseDeadline) {
-          const current = await this.readJson(path.join(lock, "owner.json"), 16_384).catch(() => undefined) as { ownerToken?: unknown } | undefined;
-          if (current?.ownerToken !== ownerToken) return;
-          await wait(25); continue;
+      try {
+        await rename(lock, tombstone);
+        break;
+      } catch (error) {
+        if (missing(error) || (error as NodeJS.ErrnoException).code === 'EEXIST') {
+          return;
+        }
+        if ((error as NodeJS.ErrnoException).code === 'EPERM' && Date.now() < releaseDeadline) {
+          const current = (await this.readJson(path.join(lock, 'owner.json'), 16_384).catch(
+            () => undefined,
+          )) as { ownerToken?: unknown } | undefined;
+          if (current?.ownerToken !== ownerToken) {
+            return;
+          }
+          await wait(25);
+          continue;
         }
         throw error;
       }
     }
     await rm(tombstone, { recursive: true, force: true });
   }
-  private async removeStaleLock(lock: string, ownerToken: string, ownerPid: number): Promise<boolean> {
-    if (await this.isPidAlive(ownerPid) !== false) return false;
+  private async removeStaleLock(
+    lock: string,
+    ownerToken: string,
+    ownerPid: number,
+  ): Promise<boolean> {
+    if ((await this.isPidAlive(ownerPid)) !== false) {
+      return false;
+    }
     try {
-      const owner = await this.readJson(path.join(lock, "owner.json"), 16_384);
-      if (!owner || typeof owner !== "object" || (owner as { ownerToken?: unknown; pid?: unknown }).ownerToken !== ownerToken || (owner as { pid?: unknown }).pid !== ownerPid || await this.isPidAlive(ownerPid) !== false) return false;
+      const owner = await this.readJson(path.join(lock, 'owner.json'), 16_384);
+      if (
+        !owner ||
+        typeof owner !== 'object' ||
+        (owner as { ownerToken?: unknown; pid?: unknown }).ownerToken !== ownerToken ||
+        (owner as { pid?: unknown }).pid !== ownerPid ||
+        (await this.isPidAlive(ownerPid)) !== false
+      ) {
+        return false;
+      }
       const tombstone = `${lock}.dead-${ownerToken}-${randomUUID()}`;
       await rename(lock, tombstone);
       await rm(tombstone, { recursive: true, force: true });
       return true;
-    } catch (error) { if (missing(error)) return false; throw error; }
+    } catch (error) {
+      if (missing(error)) {
+        return false;
+      }
+      throw error;
+    }
   }
-  private async withLock<T>(
-    file: string,
-    action: () => Promise<T>,
-  ): Promise<T> {
+  private async withLock<T>(file: string, action: () => Promise<T>): Promise<T> {
     await mkdir(path.dirname(file), { recursive: true });
     const lock = `${file}.lock`,
       deadline = this.now() + this.lockWaitMs,
@@ -311,14 +406,25 @@ export class SessionStore {
         await mkdir(lock);
         try {
           const marker = this.initializer(lock, ownerToken);
-          await writeFile(marker, JSON.stringify({ pid: this.processId, token: ownerToken }), { flag: "wx", mode: 0o600 });
+          await writeFile(marker, JSON.stringify({ pid: this.processId, token: ownerToken }), {
+            flag: 'wx',
+            mode: 0o600,
+          });
           await this.afterLockInitializerCreated?.(lock, ownerToken);
-          if (!await this.ownsInitializer(lock, ownerToken))
-            throw new SessionError("SESSION_LOCK_OWNERSHIP_LOST", "session lock initialization was superseded");
+          if (!(await this.ownsInitializer(lock, ownerToken))) {
+            throw new SessionError(
+              'SESSION_LOCK_OWNERSHIP_LOST',
+              'session lock initialization was superseded',
+            );
+          }
           const acquiredAt = this.now();
-          await writeFile(path.join(lock, "owner.json"), JSON.stringify({ pid: this.processId, ownerToken, acquiredAt }), { flag: "wx", mode: 0o600 });
+          await writeFile(
+            path.join(lock, 'owner.json'),
+            JSON.stringify({ pid: this.processId, ownerToken, acquiredAt }),
+            { flag: 'wx', mode: 0o600 },
+          );
           const lease = path.join(lock, `lease-${ownerToken}`);
-          await writeFile(lease, "", { flag: "wx", mode: 0o600 });
+          await writeFile(lease, '', { flag: 'wx', mode: 0o600 });
           await utimes(lease, acquiredAt / 1000, acquiredAt / 1000);
           await rm(marker);
         } catch (error) {
@@ -327,28 +433,53 @@ export class SessionStore {
         }
         break;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        const owner = await this.readJson(path.join(lock, "owner.json"), 16_384).catch(() => undefined) as { ownerToken?: unknown; pid?: unknown } | undefined;
-        if (owner && typeof owner.ownerToken === "string" && Number.isSafeInteger(owner.pid) && (owner.pid as number) > 0 && await this.removeStaleLock(lock, owner.ownerToken, owner.pid as number)) continue;
-        if ((!owner || typeof owner.ownerToken !== "string") && await this.removeOrphanedInitialization(lock)) continue;
-        if (this.now() >= deadline)
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+          throw error;
+        }
+        const owner = (await this.readJson(path.join(lock, 'owner.json'), 16_384).catch(
+          () => undefined,
+        )) as { ownerToken?: unknown; pid?: unknown } | undefined;
+        if (
+          owner &&
+          typeof owner.ownerToken === 'string' &&
+          Number.isSafeInteger(owner.pid) &&
+          (owner.pid as number) > 0 &&
+          (await this.removeStaleLock(lock, owner.ownerToken, owner.pid as number))
+        ) {
+          continue;
+        }
+        if (
+          (!owner || typeof owner.ownerToken !== 'string') &&
+          (await this.removeOrphanedInitialization(lock))
+        ) {
+          continue;
+        }
+        if (this.now() >= deadline) {
           throw new SessionError(
-            "SESSION_LOCK_TIMEOUT",
-            "timed out waiting for session transaction lock",
+            'SESSION_LOCK_TIMEOUT',
+            'timed out waiting for session transaction lock',
           );
+        }
         await wait(10);
       }
     }
     let heartbeatFailure: unknown;
     const lease = path.join(lock, `lease-${ownerToken}`);
-    const heartbeat = setInterval(() => {
-      const timestamp = this.now() / 1000;
-      // utimes is successor-safe: unlike a write, it cannot recreate a lease after takeover.
-      void utimes(lease, timestamp, timestamp).catch(error => { heartbeatFailure = error; });
-    }, Math.max(10, Math.floor(this.staleLockMs / 3)));
+    const heartbeat = setInterval(
+      () => {
+        const timestamp = this.now() / 1000;
+        // utimes is successor-safe: unlike a write, it cannot recreate a lease after takeover.
+        void utimes(lease, timestamp, timestamp).catch((error) => {
+          heartbeatFailure = error;
+        });
+      },
+      Math.max(10, Math.floor(this.staleLockMs / 3)),
+    );
     try {
       const result = await action();
-      if (heartbeatFailure) throw heartbeatFailure;
+      if (heartbeatFailure) {
+        throw heartbeatFailure;
+      }
       return result;
     } finally {
       clearInterval(heartbeat);
@@ -356,15 +487,12 @@ export class SessionStore {
     }
   }
 
-  async read(
-    identity: IdentityV1,
-    runtime: RuntimeName,
-  ): Promise<SessionRegistryV1> {
+  async read(identity: IdentityV1, runtime: RuntimeName): Promise<SessionRegistryV1> {
     const file = this.registryPath(identity, runtime);
     try {
       return parseSessionRegistryV1(await this.readJson(file));
     } catch (error) {
-      if (missing(error))
+      if (missing(error)) {
         return {
           schemaVersion: 1,
           identity,
@@ -372,11 +500,11 @@ export class SessionStore {
           records: [],
           recentEventIds: [],
         };
-      if (error instanceof SessionError) throw error;
-      throw new SessionError(
-        "SESSION_REGISTRY_CORRUPT",
-        `session registry is corrupt: ${file}`,
-      );
+      }
+      if (error instanceof SessionError) {
+        throw error;
+      }
+      throw new SessionError('SESSION_REGISTRY_CORRUPT', `session registry is corrupt: ${file}`);
     }
   }
   async transaction<T>(
@@ -397,11 +525,9 @@ export class SessionStore {
         valid.identity.domain !== identity.domain ||
         valid.identity.name !== identity.name ||
         valid.runtime !== runtime
-      )
-        throw new SessionError(
-          "SESSION_PARTITION_MISMATCH",
-          "transaction changed its partition",
-        );
+      ) {
+        throw new SessionError('SESSION_PARTITION_MISMATCH', 'transaction changed its partition');
+      }
       await this.atomicJson(file, valid);
       return changed.result;
     });
@@ -411,49 +537,73 @@ export class SessionStore {
     return this.transaction(valid.identity, valid.runtime, (registry) => {
       const records = [...registry.records],
         index = records.findIndex((item) => item.recordId === valid.recordId);
-      if (index === -1) records.push(valid);
-      else records[index] = valid;
+      if (index === -1) {
+        records.push(valid);
+      } else {
+        records[index] = valid;
+      }
       return { registry: { ...registry, records }, result: valid };
     });
   }
   async partitions(): Promise<SessionRegistryV1[]> {
-    const root = path.join(this.stateRoot, "sessions", "v1", "identities"),
+    const root = path.join(this.stateRoot, 'sessions', 'v1', 'identities'),
       result: SessionRegistryV1[] = [];
     let domains: string[];
     try {
       domains = await readdir(root);
     } catch (error) {
-      if (missing(error)) return [];
+      if (missing(error)) {
+        return [];
+      }
       throw error;
     }
     for (const domainEntry of domains.sort()) {
-      if (!domainEntry.startsWith("d-")) continue;
+      if (!domainEntry.startsWith('d-')) {
+        continue;
+      }
       const domainPath = path.join(root, domainEntry);
-      if ((await lstat(domainPath)).isSymbolicLink()) continue;
+      if ((await lstat(domainPath)).isSymbolicLink()) {
+        continue;
+      }
       for (const nameEntry of (await readdir(domainPath)).sort()) {
-        if (!nameEntry.startsWith("n-")) continue;
+        if (!nameEntry.startsWith('n-')) {
+          continue;
+        }
         const identity = {
           domain: decode(domainEntry.slice(2)),
           name: decode(nameEntry.slice(2)),
         };
-        for (const runtime of ["claude", "pi"] as const) {
+        for (const runtime of ['claude', 'pi'] as const) {
           const registry = await this.read(identity, runtime);
-          if (registry.records.length) result.push(registry);
+          if (registry.records.length) {
+            result.push(registry);
+          }
         }
       }
     }
     return result;
   }
   async listNativeBindings(): Promise<NativeBindingRecordV1[]> {
-    const directory = path.join(this.stateRoot, "sessions", "v1", "private", "native-bindings");
+    const directory = path.join(this.stateRoot, 'sessions', 'v1', 'private', 'native-bindings');
     let files: string[];
-    try { files = await readdir(directory); }
-    catch (error) { if (missing(error)) return []; throw error; }
+    try {
+      files = await readdir(directory);
+    } catch (error) {
+      if (missing(error)) {
+        return [];
+      }
+      throw error;
+    }
     const result: NativeBindingRecordV1[] = [];
     for (const file of files.sort()) {
-      if (!file.endsWith(".json")) continue;
-      const full = path.join(directory, file), info = await lstat(full);
-      if (info.isSymbolicLink() || !info.isFile()) continue;
+      if (!file.endsWith('.json')) {
+        continue;
+      }
+      const full = path.join(directory, file),
+        info = await lstat(full);
+      if (info.isSymbolicLink() || !info.isFile()) {
+        continue;
+      }
       result.push(parseNativeBindingRecordV1(await this.readJson(full)));
     }
     return result;
@@ -466,131 +616,131 @@ export class SessionStore {
   }
   async readNativeBinding(ref: string): Promise<NativeBindingRecordV1> {
     try {
-      return parseNativeBindingRecordV1(
-        await this.readJson(this.nativeBindingPath(ref)),
-      );
+      return parseNativeBindingRecordV1(await this.readJson(this.nativeBindingPath(ref)));
     } catch (error) {
-      if (missing(error))
+      if (missing(error)) {
         throw new SessionError(
-          "SESSION_NATIVE_BINDING_NOT_FOUND",
-          "recorded native binding was not found",
+          'SESSION_NATIVE_BINDING_NOT_FOUND',
+          'recorded native binding was not found',
         );
+      }
       throw error;
     }
   }
   async listLifecycleBindingIds(): Promise<string[]> {
-    const directory = path.join(
-      this.stateRoot,
-      "sessions",
-      "v1",
-      "private",
-      "lifecycle-bindings",
-    );
+    const directory = path.join(this.stateRoot, 'sessions', 'v1', 'private', 'lifecycle-bindings');
     let files: string[];
     try {
       files = await readdir(directory);
     } catch (error) {
-      if (missing(error)) return [];
+      if (missing(error)) {
+        return [];
+      }
       throw error;
     }
     const result: string[] = [];
     for (const file of files.sort()) {
-      if (!file.endsWith(".json")) continue;
+      if (!file.endsWith('.json')) {
+        continue;
+      }
       const full = path.join(directory, file);
       const info = await lstat(full);
-      if (info.isSymbolicLink() || !info.isFile()) continue;
+      if (info.isSymbolicLink() || !info.isFile()) {
+        continue;
+      }
       result.push(decode(file.slice(0, -5)));
     }
     return result;
   }
-  async saveLifecycleBinding(
-    value: SessionLifecycleBindingRecordV1,
-  ): Promise<void> {
+  async saveLifecycleBinding(value: SessionLifecycleBindingRecordV1): Promise<void> {
     const valid = parseLifecycleBindingRecordV1(value);
-    await this.withLock(
-      this.lifecycleBindingPath(valid.binding.bindingId),
-      () =>
-        this.atomicJson(
-          this.lifecycleBindingPath(valid.binding.bindingId),
-          valid,
-        ),
+    await this.withLock(this.lifecycleBindingPath(valid.binding.bindingId), () =>
+      this.atomicJson(this.lifecycleBindingPath(valid.binding.bindingId), valid),
     );
   }
-  async readLifecycleBinding(
-    bindingId: string,
-  ): Promise<SessionLifecycleBindingRecordV1> {
+  async readLifecycleBinding(bindingId: string): Promise<SessionLifecycleBindingRecordV1> {
     try {
       return parseLifecycleBindingRecordV1(
         await this.readJson(this.lifecycleBindingPath(bindingId)),
       );
     } catch (error) {
-      if (missing(error))
+      if (missing(error)) {
         throw new SessionError(
-          "SESSION_LIFECYCLE_BINDING_NOT_FOUND",
-          "lifecycle binding was not found",
+          'SESSION_LIFECYCLE_BINDING_NOT_FOUND',
+          'lifecycle binding was not found',
         );
+      }
       throw error;
     }
   }
   async saveCapture(value: SessionCaptureV1): Promise<void> {
     const valid = parseSessionCaptureV1(value);
-    await this.withLock(
-      this.capturePath(valid.identity, valid.runtime, valid.captureId),
-      () =>
-        this.atomicJson(
-          this.capturePath(valid.identity, valid.runtime, valid.captureId),
-          valid,
-        ),
+    await this.withLock(this.capturePath(valid.identity, valid.runtime, valid.captureId), () =>
+      this.atomicJson(this.capturePath(valid.identity, valid.runtime, valid.captureId), valid),
     );
   }
   async serializeImport<T>(digest: string, action: () => Promise<T>): Promise<T> {
     return this.withLock(`${this.receiptPath(digest)}.transaction`, action);
   }
   async readImportJournal(digest: string): Promise<LegacyImportJournalV1 | undefined> {
-    try { const value=parseLegacyImportJournalV1(await this.readJson(this.journalPath(digest))); if(value.confirmationDigest!==digest) throw new SessionError("SESSION_INVALID_SCHEMA","journal digest does not match its file"); return value; }
-    catch(error){if(missing(error))return undefined;throw error;}
-  }
-  async saveImportJournal(digest: string, value: LegacyImportJournalV1): Promise<void> {
-    const valid=parseLegacyImportJournalV1(value);if(valid.confirmationDigest!==digest)throw new SessionError("SESSION_INVALID_SCHEMA","journal digest does not match its file");await this.atomicJson(this.journalPath(digest),valid);
-  }
-  async removeImportJournal(digest: string): Promise<void> { await rm(this.journalPath(digest),{force:true}); }
-  async readReceipt(digest: string): Promise<LegacyImportReceiptV1 | undefined> {
     try {
-      const receipt = parseLegacyImportReceiptV1(
-        await this.readJson(this.receiptPath(digest)),
-      );
-      if (receipt.confirmationDigest !== digest)
-        throw new SessionError(
-          "SESSION_INVALID_SCHEMA",
-          "receipt confirmation digest does not match its file",
-        );
-      return receipt;
+      const value = parseLegacyImportJournalV1(await this.readJson(this.journalPath(digest)));
+      if (value.confirmationDigest !== digest) {
+        throw new SessionError('SESSION_INVALID_SCHEMA', 'journal digest does not match its file');
+      }
+      return value;
     } catch (error) {
-      if (missing(error)) return undefined;
+      if (missing(error)) {
+        return undefined;
+      }
       throw error;
     }
   }
-  async saveReceipt(
-    digest: string,
-    value: LegacyImportReceiptV1,
-  ): Promise<LegacyImportReceiptV1> {
+  async saveImportJournal(digest: string, value: LegacyImportJournalV1): Promise<void> {
+    const valid = parseLegacyImportJournalV1(value);
+    if (valid.confirmationDigest !== digest) {
+      throw new SessionError('SESSION_INVALID_SCHEMA', 'journal digest does not match its file');
+    }
+    await this.atomicJson(this.journalPath(digest), valid);
+  }
+  async removeImportJournal(digest: string): Promise<void> {
+    await rm(this.journalPath(digest), { force: true });
+  }
+  async readReceipt(digest: string): Promise<LegacyImportReceiptV1 | undefined> {
+    try {
+      const receipt = parseLegacyImportReceiptV1(await this.readJson(this.receiptPath(digest)));
+      if (receipt.confirmationDigest !== digest) {
+        throw new SessionError(
+          'SESSION_INVALID_SCHEMA',
+          'receipt confirmation digest does not match its file',
+        );
+      }
+      return receipt;
+    } catch (error) {
+      if (missing(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+  async saveReceipt(digest: string, value: LegacyImportReceiptV1): Promise<LegacyImportReceiptV1> {
     const valid = parseLegacyImportReceiptV1(value);
-    if (valid.confirmationDigest !== digest)
+    if (valid.confirmationDigest !== digest) {
       throw new SessionError(
-        "SESSION_INVALID_SCHEMA",
-        "receipt confirmation digest does not match its file",
+        'SESSION_INVALID_SCHEMA',
+        'receipt confirmation digest does not match its file',
       );
+    }
     return this.withLock(this.receiptPath(digest), async () => {
       const existing = await this.readReceipt(digest);
-      if (existing !== undefined) return existing;
+      if (existing !== undefined) {
+        return existing;
+      }
       await this.atomicJson(this.receiptPath(digest), valid);
       return value;
     });
   }
-  async readBoundedRegularJson(
-    file: string,
-    maximumBytes: number,
-  ): Promise<unknown> {
+  async readBoundedRegularJson(file: string, maximumBytes: number): Promise<unknown> {
     return this.readJson(file, maximumBytes);
   }
 }

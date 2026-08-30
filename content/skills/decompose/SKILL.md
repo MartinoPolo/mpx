@@ -1,6 +1,6 @@
 ---
 name: decompose
-description: "Splits a large source file or a folder of them into logical modules while preserving behavior."
+description: 'Splits a large source file or a folder of them into logical modules while preserving behavior.'
 metadata:
   mpx:
     skillPacks: [work]

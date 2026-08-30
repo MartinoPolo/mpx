@@ -1,6 +1,6 @@
 ---
 name: design-brief
-description: "Writes a standalone design brief for a UI component — surrounding context, exhaustive requirements and states, and a component reuse map — then gates dependent tracker issues/tasks with a Design needed label. Use for a design brief, design spec, component spec, or UI spec."
+description: 'Writes a standalone design brief for a UI component — surrounding context, exhaustive requirements and states, and a component reuse map — then gates dependent tracker issues/tasks with a Design needed label. Use for a design brief, design spec, component spec, or UI spec.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -54,7 +54,7 @@ header heights. Record them as concrete percentages or pixels.
 **What is settled** — which surrounding elements are implemented or designed to final state (the
 mockup reproduces those faithfully) and which are still open.
 
-Write the findings into the brief's *Surrounding Context* section.
+Write the findings into the brief's _Surrounding Context_ section.
 
 ## Step 3: Inventory components to reuse
 
@@ -67,7 +67,7 @@ Be specific: "use `Button variant='ghost'` size='icon'", not "add a button".
 ## Step 4: Research missing primitives
 
 For a needed pattern the inventory lacks, spawn `mp-context7-docs-fetcher` against the project's
-component library. List the result under *Components to Adopt* with the reason nothing existing
+component library. List the result under _Components to Adopt_ with the reason nothing existing
 suffices. Installation is deferred to `mpx design-refine`.
 
 ## Step 5: Draft the brief

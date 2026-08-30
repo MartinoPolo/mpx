@@ -1,6 +1,6 @@
 ---
 name: suppression-audit
-description: "Repo-wide audit of code-quality suppressions (eslint-disable, ts-ignore, fallow-ignore) that fixes unjustified ones and opens a PR."
+description: 'Repo-wide audit of code-quality suppressions (eslint-disable, ts-ignore, fallow-ignore) that fixes unjustified ones and opens a PR.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -13,14 +13,14 @@ Audit all code quality suppressions and lint config rule changes across the repo
 
 ## Suppression Types
 
-| Type | Pattern | Where |
-|------|---------|-------|
-| ESLint | `eslint-disable`, `eslint-disable-next-line`, `eslint-disable-line` | Source files |
-| Fallow | `fallow-ignore-next-line`, `fallow-ignore-file` | Source files |
-| Svelte | `svelte-ignore` | `.svelte` files |
-| TypeScript | `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck` | `.ts`/`.svelte` files |
-| Oxlint | `oxlint-disable`, rules set to `"off"` | Source + config |
-| Config rules | Rules set to `"off"`, `"warn"`, or `0` | `eslint.config.*`, `.oxlintrc.*` |
+| Type         | Pattern                                                             | Where                            |
+| ------------ | ------------------------------------------------------------------- | -------------------------------- |
+| ESLint       | `eslint-disable`, `eslint-disable-next-line`, `eslint-disable-line` | Source files                     |
+| Fallow       | `fallow-ignore-next-line`, `fallow-ignore-file`                     | Source files                     |
+| Svelte       | `svelte-ignore`                                                     | `.svelte` files                  |
+| TypeScript   | `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`                     | `.ts`/`.svelte` files            |
+| Oxlint       | `oxlint-disable`, rules set to `"off"`                              | Source + config                  |
+| Config rules | Rules set to `"off"`, `"warn"`, or `0`                              | `eslint.config.*`, `.oxlintrc.*` |
 
 ## Process
 
@@ -49,17 +49,20 @@ Spawn an `Explore` sub-agent (breadth: medium, no `model` param) to find and rea
 For each suppression found in Steps 2-3, classify it:
 
 **REMOVE** — suppression is unjustified, a straightforward fix exists:
+
 - Rule violation is easy to fix (rename, restructure, add type)
 - Suppression was added as a shortcut instead of fixing the issue
 - The suppressed rule no longer triggers (code changed since suppression was added)
 
 **KEEP** — suppression is justified:
+
 - Framework/library limitation requires it (e.g., Svelte a11y for intentionally non-standard interactions)
 - Fix would require major refactoring disproportionate to the benefit
 - Rule is genuinely wrong for the context (e.g., `no-undef` disabled globally in TypeScript projects)
 - Test files where the suppressed pattern is the thing being tested
 
 **UPGRADE** — warning should be an error:
+
 - Config recently downgraded a rule from error to warn without clear reason
 - Rule removal weakens quality gates
 

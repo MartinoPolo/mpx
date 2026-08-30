@@ -1,6 +1,6 @@
 ---
 name: commit
-description: "Stages and commits changes in conventional commit format."
+description: 'Stages and commits changes in conventional commit format.'
 metadata:
   mpx:
     skillPacks: [work]

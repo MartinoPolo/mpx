@@ -34,9 +34,37 @@ The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `
     "pi": [{ "path": "runtimes/example", "role": "extension" }]
   },
   "external": {
-    "gitRemotes": [{ "id": "repo-remotes", "request": { "repository": "C:\\_MP_projects\\repo", "proposals": [{ "action": "set-url", "remote": "origin", "url": "git@github.com:owner/repo.git" }] } }],
-    "obsidian": [{ "id": "notes", "request": { "reviewedFiles": ["Index.md"], "changes": [{ "action": "write", "path": "Index.md", "content": "# Index", "purpose": "backlinks" }] } }],
-    "raycast": [{ "id": "raycast-review", "derivative": { "encrypted": true, "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }] } }]
+    "gitRemotes": [
+      {
+        "id": "repo-remotes",
+        "request": {
+          "repository": "C:\\_MP_projects\\repo",
+          "proposals": [
+            { "action": "set-url", "remote": "origin", "url": "git@github.com:owner/repo.git" }
+          ]
+        }
+      }
+    ],
+    "obsidian": [
+      {
+        "id": "notes",
+        "request": {
+          "reviewedFiles": ["Index.md"],
+          "changes": [
+            { "action": "write", "path": "Index.md", "content": "# Index", "purpose": "backlinks" }
+          ]
+        }
+      }
+    ],
+    "raycast": [
+      {
+        "id": "raycast-review",
+        "derivative": {
+          "encrypted": true,
+          "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }]
+        }
+      }
+    ]
   }
 }
 ```
@@ -60,21 +88,27 @@ Raycast plans require a separate strict post-export evidence file:
   "schemaVersion": 1,
   "kind": "raycast-post-export-evidence",
   "integrations": [
-    { "id": "raycast-review", "derivative": { "encrypted": true, "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }] } }
+    {
+      "id": "raycast-review",
+      "derivative": {
+        "encrypted": true,
+        "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }]
+      }
+    }
   ]
 }
 ```
 
 Integration IDs are globally unique and sorted. Every entry must name a Raycast integration in the external plan; unknown and non-Raycast IDs are rejected, and every Raycast plan requires evidence. Git and Obsidian use no supplemental evidence because their exact plans already bind the inspected repository/files and expected post-change state.
 
-| Integration/action | Inspection boundary | Plan and confirmation | Apply classification | Post-change verification |
-|---|---|---|---|---|
-| Git remotes | One explicitly requested repository under an approved `MPX_PROJECTS`, `MPX_WORK`, or `MPX_CLONED` root; argv-only `git remote -v`; exact `.git/config` bytes | Exact `git remote add`, `set-url`, or `rename` argv; one digest per repository; unrelated remotes retained | Confirmation required; manual execution | Run argv-only `git remote -v` in that same repository and compare with the reviewed proposal |
-| Obsidian MPX content | Only the exact reviewed relative file list below `${MPX_OBSIDIAN_VAULT}/MPX`; no vault scan or unrelated note reads | Byte/absence snapshots for every backlink, query, CSS, write, source, and rename destination; one atomic batch digest | Confirmation required; manual execution | Re-open only reviewed paths; restore the complete snapshot set if any batch member fails |
-| Raycast | A user-supplied, encrypted, strict derivative containing only IDs, categories, and reviewed commands; unknown/private/credential fields rejected | ID/category-preserving encrypted plan with manual instructions | Manual-only; automatic import is forbidden | User creates a fresh encrypted post-export derivative; compare exact IDs/categories |
-| Authentication login | No credential inspection | Provider-native instructions only | Manual-only | User/provider confirms account route |
-| Hosted repository rename | No automatic mutation | Exact provider review checklist | Manual-only | User verifies old/new repository routes and redirects |
-| Export import | Sanitized derivative only | Exact reviewed export identity | Manual-only | Fresh post-export derivative comparison |
+| Integration/action       | Inspection boundary                                                                                                                                          | Plan and confirmation                                                                                                 | Apply classification                       | Post-change verification                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Git remotes              | One explicitly requested repository under an approved `MPX_PROJECTS`, `MPX_WORK`, or `MPX_CLONED` root; argv-only `git remote -v`; exact `.git/config` bytes | Exact `git remote add`, `set-url`, or `rename` argv; one digest per repository; unrelated remotes retained            | Confirmation required; manual execution    | Run argv-only `git remote -v` in that same repository and compare with the reviewed proposal |
+| Obsidian MPX content     | Only the exact reviewed relative file list below `${MPX_OBSIDIAN_VAULT}/MPX`; no vault scan or unrelated note reads                                          | Byte/absence snapshots for every backlink, query, CSS, write, source, and rename destination; one atomic batch digest | Confirmation required; manual execution    | Re-open only reviewed paths; restore the complete snapshot set if any batch member fails     |
+| Raycast                  | A user-supplied, encrypted, strict derivative containing only IDs, categories, and reviewed commands; unknown/private/credential fields rejected             | ID/category-preserving encrypted plan with manual instructions                                                        | Manual-only; automatic import is forbidden | User creates a fresh encrypted post-export derivative; compare exact IDs/categories          |
+| Authentication login     | No credential inspection                                                                                                                                     | Provider-native instructions only                                                                                     | Manual-only                                | User/provider confirms account route                                                         |
+| Hosted repository rename | No automatic mutation                                                                                                                                        | Exact provider review checklist                                                                                       | Manual-only                                | User verifies old/new repository routes and redirects                                        |
+| Export import            | Sanitized derivative only                                                                                                                                    | Exact reviewed export identity                                                                                        | Manual-only                                | Fresh post-export derivative comparison                                                      |
 
 Paths are canonicalized beneath approved roots, and regular files/directories are required. Traversal, symlink, special-entry, duplicate/unsorted intent, unknown-field, and shell/control-character inputs fail closed. Shell command strings are never constructed. Existing or foreign files outside the exact reviewed scope are neither read nor changed.
 
@@ -90,14 +124,14 @@ Static MCP registrations contain only a domain-qualified label, executable path/
 
 ## Simulation matrix
 
-| Machine | Scenario | Expected result |
-|---|---|---|
-| clean | publish/apply twice | one immutable release; side effects converge |
-| existing | unrelated native config, credentials, roots, and sessions | byte-identical and untouched |
-| existing | same-name foreign or receipt-owned drift | refuse before mutation |
-| either | observation changes after plan | `INSTALL_OBSERVATION_CHANGED`; no side effect |
-| either | wrong confirmation digest | `INSTALL_CONFIRMATION_MISMATCH`; no side effect |
-| either | injected failure before/after each operation | reverse restoration from snapshots; native state byte-identical |
-| either | interrupted applying journal | recovery restores snapshots before retry |
-| installed | runner link, special file, wrong path/size/hash/receipt | authority fails closed |
-| installed | uninstall with foreign/drifted owned target | refuse and preserve target |
+| Machine   | Scenario                                                  | Expected result                                                 |
+| --------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| clean     | publish/apply twice                                       | one immutable release; side effects converge                    |
+| existing  | unrelated native config, credentials, roots, and sessions | byte-identical and untouched                                    |
+| existing  | same-name foreign or receipt-owned drift                  | refuse before mutation                                          |
+| either    | observation changes after plan                            | `INSTALL_OBSERVATION_CHANGED`; no side effect                   |
+| either    | wrong confirmation digest                                 | `INSTALL_CONFIRMATION_MISMATCH`; no side effect                 |
+| either    | injected failure before/after each operation              | reverse restoration from snapshots; native state byte-identical |
+| either    | interrupted applying journal                              | recovery restores snapshots before retry                        |
+| installed | runner link, special file, wrong path/size/hash/receipt   | authority fails closed                                          |
+| installed | uninstall with foreign/drifted owned target               | refuse and preserve target                                      |

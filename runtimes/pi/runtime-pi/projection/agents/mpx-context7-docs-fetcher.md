@@ -1,12 +1,13 @@
 ---
 name: mpx-context7-docs-fetcher
-description: "Fetches up-to-date library documentation via Context7 MCP. Use for library API questions, framework best practices, package-specific patterns."
+description: 'Fetches up-to-date library documentation via Context7 MCP. Use for library API questions, framework best practices, package-specific patterns.'
 model: openai-codex/gpt-5.6-luna
 thinking: low
 tools: read,mcp
 output_schema: text
 
 ---
+
 # Context7 Documentation Agent
 
 Prevents hallucinated APIs by fetching up-to-date library documentation before answering.

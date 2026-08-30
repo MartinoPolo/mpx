@@ -1,1 +1,23 @@
-{"schemaVersion":1,"project":{"id":"phase-h/coupled"},"repository":{"provider":"generic","remote":"origin"},"development":{"services":{"web":{"scope":"checkout","port":{"mode":"managed","preferred":8100,"family":"app"},"environmentVariable":"WEB_URL","protocol":"http","start":{"type":"package-script","script":"dev:web"}},"api":{"scope":"checkout","port":{"mode":"managed","preferred":8101,"family":"app"},"environmentVariable":"API_URL","protocol":"http","start":{"type":"package-script","script":"dev:api"}}}}}
+{
+  "schemaVersion": 1,
+  "project": { "id": "phase-h/coupled" },
+  "repository": { "provider": "generic", "remote": "origin" },
+  "development": {
+    "services": {
+      "web": {
+        "scope": "checkout",
+        "port": { "mode": "managed", "preferred": 8100, "family": "app" },
+        "environmentVariable": "WEB_URL",
+        "protocol": "http",
+        "start": { "type": "package-script", "script": "dev:web" }
+      },
+      "api": {
+        "scope": "checkout",
+        "port": { "mode": "managed", "preferred": 8101, "family": "app" },
+        "environmentVariable": "API_URL",
+        "protocol": "http",
+        "start": { "type": "package-script", "script": "dev:api" }
+      }
+    }
+  }
+}

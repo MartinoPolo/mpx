@@ -6,12 +6,12 @@
 
 Identity is always explicit, including when supplied by a short alias. CWD classification never chooses identity or grants access. Aliases contribute only runtime and identity:
 
-| Alias | Runtime | Identity |
-| --- | --- | --- |
-| `cc` | Claude | `personal` |
-| `ccw` | Claude | `work` |
-| `pi` | Pi | `personal` |
-| `piw` | Pi | `work` |
+| Alias | Runtime | Identity   |
+| ----- | ------- | ---------- |
+| `cc`  | Claude  | `personal` |
+| `ccw` | Claude  | `work`     |
+| `pi`  | Pi      | `personal` |
+| `piw` | Pi      | `work`     |
 
 Mode, skill policy, content scope, executor, workspace, and network policy still resolve through direct input, project default, longest matching content-scope default, then safe built-ins. Alias expansion does not add a preset, mode, policy, or grant. Project skills are resolved under the same policy and immutable artifact bindings as canonical skills; project location alone grants nothing.
 

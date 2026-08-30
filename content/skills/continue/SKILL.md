@@ -1,11 +1,12 @@
 ---
 name: continue
-description: "Recovers interrupted child work and managed development services, then continues the active task."
+description: 'Recovers interrupted child work and managed development services, then continues the active task.'
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # Continue and Recover
 
 Recover work after a runtime interruption without repeating work that is already durable. If the invocation input names a focus or task, assess and recover it first.

@@ -1,7 +1,8 @@
 ---
 name: mpx-chrome-devtools-tester
-description: "Exploratory browser click-through, console/network inspection, and performance audits via chrome-devtools MCP. Returns evidence-based findings."
+description: 'Exploratory browser click-through, console/network inspection, and performance audits via chrome-devtools MCP. Returns evidence-based findings.'
 ---
+
 # chrome-devtools-tester Agent
 
 Interactive exploratory browser testing. Reports findings only, never edits source.

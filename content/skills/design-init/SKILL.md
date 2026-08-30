@@ -66,16 +66,16 @@ OKLCH colors for perceptual uniformity. Google Fonts `@import` at the top.
 
 ```css
 :root {
-	/* Typography */
-	--font-sans: 'Font Name', system-ui, sans-serif;
-	--font-mono: 'Mono Font', ui-monospace, monospace;
+  /* Typography */
+  --font-sans: 'Font Name', system-ui, sans-serif;
+  --font-mono: 'Mono Font', ui-monospace, monospace;
 
-	/* Colors */
-	--color-primary: oklch(...);
-	/* … full semantic set … */
+  /* Colors */
+  --color-primary: oklch(...);
+  /* … full semantic set … */
 
-	/* Spacing scale, radii, shadows, motion */
-	--space-1: 4px;
+  /* Spacing scale, radii, shadows, motion */
+  --space-1: 4px;
 }
 
 /* Dark mode overrides, when the project supports it */

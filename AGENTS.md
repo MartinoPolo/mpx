@@ -19,6 +19,7 @@ MPX is a private-first TypeScript monorepo that provides one CLI and shared cont
 - Keep packages private unless publication is explicitly designed and validated.
 - Resolve cross-package behavior through workspace APIs, never absolute repository imports.
 - Add narrow tests for domain behavior and malicious inputs.
+- Separate independent top-level constants, types, functions, and test scenarios with one blank line; tightly coupled declarations may remain grouped.
 - Preserve existing installations and data until the migration acceptance gates pass.
 
 ## Runtime content

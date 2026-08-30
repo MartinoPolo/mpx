@@ -1,11 +1,12 @@
 ---
 name: raycast-config
-description: "Decrypts a Raycast .rayconfig export, audits quicklinks for stale targets and orphaned aliases, adds or repairs entries under fixed naming rules, and rebuilds an importable config."
+description: 'Decrypts a Raycast .rayconfig export, audits quicklinks for stale targets and orphaned aliases, adds or repairs entries under fixed naming rules, and rebuilds an importable config.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # Raycast config
 
 Read and rewrite the Raycast quicklink set — including aliases and hotkeys, which no
@@ -16,11 +17,11 @@ Format spec, record schemas, import semantics and the naming rules:
 
 Scripts live in `./scripts/`:
 
-| Script | Purpose |
-| --- | --- |
-| `rayconfig.mjs` | `decode` / `encode` a `.rayconfig` |
-| `audit.mjs` | Report stale targets, orphan aliases, duplicates |
-| `passphrase.ps1` | Store and read the passphrase as a DPAPI secret |
+| Script           | Purpose                                          |
+| ---------------- | ------------------------------------------------ |
+| `rayconfig.mjs`  | `decode` / `encode` a `.rayconfig`               |
+| `audit.mjs`      | Report stale targets, orphan aliases, duplicates |
+| `passphrase.ps1` | Store and read the passphrase as a DPAPI secret  |
 
 ## Process
 

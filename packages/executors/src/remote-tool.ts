@@ -1,21 +1,199 @@
-import { ExecutionError } from "./index.js";
-const SHA=/^[a-f0-9]{64}$/u;
-const ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/u;
-export interface RemoteCall {readonly requestId:string;readonly toolPath:string;readonly inputSha256:string;readonly requestSha256:string;readonly capabilitySha256:string;readonly signal?:AbortSignal}
-export interface RemoteResult {readonly schemaVersion:1;readonly kind:"result";readonly requestId:string;readonly sequence:number;readonly requestSha256:string;readonly status:"ok"|"error";readonly outputSha256:string;readonly outputBytes:number;readonly errorCode:string|null}
-function fail(code:string,message:string):never{throw new ExecutionError(code,message)}
-function parseLine(text:string,maximum:number):Record<string,unknown>{if(Buffer.byteLength(text)>maximum||!text.endsWith("\n")||text.slice(0,-1).includes("\n"))fail("REMOTE_FRAME_INVALID","Remote response must be one bounded NDJSON frame.");try{const value=JSON.parse(text.slice(0,-1)) as unknown;if(!value||typeof value!=="object"||Array.isArray(value))return fail("REMOTE_FRAME_INVALID","Remote frame must be an object.");return value as Record<string,unknown>}catch{return fail("REMOTE_FRAME_INVALID","Remote frame is invalid JSON.")}}
-export class RemoteToolClient{
- readonly #seen=new Set<string>();#sequence=0;
- constructor(readonly options:{planKey:string;inventorySha256:string;capabilitySha256:string;send(line:string,signal?:AbortSignal):Promise<string>;maxFrameBytes?:number;maxOutputBytes?:number}){if(![options.planKey,options.inventorySha256,options.capabilitySha256].every(v=>SHA.test(v)))fail("REMOTE_BINDING_INVALID","Remote client hashes are invalid.")}
- async call(call:RemoteCall):Promise<RemoteResult>{
-  if(this.#seen.has(call.requestId))fail("REMOTE_REPLAY","Remote request identifier was already used.");if(!ID.test(call.requestId)||!/^[a-z0-9][a-z0-9._/-]{0,255}$/u.test(call.toolPath)||![call.inputSha256,call.requestSha256,call.capabilitySha256].every(v=>SHA.test(v)))fail("REMOTE_REQUEST_INVALID","Remote request is malformed.");if(call.capabilitySha256!==this.options.capabilitySha256)fail("REMOTE_CAPABILITY_WIDENING","Remote request attempted capability widening.");if(call.signal?.aborted)fail("REMOTE_CANCELLED","Remote request was cancelled.");
-  this.#seen.add(call.requestId);const sequence=++this.#sequence;const frame={schemaVersion:1,kind:"request",requestId:call.requestId,sequence,planKey:this.options.planKey,inventorySha256:this.options.inventorySha256,capabilitySha256:call.capabilitySha256,toolPath:call.toolPath,inputSha256:call.inputSha256,requestSha256:call.requestSha256};const encoded=`${JSON.stringify(frame)}\n`;if(Buffer.byteLength(encoded)>(this.options.maxFrameBytes??16_384))fail("REMOTE_FRAME_INVALID","Remote request exceeds the frame limit.");
-  const raw=await this.options.send(encoded,call.signal);if(call.signal?.aborted)fail("REMOTE_CANCELLED","Remote request was cancelled.");const value=parseLine(raw,this.options.maxFrameBytes??16_384);const keys=["schemaVersion","kind","requestId","sequence","requestSha256","status","outputSha256","outputBytes","errorCode"];if(Object.keys(value).some(k=>!keys.includes(k))||keys.some(k=>!Object.hasOwn(value,k)))fail("REMOTE_FRAME_INVALID","Remote result fields are not exact.");if(value.schemaVersion!==1||value.kind!=="result"||value.requestId!==call.requestId||value.sequence!==sequence||value.requestSha256!==call.requestSha256)fail("REMOTE_STALE_RESULT","Remote result is stale or mismatched.");if(!["ok","error"].includes(value.status as string)||typeof value.outputSha256!=="string"||!SHA.test(value.outputSha256)||!Number.isSafeInteger(value.outputBytes)||Number(value.outputBytes)<0||Number(value.outputBytes)>(this.options.maxOutputBytes??1_048_576)||(value.errorCode!==null&&(typeof value.errorCode!=="string"||!ID.test(value.errorCode))))fail("REMOTE_OUTPUT_INVALID","Remote result exceeds output or shape limits.");return Object.freeze(value as unknown as RemoteResult)
- }
- cancel(requestId:string):string{if(!this.#seen.has(requestId))fail("REMOTE_REQUEST_UNKNOWN","Cannot cancel an unknown request.");return `${JSON.stringify({schemaVersion:1,kind:"cancel",requestId})}\n`}
+import { ExecutionError } from './index.js';
+const SHA = /^[a-f0-9]{64}$/u;
+const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/u;
+export interface RemoteCall {
+  readonly requestId: string;
+  readonly toolPath: string;
+  readonly inputSha256: string;
+  readonly requestSha256: string;
+  readonly capabilitySha256: string;
+  readonly signal?: AbortSignal;
+}
+export interface RemoteResult {
+  readonly schemaVersion: 1;
+  readonly kind: 'result';
+  readonly requestId: string;
+  readonly sequence: number;
+  readonly requestSha256: string;
+  readonly status: 'ok' | 'error';
+  readonly outputSha256: string;
+  readonly outputBytes: number;
+  readonly errorCode: string | null;
+}
+function fail(code: string, message: string): never {
+  throw new ExecutionError(code, message);
+}
+function parseLine(text: string, maximum: number): Record<string, unknown> {
+  if (
+    Buffer.byteLength(text) > maximum ||
+    !text.endsWith('\n') ||
+    text.slice(0, -1).includes('\n')
+  ) {
+    fail('REMOTE_FRAME_INVALID', 'Remote response must be one bounded NDJSON frame.');
+  }
+  try {
+    const value = JSON.parse(text.slice(0, -1)) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return fail('REMOTE_FRAME_INVALID', 'Remote frame must be an object.');
+    }
+    return value as Record<string, unknown>;
+  } catch {
+    return fail('REMOTE_FRAME_INVALID', 'Remote frame is invalid JSON.');
+  }
+}
+export class RemoteToolClient {
+  readonly #seen = new Set<string>();
+  #sequence = 0;
+  constructor(
+    readonly options: {
+      planKey: string;
+      inventorySha256: string;
+      capabilitySha256: string;
+      send(line: string, signal?: AbortSignal): Promise<string>;
+      maxFrameBytes?: number;
+      maxOutputBytes?: number;
+    },
+  ) {
+    if (
+      ![options.planKey, options.inventorySha256, options.capabilitySha256].every((v) =>
+        SHA.test(v),
+      )
+    ) {
+      fail('REMOTE_BINDING_INVALID', 'Remote client hashes are invalid.');
+    }
+  }
+  async call(call: RemoteCall): Promise<RemoteResult> {
+    if (this.#seen.has(call.requestId)) {
+      fail('REMOTE_REPLAY', 'Remote request identifier was already used.');
+    }
+    if (
+      !ID.test(call.requestId) ||
+      !/^[a-z0-9][a-z0-9._/-]{0,255}$/u.test(call.toolPath) ||
+      ![call.inputSha256, call.requestSha256, call.capabilitySha256].every((v) => SHA.test(v))
+    ) {
+      fail('REMOTE_REQUEST_INVALID', 'Remote request is malformed.');
+    }
+    if (call.capabilitySha256 !== this.options.capabilitySha256) {
+      fail('REMOTE_CAPABILITY_WIDENING', 'Remote request attempted capability widening.');
+    }
+    if (call.signal?.aborted) {
+      fail('REMOTE_CANCELLED', 'Remote request was cancelled.');
+    }
+    this.#seen.add(call.requestId);
+    const sequence = ++this.#sequence;
+    const frame = {
+      schemaVersion: 1,
+      kind: 'request',
+      requestId: call.requestId,
+      sequence,
+      planKey: this.options.planKey,
+      inventorySha256: this.options.inventorySha256,
+      capabilitySha256: call.capabilitySha256,
+      toolPath: call.toolPath,
+      inputSha256: call.inputSha256,
+      requestSha256: call.requestSha256,
+    };
+    const encoded = `${JSON.stringify(frame)}\n`;
+    if (Buffer.byteLength(encoded) > (this.options.maxFrameBytes ?? 16_384)) {
+      fail('REMOTE_FRAME_INVALID', 'Remote request exceeds the frame limit.');
+    }
+    const raw = await this.options.send(encoded, call.signal);
+    if (call.signal?.aborted) {
+      fail('REMOTE_CANCELLED', 'Remote request was cancelled.');
+    }
+    const value = parseLine(raw, this.options.maxFrameBytes ?? 16_384);
+    const keys = [
+      'schemaVersion',
+      'kind',
+      'requestId',
+      'sequence',
+      'requestSha256',
+      'status',
+      'outputSha256',
+      'outputBytes',
+      'errorCode',
+    ];
+    if (
+      Object.keys(value).some((k) => !keys.includes(k)) ||
+      keys.some((k) => !Object.hasOwn(value, k))
+    ) {
+      fail('REMOTE_FRAME_INVALID', 'Remote result fields are not exact.');
+    }
+    if (
+      value.schemaVersion !== 1 ||
+      value.kind !== 'result' ||
+      value.requestId !== call.requestId ||
+      value.sequence !== sequence ||
+      value.requestSha256 !== call.requestSha256
+    ) {
+      fail('REMOTE_STALE_RESULT', 'Remote result is stale or mismatched.');
+    }
+    if (
+      !['ok', 'error'].includes(value.status as string) ||
+      typeof value.outputSha256 !== 'string' ||
+      !SHA.test(value.outputSha256) ||
+      !Number.isSafeInteger(value.outputBytes) ||
+      Number(value.outputBytes) < 0 ||
+      Number(value.outputBytes) > (this.options.maxOutputBytes ?? 1_048_576) ||
+      (value.errorCode !== null &&
+        (typeof value.errorCode !== 'string' || !ID.test(value.errorCode)))
+    ) {
+      fail('REMOTE_OUTPUT_INVALID', 'Remote result exceeds output or shape limits.');
+    }
+    return Object.freeze(value as unknown as RemoteResult);
+  }
+  cancel(requestId: string): string {
+    if (!this.#seen.has(requestId)) {
+      fail('REMOTE_REQUEST_UNKNOWN', 'Cannot cancel an unknown request.');
+    }
+    return `${JSON.stringify({ schemaVersion: 1, kind: 'cancel', requestId })}\n`;
+  }
 }
 
-export interface RemoteToolHandler {execute(request:{toolPath:string;inputSha256:string;signal:AbortSignal}):Promise<{status:"ok"|"error";outputSha256:string;outputBytes:number;errorCode:string|null}>}
+export interface RemoteToolHandler {
+  execute(request: { toolPath: string; inputSha256: string; signal: AbortSignal }): Promise<{
+    status: 'ok' | 'error';
+    outputSha256: string;
+    outputBytes: number;
+    errorCode: string | null;
+  }>;
+}
 /** Stateless worker parser. The caller supplies typed handlers; this module never executes a shell. */
-export async function handleRemoteToolFrame(line:string,binding:{planKey:string;inventorySha256:string;capabilitySha256:string},handler:RemoteToolHandler,maxFrameBytes=16_384):Promise<string>{const value=parseLine(line,maxFrameBytes);const expected=["schemaVersion","kind","requestId","sequence","planKey","inventorySha256","capabilitySha256","toolPath","inputSha256","requestSha256"];if(Object.keys(value).some(k=>!expected.includes(k))||expected.some(k=>!Object.hasOwn(value,k)))fail("REMOTE_FRAME_INVALID","Remote request fields are not exact.");if(value.planKey!==binding.planKey||value.inventorySha256!==binding.inventorySha256)fail("REMOTE_STALE_HASH","Remote request binding is stale.");if(value.capabilitySha256!==binding.capabilitySha256)fail("REMOTE_CAPABILITY_WIDENING","Remote capability does not match.");const result=await handler.execute({toolPath:String(value.toolPath),inputSha256:String(value.inputSha256),signal:new AbortController().signal});return `${JSON.stringify({schemaVersion:1,kind:"result",requestId:value.requestId,sequence:value.sequence,requestSha256:value.requestSha256,...result})}\n`}
+export async function handleRemoteToolFrame(
+  line: string,
+  binding: { planKey: string; inventorySha256: string; capabilitySha256: string },
+  handler: RemoteToolHandler,
+  maxFrameBytes = 16_384,
+): Promise<string> {
+  const value = parseLine(line, maxFrameBytes);
+  const expected = [
+    'schemaVersion',
+    'kind',
+    'requestId',
+    'sequence',
+    'planKey',
+    'inventorySha256',
+    'capabilitySha256',
+    'toolPath',
+    'inputSha256',
+    'requestSha256',
+  ];
+  if (
+    Object.keys(value).some((k) => !expected.includes(k)) ||
+    expected.some((k) => !Object.hasOwn(value, k))
+  ) {
+    fail('REMOTE_FRAME_INVALID', 'Remote request fields are not exact.');
+  }
+  if (value.planKey !== binding.planKey || value.inventorySha256 !== binding.inventorySha256) {
+    fail('REMOTE_STALE_HASH', 'Remote request binding is stale.');
+  }
+  if (value.capabilitySha256 !== binding.capabilitySha256) {
+    fail('REMOTE_CAPABILITY_WIDENING', 'Remote capability does not match.');
+  }
+  const result = await handler.execute({
+    toolPath: String(value.toolPath),
+    inputSha256: String(value.inputSha256),
+    signal: new AbortController().signal,
+  });
+  return `${JSON.stringify({ schemaVersion: 1, kind: 'result', requestId: value.requestId, sequence: value.sequence, requestSha256: value.requestSha256, ...result })}\n`;
+}

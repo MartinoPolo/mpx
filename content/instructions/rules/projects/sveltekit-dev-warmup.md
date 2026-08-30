@@ -2,10 +2,10 @@
 scope: project
 selector: sveltekit-dev-warmup
 paths:
-  - "vite.config.*"
-  - "**/+page.svelte"
-  - "**/+layout.svelte"
-applyTo: "vite.config.*,**/+page.svelte,**/+layout.svelte"
+  - 'vite.config.*'
+  - '**/+page.svelte'
+  - '**/+layout.svelte'
+applyTo: 'vite.config.*,**/+page.svelte,**/+layout.svelte'
 ---
 
 # SvelteKit Dev Warmup

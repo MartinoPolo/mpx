@@ -2,10 +2,10 @@
 scope: language
 selector: svelte
 paths:
-  - "**/*.svelte"
-  - "**/*.svelte.ts"
-  - "**/*.svelte.js"
-applyTo: "**/*.svelte,**/*.svelte.ts,**/*.svelte.js"
+  - '**/*.svelte'
+  - '**/*.svelte.ts'
+  - '**/*.svelte.js'
+applyTo: '**/*.svelte,**/*.svelte.ts,**/*.svelte.js'
 ---
 
 # Svelte 5

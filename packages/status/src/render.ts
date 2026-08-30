@@ -1,13 +1,13 @@
-import type { PortResolutionState, StatusSnapshotV1 } from "./provider.js";
-import { parseStatusSnapshotV1 } from "./snapshot.js";
+import type { PortResolutionState, StatusSnapshotV1 } from './provider.js';
+import { parseStatusSnapshotV1 } from './snapshot.js';
 
-export type PortSegmentMarker = "" | "*" | "!" | "?";
+export type PortSegmentMarker = '' | '*' | '!' | '?';
 
 export interface PortSegmentService {
   readonly id: string;
   readonly port: number | null;
   readonly listening: boolean;
-  readonly conflict: "none" | "external" | "unknown";
+  readonly conflict: 'none' | 'external' | 'unknown';
   readonly marker: PortSegmentMarker;
 }
 
@@ -16,10 +16,14 @@ export interface PortSegmentData {
   readonly services: readonly PortSegmentService[];
 }
 
-function markerFor(service: StatusSnapshotV1["services"][number]): PortSegmentMarker {
-  if (service.conflict === "external") return "!";
-  if (service.conflict === "unknown") return "?";
-  return service.listening ? "*" : "";
+function markerFor(service: StatusSnapshotV1['services'][number]): PortSegmentMarker {
+  if (service.conflict === 'external') {
+    return '!';
+  }
+  if (service.conflict === 'unknown') {
+    return '?';
+  }
+  return service.listening ? '*' : '';
 }
 
 /** Creates stable, runtime-neutral current-worktree port data. */
@@ -40,9 +44,13 @@ export function normalizePortSegment(snapshot: StatusSnapshotV1): PortSegmentDat
 
 /** Applies the shared plain-text representation; runtimes may style the result around this API. */
 export function formatPortSegment(segment: PortSegmentData): string {
-  if (segment.resolution !== "valid") return `ports ${segment.resolution}`;
-  if (segment.services.length === 0) return "ports none";
-  return `ports ${segment.services.map((service) => `${service.id}:${service.port ?? "?"}${service.marker}`).join(" ")}`;
+  if (segment.resolution !== 'valid') {
+    return `ports ${segment.resolution}`;
+  }
+  if (segment.services.length === 0) {
+    return 'ports none';
+  }
+  return `ports ${segment.services.map((service) => `${service.id}:${service.port ?? '?'}${service.marker}`).join(' ')}`;
 }
 
 export function renderPortSegment(snapshot: StatusSnapshotV1): string {
@@ -60,6 +68,10 @@ export function renderPiPortSegment(value: unknown): string {
 }
 
 /** @deprecated Use renderClaudePortSegment. */
-export function renderClaudeFixture(value: unknown): string { return renderClaudePortSegment(value); }
+export function renderClaudeFixture(value: unknown): string {
+  return renderClaudePortSegment(value);
+}
 /** @deprecated Use renderPiPortSegment. */
-export function renderPiFixture(value: unknown): string { return renderPiPortSegment(value); }
+export function renderPiFixture(value: unknown): string {
+  return renderPiPortSegment(value);
+}

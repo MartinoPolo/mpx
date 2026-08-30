@@ -26,18 +26,23 @@ Generated: [date] | Child Issues: [IDs] | Reviews: [explicit IDs]
 ## Unresolved Items
 
 ### Needs AFK Issue
+
 - [ ] [title and confirmed scope]
 
 ### Needs HITL Issue
+
 - [ ] [title and open decisions]
 
 ### Already Tracked
+
 - [Issue ID and title]
 
 ## Documentation Updates
+
 - [ ] [file and exact drift]
 
 ## Architecture Promotion Candidates
+
 - [title, evidence, recommendation]
 ```
 

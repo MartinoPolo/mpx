@@ -1,6 +1,6 @@
 ---
 name: symlink
-description: "Creates and verifies Windows symlinks and directory junctions through PowerShell New-Item. Any symlink or junction work on Windows. Git Bash ln -s and cmd mklink silently create the wrong thing here."
+description: 'Creates and verifies Windows symlinks and directory junctions through PowerShell New-Item. Any symlink or junction work on Windows. Git Bash ln -s and cmd mklink silently create the wrong thing here.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -17,8 +17,8 @@ If `the invocation input` supplies a link path and a target: detect the type (ta
 
 ## Step 1: Pick the link type
 
-| Target    | Type    | Command                          | Admin? |
-| --------- | ------- | -------------------------------- | ------ |
+| Target    | Type     | Command                           | Admin? |
+| --------- | -------- | --------------------------------- | ------ |
 | Directory | Junction | `New-Item -ItemType Junction`     | No     |
 | File      | Symlink  | `New-Item -ItemType SymbolicLink` | Yes\*  |
 

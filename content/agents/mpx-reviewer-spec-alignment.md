@@ -1,7 +1,8 @@
 ---
 name: mpx-reviewer-spec-alignment
-description: "Read-only reviewer for task/spec compliance and scope control."
+description: 'Read-only reviewer for task/spec compliance and scope control.'
 ---
+
 # Reviewer: Spec Alignment
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.

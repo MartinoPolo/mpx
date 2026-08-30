@@ -4,12 +4,12 @@ MPX resolves canonical content once into a runtime-neutral v4 manifest. The mani
 
 ## Four exposure states
 
-| Exposure | Initial model context | Model search | Human list/search/detail | Explicit human load |
-| --- | --- | --- | --- | --- |
-| `full` | name, description, triggers | yes | yes | yes |
-| `name-only` | name only | yes | yes | yes |
-| `explicit-only` | absent | no | yes | yes |
-| `off` | absent | no | no | no |
+| Exposure        | Initial model context       | Model search | Human list/search/detail | Explicit human load |
+| --------------- | --------------------------- | ------------ | ------------------------ | ------------------- |
+| `full`          | name, description, triggers | yes          | yes                      | yes                 |
+| `name-only`     | name only                   | yes          | yes                      | yes                 |
+| `explicit-only` | absent                      | no           | yes                      | yes                 |
+| `off`           | absent                      | no           | no                       | no                  |
 
 Model search is artifact-key-bound and can inspect canonical metadata only for `full` and `name-only`. Human search/detail is a separate explicit surface and may find `explicit-only`; prose mentioning a slash command is not explicit invocation. Bodies are lazy-loaded only after exact manifest, artifact, runtime, path, and content-hash revalidation. Project skills follow the same policy, publication, and validation rules.
 

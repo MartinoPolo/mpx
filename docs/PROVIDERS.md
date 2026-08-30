@@ -6,15 +6,15 @@ MPX selects provider IDs from `mpxconfig.json`, but configuration cannot add an 
 
 `repository.provider` selects Review and CI behavior. `issues.provider` selects Issue behavior; when `issues` is absent, resolution uses `none`. Resolution is role-aware: a provider must be registered for the selected role. Issue-only providers such as KanbanFlow do not trigger Git remote resolution; repository selection is performed only for adapters that require a forge repository. The current built-in declared and implemented surface is:
 
-| Provider | Role | Issue | Review | CI |
-| --- | --- | --- | --- | --- |
-| GitHub | repository, issues | list, view, create, edit, comment, label, finish | view, create, update, comment, ready, merge | status, watch, logs, retry |
-| GitLab | repository, issues | list, view, create, edit, comment, label, finish | view, create, update, comment, ready, merge | status, watch, logs, retry |
-| KanbanFlow | issues | list, view, create, edit, comment, label, move, finish | — | — |
-| Gerrit | repository | — | none implemented | none implemented |
-| generic Git | repository | — | none implemented | none implemented |
-| local filesystem | issues | none implemented | — | — |
-| none | issues | none | — | — |
+| Provider         | Role               | Issue                                                  | Review                                      | CI                         |
+| ---------------- | ------------------ | ------------------------------------------------------ | ------------------------------------------- | -------------------------- |
+| GitHub           | repository, issues | list, view, create, edit, comment, label, finish       | view, create, update, comment, ready, merge | status, watch, logs, retry |
+| GitLab           | repository, issues | list, view, create, edit, comment, label, finish       | view, create, update, comment, ready, merge | status, watch, logs, retry |
+| KanbanFlow       | issues             | list, view, create, edit, comment, label, move, finish | —                                           | —                          |
+| Gerrit           | repository         | —                                                      | none implemented                            | none implemented           |
+| generic Git      | repository         | —                                                      | none implemented                            | none implemented           |
+| local filesystem | issues             | none implemented                                       | —                                           | —                          |
+| none             | issues             | none                                                   | —                                           | —                          |
 
 GitHub and GitLab intentionally do not declare `issue.move`. KanbanFlow does not declare Review or CI. Gerrit, generic, local, and none fail closed because they currently declare no operational capabilities. An invocation outside the selected provider's declared set returns `CAPABILITY_UNSUPPORTED`; an unknown or wrong-role provider fails before execution. MPX never falls back to a direct provider command.
 

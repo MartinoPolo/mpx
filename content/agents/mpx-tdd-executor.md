@@ -1,7 +1,8 @@
 ---
 name: mpx-tdd-executor
-description: "Executes TDD red-green-refactor cycles. Receives behaviors to implement, writes tests first, then minimal code to pass."
+description: 'Executes TDD red-green-refactor cycles. Receives behaviors to implement, writes tests first, then minimal code to pass.'
 ---
+
 # TDD Executor Agent
 
 Implement assigned behaviors using strict red-green-refactor.

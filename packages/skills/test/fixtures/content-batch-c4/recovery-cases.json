@@ -1,7 +1,11 @@
 [
   {
     "name": "no interruption",
-    "required": ["No interruption", "continue the most recent task normally", "Do not run the recovery steps"]
+    "required": [
+      "No interruption",
+      "continue the most recent task normally",
+      "Do not run the recovery steps"
+    ]
   },
   {
     "name": "resumable child",

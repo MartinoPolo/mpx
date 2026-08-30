@@ -1,11 +1,12 @@
 ---
 name: harvest-decisions
-description: "Explicitly harvests authorized recent session decisions into project context and decision documents after user confirmation."
+description: 'Explicitly harvests authorized recent session decisions into project context and decision documents after user confirmation.'
 metadata:
   mpx:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # Harvest Decisions
 
 Harvest design and architecture decisions only when the user explicitly invokes this skill. Read authorized session content through runtime contracts, deduplicate the decisions, preview proposed documentation changes, and write only after confirmation.
@@ -74,6 +75,7 @@ Use this decision format:
 
 ```markdown
 ### Title
+
 Decided: date
 What: settled choice
 Why: stated rationale

@@ -6,14 +6,14 @@ The first migration snapshot was captured before source or machine integration c
 
 ## Source boundaries
 
-| Source | Captured revision | Migration role | Baseline state |
-| --- | --- | --- | --- |
-| `mpx-claude-code` | `418b11e586cb93c29ee6a690210b2380179e82ac` | Claude content, hooks, status, worktree modules | Dirty; archived, left untouched |
-| `mpx-pi` | `95d64232f1a4563bec8c1a819eed5b299f136d11` | Pi adapters and lifecycle events | Dirty and ahead of remote; archived, left untouched |
-| `mpx-ports` | `be104c48180ca08694f8cd5a9c6e437008e6ab8c` | Windows process inspection reference | Clean |
-| `mpx-worktrees` | `6cdf8f8c2731015789f93abd687c834091c1c661` | Worktree selection and removal reference | Clean |
-| `agent-resurrect` | `30184715798938aaf76966f1a796b96c3b53e2cf` | Session migration source | Dirty; archived, left untouched |
-| `kanbanflow-cli` | `84bc4b859bdfcf95f0112d817d55621454b6bbec` | Independent KanbanFlow credential owner | Clean and ahead of remote |
+| Source            | Captured revision                          | Migration role                                  | Baseline state                                      |
+| ----------------- | ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------- |
+| `mpx-claude-code` | `418b11e586cb93c29ee6a690210b2380179e82ac` | Claude content, hooks, status, worktree modules | Dirty; archived, left untouched                     |
+| `mpx-pi`          | `95d64232f1a4563bec8c1a819eed5b299f136d11` | Pi adapters and lifecycle events                | Dirty and ahead of remote; archived, left untouched |
+| `mpx-ports`       | `be104c48180ca08694f8cd5a9c6e437008e6ab8c` | Windows process inspection reference            | Clean                                               |
+| `mpx-worktrees`   | `6cdf8f8c2731015789f93abd687c834091c1c661` | Worktree selection and removal reference        | Clean                                               |
+| `agent-resurrect` | `30184715798938aaf76966f1a796b96c3b53e2cf` | Session migration source                        | Dirty; archived, left untouched                     |
+| `kanbanflow-cli`  | `84bc4b859bdfcf95f0112d817d55621454b6bbec` | Independent KanbanFlow credential owner         | Clean and ahead of remote                           |
 
 Dirty source repositories are intentionally archived rather than cleaned or committed by this migration. MPX must not overwrite or normalize user-owned changes.
 

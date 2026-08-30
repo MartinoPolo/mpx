@@ -31,21 +31,65 @@
   },
   "modes": {
     "project": { "resources": { "selected-project": "read-write" } },
-    "developer": { "resources": { "identity-domain": "read-write", "cloned-repositories": "read-only" } },
-    "personal-assistant": { "resources": { "assistant-input": "read-write", "assistant-output": "read-write" } },
-    "computer-control": { "resources": { "computer-control-config": "read-write", "computer-control-executable-settings": "staged-write" } },
+    "developer": {
+      "resources": { "identity-domain": "read-write", "cloned-repositories": "read-only" }
+    },
+    "personal-assistant": {
+      "resources": { "assistant-input": "read-write", "assistant-output": "read-write" }
+    },
+    "computer-control": {
+      "resources": {
+        "computer-control-config": "read-write",
+        "computer-control-executable-settings": "staged-write"
+      }
+    },
     "unrestricted": { "resources": { "host": "read-write" } }
   },
   "skillPolicies": {
     "clean": { "skillExposure": { "default": "explicit-only" } },
     "developer": { "skillPacks": ["core"], "skillExposure": { "default": "name-only" } },
-    "personal-assistant": { "skillPacks": ["core", "personal"], "skillExposure": { "default": "name-only" } }
+    "personal-assistant": {
+      "skillPacks": ["core", "personal"],
+      "skillExposure": { "default": "name-only" }
+    }
   },
   "presets": {
-    "personal-dev": { "identity": "personal", "mode": "developer", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation" },
-    "personal-research": { "identity": "personal", "mode": "project", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "research" },
-    "work-project": { "identity": "work", "mode": "project", "skillPolicy": "developer", "contentScope": "work", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation" },
-    "work-delivery": { "identity": "work", "mode": "project", "skillPolicy": "developer", "contentScope": "work", "executor": "docker", "workspace": "clone", "networkPolicy": "delivery" }
+    "personal-dev": {
+      "identity": "personal",
+      "mode": "developer",
+      "skillPolicy": "developer",
+      "contentScope": "personal",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "implementation"
+    },
+    "personal-research": {
+      "identity": "personal",
+      "mode": "project",
+      "skillPolicy": "developer",
+      "contentScope": "personal",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "research"
+    },
+    "work-project": {
+      "identity": "work",
+      "mode": "project",
+      "skillPolicy": "developer",
+      "contentScope": "work",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "implementation"
+    },
+    "work-delivery": {
+      "identity": "work",
+      "mode": "project",
+      "skillPolicy": "developer",
+      "contentScope": "work",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "delivery"
+    }
   },
   "launchDefaults": {
     "scopes": { "personal": { "personal": "personal-dev" }, "work": { "work": "work-project" } },

@@ -1,11 +1,11 @@
-import type { PublicError } from "./errors.js";
-import { serializePublicError } from "./errors.js";
-import type { JsonValue } from "./json.js";
+import type { PublicError } from './errors.js';
+import { serializePublicError } from './errors.js';
+import type { JsonValue } from './json.js';
 
 export interface Diagnostic {
   code: string;
   message: string;
-  severity: "info" | "warning" | "error";
+  severity: 'info' | 'warning' | 'error';
   details?: JsonValue;
 }
 
@@ -25,8 +25,14 @@ export interface ErrorEnvelope {
 
 export type ApiEnvelope<T extends JsonValue = JsonValue> = SuccessEnvelope<T> | ErrorEnvelope;
 
-export const successEnvelope = <T extends JsonValue>(data: T, warnings: Diagnostic[] = []): SuccessEnvelope<T> =>
-  ({ apiVersion: 1, ok: true, data, warnings });
+export const successEnvelope = <T extends JsonValue>(
+  data: T,
+  warnings: Diagnostic[] = [],
+): SuccessEnvelope<T> => ({ apiVersion: 1, ok: true, data, warnings });
 
-export const errorEnvelope = (error: unknown, warnings: Diagnostic[] = []): ErrorEnvelope =>
-  ({ apiVersion: 1, ok: false, error: serializePublicError(error), warnings });
+export const errorEnvelope = (error: unknown, warnings: Diagnostic[] = []): ErrorEnvelope => ({
+  apiVersion: 1,
+  ok: false,
+  error: serializePublicError(error),
+  warnings,
+});

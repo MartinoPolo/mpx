@@ -1,4 +1,4 @@
-import type { JsonValue } from "./json.js";
+import type { JsonValue } from './json.js';
 
 export interface MpxErrorOptions {
   code: string;
@@ -27,12 +27,18 @@ export class MpxError extends Error {
 
   constructor(options: MpxErrorOptions) {
     super(options.message);
-    this.name = "MpxError";
+    this.name = 'MpxError';
     this.code = options.code;
     this.retryable = options.retryable ?? false;
-    if (options.capability !== undefined) this.capability = options.capability;
-    if (options.remediation !== undefined) this.remediation = options.remediation;
-    if (options.details !== undefined) this.details = options.details;
+    if (options.capability !== undefined) {
+      this.capability = options.capability;
+    }
+    if (options.remediation !== undefined) {
+      this.remediation = options.remediation;
+    }
+    if (options.details !== undefined) {
+      this.details = options.details;
+    }
   }
 
   toPublic(): PublicError {
@@ -48,6 +54,8 @@ export class MpxError extends Error {
 }
 
 export function serializePublicError(error: unknown): PublicError {
-  if (error instanceof MpxError) return error.toPublic();
-  return { code: "INTERNAL_ERROR", message: "An internal error occurred.", retryable: false };
+  if (error instanceof MpxError) {
+    return error.toPublic();
+  }
+  return { code: 'INTERNAL_ERROR', message: 'An internal error occurred.', retryable: false };
 }

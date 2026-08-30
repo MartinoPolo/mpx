@@ -2,10 +2,10 @@
 scope: project
 selector: svelte-context
 paths:
-    - '**/*.svelte'
-    - '**/*.svelte.ts'
-    - '**/*.svelte.js'
-    - '**/*.context.**'
+  - '**/*.svelte'
+  - '**/*.svelte.ts'
+  - '**/*.svelte.js'
+  - '**/*.context.**'
 applyTo: '**/*.svelte,**/*.svelte.ts,**/*.svelte.js, **/*.context.**'
 ---
 
@@ -38,16 +38,16 @@ export { useMyFeature };
 
 // 2. set function
 export function setMyFeatureContext() {
-	const ctx = createMyFeatureContext();
-	setMyFeatureInternal(ctx);
-	return ctx;
+  const ctx = createMyFeatureContext();
+  setMyFeatureInternal(ctx);
+  return ctx;
 }
 
 // 3. Factory last — return is the last thing in the file
 function createMyFeatureContext() {
-	const count = new StateRaw(0);
-	const doubled = new Derived(() => count.current * 2);
-	return { count, doubled };
+  const count = new StateRaw(0);
+  const doubled = new Derived(() => count.current * 2);
+  return { count, doubled };
 }
 ```
 
@@ -67,12 +67,12 @@ function createMyFeatureContext() {
 import { Persisted, jsonSerde } from '$lib/reactivity/persisted.svelte';
 
 function isTheme(value: unknown): value is 'dark' | 'light' | 'system' {
-	return typeof value === 'string' && ['dark', 'light', 'system'].includes(value);
+  return typeof value === 'string' && ['dark', 'light', 'system'].includes(value);
 }
 
 const theme = new Persisted({
-	key: 'theme',
-	serde: jsonSerde(isTheme),
-	defaultValue: 'system' as const,
+  key: 'theme',
+  serde: jsonSerde(isTheme),
+  defaultValue: 'system' as const,
 });
 ```

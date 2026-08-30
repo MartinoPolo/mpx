@@ -2,9 +2,9 @@
 scope: project
 selector: sveltekit-paths-server
 paths:
-  - "**/src/routes/**/*.ts"
-  - "**/src/hooks*.ts"
-applyTo: "**/src/routes/**/*.ts,**/src/hooks*.ts"
+  - '**/src/routes/**/*.ts'
+  - '**/src/hooks*.ts'
+applyTo: '**/src/routes/**/*.ts,**/src/hooks*.ts'
 ---
 
 # SvelteKit Type-Safe Paths — Server & Runtime Matching
@@ -14,14 +14,14 @@ Supplements `sveltekit-paths.md` for projects with a SvelteKit server runtime (S
 ## `resolve` in server code
 
 ```ts
-import { resolve } from "$app/paths";
-import { redirect } from "@sveltejs/kit";
+import { resolve } from '$app/paths';
+import { redirect } from '@sveltejs/kit';
 
 // ✅ Server-side redirect with type-safe route
-throw redirect(303, resolve("/dashboard"));
+throw redirect(303, resolve('/dashboard'));
 
 // ✅ Dynamic route in load function
-const url = resolve("/blog/[slug]", { slug });
+const url = resolve('/blog/[slug]', { slug });
 ```
 
 ## `match` — runtime route matching (≥ 2.52)
@@ -29,10 +29,10 @@ const url = resolve("/blog/[slug]", { slug });
 Use `match()` to identify which route a URL corresponds to and extract its parameters:
 
 ```ts
-import { match } from "$app/paths";
+import { match } from '$app/paths';
 
-const route = await match("/blog/hello-world");
-if (route?.id === "/blog/[slug]") {
+const route = await match('/blog/hello-world');
+if (route?.id === '/blog/[slug]') {
   const { slug } = route.params;
 }
 ```

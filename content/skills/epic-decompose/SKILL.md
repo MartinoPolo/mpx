@@ -7,6 +7,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # Decompose an Epic
 
 Use the canonical [Issue template](ISSUE_TEMPLATE.md).

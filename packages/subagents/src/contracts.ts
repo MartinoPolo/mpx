@@ -1,8 +1,8 @@
-import type { ChildLaunchAuthorityV1 } from "@mpx/runtime-contracts";
+import type { ChildLaunchAuthorityV1 } from '@mpx/runtime-contracts';
 
-export type AgentStatus = "queued" | "running" | "completed" | "failed";
-export type JoinMode = "foreground" | "background" | "group" | "async";
-export type MemoryScope = "user" | "project" | "local";
+export type AgentStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type JoinMode = 'foreground' | 'background' | 'group' | 'async';
+export type MemoryScope = 'user' | 'project' | 'local';
 
 export interface ResolvedModelSnapshot {
   readonly provider: string;
@@ -47,7 +47,14 @@ export interface AgentLaunchRequest {
   readonly isolation?: { readonly cwd: string; readonly branch: string; readonly base?: string };
 }
 export interface AgentRunner {
-  run(request: AgentLaunchRequest, context: { readonly cwd: string; readonly signal: AbortSignal; readonly steer: AsyncIterable<string> }): Promise<string>;
+  run(
+    request: AgentLaunchRequest,
+    context: {
+      readonly cwd: string;
+      readonly signal: AbortSignal;
+      readonly steer: AsyncIterable<string>;
+    },
+  ): Promise<string>;
 }
 export interface CompletionNotification {
   readonly agents: readonly Agent[];

@@ -1,6 +1,6 @@
 ---
 name: components-audit
-description: "Audits design-system component usage, flagging native elements, wrong variants, missed componentization opportunities, and hardcoded colors that bypass theme tokens."
+description: 'Audits design-system component usage, flagging native elements, wrong variants, missed componentization opportunities, and hardcoded colors that bypass theme tokens.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -57,15 +57,19 @@ Report shape:
 
 ```markdown
 ## Native element → component (A)
+
 - `path:line` — current → suggested fix
 
 ## Improper variant/prop usage (B)
+
 - `path:line` — current → suggested fix
 
 ## Componentize / add-variant recommendations (C)
+
 - pattern (N occurrences) — proposed variant/component + call-sites
 
 ## Hardcoded theme-color bypass (D)
+
 - `path:line` — current → suggested fix
 ```
 
@@ -94,6 +98,7 @@ Components folder: [path]
 Inventory: [N components]
 
 Findings:
+
 - A native→component: [N]
 - B improper variant: [N]
 - C recommendations: [N]

@@ -1,6 +1,6 @@
 ---
 name: mpx-ci-fixer
-description: "Fixes a failing CI run on a PR branch. Fetches logs, diagnoses, fixes, pushes, re-watches. Returns bounded JSON."
+description: 'Fixes a failing CI run on a PR branch. Fetches logs, diagnoses, fixes, pushes, re-watches. Returns bounded JSON.'
 model: openai-codex/gpt-5.6-sol
 thinking: high
 tools: read,grep,find,ls,bash,edit,write

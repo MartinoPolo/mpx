@@ -8,15 +8,15 @@
  * compose all read the descriptor rather than branching on the mode name.
  */
 
-const FALLBACK_SLUG = "video";
-const API_KEY_SETUP_URL = "https://aistudio.google.com/apikey";
-const RATE_LIMIT_URL = "https://aistudio.google.com/rate-limit";
+const FALLBACK_SLUG = 'video';
+const API_KEY_SETUP_URL = 'https://aistudio.google.com/apikey';
+const RATE_LIMIT_URL = 'https://aistudio.google.com/rate-limit';
 
 export function slugify(title) {
-  const slug = String(title ?? "")
+  const slug = String(title ?? '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   return slug || FALLBACK_SLUG;
 }
 
@@ -31,13 +31,13 @@ function sanitizeFolderName(name) {
     // YouTube titles carry curly apostrophes, which break the file:// links the report
     // renders; the straight apostrophe survives both Windows and markdown links.
     .replace(/[‘’]/g, "'")
-    .replace(WINDOWS_ILLEGAL_CHARACTERS, " ")
-    .replace(/\s+/g, " ")
+    .replace(WINDOWS_ILLEGAL_CHARACTERS, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, FOLDER_NAME_LIMIT)
     // Windows silently drops a trailing dot or space, leaving a folder whose name no longer
     // matches the path anything else built.
-    .replace(/[. ]+$/, "");
+    .replace(/[. ]+$/, '');
   return WINDOWS_RESERVED_NAMES.test(cleaned) ? `${cleaned}_` : cleaned;
 }
 
@@ -50,15 +50,19 @@ function sanitizeFolderName(name) {
  * than losing a finished run to a failed lookup.
  */
 export function composeFolderName(videoMetadata, slug) {
-  const title = String(videoMetadata?.title ?? "").trim();
-  if (!title) return slug;
-  const channel = String(videoMetadata?.channel ?? "").trim();
+  const title = String(videoMetadata?.title ?? '').trim();
+  if (!title) {
+    return slug;
+  }
+  const channel = String(videoMetadata?.channel ?? '').trim();
   return sanitizeFolderName(channel ? `[${channel}] ${title}` : title) || slug;
 }
 
 export function assertApiKey(environment) {
-  const geminiApiKey = (environment?.GEMINI_API_KEY ?? "").trim();
-  if (geminiApiKey) return geminiApiKey;
+  const geminiApiKey = (environment?.GEMINI_API_KEY ?? '').trim();
+  if (geminiApiKey) {
+    return geminiApiKey;
+  }
   throw new Error(
     `GEMINI_API_KEY is not set. Create a key at ${API_KEY_SETUP_URL}, then set it for this machine:\n` +
       `  setx GEMINI_API_KEY "<your-key>"\n` +
@@ -67,8 +71,10 @@ export function assertApiKey(environment) {
 }
 
 function extractApiMessage(body) {
-  if (typeof body === "string") return body.slice(0, 300);
-  return body?.error?.message ?? "";
+  if (typeof body === 'string') {
+    return body.slice(0, 300);
+  }
+  return body?.error?.message ?? '';
 }
 
 export function describeApiError(status, body) {
@@ -88,32 +94,32 @@ export function describeApiError(status, body) {
 // The person on screen, so the generated sheet is recognisable as belonging to this video.
 // Nothing here is required: Gemini omits what it cannot see rather than inventing it.
 const PERFORMER_SCHEMA = {
-  type: "object",
-  propertyOrdering: ["build", "hair", "clothing", "setting"],
+  type: 'object',
+  propertyOrdering: ['build', 'hair', 'clothing', 'setting'],
   properties: {
-    build: { type: "string" },
-    hair: { type: "string" },
-    clothing: { type: "string" },
-    setting: { type: "string" },
+    build: { type: 'string' },
+    hair: { type: 'string' },
+    clothing: { type: 'string' },
+    setting: { type: 'string' },
   },
 };
 
 const PERFORMER_INSTRUCTION = [
-  "Fill performer with the appearance of the person on screen, so an illustrator can draw the same person on every panel: apparent build, hair, the colours and type of clothing, and the setting (gym, studio, outdoors, home).",
-  "Describe only what is visible, in neutral, drawable terms — colours, shapes and garments rather than judgements about the person.",
-  "Omit any field you cannot see, and leave performer out entirely when no person appears on screen.",
-].join(" ");
+  'Fill performer with the appearance of the person on screen, so an illustrator can draw the same person on every panel: apparent build, hair, the colours and type of clothing, and the setting (gym, studio, outdoors, home).',
+  'Describe only what is visible, in neutral, drawable terms — colours, shapes and garments rather than judgements about the person.',
+  'Omit any field you cannot see, and leave performer out entirely when no person appears on screen.',
+].join(' ');
 
 function sectionSchema(itemsKey, itemSchema) {
   return {
-    type: "array",
+    type: 'array',
     items: {
-      type: "object",
-      propertyOrdering: ["name", itemsKey],
-      required: ["name", itemsKey],
+      type: 'object',
+      propertyOrdering: ['name', itemsKey],
+      required: ['name', itemsKey],
       properties: {
-        name: { type: "string" },
-        [itemsKey]: { type: "array", items: itemSchema },
+        name: { type: 'string' },
+        [itemsKey]: { type: 'array', items: itemSchema },
       },
     },
   };
@@ -121,12 +127,12 @@ function sectionSchema(itemsKey, itemSchema) {
 
 function sheetSchema(itemsKey, itemSchema) {
   return {
-    type: "object",
-    propertyOrdering: ["title", "summary", "performer", "sections"],
-    required: ["title", "summary", "sections"],
+    type: 'object',
+    propertyOrdering: ['title', 'summary', 'performer', 'sections'],
+    required: ['title', 'summary', 'sections'],
     properties: {
-      title: { type: "string" },
-      summary: { type: "string" },
+      title: { type: 'string' },
+      summary: { type: 'string' },
       performer: PERFORMER_SCHEMA,
       sections: sectionSchema(itemsKey, itemSchema),
     },
@@ -134,85 +140,78 @@ function sheetSchema(itemsKey, itemSchema) {
 }
 
 const EXERCISE_ITEM_SCHEMA = {
-  type: "object",
-  propertyOrdering: [
-    "name",
-    "amount",
-    "startPose",
-    "endPose",
-    "movementDirection",
-    "formCue",
-  ],
+  type: 'object',
+  propertyOrdering: ['name', 'amount', 'startPose', 'endPose', 'movementDirection', 'formCue'],
   // amount is deliberately absent: a required string is a string the model fills, and what it
   // fills a prescriptionless exercise with is "1 rep" or the demo clip's length.
-  required: ["name", "startPose", "endPose", "movementDirection", "formCue"],
+  required: ['name', 'startPose', 'endPose', 'movementDirection', 'formCue'],
   properties: {
-    name: { type: "string" },
-    amount: { type: "string" },
-    startPose: { type: "string" },
-    endPose: { type: "string" },
-    movementDirection: { type: "string" },
-    formCue: { type: "string" },
+    name: { type: 'string' },
+    amount: { type: 'string' },
+    startPose: { type: 'string' },
+    endPose: { type: 'string' },
+    movementDirection: { type: 'string' },
+    formCue: { type: 'string' },
   },
 };
 
 const POINT_ITEM_SCHEMA = {
-  type: "object",
-  propertyOrdering: ["label", "detail", "visual"],
-  required: ["label", "detail", "visual"],
+  type: 'object',
+  propertyOrdering: ['label', 'detail', 'visual'],
+  required: ['label', 'detail', 'visual'],
   properties: {
-    label: { type: "string" },
-    detail: { type: "string" },
-    visual: { type: "string" },
+    label: { type: 'string' },
+    detail: { type: 'string' },
+    visual: { type: 'string' },
   },
 };
 
 const EXERCISE_INSTRUCTION = [
-  "Watch this workout video and transcribe every exercise demonstrated, in the order performed.",
-  "Give the video a short title and a one-sentence summary.",
-  "Group the exercises into the sections the video itself uses (warm-up, circuits, cool-down); use a single section when the video has none.",
-  "Write amount only for a prescription the video actually states: sets and reps (for example 3 x 12 reps), a duration to hold or work for (for example 45 seconds), or a frequency (for example twice a day).",
+  'Watch this workout video and transcribe every exercise demonstrated, in the order performed.',
+  'Give the video a short title and a one-sentence summary.',
+  'Group the exercises into the sections the video itself uses (warm-up, circuits, cool-down); use a single section when the video has none.',
+  'Write amount only for a prescription the video actually states: sets and reps (for example 3 x 12 reps), a duration to hold or work for (for example 45 seconds), or a frequency (for example twice a day).',
   "Leave amount empty whenever the video prescribes nothing — a setup step, a demonstration of a mistake, a movement shown once, or 'hold it as long as you like'. Never invent an amount, never write a filler such as '1 set', '1 rep' or 'as needed', and never use how long the exercise happens to be demonstrated on screen as its amount.",
   "An exercise travels between two positions, so describe both. Write startPose and endPose as clauses completing the sentence 'A person ...', each describing only the visible body position an illustrator could draw from, for example 'standing tall with feet together and arms at their sides' and 'in a deep side lunge with one leg straight and the toes pointed up'.",
-  "For a static hold, write startPose as the entry position and endPose as the held position.",
+  'For a static hold, write startPose as the entry position and endPose as the held position.',
   "Write movementDirection as a short phrase completing the sentence 'an arrow ...', naming only the path the body travels between those two positions, for example 'sweeping down and out to the left hip' or 'pointing straight down through the hips'; leave the word arrow out of it.",
-  "Write all three in the third person, describing the figure rather than addressing the viewer; they are drawing instructions, so keep coaching language out of them.",
-  "Write formCue as one short coaching cue for performing the movement safely.",
+  'Write all three in the third person, describing the figure rather than addressing the viewer; they are drawing instructions, so keep coaching language out of them.',
+  'Write formCue as one short coaching cue for performing the movement safely.',
   PERFORMER_INSTRUCTION,
-].join(" ");
+].join(' ');
 
 const GENERIC_INSTRUCTION = [
-  "Watch this video and distil it into a one-page overview sheet.",
-  "Give the video a short title and a one-sentence summary.",
-  "Group the material into the sections the video itself uses; use a single section when the video has none.",
-  "Within each section list the points worth remembering, in the order the video makes them.",
-  "Write label as a short noun phrase of two to six words naming the point.",
-  "Write detail as one sentence carrying the substance of the point, in prose a reader keeps.",
+  'Watch this video and distil it into a one-page overview sheet.',
+  'Give the video a short title and a one-sentence summary.',
+  'Group the material into the sections the video itself uses; use a single section when the video has none.',
+  'Within each section list the points worth remembering, in the order the video makes them.',
+  'Write label as a short noun phrase of two to six words naming the point.',
+  'Write detail as one sentence carrying the substance of the point, in prose a reader keeps.',
   "Write visual as a clause completing the sentence 'an illustration of ...', naming only what an illustrator would draw for that point — concrete objects, a small scene, or a simple icon, for example 'a hand pouring water into a measuring jug' — and keep abstractions, lettering and numbers out of it.",
-  "Write visual in the third person; it is a drawing instruction, so keep explanatory language in detail instead.",
+  'Write visual in the third person; it is a drawing instruction, so keep explanatory language in detail instead.',
   PERFORMER_INSTRUCTION,
-].join(" ");
+].join(' ');
 
 const EXERCISE_STYLE_BLOCK =
-  "The style should be clean, flat vector illustration, minimalistic, with a plain white background, serving as a step-by-step exercise guide.";
+  'The style should be clean, flat vector illustration, minimalistic, with a plain white background, serving as a step-by-step exercise guide.';
 const GENERIC_STYLE_BLOCK =
-  "The style should be clean, flat vector illustration, minimalistic, with a plain white background, serving as a single-page reference sheet.";
+  'The style should be clean, flat vector illustration, minimalistic, with a plain white background, serving as a single-page reference sheet.';
 const GRID_STYLE_BLOCK =
-  "The overall style should be modern, visually pleasing, flat vector art with a cohesive color palette on a plain white background.";
+  'The overall style should be modern, visually pleasing, flat vector art with a cohesive color palette on a plain white background.';
 
 function escapeTableCell(value) {
-  return String(value ?? "").replace(/\|/g, "\\|");
+  return String(value ?? '').replace(/\|/g, '\\|');
 }
 
 function readAmount(exercise) {
-  return String(exercise?.amount ?? "").trim();
+  return String(exercise?.amount ?? '').trim();
 }
 
 // An exercise the video never prescribed carries no amount, and printing empty parentheses
 // after its name reads as a prescription the video never made.
 function describeAmount(exercise) {
   const amount = readAmount(exercise);
-  return amount ? ` (${amount})` : "";
+  return amount ? ` (${amount})` : '';
 }
 
 function hasAnyAmount(exercises) {
@@ -223,40 +222,39 @@ function hasAnyAmount(exercises) {
 // sometimes returns one ("a curved arrow sweeping down") and sometimes a bare direction
 // ("downward into a squat"), and only one of those reads as a sentence in the template.
 function describeArrow(exercise) {
-  const direction = String(exercise.movementDirection ?? "")
+  const direction = String(exercise.movementDirection ?? '')
     .trim()
-    .replace(/^(a|an)\s+\w*\s*arrow\s+/i, "");
-  return direction ? `an arrow ${direction}` : "";
+    .replace(/^(a|an)\s+\w*\s*arrow\s+/i, '');
+  return direction ? `an arrow ${direction}` : '';
 }
 
 function describeVisual(point) {
-  const visual = String(point.visual ?? "")
+  const visual = String(point.visual ?? '')
     .trim()
-    .replace(/^an?\s+illustration\s+of\s+/i, "");
-  return visual || String(point.label ?? "").trim();
+    .replace(/^an?\s+illustration\s+of\s+/i, '');
+  return visual || String(point.label ?? '').trim();
 }
 
 const SHEET_MODES = {
   exercise: {
-    itemsKey: "exercises",
-    schema: sheetSchema("exercises", EXERCISE_ITEM_SCHEMA),
+    itemsKey: 'exercises',
+    schema: sheetSchema('exercises', EXERCISE_ITEM_SCHEMA),
     instruction: EXERCISE_INSTRUCTION,
     styleBlock: EXERCISE_STYLE_BLOCK,
     tableLeadIn:
-      "For reference, the exercises restated exactly — use these names verbatim as the labels.",
+      'For reference, the exercises restated exactly — use these names verbatim as the labels.',
     // A sheet where no exercise was prescribed anything would print a column of blanks, so
     // the Amount column only appears when at least one exercise carries one.
     columns: [
-      { header: "Exercise", cell: (exercise) => exercise.name },
+      { header: 'Exercise', cell: (exercise) => exercise.name },
       {
-        header: "Amount",
+        header: 'Amount',
         cell: (exercise) => exercise.amount,
         include: hasAnyAmount,
       },
-      { header: "Form cue", cell: (exercise) => exercise.formCue },
+      { header: 'Form cue', cell: (exercise) => exercise.formCue },
     ],
-    emptyPromptNote:
-      "No exercises were extracted, so there is nothing to illustrate yet.",
+    emptyPromptNote: 'No exercises were extracted, so there is nothing to illustrate yet.',
     openingSentence: (sheet, count) =>
       `A clean, ${count}-panel fitness infographic titled "${sheet.title}". ` +
       `Every panel shows the same exercise twice — its start position and its end position — with an arrow between them.`,
@@ -269,7 +267,7 @@ const SHEET_MODES = {
       const arrow = describeArrow(exercise);
       const arrowClause = arrow
         ? `, with ${arrow} drawn between them to show the direction of the movement`
-        : "";
+        : '';
       return (
         `Panel ${index + 1} — ${exercise.name}${describeAmount(exercise)}: two figures side by side, ` +
         `first a person ${exercise.startPose}, then a person ${exercise.endPose}${arrowClause}.`
@@ -279,27 +277,25 @@ const SHEET_MODES = {
     // arrow keeps the direction readable at tile size.
     gridEntry: (exercise, index) => {
       const arrow = describeArrow(exercise);
-      return `${index + 1}. ${exercise.name}${describeAmount(exercise)} — a figure ${exercise.endPose}${arrow ? `, with ${arrow}` : ""}.`;
+      return `${index + 1}. ${exercise.name}${describeAmount(exercise)} — a figure ${exercise.endPose}${arrow ? `, with ${arrow}` : ''}.`;
     },
-    performerLead: "Draw the same person in every panel",
+    performerLead: 'Draw the same person in every panel',
     panelCaption: (exercises) =>
       hasAnyAmount(exercises)
-        ? "Number each panel and label it with the exercise name and its amount where one is given."
-        : "Number each panel and label it with the exercise name.",
+        ? 'Number each panel and label it with the exercise name and its amount where one is given.'
+        : 'Number each panel and label it with the exercise name.',
   },
   generic: {
-    itemsKey: "points",
-    schema: sheetSchema("points", POINT_ITEM_SCHEMA),
+    itemsKey: 'points',
+    schema: sheetSchema('points', POINT_ITEM_SCHEMA),
     instruction: GENERIC_INSTRUCTION,
     styleBlock: GENERIC_STYLE_BLOCK,
-    tableLeadIn:
-      "For reference, the points restated exactly — use these labels verbatim.",
+    tableLeadIn: 'For reference, the points restated exactly — use these labels verbatim.',
     columns: [
-      { header: "Point", cell: (point) => point.label },
-      { header: "Detail", cell: (point) => point.detail },
+      { header: 'Point', cell: (point) => point.label },
+      { header: 'Detail', cell: (point) => point.detail },
     ],
-    emptyPromptNote:
-      "No points were extracted, so there is nothing to illustrate yet.",
+    emptyPromptNote: 'No points were extracted, so there is nothing to illustrate yet.',
     openingSentence: (sheet, count) =>
       `A clean, ${count}-panel infographic titled "${sheet.title}". ` +
       `Every panel illustrates one point and carries its label underneath.`,
@@ -310,8 +306,7 @@ const SHEET_MODES = {
       `Panel ${index + 1} — ${point.label}: an illustration of ${describeVisual(point)}.`,
     gridEntry: (point, index) =>
       `${index + 1}. ${point.label} — an illustration of ${describeVisual(point)}.`,
-    performerLead:
-      "Wherever a panel shows a person, draw the same person throughout",
+    performerLead: 'Wherever a panel shows a person, draw the same person throughout',
     panelCaption: () => "Number each panel and label it with the point's name.",
   },
 };
@@ -320,8 +315,10 @@ const SHEET_MODES = {
 // title silently produces the wrong schema for the whole run.
 export function resolveMode(mode) {
   const descriptor = SHEET_MODES[mode];
-  if (descriptor) return descriptor;
-  const modeList = Object.keys(SHEET_MODES).join(", ");
+  if (descriptor) {
+    return descriptor;
+  }
+  const modeList = Object.keys(SHEET_MODES).join(', ');
   throw new Error(
     mode
       ? `Unknown --mode "${mode}". Use one of: ${modeList}.`
@@ -329,25 +326,21 @@ export function resolveMode(mode) {
   );
 }
 
-export function buildExtractionRequest(
-  youtubeUrl,
-  focus,
-  { mediaResolution, mode } = {},
-) {
+export function buildExtractionRequest(youtubeUrl, focus, { mediaResolution, mode } = {}) {
   const descriptor = resolveMode(mode);
-  const focusText = String(focus ?? "").trim();
+  const focusText = String(focus ?? '').trim();
   const instruction = focusText
     ? `${descriptor.instruction} Cover only this part of the video: ${focusText}`
     : descriptor.instruction;
 
   const generationConfig = {
-    responseMimeType: "application/json",
+    responseMimeType: 'application/json',
     responseSchema: descriptor.schema,
   };
   // Low resolution cuts the video token count roughly fourfold; only opt in when asked,
   // because on-screen rep counts get unreadable at that sampling rate.
-  if (mediaResolution === "low") {
-    generationConfig.mediaResolution = "MEDIA_RESOLUTION_LOW";
+  if (mediaResolution === 'low') {
+    generationConfig.mediaResolution = 'MEDIA_RESOLUTION_LOW';
   }
 
   return {
@@ -365,9 +358,7 @@ export function buildExtractionRequest(
 const PANEL_LAYOUT_LIMIT = 8;
 
 function everyItem(sheet, descriptor) {
-  return (sheet?.sections ?? []).flatMap(
-    (section) => section[descriptor.itemsKey] ?? [],
-  );
+  return (sheet?.sections ?? []).flatMap((section) => section[descriptor.itemsKey] ?? []);
 }
 
 export function countItems(sheet, mode) {
@@ -376,12 +367,12 @@ export function countItems(sheet, mode) {
 
 function performerFields(sheet) {
   const performer = sheet?.performer ?? {};
-  const read = (field) => String(performer[field] ?? "").trim();
+  const read = (field) => String(performer[field] ?? '').trim();
   return {
-    build: read("build"),
-    hair: read("hair"),
-    clothing: read("clothing"),
-    setting: read("setting"),
+    build: read('build'),
+    hair: read('hair'),
+    clothing: read('clothing'),
+    setting: read('setting'),
   };
 }
 
@@ -395,12 +386,12 @@ export function composePerformerSentence(sheet, mode) {
   const figureParts = [build, hair, clothing].filter(Boolean);
   const sentences = [];
   if (figureParts.length > 0) {
-    sentences.push(`${descriptor.performerLead}: ${figureParts.join(", ")}.`);
+    sentences.push(`${descriptor.performerLead}: ${figureParts.join(', ')}.`);
   }
   if (setting) {
     sentences.push(`Suggest the setting with a few minimal props: ${setting}.`);
   }
-  return sentences.join(" ");
+  return sentences.join(' ');
 }
 
 /**
@@ -408,9 +399,7 @@ export function composePerformerSentence(sheet, mode) {
  * the sheet's items is dropped everywhere, so every section's table has the same shape.
  */
 function visibleColumns(descriptor, items) {
-  return descriptor.columns.filter(
-    (column) => !column.include || column.include(items),
-  );
+  return descriptor.columns.filter((column) => !column.include || column.include(items));
 }
 
 /**
@@ -421,28 +410,26 @@ function visibleColumns(descriptor, items) {
 export function renderSectionTables(sheet, mode) {
   const descriptor = resolveMode(mode);
   const columns = visibleColumns(descriptor, everyItem(sheet, descriptor));
-  const headerRow = `| ${columns.map((column) => column.header).join(" | ")} |`;
-  const dividerRow = `| ${columns.map(() => "---").join(" | ")} |`;
+  const headerRow = `| ${columns.map((column) => column.header).join(' | ')} |`;
+  const dividerRow = `| ${columns.map(() => '---').join(' | ')} |`;
 
   const lines = [];
   let leadInPrinted = false;
   for (const section of sheet?.sections ?? []) {
-    lines.push(`## ${section.name}`, "");
+    lines.push(`## ${section.name}`, '');
     // The lead-in explains every table that follows, so it is printed once.
     if (!leadInPrinted) {
-      lines.push(descriptor.tableLeadIn, "");
+      lines.push(descriptor.tableLeadIn, '');
       leadInPrinted = true;
     }
     lines.push(headerRow, dividerRow);
     for (const item of section[descriptor.itemsKey] ?? []) {
-      lines.push(
-        `| ${columns.map((column) => escapeTableCell(column.cell(item))).join(" | ")} |`,
-      );
+      lines.push(`| ${columns.map((column) => escapeTableCell(column.cell(item))).join(' | ')} |`);
     }
-    lines.push("");
+    lines.push('');
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /**
@@ -453,12 +440,12 @@ export function renderSectionTables(sheet, mode) {
 export function renderPromptDocument(sheet, mode) {
   const tables = renderSectionTables(sheet, mode).trimEnd();
   return [
-    `# ${sheet?.title ?? "Sheet"}`,
-    "",
+    `# ${sheet?.title ?? 'Sheet'}`,
+    '',
     composeImagePrompt(sheet, mode),
-    ...(tables ? ["", tables] : []),
-    "",
-  ].join("\n");
+    ...(tables ? ['', tables] : []),
+    '',
+  ].join('\n');
 }
 
 function composePanelPrompt(sheet, descriptor, items, performerSentence) {
@@ -467,25 +454,23 @@ function composePanelPrompt(sheet, descriptor, items, performerSentence) {
   // Sections earn a grouping instruction only when one of them actually gathers several
   // items. A video that titles every item separately yields one section per item, where
   // naming the rows just repeats the panel labels.
-  const groupingSections = (sheet.sections ?? []).filter(
-    (section) => section.name,
-  );
+  const groupingSections = (sheet.sections ?? []).filter((section) => section.name);
   const gathersItems = groupingSections.some(
     (section) => (section[descriptor.itemsKey] ?? []).length > 1,
   );
   const grouping =
     groupingSections.length > 1 && gathersItems
-      ? ` Group the panels into labelled rows: ${groupingSections.map((section) => section.name).join(", ")}.`
-      : "";
+      ? ` Group the panels into labelled rows: ${groupingSections.map((section) => section.name).join(', ')}.`
+      : '';
 
   return [
     descriptor.openingSentence(sheet, items.length),
-    panels.join(" "),
+    panels.join(' '),
     performerSentence,
     `${descriptor.styleBlock} ${descriptor.panelCaption(items)}${grouping}`,
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(' ');
 }
 
 function composeGridPrompt(sheet, descriptor, items, performerSentence) {
@@ -493,12 +478,12 @@ function composeGridPrompt(sheet, descriptor, items, performerSentence) {
 
   return [
     descriptor.gridOpeningSentence(sheet, items.length),
-    tiles.join(" "),
+    tiles.join(' '),
     performerSentence,
     GRID_STYLE_BLOCK,
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(' ');
 }
 
 export function composeImagePrompt(sheet, mode) {
@@ -508,10 +493,10 @@ export function composeImagePrompt(sheet, mode) {
 
   if (items.length === 0) {
     return [
-      `A clean infographic titled "${sheet?.title ?? "Video Sheet"}".`,
+      `A clean infographic titled "${sheet?.title ?? 'Video Sheet'}".`,
       descriptor.emptyPromptNote,
       descriptor.styleBlock,
-    ].join(" ");
+    ].join(' ');
   }
 
   // The verbatim restatement that keeps labels unparaphrased lives in the section tables

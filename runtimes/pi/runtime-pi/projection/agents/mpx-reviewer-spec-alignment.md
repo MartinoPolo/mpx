@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-spec-alignment
-description: "Read-only reviewer for task/spec compliance and scope control."
+description: 'Read-only reviewer for task/spec compliance and scope control.'
 model: openai-codex/gpt-5.6-terra
 thinking: medium
 tools: read,grep,find,ls,bash
 output_schema: findings
 
 ---
+
 # Reviewer: Spec Alignment
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.

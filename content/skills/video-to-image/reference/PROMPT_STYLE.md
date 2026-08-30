@@ -14,7 +14,7 @@ layout instead of inventing one, and it is why a sheet comes back with exactly t
 the video had.
 
 **2. One numbered entry per item, describing what is visible.** This is the part that
-decides whether the image is usable. The entry describes *body geometry*, not coaching:
+decides whether the image is usable. The entry describes _body geometry_, not coaching:
 
 > Panel 1: A person in a Runner's Lunge, with one foot forward and the opposite hand on the
 > ground, reaching the other arm up to the sky.
@@ -63,10 +63,10 @@ that can be trained from.
 
 ## Layout follows item count
 
-| Items | Shape | Figures per item | Per-item text |
-| ------- | ------------------------------------------- | ------------------------ | ---------------------------------------- |
-| Up to 8 | A single row or two rows of numbered panels | Two, plus the arrow | Full name, plus an amount only if stated |
-| Over 8 | A grid of small icon tiles | One, the end position | 2-5 words |
+| Items   | Shape                                       | Figures per item      | Per-item text                            |
+| ------- | ------------------------------------------- | --------------------- | ---------------------------------------- |
+| Up to 8 | A single row or two rows of numbered panels | Two, plus the arrow   | Full name, plus an amount only if stated |
+| Over 8  | A grid of small icon tiles                  | One, the end position | 2-5 words                                |
 
 An amount reaches the prompt only when the video prescribed one; see
 [`EXERCISE.md`](EXERCISE.md) for why an invented amount is worse than none.
@@ -119,7 +119,7 @@ vocabulary for the other twenty-nine, which is cheaper than describing all of th
 
 A fifth part joins the four above whenever the video has someone on screen: one sentence
 describing the person to draw in every panel — build, hair, clothing colours, and the setting
-suggested with a few props. It is what makes the sheet recognisable as belonging to *this*
+suggested with a few props. It is what makes the sheet recognisable as belonging to _this_
 video rather than to any workout, and it comes from the `performer` object the extraction
 step fills. A video with nobody on screen returns an empty `performer` and the sentence is
 simply left out.

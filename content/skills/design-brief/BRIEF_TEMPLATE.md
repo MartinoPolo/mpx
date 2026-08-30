@@ -62,16 +62,16 @@ state — reproduce faithfully — or still being designed.]
 
 Every state this component can be in:
 
-| State | Visual Treatment | Trigger |
+| State                     | Visual Treatment | Trigger |
 | ------------------------- | ---------------- | ------- |
-| Default | [description] | [when] |
-| Loading | [description] | [when] |
-| Empty | [description] | [when] |
-| Error | [description] | [when] |
-| Hover | [description] | [when] |
-| Active/Focus | [description] | [when] |
-| Disabled | [description] | [when] |
-| [feature-specific states] | | |
+| Default                   | [description]    | [when]  |
+| Loading                   | [description]    | [when]  |
+| Empty                     | [description]    | [when]  |
+| Error                     | [description]    | [when]  |
+| Hover                     | [description]    | [when]  |
+| Active/Focus              | [description]    | [when]  |
+| Disabled                  | [description]    | [when]  |
+| [feature-specific states] |                  |         |
 
 ---
 
@@ -79,22 +79,22 @@ Every state this component can be in:
 
 ### Existing components (use these)
 
-| Component | Variant/Props | Usage in this design |
+| Component | Variant/Props                 | Usage in this design   |
 | --------- | ----------------------------- | ---------------------- |
-| Button | `variant="ghost"` size="icon" | Toolbar action buttons |
-| Badge | `variant="success"` | Status indicators |
+| Button    | `variant="ghost"` size="icon" | Toolbar action buttons |
+| Badge     | `variant="success"`           | Status indicators      |
 
 ### Components to adopt
 
-| Component | Source | Rationale |
+| Component | Source             | Rationale                                  |
 | --------- | ------------------ | ------------------------------------------ |
-| [name] | [library + ref id] | [why existing components don't cover this] |
+| [name]    | [library + ref id] | [why existing components don't cover this] |
 
 ### Components to design
 
-| Component | Description | Why new |
+| Component | Description    | Why new                           |
 | --------- | -------------- | --------------------------------- |
-| [name] | [what it does] | [why no existing component works] |
+| [name]    | [what it does] | [why no existing component works] |
 
 ---
 

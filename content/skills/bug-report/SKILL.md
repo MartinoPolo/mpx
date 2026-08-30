@@ -77,6 +77,7 @@ plus any area labels detected from codebase exploration, and this body:
 **Expected behavior:** [what should happen]
 
 **How to reproduce:**
+
 1. [step 1]
 2. [step 2]
 

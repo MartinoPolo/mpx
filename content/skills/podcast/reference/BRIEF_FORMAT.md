@@ -18,10 +18,13 @@ true.
 # <Topic> Deep Dive — Podcast Resource (target <N> minutes)
 
 ## Part 1: <what it is and where it fits>
+
 <3-6 dense paragraphs>
 
 ## Part 2: <the core API or mechanism>
+
 ...
+
 ## Part N: In Your Own Code
 ```
 
@@ -40,13 +43,13 @@ generated podcasts feel empty. Say the mechanism:
 **Spell syntax out for text-to-speech.** The hosts read this aloud, so punctuation-heavy syntax
 becomes words:
 
-| Written in the brief | Instead of |
-| ---------------------------------------- | ----------------- |
-| the colon host pseudo-class | `:host` |
-| double-colon part | `::part` |
+| Written in the brief                                   | Instead of        |
+| ------------------------------------------------------ | ----------------- |
+| the colon host pseudo-class                            | `:host`           |
+| double-colon part                                      | `::part`          |
 | element double-colon part open-paren label close-paren | `el::part(label)` |
-| the class svelte dash hash | `.svelte-<hash>` |
-| h1 through h6 | `h1`–`h6` |
+| the class svelte dash hash                             | `.svelte-<hash>`  |
+| h1 through h6                                          | `h1`–`h6`         |
 
 Plain identifiers stay as they are: `attachShadow`, `ShadowRoot`, `adoptedStyleSheets`.
 
@@ -83,7 +86,7 @@ Fixed skeleton, in this order:
    notes: what he works with daily, what he already owns, what he has never used. This line is
    what makes the hosts skip the basics.
 3. **Tone** — one sentence, e.g. `Technical and conversational. Two experienced developers
-   going deep. Be specific and precise.`
+going deep. Be specific and precise.`
 4. **CRITICAL block** — verbatim:
 
    > CRITICAL: NO metaphors. NO analogies. NO figurative language. Use direct, literal,
@@ -92,6 +95,7 @@ Fixed skeleton, in this order:
    > rhetorical questions, no restating.
 
    Swap the example API names for the current topic's.
+
 5. **Numbered topics** — one line per brief part, mirroring its order, with key sub-topics in
    parentheses. The personalization part gets its own numbered line so the hosts reach it.
 6. **Target duration** — the line from the length table in SKILL.md § Step 5.

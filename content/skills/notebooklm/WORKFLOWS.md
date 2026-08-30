@@ -5,17 +5,19 @@ Use the workflow matching the requested outcome and account for every source and
 ## Common Workflows
 
 ### Research to Podcast (Interactive)
+
 **Time:** 5-10 minutes total
 
-1. `notebooklm create "Research: [topic]"` — *if fails: check auth with `notebooklm login`*
-2. `notebooklm source add` for each URL/document — *if one fails: log warning, continue with others*
-3. Wait for sources: `notebooklm source list --json` until all status=READY — *required before generation*
-4. `notebooklm generate audio "Focus on [specific angle]"` (confirm when asked) — *if rate limited: wait 5 min, retry once*
+1. `notebooklm create "Research: [topic]"` — _if fails: check auth with `notebooklm login`_
+2. `notebooklm source add` for each URL/document — _if one fails: log warning, continue with others_
+3. Wait for sources: `notebooklm source list --json` until all status=READY — _required before generation_
+4. `notebooklm generate audio "Focus on [specific angle]"` (confirm when asked) — _if rate limited: wait 5 min, retry once_
 5. Note the artifact ID returned
 6. Check `notebooklm artifact list` later for status
 7. `notebooklm download audio ./podcast.mp3` when complete (confirm when asked)
 
 ### Research to Podcast (Automated with Subagent)
+
 **Time:** 5-10 minutes, but continues in background
 
 When user wants full automation (generate and download when ready):
@@ -31,12 +33,14 @@ When user wants full automation (generate and download when ready):
 5. Main conversation continues while agent waits
 
 **Error handling in subagent:**
+
 - If `artifact wait` returns exit code 2 (timeout): Report timeout, suggest checking `artifact list`
 - If download fails: Check if artifact status is COMPLETED first
 
 **Benefits:** Non-blocking, user can do other work, automatic download on completion
 
 ### Document Analysis
+
 **Time:** 1-2 minutes
 
 1. `notebooklm create "Analysis: [project]"`
@@ -46,6 +50,7 @@ When user wants full automation (generate and download when ready):
 5. Continue chatting as needed
 
 ### Bulk Import
+
 **Time:** Varies by source count
 
 1. `notebooklm create "Collection: [name]"`
@@ -61,6 +66,7 @@ When user wants full automation (generate and download when ready):
 **Supported types:** PDFs, YouTube URLs, web URLs, Google Docs, text files, Markdown, Word docs, EPUB, audio files, video files, images
 
 ### Bulk Import with Source Waiting (Subagent Pattern)
+
 **Time:** Varies by source count
 
 When adding multiple sources and needing to wait for processing before chat/generation:
@@ -77,6 +83,7 @@ When adding multiple sources and needing to wait for processing before chat/gene
 **Why wait for sources?** Sources must be indexed before chat or generation. Takes ~30 seconds to several minutes per source (see the processing-times table below).
 
 ### Deep Web Research (Subagent Pattern)
+
 **Time:** 15-30+ minutes, runs in background
 
 Deep research finds and analyzes web sources on a topic:
@@ -91,15 +98,18 @@ Deep research finds and analyzes web sources on a topic:
 5. When agent completes, sources are imported automatically
 
 **Alternative (blocking):** For simple cases, omit `--no-wait`:
+
 ```bash
 notebooklm source add-research "topic" --mode deep --import-all
 # Blocks until research completes (deep mode: 15-30+ min)
 ```
 
 **When to use each mode:**
+
 - `--mode fast`: Specific topic, quick overview needed (5-10 sources, seconds)
 - `--mode deep`: Broad topic, comprehensive analysis needed (20+ sources, 15-30+ min)
 
 **Research sources:**
+
 - `--from web`: Search the web (default)
 - `--from drive`: Search Google Drive

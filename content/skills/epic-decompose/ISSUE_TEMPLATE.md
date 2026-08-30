@@ -4,6 +4,7 @@ Canonical provider-neutral task Issue body for `issue-create` and `epic-decompos
 
 ```markdown
 > **Unanswered questions:**
+>
 > - [Question requiring a human decision; HITL Issues only]
 
 ## Description

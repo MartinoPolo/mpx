@@ -3,7 +3,7 @@
   "sourceRegistry": "packages/runtime-tools/src/runtime-tool-registry.ts",
   "runtimeToolInventorySha256": "64032f7f15021fc4999cf9458bbada0f61b7627a529e9f3ef62e873b5685451a",
   "executorEvidenceSource": "packages/executors/src/index.ts",
-  "executorEvidenceBindingSha256": "669fbcd3fa13989f9a843f21cbfda2df7bba65f49e625b40b52b1c19eb1ac561",
+  "executorEvidenceBindingSha256": "a078ec5f30323b16647eb1a8d1de9901f1b4ac6f55205bc975dde7f4728c7aa3",
   "productionBackend": "apps/cli/src/sbx-execution.ts#createProductionSbxExecutionAdapter",
   "lifecycleAdapter": "packages/executors/src/standalone-sbx-executor.ts#StandaloneSbxLifecycleAdapter",
   "counts": {

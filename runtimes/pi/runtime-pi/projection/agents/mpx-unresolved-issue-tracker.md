@@ -1,6 +1,6 @@
 ---
 name: mpx-unresolved-issue-tracker
-description: "Routes unresolved items from execution to sibling GitHub issues or a epic-level tracking issue. Spawned by skills that discover non-blocking issues during implementation."
+description: 'Routes unresolved items from execution to sibling GitHub issues or a epic-level tracking issue. Spawned by skills that discover non-blocking issues during implementation.'
 model: openai-codex/gpt-5.6-terra
 thinking: low
 tools: read,grep,find,ls,bash
@@ -67,6 +67,7 @@ gh api graphql -f query='
 ```
 
 Separate sub-issues into:
+
 - **Sibling issues** — open sub-issues excluding the source issue and any issue labeled `unresolved`
 - **Existing tracking issue** — open sub-issue labeled `unresolved` (at most one)
 
@@ -93,6 +94,7 @@ Appended format — if the sibling already has an `## Unresolved from #<source>`
 ## Unresolved from #<source_issue>
 
 ### <Item summary>
+
 **Why unresolved:** <reasoning>
 **Summary:** <description>
 ```
@@ -151,13 +153,16 @@ Report what was routed where:
 **Epic:** #<number> — <title>
 
 ### Routed to Sibling Issues
+
 - **<item summary>** → #<sibling> (<sibling title>)
 
 ### Routed to Tracking Issue
+
 - **<item summary>** → #<tracking> (Unresolved: <epic title>)
   - [created | updated]
 
 ### Could Not Route
+
 - [any items that failed, with reason]
 ```
 

@@ -37,18 +37,18 @@ folder.
 
 ```jsonc
 {
-  "id": "01K…",          // ULID; identity across import
-  "name": "…",           // searched by fuzzy match over the whole string
-  "link": "…",           // URL, filesystem path, custom scheme, or command line
+  "id": "01K…", // ULID; identity across import
+  "name": "…", // searched by fuzzy match over the whole string
+  "link": "…", // URL, filesystem path, custom scheme, or command line
   "rawContent": null,
   "icon": "default",
-  "openCount": 0,        // drives ranking; preserved on update
-  "openWith": "/Applications/<uuid>",       // optional
-  "applicationId": "/Applications/<uuid>",  // always present alongside openWith, same value
+  "openCount": 0, // drives ranking; preserved on update
+  "openWith": "/Applications/<uuid>", // optional
+  "applicationId": "/Applications/<uuid>", // always present alongside openWith, same value
   "tags": [],
   "createdAt": "…",
   "updatedAt": "…",
-  "pinned": 0            // optional
+  "pinned": 0, // optional
 }
 ```
 
@@ -70,11 +70,15 @@ therefore not a source of ids. The layout is 10 characters of millisecond timest
 followed by 16 of randomness, first character `0`–`7`:
 
 ```js
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 function ulid() {
-  let timestamp = "", value = BigInt(Date.now());
-  for (let index = 0; index < 10; index += 1) { timestamp = CROCKFORD[Number(value % 32n)] + timestamp; value /= 32n; }
-  let randomness = "";
+  let timestamp = '',
+    value = BigInt(Date.now());
+  for (let index = 0; index < 10; index += 1) {
+    timestamp = CROCKFORD[Number(value % 32n)] + timestamp;
+    value /= 32n;
+  }
+  let randomness = '';
   for (const byte of crypto.getRandomValues(new Uint8Array(16))) randomness += CROCKFORD[byte % 32];
   return timestamp + randomness;
 }
@@ -108,7 +112,7 @@ This is why a quicklinks-only JSON import cannot carry aliases — that command 
 From the quicklinks importer:
 
 ```js
-for (let id of existingIds) importedIds.has(id) || await deleteOne(id);
+for (let id of existingIds) importedIds.has(id) || (await deleteOne(id));
 ```
 
 - **The file is a mirror, not a patch.** Any quicklink present in Raycast and absent from
@@ -147,14 +151,14 @@ Suggested per-project family: `repo`, `prs` (or `mrs`), `issues`, `dash`, `folde
 
 ## Link forms that work on Windows
 
-| Target | `link` |
-| --- | --- |
-| Web | `https://…` |
-| Folder or file | `<drive>:\path\to\thing` |
-| File, opened with a chosen app | `file:///C:/path` + `openWith` |
-| Obsidian note | `obsidian://open?vault=<vault>&file=<url-encoded path within vault>` |
-| VS Code folder | `file:///C:/path` + the VS Code `openWith` id |
-| Terminal profile | `wt -p "<profile name>"` + the Windows Terminal `openWith` id |
-| Parameterised | `https://…/{argument name="query"}` |
+| Target                         | `link`                                                               |
+| ------------------------------ | -------------------------------------------------------------------- |
+| Web                            | `https://…`                                                          |
+| Folder or file                 | `<drive>:\path\to\thing`                                             |
+| File, opened with a chosen app | `file:///C:/path` + `openWith`                                       |
+| Obsidian note                  | `obsidian://open?vault=<vault>&file=<url-encoded path within vault>` |
+| VS Code folder                 | `file:///C:/path` + the VS Code `openWith` id                        |
+| Terminal profile               | `wt -p "<profile name>"` + the Windows Terminal `openWith` id        |
+| Parameterised                  | `https://…/{argument name="query"}`                                  |
 
 Placeholders also cover clipboard, selected text, date and calculator results.
