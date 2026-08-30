@@ -11,7 +11,7 @@ import {
   validateGeneratedRepository,
   validateProvenance,
   validateSharedInstructionLinks,
-} from './validate-generated.mjs';
+} from '../../../scripts/validate-generated.mjs';
 
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const messages = (diagnostics) => diagnostics.map((item) => item.code);
@@ -37,7 +37,7 @@ describe('generated repository validation', () => {
   });
 
   it('keeps the canonical shared-instruction inventory complete', async () => {
-    const root = path.resolve(import.meta.dirname, '../content/instructions/shared');
+    const root = path.resolve(import.meta.dirname, '../../../content/instructions/shared');
     expect(new Set(await readdir(root))).toEqual(
       new Set([
         'AUTHORING.md',
@@ -61,7 +61,7 @@ describe('generated repository validation', () => {
   });
 
   it('keeps current shared-instruction relative links closed', async () => {
-    const root = path.resolve(import.meta.dirname, '..');
+    const root = path.resolve(import.meta.dirname, '../../..');
     const directory = path.join(root, 'content/instructions/shared');
     const names = await readdir(directory);
     const current = new Map(
@@ -100,7 +100,7 @@ describe('generated repository validation', () => {
   });
 
   it('recursively syntax-checks every current canonical JavaScript support script', async () => {
-    const root = path.resolve(import.meta.dirname, '..');
+    const root = path.resolve(import.meta.dirname, '../../..');
     const content = path.join(root, 'content');
     const entries = await readdir(content, { recursive: true, withFileTypes: true });
     const names = entries

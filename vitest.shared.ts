@@ -44,7 +44,6 @@ export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>
     'apps/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
     'packages/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
     'runtimes/*/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'scripts/*.test.mjs',
   ],
   e2e: [
     'tests/e2e/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',

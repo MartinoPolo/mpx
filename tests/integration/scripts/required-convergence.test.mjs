@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { runRequiredConvergence } from './required-convergence.mjs';
+import { runRequiredConvergence } from '../../../scripts/required-convergence.mjs';
 
 describe('required source convergence gate', () => {
   it('runs the real drift verifier when both configured legacy source roots exist', async () => {
@@ -43,7 +43,9 @@ describe('required source convergence gate', () => {
   it('exits nonzero when the required gate cannot run in CI', () => {
     const environment = { ...process.env, CI: 'true' };
     delete environment.MPX_PROJECTS;
-    const script = fileURLToPath(new URL('./required-convergence.mjs', import.meta.url));
+    const script = fileURLToPath(
+      new URL('../../../scripts/required-convergence.mjs', import.meta.url),
+    );
     const result = spawnSync(process.execPath, [script], { encoding: 'utf8', env: environment });
     expect(result.status).toBe(1);
     expect(result.stdout.trim()).toBe(

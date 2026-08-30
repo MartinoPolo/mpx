@@ -4,9 +4,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { commandSelectorBytes } from './windows-command.mjs';
+import { commandSelectorBytes } from '../../../scripts/windows-command.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const readPackage = async (relativePath) =>
   JSON.parse(await readFile(path.join(root, relativePath), 'utf8'));
 const executeFile = promisify(execFile);

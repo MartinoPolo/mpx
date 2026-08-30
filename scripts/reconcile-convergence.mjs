@@ -243,7 +243,7 @@ async function decision(entry) {
       disposition: 'externalized',
       destination: 'docs/history/PI_MIGRATION.md',
       adaptation: 'retained as attributed migration history rather than active runtime guidance',
-      test: 'scripts/validate-generated.test.mjs',
+      test: 'tests/integration/scripts/validate-generated.test.mjs',
     };
   }
   if (
@@ -284,7 +284,7 @@ async function decision(entry) {
         disposition: 'canonicalized',
         destination,
         adaptation: 'moved executable discovery behavior beside its canonical skill',
-        test: 'scripts/validate-generated.test.mjs',
+        test: 'tests/integration/scripts/validate-generated.test.mjs',
       };
     }
     if (/worktree|base-branch/u.test(entry.path)) {
@@ -348,7 +348,7 @@ async function decision(entry) {
       disposition: 'externalized',
       destination: 'docs/RUNTIME_ADAPTERS.md',
       adaptation: 'replaced legacy operational guidance with current runtime adapter documentation',
-      test: 'scripts/validate-generated.test.mjs',
+      test: 'tests/integration/scripts/validate-generated.test.mjs',
     };
   }
   return {

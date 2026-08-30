@@ -8,10 +8,10 @@ import {
   classifyTestPath,
   matchingTestCategories,
   TEST_CATEGORIES,
-} from '../vitest.shared.ts';
-import { discoverWorkspaceRoots, filesBelow } from './test-harness-support.mjs';
+} from '../../../vitest.shared.ts';
+import { discoverWorkspaceRoots, filesBelow } from './fixtures/test-harness-support.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const workspaceRoots = await discoverWorkspaceRoots(root);
 
 async function json(relative) {
@@ -26,7 +26,8 @@ describe('test taxonomy', () => {
     expect(classifyTestPath('packages/core/src/value.integration.test.ts')).toBe('integration');
     expect(classifyTestPath('apps/cli/test/unit/value.e2e.test.ts')).toBe('e2e');
     expect(classifyTestPath('tests/contract/public-api.test.ts')).toBe('contract');
-    expect(classifyTestPath('scripts/example.test.mjs')).toBe('integration');
+    expect(classifyTestPath('tests/integration/scripts/example.test.mjs')).toBe('integration');
+    expect(classifyTestPath('scripts/example.test.mjs')).toBeUndefined();
   });
 
   test('does not infer a category from incidental directory or stem words', () => {
@@ -56,6 +57,29 @@ describe('test taxonomy', () => {
     expect(classifyTestPath('tests/contract/future.test.ts')).toBe('contract');
     expect(classifyTestPath('tests/integration/future.test.ts')).toBe('integration');
     expect(classifyTestPath('tests/e2e/future.test.ts')).toBe('e2e');
+  });
+
+  test('keeps the script governance cohort exclusively in root integration tests', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = [
+      'build-preparation.test.mjs',
+      'capture-migration-baseline.test.mjs',
+      'convergence-manifest.test.mjs',
+      'native-capability-inventory.test.mjs',
+      'required-convergence.test.mjs',
+      'run-f2-live-proof.test.mjs',
+      'test-harness.test.mjs',
+      'validate-generated.test.mjs',
+    ];
+    for (const basename of basenames) {
+      const formerPath = `scripts/${basename}`;
+      const integrationPath = `tests/integration/scripts/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(integrationPath), integrationPath).toBe(true);
+      expect(matchingTestCategories(integrationPath), integrationPath).toEqual(['integration']);
+    }
+    expect(files.has('scripts/test-harness-support.mjs')).toBe(false);
+    expect(files.has('tests/integration/scripts/fixtures/test-harness-support.mjs')).toBe(true);
   });
 
   test('preserves the fixed six-suite contract migration inventory', async () => {

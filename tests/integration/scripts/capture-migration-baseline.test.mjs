@@ -17,8 +17,11 @@ import {
   captureFileCandidate,
   inventoriesEqual,
   inventoryDirectory,
-} from './capture-baseline-files.mjs';
-import { buildDirectoryCandidates, buildFileCandidates } from './capture-baseline-candidates.mjs';
+} from '../../../scripts/capture-baseline-files.mjs';
+import {
+  buildDirectoryCandidates,
+  buildFileCandidates,
+} from '../../../scripts/capture-baseline-candidates.mjs';
 
 const roots = [];
 afterEach(async () =>

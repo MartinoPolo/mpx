@@ -25,5 +25,5 @@
 
 # Validators and generated text projections must observe the same bytes.
 /scripts/validate-generated.mjs text eol=lf
-/scripts/validate-generated.test.mjs text eol=lf
+/tests/integration/scripts/validate-generated.test.mjs text eol=lf
 /runtimes/pi/runtime-pi/projection/** text=auto eol=lf

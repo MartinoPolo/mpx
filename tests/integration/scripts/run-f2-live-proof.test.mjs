@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const execute = promisify(execFile),
-  root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+  root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
   script = path.join(root, 'scripts', 'run-f2-live-proof.ps1'),
   fake = path.join(root, 'scripts', 'fake-sbx.mjs'),
   pin = 'b064711a10f22363953e90eae926dbd9d96419e601f9308cd9d1102e3d81ccbf';

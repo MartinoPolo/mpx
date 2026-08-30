@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { collectInventory } from './native-capability-inventory.mjs';
+import { collectInventory } from '../../../scripts/native-capability-inventory.mjs';
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-native-inventory-'));

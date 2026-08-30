@@ -9,7 +9,7 @@ import {
   compareConvergenceManifests,
   mergeReviewedDecisions,
   validateConvergenceManifest,
-} from './convergence-manifest.mjs';
+} from '../../../scripts/convergence-manifest.mjs';
 
 function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();

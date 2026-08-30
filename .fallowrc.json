@@ -1,6 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-  "entry": ["scripts/**/*.{js,mjs,ts}", "evidence/**/*.ts", "tests/contract/**/*.test.ts"],
+  "entry": [
+    "scripts/**/*.{js,mjs,ts}",
+    "evidence/**/*.ts",
+    "tests/contract/**/*.test.ts",
+    "tests/integration/**/*.test.{js,mjs,ts}"
+  ],
   "ignorePatterns": [
     "**/dist/**",
     "**/coverage/**",
