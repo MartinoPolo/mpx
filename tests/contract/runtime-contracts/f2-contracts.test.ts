@@ -16,7 +16,7 @@ import {
   validateF2ProofReportV1,
   type F2PolicyProfileV1,
   type F2ProofDecisionV2,
-} from '../src/index.js';
+} from '@mpx/runtime-contracts';
 
 const h = (character: string) => character.repeat(64);
 const pin = {
@@ -77,7 +77,12 @@ describe('Phase F2 proof contracts', () => {
   it('publishes closed JSON schemas for every v1 proof contract', async () => {
     const schema = JSON.parse(
       await readFile(
-        fileURLToPath(new URL('../schemas/f2-proof-contracts-v1.schema.json', import.meta.url)),
+        fileURLToPath(
+          new URL(
+            '../../../packages/runtime-contracts/schemas/f2-proof-contracts-v1.schema.json',
+            import.meta.url,
+          ),
+        ),
         'utf8',
       ),
     );

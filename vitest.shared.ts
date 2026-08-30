@@ -19,14 +19,8 @@ export const EXCLUDED_TEST_PATHS = [
   '**/generated/**',
 ] as const;
 
-export const ROOT_CONTRACT_LEGACY_INCLUDES = [
-  'packages/runtime-contracts/test/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-  'packages/providers/src/{contracts,conformance}.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-  'packages/provider-github/src/issue.conformance.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-] as const;
-
 export const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
-  unit: ['**/*.integration.test.*', '**/*.e2e.test.*', ...ROOT_CONTRACT_LEGACY_INCLUDES],
+  unit: ['**/*.integration.test.*', '**/*.e2e.test.*'],
   payload: [],
   contract: [],
   integration: [],
@@ -44,10 +38,7 @@ export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>
     'tests/payload/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
     'content/skills/**/{test,tests,__tests__}/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
   ],
-  contract: [
-    'tests/contract/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    ...ROOT_CONTRACT_LEGACY_INCLUDES,
-  ],
+  contract: ['tests/contract/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
   integration: [
     'tests/integration/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
     'apps/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
@@ -108,16 +99,8 @@ export function createCategoryConfig(category: TestCategory, maxWorkers?: number
   return defineConfig(categoryConfig(category, maxWorkers));
 }
 
-function rootOwnedContractExcludes(workspaceRoot: string): string[] {
-  const relativeRoot = path.relative(import.meta.dirname, workspaceRoot).replaceAll('\\', '/');
-  const prefix = `${relativeRoot}/`;
-  return ROOT_CONTRACT_LEGACY_INCLUDES.filter((pattern) => pattern.startsWith(prefix)).map(
-    (pattern) => pattern.slice(prefix.length),
-  );
-}
-
 export function createWorkspaceUnitConfig(
-  workspaceRoot: string,
+  _workspaceRoot: string,
   options: { testTimeout?: number; exclude?: readonly string[] } = {},
 ): UserConfig {
   return defineConfig({
@@ -132,7 +115,6 @@ export function createWorkspaceUnitConfig(
         ...EXCLUDED_TEST_PATHS,
         '**/*.integration.test.*',
         '**/*.e2e.test.*',
-        ...rootOwnedContractExcludes(workspaceRoot),
         ...(options.exclude ?? []),
       ],
       ...(options.testTimeout === undefined ? {} : { testTimeout: options.testTimeout }),

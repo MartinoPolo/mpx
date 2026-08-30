@@ -42,7 +42,7 @@ import {
   createRuntimeSessionObservationV1,
   parseRuntimeSessionObservationV1,
   validateSessionLifecycleBindingV1,
-} from '../src/index.js';
+} from '@mpx/runtime-contracts';
 
 const roots: string[] = [];
 afterEach(async () =>
@@ -234,7 +234,7 @@ describe('runtime-neutral v4 contracts', () => {
   });
 
   it('publishes strict portable JSON schemas for both v4 contracts', async () => {
-    const schemaRoot = fileURLToPath(new URL('../../skills/schemas/', import.meta.url));
+    const schemaRoot = fileURLToPath(new URL('../../../packages/skills/schemas/', import.meta.url));
     const manifestSchema = JSON.parse(
       await readFile(path.join(schemaRoot, 'resolved-skill-manifest-v4.schema.json'), 'utf8'),
     ) as Record<string, any>;

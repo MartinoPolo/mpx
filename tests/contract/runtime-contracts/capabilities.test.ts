@@ -10,7 +10,7 @@ import {
   validateToolResultV1,
   type ChildLaunchRequestV1,
   type RuntimeCapabilityManifestV1,
-} from '../src/index.js';
+} from '@mpx/runtime-contracts';
 
 const digest = (character: string) => character.repeat(64);
 const tool = {

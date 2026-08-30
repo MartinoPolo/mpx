@@ -20,7 +20,7 @@
     "test": "pnpm run build && pnpm run test:convergence && pnpm run test:unit && pnpm run test:payload && pnpm run test:contract && pnpm run test:integration && pnpm run test:e2e",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:payload": "vitest run --config vitest.payload.config.ts",
-    "test:contract": "vitest run --config vitest.contract.config.ts",
+    "test:contract": "pnpm --filter @mpx/provider-github... --filter @mpx/runtime-contracts... build && vitest run --config vitest.contract.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:convergence": "node scripts/required-convergence.mjs",
@@ -32,6 +32,9 @@
     "validate:generated": "node scripts/validate-generated.mjs"
   },
   "devDependencies": {
+    "@mpx/provider-github": "workspace:*",
+    "@mpx/providers": "workspace:*",
+    "@mpx/runtime-contracts": "workspace:*",
     "@types/node": "^22.15.0",
     "esbuild": "0.25.12",
     "fallow": "^3.20.0",

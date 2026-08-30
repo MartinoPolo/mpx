@@ -8,7 +8,7 @@ import {
   type ProviderDataV1,
   type ReviewCommentV1,
   type ReviewV1,
-} from './index.js';
+} from '@mpx/providers';
 
 describe('versioned provider-neutral DTOs', () => {
   it('normalizes issue, review, comment, and CI records at schema version 1', () => {

@@ -7,7 +7,6 @@ import {
   CATEGORY_CONFIGS,
   classifyTestPath,
   matchingTestCategories,
-  ROOT_CONTRACT_LEGACY_INCLUDES,
   TEST_CATEGORIES,
 } from '../vitest.shared.ts';
 import { discoverWorkspaceRoots, filesBelow } from './test-harness-support.mjs';
@@ -57,6 +56,47 @@ describe('test taxonomy', () => {
     expect(classifyTestPath('tests/contract/future.test.ts')).toBe('contract');
     expect(classifyTestPath('tests/integration/future.test.ts')).toBe('integration');
     expect(classifyTestPath('tests/e2e/future.test.ts')).toBe('e2e');
+  });
+
+  test('preserves the fixed six-suite contract migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/runtime-contracts/test/capabilities.test.ts',
+        'tests/contract/runtime-contracts/capabilities.test.ts',
+      ],
+      [
+        'packages/runtime-contracts/test/f2-contracts.test.ts',
+        'tests/contract/runtime-contracts/f2-contracts.test.ts',
+      ],
+      [
+        'packages/runtime-contracts/test/runtime-contracts.test.ts',
+        'tests/contract/runtime-contracts/runtime-contracts.test.ts',
+      ],
+      ['packages/providers/src/contracts.test.ts', 'tests/contract/providers/contracts.test.ts'],
+      [
+        'packages/providers/src/conformance.test.ts',
+        'tests/contract/providers/conformance.test.ts',
+      ],
+      [
+        'packages/provider-github/src/issue.conformance.test.ts',
+        'tests/contract/provider-github/issue.conformance.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(6);
+    for (const [formerPath, contractPath] of migrationInventory) {
+      expect(files.has(contractPath), contractPath).toBe(true);
+      expect(classifyTestPath(contractPath), contractPath).toBe('contract');
+      expect(files.has(formerPath), formerPath).toBe(false);
+    }
+  });
+
+  test('keeps every contract-classified test under the root contract directory', async () => {
+    const files = (await filesBelow(root)).filter((file) => /\.test\.(?:[cm]?[jt]sx?)$/.test(file));
+    const contractTests = files.filter((file) => classifyTestPath(file) === 'contract');
+    for (const file of contractTests) {
+      expect(file, file).toMatch(/^tests\/contract\//u);
+    }
   });
 
   test('selects every current owned test exactly once using configured patterns', async () => {
@@ -130,16 +170,16 @@ describe('configuration structure', () => {
     }
   });
 
-  test('excludes root-owned legacy contract tests from their workspace unit configs', async () => {
-    for (const contractPattern of ROOT_CONTRACT_LEGACY_INCLUDES) {
-      const workspace = workspaceRoots.find((candidate) =>
-        contractPattern.startsWith(`${candidate}/`),
-      );
-      expect(workspace, contractPattern).toBeDefined();
+  test('keeps root contract suites outside package unit config discovery', async () => {
+    for (const workspace of workspaceRoots) {
       const config = await import(path.join(root, workspace, 'vitest.config.ts'));
-      expect(config.default.test.exclude, contractPattern).toContain(
-        contractPattern.slice(workspace.length + 1),
-      );
+      expect(config.default.test.include, workspace).toEqual([
+        'src/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+        'test/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+      ]);
+      expect(
+        path.relative(path.join(root, workspace), path.join(root, 'tests', 'contract')),
+      ).toMatch(/^\.\.[\\/]/u);
     }
   });
 
@@ -200,6 +240,13 @@ describe('configuration structure', () => {
       'vitest run --config vitest.payload.config.ts',
     );
     expect(rootManifest.scripts.typecheck).not.toContain('content/skills');
+  });
+
+  test('builds the public contract dependency closure before invoking contract Vitest', async () => {
+    const rootManifest = await json('package.json');
+    expect(rootManifest.scripts['test:contract']).toMatch(
+      /^pnpm --filter @mpx\/provider-github\.\.\. --filter @mpx\/runtime-contracts\.\.\. build && vitest run --config vitest\.contract\.config\.ts$/u,
+    );
   });
 
   test('root aggregate invokes every category exactly once', async () => {

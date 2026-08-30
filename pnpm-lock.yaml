@@ -8,6 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@mpx/provider-github':
+        specifier: workspace:*
+        version: link:packages/provider-github
+      '@mpx/providers':
+        specifier: workspace:*
+        version: link:packages/providers
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:packages/runtime-contracts
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1

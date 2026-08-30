@@ -5,8 +5,8 @@ import {
   type IssueCapability,
   type IssueCommentV1,
   type IssueV1,
-} from './index.js';
-import { defineIssueAdapterConformance, type IssueConformanceDriver } from './testing.js';
+} from '@mpx/providers';
+import { defineIssueAdapterConformance, type IssueConformanceDriver } from '@mpx/providers/testing';
 
 const withoutMove = ISSUE_CAPABILITIES.filter((capability) => capability !== 'issue.move');
 

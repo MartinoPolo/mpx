@@ -190,16 +190,18 @@ type ParityDeclaration = {
   kind: 'node' | 'vitest';
   entry: string;
   entries?: readonly string[];
+  buildFilters?: readonly string[];
 };
 const PARITY: readonly ParityDeclaration[] = [
   {
     id: 'semantic',
     kind: 'vitest',
-    entry: 'packages/providers/src/conformance.test.ts',
+    entry: 'tests/contract/providers/conformance.test.ts',
     entries: [
       'packages/skills/test/canonical-content.test.ts',
-      'packages/providers/src/conformance.test.ts',
+      'tests/contract/providers/conformance.test.ts',
     ],
+    buildFilters: ['@mpx/skills...', '@mpx/provider-github...'],
   },
   { id: 'generation', kind: 'node', entry: 'scripts/validate-generated.mjs' },
   { id: 'hooks', kind: 'vitest', entry: 'packages/runtime-hooks/src/index.test.ts' },
@@ -276,18 +278,23 @@ export async function executeParityChecks(input: {
     started = Date.now(),
     total = input.totalTimeoutMs ?? 120_000,
     per = input.perCheckTimeoutMs ?? 20_000;
-  const narrowEnv: NodeJS.ProcessEnv = {
-    PATH: input.environment?.PATH ?? process.env.PATH,
-    PATHEXT: input.environment?.PATHEXT ?? process.env.PATHEXT,
-    SystemRoot: input.environment?.SystemRoot ?? process.env.SystemRoot,
-    ComSpec: input.environment?.ComSpec ?? process.env.ComSpec,
-    TEMP: input.environment?.TEMP ?? process.env.TEMP,
-    TMP: input.environment?.TMP ?? process.env.TMP,
-    MPX_PROJECTS: input.environment?.MPX_PROJECTS,
-    CI: '1',
-    NO_COLOR: '1',
-  };
+  const pnpmHome = input.environment?.PNPM_HOME ?? process.env.PNPM_HOME,
+    narrowEnv: NodeJS.ProcessEnv = {
+      PATH: input.environment?.PATH ?? process.env.PATH,
+      PATHEXT: input.environment?.PATHEXT ?? process.env.PATHEXT,
+      SystemRoot: input.environment?.SystemRoot ?? process.env.SystemRoot,
+      ComSpec: input.environment?.ComSpec ?? process.env.ComSpec,
+      TEMP: input.environment?.TEMP ?? process.env.TEMP,
+      TMP: input.environment?.TMP ?? process.env.TMP,
+      PNPM_HOME: pnpmHome,
+      MPX_PROJECTS: input.environment?.MPX_PROJECTS,
+      CI: '1',
+      NO_COLOR: '1',
+    };
   const vitest = path.join(input.repoRoot, 'node_modules', 'vitest', 'vitest.mjs'),
+    pnpm = pnpmHome
+      ? path.join(path.resolve(pnpmHome), process.platform === 'win32' ? 'pnpm.exe' : 'pnpm')
+      : undefined,
     results: ParityResult[] = [];
   for (const declaration of declarations) {
     const remaining = total - (Date.now() - started),
@@ -305,7 +312,8 @@ export async function executeParityChecks(input: {
     }
     if (
       (await Promise.all(resolvedEntries.map(existsFn))).includes(false) ||
-      (declaration.kind === 'vitest' && !(await existsFn(vitest)))
+      (declaration.kind === 'vitest' && !(await existsFn(vitest))) ||
+      (declaration.buildFilters !== undefined && (pnpm === undefined || !(await existsFn(pnpm))))
     ) {
       results.push({
         id: declaration.id,
@@ -313,6 +321,37 @@ export async function executeParityChecks(input: {
         exitCode: null,
         stdout: outputEvidence(''),
         stderr: outputEvidence(''),
+      });
+      continue;
+    }
+    let prerequisite: ParityRunResult | undefined;
+    if (declaration.buildFilters !== undefined && pnpm !== undefined) {
+      prerequisite = await runner({
+        program: pnpm,
+        args: [...declaration.buildFilters.flatMap((filter) => ['--filter', filter]), 'build'],
+        cwd: input.repoRoot,
+        env: narrowEnv,
+        timeoutMs: Math.min(per, remaining),
+      });
+      if (prerequisite.status !== 'passed') {
+        results.push({
+          id: declaration.id,
+          status: prerequisite.status,
+          exitCode: prerequisite.exitCode,
+          stdout: outputEvidence(prerequisite.stdout),
+          stderr: outputEvidence(prerequisite.stderr),
+        });
+        continue;
+      }
+    }
+    const postBuildRemaining = total - (Date.now() - started);
+    if (postBuildRemaining <= 0) {
+      results.push({
+        id: declaration.id,
+        status: 'timed-out',
+        exitCode: null,
+        stdout: outputEvidence(prerequisite?.stdout ?? ''),
+        stderr: outputEvidence(prerequisite?.stderr ?? ''),
       });
       continue;
     }
@@ -325,14 +364,14 @@ export async function executeParityChecks(input: {
         args,
         cwd: input.repoRoot,
         env: narrowEnv,
-        timeoutMs: Math.min(per, remaining),
+        timeoutMs: Math.min(per, postBuildRemaining),
       });
     results.push({
       id: declaration.id,
       status: outcome.status,
       exitCode: outcome.exitCode,
-      stdout: outputEvidence(outcome.stdout),
-      stderr: outputEvidence(outcome.stderr),
+      stdout: outputEvidence(`${prerequisite?.stdout ?? ''}${outcome.stdout}`),
+      stderr: outputEvidence(`${prerequisite?.stderr ?? ''}${outcome.stderr}`),
     });
   }
   return results;

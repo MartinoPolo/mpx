@@ -190,6 +190,43 @@ describe('Phase J migration reconciliation', () => {
     expect(JSON.stringify(audit)).not.toContain(missing);
   });
 
+  it('builds a semantic dependency closure before invoking its Vitest entries', async () => {
+    const calls: { program: string; args: string[] }[] = [];
+    const results = await executeParityChecks({
+      repoRoot: path.resolve('.'),
+      declarations: [
+        {
+          id: 'semantic',
+          kind: 'vitest',
+          entry: 'semantic.test.ts',
+          buildFilters: ['@mpx/skills...', '@mpx/provider-github...'],
+        },
+      ],
+      exists: async () => true,
+      environment: { PNPM_HOME: path.resolve('pnpm-home') },
+      runner: async (request) => {
+        calls.push({ program: request.program, args: request.args });
+        return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
+      },
+    });
+    expect(results[0]?.status).toBe('passed');
+    expect(calls).toEqual([
+      {
+        program: expect.stringMatching(/[\\/]pnpm(?:\.exe)?$/u),
+        args: ['--filter', '@mpx/skills...', '--filter', '@mpx/provider-github...', 'build'],
+      },
+      {
+        program: process.execPath,
+        args: [
+          path.join(path.resolve('.'), 'node_modules', 'vitest', 'vitest.mjs'),
+          'run',
+          'semantic.test.ts',
+          '--reporter=dot',
+        ],
+      },
+    ]);
+  });
+
   it('executes declared parity checks with bounded digest-only results and fail-closed gating', async () => {
     const calls: string[] = [];
     const results = await executeParityChecks({

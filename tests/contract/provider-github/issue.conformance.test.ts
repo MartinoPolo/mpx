@@ -7,7 +7,7 @@ import type {
   ProviderProcessResult,
 } from '@mpx/providers';
 import { defineIssueAdapterConformance } from '@mpx/providers/testing';
-import { createGitHubAdapters } from './index.js';
+import { createGitHubAdapters } from '@mpx/provider-github';
 
 interface NativeIssue {
   number: number;
