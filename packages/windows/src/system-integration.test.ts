@@ -10,6 +10,14 @@ import {
 
 const bashBlock = "# MPX aliases\ncc() { mpx launch claude \"$@\"; }\n";
 
+it("creates a binary file only when its target is absent", async () => {
+  const files = new FakeBinaryFileSystem({ existing: Buffer.from("preserve") });
+  await expect(files.create("new", Buffer.from("created"))).resolves.toBe(true);
+  await expect(files.create("existing", Buffer.from("replacement"))).resolves.toBe(false);
+  expect((await files.read("new"))?.toString()).toBe("created");
+  expect((await files.read("existing"))?.toString()).toBe("preserve");
+});
+
 describe("managed launcher integration", () => {
   it("inserts and removes exactly one managed block while preserving unrelated bytes", async () => {
     const files = new FakeBinaryFileSystem({ "/home/me/.bashrc": Buffer.from([0xef, 0xbb, 0xbf, ...Buffer.from("before\r\nafter\r\n")]) });

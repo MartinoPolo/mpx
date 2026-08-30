@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "mpx-phase-j-cutover-plan",
+  "historicalOfflineExample": true,
+  "historicalNotice": "Historical offline/example evidence only; not a current proposal, live observation, or executable plan.",
   "nonDestructive": true,
   "gatePassed": false,
   "actions": [

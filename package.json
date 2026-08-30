@@ -11,7 +11,7 @@
     "check": "pnpm -r check",
     "test": "pnpm run build && pnpm run test:convergence && pnpm run test:integration && pnpm -r test",
     "test:convergence": "node scripts/required-convergence.mjs",
-    "test:integration": "vitest run scripts/validate-generated.test.mjs scripts/convergence-manifest.test.mjs scripts/required-convergence.test.mjs scripts/native-capability-inventory.test.mjs scripts/build-preparation.test.mjs scripts/capture-migration-baseline.test.mjs",
+    "test:integration": "vitest run scripts/validate-generated.test.mjs scripts/convergence-manifest.test.mjs scripts/required-convergence.test.mjs scripts/native-capability-inventory.test.mjs scripts/build-preparation.test.mjs scripts/capture-migration-baseline.test.mjs scripts/run-f2-live-proof.test.mjs",
     "inventory:native": "node scripts/native-capability-inventory.mjs",
     "typecheck": "pnpm -r build && pnpm -r typecheck",
     "baseline:capture": "node scripts/capture-migration-baseline.mjs",

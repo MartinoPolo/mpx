@@ -161,6 +161,9 @@ importers:
 
   packages/installer:
     dependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../config
       '@mpx/core':
         specifier: workspace:*
         version: link:../core

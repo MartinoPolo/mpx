@@ -7,6 +7,7 @@ import { FakeRegistryStore, FakeScheduledTaskStore, ManagedLauncherAdapter, Owne
 
 class NativeFiles implements BinaryFileSystem {
   async read(target: string) { try { return await readFile(target); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; } }
+  async create(target: string, body: Buffer) { try { await writeFile(target, body, { flag: "wx" }); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") return false; throw error; } }
   async write(target: string, body: Buffer) { await writeFile(target, body); }
   async remove(target: string) { await unlink(target); }
 }

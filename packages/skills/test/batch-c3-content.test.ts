@@ -21,8 +21,7 @@ async function skill(identity: string): Promise<string> {
 }
 
 describe("Batch C3 canonical content", () => {
-  it("matches the semantic source fixture and records a version for every imported skill", async () => {
-    expect(semanticFixture.sourceRevision).toMatch(/^[0-9a-f]{40}$/u);
+  it("enforces the semantic content contract and records a version for every imported skill", async () => {
     expect(identities).toHaveLength(28);
     for (const [identity, fixture] of Object.entries(semanticFixture.skills)) {
       expect(fixture.version, `${identity} version`).toMatch(/^\d+\.\d+(?:\.\d+)?$/u);

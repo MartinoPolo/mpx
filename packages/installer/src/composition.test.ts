@@ -39,7 +39,9 @@ it("composes four runtime registrations and external references into automatic, 
   expect(node.isFile()).toBe(true);
   // Production planning uses the configured immutable Node boundary, never a shell.
   (adapter as unknown as { environment: NodeJS.ProcessEnv }).environment.MPX_NODE_EXECUTABLE = process.execPath;
-  const manifest = { schemaVersion: 1, kind: "release-manifest", releaseKey, convergenceHash: releaseKey, files: [{ path: "bin/mpx.mjs", bytes: 3, sha256: sha("cli") }] } as ReleaseManifestV1;
+  const projectionEvidence = [...new Map(runtimeRegistrations.registrations.flatMap(registration => registration.projection.files).map(file => [file.path, { path: file.path, bytes: file.bytes, sha256: file.sha256 }])).values()];
+  const manifest = { schemaVersion: 1, kind: "release-manifest", releaseKey, convergenceHash: releaseKey, files: [{ path: "bin/mpx.mjs", bytes: 3, sha256: sha("cli") }, ...projectionEvidence].sort((a, b) => a.path.localeCompare(b.path)) } as ReleaseManifestV1;
+  await expect(adapter.operations(intent, { ...manifest, files: manifest.files.map((file, index) => index === 0 ? file : { ...file, sha256: sha("mismatch") }) })).rejects.toMatchObject({ code: "INSTALL_PROJECTION_MISMATCH" });
   const operations = await adapter.operations(intent, manifest);
   expect(operations.automatic.map(operation => operation.id).filter(id => id.includes("registration"))).toEqual([
     "70-registration-claude-personal", "71-registration-claude-work", "72-registration-pi-personal", "73-registration-pi-work", "74-registration-mcp-personal-github",

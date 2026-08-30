@@ -22,6 +22,7 @@ import {
   type ReleaseManifestV1,
   type TransactionJournalV1,
 } from "./immutable-core.js";
+import { aggregateInstallerFailure } from "./failure.js";
 export { installerDigest } from "./immutable-core.js";
 export type { InstallIntentV1, InstallOperationV1 } from "./immutable-core.js";
 
@@ -34,6 +35,8 @@ export interface SideEffectAdapter {
   restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
   receiptLocator?(operation: InstallOperationV1): Promise<unknown>;
   hydrateReceiptOperation?(operation: InstallOperationV1, locator: unknown): Promise<void>;
+  /** Fail-closed retention decision, consulted only after durable locator hydration. */
+  retainOnUninstall?(operation: InstallOperationV1): Promise<boolean>;
 }
 export interface StoredTransaction { journal: TransactionJournalV1; snapshots: Readonly<Record<string, string | null>>; operations: readonly InstallOperationV1[]; priorReceipt?: OwnershipReceiptV1 }
 function durableSnapshots(snapshots:Readonly<Record<string,string|null>>,journal:TransactionJournalV1):Record<string,string|null>{const ids=[...journal.completedOperationIds,...(journal.inFlightOperationId?[journal.inFlightOperationId]:[])];return Object.fromEntries(ids.map(id=>[id,snapshots[id]??null]));}
@@ -145,7 +148,7 @@ export class NodeTransactionStore implements TransactionStore {
     finally {
       let releaseFailure:unknown;
       try{await releaseProcess?.();}catch(failure){releaseFailure=failure;}finally{releaseLocal();}
-      if(primary!==undefined&&releaseFailure!==undefined)throw new AggregateError([primary,releaseFailure],"Installer transaction and process-lock release both failed.",{cause:primary});
+      if(primary!==undefined&&releaseFailure!==undefined)throw aggregateInstallerFailure(primary,[releaseFailure],"Installer transaction and process-lock release both failed.");
       if(releaseFailure!==undefined)throw releaseFailure;
     }
     if(primary!==undefined)throw primary;
@@ -201,7 +204,7 @@ export class ImmutableInstallerService {
         await this.options.store.writeReceipt(receipt); journal = { ...journal, phase: "committed" }; await this.options.store.writeTransaction({ journal, snapshots: durableSnapshots(snapshots,journal), operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) }); return receipt;
       } catch (failure) {
         try { await this.rollbackStored({ journal, snapshots, operations: plan.operations, ...(priorReceipt ? { priorReceipt } : {}) }, plan.operations); }
-        catch (rollbackFailure) { throw new AggregateError([failure, rollbackFailure], "Install failed and rollback also failed.", { cause: failure }); }
+        catch (rollbackFailure) { throw aggregateInstallerFailure(failure, [rollbackFailure], "Install failed and rollback also failed."); }
         throw failure;
       }
     });
@@ -218,21 +221,30 @@ export class ImmutableInstallerService {
   async recover(): Promise<void> { const stored = await this.options.store.readTransaction(); if (!stored || stored.journal.phase === "rolled-back") return; await this.rollbackStored(stored, stored.operations); }
   async rollback(): Promise<void> { await this.options.store.exclusive(async () => { const stored = await this.options.store.readTransaction(); if (stored && stored.journal.phase !== "rolled-back") await this.rollbackStored(stored, stored.operations); }); }
   async verify(): Promise<InstallVerificationV1> { const receipt = await this.options.store.readReceipt(); const issues: string[] = []; if (!receipt) issues.push("receipt-missing"); else for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation); if (operation.action === "ensure" ? actual !== operation.desiredDigest : actual !== null) issues.push(`operation-drift:${operation.id}`); } return { schemaVersion: 1, kind: "install-verification", releaseKey: receipt?.releaseKey ?? "", healthy: issues.length === 0, issues, checkedAt: this.now().toISOString() }; }
-  async planUninstall(): Promise<InstallPlanV1> {
-    const receipt = await this.options.store.readReceipt(); if (!receipt) fail("INSTALL_NOT_OWNED", "Installation is not owned.");
+  private async hydrateUninstallReceipt(receipt: OwnershipReceiptV1): Promise<readonly InstallOperationV1[]> {
+    const removable: InstallOperationV1[] = [];
     for (let index = 0; index < receipt.operations.length; index++) {
       const operation = receipt.operations[index]!, locator = receipt.operationLocators[index]!, adapter = this.adapter(operation.adapter);
       if (locator.spec !== null && !adapter.hydrateReceiptOperation) fail("INSTALL_RECEIPT_AMBIGUOUS", `Adapter ${operation.adapter} cannot hydrate its durable receipt operation.`);
       await adapter.hydrateReceiptOperation?.(operation, locator.spec);
+      const retained = adapter.retainOnUninstall ? await adapter.retainOnUninstall(operation) : false;
+      if (!retained) removable.push(operation);
     }
+    return removable;
+  }
+  async planUninstall(): Promise<InstallPlanV1> {
+    const receipt = await this.options.store.readReceipt(); if (!receipt) fail("INSTALL_NOT_OWNED", "Installation is not owned.");
+    const removable = await this.hydrateUninstallReceipt(receipt);
     const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["uninstall"] };
-    const operations = receipt.operations.map((operation) => ({ ...operation, action: "remove" as const, desiredDigest: null })); return this.plan(intent, operations);
+    const operations = removable.map((operation) => ({ ...operation, action: "remove" as const, desiredDigest: null })); return this.plan(intent, operations);
   }
   async uninstall(planValue: InstallPlanV1, confirmation: string): Promise<void> {
     const plan = parseInstallPlanV1(planValue); if (confirmation !== plan.confirmationDigest) fail("INSTALL_CONFIRMATION_MISMATCH", "Exact plan confirmation is required.");
     await this.options.store.exclusive(async () => {
       await this.recover(); const receipt = await this.options.store.readReceipt(); if (!receipt || receipt.releaseKey !== plan.intent.releaseKey) fail("INSTALL_NOT_OWNED", "Installation is not owned.");
-      for (const operation of receipt.operations) { const actual = await this.adapter(operation.adapter).observe(operation); if (operation.action === "ensure" && actual !== operation.desiredDigest) fail("INSTALL_FOREIGN_OR_DRIFTED", `Refusing drifted target ${operation.target}.`); }
+      const removable = await this.hydrateUninstallReceipt(receipt);
+      if (installerDigest(removable.map(operation => operation.id)) !== installerDigest(plan.operations.map(operation => operation.id))) fail("INSTALL_OWNERSHIP_MISMATCH", "Uninstall plan does not match retained receipt ownership.");
+      for (const operation of removable) { const actual = await this.adapter(operation.adapter).observe(operation); if (operation.action === "ensure" && actual !== operation.desiredDigest) fail("INSTALL_FOREIGN_OR_DRIFTED", `Refusing drifted target ${operation.target}.`); }
       await this.assertCurrent(plan); const snapshots: Record<string, string | null> = {}; for (const operation of plan.operations) snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
       const snapshot: MachineSnapshotV1 = { schemaVersion: 1, kind: "machine-snapshot", transactionId: randomUUID(), observations: plan.observations, capturedAt: this.now().toISOString() }; let journal: TransactionJournalV1 = { schemaVersion: 1, kind: "transaction-journal", transactionId: snapshot.transactionId, phase: "applying", completedOperationIds: [], snapshot }; const stored: StoredTransaction = { journal, snapshots, operations: plan.operations, priorReceipt: receipt }; await this.options.store.writeTransaction({ ...stored, snapshots:{} });
       try {
@@ -250,7 +262,7 @@ export class ImmutableInstallerService {
         await this.options.store.removeReceipt(); await this.options.store.removeTransaction();
       } catch (failure) {
         try { await this.rollbackStored({ ...stored, journal }, plan.operations); }
-        catch (rollbackFailure) { throw new AggregateError([failure, rollbackFailure], "Uninstall failed and rollback also failed.", { cause: failure }); }
+        catch (rollbackFailure) { throw aggregateInstallerFailure(failure, [rollbackFailure], "Uninstall failed and rollback also failed."); }
         throw failure;
       }
     });

@@ -1,8 +1,8 @@
 # MPX Unified System Migration
 
 **Status:** Sole authoritative active migration plan; Phases B–F1 and G–I are implemented, the F2 host-Pi/sandbox-executor contracts and proof foundation are implemented with live standalone-sbx attestation pending, and Phase J tooling is implemented but live observation/cutover/rollback gates remain pending
-**Destination:** `C:/_MP_projects/mpx`  
-**Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates  
+**Destination:** `${MPX_PROJECTS}/mpx`
+**Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates
 **Canonical project manifest:** `mpxconfig.json`
 
 ## 1. Executive decision
@@ -96,23 +96,23 @@ Native account roots separate storage but do not enforce filesystem boundaries. 
 
 ### Built-in modes and elevation
 
-| Mode | Intended policy |
-| --- | --- |
-| `project` | Current canonical repository/worktree read/write only when it belongs to the selected identity domain. Opposite-domain projects require an explicit cross-domain grant. |
-| `developer` | Selected identity domain read/write; `${MPX_CLONED}` read-only. |
-| `personal-assistant` | `${MPX_OBSIDIAN_VAULT}` and `${MPX_AI_GENERATED}` read/write. |
-| `computer-control` | Explicit allowlist of dotfiles, AppData application config, Windows Terminal, and non-authoritative harness preferences; credentials, auth, history, sessions, caches, launch policy, and managed launcher blocks excluded. Executable-bearing settings require a separately confirmed staged apply. |
-| `unrestricted` | Emergency host-wide access; never inferred or defaulted. |
+| Mode                 | Intended policy                                                                                                                                                                                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`            | Current canonical repository/worktree read/write only when it belongs to the selected identity domain. Opposite-domain projects require an explicit cross-domain grant.                                                                                                                              |
+| `developer`          | Selected identity domain read/write; `${MPX_CLONED}` read-only.                                                                                                                                                                                                                                      |
+| `personal-assistant` | `${MPX_OBSIDIAN_VAULT}` and `${MPX_AI_GENERATED}` read/write.                                                                                                                                                                                                                                        |
+| `computer-control`   | Explicit allowlist of dotfiles, AppData application config, Windows Terminal, and non-authoritative harness preferences; credentials, auth, history, sessions, caches, launch policy, and managed launcher blocks excluded. Executable-bearing settings require a separately confirmed staged apply. |
+| `unrestricted`       | Emergency host-wide access; never inferred or defaulted.                                                                                                                                                                                                                                             |
 
 Unknown CWD fails closed. A project CWD outside the selected identity domain also fails until an explicit cross-domain grant is present; recognition as a project never bypasses identity policy. Cross-domain grants are launch-only and read-only by default; read/write requires explicit syntax (`--grant ro:<resource>` / `--grant rw:<resource>`). Elevation requires relaunch, a persistent visible banner, a human reason, and a sanitized local audit with no prompt, secret, or unnecessary raw path. MPX launch policy, identity routes, and managed shell blocks form a protected control plane changed only through a separately confirmed `mpx install plan|apply` flow.
 
 Skill policy is orthogonal to filesystem mode. Initial named policies are:
 
-| Skill policy | Availability and initial disclosure |
-| --- | --- |
-| `clean` | All trusted canonical skills remain human-searchable and human-invocable; default exposure is `explicit-only`, so no catalog names or descriptions enter initial model context. |
-| `developer` | Core and development packs are available; only a deliberately small workflow set is `full`, with the remainder `name-only` or `explicit-only`. |
-| `personal-assistant` | Personal-assistant packs are available with the same least-disclosure rule; filesystem access still comes only from mode/grants. |
+| Skill policy         | Availability and initial disclosure                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clean`              | All trusted canonical skills remain human-searchable and human-invocable; default exposure is `explicit-only`, so no catalog names or descriptions enter initial model context. |
+| `developer`          | Core and development packs are available; only a deliberately small workflow set is `full`, with the remainder `name-only` or `explicit-only`.                                  |
+| `personal-assistant` | Personal-assistant packs are available with the same least-disclosure rule; filesystem access still comes only from mode/grants.                                                |
 
 A preset may align mode and skill policy under the same friendly label, but they remain separate resolved axes. Existing content scopes remain lower-level catalog inputs that supply root-derived pack/exposure defaults and project overrides; a skill policy selects or narrows those inputs for a launch. `--content-scope` is an expert catalog-composition override only. Invoking an available skill never widens filesystem policy; it may fail with a denied capability.
 
@@ -124,11 +124,11 @@ Docker Sandboxes is the required default executor for normal agent launches afte
 
 Workspace isolation and Git delivery are separate choices:
 
-| Workspace strategy | Where the agent edits | Agent Git access | Host visibility and intended use |
-| --- | --- | --- | --- |
-| `clone` (normal default) | A private full clone inside the sandbox; the host source is mounted read-only. | Full branch, commit, fetch, push, and signing support. | Changes appear on the host only after an optional fetch from `sandbox-<name>` or after the agent pushes. This replaces a host-created worktree for that agent task; it is not layered on top of one. |
-| `host-worktree` (explicit compatibility) | A host-created worktree mounted read/write. | No: Docker mounts the worktree but not the common Git administration directory referenced by its `.git` pointer. | File edits appear immediately. The human performs status/commit/push from the host, preserving the current host-worktree workflow. |
-| `direct` (explicit elevated compatibility) | The current host checkout mounted read/write. | Yes. | Edits and Git mutations reach the host immediately; use only when that weaker boundary is intentional. |
+| Workspace strategy                         | Where the agent edits                                                          | Agent Git access                                                                                                 | Host visibility and intended use                                                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clone` (normal default)                   | A private full clone inside the sandbox; the host source is mounted read-only. | Full branch, commit, fetch, push, and signing support.                                                           | Changes appear on the host only after an optional fetch from `sandbox-<name>` or after the agent pushes. This replaces a host-created worktree for that agent task; it is not layered on top of one. |
+| `host-worktree` (explicit compatibility)   | A host-created worktree mounted read/write.                                    | No: Docker mounts the worktree but not the common Git administration directory referenced by its `.git` pointer. | File edits appear immediately. The human performs status/commit/push from the host, preserving the current host-worktree workflow.                                                                   |
+| `direct` (explicit elevated compatibility) | The current host checkout mounted read/write.                                  | Yes.                                                                                                             | Edits and Git mutations reach the host immediately; use only when that weaker boundary is intentional.                                                                                               |
 
 Docker clone mode cannot be created from a linked non-main host worktree, so MPX launches it from the main repository checkout and records the sandbox/task branch. A clone sandbox may itself contain multiple branches or internal Git worktrees for parallel tasks. Separate clone sandboxes remain preferable when modifying agents need failure and lifecycle isolation. Clone mode protects host files and host Git metadata from writes, not the readable source from disclosure; extra workspaces remain direct mounts unless independently constrained.
 
@@ -140,23 +140,24 @@ One interactive task normally owns one named sandbox clone. Subagents inherit th
 
 Network policy is independent from filesystem isolation and provider action authority. Docker rules constrain destination host/IP/port, not HTTP methods or provider operations, so they cannot distinguish viewing a PR from merging it when both use the same provider endpoint. Initial named policies are:
 
-| Network policy | Intended use |
-| --- | --- |
-| `research` | Unrestricted public outbound TCP/HTTP(S) for planning, grilling, package and documentation research. Private, link-local, cloud-metadata, and host-network destinations remain blocked except for explicit project services. |
+| Network policy   | Intended use                                                                                                                                                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `open`           | Selected standalone-sbx baseline, mapped to global `allow-all`. It permits outbound destinations and is not an egress-isolation boundary. Filesystem, mount, process, and identity boundaries remain independently useful.                                      |
+| `research`       | Retained deny-default profile for broad approved research destinations.                                                                                                                                                                                          |
 | `implementation` | Docker's version-pinned balanced development baseline plus user-approved project additions: package registries, source/code hosts, dependency documentation, required cloud services, development/test/production origins, and exact local development services. |
-| `delivery` | `implementation` plus deployment or operational control-plane endpoints required by the project's shipping workflow. Whether the agent may push, create a review, or merge is still decided by workflow policy and credentials. |
-| `minimal` | Default-deny with only the model/auth transport and exact task endpoints required by the selected runtime architecture. |
+| `delivery`       | `implementation` plus deployment or operational control-plane endpoints required by the project's shipping workflow. Whether the agent may push, create a review, or merge is still decided by workflow policy and credentials.                                  |
+| `minimal`        | Default-deny with only the model/auth transport and exact task endpoints required by the selected runtime architecture.                                                                                                                                          |
 
-`implementation` is the normal project default; `research` is the simple broad-web override, and a project whose allowlist becomes burdensome may explicitly default to `research`. MPX proposes narrower user-local policy from package manifests, committed project endpoints, and representative `sbx policy log --json` observations. Dependency metadata and observed traffic are hints rather than authority: generated suggestions require human approval, an untrusted repository cannot widen policy, and MPX verifies the effective sandbox policy with `sbx policy check network`. The launch banner states that public egress permits exfiltration of readable source, prompt/tool data, and any sandbox-visible credential even though the host filesystem remains isolated. Direct external UDP/ICMP limitations remain accurately reported.
+The selected standalone-sbx baseline is `open`, with default allow and no destination isolation. The deny-default profiles remain available but are not selected. Their reviewed `implementation` allowlist remains `api.anthropic.com:443`, `api.github.com:443`, `api.openai.com:443`, `github.com:443`, and `registry.npmjs.org:443`; selecting one still requires sorted allows plus the deny sentinel. MPX proposes narrower user-local policy from package manifests, committed project endpoints, and representative `sbx policy log --json` observations. Those summaries are informational allowlist hints only: policy evaluator checks generate no traffic/log records, and logs are not per-target F2 proof or V2 admission evidence. Dependency metadata and observed traffic are hints rather than authority: generated suggestions require human approval, an untrusted repository cannot widen policy, and MPX verifies the selected sandbox policy with `sbx policy check network --sandbox <name> <target> --json`. The launch banner states that public egress permits exfiltration of readable source, prompt/tool data, and any sandbox-visible credential even though the host filesystem remains isolated. Direct external UDP/ICMP limitations remain accurately reported.
 
 ### Four-state skill exposure
 
-| Exposure | Initial model context | Model loading | Human invocation |
-| --- | --- | --- | --- |
-| `full` | Name, description, triggers | Allowed | Slash/UI/CLI |
-| `name-only` | Name only | Allowed | Slash/UI/CLI |
-| `explicit-only` | None | Rejected | Actual slash/UI/CLI only |
-| `off` | None | Rejected | Absent |
+| Exposure        | Initial model context       | Model loading | Human invocation         |
+| --------------- | --------------------------- | ------------- | ------------------------ |
+| `full`          | Name, description, triggers | Allowed       | Slash/UI/CLI             |
+| `name-only`     | Name only                   | Allowed       | Slash/UI/CLI             |
+| `explicit-only` | None                        | Rejected      | Actual slash/UI/CLI only |
+| `off`           | None                        | Rejected      | Absent                   |
 
 `explicit-only` is the no-discovery, human-invocable state. It has no model-visible metadata and is reachable only through an actual slash/UI/CLI invocation; prose that resembles a slash command never expands it. Human autocomplete and search must list every user-invocable skill, including `explicit-only`, so the user never needs to remember a hidden marker syntax. `name-only` is the lean default: the model sees a stable skill name and may load that skill body lazily from the middle of a prompt. `full` is reserved for deliberately small, safe-to-auto-invoke workflows. Loading always validates launch-bound manifest membership, canonical path containment, provenance, hash, and runtime compatibility. There is no `[[mpx:*]]` marker syntax.
 
@@ -171,63 +172,137 @@ Human CLI/TUI list/search/autocomplete sees all user-invocable skills, but descr
   "identities": {
     "personal": {
       "domain": "personal",
-      "runtimeRoots": {"claude": "~/.claude", "pi": "~/.pi/agent"},
+      "runtimeRoots": { "claude": "~/.claude", "pi": "~/.pi/agent" },
       "gitAuthorRoute": "personal",
-      "providerRoutes": {"github": "github-personal"},
+      "providerRoutes": { "github": "github-personal" },
       "sshRoute": "personal-agent",
-      "mcpSharing": {"allow": ["context7"], "shareNativeAuth": false}
+      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false }
     },
     "work": {
       "domain": "work",
-      "runtimeRoots": {"claude": "~/.claude-work", "pi": "~/.pi/agent-work"},
+      "runtimeRoots": { "claude": "~/.claude-work", "pi": "~/.pi/agent-work" },
       "gitAuthorRoute": "work",
-      "providerRoutes": {"gitlab": "gitlab-work", "kanbanflow": "kanbanflow-work"},
+      "providerRoutes": {
+        "gitlab": "gitlab-work",
+        "kanbanflow": "kanbanflow-work"
+      },
       "sshRoute": "work-agent",
-      "mcpSharing": {"allow": ["context7"], "shareNativeAuth": false}
+      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false }
     }
   },
   "domains": {
-    "personal": ["${MPX_PROJECTS}"], "work": ["${MPX_WORK}"], "oss": ["${MPX_CLONED}"],
-    "assistant-input": ["${MPX_OBSIDIAN_VAULT}"], "assistant-output": ["${MPX_AI_GENERATED}"],
+    "personal": ["${MPX_PROJECTS}"],
+    "work": ["${MPX_WORK}"],
+    "oss": ["${MPX_CLONED}"],
+    "assistant-input": ["${MPX_OBSIDIAN_VAULT}"],
+    "assistant-output": ["${MPX_AI_GENERATED}"],
     "cloud": ["${MPX_ONEDRIVE}"]
   },
   "contentScopes": {
-    "personal": {"roots": ["${MPX_PROJECTS}"], "skillPacks": ["core", "personal"]},
-    "work": {"roots": ["${MPX_WORK}"], "skillPacks": ["core", "work"]}
+    "personal": {
+      "roots": ["${MPX_PROJECTS}"],
+      "skillPacks": ["core", "personal"]
+    },
+    "work": { "roots": ["${MPX_WORK}"], "skillPacks": ["core", "work"] }
   },
   "modes": {
-    "project": {"resources": {"selected-project": "read-write"}},
-    "developer": {"resources": {"identity-domain": "read-write", "cloned-repositories": "read-only"}},
-    "personal-assistant": {"resources": {"assistant-input": "read-write", "assistant-output": "read-write"}},
-    "computer-control": {"resources": {"computer-control-config": "read-write", "computer-control-executable-settings": "staged-write"}},
-    "unrestricted": {"resources": {"host": "read-write"}}
+    "project": { "resources": { "selected-project": "read-write" } },
+    "developer": {
+      "resources": {
+        "identity-domain": "read-write",
+        "cloned-repositories": "read-only"
+      }
+    },
+    "personal-assistant": {
+      "resources": {
+        "assistant-input": "read-write",
+        "assistant-output": "read-write"
+      }
+    },
+    "computer-control": {
+      "resources": {
+        "computer-control-config": "read-write",
+        "computer-control-executable-settings": "staged-write"
+      }
+    },
+    "unrestricted": { "resources": { "host": "read-write" } }
   },
   "skillPolicies": {
-    "clean": {"skillExposure": {"default": "explicit-only"}},
-    "developer": {"skillPacks": ["core"], "skillExposure": {"default": "name-only"}},
-    "personal-assistant": {"skillPacks": ["core", "personal"], "skillExposure": {"default": "name-only"}}
+    "clean": { "skillExposure": { "default": "explicit-only" } },
+    "developer": {
+      "skillPacks": ["core"],
+      "skillExposure": { "default": "name-only" }
+    },
+    "personal-assistant": {
+      "skillPacks": ["core", "personal"],
+      "skillExposure": { "default": "name-only" }
+    }
   },
   "presets": {
-    "personal-dev": {"identity": "personal", "mode": "developer", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation"},
-    "personal-research": {"identity": "personal", "mode": "project", "skillPolicy": "developer", "contentScope": "personal", "executor": "docker", "workspace": "clone", "networkPolicy": "research"},
-    "work-project": {"identity": "work", "mode": "project", "skillPolicy": "developer", "contentScope": "work", "executor": "docker", "workspace": "clone", "networkPolicy": "implementation"},
-    "work-delivery": {"identity": "work", "mode": "project", "skillPolicy": "developer", "contentScope": "work", "executor": "docker", "workspace": "clone", "networkPolicy": "delivery"}
+    "personal-dev": {
+      "identity": "personal",
+      "mode": "developer",
+      "skillPolicy": "developer",
+      "contentScope": "personal",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "open"
+    },
+    "personal-research": {
+      "identity": "personal",
+      "mode": "project",
+      "skillPolicy": "developer",
+      "contentScope": "personal",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "research"
+    },
+    "work-project": {
+      "identity": "work",
+      "mode": "project",
+      "skillPolicy": "developer",
+      "contentScope": "work",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "open"
+    },
+    "work-delivery": {
+      "identity": "work",
+      "mode": "project",
+      "skillPolicy": "developer",
+      "contentScope": "work",
+      "executor": "docker",
+      "workspace": "clone",
+      "networkPolicy": "delivery"
+    }
   },
   "launchDefaults": {
-    "scopes": {"personal": {"personal": "personal-dev"}, "work": {"work": "work-project"}},
-    "projects": {"MartinoPolo/mpx": {"personal": "personal-dev", "work": "work-project"}}
+    "scopes": {
+      "personal": { "personal": "personal-dev" },
+      "work": { "work": "work-project" }
+    },
+    "projects": {
+      "MartinoPolo/mpx": { "personal": "personal-dev", "work": "work-project" }
+    }
   },
   "networkPolicies": {
-    "research": {"preset": "allow-all", "denyPrivateNetworks": true},
-    "implementation": {"preset": "balanced", "approvedProjectAdditions": true},
-    "delivery": {"extends": "implementation", "approvedDeliveryAdditions": true},
-    "minimal": {"preset": "deny-all", "requiredRuntimeEndpoints": true}
+    "open": { "preset": "allow-all" },
+    "research": { "preset": "allow-all", "denyPrivateNetworks": true },
+    "implementation": {
+      "preset": "balanced",
+      "approvedProjectAdditions": true
+    },
+    "delivery": {
+      "extends": "implementation",
+      "approvedDeliveryAdditions": true
+    },
+    "minimal": { "preset": "deny-all", "requiredRuntimeEndpoints": true }
   },
-  "executors": {"host": {}, "docker": {}}
+  "executors": { "host": {}, "docker": {} }
 }
 ```
 
-All `${MPX_*}` values are environment-resolved root tokens. `~` is permitted only in documented user-local path fields and resolves to the platform user home. Routes are labels, never secret payloads or private-key paths. Network policy declarations are MPX compositions, not raw `sbx policy init` arguments: the executor materializes their base preset plus sandbox-scoped allow/deny rules and verifies the result.
+All `${MPX_*}` values are environment-resolved root tokens. `~` is permitted only in documented user-local path fields and resolves to the platform user home. Routes are labels, never secret payloads or private-key paths. Network policy declarations and `sandbox.profile` are MPX logical compositions, never sbx `--profile` values. Before MPX create, a human must review and perform the one-time `sbx policy init allow-all`; this machine-wide open default affects every sbx sandbox, provides no destination-policy isolation, and MPX never initializes it. For `open`, the executor adds no sandbox-scoped network rule and performs only canonical bounded allow checks. Deny-default profiles remain available and retain sorted selected allows plus the global-default deny sentinel. Local profiles and `policy add`/`policy set` do not exist in standalone sbx v0.39.
 
 ### Privacy-safe motivation
 
@@ -524,29 +599,29 @@ No skill parses human tables. No skill shells directly to `gh`, `glab`, `git pus
 
 ### Property semantics
 
-| Property | Meaning |
-| --- | --- |
-| `$schema` | Editor validation/completion metadata. |
-| `schemaVersion` | Runtime parser and migration discriminator. Unknown versions fail closed. |
-| `project.id` | Stable project identity used in diagnostics and state. Prefer forge namespace/repository. |
-| `repository.provider` | `github`, `gitlab`, `gerrit`, or `generic`; selects repository/review/CI capabilities. |
-| `repository.remote` | Git remote used for provider operations, normally `origin`. |
-| `issues.provider` | Built-in v1 values: `github`, `gitlab`, `kanbanflow`, `local`, or `none`. Additional IDs such as `jira` or `linear` are valid only after a trusted adapter with an executable/API and credential contract is installed. |
-| `issues.*` | Provider-specific, non-secret project binding selected through a strict schema union. Unregistered provider IDs fail before any operation. |
-| `issues.states` | Canonical MPX issue-state to provider-native state/column ID mapping. |
-| `tooling.packageManager` | `auto`, `pnpm`, `yarn`, `npm`, `bun`, or `none`. Explicit value overrides detection. |
-| `workflow.branch.base` | Base used only when MPX creates a branch/worktree; may be omitted for remote HEAD detection. |
-| `workflow.branch.template` | Optional naming template with constrained placeholders such as `{author}`, `{issue}`, and `{slug}`. |
-| `workflow.codeReview` | Optional agent-workflow ceiling, not provider or executor selection. When omitted, the invoked skill and current user request govern. `human` forbids that autonomous transition; `agent` permits but does not require it. It is not a statement that every issue must create a review. |
-| `worktrees.postCreate` | Preparation pipeline run after a requested worktree is created. |
-| `development.services` | Stable service IDs, launch references, protocol, and port-allocation declarations. |
-| `development.services.*.scope` | `checkout` gets a per-checkout lease; `project` is shared by all worktrees, suitable for one development database. |
-| `development.services.*.port.mode` | `managed` is exclusive and allocated; `fixed-shared` is a transitional hard-coded port allowed to collide and reported by doctor. |
-| `development.services.*.port.preferred` | Main-checkout port and allocation-family anchor. Optional when allocation comes from a user pool. |
-| `development.services.*.port.family` | Optional explicit family ID overriding automatic numeric-contiguity grouping. |
-| `environmentVariable` | Variable injected by `mpx dev` and available to assignment-aware project config. |
-| `protocol` | `http`, `https`, or `tcp`; used for readiness and links. |
-| `start` | Typed launcher reference, initially package scripts; never a shell string. |
+| Property                                | Meaning                                                                                                                                                                                                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$schema`                               | Editor validation/completion metadata.                                                                                                                                                                                                                                                  |
+| `schemaVersion`                         | Runtime parser and migration discriminator. Unknown versions fail closed.                                                                                                                                                                                                               |
+| `project.id`                            | Stable project identity used in diagnostics and state. Prefer forge namespace/repository.                                                                                                                                                                                               |
+| `repository.provider`                   | `github`, `gitlab`, `gerrit`, or `generic`; selects repository/review/CI capabilities.                                                                                                                                                                                                  |
+| `repository.remote`                     | Git remote used for provider operations, normally `origin`.                                                                                                                                                                                                                             |
+| `issues.provider`                       | Built-in v1 values: `github`, `gitlab`, `kanbanflow`, `local`, or `none`. Additional IDs such as `jira` or `linear` are valid only after a trusted adapter with an executable/API and credential contract is installed.                                                                 |
+| `issues.*`                              | Provider-specific, non-secret project binding selected through a strict schema union. Unregistered provider IDs fail before any operation.                                                                                                                                              |
+| `issues.states`                         | Canonical MPX issue-state to provider-native state/column ID mapping.                                                                                                                                                                                                                   |
+| `tooling.packageManager`                | `auto`, `pnpm`, `yarn`, `npm`, `bun`, or `none`. Explicit value overrides detection.                                                                                                                                                                                                    |
+| `workflow.branch.base`                  | Base used only when MPX creates a branch/worktree; may be omitted for remote HEAD detection.                                                                                                                                                                                            |
+| `workflow.branch.template`              | Optional naming template with constrained placeholders such as `{author}`, `{issue}`, and `{slug}`.                                                                                                                                                                                     |
+| `workflow.codeReview`                   | Optional agent-workflow ceiling, not provider or executor selection. When omitted, the invoked skill and current user request govern. `human` forbids that autonomous transition; `agent` permits but does not require it. It is not a statement that every issue must create a review. |
+| `worktrees.postCreate`                  | Preparation pipeline run after a requested worktree is created.                                                                                                                                                                                                                         |
+| `development.services`                  | Stable service IDs, launch references, protocol, and port-allocation declarations.                                                                                                                                                                                                      |
+| `development.services.*.scope`          | `checkout` gets a per-checkout lease; `project` is shared by all worktrees, suitable for one development database.                                                                                                                                                                      |
+| `development.services.*.port.mode`      | `managed` is exclusive and allocated; `fixed-shared` is a transitional hard-coded port allowed to collide and reported by doctor.                                                                                                                                                       |
+| `development.services.*.port.preferred` | Main-checkout port and allocation-family anchor. Optional when allocation comes from a user pool.                                                                                                                                                                                       |
+| `development.services.*.port.family`    | Optional explicit family ID overriding automatic numeric-contiguity grouping.                                                                                                                                                                                                           |
+| `environmentVariable`                   | Variable injected by `mpx dev` and available to assignment-aware project config.                                                                                                                                                                                                        |
+| `protocol`                              | `http`, `https`, or `tcp`; used for readiness and links.                                                                                                                                                                                                                                |
+| `start`                                 | Typed launcher reference, initially package scripts; never a shell string.                                                                                                                                                                                                              |
 
 Use JSON Schema with `additionalProperties: false`. Defaults are applied by resolver code, not assumed from validator mutation.
 
@@ -1029,348 +1104,109 @@ Update project dashboards and issue references under the MPX project area and mi
 
 Update bootstrap variables such as `MPX_SKILLS_DIR` only after the new path exists. Continue resolving machine roots from the existing `MPX_*` variables. Add new variables only when they bootstrap user-local config; do not mirror project configuration into environment variables.
 
-## 18. Phased execution
-
-### Phase A — Baseline and safety
-
-- Create the new Git repository at `C:/_MP_projects/mpx` without moving old sources.
-- Add root instructions, workspace tooling, this plan, and ADRs.
-- Capture integration snapshots and source commit inventory.
-- Run a secret/path/publication audit.
-- Define rollback commands and artifact locations.
-
-**Gate:** destination is reproducible; every mutable integration has a backup and restore test.
-
-### Phase B — Contracts first
-
-This completed baseline implemented the original scope/config/provider contracts and four exposure states. Phase B2 preserves that four-state contract and adds user-local project and scope launch defaults.
-
-- Implement config schema/resolver/provenance.
-- Implement result/error envelopes.
-- Implement user scope/provider registry contracts.
-- Define the baseline canonical skill-catalog metadata, pack membership, scope/project pack and exposure precedence, project-extension boundary, identity/collision rules, artifact key, runtime binding, and resolved-manifest schema.
-- Implement read-only skill inventory, exposure explanation, and bounded search over fixtures before importing runtime content.
-- Add GitHub/GitLab/KanbanFlow fixture configs.
-- Implement `mpx config`, `mpx skill`, `mpx init`, and `mpx doctor` read-only paths.
-
-**Gate:** schema fixtures, skill scope/exposure fixtures, collision tests, deterministic manifest snapshots, bounded search tests, and malicious-config tests pass; no secret enters resolved output.
-
-### Phase B2 — Launch contracts and fast defaults (implemented)
-
-The corrected contract retains read-only identity, mode, preset, grant, descriptor/key, provider/SSH/MCP routing, split-search, and `--content-scope` work. It uses exactly four exposure states with no marker or activation-minting surface, and implements project/scope launch-default resolution, workspace/network policy axes, alias fast-path resolution, and provenance explaining every default.
-
-Actual harness spawning, trusted interactive confirmation and approval minting, persistent audit storage, runtime imports/integration, and Docker execution remain deferred to Phase F/F2.
-
-**Gate:** fail-closed CWD, identity-domain mismatch, deterministic explicit/project/scope/built-in default precedence, tuple immutability, route/secret safety, elevation audit, and four-state manifest/provenance/hash/path/rejection fixtures pass. `cc`, `ccw`, `pi`, and `piw` resolve a known project without additional launch arguments.
-
-### Phase C — Ports and state
-
-This baseline is implemented; the tasks below record delivered scope and remain acceptance obligations for later integration.
-
-- Implement port families, global registry, main reservation, local lease file, concurrency, and reconciliation.
-- Add Windows process-inspection adapter and JSON output.
-- Implement `mpx ports` commands.
-- Build provider-neutral status snapshots and fixture renderers against the shared resolver; do not modify or import the old Claude/Pi runtime sources yet.
-
-**Gate:** exact family arithmetic, cross-repo exclusivity, fixed-shared warnings, concurrent allocation, crash recovery, and status-snapshot fixture parity pass.
-
-### Phase D — Worktree lifecycle
-
-**Status: complete.** Production preparation, cancellation, worker restart reconciliation, and the Windows-path gate are implemented and verified. Durable creation continuation records content-bound include and preparation evidence and resumes Git → includes → ports → preparation after any persisted boundary; prunable/manual deletion reconciliation and explicit `--cwd` removal safety are covered.
-
-- Port worktree picker/lifecycle from Bash and plugin-local scripts into packages.
-- Implement standard sibling path, `.worktreeinclude`, no-editor behavior, lifecycle state, and background preparation worker.
-- Add remove/reconcile safety.
-- Implement shell `cd` integration as a thin wrapper.
-
-**Gate:** create/prepare/remove/reconcile tests pass on Windows paths, spaces, dirty/locked worktrees, failure, and cancellation.
-
-### Phase E — Provider-neutral issues and delivery
-
-**Status: complete.** Final review and verification are green for the trusted provider registry and adapters, the KanbanFlow Issue/`mpxconfig.json` cutover in its dedicated worktree, provider-neutral CLI and canonical skills, identical fake-backend Issue conformance, and structured unsupported-capability and error results.
-
-- Implement provider registry and built-in adapters.
-- Rename KanbanFlow’s public Task vocabulary to Issue in its separate repo.
-- Make `kf` read `mpxconfig.json` only.
-- Rewrite generic skills to `mpx issue`, `mpx review`, and `mpx ci`.
-- Remove GitHub/GitLab/Kanban command tables from canonical skills.
-
-**Gate:** identical issue contract tests pass across fake GitHub, GitLab, and KanbanFlow backends; unsupported capabilities fail structurally.
-
-### Phase F — Docker-first launch integration, runtime unification, and four-state skill projection
-
-**Status: complete.** Spec, security, reliability, and performance reviews are clean, and the full Phase F tests and gates pass. Evidence includes launch-bound neutral manifests and Claude/Pi projections; the exact `full`, `name-only`, `explicit-only`, and `off` states with separate model/human discovery; alias and runtime execution with default Docker safely gated pending F2, no fallback, and explicit host approval; canonical content and provenance; shared policy, hooks, and status with live runtime parity; project skills; read-only routes with Claude MCP support and structured Pi incompatibility; launch audits; and source verification.
-
-The Phase F2 host-Pi/sandbox-executor split, contracts, diagnostics, and proof foundation are implemented. The pinned live standalone-sbx attestation remains pending; Docker does not become the default until that live gate passes.
-
-- Implement Docker-first launch resolution, identity-native runtime roots, Git/provider/SSH/MCP routing, mode/skill-policy/workspace/network/grant reporting, launch banners/audits, and immutable `launchKey` validation. Host filesystem execution is explicit elevation only.
-- Make account aliases delegate to the launch resolver while preserving fast personal/work selection and requiring relaunch for any rights change. From a known project directory, the aliases need no profile arguments beyond their built-in harness and identity selection.
-- Fully import the maintained `mpx-pi` runtime/config tree and the Claude sources; move shared content into one canonical tree while Pi-only extensions, settings projections, themes, account setup, and vendor provenance move under `runtimes/pi/`.
-- Classify every canonical skill by pack and default exposure; migrate personal skills into canonical content and rewrite or retire provider-specific duplicates.
-- Build one `mpx` Claude plugin implementation plus immutable scope/project-resolved artifacts and launch-time artifact selection.
-- Convert skills to bare identities and `/mpx:*`.
-- Generate Claude exposure metadata and the Pi command/catalog/loader manifest from the same resolver output.
-- Implement separate search contracts: bounded artifact-bound model search for `full`/`name-only`, and explicit human CLI/TUI slash autocomplete/search across all user-invocable states without implicit model disclosure.
-- Rename canonical agents and regenerate Pi agents.
-- Replace all absolute cross-repository imports and Claude-specific placeholders in canonical content.
-- Port hooks/status/footer through package APIs and connect both runtime renderers to the Phase C status snapshot.
-- Inventory the hand-maintained `~/.codex` mirror, move any still-required Pi dependency such as `compact-context.js` into canonical MPX packages, and mark obsolete mirror content for Phase J removal.
-
-**Gate:** Claude personal, Claude work, and Pi resolve the same intended skill availability and exposure; `full`, `name-only`, `explicit-only`, and `off` behave as specified; skill bodies remain lazy; a canonical skill behaves equivalently in both harnesses; fast aliases resolve the project defaults; and Claude and Pi render equivalent validated current-worktree ports.
-
-### Phase F2 — Required Docker isolation and authentication proof
-
-Use standalone `sbx`; ignore the legacy `docker sandbox` plugin and do not attempt state migration without a documented conversion path. Pin the runtime version and every kit by immutable version/digest or source commit. Generate state-local unmounted sandbox environment files; prove both clone-mode sandbox-remote fetch and direct provider push/PR/MR/merge paths; use RO reference/opposite-domain mounts and no shared mutable skill store; document mount/confidentiality limits and environment recreation rules. Prove that clone mode is launched from a main checkout rather than a linked host worktree, and that host-worktree compatibility keeps Git operations on the host.
-
-For Pi, do not claim proxy-managed OAuth through a third-party kit: Docker currently documents that this is unsupported. Prove the host-side Pi/sandbox-executor split with the ChatGPT/Codex subscription: native host file/shell/process/browser/Git tools are absent, every model-triggerable operation crosses the launch-bound MPX executor, and no OAuth token or native `auth.json` enters the VM. Keep personal/work auth and session state separate. A fully in-sandbox Pi remains blocked until Docker or another executor can provide an equivalent OAuth-isolation contract.
-
-**Gate:** the selected `sbx` client/daemon satisfy the pinned feature contract and diagnostics; built-in Claude/Codex credential isolation works; the Pi split-executor proof shows no host-capability bypass and no token in the VM; clone fetch/direct-provider delivery, no-shared-skills, mount, named network policies, local-service, and resume behavior pass. Docker becomes the default only after this gate.
-
-### Phase G — Sessions
-
-**Status: implemented.** Provider-neutral session persistence, discovery, lifecycle coordination, native identity/account binding, unfinished/inbox state, and fail-closed resume are covered by the Phase G acceptance evidence; live F2 admission remains independently gated.
-
-- Import session schemas/scanners/resume planning.
-- Add unfinished state and inbox.
-- Persist identity, mode, executor, resolved grants, skill artifact key, and `launchKey` without copying native credentials or prompt content.
-- Wire Claude/Pi lifecycle events.
-- Add one-time session-save import without merging personal and work histories.
-- Replace old scheduled autosave with MPX-owned installation.
-
-**Gate:** active discovery, mark unfinished, restart, inbox persistence, and resume into the correct identity/mode/executor for both runtimes; personal/work native history remains isolated and rollback leaves old saves usable.
-
-### Phase H — Project and template rollout
-
-**Status: implemented.** The expanded Phase H fixture matrix and acceptance evidence cover shared, coupled, checkout-scoped, external, and test-consumer rollout behavior without asserting unperformed machine cutover.
-
-Parallelize independent repository adaptations:
-
-- `yoursafe-components`
-- `meeplog`
-- `prejemesi`
-- Grovekeeper as a normal project
-- `template-sveltekit` and its setup skill
-
-Do not include React Native.
-
-**Gate:** each target runs its dev/test surfaces on assigned non-default ports with coupled URLs correct.
-
-### Phase I — Installation and system registration
-
-**Status: implemented.** Transactional installation, native Windows resource stores, four-route registration, external-integration planning, clean/existing-machine simulations, verification, and rollback are complete while legacy activation remains recoverable and enabled.
-
-- Install new CLI and user config; detect standalone `sbx` independently from Docker Desktop and report unsupported, legacy-only, unauthenticated, or client/daemon-mismatch states without making Docker a required dependency.
-- Register Claude plugin and Pi runtime.
-- Replace shell blocks with one managed launcher block that preserves `cc`/`ccd`/`ccw`/`ccwd` and `pi`/`piw` identity shortcuts.
-- Verify each native Claude/Pi account root, Git/provider/SSH route, MCP-sharing choice, and session/history boundary independently.
-- Update Windows Terminal, Raycast, Obsidian, scheduled tasks, shortcuts, environment paths, and repository remotes.
-- Run clean-machine and existing-machine installation simulations.
-
-**Gate:** `mpx install verify`, every identity/harness routing matrix, and the external integration checklist pass with old system still recoverable.
-
-### Phase J — Cutover and retirement
-
-**Status: tooling implemented; live gates pending.** Reconciliation, complete parity reporting, privacy-safe installed-runtime access audit, legacy-disabled acceptance assertion/fixture, gated exact-marker cutover planning, confirmation digest, immutable 30-day snapshot contract, and temporary automated rollback drill are implemented. No real legacy activation, native state, repository, or remote is changed. See `docs/PHASE_J_RECONCILIATION.md` and the explicit non-empty exception gate in `docs/phase-j-exceptions.json`.
-
-- Observe normal use through a deliberate validation period.
-- Confirm no old path/config/namespace is accessed.
-- Remove old activation and marker blocks, then retire the hand-maintained `~/.codex` mirror after the Phase F inventory proves no required runtime dependency remains.
-- Archive or rename old repositories and update redirects/remotes. Archive `mpx-pi` only after its complete maintained tree, vendor/license provenance, and historical journal are present in MPX and no runtime path references the old checkout.
-- Retain immutable migration snapshots for a defined rollback window.
-
-**Gate:** full acceptance suite passes after old activation is removed; rollback drill succeeds from snapshots.
-
-## 19. Rigorous validation plan
-
-### Static repository validation
-
-- Search tracked files for old absolute roots and repository names.
-- Search active content for `/mp:`, `/mp-gh:`, `mp-*` public skill identities, `agent-resurrect`, old CLI names, `.worktree-hub.json`, `.mpx/kanbanflow.json`, and `statusline-projects.json`.
-- Allow old names only in migration history/docs explicitly marked historical.
-- Validate package licenses, `private` flags, publish allowlists, and generated artifacts.
-- Verify no credential/session/state file is tracked.
-- Verify generated Pi agents and runtime artifacts are reproducible and drift-free.
-
-### Config and trust
-
-- Valid fixture per provider.
-- Missing, malformed, unknown-field, and unsupported-version failures.
-- User scope resolution for `MPX_PROJECTS` and `MPX_WORK`.
-- Project cannot define executable commands or broaden user trust.
-- Repo-defined post-create scripts blocked before trust.
-- Trust records are bound to repository identity, commit/config hash, and package manifest/lockfile/script fingerprints; changing any fingerprint invalidates automation approval.
-- Package install lifecycle hooks are treated as arbitrary repository code, not as intrinsically safe typed operations.
-- Resolved config and logs contain no tokens, keyring values, private key paths where redaction is required, or secret environment values.
-- `mpx init` is byte-idempotent after confirmation.
-- No legacy config import occurs.
-
-### Ports
-
-- Main managed services get exact preferred ports.
-- Main leases are created before linked worktree allocation.
-- `8100/8101` produces `8102/8103`, then `8104/8105`.
-- `5173/6006` produces `5174/6007`, then `5175/6008`.
-- Mixed families do not overlap.
-- Explicit family override behavior is deterministic.
-- Managed cross-repo preferred conflicts are rejected at init/registration.
-- `fixed-shared` duplicate claims are allowed and warned.
-- Project-scoped shared database is identical in every worktree and not reallocated.
-- Concurrent allocators cannot select the same exclusive port.
-- Crash between registry reservation and file write recovers safely.
-- External listeners cause candidate rejection/conflict reporting.
-- Deleted/Fork-created/manual worktrees reconcile correctly.
-- Port ceiling, reserved range, malformed lease, config change, and stale lease tests pass.
-- Status line shows assigned ports and separately probes listening state.
-- Claude and Pi show the same current-worktree ports.
-
-### Worktrees
-
-- Main resolution from Git common directory.
-- Standard sibling folder for paths with spaces and branch slashes.
-- Name/path traversal rejection.
-- Correct base precedence and noninteractive failure.
-- `.worktreeinclude` matching, containment, symlink, tracked-file exclusion, source/main fallback, and secret-copy trust.
-- No editor process starts.
-- Background preparation returns promptly but records a worker.
-- Ordered steps, dependencies, timeout, failure, cancellation, log redaction, and restart reconciliation.
-- Failed preparation preserves diagnostics.
-- Dirty/locked worktree removal refuses safely.
-- Removal stops only MPX-owned process fingerprints and releases leases at the correct point.
-
-### Providers and credentials
-
-- Provider ID maps deterministically to trusted adapter and executable.
-- User executable override requires trust and validates path/version.
-- GitHub/GitLab enterprise host behavior.
-- `gh`, `glab`, `kf`, and SSH auth probes do not print tokens.
-- Account/host mismatch fails before mutation.
-- Capability matrix and normalized output snapshots.
-- Gerrit review creation uses its semantic adapter rather than a substituted PR command.
-
-### Skills and runtimes
-
-- Canonical skill identities, pack membership, default exposure, descriptions, and trigger text validate without duplicated identity or copied descriptions.
-- Scope classification uses canonical path-segment matching and longest-root precedence; user-local project pack/exposure overrides resolve through canonical `project.id`; the launch-only `--content-scope` selector is process-bound and reported.
-- Artifact keys change with runtime, scope, project, canonical content, effective user config, or mapping version; launchers select the exact artifact and reject stale or cross-project/scope session reuse.
-- Pack exclusion, `full`, `name-only`, `explicit-only`, and `off` produce deterministic manifest snapshots with identical availability and exposure decisions for Claude and Pi.
-- Initial-context snapshots contain full discovery metadata only for `full`, names only for `name-only`, and no identity or description for `explicit-only`, `off`, or excluded skills. No full skill body appears before invocation.
-- A natural-language request invokes an intended `full` skill; an inline explicit name can resolve `name-only`; an actual slash invokes `explicit-only`; prose slash text does not bypass policy.
-- Model loaders accept only current `full` and `name-only` entries and reject `explicit-only`, `off`, excluded, ambiguous, stale, and path-escaped requests.
-- Bounded skill search requires the runtime's launch-bound artifact key, remains fixed after CWD changes, rejects stale/mismatched keys, returns relevant `full` and `name-only` metadata on demand, and never reveals other exposure states.
-- Trusted project `.agents/skills` remain outside the MPX namespace, require an explicit native-compatible `full` or `explicit-only` exposure declaration, are inventoried for context/compatibility diagnostics, and fail validation on missing/mismatched exposure, attempted `/mpx:*`, or runtime collision.
-- Provider-specific implementation does not add redundant skill descriptions.
-- `/mpx:<name>` resolves in both Claude and Pi.
-- No catalog-owned native Pi `/skill:*` duplicate is present.
-- No doubled `/mpx:mpx-*` names.
-- Old `/mp:*` is absent after final cutover.
-- Canonical skill invokes `mpx`, not provider CLIs.
-- Claude runtime generation maps exposure without relying on plugin-inapplicable `skillOverrides`; Pi produces compatibility diagnostics for unsupported runtime semantics.
-- Agent model/tool/thinking mappings generate correctly.
-- Claude hooks and Pi adapters produce equivalent blocking/context behavior where intended.
-- Plugin install from cache contains all required files and no outside symlink dependency.
-
-### Launch, identity, and executor validation
-
-- Every tuple dimension, including skill policy, and `launchKey` is process/session immutable; changed rights or disclosure require visible relaunch.
-- Identity routes native roots/Git/providers/SSH/MCP while CWD classification grants nothing; unknown CWD fails closed.
-- Built-in mode matrices, identity-domain project checks, RO-default cross-domain grants, explicit RW, elevation reason/banner/sanitized audit, protected control-plane apply, and next-launch-only UI pass.
-- Host reports exact interception and never claims isolation; Docker reports direct/clone/extra-mount and confidentiality limits.
-- Explicit-only tests prove that actual slash/UI/CLI invocation succeeds, prose slash text is inert, autocomplete remains user-visible, and model loaders reject the state. Full and name-only tests prove their distinct discovery and lazy-loading contracts.
-- Project launch-default tests prove explicit/project/scope/built-in precedence and show that committed project files cannot select identity, grants, executor, writable mounts, credential routes, or a broader network policy.
-- Docker tests prove clone commit/fetch handoff and authorized push/PR/MR/merge, host-worktree Git limitations, project/local service connectivity, effective named network policy and policy-log diagnostics, no shared mutable skills, and the host-side Pi executor's lack of model-triggerable host file/shell/process/browser/Git capabilities.
-- Descriptors/config/logs contain no secret, private key, native-auth path, OAuth token, or prompt. Docker tests are required for supported launchers and capability-gated only on platforms explicitly declared unsupported.
-
-### Project runtime verification
-
-For each target repository, allocate non-default ports and verify the actual listener, URL generation, and tests:
-
-- `yoursafe-components`: Components, Storybook/Docs, asset URL, Playwright, HTTPS/certs.
-- `meeplog`: app, preview, Storybook, worker `/health`, public API URL, Vitest APIs.
-- `prejemesi`: app, preview, Storybook, Playwright, Vitest APIs, auth origin/trusted origins; shared database remains one instance.
-- Grovekeeper: Vite/Tauri URL coupling, HMR where applicable, preview/Playwright, Storybook.
-- Generated Svelte template: create two linked worktrees and run dev/preview/Storybook/E2E on distinct assignments.
-
-Use strict ports so silent framework auto-increment cannot masquerade as success.
-
-### Sessions
-
-- Discover active Claude personal/work and Pi sessions.
-- Stable runtime-qualified identity.
-- Mark unfinished with note/next action.
-- Restart machine/process and preserve inbox.
-- Resume into correct account, cwd, worktree, model/reasoning policy, and session file.
-- Reconcile dead processes without losing unfinished state.
-- One-time legacy save import is idempotent and non-destructive.
-- Scheduled capture runs and reports a healthy last result.
-
-### Installer and machine integration
-
-- `mpx install plan` is read-only and complete.
-- Apply is idempotent and marker ownership does not duplicate blocks.
-- Verify checks actual targets rather than source intentions.
-- Uninstall removes only MPX-owned entries and preserves credentials/data.
-- Claude personal and work launchers load correct account/plugin combinations.
-- Pi auth/session data remain real files.
-- Windows Terminal profile opens at new repo and uses the intended icon.
-- Raycast repo/editor/terminal/Obsidian/CLI links all execute.
-- Obsidian dashboards and inbound links resolve after folder/page rename.
-- Scheduled tasks and shortcuts point to new commands.
-- Environment variables and PATH contain no stale required path.
-- Old system can still launch during validation and can be restored after a simulated failed cutover.
-
-### Future GUI independence
-
-- Run the entire core/CLI test suite with Grovekeeper absent.
-- Delete/disable any future GUI process and verify ports, worktrees, sessions, providers, status lines, and installers continue working.
-- Validate stable JSON snapshots from a standalone consumer fixture.
-- Ensure the state database is owned and migrated by MPX, not by a GUI.
-
-## 20. Completion criteria
-
-The migration is complete only when:
-
-- New `mpx` repository is the canonical source.
-- `mpxconfig.json` is documented, validated, and used by target projects.
-- Main and linked checkout port invariants pass across repositories.
-- Claude and Pi use `/mpx:*`, shared canonical content, and the same resolved skill availability/exposure manifest.
-- Skill packs, named skill policies including zero-initial-context `clean`, user-local content/project overrides, four-state exposure, split human/model search, lean initial context, and lazy body loading pass cross-runtime tests.
-- Generic Issue terminology and adapters replace Task/ticket/provider command prose.
-- Worktree creation is safe, standard, no-editor, port-aware, and preparation-aware.
-- `mpx session inbox` provides durable unfinished-work tracking.
-- Target projects and Svelte scaffolding run on assigned ports.
-- Required Docker launch, identity routing, mode/workspace/network/grant reporting, Pi split-executor isolation, machine installation, and all external integrations validate; host filesystem execution remains explicitly elevated.
-- No old system component is required for normal operation.
-- Rollback snapshots and drills have passed before old repositories/installations are retired.
-
-## 21. Evidence used for this plan
-
-Primary inspected sources include:
-
-- `C:/_MP_projects/mpx-claude-code/docs/WORKTREE_HUB.md`
-- `C:/_MP_projects/mpx-claude-code/docs/PLUGIN_CONVERSION.md`
-- `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/lib/worktree-hub.mts`
-- `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/setup-worktree.mts`
-- `C:/_MP_projects/mpx-claude-code/plugins/mp/scripts/status-line.mts`
-- `C:/_MP_projects/mpx-pi/README.md`
-- `C:/_MP_projects/mpx-pi/PI_MIGRATION.md` (historical Pi implementation journal/provenance; not an active plan)
-- `C:/_MP_projects/mpx-pi/extensions/footer.ts`
-- `C:/_MP_projects/mpx-pi/extensions/mp-namespace-commands.ts`
-- `C:/_MP_projects/kanbanflow-cli/src/config.rs`
-- `C:/_MP_projects/kanbanflow-cli/src/token.rs`
-- `C:/_MP_projects/kanbanflow-cli/skills/shared/KF_WORKFLOW.md`
-- `C:/_MP_projects/mpx-ports/README.md`
-- `C:/_MP_projects/mpx-worktrees/README.md`
-- `C:/_MP_projects/agent-resurrect/README.md`
-- `C:/_MP_github_cloned/matt-pocock-skills/skills/engineering/setup-matt-pocock-skills/SKILL.md`
-- `C:/_MP_github_cloned/matt-pocock-skills/CONTEXT.md`
-- Target project and template package/framework/test configuration under `prejemesi`, `meeplog`, Grovekeeper, `template-sveltekit`, and `yoursafe-components`.
-- Installed Pi documentation for skills, extensions, packages, providers, models, SDK, settings, and environment variables.
-- Claude Code skill and plugin documentation for progressive disclosure, invocation controls, `skillOverrides`, plugin namespaces, and command expansion.
-- Agent Skills specification for portable canonical frontmatter and supporting-file layout.
-- Claude Code worktree documentation for `.worktreeinclude`.
-- Machine integration inventory covering shell profiles, Windows Terminal, Claude/Pi config links, Raycast artifacts, Obsidian project dashboards, and installer-owned state.
-- Privacy-safe aggregate session path classifications in Section 2A.
-- Prior local standalone `sbx` and legacy Docker Desktop plugin inspection as historical evidence only; launch readiness must be re-verified on the actual host at implementation time.
-- `https://github.com/docker/sbx-releases` for proprietary standalone release metadata and `C:/_MP_github_cloned/sbx-kits-contrib` for Apache-2.0 contributed kit source, including the Pi kit's current credential limitations.
-- Current Docker Sandboxes security, credential, kit, network-policy, clone-workflow, and local-development documentation, especially the explicit limitation that third-party sandbox agents do not receive proxy-managed OAuth.
-- Current Claude Code skill invocation/context documentation and Pi skill/provider documentation establishing that MPX `name-only` requires runtime-specific projection and that Pi's ChatGPT/Codex OAuth normally lives in its native host auth store.
+## 18. Durable phase summary
+
+Implementation status describes repository code and focused automated evidence only. **It is not live acceptance.** No reviewed session approved consequential mutation of native account roots, OAuth state, shell activation, Windows Terminal, scheduled tasks, real repositories, provider remotes, or legacy installations.
+
+| Phase | Durable result | Live state |
+| --- | --- | --- |
+| A | Baseline/snapshot and provenance contracts implemented; historical evidence retained. | Native recovery and machine-integration drill pending. |
+| B–E | Config, launch, ports, worktrees, providers, issues, review, CI, and development-service domain tooling implemented. | Real account/provider/project routes pending. |
+| F1 | Canonical runtime-neutral content, deterministic projections, runtime manifests, guards, and native inventory implemented. | Installed Claude/Pi observation pending. |
+| F2 | Standalone-sbx policy/proof contracts and host-Pi remote-executor foundation implemented. | Live `sbx` admission, OAuth isolation, and sandbox/container selection pending. |
+| G | Session lifecycle, discovery, binding, resume planning, and scheduled reconcile authority implemented. | Live provider session/resume and scheduled-task run pending. |
+| H | Target rollout adapters and fixture coverage implemented. | Named-target runs and Windows Terminal observation pending. |
+| I | Immutable installer plan/apply/verify/rollback and scheduling authority implemented. | User config, installation, native registration, and four account routes pending. |
+| J | Reconciliation, parity, audit, cutover planning, and rollback-drill tooling implemented. | Observation window, cutover, live rollback, and retirement pending. |
+
+Verification resumes phase by phase after this documentation consolidation. Detailed durable contracts remain in `docs/CONFIG.md`, `docs/LAUNCH.md`, `docs/RUNTIME_ADAPTERS.md`, `docs/PORTS.md`, `docs/WORKTREES.md`, `docs/PROVIDERS.md`, `docs/ISSUES.md`, `docs/INSTALLATION.md`, `docs/MIGRATION_BASELINE.md`, `docs/PHASE_F1_NATIVE_INVENTORY.md`, the two Phase F2 proof documents, `docs/PHASE_I_INSTALLER.md`, `docs/PHASE_I_ROLLBACK.md`, and `docs/PHASE_J_RECONCILIATION.md`. `docs/history/` is evidence/provenance, not active status authority.
+
+## 19. User-decision log
+
+User prompts override agent summaries, reviews, inferred completion, and historical phase claims. Dates identify the reviewed Pi sessions; session IDs are cited without machine paths.
+
+| Date | Pi session ID(s) | Binding user decision |
+| --- | --- | --- |
+| 2026-08-24 | `01a0326c-eece-78ef-9307-b46334baec15` | Integrate substantive work gradually; phases believed complete remain subject to verification. |
+| 2026-08-25 | `01a0384e-de49-7f97-b0a9-3b9c13bdc567` | Support personal/work Pi through existing `pi`/`piw`; require full current Pi/Claude parity; accept root-attested enrollment for local usability. |
+| 2026-08-25 | `01a03a2c-5108-78b5-9e6c-8a7b6d9cf366` | Migrate/neutralize batch-execute; keep canonical skills runtime-neutral and map models per runtime. Pi subagents are Codex-only with no Anthropic defaults; stop legacy `MPX_SKILLS_DIR` export before cutover. |
+| 2026-08-25/26 | `01a0398d-6272-73a6-8624-c880a3c845da` | Defer ponytail, NotebookLM mind-map/slides, unslop, pstack, wait-what, and simplify until stable; consolidate migration planning/history. |
+| 2026-08-27 | `01a03a88-7f8c-7ece-aec2-9039e710259b` | Consolidate meaningful worktrees/branches into main, then verify phase by phase with the Pi harness and Prejemesi target; approve Phase A offline verification while deferring native restore. |
+| 2026-08-27 | `01a04471-c0d7-7b28-9393-4d8bd715a20e` | Require project-bound isolation with optional mounts and worktree-friendly Git; final sandbox choice remains open. |
+| 2026-08-27/28 | `01a04505-24a9-70dd-8f2b-518a3278a08a`; Claude review sessions | Phase I offline work did not approve live installer, account, task, or external mutations; Claude review was blocked by expired OAuth. |
+| 2026-08-28 | `01a0479b-ba89-798f-82b4-b6e249543687` (current) | Consolidate worktrees into main; delete redundant tests and stale migration docs; keep a checkbox acceptance ledger; prioritize agent-implementable blockers before manual gates; gather explicit human actions needed to migrate the user's agent. |
+| 2026-08-28 | `01a0479b-ba89-798f-82b4-b6e249543687` (current) | Reject global deny-all/allowlist enforcement and select the standalone-sbx `open` network baseline mapped to global `allow-all`, accepting that destination policy is not an isolation boundary. Keep the live F2 gate unchecked until proof passes. |
+
+## 20. Acceptance criteria
+
+Checkboxes are the sole migration acceptance ledger. `[x]` means reproducibly evidenced by current repository code and focused tests; it never implies live-machine acceptance.
+
+### Verified offline architecture and domains
+
+- [x] Canonical config, launch tuple, identity/domain, grants, exposure, and fail-closed resolution contracts exist.
+- [x] Provider-neutral issue/review/CI capability contracts and adapters exist.
+- [x] Deterministic managed-port allocation, lease, inspection, and reconciliation contracts exist.
+- [x] Worktree create/remove/prepare/trust and package/development-service contracts exist.
+- [x] Session lifecycle, unfinished inbox, account binding, resume planning, and reconcile contracts exist.
+- [x] Phase J executes bounded parity checks, records privacy-safe four-route audit coverage, persists content-addressed observations, and produces fail-closed cutover/rollback plans without applying live cutover.
+
+### Verified offline skills
+
+- [x] Canonical skill source is runtime-neutral and generated artifacts converge with provenance checks.
+- [x] Core workflow skills are catalogued and projected deterministically.
+- [x] Issue, review, CI, Git, and delivery skill groups use MPX capability boundaries.
+- [x] Port, worktree, package, and development-service skill groups use MPX domain contracts.
+- [x] Session, handoff, resume, and status skill groups use MPX session/runtime contracts.
+- [x] Research, browser, documentation, and NotebookLM skill groups are present as migrated canonical content.
+- [x] Skill packs and `full`/`name-only`/`explicit-only`/`off` exposure resolve consistently for both runtimes.
+- [x] Deferred proposed skill additions are excluded from the stability gate.
+
+### Verified offline runtimes
+
+- [x] Claude and Pi consume deterministic launch-bound manifests rather than separate canonical skill bodies.
+- [x] Runtime-specific model mapping is separated from canonical skill/agent intent.
+- [x] Pi account enrollment supports root-attested personal/work bindings and fails closed when absent or mismatched.
+- [x] Host-Pi remote executor contracts remove model-visible native host file/shell/process/browser/Git tooling.
+- [x] Standalone-sbx command, policy, mount, environment, and proof validation contracts exist.
+- [x] F2 plan exports and V2 proof reports bind the exact launch, artifact, SBX plan, source evidence, deterministic proof sandbox, and network-policy decision matrix.
+- [x] The fake-sbx proof harness verifies confirmation, executable hash, plan-derived arguments, policy decisions, timeout, and cleanup behavior without counting as live attestation.
+- [x] Runtime guard/status/session adapter behavior has focused automated coverage.
+- [x] Pi MPX subagent projections are Codex-only, with no Anthropic default mapping.
+- [x] Active runtime launch does not require a legacy `MPX_SKILLS_DIR` export.
+
+### Verified offline installer
+
+- [x] Immutable release manifests, receipts, plan/apply/verify/uninstall, and rollback contracts exist.
+- [x] Installer operations are confirmation-bound, transactional, and covered by clean/existing-machine simulations.
+- [x] Shell aliases, native runtime registration, Terminal, environment, shortcut, and scheduled-task operations are represented in installer plans.
+- [x] Scheduled reconcile resolves immutable installed-runner authority and fails closed when unavailable or unhealthy.
+- [x] Generated convergence and documentation compatibility validation no longer depend on deleted transient phase reviews.
+
+### Live and manual gates
+
+- [x] Generated convergence is clean after a fresh full build/check in the consolidated working tree.
+- [x] The pinned standalone `sbx` v0.39.0 binary, daemon diagnostics, authentication, and user-selected global `allow-all` policy are present on this machine.
+- [ ] Live Phase F2 standalone-sbx executable/version/policy/mount proof passes. The current open-network run creates and cleans the proof sandbox but is blocked before report emission by strict v0.39 policy-check JSON compatibility.
+- [ ] Live Claude sandbox and host-Pi OAuth routes pass without credentials entering the sandbox.
+- [x] Standalone sbx is the approved sandbox product, with the user-selected global `allow-all`/MPX `open` network baseline explicitly treated as non-isolating.
+- [ ] Phase H named-target runs pass against every required real project/template.
+- [ ] Windows Terminal profile/start-directory/alias behavior is observed interactively.
+- [ ] Linux portability is documented in README and verified on Linux.
+- [ ] macOS portability is documented in README and verified on macOS.
+- [ ] User-local config is reviewed and installed.
+- [ ] Immutable MPX installation is applied and verified on the live machine.
+- [ ] Claude and Pi native runtime/plugin/extension registration is verified.
+- [ ] Personal Claude account route works end to end.
+- [ ] Work Claude account route works end to end.
+- [ ] Personal Pi (`pi`) account route works end to end.
+- [ ] Work Pi (`piw`) account route works end to end.
+- [ ] Scheduled task executes the installed immutable session reconcile runner successfully.
+- [ ] Real Git author/SSH routing is evidenced for personal and work identities.
+- [ ] Obsidian integration is evidenced without widening unrelated vault access.
+- [ ] Raycast integration is evidenced on the live machine.
+- [ ] Live provider operations and native session resume are verified for required routes.
+- [ ] Required observation window completes with zero unapproved legacy dependency findings.
+- [ ] Zero-legacy activation/config audit passes.
+- [ ] User explicitly approves and performs cutover.
+- [ ] Live rollback from the cutover state succeeds.
+- [ ] Legacy activation, repositories, and obsolete migration-only state are retired only after all prior gates pass.

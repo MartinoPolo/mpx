@@ -5,7 +5,7 @@
 .DESCRIPTION
     The passphrase is encrypted with the Windows Data Protection API under the current
     user account, so only this user on this machine can read it back. It is written to
-    %LOCALAPPDATA%, deliberately outside the mpx-claude-code repo, which is public.
+    %LOCALAPPDATA%, deliberately outside the MPX source tree so it cannot be committed.
 
 .EXAMPLE
     powershell -File passphrase.ps1 -Action set -Passphrase 'the-passphrase'

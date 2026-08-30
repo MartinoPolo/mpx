@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it, vi } from "vitest";
-import { createF2ProofReportV1 } from "@mpx/runtime-contracts";
-import { SBX_V0_39_0_PIN } from "@mpx/executors";
-import { createProductionSbxExecutionAdapter, loadProductionSbxProofSources, planProductionSbxExecution } from "./sbx-execution.js";
+import { createF2ProofReportV1, createF2ProofReportV2, createSbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
+import { buildF2ProofPolicyMatrix, SBX_V0_39_0_PIN } from "@mpx/executors";
+import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof, loadProductionSbxProofSources, planProductionSbxExecution } from "./sbx-execution.js";
 
 const h=(value:string)=>value.repeat(64).slice(0,64);
 const sha=(value:Uint8Array|string)=>createHash("sha256").update(value).digest("hex");
@@ -24,6 +24,16 @@ it("loads all F2 evidence from a copied immutable release after the source check
   await expect(loadProductionSbxProofSources({},pathToFileURL(path.join(bin,"mpx.mjs")).href)).resolves.toEqual({sbxPinSha256:sha("installed sbx pin"),runtimeToolInventorySha256:h("1"),executorEvidenceSha256:sha(executor)});
 });
 
+it("diagnoses only strict V2 proof bound to the configured canonical plan export",async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),"mpx-f2-diagnose-")),release=path.join(root,"release"),evidence=path.join(release,"evidence");await mkdir(evidence,{recursive:true});const executor=Buffer.from("diagnostic executor"),sources={sbxPinSha256:sha("diagnostic pin"),runtimeToolInventorySha256:h("7"),executorEvidenceSha256:sha(executor)};await Promise.all([writeFile(path.join(evidence,"sbx-pin.json"),"diagnostic pin"),writeFile(path.join(evidence,"executor-evidence.ts"),executor),writeFile(path.join(evidence,"runtime-tool-inventory.json"),JSON.stringify({runtimeToolInventorySha256:sources.runtimeToolInventorySha256,executorEvidenceBindingSha256:sources.executorEvidenceSha256}))]);const matrix=buildF2ProofPolicyMatrix("implementation"),plan=createSbxLaunchPlanExportV1({launchKey:h("1"),descriptorSha256:h("2"),runtime:"pi",identity:{name:"work",domain:"work"},artifact:{manifestKey:h("3"),artifactKey:h("4"),fileMapHash:h("5")},evidence:sources,sandbox:{planKey:h("6"),profile:"implementation",proofSandboxName:"mpx-proof-666666666666",createArgv:["create","--name","reviewed","shell","."]},policyMatrix:matrix}),decisions=matrix.flatMap(profile=>profile.targets.map(target=>({profile:profile.profile,...target,count:1}))),report=createF2ProofReportV2({...plan,planExportKey:plan.exportKey,decisions,builtInClaudeEvidence:null,verdict:"pass"}),planFile=path.join(root,"plan.json"),reportFile=path.join(root,"report.json"),environment={MPX_RELEASE_ROOT:release,MPX_F2_PLAN_EXPORT_FILE:planFile,MPX_F2_PROOF_REPORT_FILE:reportFile};
+  await Promise.all([writeFile(planFile,JSON.stringify(plan)),writeFile(reportFile,JSON.stringify(report))]);
+  await expect(diagnoseConfiguredF2Proof(environment)).resolves.toEqual([]);
+  await writeFile(reportFile,JSON.stringify(createF2ProofReportV1({planKey:plan.sandbox.planKey,...sources,attestationSha256:h("a"),verdict:"pass"})));
+  await expect(diagnoseConfiguredF2Proof(environment)).resolves.toContain("F2_PROOF_V2_REQUIRED");
+  await writeFile(reportFile,JSON.stringify({...report,planExportKey:h("f")}));
+  await expect(diagnoseConfiguredF2Proof(environment)).resolves.toContain("F2_PROOF_INVALID");
+});
+
 it("selects verified standalone sbx evidence and runs create, policy, worker bridge, attach, and awaited teardown",async()=>{
   const root=await mkdtemp(path.join(tmpdir(),"mpx-sbx-cli-")),cwd=path.join(root,"repo"),stateRoot=path.join(root,"state"),executable=path.join(root,"apps","sbx.exe");
   await Promise.all([mkdir(cwd),mkdir(stateRoot),mkdir(path.dirname(executable))]);await writeFile(executable,"fake");
@@ -31,10 +41,10 @@ it("selects verified standalone sbx evidence and runs create, policy, worker bri
   const input={environment:{MPX_SBX_EXECUTABLE:executable},cwd,stateRoot,runtime:"pi" as const,identity:{name:"work",domain:"work" as const},workspaceMode:"clone" as const,worktreeRole:"main" as const,workspaceRoot:cwd,gitCommonDir:path.join(cwd,".git"),nativeRoots:[path.join(root,"native")],credentialRoots:[path.join(root,"credentials")],oppositeDomainRoots:[path.join(root,"personal")],network:{name:"implementation",allow:["api.openai.com:443"]},ports:[4310],sources};
   const planned=planProductionSbxExecution(input),proof=createF2ProofReportV1({planKey:planned.plan.planKey,...sources,attestationSha256:h("a"),verdict:"pass"});
   const calls:string[][]=[];
-  const adapter=await createProductionSbxExecutionAdapter({...input,proof},{inspectExecutable:async file=>({file:true,realpath:file,sha256:SBX_V0_39_0_PIN.windowsBinarySha256}),diagnostics:async()=>({status:"pass",digest:h("d")}),run:async request=>{calls.push([...request.argv]);return {exitCode:0,stdout:"",stderr:"",truncated:false};}});
+  const adapter=await createProductionSbxExecutionAdapter({...input,proof},{inspectExecutable:async file=>({file:true,realpath:file,sha256:SBX_V0_39_0_PIN.windowsBinarySha256}),diagnostics:async()=>({status:"pass",digest:h("d")}),run:async request=>{calls.push([...request.argv]);const target=request.argv[request.argv.indexOf("--sandbox")+2];if(request.argv[0]==="policy"&&request.argv[1]==="check"){const allowed=target!=="blocked.invalid:443";return {exitCode:allowed?0:1,stdout:JSON.stringify({action:"net:connect:tcp",allowed,resource_value:target,type:"network",...(!allowed?{deny_kind:"implicit",reason:"default deny",rule:"default"}:{})}),stderr:"",truncated:false};}return {exitCode:0,stdout:"",stderr:"",truncated:false};}});
   expect(await adapter.verify()).toEqual({status:"verified",verifier:"standalone-sbx-live",evidenceDigest:proof.reportKey});
   await adapter.execute({executable:process.execPath,argv:[],cwd,environment:{}});
-  expect(calls.map(call=>call[0])).toEqual(["create","ports","policy","exec","run","rm"]);
+  expect(calls.map(call=>call[0])).toEqual(["policy","create","ports","policy","policy","policy","exec","run","rm"]);
   expect(adapter.bridge).toEqual({endpoint:`sbx://${planned.plan.appName}/worker`,attestationSha256:expect.stringMatching(/^[a-f0-9]{64}$/u)});
 });
 

@@ -13,6 +13,25 @@ class BytesAdapter implements SideEffectAdapter {
   async apply(operation: InstallOperationV1) { if (this.calls++ === this.failAt) throw new Error("injected"); operation.action === "remove" ? this.values.delete(operation.target) : this.values.set(operation.target, Buffer.from(operation.desiredDigest!)); }
   async restore(operation: InstallOperationV1, snapshot: string | null) { if (this.restoreFailure) throw this.restoreFailure; snapshot === null ? this.values.delete(operation.target) : this.values.set(operation.target, Buffer.from(snapshot, "base64")); }
 }
+class RetainingAdapter implements SideEffectAdapter {
+  readonly name = "retaining";
+  readonly values = new Map<string, string>();
+  readonly hydrated = new Set<string>();
+  async observe(operation: InstallOperationV1) { return this.values.get(operation.target) ?? null; }
+  async capture(operation: InstallOperationV1) { return this.values.get(operation.target) ?? null; }
+  async apply(operation: InstallOperationV1) { operation.action === "remove" ? this.values.delete(operation.target) : this.values.set(operation.target, operation.desiredDigest!); }
+  async restore(operation: InstallOperationV1, snapshot: string | null) { snapshot === null ? this.values.delete(operation.target) : this.values.set(operation.target, snapshot); }
+  async receiptLocator(operation: InstallOperationV1) { return { kind: operation.id === "config" ? "user-owned" : "installer-owned" }; }
+  async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown) {
+    const kind = (locator as { kind?: unknown } | null)?.kind;
+    if (operation.id === "config" ? operation.target !== "C:\\Roaming\\mpx\\config.json" || kind !== "user-owned" : kind !== "installer-owned") throw Object.assign(new Error("forged"), { code: "INSTALL_RECEIPT_FORGED" });
+    this.hydrated.add(operation.id);
+  }
+  async retainOnUninstall(operation: InstallOperationV1) {
+    if (!this.hydrated.has(operation.id)) throw new Error("retention checked before hydration");
+    return operation.id === "config";
+  }
+}
 const intent: InstallIntentV1 = { schemaVersion: 1, kind: "install-intent", releaseKey: "a".repeat(64), convergenceHash: "a".repeat(64), components: ["cli"] };
 
 describe("durable installer transaction state", () => {
@@ -68,6 +87,30 @@ describe("durable installer transaction state", () => {
 });
 
 describe("installer transactions", () => {
+  it("hydrates signed locators before retaining user-owned state and removes other owned operations", async () => {
+    const adapter = new RetainingAdapter(), store = new MemoryTransactionStore(), manifest = { schemaVersion: 1 as const, kind: "release-manifest" as const, releaseKey: "a".repeat(64), convergenceHash: "a".repeat(64), files: [] };
+    const service = new ImmutableInstallerService({ adapters: [adapter], store, manifest });
+    const operations: InstallOperationV1[] = [
+      { id: "config", adapter: adapter.name, action: "ensure", target: "C:\\Roaming\\mpx\\config.json", desiredDigest: "b".repeat(64) },
+      { id: "native", adapter: adapter.name, action: "ensure", target: "C:\\native", desiredDigest: "c".repeat(64) },
+    ];
+    const install = await service.plan(intent, operations); await service.apply(install, install.confirmationDigest); await service.finalize();
+    const restarted = new RetainingAdapter(); restarted.values.set("C:\\Roaming\\mpx\\config.json", "b".repeat(64)); restarted.values.set("C:\\native", "c".repeat(64));
+    const uninstalling = new ImmutableInstallerService({ adapters: [restarted], store });
+    const plan = await uninstalling.planUninstall();
+    expect(plan.operations.map(operation => operation.id)).toEqual(["native"]);
+    expect([...restarted.hydrated].sort()).toEqual(["config", "native"]);
+    await uninstalling.uninstall(plan, plan.confirmationDigest);
+    expect(restarted.values.get("C:\\Roaming\\mpx\\config.json")).toBe("b".repeat(64));
+    expect(restarted.values.has("C:\\native")).toBe(false);
+  });
+
+  it("refuses a recomputed locator that forges retention for an arbitrary resource", async () => {
+    const adapter = new RetainingAdapter(), store = new MemoryTransactionStore(), operation: InstallOperationV1 = { id: "config", adapter: adapter.name, action: "ensure", target: "C:\\Roaming\\arbitrary.json", desiredDigest: "b".repeat(64) }, spec = { kind: "user-owned" };
+    await store.writeReceipt({ schemaVersion: 2, kind: "ownership-receipt", releaseKey: "a".repeat(64), convergenceHash: "a".repeat(64), files: [], operations: [operation], operationLocators: [{ operationId: operation.id, adapter: operation.adapter, spec, bindingDigest: installerDigest({ operation, spec }) }], installedAt: "2025-01-01T00:00:00.000Z" });
+    await expect(new ImmutableInstallerService({ adapters: [adapter], store }).planUninstall()).rejects.toMatchObject({ code: "INSTALL_RECEIPT_FORGED" });
+  });
+
   it("revalidates observations and exact confirmation before side effects", async () => {
     const values = new Map([["config", Buffer.from("native")]]), adapter = new BytesAdapter(values), service = new ImmutableInstallerService({ adapters: [adapter], store: new MemoryTransactionStore(), now: () => new Date("2025-01-01") });
     const plan = await service.plan(intent, [{ id: "write", adapter: "files", action: "ensure", target: "owned", desiredDigest: "b".repeat(64) }]);
@@ -122,6 +165,7 @@ describe("installer transactions", () => {
     const plan = await service.plan(intent, [{ id: "write", adapter: "files", action: "ensure", target: "owned", desiredDigest: "b".repeat(64) }]);
     const failure = await service.apply(plan, plan.confirmationDigest).catch(error => error as AggregateError);
     expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure.message).toBe("injected");
     expect(failure.errors.map(error => (error as Error).message)).toEqual(["injected", "restore failed"]);
     expect(failure.cause).toBe(failure.errors[0]);
     expect((await store.readTransaction())?.journal).toMatchObject({ phase: "applying", inFlightOperationId: "write" });

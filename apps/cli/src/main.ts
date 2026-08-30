@@ -21,13 +21,14 @@ import {
 } from "@mpx/config";
 import { createSkillArtifactReference, errorEnvelope, MpxError, sha256Canonical, successEnvelope, type Diagnostic, type JsonValue } from "@mpx/core";
 import { canonicalNativeRootDigest, resolveLaunch, resolveLaunchSelection, serializeLaunchPublic, type ResolveLaunchSelectionInput, type ShortLaunchAlias } from "@mpx/launch";
-import { ExecutionError, namedSbxPolicies, sanitizeHostReason } from "@mpx/executors";
+import { ExecutionError, buildF2ProofPolicyMatrix, namedSbxPolicies, sanitizeHostReason } from "@mpx/executors";
+import { createSbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
 import { probeProvider, type ProviderRegistry } from "@mpx/providers";
 import { LocalIssueStore, rebuildObsidianIssueViews } from "@mpx/provider-local";
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from "@mpx/status";
 import { expandBranchTemplate } from "@mpx/worktrees";
 import { createRuntimeSkillArtifact, explainSkill, humanCompleteSkills, humanListSkills, humanSearchSkills, humanSkillDetail, inventoryCanonical, inventoryProjectSkills, resolveManifest, searchSkills, SkillCatalogError, doctor as skillDoctor, type ResolveOptions } from "@mpx/skills";
-import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, immutableInstaller, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
+import { catalogPath, configuredProviderRegistry, createDefaultSbxDiagnostics, defaultContext, executeInternalPreparationWorker, immutableInstaller, installIntentBuilder, NodeProviderProcessExecutor, ports, productionSessionDiscoveries, productionSessionProcessInspector, productionSessionResumeDependencies, providerService, sessions, stateRoot, status, worktrees, type CliContext } from "./context.js";
 import { executeSessionCommand } from "./session-command.js";
 import { executeInstallCommand } from "./install-command.js";
 import { executeAccountCommand, productionPiAuthProbe } from "./account-command.js";
@@ -35,9 +36,18 @@ import { ProductionSessionLifecycleBridge } from "./session-lifecycle-bridge.js"
 import { createProductionSessionBranchRuntimeAdapter, createWindowsTerminalBranchAdapter, diagnoseSessionBranchAdapters } from "./session-branch-adapters.js";
 import { currentLaunchTuple, directProcessTty, executeResolvedLaunch, executionMpxError, executorEvidence, resolveTrustedRuntimeExecutable } from "./launch-execution.js";
 import { processIo, type CliIo } from "./io.js";
+
+function resolveScheduledCaptureAuthority(context: CliContext): NonNullable<CliContext["scheduledCaptureAuthority"]> {
+  return context.scheduledCaptureAuthority ?? {
+    inspect: async () => {
+      const verification = await immutableInstaller(context).verify(true);
+      return { installed: verification.healthy, authorityDigest: verification.healthy && verification.releaseKey ? verification.releaseKey : null };
+    },
+  };
+}
 import { defaultDevService, executeDevCommand } from "./dev-command.js";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
-import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof } from "./sbx-execution.js";
+import { createProductionSbxExecutionAdapter, diagnoseConfiguredF2Proof, loadProductionSbxProofSources, planProductionSbxExecution, productionProofCreateArgv } from "./sbx-execution.js";
 import { BranchLeaseStore, BranchLineageStore, ConversationBranchService, RootAttestationService, SessionService, RootAttestationStore, SessionError, createClaudeBranchAdapter, createPiBranchAdapter, type BranchRequestV1, type BranchRuntimeAdapter, type ConversationBranchPlanV1, type ResumePlanV1 } from "@mpx/sessions";
 import { executeMigrationCommand } from "./migration.js";
 
@@ -54,7 +64,7 @@ function parse(argv: readonly string[]): Parsed {
     if (!word.startsWith("--")) { words.push(word); continue; }
     const [name,inline]=word.slice(2).split("=",2);
     if (["json","rebuild","confirm","machine","cancel","all-active","strict","dry-run","acknowledge-shared-risk","terminal-tab","legacy-disabled"].includes(name!)) options.set(name!,true);
-    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","intent","plan","transaction","terminal-title"].includes(name!)) {
+    else if (["cwd","role","limit","lines","artifact-key","pid","identity","skill-policy","runtime","content-scope","mode","executor","workspace","network-policy","preset","reason","grant","base","branch","template","slug","author","issue","review","execution","approval","package-approval","explicit-executable-approval","include-approval","orphan-approval","path","source","id","title","body","label","destination","dependency-id","revision","source-branch","target-branch","method","run-id","state","status","note","summary","disposition","next-action","priority","related-issue","related-review","capture","confirm-plan","import-legacy","map-account","map-pi-root","intent","request","plan","transaction","external-plan","raycast-post-export","terminal-title"].includes(name!)) {
       const value=inline ?? argv[++i]; if (value===undefined || (value.length===0 && name!=="body") || value.startsWith("--")) throw new UsageError(`--${name} requires a value`);
       if (["grant","import-legacy","map-account","map-pi-root"].includes(name!)) options.set(name!,[...((options.get(name!) as string[]|undefined)??[]),value]);
       else options.set(name!,value);
@@ -167,6 +177,10 @@ function resolveOptions(
   };
 }
 
+function unexpectedCommandError(error:unknown,context:CliContext):MpxError {
+  try { context.onInternalError?.(error); } catch { /* A debug sink cannot affect command behavior. */ }
+  return new MpxError({code:"COMMAND_FAILED",message:"Command failed."});
+}
 function sanitizePublicMessage(message:string):string {
   return message.replace(/[\r\n\t]+/gu," ").trim().replace(/[A-Za-z]:[\\/][^\s,;]+/gu,"[path]").replace(/(^|[\s(])\/[^\s,;)]+/gu,"$1[path]").slice(0,256);
 }
@@ -432,12 +446,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
         admitExecutor: async branch => branch.launchIdentity.executor === "host" || (await dockerAdmission(branchAdmissionPlan(branch))).admitted,
       }, branchLeaseStore);
     }
-    const scheduledCaptureAuthority = context.scheduledCaptureAuthority ?? ((context.installOrchestrator || (context.installerOperationAdapter && context.installerTransactionStore)) ? {
-      inspect: async () => {
-        const verification = await immutableInstaller(context).verify(true);
-        return { installed: verification.healthy, authorityDigest: verification.healthy && verification.releaseKey ? verification.releaseKey : null };
-      },
-    } : undefined);
+    const scheduledCaptureAuthority = resolveScheduledCaptureAuthority(context);
     const result = await executeSessionCommand({ action, args, options: parsed.options }, {
       store: sessionStore,
       resolveIdentity: async name => {
@@ -456,7 +465,8 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     return { data: result.data, warnings: [...result.warnings] };
   }
   if (group === "install") {
-    const result = await executeInstallCommand({ action, args, options: parsed.options }, { orchestrator: immutableInstaller(context) });
+    const needsBuilder = action === "intent" || action === "prepare" || action === "verify" && typeof parsed.options.get("external-plan") === "string";
+    const result = await executeInstallCommand({ action, args, options: parsed.options }, { orchestrator: immutableInstaller(context), ...(needsBuilder ? { builder: installIntentBuilder(context) } : {}) });
     return { data: result.data, warnings };
   }
   if (["identity","mode","skill-policy","preset"].includes(group) && ["list","show"].includes(action ?? "")) {
@@ -549,7 +559,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
     if(bound.runtimeArtifact?.runtime!==action) throw new MpxError({code:"RUNTIME_CONTEXT_MISMATCH",message:"The process-bound runtime does not match the requested runtime entry.",remediation:"Relaunch and restart the runtime process."});
     return {data:tuple,warnings};
   }
-  if (group==="launch" && (action==="explain" || action==="claude" || action==="pi" || shortLaunchAliases.has(action as ShortLaunchAlias))) {
+  if (group==="launch" && (action==="explain" || action==="sbx-plan-export" || action==="claude" || action==="pi" || shortLaunchAliases.has(action as ShortLaunchAlias))) {
     if (args.length) throw new UsageError(`launch ${action} accepts no positional arguments`);
     const alias=shortLaunchAliases.has(action as ShortLaunchAlias)?action as ShortLaunchAlias:undefined;
     const user=await requiredUserConfig(context);
@@ -567,7 +577,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       userConfig:user,cwd:parsed.cwd,...(runtime?{runtime}:{}),...(identity?{identity}:{}),...(alias?{alias}:{}),
       ...(modeOption?{mode:modeOption}:{}), ...(skillPolicyOption?{skillPolicy:skillPolicyOption}:{}),
       ...(contentScopeOption?{contentScope:contentScopeOption}:{}),
-      ...(executorOption==="host"||executorOption==="docker"?{executor:executorOption}:{}),
+      ...(action==="sbx-plan-export"?{executor:"docker" as const}:executorOption==="host"||executorOption==="docker"?{executor:executorOption}:{}),
       ...(workspaceOption==="clone"||workspaceOption==="host-worktree"||workspaceOption==="direct"?{workspace:workspaceOption}:{}),
       ...(networkPolicyOption?{networkPolicy:networkPolicyOption}:{}), ...(presetOption?{preset:presetOption}:{}),
       ...(projectId?{projectId}:{}),
@@ -587,6 +597,8 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       return {data:{schemaVersion:1,identity:null,runtime:runtimeOption??null,candidates},warnings};
     }
     if (!identityOption && !alias) throw new MpxError({code:"IDENTITY_REQUIRED",message:"Launch identity must be supplied explicitly."});
+    if(action==="sbx-plan-export"&&runtimeOption===undefined)throw new MpxError({code:"RUNTIME_REQUIRED",message:"A sandbox plan export requires an explicit runtime."});
+    if(action==="sbx-plan-export"&&executorOption==="host")throw new MpxError({code:"EXECUTOR_UNAVAILABLE",message:"A sandbox plan export is always bound to the Docker executor."});
     const runtime=runtimeOption ?? (alias?undefined:"pi");
     const launchInput=common(runtime,identityOption);
     const selection=await resolveLaunchSelection(launchInput);
@@ -600,7 +612,7 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       });
       return {data:{schemaVersion:1,runtime:null,identity:selection.identity,selection:publicSelection(selection)},warnings};
     }
-    if(action!=="explain"&&selection.executor==="docker"&&context.sbxDiagnostics){
+    if(action!=="explain"&&action!=="sbx-plan-export"&&selection.executor==="docker"&&context.sbxDiagnostics){
       const sbx=await context.sbxDiagnostics(),code=sbx.failureCodes[0];
       if(sbx.readOnly!==true)throw new MpxError({code:"SBX_DIAGNOSTICS_UNSAFE",message:"Sandbox diagnostics must be read-only."});
       if(code)throw new MpxError({code,message:`Standalone sbx launch diagnostic: ${code}.`,details:{executor:"docker"}});
@@ -617,16 +629,21 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       ? async (): Promise<StatusSnapshotV1> => status(context).snapshot({ cwd: parsed.cwd, projectRoot: found.root, config: found.config, configHash: sha256Canonical(found.config as unknown as JsonValue) })
       : async (): Promise<StatusSnapshotV1> => parseStatusSnapshotV1({ schemaVersion: 1, project: { id: repositoryId, cwd: parsed.cwd }, worktree: { id: null, path: null, role: null, branch: null }, portResolution: "missing", services: [], diagnostics: [] });
     let executionContext=context;
-    if(action!=="explain"&&selection.executor==="docker"&&context.launchExecutorAdapters===undefined&&context.env.LOCALAPPDATA){
+    if(action!=="explain"&&action!=="sbx-plan-export"&&selection.executor==="docker"&&context.launchExecutorAdapters===undefined&&context.env.LOCALAPPDATA){
       try{
         const snapshot=await statusSnapshot(),configured=user.identities[selection.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"];
         const adapter=await createProductionSbxExecutionAdapter({environment:context.env,cwd:parsed.cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:selection.runtime,identity:{name:selection.identity.name,domain:selection.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:parsed.cwd,gitCommonDir:path.join(parsed.cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:snapshot.services.flatMap(service=>service.port===null?[]:[service.port])},context.launchSbxExecutionDependencies);
         executionContext={...context,launchExecutorAdapters:[adapter],...(adapter.bridge?{launchSbxBridge:adapter.bridge}:{})};
-      }catch{/* The existing typed unverified Docker gate remains authoritative. */}
+      }catch(failure){
+        if(failure instanceof MpxError)throw failure;
+        const message=failure instanceof Error?failure.message:"Docker admission setup failed.",matched=/^([A-Z][A-Z0-9_]+)(?::|\b)/u.exec(message);
+        throw new MpxError({code:matched?.[1]??"DOCKER_ADMISSION_SETUP_FAILED",message:"Docker admission setup failed closed.",details:{executor:"docker",diagnostic:matched?.[1]??"DOCKER_ADMISSION_SETUP_FAILED"}});
+      }
     }
-    const evidence=action==="explain"?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:"explain"} as unknown as JsonValue)}:await executorEvidence(executionContext,selection.executor), tty=context.launchTty??directProcessTty();
+    const readOnlyPlan=action==="explain"||action==="sbx-plan-export";
+    const evidence=readOnlyPlan?{status:"unverified" as const,verifier:"launch-explain",evidenceDigest:sha256Canonical({executor:selection.executor,operation:action} as unknown as JsonValue)}:await executorEvidence(executionContext,selection.executor), tty=context.launchTty??directProcessTty();
     let hostApproval:{reason:string;approvalKey:string}|undefined;
-    if(selection.executor==="host" && action!=="explain") {
+    if(selection.executor==="host" && !readOnlyPlan) {
       if(parsed.json || !tty.direct) throw new MpxError({code:"HOST_TTY_REQUIRED",message:"Host approval requires a current direct interactive TTY.",remediation:"Run the explicit host launch interactively, or use Docker."});
       if(!reasonOption?.trim()) throw new MpxError({code:"HOST_REASON_REQUIRED",message:"Host execution requires a nonempty reason."});
       if(!await tty.confirm(`Approve elevated host compatibility execution — ${sanitizeHostReason(reasonOption)}`)) throw new MpxError({code:"HOST_APPROVAL_DENIED",message:"Host execution was not approved."});
@@ -640,6 +657,14 @@ async function execute(parsed:Parsed, context:CliContext):Promise<ExecuteResult>
       policyInputs:{schemaVersion:1,manifestKey:manifest.manifestKey,skillArtifactKey:skillArtifact.artifactKey},
     });
     if(action==="explain") return {data:serializeLaunchPublic(descriptor),warnings};
+    if(action==="sbx-plan-export"){
+      if(!context.env.LOCALAPPDATA)throw new MpxError({code:"STATE_ROOT_REQUIRED",message:"LOCALAPPDATA is required to plan a production sandbox."});
+      const configured=user.identities[selection.identity.name]!,network=namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies]??namedSbxPolicies["deny-all"],sources=await loadProductionSbxProofSources(context.env);
+      const planned=planProductionSbxExecution({environment:context.env,cwd:parsed.cwd,stateRoot:path.join(context.env.LOCALAPPDATA,"mpx"),runtime:selection.runtime,identity:{name:selection.identity.name,domain:selection.identity.domain==="personal"?"personal":"work"},workspaceMode:selection.workspace,worktreeRole:selection.workspace==="host-worktree"?"linked":"main",...(selection.workspace==="direct"?{directCompatibility:true}:{}),workspaceRoot:parsed.cwd,gitCommonDir:path.join(parsed.cwd,".git"),nativeRoots:Object.values(user.identities).flatMap(identity=>Object.values(identity.runtimeRoots)),credentialRoots:[],oppositeDomainRoots:Object.values(user.identities).filter(identity=>identity.domain!==configured.domain).flatMap(identity=>Object.values(identity.runtimeRoots)),network:{name:selection.networkPolicy.name in namedSbxPolicies?selection.networkPolicy.name:"deny-all",allow:network.allow},ports:[],sources});
+      const portableArgv=productionProofCreateArgv(planned.plan);
+      const exportPlan=createSbxLaunchPlanExportV1({launchKey:descriptor.launchKey,descriptorSha256:sha256Canonical(descriptor as unknown as JsonValue),runtime:selection.runtime,identity:{name:selection.identity.name,domain:selection.identity.domain==="personal"?"personal":"work"},artifact:{manifestKey:artifact.reference.manifestKey,artifactKey:artifact.reference.artifactKey,fileMapHash:artifact.reference.fileMapHash},evidence:{sbxPinSha256:sources.sbxPinSha256,runtimeToolInventorySha256:sources.runtimeToolInventorySha256,executorEvidenceSha256:sources.executorEvidenceSha256},sandbox:{planKey:planned.plan.planKey,profile:planned.plan.networkPolicy.name,proofSandboxName:`mpx-proof-${planned.plan.planKey.slice(0,12)}`,createArgv:portableArgv},policyMatrix:buildF2ProofPolicyMatrix(planned.plan.networkPolicy.name as keyof typeof namedSbxPolicies)});
+      return {data:exportPlan,warnings};
+    }
     if (selection.runtime === "pi" && evidence.status === "verified" && requirePiAccountPreflight) {
       const accountService = context.rootAttestationService ?? new RootAttestationService(new RootAttestationStore(stateRoot(context)));
       const configured = user.identities[selection.identity.name]!, auth = context.accountAuthVerifier ?? productionPiAuthProbe({ cwd: parsed.cwd, environment: context.env, ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}) });
@@ -891,7 +916,7 @@ export async function run(argv:string[]=process.argv.slice(2), io:CliIo=processI
             ? invalidConfigError()
           : error instanceof ConfigValidationError
             ? normalizeConfigError(error)
-            : new MpxError({ code: "COMMAND_FAILED", message: "Command failed." });
+            : unexpectedCommandError(error,context);
     if (parsed?.json || argv.includes("--json")) io.stdout(JSON.stringify(errorEnvelope(normalized))+"\n");
     else io.stderr(`${normalized.code}: ${normalized.message}\n${usageError?usage+"\n":""}`);
     return usageError?2:1;

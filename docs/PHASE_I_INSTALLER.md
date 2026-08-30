@@ -12,7 +12,36 @@ Immediately before scheduled plan/apply/verify use, `NodeInstalledRunnerAuthorit
 
 ## CLI orchestration
 
-The public surface is `mpx install plan --intent <file>`, `apply --plan <file> --confirm-plan <digest>`, `verify [--strict]`, `rollback --transaction <id> --confirm-plan <digest>`, and `uninstall --confirm-plan <digest>`. Intent and plan files use strict version-1 parsers. Planning only builds and observes the current deterministic release; it does not publish, authenticate, or launch. Apply rebuilds and revalidates release content, operation composition, and machine observations before publication, then applies automatic operations with the scheduled operation group last. Failures restore captured state in reverse order.
+The read-only builder surfaces are `mpx install intent --request <json-or-file>` and `mpx install prepare --request <json-or-file>`. Automation may pass the strict JSON object inline; guided use may pass a path to a bounded regular JSON file. `intent` returns an `install-intent-build-result` containing the exact `InstallIntentV1` plus reviewable external plans. `prepare` builds the same result and immediately passes its intent to the existing read-only orchestrator planner. `mpx install plan --intent <file>` remains supported and accepts either a raw `InstallIntentV1` or the strict build-result envelope.
+
+The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `verify [--strict] [--external-plan <intent-result.json>] [--raycast-post-export <evidence.json>]`, `rollback --transaction <id> --confirm-plan <digest>`, and `uninstall --confirm-plan <digest>`. Request, build-result, intent, evidence, verification-result, and plan files use strict version-1 parsers. Intent building, planning, and external verification are read-only: they do not publish, authenticate, launch, apply a reviewed external plan, or change external systems. Apply rebuilds and revalidates release content, operation composition, and machine observations before publication, then applies automatic operations with the scheduled operation group last. Failures restore captured state in reverse order.
+
+`InstallIntentRequestV1` has these exact JSON fields (unknown fields fail closed):
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "install-intent-request",
+  "userConfigPath": "C:\\Users\\me\\AppData\\Roaming\\mpx\\config.json",
+  "identities": { "personal": "home", "work": "office" },
+  "providers": { "personal": "github", "work": "gitlab" },
+  "executables": {
+    "claude": { "path": "C:\\Tools\\claude.exe", "version": "1.2.3" },
+    "pi": { "path": "C:\\Tools\\pi.exe", "version": "1.2.3" }
+  },
+  "projections": {
+    "claude": [{ "path": "content/example", "role": "plugin" }],
+    "pi": [{ "path": "runtimes/example", "role": "extension" }]
+  },
+  "external": {
+    "gitRemotes": [{ "id": "repo-remotes", "request": { "repository": "C:\\_MP_projects\\repo", "proposals": [{ "action": "set-url", "remote": "origin", "url": "git@github.com:owner/repo.git" }] } }],
+    "obsidian": [{ "id": "notes", "request": { "reviewedFiles": ["Index.md"], "changes": [{ "action": "write", "path": "Index.md", "content": "# Index", "purpose": "backlinks" }] } }],
+    "raycast": [{ "id": "raycast-review", "derivative": { "encrypted": true, "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }] } }]
+  }
+}
+```
+
+All collections are bounded, unique, and sorted by ID/path (nested proposals and changes use canonical JSON order). Projection entries must cover every required Claude/Pi role and each path must exactly match a file in the current release manifest. External plan records have exact fields `id`, `adapter`, `classification`, `planDigest`, `verifierRef`, and `plan`; their digest and verifier binding are revalidated before `install plan` accepts the envelope.
 
 Native side effects remain behind an application-injected `InstallerOperationAdapter`; this package does not implement Windows provisioning internals. `%APPDATA%`, `%LOCALAPPDATA%`, and `MPX_APPS` must be explicit absolute production roots. Verification hashes actual release files and observes actual operation targets; `--strict` additionally reports foreign entries without removing them. Uninstall refuses absent ownership and foreign or drifted owned targets. The legacy public `--component`/`--runner` reader has been removed.
 
@@ -20,7 +49,23 @@ A healthy strict Phase I verification supplies the release-key authority digest 
 
 ## Confirmation and manual external integrations
 
-External integration requests are typed, sorted plan-digest and verifier references in the immutable install intent. Git and Obsidian are confirmation-required; Raycast is manual-only. These are **planning contracts only**: no external integration is emitted as an automatic operation, and the installer never executes Git remote changes, writes Obsidian notes, imports Raycast settings, logs in to an account, or renames a hosted repository. Verification reports confirmed references and manual-only work separately; manual-only status does not make otherwise verified automatic state unhealthy.
+External integration requests are typed, sorted plan-digest and verifier references in the immutable install intent. Git and Obsidian are confirmation-required; Raycast is manual-only. No external integration is emitted as an automatic operation, and the installer never executes Git remote changes, writes Obsidian notes, imports Raycast settings, logs in to an account, or renames a hosted repository.
+
+A receipt reference is never evidence of success. Without exact live evidence every receipt-bound external integration reports `verification-required` and adds `external-verification-required:<id>`. `--external-plan` re-parses the prior `install-intent-build-result`, invokes the existing Git/Obsidian/Raycast read-only verifiers against its exact digest-bound plans, and passes a result binding `id`, `adapter`, `planDigest`, `verifierRef`, `healthy`, and sorted issues into standard install verification. Stale digest/ref bindings are refused. Drift reports `unhealthy` with namespaced stable issues; only an exact healthy binding reports `verified`. If no ownership receipt exists, no external verifier is invoked.
+
+Raycast plans require a separate strict post-export evidence file:
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "raycast-post-export-evidence",
+  "integrations": [
+    { "id": "raycast-review", "derivative": { "encrypted": true, "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }] } }
+  ]
+}
+```
+
+Integration IDs are globally unique and sorted. Every entry must name a Raycast integration in the external plan; unknown and non-Raycast IDs are rejected, and every Raycast plan requires evidence. Git and Obsidian use no supplemental evidence because their exact plans already bind the inspected repository/files and expected post-change state.
 
 | Integration/action | Inspection boundary | Plan and confirmation | Apply classification | Post-change verification |
 |---|---|---|---|---|

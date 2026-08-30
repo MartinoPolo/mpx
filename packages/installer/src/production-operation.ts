@@ -1,20 +1,42 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, open, readFile, rename, rm, writeFile, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { MpxError, parseStrictJson } from "@mpx/core";
+import { parseUserConfig } from "@mpx/config";
 import { ManagedLauncherAdapter, OwnedJsonResourceAdapter, ProductionWindowsResourceStore, type BinaryFileSystem, type JsonResourceStore, type ManagedLauncherSpec, type OwnedResourceSpec } from "@mpx/windows";
-import { canonicalJson, installerDigest, type InstallIntentV1, type InstallOperationV1, type ReleaseManifestV1 } from "./immutable-core.js";
+import { canonicalJson, installerDigest, type InstallIntentV1, type InstallOperationV1, type ReleaseManifestV1, type ScheduledTaskStatusEvidenceV1 } from "./immutable-core.js";
 import { buildStableSelectorBody, buildWindowsIntegrationSpecs } from "./windows-integration.js";
 import { verifyAccountEnrollment, verifyRuntimeRegistrationMatrix, type AccountProbeV1, type RuntimeIdentity, type RuntimeRegistrationObservationV1 } from "./runtime-registration.js";
 import type { InstallerOperationAdapter, InstallerOperationSet } from "./orchestration.js";
+import { withInstallerCleanup } from "./failure.js";
 
 const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException).code === "ENOENT";
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
 const sha = (body: Uint8Array): string => createHash("sha256").update(body).digest("hex");
 
+interface BinaryCreateOperations {
+  open(target: string, flags: "wx"): Promise<Pick<FileHandle, "writeFile" | "sync" | "close">>;
+  link(existingPath: string, newPath: string): Promise<void>;
+}
+const binaryCreateOperations: BinaryCreateOperations = { open: (target, flags) => open(target, flags), link };
+
 export class NodeBinaryFileSystem implements BinaryFileSystem {
+  private readonly createOperations: BinaryCreateOperations;
+  constructor(createOperations: Partial<BinaryCreateOperations> = {}) { this.createOperations = { ...binaryCreateOperations, ...createOperations }; }
   async read(target: string): Promise<Buffer | undefined> { try { const info = await lstat(target); if (!info.isFile() || info.isSymbolicLink()) fail("INSTALL_TARGET_UNSAFE", "Installer file target is unsafe."); return readFile(target); } catch (failure) { if (missing(failure)) return undefined; throw failure; } }
-  async write(target: string, body: Buffer): Promise<void> { await mkdir(path.dirname(target), { recursive: true }); const temporary = `${target}.${randomUUID()}.tmp`; try { await writeFile(temporary, body, { flag: "wx" }); await rename(temporary, target); } finally { await rm(temporary, { force: true }); } }
+  async create(target: string, body: Buffer): Promise<boolean> {
+    await mkdir(path.dirname(target), { recursive: true });
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    return withInstallerCleanup(async () => {
+      const handle = await this.createOperations.open(temporary, "wx");
+      try { await handle.writeFile(body); await handle.sync(); }
+      finally { await handle.close(); }
+      try { await this.createOperations.link(temporary, target); }
+      catch (failure) { if ((failure as NodeJS.ErrnoException).code === "EEXIST") return false; throw failure; }
+      return true;
+    }, () => rm(temporary, { force: true }), "File creation and temporary cleanup both failed.");
+  }
+  async write(target: string, body: Buffer): Promise<void> { await mkdir(path.dirname(target), { recursive: true }); const temporary = `${target}.${randomUUID()}.tmp`; await withInstallerCleanup(async () => { await writeFile(temporary, body, { flag: "wx" }); await rename(temporary, target); }, () => rm(temporary, { force: true }), "File replacement and temporary cleanup both failed."); }
   async remove(target: string): Promise<void> { await rm(target, { force: true }); }
 }
 
@@ -61,10 +83,14 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
     return { observations, accountProbes, mcpSharing, staticMcpIssues, staticMcpAbsent, runtimeIssues };
   }
 }
+export interface ScheduledTaskStatusInspectionPort {
+  inspect(target: string): Promise<ScheduledTaskStatusEvidenceV1>;
+}
 export interface ProductionInstallerResources {
   readonly files: BinaryFileSystem;
   readonly resources: JsonResourceStore;
   readonly runtimeRegistrations?: RuntimeRegistrationInspectionPort;
+  readonly scheduledTaskStatus?: ScheduledTaskStatusInspectionPort;
 }
 class RoutedProductionResourceStore implements JsonResourceStore {
   constructor(private readonly files: JsonResourceStore, private readonly native: JsonResourceStore) {}
@@ -75,23 +101,37 @@ class RoutedProductionResourceStore implements JsonResourceStore {
 }
 export function createProductionInstallerResources(platform: NodeJS.Platform = process.platform, environment: NodeJS.ProcessEnv = process.env): ProductionInstallerResources {
   const files = new NodeBinaryFileSystem(), json = new NodeJsonResourceStore();
-  return { files, resources: platform === "win32" ? new RoutedProductionResourceStore(json, new ProductionWindowsResourceStore({ platform })) : json, runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment) };
+  if (platform !== "win32") return { files, resources: json, runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment) };
+  const native = new ProductionWindowsResourceStore({ platform });
+  return { files, resources: new RoutedProductionResourceStore(json, native), runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment), scheduledTaskStatus: { inspect: target => native.inspectScheduledTaskStatus(target) } };
 }
 
-interface Entry { operation: InstallOperationV1; launcher?: ManagedLauncherSpec; resource?: OwnedResourceSpec; fileBody?: Buffer; fileSource?: string; expectedBytes?: number }
+interface Entry { operation: InstallOperationV1; launcher?: ManagedLauncherSpec; resource?: OwnedResourceSpec; fileBody?: Buffer; fileSource?: string; expectedBytes?: number; createOnly?: boolean; retainOnUninstall?: boolean }
 export class ProductionInstallerOperationAdapter implements InstallerOperationAdapter {
   readonly name = "windows-production";
   private readonly launchers: ManagedLauncherAdapter;
   private readonly owned: OwnedJsonResourceAdapter;
   private readonly files: BinaryFileSystem;
   private readonly runtimeRegistrations: RuntimeRegistrationInspectionPort | undefined;
+  private readonly scheduledTaskStatus: ScheduledTaskStatusInspectionPort | undefined;
   private readonly resources: JsonResourceStore;
   private readonly environment: Readonly<NodeJS.ProcessEnv>;
   private readonly entries = new Map<string, Entry>();
   constructor(environment: NodeJS.ProcessEnv, private readonly currentUser: string, resources: ProductionInstallerResources = createProductionInstallerResources(process.platform, environment)) {
-    this.environment = { ...environment }; this.files = resources.files; this.resources = resources.resources; this.launchers = new ManagedLauncherAdapter(resources.files); this.owned = new OwnedJsonResourceAdapter(resources.resources); this.runtimeRegistrations = resources.runtimeRegistrations;
+    this.environment = { ...environment }; this.files = resources.files; this.resources = resources.resources; this.launchers = new ManagedLauncherAdapter(resources.files); this.owned = new OwnedJsonResourceAdapter(resources.resources); this.runtimeRegistrations = resources.runtimeRegistrations; this.scheduledTaskStatus = resources.scheduledTaskStatus;
   }
   async operations(intent: InstallIntentV1, manifest: ReleaseManifestV1, requireActual = false): Promise<InstallerOperationSet> {
+    let userConfigEntry: Entry | undefined;
+    if (intent.userConfigArtifact) {
+      parseUserConfig(intent.userConfigArtifact.content, this.environment);
+      const appData = this.environment.APPDATA;
+      if (!appData || !path.win32.isAbsolute(appData)) fail("INSTALL_MUTABLE_ROOT_UNAVAILABLE", "APPDATA is required for the user-config artifact.");
+      const target = path.win32.join(appData, "mpx", "config.json"), body = Buffer.from(intent.userConfigArtifact.content, "utf8");
+      if (sha(body) !== intent.userConfigArtifact.sha256) fail("INSTALL_SCHEMA_INVALID", "User-config artifact digest is invalid.");
+      const existing = await this.files.read(target);
+      if (existing && !existing.equals(body) && !requireActual) fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to replace different existing user-config bytes.");
+      userConfigEntry = { fileBody: body, createOnly: true, retainOnUninstall: true, operation: { id: "01-user-config", adapter: this.name, action: "ensure", target, desiredDigest: intent.userConfigArtifact.sha256 } };
+    }
     if (intent.runtimeRegistrations) {
       if (!this.runtimeRegistrations) fail("INSTALL_REGISTRATION_INSPECTION_UNAVAILABLE", "Runtime registration actual-state inspection is required.");
       const inspection = await this.runtimeRegistrations.inspect(intent), registration = verifyRuntimeRegistrationMatrix(intent.runtimeRegistrations, inspection.observations), enrollment = verifyAccountEnrollment(intent.runtimeRegistrations, inspection.accountProbes);
@@ -110,6 +150,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const selectorBody = Buffer.from(buildStableSelectorBody(), "utf8");
     const selectorTarget = path.win32.join(this.environment.MPX_APPS!, "mpx", "bin", "mpx.cmd");
     const automatic: Entry[] = [
+      ...(userConfigEntry ? [userConfigEntry] : []),
       { fileBody: selectorBody, operation: { id: "05-cli-selector", adapter: this.name, action: "ensure", target: selectorTarget, desiredDigest: sha(selectorBody) } },
     ];
     for (const [index, launcher] of specs.launchers.entries()) {
@@ -124,7 +165,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       automatic.push({ fileBody: projectionBody, operation: { id: `60-projection-${registration.identity}-descriptor`, adapter: this.name, action: "ensure", target: projectionTarget, desiredDigest: sha(projectionBody) } });
       for (const [fileIndex, file] of registration.projection.files.entries()) {
         const evidence = manifest.files.find(candidate => candidate.path === file.path);
-        if (!evidence || evidence.sha256 !== file.sha256 || evidence.bytes !== file.bytes) continue;
+        if (!evidence || evidence.sha256 !== file.sha256 || evidence.bytes !== file.bytes) fail("INSTALL_PROJECTION_MISMATCH", `Runtime projection ${file.path} does not match the current release manifest.`);
         const target = path.win32.join(this.environment.LOCALAPPDATA!, "mpx", "runtime-projections", intent.releaseKey, registration.identity, ...file.path.split("/"));
         const source = path.win32.join(this.environment.MPX_APPS!, "mpx", "releases", intent.releaseKey, ...file.path.split("/"));
         automatic.push({ fileSource: source, expectedBytes: file.bytes, operation: { id: `61-projection-${registration.identity}-${String(fileIndex).padStart(4, "0")}`, adapter: this.name, action: "ensure", target, desiredDigest: file.sha256 } });
@@ -149,10 +190,17 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       manualOnly: references.filter((_reference, index) => intent.externalIntegrations![index]!.classification === "manual-only"),
     } };
   }
+  async inspectScheduledTaskStatus(operation: InstallOperationV1): Promise<ScheduledTaskStatusEvidenceV1 | undefined> {
+    const entry = await this.entry(operation);
+    if (entry.resource?.kind !== "scheduled-task") return undefined;
+    if (!this.scheduledTaskStatus) fail("INSTALL_TASK_STATUS_UNAVAILABLE", "Scheduled-task status inspection is required for install verification.");
+    return this.scheduledTaskStatus.inspect(operation.target);
+  }
   async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
     const entry = await this.entry(operation);
     if (entry.launcher) return { kind: "launcher", spec: entry.launcher };
     if (entry.resource) return { kind: "resource", spec: entry.resource };
+    if (entry.retainOnUninstall) return { kind: "user-config", retention: "user-owned" };
     return { kind: "file" };
   }
   async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown): Promise<void> {
@@ -162,6 +210,11 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const target = path.win32.resolve(operation.target).toLowerCase(), assertFileTarget = () => { if (!roots.some(root => target === root || target.startsWith(`${root}\\`))) fail("INSTALL_RECEIPT_FORGED", `Receipt target is outside configured ownership roots for ${operation.id}.`); };
     let entry: Entry;
     if (value.kind === "file" && keys === "kind") { assertFileTarget(); entry = { operation, fileBody: Buffer.alloc(0) }; }
+    else if (value.kind === "user-config" && value.retention === "user-owned" && keys === "kind\0retention") {
+      const expectedTarget = this.environment.APPDATA && path.win32.join(this.environment.APPDATA, "mpx", "config.json");
+      if (operation.id !== "01-user-config" || !expectedTarget || path.win32.resolve(operation.target).toLowerCase() !== path.win32.resolve(expectedTarget).toLowerCase() || operation.action !== "ensure" || operation.desiredDigest === null) fail("INSTALL_RECEIPT_FORGED", `User-config locator does not bind ${operation.id}.`);
+      entry = { operation, fileBody: Buffer.alloc(0), createOnly: true, retainOnUninstall: true };
+    }
     else if (value.kind === "launcher" && keys === "kind\0spec" && value.spec && typeof value.spec === "object" && !Array.isArray(value.spec)) {
       assertFileTarget(); const launcher = value.spec as unknown as ManagedLauncherSpec;
       if (launcher.path !== operation.target) fail("INSTALL_RECEIPT_FORGED", `Launcher locator does not bind ${operation.id}.`);
@@ -173,6 +226,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     } else fail("INSTALL_RECEIPT_AMBIGUOUS", `Invalid durable locator for ${operation.id}.`);
     this.entries.set(installerDigest(operation), entry);
   }
+  async retainOnUninstall(operation: InstallOperationV1): Promise<boolean> {
+    return (await this.entry(operation)).retainOnUninstall === true;
+  }
   private async entry(operation: InstallOperationV1): Promise<Entry> {
     const exact=this.entries.get(installerDigest(operation));if(exact)return exact;
     if(operation.action==="remove")for(const entry of this.entries.values())if(entry.operation.id===operation.id&&entry.operation.target===operation.target){if(entry.resource&&(await this.owned.inspect(entry.resource)).status==="owned")return entry;if(entry.fileBody||entry.fileSource||entry.launcher)return entry;}
@@ -180,11 +236,19 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   }
   async observe(operation: InstallOperationV1): Promise<string | null> { const entry = await this.entry(operation), target=operation.target; if (entry.fileBody || entry.fileSource) { const current = await this.files.read(target); return current ? sha(current) : null; } if (entry.launcher) return (await this.launchers.inspect(entry.launcher)).digest; return (await this.owned.inspect(entry.resource!)).digest; }
   async capture(operation: InstallOperationV1): Promise<string | null> { const entry = await this.entry(operation), target=operation.target; if (entry.fileBody || entry.fileSource || entry.launcher) { const current = await this.files.read(target); return current?.toString("base64") ?? null; } const current = await this.resources.read(target); return current === undefined ? null : Buffer.from(JSON.stringify(current)).toString("base64"); }
-  async apply(operation: InstallOperationV1): Promise<void> { const entry = await this.entry(operation); if (entry.fileBody || entry.fileSource) { if (operation.action === "remove") await this.files.remove(operation.target); else { const body = entry.fileBody ?? await this.files.read(entry.fileSource!); if (!body || body.length !== entry.expectedBytes && entry.expectedBytes !== undefined || sha(body) !== operation.desiredDigest) fail("INSTALL_RELEASE_PROJECTION_DRIFT", `Immutable projection source changed for ${operation.id}.`); await this.files.write(operation.target, body); } return; } if (operation.action === "remove") { if (entry.launcher) { const plan = await this.launchers.plan(entry.launcher); if (plan.previousManagedBase64 === null) return; await this.launchers.remove({ schemaVersion: 1, kind: "managed-launcher-receipt", target: entry.launcher.path, shell: entry.launcher.shell, managedBase64: plan.previousManagedBase64, previousManagedBase64: null }); } else { const plan = await this.owned.plan(entry.resource!); if (plan.inspection.status === "absent") return; await this.owned.remove({ schemaVersion: 1, kind: "owned-resource-receipt", spec: entry.resource!, desiredDigest: installerDigest(entry.resource!.desired) }); } return; }
+  async apply(operation: InstallOperationV1): Promise<void> { const entry = await this.entry(operation); if (entry.fileBody || entry.fileSource) { if (operation.action === "remove") await this.files.remove(operation.target); else { const body = entry.fileBody ?? await this.files.read(entry.fileSource!); if (!body || body.length !== entry.expectedBytes && entry.expectedBytes !== undefined || sha(body) !== operation.desiredDigest) fail("INSTALL_RELEASE_PROJECTION_DRIFT", `Immutable projection source changed for ${operation.id}.`); if (entry.createOnly) { if (await this.files.create(operation.target, body)) return; const current = await this.files.read(operation.target); if (!current?.equals(body)) fail("INSTALL_FOREIGN_OR_DRIFTED", `Refusing to replace different existing bytes for ${operation.id}.`); return; } await this.files.write(operation.target, body); } return; } if (operation.action === "remove") { if (entry.launcher) { const plan = await this.launchers.plan(entry.launcher); if (plan.previousManagedBase64 === null) return; await this.launchers.remove({ schemaVersion: 1, kind: "managed-launcher-receipt", target: entry.launcher.path, shell: entry.launcher.shell, managedBase64: plan.previousManagedBase64, previousManagedBase64: null }); } else { const plan = await this.owned.plan(entry.resource!); if (plan.inspection.status === "absent") return; await this.owned.remove({ schemaVersion: 1, kind: "owned-resource-receipt", spec: entry.resource!, desiredDigest: installerDigest(entry.resource!.desired) }); } return; }
     if (entry.launcher) await this.launchers.apply(await this.launchers.plan(entry.launcher)); else await this.owned.apply(await this.owned.plan(entry.resource!)); }
   async restore(operation: InstallOperationV1, snapshot: string | null): Promise<void> {
     const entry = await this.entry(operation), target=operation.target;
-    if (entry.fileBody || entry.fileSource || entry.launcher) { snapshot === null ? await this.files.remove(target) : await this.files.write(target, Buffer.from(snapshot, "base64")); return; }
+    if (entry.fileBody || entry.fileSource || entry.launcher) {
+      if (entry.createOnly) {
+        const current = await this.files.read(target), prior = snapshot === null ? undefined : Buffer.from(snapshot, "base64");
+        const currentDigest = current ? sha(current) : null, priorDigest = prior ? sha(prior) : null;
+        if (currentDigest === priorDigest) return;
+        if (currentDigest !== operation.desiredDigest) fail("INSTALL_FOREIGN_OR_DRIFTED", "Refusing to restore over a foreign or drifted user config.");
+      }
+      snapshot === null ? await this.files.remove(target) : await this.files.write(target, Buffer.from(snapshot, "base64")); return;
+    }
     const inspection = await this.owned.inspect(entry.resource!);
     const prior = snapshot === null ? undefined : JSON.parse(Buffer.from(snapshot, "base64").toString("utf8"));
     const current = await this.resources.read(target), priorDigest = prior === undefined ? null : installerDigest(prior), currentDigest = current === undefined ? null : installerDigest(current);

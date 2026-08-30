@@ -9,13 +9,18 @@ import { createNodeWorktreeIncludeDependencies, deriveLifecycleKey, deriveWorktr
 import type { PreparationPlan, ProjectConfig } from "@mpx/config";
 import type { ProviderProcessRequest } from "@mpx/providers";
 import { afterEach, expect, it, vi } from "vitest";
-import { catalogPath, classifyProviderProcessResult, defaultContext, immutableInstaller, installer, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
+import { catalogPath, classifyProviderProcessResult, defaultContext, immutableInstaller, installer, installerSourceRoot, NodeProviderProcessExecutor, NodeRepositorySelectorResolver, parseForgeRepositoryUrl, preparationRuntime, productionSessionDiscoveries, providerService, requireRepositoryBoundLifecycleState, resolveBuiltInProviderExecutable, verifyPreparationWorkerHandshake, windowsProcessIdentityInspector, worktrees } from "./context.js";
 import { SessionService, SessionStore } from "@mpx/sessions";
 
 const exec = promisify(execFile);
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+
+it("resolves installer assets from source and bundled immutable releases", () => {
+  expect(installerSourceRoot("C:/repo/apps/cli/dist/context.js")).toBe(path.resolve("C:/repo"));
+  expect(installerSourceRoot("C:/Apps/mpx/releases/key/bin/mpx.mjs")).toBe(path.resolve("C:/Apps/mpx/releases/key"));
+});
 
 it("constructs the production installer without injected test adapters", () => {
   const root = path.resolve("C:/temp/mpx-installer-context");

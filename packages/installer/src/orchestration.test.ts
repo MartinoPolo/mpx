@@ -2,16 +2,20 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { type InstallIntentV1, type InstallOperationV1 } from "./immutable-core.js";
+import { type InstallIntentV1, type InstallOperationV1, type ScheduledTaskStatusEvidenceV1 } from "./immutable-core.js";
 import { MemoryTransactionStore, installerDigest } from "./transaction.js";
 import { InstallOrchestrator, NodeCurrentReleaseBuilder, type InstallerOperationAdapter } from "./orchestration.js";
+import type { InstallExternalVerificationResultV1 } from "./install-intent-builder.js";
 
 class FixtureAdapter implements InstallerOperationAdapter {
   readonly name = "fixture";
   readonly values = new Map<string, string>();
   applyCalls: string[] = [];
+  statusCalls: string[] = [];
+  taskStatus: ScheduledTaskStatusEvidenceV1 | undefined;
   constructor(readonly automatic: readonly InstallOperationV1[], readonly scheduled: readonly InstallOperationV1[] = []) {}
   async operations() { return { automatic: this.automatic, scheduled: this.scheduled }; }
+  async inspectScheduledTaskStatus(operation: InstallOperationV1) { this.statusCalls.push(operation.id); return this.scheduled.some(item => item.id === operation.id) ? this.taskStatus : undefined; }
   async observe(operation: InstallOperationV1) { return this.values.get(operation.target) ?? null; }
   async capture(operation: InstallOperationV1) { return this.values.get(operation.target) ?? null; }
   async apply(operation: InstallOperationV1) { this.applyCalls.push(operation.id); operation.action === "remove" ? this.values.delete(operation.target) : this.values.set(operation.target, operation.desiredDigest!); }
@@ -118,6 +122,77 @@ describe("Phase I install orchestration", () => {
     expect(await orchestrator.verify()).toMatchObject({ healthy: false, issues: ["operation-drift:10-automatic", "release-file-drift:dist/mpx.js"] });
   });
 
+  it("returns healthy structured evidence after the managed scheduled task has run successfully", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder, now: () => new Date("2024-12-31T23:59:59.000Z") });
+    const plan = await orchestrator.plan(f.intent);
+    await orchestrator.apply(plan, plan.confirmationDigest);
+    expect(adapter.statusCalls).toEqual([]);
+    adapter.taskStatus = { exists: true, state: "Ready", lastRunAt: "2025-01-01T00:00:00.000Z", lastResult: 0, nextRunAt: "2025-01-01T00:05:00.000Z" };
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: true, issues: [], scheduledTask: {
+      id: "90-scheduled-capture", target: "90-scheduled-capture", status: "healthy", exists: true, state: "Ready", lastRunAt: "2025-01-01T00:00:00.000Z", lastResult: 0, nextRunAt: "2025-01-01T00:05:00.000Z",
+    } });
+  });
+
+  it("rejects zero-result scheduled-task evidence that predates the ownership receipt", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder, now: () => new Date("2025-01-02T00:00:00.000Z") });
+    const plan = await orchestrator.plan(f.intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    adapter.taskStatus = { exists: true, state: "Ready", lastRunAt: "2025-01-01T23:59:59.000Z", lastResult: 0 };
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: false, issues: ["scheduled-task-run-predates-install:90-scheduled-capture"], scheduledTask: { status: "not-run", lastResult: 0 } });
+  });
+
+  it("reports a missing managed scheduled task as unhealthy structured evidence", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(f.intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    adapter.taskStatus = { exists: false };
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: false, issues: ["scheduled-task-missing:90-scheduled-capture"], scheduledTask: { id: "90-scheduled-capture", status: "missing", exists: false, lastRunAt: null, lastResult: null } });
+  });
+
+  it("fails closed when scheduled-task status inspection is unavailable", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(f.intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    (adapter as { inspectScheduledTaskStatus?: FixtureAdapter["inspectScheduledTaskStatus"] }).inspectScheduledTaskStatus = undefined;
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: false, issues: ["scheduled-task-status-unavailable:90-scheduled-capture"] });
+  });
+
+  it("reports an installed managed scheduled task with no run evidence as unhealthy", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(f.intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    adapter.taskStatus = { exists: true, state: "Ready" };
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: false, issues: ["scheduled-task-not-run:90-scheduled-capture"], scheduledTask: { id: "90-scheduled-capture", status: "not-run", exists: true, lastRunAt: null, lastResult: null } });
+  });
+
+  it("reports a nonzero managed scheduled task result as unhealthy", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder, now: () => new Date("2024-12-31T23:59:59.000Z") });
+    const plan = await orchestrator.plan(f.intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    adapter.taskStatus = { exists: true, state: "Ready", lastRunAt: "2025-01-01T00:00:00.000Z", lastResult: 1 };
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: false, issues: ["scheduled-task-failed:90-scheduled-capture:1"], scheduledTask: { id: "90-scheduled-capture", status: "failed", exists: true, lastResult: 1 } });
+  });
+
+  it("does not inspect native or external state when the ownership receipt is missing", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([], [operation("90-scheduled-capture")]);
+    let externalCalls = 0;
+    const result = await new InstallOrchestrator({ adapter, store: new MemoryTransactionStore(), releases: f.builder }).verify(false, async () => { externalCalls++; throw new Error("external inspection forbidden"); });
+    expect(result).toMatchObject({ healthy: false, issues: ["receipt-missing"] });
+    expect(adapter.statusCalls).toEqual([]);
+    expect(externalCalls).toBe(0);
+  });
+
+  it("fails verification when the current scheduled operation is absent from the receipt", async () => {
+    const f = await fixture(), scheduled = operation("90-scheduled-capture"), adapter = new FixtureAdapter([], [scheduled]), store = new MemoryTransactionStore();
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(f.intent);
+    await orchestrator.apply(plan, plan.confirmationDigest);
+    const receipt = (await store.readReceipt())!;
+    await store.writeReceipt({ ...receipt, operations: [], operationLocators: [] });
+    await expect(orchestrator.verify()).resolves.toMatchObject({ healthy: false, issues: ["scheduled-operation-drift:90-scheduled-capture"] });
+  });
+
   it("recomposes production operations from the receipt in a fresh verify process", async () => {
     const f = await fixture(), store = new MemoryTransactionStore(), installed = new FixtureAdapter([operation("10-automatic")]);
     const first = new InstallOrchestrator({ adapter: installed, store, releases: f.builder });
@@ -180,6 +255,40 @@ describe("Phase I install orchestration", () => {
     await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({ code: "INSTALL_FOREIGN_OR_DRIFTED" });
     expect(adapter.values.get("10-automatic")).toBe(foreignDigest);
     await expect(readFile(path.join(f.appsRoot, "mpx", "releases", f.manifest.releaseKey, "dist", "mpx.js"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("fails closed when receipt-bound external integrations have no live evidence", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([]), store = new MemoryTransactionStore(), planDigest = installerDigest("git-plan"), verifierRef = `git-remotes:origin:${planDigest}`;
+    const intent: InstallIntentV1 = { ...f.intent, externalIntegrations: [{ id: "origin", adapter: "git-remotes", classification: "confirmation-required", planDigest, verifierRef }] };
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    const result = await orchestrator.verify();
+    expect(result).toMatchObject({ healthy: false, issues: ["external-verification-required:origin"], externalIntegrations: [{ id: "origin", status: "verification-required" }] });
+    expect(result.externalIntegrations?.[0]?.status).not.toBe("confirmed");
+  });
+
+  it("marks only exactly bound healthy external evidence verified", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([]), store = new MemoryTransactionStore(), planDigest = installerDigest("notes-plan"), verifierRef = `obsidian:notes:${planDigest}`;
+    const intent: InstallIntentV1 = { ...f.intent, externalIntegrations: [{ id: "notes", adapter: "obsidian", classification: "confirmation-required", planDigest, verifierRef }] };
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    const external: InstallExternalVerificationResultV1 = { schemaVersion: 1, kind: "install-external-verification", integrations: [{ id: "notes", adapter: "obsidian", planDigest, verifierRef, healthy: true, issues: [] }] };
+    await expect(orchestrator.verify(false, external)).resolves.toMatchObject({ healthy: true, issues: [], externalIntegrations: [{ id: "notes", status: "verified" }] });
+  });
+
+  it("refuses stale digest or verifier bindings and exposes stable unhealthy external issues", async () => {
+    const f = await fixture(), adapter = new FixtureAdapter([]), store = new MemoryTransactionStore(), gitDigest = installerDigest("git-plan"), rayDigest = installerDigest("ray-plan");
+    const intent: InstallIntentV1 = { ...f.intent, externalIntegrations: [
+      { id: "git", adapter: "git-remotes", classification: "confirmation-required", planDigest: gitDigest, verifierRef: `git-remotes:git:${gitDigest}` },
+      { id: "ray", adapter: "raycast", classification: "manual-only", planDigest: rayDigest, verifierRef: `raycast:ray:${rayDigest}` },
+    ] };
+    const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const plan = await orchestrator.plan(intent); await orchestrator.apply(plan, plan.confirmationDigest);
+    const external: InstallExternalVerificationResultV1 = { schemaVersion: 1, kind: "install-external-verification", integrations: [
+      { id: "git", adapter: "git-remotes", planDigest: installerDigest("stale"), verifierRef: `git-remotes:git:${gitDigest}`, healthy: true, issues: [] },
+      { id: "ray", adapter: "raycast", planDigest: rayDigest, verifierRef: `raycast:ray:${rayDigest}`, healthy: false, issues: ["raycast-id-category-drift"] },
+    ] };
+    await expect(orchestrator.verify(false, external)).resolves.toMatchObject({ healthy: false, issues: ["external-verification-required:git", "external-verification:ray:raycast-id-category-drift"], externalIntegrations: [{ id: "git", status: "verification-required" }, { id: "ray", status: "unhealthy" }] });
   });
 
   it("uninstalls only receipt-owned state with exact confirmation", async () => {

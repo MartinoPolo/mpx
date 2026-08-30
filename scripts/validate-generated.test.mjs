@@ -274,6 +274,37 @@ describe("generated repository validation", () => {
     ]);
   });
 
+  it("allows only the tracked generated CLI bundle to use the larger text-read bound", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mpx-generated-limit-"));
+    await Promise.all([mkdir(path.join(root, "bin")), mkdir(path.join(root, "content"))]);
+    const oversized = Buffer.alloc(1024 * 1024 + 1, 97);
+    await Promise.all([
+      writeFile(path.join(root, "bin", "mpx.mjs"), oversized),
+      writeFile(path.join(root, "content", "large.md"), oversized),
+    ]);
+    try {
+      const values = await repositoryFiles(root, ["bin/mpx.mjs", "content/large.md"], { trackedFiles: ["bin/mpx.mjs", "content/large.md"] });
+      expect(values.get("bin/mpx.mjs")?.length).toBe(oversized.length);
+      expect([...values.diagnostics]).toEqual([
+        expect.objectContaining({ code: "FILE_TOO_LARGE", file: "content/large.md" }),
+      ]);
+
+      const untrackedBundle = await repositoryFiles(root, ["bin/mpx.mjs"]);
+      expect([...untrackedBundle.diagnostics]).toEqual([
+        expect.objectContaining({ code: "FILE_TOO_LARGE", file: "bin/mpx.mjs" }),
+      ]);
+
+      await writeFile(path.join(root, "bin", "mpx.mjs"), Buffer.alloc(2 * 1024 * 1024 + 1, 97));
+      const overBundleBound = await repositoryFiles(root, ["bin/mpx.mjs"]);
+      expect(overBundleBound.has("bin/mpx.mjs")).toBe(false);
+      expect([...overBundleBound.diagnostics]).toEqual([
+        expect.objectContaining({ code: "FILE_TOO_LARGE", file: "bin/mpx.mjs" }),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not read an enumerated textual non-regular file", async () => {
     const read = vi.fn();
     const close = vi.fn();

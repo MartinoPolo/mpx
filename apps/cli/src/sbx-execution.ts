@@ -5,8 +5,8 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
-import { parseF2ProofReportV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
-import { buildSandboxPlanV1, diagnoseSbx, resolveTrustedSbxExecutable, SBX_V0_39_0_PIN, StandaloneSbxExecutorAdapter, type BoundedProcessRunner, type ClaudeVmProjection, type ProcessResult, type StandaloneSbxRunRequest } from "@mpx/executors";
+import { parseF2ProofReportV1, parseF2ProofReportV2, parseSbxLaunchPlanExportV1, validateF2ProofReportV2, type F2ProofReportV1, type F2ProofReportV2, type SbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
+import { buildF2ProofPolicyMatrix, buildSandboxPlanV1, diagnoseSbx, resolveTrustedSbxExecutable, SBX_V0_39_0_PIN, StandaloneSbxExecutorAdapter, type BoundedProcessRunner, type ClaudeVmProjection, type ProcessResult, type StandaloneSbxRunRequest, type SandboxLaunchPlanV1, type SbxPolicyName } from "@mpx/executors";
 
 export interface SbxProofSources { readonly sbxPinSha256:string; readonly runtimeToolInventorySha256:string; readonly executorEvidenceSha256:string }
 export interface ProductionSbxExecutionInput {
@@ -14,7 +14,7 @@ export interface ProductionSbxExecutionInput {
   readonly identity:{readonly name:string;readonly domain:"personal"|"work"}; readonly workspaceMode:"clone"|"host-worktree"|"direct"; readonly worktreeRole:"main"|"linked";
   readonly workspaceRoot:string; readonly gitCommonDir:string; readonly nativeRoots:readonly string[]; readonly credentialRoots:readonly string[]; readonly oppositeDomainRoots:readonly string[];
   readonly network:{readonly name:string;readonly allow:readonly string[]}; readonly ports:readonly number[]; readonly directCompatibility?:boolean;
-  readonly sources?:SbxProofSources; readonly proof?:F2ProofReportV1;
+  readonly sources?:SbxProofSources; readonly proof?:F2ProofReportV1|F2ProofReportV2; readonly planExport?:SbxLaunchPlanExportV1;
   /** Exact launch-bound bytes and Docker credential proof required for a new Claude VM. */
   readonly claudeLaunch?:{readonly projection:ClaudeVmProjection};
 }
@@ -44,6 +44,7 @@ export async function loadProductionSbxProofSources(environment:NodeJS.ProcessEn
   if(executorEvidenceSha256!==inventory.executorEvidenceBindingSha256)throw new Error("Packaged executor evidence drifted.");
   return {sbxPinSha256:await sha256File(evidence("sbx-pin.json")),runtimeToolInventorySha256:inventory.runtimeToolInventorySha256,executorEvidenceSha256};
 }
+export function productionProofCreateArgv(plan:SandboxLaunchPlanV1):readonly string[]{const result:string[]=[];for(let index=0;index<plan.sbxArgv.length;index++){const value=plan.sbxArgv[index]!;if(value==="--env"){index++;continue;}result.push(value===plan.workspaceSource?".":value);}return Object.freeze(result);}
 export function planProductionSbxExecution(input:ProductionSbxExecutionInput&{sources:SbxProofSources}){
   const plan=buildSandboxPlanV1({runtime:input.runtime,identity:input.identity,workspaceMode:input.workspaceMode,worktreeRole:input.worktreeRole,...(input.directCompatibility?{directCompatibility:true}:{}),workspaceRoot:input.workspaceRoot,stateRoot:input.stateRoot,nativeRoots:input.nativeRoots,credentialRoots:input.credentialRoots,oppositeDomainRoots:input.oppositeDomainRoots,dockerSocketPaths:["//./pipe/docker_engine"],gitCommonDir:input.gitCommonDir,runtimeToolInventorySha256:input.sources.runtimeToolInventorySha256,network:input.network});
   const bridge=Object.freeze({endpoint:`sbx://${plan.appName}/worker`,attestationSha256:sha256Canonical({schemaVersion:1,kind:"standalone-sbx-worker",planKey:plan.planKey,runtimeToolInventorySha256:plan.runtimeToolInventorySha256} as JsonValue)});
@@ -63,24 +64,31 @@ function defaults(environment:NodeJS.ProcessEnv):SbxExecutionDependencies{
     diagnostics:async(executable,cwd)=>{const runner:BoundedProcessRunner={run:request=>run(request)};const result=await diagnoseSbx({executable,cwd,runner,pin:SBX_V0_39_0_PIN});return {status:result.failureCodes.length===0?"pass":"fail",digest:sha256Canonical(result as unknown as JsonValue)}},
   };
 }
+async function boundedContractJson(file:string):Promise<unknown>{if(!path.isAbsolute(file))throw new Error("contract path must be absolute");const info=await lstat(file);if(!info.isFile()||info.isSymbolicLink()||info.size<2||info.size>1024*1024)throw new Error("contract file is unsafe");return JSON.parse(await readFile(file,"utf8"));}
 export async function diagnoseConfiguredF2Proof(environment:NodeJS.ProcessEnv):Promise<readonly string[]>{
-  const file=value(environment,"MPX_F2_PROOF_REPORT_FILE");if(!file)return Object.freeze(["F2_PROOF_NOT_CONFIGURED"]);
-  if(!path.isAbsolute(file))return Object.freeze(["F2_PROOF_INVALID"]);
-  try{
-    const [report,sources]=await Promise.all([readFile(file,"utf8").then(text=>parseF2ProofReportV1(JSON.parse(text))),loadProductionSbxProofSources(environment)]);
-    const codes=[...(report.sbxPinSha256===sources.sbxPinSha256?[]:["SBX_PIN_DIGEST_DRIFT"]),...(report.runtimeToolInventorySha256===sources.runtimeToolInventorySha256?[]:["RUNTIME_TOOL_INVENTORY_DRIFT"]),...(report.executorEvidenceSha256===sources.executorEvidenceSha256?[]:["EXECUTOR_EVIDENCE_DRIFT"]),...(report.verdict==="pass"?[]:["F2_PROOF_FAILED"])];return Object.freeze(codes);
-  }catch{return Object.freeze(["F2_PROOF_INVALID"]);}
+  const reportFile=value(environment,"MPX_F2_PROOF_REPORT_FILE");if(!reportFile)return Object.freeze(["F2_PROOF_NOT_CONFIGURED"]);
+  if(!path.isAbsolute(reportFile))return Object.freeze(["F2_PROOF_INVALID"]);
+  let rawReport:unknown;try{rawReport=await boundedContractJson(reportFile);}catch{return Object.freeze(["F2_PROOF_INVALID"]);}
+  if((rawReport as {schemaVersion?:unknown})?.schemaVersion===1)return Object.freeze(["F2_PROOF_V2_REQUIRED"]);
+  let report:F2ProofReportV2;try{report=parseF2ProofReportV2(rawReport);}catch{return Object.freeze(["F2_PROOF_INVALID"]);}
+  const planFile=value(environment,"MPX_F2_PLAN_EXPORT_FILE");if(!planFile)return Object.freeze(["F2_PLAN_EXPORT_NOT_CONFIGURED"]);if(!path.isAbsolute(planFile))return Object.freeze(["F2_PLAN_EXPORT_INVALID"]);
+  let plan:SbxLaunchPlanExportV1;try{plan=parseSbxLaunchPlanExportV1(await boundedContractJson(planFile));}catch{return Object.freeze(["F2_PLAN_EXPORT_INVALID"]);}
+  let sources:SbxProofSources;try{sources=await loadProductionSbxProofSources(environment);}catch{return Object.freeze(["F2_PACKAGED_EVIDENCE_INVALID"]);}
+  const codes=[...(report.evidence.sbxPinSha256===sources.sbxPinSha256?[]:["SBX_PIN_DIGEST_DRIFT"]),...(report.evidence.runtimeToolInventorySha256===sources.runtimeToolInventorySha256?[]:["RUNTIME_TOOL_INVENTORY_DRIFT"]),...(report.evidence.executorEvidenceSha256===sources.executorEvidenceSha256?[]:["EXECUTOR_EVIDENCE_DRIFT"]),...validateF2ProofReportV2(report,plan).diagnostics.map(item=>item.code),...(report.verdict==="pass"?[]:["F2_PROOF_FAILED"])];return Object.freeze([...new Set(codes)]);
 }
 
-async function readProof(input:ProductionSbxExecutionInput,planKey:string):Promise<F2ProofReportV1>{
-  if(input.proof)return parseF2ProofReportV1(input.proof);
+async function readProof(input:ProductionSbxExecutionInput,planKey:string):Promise<F2ProofReportV1|F2ProofReportV2>{
+  if(input.proof)return input.planExport?parseF2ProofReportV2(input.proof):parseF2ProofReportV1(input.proof);
   const explicit=value(input.environment,"MPX_F2_PROOF_REPORT_FILE"),root=value(input.environment,"MPX_F2_PROOF_ROOT");const file=explicit??(root&&path.isAbsolute(root)?path.join(root,`${planKey}.json`):undefined);
   if(!file||!path.isAbsolute(file))throw new Error("A launch-bound F2 proof report file is required.");
-  return parseF2ProofReportV1(JSON.parse(await readFile(file,"utf8")));
+  const raw=JSON.parse(await readFile(file,"utf8")) as {schemaVersion?:unknown};return input.planExport||raw.schemaVersion===2?parseF2ProofReportV2(raw):parseF2ProofReportV1(raw);
 }
 export async function createProductionSbxExecutionAdapter(input:ProductionSbxExecutionInput,dependencies?:SbxExecutionDependencies):Promise<SbxExecutionAdapter>{
+  const exportFile=value(input.environment,"MPX_F2_PLAN_EXPORT_FILE"),loadedExport=input.planExport??(dependencies===undefined&&exportFile&&path.isAbsolute(exportFile)?parseSbxLaunchPlanExportV1(JSON.parse(await readFile(exportFile,"utf8"))):undefined);
+  if(dependencies===undefined&&!loadedExport)throw new Error("PLAN_EXPORT_REQUIRED: production Docker admission requires an exact reviewed sandbox plan export.");
   const deps=dependencies??defaults(input.environment),sources=input.sources??await loadProductionSbxProofSources(input.environment),planned=planProductionSbxExecution({...input,sources}),locations=candidates(input.environment);
+  if(loadedExport&&(loadedExport.sandbox.planKey!==planned.plan.planKey||loadedExport.runtime!==input.runtime||loadedExport.identity.name!==input.identity.name||loadedExport.identity.domain!==input.identity.domain||loadedExport.evidence.sbxPinSha256!==sources.sbxPinSha256||loadedExport.evidence.runtimeToolInventorySha256!==sources.runtimeToolInventorySha256||loadedExport.evidence.executorEvidenceSha256!==sources.executorEvidenceSha256||loadedExport.sandbox.profile!==planned.plan.networkPolicy.name||loadedExport.sandbox.proofSandboxName!==`mpx-proof-${planned.plan.planKey.slice(0,12)}`||JSON.stringify(loadedExport.sandbox.createArgv)!==JSON.stringify(productionProofCreateArgv(planned.plan))||JSON.stringify(loadedExport.policyMatrix)!==JSON.stringify(buildF2ProofPolicyMatrix(planned.plan.networkPolicy.name as SbxPolicyName))))throw new Error("PLAN_EXPORT_MISMATCH: reviewed export does not match the regenerated production sandbox plan.");
   const executable=await resolveTrustedSbxExecutable({candidates:locations.candidates,projectRoot:input.cwd,trustedRoots:locations.trustedRoots,expectedSha256:SBX_V0_39_0_PIN.windowsBinarySha256,inspect:file=>deps.inspectExecutable(file)});
-  const proof=await readProof(input,planned.plan.planKey);
-  return new StandaloneSbxExecutorAdapter({executable,cwd:input.cwd,plan:planned.plan,agent:input.runtime==="claude"?"claude":"shell",report:proof,sbxPinSha256:sources.sbxPinSha256,executorEvidenceSha256:sources.executorEvidenceSha256,ports:input.ports.map(port=>`127.0.0.1:${port}:${port}/tcp4`),worker:{argv:["mpx-f2-worker","--bridge",planned.bridge.endpoint,"--attestation",planned.bridge.attestationSha256],...planned.bridge},...(input.claudeLaunch?{projection:input.claudeLaunch.projection}:{}),...(proof.builtInClaudeEvidence?{claudeEvidence:proof.builtInClaudeEvidence}:{}),...(deps.allowSignedFixtureEvidence?{allowSignedFixtureEvidence:true}:{}),diagnostics:()=>deps.diagnostics(executable,input.cwd),run:deps.run});
+  const proof=await readProof({...input,...(loadedExport?{planExport:loadedExport}:{})},planned.plan.planKey),planExport=loadedExport;
+  return new StandaloneSbxExecutorAdapter({executable,cwd:input.cwd,plan:planned.plan,agent:input.runtime==="claude"?"claude":"shell",report:proof,...(planExport?{planExport}:{}),sbxPinSha256:sources.sbxPinSha256,executorEvidenceSha256:sources.executorEvidenceSha256,ports:input.ports.map(port=>`127.0.0.1:${port}:${port}/tcp4`),worker:{argv:["mpx-f2-worker","--bridge",planned.bridge.endpoint,"--attestation",planned.bridge.attestationSha256],...planned.bridge},...(input.claudeLaunch?{projection:input.claudeLaunch.projection}:{}),...(proof.builtInClaudeEvidence?{claudeEvidence:proof.builtInClaudeEvidence}:{}),...(deps.allowSignedFixtureEvidence?{allowSignedFixtureEvidence:true}:{}),diagnostics:()=>deps.diagnostics(executable,input.cwd),run:deps.run});
 }

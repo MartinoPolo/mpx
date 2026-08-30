@@ -16,8 +16,12 @@ import {
   type InstallVerificationV1,
   type OwnershipReceiptV1,
   type ReleaseManifestV1,
+  type ScheduledTaskStatusEvidenceV1,
+  type InstallVerificationScheduledTaskV1,
 } from "./immutable-core.js";
 import { ImmutableInstallerService, installerDigest, type LegacyOwnershipReceiptV1, type SideEffectAdapter, type TransactionStore } from "./transaction.js";
+import { parseInstallExternalVerificationResultV1, type InstallExternalVerificationResultV1 } from "./install-intent-builder.js";
+import { aggregateInstallerFailure } from "./failure.js";
 
 function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
 const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException).code === "ENOENT";
@@ -30,6 +34,8 @@ export interface InstallerOperationSet {
 /** The host owns native details; orchestration only consumes ordered, reversible operations. */
 export interface InstallerOperationAdapter extends SideEffectAdapter {
   operations(intent: InstallIntentV1, manifest: ReleaseManifestV1, requireActual?: boolean): Promise<InstallerOperationSet>;
+  /** Returns run evidence only for a managed scheduled-task operation. */
+  inspectScheduledTaskStatus?(operation: InstallOperationV1): Promise<ScheduledTaskStatusEvidenceV1 | undefined>;
 }
 export interface CurrentReleaseBuilder {
   readonly appsRoot: string;
@@ -189,23 +195,67 @@ export class InstallOrchestrator {
       const rollbackFailures: unknown[] = [];
       if (rollbackActivation) try { await rollbackActivation(); } catch (rollbackFailure) { rollbackFailures.push(rollbackFailure); }
       try { await service.rollback(); } catch (rollbackFailure) { rollbackFailures.push(rollbackFailure); }
-      if (rollbackFailures.length > 0) throw new AggregateError([failure, ...rollbackFailures], "Install failed and rollback also failed.", { cause: failure });
+      if (rollbackFailures.length > 0) throw aggregateInstallerFailure(failure, rollbackFailures, "Install failed and rollback also failed.");
       throw failure;
     }
   }
-  async verify(strict = false): Promise<InstallVerificationV1> {
+  async verify(strict = false, externalSource?: InstallExternalVerificationResultV1 | (() => Promise<InstallExternalVerificationResultV1>)): Promise<InstallVerificationV1> {
     const receipt = await this.options.store.readReceipt();
+    let scheduledOperations: readonly InstallOperationV1[] = [];
     if (receipt) {
       const manifest: ReleaseManifestV1 = { schemaVersion: 1, kind: "release-manifest", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, files: receipt.files };
-      await this.options.adapter.operations(receipt.installIntent ?? { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest, true);
+      const expected = await this.options.adapter.operations(receipt.installIntent ?? { schemaVersion: 1, kind: "install-intent", releaseKey: receipt.releaseKey, convergenceHash: receipt.convergenceHash, components: ["verify"] }, manifest, true);
+      scheduledOperations = expected.scheduled;
     }
     const base = await this.service().verify();
-    const issues = [...base.issues, ...(receipt ? await this.options.releases.verify(receipt, strict) : [])].sort((a, b) => a.localeCompare(b));
-    if (!receipt?.installIntent) return { ...base, healthy: issues.length === 0, issues };
+    const scheduledIssues = scheduledOperations.flatMap(expected => {
+      const actual = receipt?.operations.find(operation => operation.id === expected.id);
+      return actual && canonicalJson(actual) === canonicalJson(expected) ? [] : [`scheduled-operation-drift:${expected.id}`];
+    });
+    const issues = [...base.issues, ...scheduledIssues, ...(receipt ? await this.options.releases.verify(receipt, strict) : [])];
+    let scheduledTask: InstallVerificationScheduledTaskV1 | undefined;
+    const scheduledOperation = receipt?.operations.find(operation => operation.id === "90-scheduled-capture");
+    if (scheduledOperation) {
+      const taskInspector = this.options.adapter.inspectScheduledTaskStatus;
+      const taskEvidence = taskInspector ? await taskInspector.call(this.options.adapter, scheduledOperation) : undefined;
+      if (!taskEvidence) issues.push(`scheduled-task-status-unavailable:${scheduledOperation.id}`);
+      else {
+        const lastRunTime = taskEvidence.lastRunAt === undefined ? Number.NaN : Date.parse(taskEvidence.lastRunAt);
+        const installedTime = receipt ? Date.parse(receipt.installedAt) : Number.NaN;
+        const predatesInstall = Number.isFinite(lastRunTime) && Number.isFinite(installedTime) && lastRunTime < installedTime;
+        const status = !taskEvidence.exists ? "missing" : taskEvidence.lastRunAt === undefined || taskEvidence.lastResult === undefined || predatesInstall ? "not-run" : taskEvidence.lastResult === 0 ? "healthy" : "failed";
+        scheduledTask = { id: scheduledOperation.id, target: scheduledOperation.target, status, exists: taskEvidence.exists, state: taskEvidence.state ?? null, lastResult: taskEvidence.lastResult ?? null, lastRunAt: taskEvidence.lastRunAt ?? null, nextRunAt: taskEvidence.nextRunAt ?? null };
+        if (status === "missing") issues.push(`scheduled-task-missing:${scheduledOperation.id}`);
+        else if (predatesInstall) issues.push(`scheduled-task-run-predates-install:${scheduledOperation.id}`);
+        else if (status === "not-run") issues.push(`scheduled-task-not-run:${scheduledOperation.id}`);
+        else if (status === "failed") issues.push(`scheduled-task-failed:${scheduledOperation.id}:${taskEvidence.lastResult}`);
+      }
+    }
+    const evidence = scheduledTask ? { scheduledTask } : {};
+    if (!receipt?.installIntent) { issues.sort((a, b) => a.localeCompare(b)); return { ...base, healthy: issues.length === 0, issues, ...evidence }; }
+    const automaticIssues = [...issues];
+    const expectedExternal = receipt.installIntent.externalIntegrations ?? [];
+    const supplied = expectedExternal.length > 0 && externalSource
+      ? parseInstallExternalVerificationResultV1(typeof externalSource === "function" ? await externalSource() : externalSource)
+      : undefined;
+    const suppliedById = new Map(supplied?.integrations.map(item => [item.id, item]) ?? []);
+    const externalIntegrations = expectedExternal.map(integration => {
+      const live = suppliedById.get(integration.id);
+      const matching = live?.adapter === integration.adapter && live.planDigest === integration.planDigest && live.verifierRef === integration.verifierRef;
+      if (!matching) {
+        issues.push(`external-verification-required:${integration.id}`);
+        return { id: integration.id, classification: integration.classification, status: "verification-required" as const, verifierRef: integration.verifierRef };
+      }
+      if (!live.healthy) {
+        for (const issue of live.issues) issues.push(`external-verification:${integration.id}:${issue}`);
+        return { id: integration.id, classification: integration.classification, status: "unhealthy" as const, verifierRef: integration.verifierRef };
+      }
+      return { id: integration.id, classification: integration.classification, status: "verified" as const, verifierRef: integration.verifierRef };
+    });
+    issues.sort((a, b) => a.localeCompare(b));
     const runtimeIds = receipt.installIntent.runtimeRegistrations?.registrations.map(registration => registration.identity) ?? [];
-    const components = ["system", ...runtimeIds].map(id => ({ id, automatic: true as const, status: issues.some(issue => id === "system" ? !issue.includes("registration-") && !runtimeIds.some(runtimeId => issue.includes(runtimeId)) : issue.includes(id)) ? "unhealthy" as const : "actual-state-verified" as const }));
-    const externalIntegrations = (receipt.installIntent.externalIntegrations ?? []).map(integration => ({ id: integration.id, classification: integration.classification, status: integration.classification === "manual-only" ? "manual-required" as const : "confirmed" as const, verifierRef: integration.verifierRef ?? `${integration.adapter}:${integration.id}` }));
-    return { ...base, healthy: issues.length === 0, issues, components, externalIntegrations, manualOnly: externalIntegrations.filter(item => item.classification === "manual-only").map(item => item.id) };
+    const components = ["system", ...runtimeIds].map(id => ({ id, automatic: true as const, status: automaticIssues.some(issue => id === "system" ? !issue.includes("registration-") && !runtimeIds.some(runtimeId => issue.includes(runtimeId)) : issue.includes(id)) ? "unhealthy" as const : "actual-state-verified" as const }));
+    return { ...base, healthy: issues.length === 0, issues, ...evidence, components, externalIntegrations, manualOnly: externalIntegrations.filter(item => item.classification === "manual-only").map(item => item.id) };
   }
   async rollback(transactionId: string, confirmation: string): Promise<RollbackResultV1> {
     const stored = await this.options.store.readTransaction();

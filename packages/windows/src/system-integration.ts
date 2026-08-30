@@ -20,6 +20,8 @@ function clone<T>(value: T): T { return structuredClone(value); }
 
 export interface BinaryFileSystem {
   read(path: string): Promise<Buffer | undefined>;
+  /** Atomically creates an absent file. Returns false without mutation when the target already exists. */
+  create(path: string, body: Buffer): Promise<boolean>;
   write(path: string, body: Buffer): Promise<void>;
   remove(path: string): Promise<void>;
 }
@@ -27,6 +29,7 @@ export class FakeBinaryFileSystem implements BinaryFileSystem {
   private readonly files = new Map<string, Buffer>();
   constructor(initial: Readonly<Record<string, Buffer>> = {}) { for (const [key, value] of Object.entries(initial)) this.files.set(key, Buffer.from(value)); }
   async read(target: string) { const value = this.files.get(target); return value && Buffer.from(value); }
+  async create(target: string, body: Buffer) { if (this.files.has(target)) return false; this.files.set(target, Buffer.from(body)); return true; }
   async write(target: string, body: Buffer) { this.files.set(target, Buffer.from(body)); }
   async remove(target: string) { this.files.delete(target); }
 }

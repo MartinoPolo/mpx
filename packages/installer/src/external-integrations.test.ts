@@ -79,6 +79,21 @@ describe("Phase I external integration confirmation planning", () => {
     await expect(adapter.inspect({ reviewedFiles: ["linked.md"], changes: [] })).rejects.toMatchObject({ code: "EXTERNAL_PATH_ESCAPE" });
   });
 
+  it("re-establishes Git and Obsidian verification roots before reading or invoking git", async () => {
+    const root = await temporary(), repository = path.join(root, "repo"), outside = await temporary(), gitCalls: string[] = [];
+    await mkdir(path.join(repository, ".git"), { recursive: true }); await writeFile(path.join(repository, ".git", "config"), "");
+    await mkdir(path.join(outside, ".git"), { recursive: true }); await writeFile(path.join(outside, ".git", "config"), "");
+    const git = new GitRemotePlanningAdapter({ allowedRoots: [root], git: { run: async cwd => { gitCalls.push(cwd); return { stdout: "", stderr: "", exitCode: 0 }; } } });
+    const gitPlan = await git.plan(await git.inspect({ repository, proposals: [{ action: "add", remote: "origin", url: "https://example.test/repo" }] }));
+    gitCalls.length = 0;
+    await expect(git.verify({ ...gitPlan, repository: outside })).rejects.toMatchObject({ code: "EXTERNAL_PATH_ESCAPE" });
+    expect(gitCalls).toEqual([]);
+
+    const vault = await temporary(), subtree = path.join(vault, "MPX"); await mkdir(subtree);
+    const obsidian = new ObsidianPlanningAdapter({ MPX_OBSIDIAN_VAULT: vault }), obsidianPlan = await obsidian.plan(await obsidian.inspect({ reviewedFiles: [], changes: [] }));
+    await expect(obsidian.verify({ ...obsidianPlan, subtree: outside })).rejects.toMatchObject({ code: "EXTERNAL_PATH_ESCAPE" });
+  });
+
   it("audits only an encrypted Raycast derivative and emits a manual-only ID/category-preserving plan", async () => {
     const adapter = new RaycastPlanningAdapter();
     const derivative = { encrypted: true as const, items: [

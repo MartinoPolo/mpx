@@ -28,7 +28,7 @@ export function sameVerificationEvidence(left: unknown, right: unknown): boolean
 }
 export interface ProcessRequest { readonly executable: string; readonly argv: readonly string[]; readonly cwd: string; readonly environment: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number; readonly signal?: AbortSignal }
 export interface ProcessResult { readonly exitCode: number; readonly stdout: string; readonly stderr: string; readonly truncated: boolean }
-export interface ExecutorAdapter { readonly name: "docker" | "host"; readonly remoteToolClient?: import("./production-remote.js").ProductionRemoteToolClient; verify(): Promise<VerificationEvidence>; execute(request: ProcessRequest): Promise<ProcessResult> }
+export interface ExecutorAdapter { readonly name: "docker" | "host"; readonly remoteToolClient?: import("./production-remote.js").ProductionRemoteToolClient; readonly proofLaunchKey?:string; verify(): Promise<VerificationEvidence>; execute(request: ProcessRequest): Promise<ProcessResult> }
 export class ExecutorRegistry {
   readonly #adapters = new Map<string, ExecutorAdapter>();
   register(adapter: ExecutorAdapter): void { this.#adapters.set(adapter.name, adapter); }
@@ -179,6 +179,7 @@ export class ExecutionService {
     if (input.expectedLaunchKey !== undefined && input.expectedLaunchKey !== descriptor.launchKey) fail("LAUNCH_RESTART_REQUIRED", "Launch rights or binding changed; create a new launch and restart.", { restartRequired: true });
     const privateEnvironment = validatePrivateLaunch(descriptor, input.privateLaunch);
     const executor = this.dependencies.executors.get(descriptor.executor.name);
+    if(executor.name==="docker"&&executor.proofLaunchKey!==undefined&&executor.proofLaunchKey!==descriptor.launchKey)fail("LAUNCH_RESTART_REQUIRED","The reviewed sandbox export is bound to another launch descriptor.",{restartRequired:true});
     const verification = await executor.verify();
     if (verification.status === "unavailable") fail("EXECUTOR_UNAVAILABLE", `Executor '${executor.name}' is unavailable.`, { executor: executor.name });
     if (verification.status !== "verified" && this.dependencies.production !== false) fail("EXECUTOR_GATE_UNVERIFIED", `Executor '${executor.name}' has not been verified.`, { executor: executor.name });

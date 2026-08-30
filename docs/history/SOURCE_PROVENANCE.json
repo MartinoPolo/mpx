@@ -853,12 +853,12 @@
       "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
       "sourceDirty": false,
       "originalSha256": "d6a1ae42658d1d9ebf40df061d94c66dd114988d993f7cbb04669e702675ae45",
-      "destinationSha256": "8a60c76d8bea10739a37753f29fddc4dfd075e6471fcded1b7f7e6072886d0e9",
+      "destinationSha256": "dbdaf10b621b2d946e318820166687f5a253fd8114bd0b352987c1516d26eb3e",
       "disposition": "imported-rewritten",
       "license": "repository license; provenance retained",
       "evidence": {
         "kind": "destination-hash",
-        "sha256": "8a60c76d8bea10739a37753f29fddc4dfd075e6471fcded1b7f7e6072886d0e9",
+        "sha256": "dbdaf10b621b2d946e318820166687f5a253fd8114bd0b352987c1516d26eb3e",
         "verification": "pnpm run validate:generated -- --verify-sources"
       }
     },
@@ -958,12 +958,12 @@
       "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
       "sourceDirty": false,
       "originalSha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
-      "destinationSha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
+      "destinationSha256": "838d13716f6f0ddf513daf673fe30b330889c34f78b976ffadae0829ff55fe27",
       "disposition": "imported-rewritten",
       "license": "repository license; provenance retained",
       "evidence": {
         "kind": "destination-hash",
-        "sha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
+        "sha256": "838d13716f6f0ddf513daf673fe30b330889c34f78b976ffadae0829ff55fe27",
         "verification": "pnpm run validate:generated -- --verify-sources"
       }
     },
@@ -1033,12 +1033,12 @@
       "sourceCommit": "92aad1213db053dc5095e6a1e37b3ba79077fbc3",
       "sourceDirty": false,
       "originalSha256": "75dd78ea1b5a0b32abccefa6810462413cf0585ecf389b10f0331edc71111e6e",
-      "destinationSha256": "75dd78ea1b5a0b32abccefa6810462413cf0585ecf389b10f0331edc71111e6e",
+      "destinationSha256": "84ddcf29cd6c94a6536f858331acabab0c0a734e229898b4edfe8da499ffc92f",
       "disposition": "imported-rewritten",
       "license": "repository license; provenance retained",
       "evidence": {
         "kind": "destination-hash",
-        "sha256": "75dd78ea1b5a0b32abccefa6810462413cf0585ecf389b10f0331edc71111e6e",
+        "sha256": "84ddcf29cd6c94a6536f858331acabab0c0a734e229898b4edfe8da499ffc92f",
         "verification": "pnpm run validate:generated -- --verify-sources"
       }
     },

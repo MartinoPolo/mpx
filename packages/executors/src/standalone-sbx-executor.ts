@@ -2,11 +2,12 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
-import { f2Sha256, parseF2ProofReportV1, type BuiltInClaudeEvidenceV1, type F2ProofReportV1 } from "@mpx/runtime-contracts";
+import { f2Sha256, parseF2ProofReportV1, parseF2ProofReportV2, validateF2ProofReportV2, type BuiltInClaudeEvidenceV1, type F2ProofReportV1, type F2ProofReportV2, type SbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
 import { ExecutionError, type ExecutorAdapter, type ProcessRequest, type ProcessResult, type VerificationEvidence } from "./index.js";
 import { PHASE_F2_REMOTE_TOOL_PATHS, attestRemoteToolSet, type ProductionRemoteToolClient, type RemoteToolSetAttestation } from "./production-remote.js";
 import type { SandboxLaunchPlanV1 } from "./sandbox-plan.js";
 import { buildSbxCommandPlans } from "./sbx-plans.js";
+import { parsePolicyEvidence } from "./sbx-policy.js";
 
 export interface StandaloneSbxRunRequest {
   readonly executable:string; readonly argv:readonly string[]; readonly cwd:string;
@@ -18,7 +19,7 @@ export interface ClaudeVmProjection {
 }
 export interface StandaloneSbxExecutorInput {
   readonly executable:string; readonly cwd:string; readonly plan:SandboxLaunchPlanV1; readonly agent:"claude"|"shell";
-  readonly report:F2ProofReportV1; readonly sbxPinSha256:string; readonly executorEvidenceSha256:string;
+  readonly report:F2ProofReportV1|F2ProofReportV2; readonly planExport?:SbxLaunchPlanExportV1; readonly sbxPinSha256:string; readonly executorEvidenceSha256:string;
   readonly ports:readonly string[];
   readonly worker?:{readonly argv:readonly string[];readonly endpoint:string;readonly attestationSha256:string};
   readonly remoteToolClient?:ProductionRemoteToolClient;
@@ -31,26 +32,30 @@ const SHA=/^[a-f0-9]{64}$/u;
 /** Production adapter for the pinned standalone sbx command surface. It never invokes a shell. */
 export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly name="docker" as const;
+  readonly proofLaunchKey?:string;
   readonly bridge:{readonly endpoint:string;readonly attestationSha256:string}|undefined;
   readonly remoteToolClient?:ProductionRemoteToolClient;
   #resumeAction:"attach"|"recreate"|undefined;
   #projection:ClaudeVmProjection|undefined;
   constructor(readonly input:StandaloneSbxExecutorInput) {
     this.#projection=input.projection;
+    if(input.planExport)this.proofLaunchKey=input.planExport.launchKey;
     this.bridge=input.worker===undefined?undefined:Object.freeze({endpoint:input.worker.endpoint,attestationSha256:input.worker.attestationSha256});
     if(input.remoteToolClient)this.remoteToolClient=input.remoteToolClient;
   }
   setResumeAction(action:"attach"|"recreate"):void{this.#resumeAction=action;}
   async verify():Promise<VerificationEvidence>{
     try {
-      const report=parseF2ProofReportV1(this.input.report),diagnostics=await this.input.diagnostics();
+      const report=this.input.planExport===undefined?parseF2ProofReportV1(this.input.report):parseF2ProofReportV2(this.input.report),diagnostics=await this.input.diagnostics();
+      const exportValid=this.input.planExport===undefined||validateF2ProofReportV2(report,this.input.planExport).valid;
       const claudeEvidenceValid=this.input.agent!=="claude"||this.#resumeAction==="attach"||this.#validateClaudeEvidence(report);
       const claudeRouteValid=this.input.agent!=="claude"||this.#resumeAction==="attach"||this.#projection===undefined||this.#validateClaudeRoute();
-      const matches=diagnostics.status==="pass"&&SHA.test(diagnostics.digest)&&report.verdict==="pass"
-        &&report.planKey===this.input.plan.planKey
-        &&report.runtimeToolInventorySha256===this.input.plan.runtimeToolInventorySha256
-        &&report.sbxPinSha256===this.input.sbxPinSha256
-        &&report.executorEvidenceSha256===this.input.executorEvidenceSha256&&claudeEvidenceValid&&claudeRouteValid;
+      const planKey="planKey" in report?report.planKey:report.sandbox.planKey,evidence="evidence" in report?report.evidence:report;
+      const matches=diagnostics.status==="pass"&&SHA.test(diagnostics.digest)&&report.verdict==="pass"&&exportValid
+        &&planKey===this.input.plan.planKey
+        &&evidence.runtimeToolInventorySha256===this.input.plan.runtimeToolInventorySha256
+        &&evidence.sbxPinSha256===this.input.sbxPinSha256
+        &&evidence.executorEvidenceSha256===this.input.executorEvidenceSha256&&claudeEvidenceValid&&claudeRouteValid;
       return Object.freeze({status:matches?"verified":"unverified",verifier:"standalone-sbx-live",evidenceDigest:matches?report.reportKey:sha256Canonical({gate:"unverified",planKey:this.input.plan.planKey} as JsonValue)});
     } catch {
       return Object.freeze({status:"unverified",verifier:"standalone-sbx-live",evidenceDigest:sha256Canonical({gate:"invalid-proof",planKey:this.input.plan.planKey} as JsonValue)});
@@ -73,10 +78,15 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
     let cleanupRequired=false,primaryError:unknown;
     try {
       if(this.#resumeAction!=="attach"){
-        cleanupRequired=true;
+        const globalPolicy=await lifecycleRun(["policy","ls","--json"]);if(globalPolicy.exitCode!==0)throw new ExecutionError("SBX_GLOBAL_POLICY_UNINITIALIZED","Standalone sbx global policy must be initialized before launch.");
         const create=await lifecycleRun(commands.create);if(create.exitCode!==0)throw new ExecutionError("SBX_CREATE_FAILED","Standalone sbx create failed.");
+        // A failed/rejected create did not create a sandbox and must not manufacture a
+        // misleading teardown failure. From this point every mismatch is cleanup-bound.
+        cleanupRequired=true;
         if(commands.ports.length>2){const ports=await lifecycleRun(commands.ports);if(ports.exitCode!==0)throw new ExecutionError("SBX_PORTS_FAILED","Standalone sbx port publication failed.");}
-        const policy=await lifecycleRun(commands.policy);if(policy.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection failed.");
+        for(const argv of commands.policyApply){const applied=await lifecycleRun(argv);if(applied.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy materialization failed.");}
+        const checks=[];for(const check of commands.policyChecks){const result=await lifecycleRun(check.argv);checks.push({target:check.target,exitCode:result.exitCode,stdout:result.stdout});}
+        try{parsePolicyEvidence({expected:commands.policyChecks.map(({target,decision})=>({target,decision})),checks});}catch{throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection did not match the selected targets.");}
       }
       if(this.input.worker&&this.#resumeAction!=="attach"){
         const workerCommands=buildSbxCommandPlans(this.input.plan,{agent:this.input.agent,execArgv:this.input.worker.argv,ports:[]});
@@ -102,7 +112,7 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
       }
     }
   }
-  #validateClaudeEvidence(report:F2ProofReportV1):boolean{
+  #validateClaudeEvidence(report:F2ProofReportV1|F2ProofReportV2):boolean{
     const evidence=this.input.claudeEvidence;
     if(!evidence||!report.builtInClaudeEvidence||f2Sha256(evidence)!==f2Sha256(report.builtInClaudeEvidence))return false;
     if(evidence.source!=="live"&&!(evidence.source==="signed-fixture"&&this.input.allowSignedFixtureEvidence===true))return false;

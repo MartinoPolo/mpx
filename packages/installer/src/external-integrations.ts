@@ -93,7 +93,14 @@ export class GitRemotePlanningAdapter implements ExternalIntegrationAdapter<GitR
     return { kind: "git-remotes", classification: "confirmation-required", repository: inspection.repository, commands, preservedRemotes: inspection.remotes, expectedRemotes, confirmation: { required: true, scope: inspection.repository, digest: confirmationDigest }, rollback: { automatic: false, snapshot: inspection.config, steps: ["Do not delete any pre-existing remote.", "Restore .git/config from the byte snapshot after confirming repository scope.", "Run git remote -v in this repository and compare with the reviewed plan."] } };
   }
   async verify(plan: GitRemotePlan): Promise<{ healthy: boolean; issues: readonly string[] }> {
-    const result = await this.options.git.run(plan.repository, ["remote", "-v"]); if (result.exitCode !== 0) return { healthy: false, issues: ["git-remote-inspection-failed"] }; const healthy = canonicalJson(normalizedRemoteLines(result.stdout)) === canonicalJson(plan.expectedRemotes); return { healthy, issues: healthy ? [] : ["git-remote-drift"] };
+    const roots = await Promise.all(this.options.allowedRoots.map(root => realpath(root).catch(() => "")));
+    const requestedInfo = await lstat(plan.repository).catch(() => fail("GIT_REPOSITORY_INVALID", "Repository is unavailable."));
+    if (requestedInfo.isSymbolicLink()) fail("EXTERNAL_PATH_UNSAFE", "Repository must not be a symbolic link.");
+    const repository = await realpath(plan.repository).catch(() => fail("GIT_REPOSITORY_INVALID", "Repository is unavailable."));
+    if (!roots.some(root => root && !path.relative(root, repository).startsWith("..") && !path.isAbsolute(path.relative(root, repository)))) fail("EXTERNAL_PATH_ESCAPE", "Repository is outside approved roots.");
+    await assertContainedRegular(repository, repository, "directory");
+    await assertContainedRegular(repository, path.join(repository, ".git", "config"), "file");
+    const result = await this.options.git.run(repository, ["remote", "-v"]); if (result.exitCode !== 0) return { healthy: false, issues: ["git-remote-inspection-failed"] }; const healthy = canonicalJson(normalizedRemoteLines(result.stdout)) === canonicalJson(plan.expectedRemotes); return { healthy, issues: healthy ? [] : ["git-remote-drift"] };
   }
 }
 
@@ -130,8 +137,13 @@ export class ObsidianPlanningAdapter implements ExternalIntegrationAdapter<Obsid
     return { kind: "obsidian", classification: "confirmation-required", subtree: inspection.subtree, reviewedFiles: inspection.reviewedFiles, expectedFiles, operations, confirmation: { required: true, scope: inspection.subtree, digest: installerDigest({ snapshots: inspection.snapshots, operations }) }, rollback: { automatic: false, snapshots: inspection.snapshots, steps: ["Apply all reviewed writes and renames as one atomic batch.", "On any failure restore every reviewed path from its byte snapshot and remove paths whose snapshot is absent.", "Re-open only the reviewed files to verify backlinks, queries, CSS and rename targets."] } };
   }
   async verify(plan: ObsidianPlan): Promise<{ healthy: boolean; issues: readonly string[] }> {
+    const vaultValue = this.environment.MPX_OBSIDIAN_VAULT ?? fail("OBSIDIAN_VAULT_UNAVAILABLE", "MPX_OBSIDIAN_VAULT is required.");
+    if (!path.isAbsolute(vaultValue)) fail("OBSIDIAN_VAULT_UNAVAILABLE", "MPX_OBSIDIAN_VAULT must be absolute.");
+    const vault = await realpath(vaultValue).catch(() => fail("OBSIDIAN_VAULT_UNAVAILABLE", "Obsidian vault is unavailable."));
+    const subtree = await assertContainedRegular(vault, path.join(vault, "MPX"), "directory");
+    if (path.resolve(plan.subtree) !== subtree) fail("EXTERNAL_PATH_ESCAPE", "Obsidian plan subtree is not the configured canonical MPX subtree.");
     const issues: string[] = [];
-    for (const expected of plan.expectedFiles) { const candidate = path.join(plan.subtree, ...expected.path.split("/")); let actual: string | null = null; try { const file = await assertContainedRegular(plan.subtree, candidate, "file"); actual = digest(await readFile(file)); } catch (failure) { if ((failure as { code?: string }).code !== "EXTERNAL_PATH_INVALID") throw failure; } if (actual !== expected.sha256) issues.push(`obsidian-file-drift:${expected.path}`); }
+    for (const expected of plan.expectedFiles) { const candidate = path.join(subtree, ...expected.path.split("/")); let actual: string | null = null; try { const file = await assertContainedRegular(subtree, candidate, "file"); actual = digest(await readFile(file)); } catch (failure) { if ((failure as { code?: string }).code !== "EXTERNAL_PATH_INVALID") throw failure; } if (actual !== expected.sha256) issues.push(`obsidian-file-drift:${expected.path}`); }
     return { healthy: issues.length === 0, issues };
   }
 }

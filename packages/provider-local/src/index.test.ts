@@ -1,5 +1,5 @@
 import { fork, type ChildProcess } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,10 +109,11 @@ describe("local Markdown issues", () => {
   it("refreshes its lease during a two-process long operation so a contender cannot steal it", async () => {
     const directory = await root(), child = fork(fixture, ["hold", directory], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
     try {
-      await waitFor(child, "locked");
-      const ownerPath=path.join(directory,".mpx-issues.lock","owner.json"),acquired=JSON.parse(await readFile(ownerPath,"utf8")) as {acquiredAt:number;heartbeatAt:number};
-      const refreshDeadline=Date.now()+2_000;let refreshed=acquired;
-      while(refreshed.heartbeatAt===acquired.heartbeatAt&&Date.now()<refreshDeadline){await new Promise(resolve=>setTimeout(resolve,10));refreshed=JSON.parse(await readFile(ownerPath,"utf8")) as typeof acquired;}
+      const heartbeatReady=waitFor(child,"heartbeat-ready");await waitFor(child, "locked");
+      const lockPath=path.join(directory,".mpx-issues.lock"),acquired=JSON.parse(await readFile(path.join(lockPath,"owner.json"),"utf8")) as {acquiredAt:number;heartbeatAt:number};
+      await heartbeatReady;const published=waitFor(child,"heartbeat-published");child.send("publish-heartbeat");await published;
+      const heartbeat=(await readdir(lockPath)).find(name=>name.startsWith("heartbeat-"));expect(heartbeat).toBeDefined();
+      const refreshed=JSON.parse(await readFile(path.join(lockPath,heartbeat!),"utf8")) as typeof acquired;
       expect(refreshed.heartbeatAt).toBeGreaterThan(acquired.heartbeatAt);
       await expect(new LocalIssueStore(directory, { staleLockMilliseconds: 2_000, lockTimeoutMilliseconds: 40, lockRetryMilliseconds: 2 }).create({ title: "contender", body: "" })).rejects.toMatchObject({ code: "LOCAL_ISSUE_LOCK_TIMEOUT" });
       child.send("release"); await waitFor(child, "finished");
@@ -142,12 +143,21 @@ describe("local Markdown issues", () => {
 
   it("reports heartbeat loss during a post-commit release as lock release pending without inviting a duplicate mutation", async () => {
     const directory = await root(), lock = path.join(directory, ".mpx-issues.lock"), displaced = `${lock}.displaced`;
-    let unblock!: () => void, callbackStarted!: () => void; const blocked = new Promise<void>(resolve => { unblock = resolve; }), started = new Promise<void>(resolve => { callbackStarted = resolve; });
-    const holding = new LocalIssueStore(directory, { staleLockMilliseconds: 15, lockHeartbeatMilliseconds: 1, lockToken: () => "holder", onChanged: async () => { callbackStarted(); await blocked; } }).create({ title: "holder", body: "" });
+    let unblock!: () => void, callbackStarted!: () => void, heartbeatRead!: () => void, replacementInstalled!: () => void;
+    const blocked = new Promise<void>(resolve => { unblock = resolve; }), started = new Promise<void>(resolve => { callbackStarted = resolve; });
+    const heartbeatObserved = new Promise<void>(resolve => { heartbeatRead = resolve; }), replacementReady = new Promise<void>(resolve => { replacementInstalled = resolve; });
+    const holding = new LocalIssueStore(directory, {
+      staleLockMilliseconds: 15,
+      lockHeartbeatMilliseconds: 1,
+      lockToken: () => "holder",
+      beforeLockHeartbeatPublish: async () => { heartbeatRead(); await replacementReady; },
+      onChanged: async () => { callbackStarted(); await blocked; },
+    }).create({ title: "holder", body: "" });
     await started;
+    await heartbeatObserved;
     for (let attempt = 0;; attempt++) { try { await rename(lock, displaced); break; } catch (error) { if (attempt === 20 || !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error; await new Promise(resolve => setTimeout(resolve, 2)); } }
     await mkdir(lock); await writeFile(path.join(lock, "owner.json"), JSON.stringify({ schemaVersion: 1, token: "replacement", pid: process.pid, acquiredAt: Date.now(), heartbeatAt: Date.now() }));
-    await new Promise(resolve => setTimeout(resolve, 20));
+    replacementInstalled();
     unblock();
     expect(await holding).toMatchObject({ id: "1", providerData: { local: { lockReleasePending: true, diagnostics: ["LOCAL_ISSUE_LOCK_RELEASE_PENDING"] } } });
     expect((await new LocalIssueStore(directory).view("1")).title).toBe("holder");

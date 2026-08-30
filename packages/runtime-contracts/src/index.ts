@@ -368,3 +368,4 @@ export async function validateRuntimeContext(input: { context: RuntimeContextV1;
 
 export * from "./capabilities.js";
 export * from "./f2.js";
+export * from "./f2-v2.js";

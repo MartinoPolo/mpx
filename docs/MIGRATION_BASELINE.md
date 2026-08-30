@@ -1,6 +1,6 @@
 # Migration baseline
 
-See [Phase A remediation acceptance](PHASE_A_ACCEPTANCE.md) for the qualification of historical snapshots, schema-2 immutable file capture, and deferred native-integration gates.
+The consolidated [migration authority](../MPX_MIGRATION.md) records acceptance. Historical snapshots use schema-2 immutable file capture; native-integration gates remain pending.
 
 The first migration snapshot was captured before source or machine integration changes. The latest verified snapshot is under `%LOCALAPPDATA%/mpx/migration-snapshots`; its `manifest.json` records source revisions, remotes, working-tree state, selected integration files, environment bootstrap paths, and scheduled-task metadata. Repository history bundles, tracked binary patches, and untracked-file archives make dirty source state recoverable without changing the source repositories.
 

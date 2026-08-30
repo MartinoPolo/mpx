@@ -23,7 +23,7 @@ import type { SbxExecutionDependencies } from "./sbx-execution.js";
 import type { CliDevService } from "./dev-command.js";
 import { ClaudeActiveScanner, PiV2ActiveRegistryScanner, SessionStore, deriveNativeBindingRef, type BranchArgvExecutionAdapter, type ConversationBranchService, type IdentityV1, type ProcessInspector, type ResumeDependencies, type ResumePlanV1, type RootAttestationService, type RuntimeDiscovery, type SessionProcessInspector, type SessionRecordV1 } from "@mpx/sessions";
 import type { AccountAuthVerifier } from "./account-command.js";
-import { activateRelease, InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeInstalledRunnerAuthority, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ProductionInstallerOperationAdapter, removeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
+import { activateRelease, GitRemotePlanningAdapter, InstallIntentBuilder, InstallOrchestrator, InstallerService, NodeCurrentReleaseBuilder, NodeGitCommandPort, NodeInstalledRunnerAuthority, NodeReceiptStore, NodeRunnerFileVerifier, NodeTransactionStore, ObsidianPlanningAdapter, ProductionInstallerOperationAdapter, RaycastPlanningAdapter, removeActiveRelease, type InstallerOperationAdapter, type TransactionStore } from "@mpx/installer";
 import { WindowsScheduledTaskAdapter } from "@mpx/windows";
 import { PiResumeTargetError, verifyPiResumeTarget } from "@mpx/runtime-pi";
 import { createProductionSessionDockerResumeAdmission } from "./session-docker-resume.js";
@@ -59,6 +59,8 @@ export interface CliContext extends LaunchExecutionContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
   accessFile?: (file: string) => Promise<void>;
+  /** Debug/test-only sink for unexpected errors. Never included in public CLI output. */
+  onInternalError?: (error: unknown) => void;
   portService?: CliPortService;
   portServiceFactory?: (stateRoot: string) => CliPortService;
   statusProvider?: StatusProvider;
@@ -94,6 +96,7 @@ export interface CliContext extends LaunchExecutionContext {
   installerService?: InstallerService;
   installerServiceFactory?: (stateRoot: string) => InstallerService;
   installOrchestrator?: InstallOrchestrator;
+  installIntentBuilder?: InstallIntentBuilder;
   installerOperationAdapter?: InstallerOperationAdapter;
   installerTransactionStore?: TransactionStore;
   /** Application-owned trusted extensions; never populated from project configuration. */
@@ -101,16 +104,17 @@ export interface CliContext extends LaunchExecutionContext {
 }
 
 async function sha256File(file:string):Promise<string>{const hash=createHash("sha256");for await(const chunk of createReadStream(file))hash.update(chunk);return hash.digest("hex")}
-export async function createDefaultSbxDiagnostics(environment:NodeJS.ProcessEnv,operationCwd:string):Promise<{readonly available:boolean;readonly failureCodes:readonly string[];readonly readOnly:true}>{
+export interface DefaultSbxDiagnosticDependencies{resolveExecutable?:()=>Promise<string>;runner?:BoundedProcessRunner}
+export async function createDefaultSbxDiagnostics(environment:NodeJS.ProcessEnv,operationCwd:string,dependencies:DefaultSbxDiagnosticDependencies={}):Promise<{readonly available:boolean;readonly failureCodes:readonly string[];readonly readOnly:true}>{
  const value=(name:string):string|undefined=>Object.entries(environment).find(([key])=>key.toLowerCase()===name.toLowerCase())?.[1];
  const pathDirectories=(value("PATH")??"").split(path.delimiter).filter(directory=>path.isAbsolute(directory));
  const configured=value("MPX_SBX_EXECUTABLE");
  const candidates=[...(configured?[configured]:[]),...pathDirectories.flatMap(directory=>[path.join(directory,"sbx.exe")])];
  const trustedRoots=[...(configured&&path.isAbsolute(configured)?[path.dirname(configured)]:[]),...pathDirectories,...(value("MPX_APPS")?[value("MPX_APPS")!]:[]),...(value("LOCALAPPDATA")?[path.join(value("LOCALAPPDATA")!,"DockerSandboxes","bin")]:[])].filter(root=>path.isAbsolute(root));
  let executable:string|undefined;
- try{executable=await resolveTrustedSbxExecutable({candidates,projectRoot:operationCwd,trustedRoots,expectedSha256:SBX_V0_39_0_PIN.windowsBinarySha256,inspect:async file=>{const info=await lstat(file),canonical=await realpath(file);return {file:info.isFile()&&!info.isSymbolicLink(),realpath:canonical,sha256:await sha256File(canonical)}}})}catch{return {available:false,failureCodes:["SBX_NOT_FOUND"],readOnly:true}}
+ try{executable=dependencies.resolveExecutable?await dependencies.resolveExecutable():await resolveTrustedSbxExecutable({candidates,projectRoot:operationCwd,trustedRoots,expectedSha256:SBX_V0_39_0_PIN.windowsBinarySha256,inspect:async file=>{const info=await lstat(file),canonical=await realpath(file);return {file:info.isFile()&&!info.isSymbolicLink(),realpath:canonical,sha256:await sha256File(canonical)}}})}catch{return {available:false,failureCodes:["SBX_NOT_FOUND"],readOnly:true}}
  const probeEnvironment=Object.fromEntries(["SYSTEMROOT","WINDIR","LOCALAPPDATA","APPDATA","USERPROFILE","TEMP","TMP"].flatMap(name=>value(name)===undefined?[]:[[name,value(name)!]]));
- const runner:BoundedProcessRunner={run:request=>new Promise((resolve,reject)=>{execFile(request.executable,[...request.argv],{cwd:request.cwd,env:probeEnvironment,timeout:request.timeoutMs,maxBuffer:request.maxOutputBytes,windowsHide:true},(error,stdout,stderr)=>{const code=error&&typeof (error as {code?:unknown}).code==="number"?(error as {code:number}).code:0;if(error&&typeof (error as {code?:unknown}).code!=="number")reject(error);else resolve({exitCode:code,stdout,stderr,truncated:false})})})};
+ const runner:BoundedProcessRunner=dependencies.runner??{run:request=>new Promise((resolve,reject)=>{execFile(request.executable,[...request.argv],{cwd:request.cwd,env:probeEnvironment,timeout:request.timeoutMs,maxBuffer:request.maxOutputBytes,windowsHide:true},(error,stdout,stderr)=>{const code=error&&typeof (error as {code?:unknown}).code==="number"?(error as {code:number}).code:0;if(error&&typeof (error as {code?:unknown}).code!=="number")reject(error);else resolve({exitCode:code,stdout,stderr,truncated:false})})})};
  return diagnoseSbx({executable,cwd:operationCwd,runner,pin:SBX_V0_39_0_PIN});
 }
 
@@ -563,13 +567,31 @@ export function installer(context: CliContext, cwd: string): InstallerService {
   });
 }
 
+export function installerSourceRoot(moduleFile = fileURLToPath(import.meta.url)): string {
+  const moduleDirectory = path.dirname(moduleFile);
+  return path.basename(moduleDirectory).toLowerCase() === "bin" ? path.resolve(moduleDirectory, "..") : path.resolve(moduleDirectory, "../../..");
+}
+
+export function installIntentBuilder(context: CliContext): InstallIntentBuilder {
+  if (context.installIntentBuilder) return context.installIntentBuilder;
+  const appsRoot = context.env.MPX_APPS;
+  if (!appsRoot || !path.isAbsolute(appsRoot)) throw new MpxError({ code: "INSTALL_ROOT_UNAVAILABLE", message: "MPX_APPS must be an absolute path." });
+  const repositoryRoot = installerSourceRoot();
+  const approvedRoots = [context.env.MPX_PROJECTS, context.env.MPX_WORK, context.env.MPX_CLONED].filter((root): root is string => Boolean(root && path.isAbsolute(root)));
+  return new InstallIntentBuilder({
+    releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot }), environment: context.env,
+    gitRemotes: new GitRemotePlanningAdapter({ allowedRoots: approvedRoots, git: new NodeGitCommandPort(context.env) }),
+    obsidian: new ObsidianPlanningAdapter(context.env), raycast: new RaycastPlanningAdapter(),
+  });
+}
+
 export function immutableInstaller(context: CliContext): InstallOrchestrator {
   if (context.installOrchestrator) return context.installOrchestrator;
   const appsRoot = context.env.MPX_APPS, appData = context.env.APPDATA, localAppData = context.env.LOCALAPPDATA;
   if (![appsRoot, appData, localAppData].every(root => root && path.isAbsolute(root))) throw new MpxError({ code: "INSTALL_ROOT_UNAVAILABLE", message: "APPDATA, LOCALAPPDATA, and MPX_APPS must be absolute paths." });
   const adapter = context.installerOperationAdapter ?? new ProductionInstallerOperationAdapter(context.env, context.env.USERDOMAIN && context.env.USERNAME ? `${context.env.USERDOMAIN}\\${context.env.USERNAME}` : context.env.USERNAME ?? context.env.USER ?? "");
   const store = context.installerTransactionStore ?? new NodeTransactionStore(path.join(localAppData!, "mpx", "installer"));
-  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const repositoryRoot = installerSourceRoot();
   return new InstallOrchestrator({
     adapter,
     store,
@@ -801,7 +823,7 @@ async function exists(candidate: string): Promise<boolean> {
 /** Locate only the application-owned canonical catalog; callers may inject a trusted fixture root. */
 export async function catalogPath(context: CliContext, _cwd: string): Promise<string> {
   if (context.catalogRoot) return context.catalogRoot;
-  const packaged = fileURLToPath(new URL("../../../content/skills", import.meta.url));
+  const packaged=path.join(installerSourceRoot(),"content","skills");
   if (await exists(packaged)) return packaged;
   throw new Error("Canonical skill catalog was not found.");
 }

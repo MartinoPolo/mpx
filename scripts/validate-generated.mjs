@@ -15,11 +15,13 @@ const CONFIGURED_PATH_MARKER = ["<configured", "path>"].join("-");
 const ACTIVE_COMPATIBILITY_DOCS = new Set([
   "docs/LAUNCH.md",
   "docs/RUNTIME_ADAPTERS.md",
-  "docs/PHASE_F_ACCEPTANCE.md",
+  "MPX_MIGRATION.md",
   "runtimes/claude/runtime-claude/COMPATIBILITY.md",
 ]);
-// Text validation is intentionally bounded to 1 MiB per file.
+// Ordinary text validation is intentionally bounded to 1 MiB per file. The generated,
+// tracked CLI bundle has its own narrow bound because bundling legitimately exceeds it.
 export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+export const MAX_GENERATED_CLI_BUNDLE_BYTES = 2 * 1024 * 1024;
 export const FILE_READ_CONCURRENCY = 8;
 
 const diagnostic = (code, file, message) => ({ code, file, message });
@@ -232,7 +234,9 @@ export async function repositoryFiles(root, names, options = {}) {
   const outcomes = new Array(textualNames.length);
   const statPath = options.lstat ?? lstat;
   const openFile = options.open ?? open;
-  const maxFileBytes = options.maxFileBytes ?? MAX_TEXT_FILE_BYTES;
+  const configuredMaxFileBytes = options.maxFileBytes;
+  const trackedFiles = new Set((options.trackedFiles ?? []).map(normalized));
+  const maxBytesFor = file => configuredMaxFileBytes ?? (file === "bin/mpx.mjs" && trackedFiles.has(file) ? MAX_GENERATED_CLI_BUNDLE_BYTES : MAX_TEXT_FILE_BYTES);
   const concurrency = Math.min(FILE_READ_CONCURRENCY, Math.max(1, Math.floor(options.concurrency ?? FILE_READ_CONCURRENCY)));
   let nextIndex = 0;
 
@@ -244,6 +248,7 @@ export async function repositoryFiles(root, names, options = {}) {
       let handle;
       try {
         const filePath = path.join(root, name);
+        const maxFileBytes = maxBytesFor(file);
         handle = await openFile(filePath, "r");
         const stats = await handle.stat();
         if (!stats.isFile() || !Number.isSafeInteger(stats.size) || stats.size < 0) {
@@ -291,9 +296,12 @@ async function run() {
   const verifySources = process.argv.includes("--verify-sources");
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const output = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "-z"], { cwd: root });
-  const names = output.toString("utf8").split("\0").filter(Boolean);
-  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root }).toString("utf8").split("\0").filter(Boolean);
-  const files = await repositoryFiles(root, names);
+  // `git ls-files -c` includes index entries deleted from the worktree. They are
+  // intentional deletion candidates, not unreadable current repository files.
+  const deleted = new Set(execFileSync("git", ["ls-files", "--deleted", "-z"], { cwd: root }).toString("utf8").split("\0").filter(Boolean));
+  const names = output.toString("utf8").split("\0").filter(name=>Boolean(name)&&!deleted.has(name));
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root }).toString("utf8").split("\0").filter(name=>Boolean(name)&&!deleted.has(name));
+  const files = await repositoryFiles(root, names, { trackedFiles: tracked });
 
   const generated = spawnSync(process.execPath, [path.join(root, "runtimes/pi/runtime-pi/scripts/generate-agents.mjs"), "--check"], { cwd: root, encoding: "utf8" });
   const drift = generated.status === 0 ? [] : [generated.stderr.trim() || generated.stdout.trim() || "projection"];

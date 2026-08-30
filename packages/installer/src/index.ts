@@ -6,6 +6,7 @@ export * from "./runtime-registration.js";
 export * from "./production-operation.js";
 export * from "./external-integrations.js";
 export * from "./installed-runner-authority.js";
+export * from "./install-intent-builder.js";
 
 import { createHash, randomUUID } from "node:crypto";
 import {

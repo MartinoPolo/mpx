@@ -1,6 +1,6 @@
 ---
 name: project-register
-description: "Registers an existing project with the workstation — one colour driving its Windows Terminal profile and icon, its VS Code Peacock theme, its status-line ports and its Raycast quicklinks."
+description: "Registers an existing project with the workstation — one colour driving its Windows Terminal profile and icon, its VS Code Peacock theme and its Raycast quicklinks."
 metadata:
   mpx:
     skillPacks: [personal]
@@ -35,10 +35,9 @@ Scripts live in `./scripts/`:
 5. Draw the icon
 6. Add the Windows Terminal profile
 7. Write the VS Code Peacock block
-8. Register dev-server ports
-9. Hand the quicklinks to `raycast-config`
-10. Register the project in the Obsidian task overview
-11. Offer the remaining setup skills
+8. Hand the quicklinks to `raycast-config`
+9. Register the project in the Obsidian task overview
+10. Offer the remaining setup skills
 
 ### Step 1: Gate on the Raycast export
 
@@ -58,7 +57,7 @@ directory from the environment rather than writing it out. Offer a **Skip Raycas
 too — the other nine steps stand on their own, and a user who only wants a terminal
 profile should not be blocked.
 
-Carry the chosen path forward to step 9. When the export predates work done in this
+Carry the chosen path forward to step 8. When the export predates work done in this
 session, ask for a fresh one rather than reusing it.
 
 ### Step 2: Resolve the project
@@ -126,7 +125,7 @@ profiles already there, generates the GUID, and re-parses the result before writ
 malformed edit never reaches Windows Terminal. Report the backup path. Windows Terminal
 picks the profile up on its own — no restart.
 
-The profile **name** is what Raycast's terminal quicklink targets in step 9, so keep it
+The profile **name** is what Raycast's terminal quicklink targets in step 8, so keep it
 identical to the folder name.
 
 The new-tab dropdown is a grouped `newTabMenu` in the same settings file — general shells,
@@ -152,16 +151,7 @@ the single source of truth: Peacock regenerates the activity bar, status bar, ti
 badge colours itself the first time VS Code opens the folder. Any stale derived keys left in
 `workbench.colorCustomizations` by an earlier colour are cleared in the same write.
 
-### Step 8: Register dev-server ports
-
-When the project serves anything on localhost, use `Edit` to add its ports to `devServers`
-in `canonical content/statusline-projects.json`, keyed by the project folder name. The
-status line then renders each as a clickable `:port` that turns green while something is
-listening. Read the ports from the project's own config — a `dev` script, `vite.config.*`
-or a compose file — rather than assuming defaults. Skip the step for a project with no
-server.
-
-### Step 9: Hand the quicklinks to `raycast-config`
+### Step 8: Hand the quicklinks to `raycast-config`
 
 Propose the family for this project, then read
 `./../raycast-config/SKILL.md` (and the `REFERENCE.md` it points to)
@@ -184,14 +174,14 @@ Registering several projects in one sitting is worth batching: collect every pro
 quicklinks first and hand them over together, so the user does one export/import
 round-trip instead of one per project.
 
-### Step 10: Register the project in the Obsidian task overview
+### Step 9: Register the project in the Obsidian task overview
 
 Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user
 uses, read [OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch.
 Do not infer or reconstruct the vault root from a home or sync-directory path. When the
 variable is unavailable or the user keeps no such vault, skip this surface and record why.
 
-### Step 11: Offer the remaining setup skills
+### Step 10: Offer the remaining setup skills
 
 `repository-setup` is no longer in this list — step 3 already ran it if the project needed it.
 Name the ones that still apply and let the user pick — neither runs unless chosen:
@@ -205,6 +195,6 @@ invocation isn't blocked.
 
 ## Report
 
-Close with a table of surfaces touched — Windows Terminal, VS Code, status line, Raycast,
-Obsidian `Tasks.md` — each with the file written and the value used. Name the Windows Terminal backup path, and
+Close with a table of surfaces touched — Windows Terminal, VS Code, Raycast and Obsidian
+`Tasks.md` — each with the file written and the value used. Name the Windows Terminal backup path, and
 state plainly which steps were skipped and why.

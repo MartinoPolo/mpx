@@ -12,6 +12,8 @@ import {
   parseSbxDiagnose,
   assertSbxHelpCompatibility,
   buildSbxCommandPlans,
+  buildF2ProofPolicyMatrix,
+  buildSbxPolicyPlan,
   namedSbxPolicies,
   parsePolicyEvidence,
   verifyNoSharedSkillsMounts,
@@ -29,9 +31,9 @@ describe("standalone sbx diagnostics",()=>{
     const runner:BoundedProcessRunner={run:vi.fn(async request=>{calls.push(request); const command=request.argv.join(" "); if(command==="version") return ok('sbx version: v0.39.0 def8cb0523a77e757bdd6ef52b459fe374f3783e\n'); if(command==="--help") return ok("Available Commands:\n create x\n daemon x\n diagnose x\n exec x\n ls x\n policy x\n ports x\n rm x\n run x\n version x\n"); if(command==="daemon status --json") return ok('{"status":"stopped","socket":"pipe"}'); return ok('{"version":"1.0","checks":[{"name":"Authentication","status":"pass","message":"available","detail":"","hint":""}],"summary":{"pass":1,"warn":0,"fail":0,"skip":0}}');})};
     const result=await diagnoseSbx({executable:"C:/Program Files/sbx/sbx.exe",cwd:"C:/state",runner,pin:{version:"0.39.0",buildCommit:"def8cb0523a77e757bdd6ef52b459fe374f3783e"}});
     expect(result.failureCodes).toEqual(["DAEMON_STOPPED"]);
-    expect(calls).toHaveLength(4);
+    expect(calls).toHaveLength(5);
     expect(calls).toEqual(expect.arrayContaining([expect.objectContaining({shell:false,executable:"C:/Program Files/sbx/sbx.exe"})]));
-    expect(calls.flatMap(value=>(value as {argv:string[]}).argv)).not.toEqual(expect.arrayContaining(["start","reset"]));
+    expect(calls.flatMap(value=>(value as {argv:string[]}).argv)).not.toEqual(expect.arrayContaining(["start","reset","init"]));
   });
 
   it("resolves only an absolute pinned standalone binary outside the project",async()=>{
@@ -69,8 +71,12 @@ describe("sandbox planning",()=>{
   it("emits argv-only create attach exec ports policy list and delete plans",()=>{
     const plan=buildSandboxPlanV1({...base,workspaceMode:"clone",worktreeRole:"main"});
     const commands=buildSbxCommandPlans(plan,{agent:"shell",execArgv:["node","worker.mjs"],ports:["127.0.0.1:3042:3042/tcp4"]});
-    expect(commands).toMatchObject({create:expect.arrayContaining(["create","--name",plan.appName,"--clone","--profile","minimal","shell",base.workspaceRoot,"--env"]),attach:["run","--name",plan.appName],exec:["exec",plan.appName,"node","worker.mjs"],ports:["ports",plan.appName,"--publish","127.0.0.1:3042:3042/tcp4"],list:["ls","--json"],delete:["rm","--force",plan.appName]});
-    expect(Object.values(commands).flat()).not.toEqual(expect.arrayContaining(["cmd.exe","powershell","-c","/c"]));
+    expect(commands).toMatchObject({create:expect.arrayContaining(["create","--name",plan.appName,"--clone","shell",base.workspaceRoot,"--env"]),attach:["run","--name",plan.appName],exec:["exec",plan.appName,"node","worker.mjs"],ports:["ports",plan.appName,"--publish","127.0.0.1:3042:3042/tcp4"],policyApply:[["policy","allow","network","--sandbox",plan.appName,"api.openai.com:443"]],policyChecks:[
+      {target:"api.openai.com:443",decision:"allow",argv:["policy","check","network","--sandbox",plan.appName,"api.openai.com:443","--json"]},
+      {target:"blocked.invalid:443",decision:"deny",argv:["policy","check","network","--sandbox",plan.appName,"blocked.invalid:443","--json"]},
+    ],list:["ls","--json"],delete:["rm","--force",plan.appName]});
+    expect(commands.create).not.toContain("--profile");
+    expect(Object.values(commands).flat(3)).not.toEqual(expect.arrayContaining(["cmd.exe","powershell","-c","/c","add","set"]));
   });
 
   it("denies sensitive/opposite/common/docker mounts and emits only state-local secret-free environment",()=>{
@@ -95,9 +101,26 @@ describe("sandbox planning",()=>{
 });
 
 describe("sandbox policy evidence",()=>{
+  it("provides an open allow-all policy without sandbox-scoped rules or deny evidence",()=>{
+    expect(namedSbxPolicies.open).toEqual({default:"allow",allow:[]});
+    const plan=buildSbxPolicyPlan("mpx-proof-open","open");
+    expect(plan.apply).toEqual([]);
+    expect(plan.checks).toEqual([{target:"example.com:443",decision:"allow",argv:["policy","check","network","--sandbox","mpx-proof-open","example.com:443","--json"]}]);
+    expect(buildF2ProofPolicyMatrix("open")).toEqual([{profile:"open",default:"allow",targets:[{target:"example.com:443",decision:"allow"}]}]);
+  });
+
   it("provides named deny-all, minimal, implementation, delivery and research deny-by-default policies",()=>{
-    expect(Object.keys(namedSbxPolicies)).toEqual(["deny-all","minimal","implementation","delivery","research"]);
-    expect(Object.values(namedSbxPolicies).every(policy=>policy.default==="deny")).toBe(true);
+    expect(Object.keys(namedSbxPolicies).filter(name=>name!=="open")).toEqual(["deny-all","minimal","implementation","delivery","research"]);
+    expect(Object.entries(namedSbxPolicies).filter(([name])=>name!=="open").every(([,policy])=>policy.default==="deny")).toBe(true);
+  });
+
+  it("builds proof evidence for only the selected policy profile",()=>{
+    const matrix=buildF2ProofPolicyMatrix("implementation");
+    expect(matrix).toHaveLength(1);
+    expect(matrix[0]?.profile).toBe("implementation");
+    expect(matrix[0]?.targets).toEqual([...matrix[0]!.targets].sort((a,b)=>a.target.localeCompare(b.target)));
+    expect(matrix[0]?.targets).toContainEqual({target:"blocked.invalid:443",decision:"deny"});
+    expect(matrix[0]?.targets.filter(target=>target.decision==="allow").map(target=>target.target)).toEqual([...namedSbxPolicies.implementation.allow]);
   });
 
   it("verifies no shared skills by mount inspection because v0.39 has no flag",()=>{
@@ -105,10 +128,26 @@ describe("sandbox policy evidence",()=>{
     expect(()=>verifyNoSharedSkillsMounts([{source:"C:/Users/me/.pi/skills",target:"/host-skills"}])).toThrow(/SHARED_SKILLS/u);
   });
 
-  it("accepts exact check/log evidence and fails closed on mismatched sandbox, target or decision",()=>{
-    const evidence=parsePolicyEvidence({sandbox:"mpx-pi-work-abc",expected:[{target:"api.openai.com:443",decision:"allow"},{target:"evil.example:443",decision:"deny"}],checks:[{sandbox:"mpx-pi-work-abc",target:"api.openai.com:443",decision:"allow"},{sandbox:"mpx-pi-work-abc",target:"evil.example:443",decision:"deny"}],logs:[{sandbox:"mpx-pi-work-abc",host:"api.openai.com",port:443,decision:"allow",count:1},{sandbox:"mpx-pi-work-abc",host:"evil.example",port:443,decision:"deny",count:1}]});
-    expect(evidence.verdict).toBe("pass"); expect(evidence.evidenceSha256).toMatch(/^[a-f0-9]{64}$/u);
-    expect(()=>parsePolicyEvidence({sandbox:"a",expected:[{target:"x:443",decision:"deny"}],checks:[{sandbox:"b",target:"x:443",decision:"deny"}],logs:[]})).toThrow(/EVIDENCE/u);
+  it("accepts documented allowed and denied policy-check JSON without policy logs",()=>{
+    const evidence=parsePolicyEvidence({expected:[{target:"api.openai.com:443",decision:"allow"},{target:"blocked.invalid:443",decision:"deny"}],checks:[
+      {target:"api.openai.com:443",exitCode:0,stdout:JSON.stringify({action:"net:connect:tcp",allowed:true,resource_value:"api.openai.com:443",type:"network"})},
+      {target:"blocked.invalid:443",exitCode:1,stdout:JSON.stringify({action:"net:connect:tcp",allowed:false,resource_value:"blocked.invalid:443",type:"network",deny_kind:"implicit",reason:"default deny",rule:"default"})},
+    ]});
+    expect(evidence).toMatchObject({verdict:"pass",decisions:[{target:"api.openai.com:443",decision:"allow",count:1},{target:"blocked.invalid:443",decision:"deny",count:1}]});
+    expect(()=>parsePolicyEvidence({...({expected:[{target:"x:443",decision:"deny"}],checks:[{target:"x:443",exitCode:1,stdout:JSON.stringify({action:"net:connect:tcp",allowed:false,resource_value:"x:443",type:"network"})}],logs:[{host:"x",count:1}]} as never)})).toThrow(/POLICY_EVIDENCE_INVALID/u);
+  });
+
+  it.each([
+    ["unknown field",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network",sandbox:"private"},0],
+    ["private field",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network",token:"secret"},0],
+    ["wrong resource",{action:"net:connect:tcp",allowed:true,resource_value:"y:443",type:"network"},0],
+    ["wrong action",{action:"connect",allowed:true,resource_value:"x:443",type:"network"},0],
+    ["wrong type",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"host"},0],
+    ["undocumented decision",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network",decision:"allow"},0],
+    ["allowed nonzero",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network"},1],
+    ["denied zero",{action:"net:connect:tcp",allowed:false,resource_value:"x:443",type:"network"},0],
+  ])("rejects %s policy-check evidence",(_label,json,exitCode)=>{
+    expect(()=>parsePolicyEvidence({expected:[{target:"x:443",decision:json.allowed?"allow":"deny"}],checks:[{target:"x:443",exitCode,stdout:JSON.stringify(json)}]})).toThrow(/POLICY_EVIDENCE_INVALID/u);
   });
 });
 
@@ -123,7 +162,9 @@ describe("remote tool protocol",()=>{
 
 describe("F2 proof runner",()=>{
   it("runs fake sbx end-to-end and returns only sanitized digest-bound F2ProofReportV1",async()=>{
-    const report=await runFakeSbxProof({planKey:h("a"),sbxPinSha256:h("b"),runtimeToolInventorySha256:h("c"),executorEvidenceSha256:h("d"),invoke:async argv=>({exitCode:0,stdout:JSON.stringify({argv,ok:true,secret:"must-not-leak"}),stderr:""})});
+    const invoked:string[][]=[];
+    const report=await runFakeSbxProof({planKey:h("a"),sbxPinSha256:h("b"),runtimeToolInventorySha256:h("c"),executorEvidenceSha256:h("d"),invoke:async argv=>{invoked.push([...argv]);return{exitCode:0,stdout:JSON.stringify({argv,ok:true,secret:"must-not-leak"}),stderr:""}}});
+    expect(invoked.some(argv=>argv[0]==="policy"&&argv[1]==="log")).toBe(false);
     expect(report).toMatchObject({schemaVersion:1,planKey:h("a"),runtimeToolInventorySha256:h("c"),verdict:"pass"});
     expect(JSON.stringify(report)).not.toContain("must-not-leak");
   });

@@ -23,6 +23,11 @@ export async function runRequiredConvergence(environment = process.env, dependen
   const projects = environment.MPX_PROJECTS;
   if (!projects) {
     const reason = "MPX_PROJECTS is not configured";
+    if (environment.CI) {
+      const code = "MPX_PROJECTS_REQUIRED";
+      write(`ERROR convergence:verify [${code}] — ${reason}.`);
+      return { status: "failed", code, reason };
+    }
     write(`SKIP convergence:verify — ${reason}; legacy source drift cannot be checked.`);
     return { status: "skipped", reason };
   }
@@ -31,6 +36,11 @@ export async function runRequiredConvergence(environment = process.env, dependen
   for (const root of required) if (!await available(root)) missing.push(root);
   if (missing.length) {
     const reason = `legacy source roots are unavailable: ${missing.join(", ")}`;
+    if (environment.CI) {
+      const code = "LEGACY_SOURCE_ROOTS_REQUIRED";
+      write(`ERROR convergence:verify [${code}] — ${reason}.`);
+      return { status: "failed", code, reason, missing };
+    }
     write(`SKIP convergence:verify — ${reason}.`);
     return { status: "skipped", reason, missing };
   }
@@ -38,4 +48,7 @@ export async function runRequiredConvergence(environment = process.env, dependen
   return { status: "verified", sourceRoots: required };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await runRequiredConvergence();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const result = await runRequiredConvergence();
+  if (result.status === "failed") process.exitCode = 1;
+}

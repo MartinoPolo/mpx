@@ -38,9 +38,7 @@ function fakeBackend(providerId: string, capabilities: readonly IssueCapability[
   };
 }
 
-describe("identical provider issue contract", () => {
-  defineIssueAdapterConformance("GitHub fake", fakeBackend("github", ISSUE_CAPABILITIES));
-  defineIssueAdapterConformance("GitLab fake", fakeBackend("gitlab", ISSUE_CAPABILITIES));
-  defineIssueAdapterConformance("KanbanFlow fake", fakeBackend("kanbanflow", ISSUE_CAPABILITIES));
-  defineIssueAdapterConformance("limited fake", fakeBackend("limited", withoutMove));
+describe("issue conformance driver", () => {
+  defineIssueAdapterConformance("move-capable fake", fakeBackend("fake", ISSUE_CAPABILITIES));
+  defineIssueAdapterConformance("move-limited fake", fakeBackend("fake", withoutMove));
 });

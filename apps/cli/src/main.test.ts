@@ -1,4 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { mkdtemp, mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
@@ -6,11 +7,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MpxError, sha256Canonical, type JsonValue } from "@mpx/core";
+import { type BoundedProcessRunner } from "@mpx/executors";
 import { DurableDevServiceManager, type ManagedProcess, type RuntimeAdapter } from "@mpx/dev-services";
 import { PortService, RegistryStore, type PortPlatformAdapter, type WorktreeIdentity } from "@mpx/ports";
 import { SessionService, SessionStore, type SessionRecordV1 } from "@mpx/sessions";
+import { canonicalJson, installerDigest, NodeTransactionStore, type InstallerOperationAdapter } from "@mpx/installer";
+import { createDefaultSbxDiagnostics } from "./context.js";
+import { parseSbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
 import { run } from "./main.js";
 import { captureIo } from "./io.js";
 
@@ -23,6 +28,11 @@ async function fixture(config:string):Promise<string>{
 }
 async function directory(prefix="mpx-cli-known-"):Promise<string>{
   return mkdtemp(path.join(tmpdir(),prefix));
+}
+async function proofReleaseRoot():Promise<string>{
+  const root=await directory("mpx-proof-release-"),evidenceRoot=path.join(root,"evidence"),source=fileURLToPath(new URL("../../../evidence/",import.meta.url));await mkdir(evidenceRoot,{recursive:true});
+  const executor=await readFile(path.join(source,"executor-evidence.ts"));await writeFile(path.join(evidenceRoot,"executor-evidence.ts"),executor);await writeFile(path.join(evidenceRoot,"sbx-pin.json"),await readFile(path.join(source,"sbx-pin.json")));
+  const inventory=JSON.parse(await readFile(path.join(source,"runtime-tool-inventory.json"),"utf8"));inventory.executorEvidenceBindingSha256=createHash("sha256").update(executor).digest("hex");await writeFile(path.join(evidenceRoot,"runtime-tool-inventory.json"),JSON.stringify(inventory));return root;
 }
 const valid=JSON.stringify({schemaVersion:1,project:{id:"sample/app"},repository:{provider:"generic",remote:"origin"}});
 const portPlatform:PortPlatformAdapter={holdAvailablePorts:async()=>({release:async()=>undefined}),inspectListeners:async()=>[],killProcess:async()=>undefined,inspectProcess:async()=>undefined};
@@ -56,13 +66,57 @@ async function configuredLaunchEnv(cwd:string, options:{classifiedRoot?:string;i
     skillPolicies:{clean:{skillExposure:{default:"explicit-only"}},developer:{skillPacks:["core"],skillExposure:{default:"name-only"}}},
     presets:{"work-project":{identity:"work",mode:"project",skillPolicy:"clean",contentScope:"work",executor:"docker",workspace:"clone",networkPolicy:"implementation"}},
     launchDefaults:{projects:{"sample/app":{work:"work-project"}},scopes:{work:{work:"work-project"}}},
-    networkPolicies:{implementation:{preset:"balanced"},minimal:{preset:"deny-all"}},
+    networkPolicies:{open:{preset:"allow-all"},implementation:{preset:"balanced"},minimal:{preset:"deny-all"}},
     executors:{host:{},...(options.docker===false?{}:{docker:{}})}
   }));
   return {APPDATA:appdata};
 }
 
 describe("cli",()=>{
+  it("runs scheduled reconcile through healthy default installer state without injected authority", async () => {
+    const cwd = await fixture(valid), root = await directory("mpx-cli-scheduled-authority-"), releaseKey = installerDigest([]);
+    const env = {
+      ...await configuredLaunchEnv(cwd),
+      MPX_APPS: path.join(root, "apps"),
+      LOCALAPPDATA: path.join(root, "local"),
+      USERPROFILE: path.join(root, "profile"),
+      USERNAME: "tester",
+    };
+    const manifest = { schemaVersion: 1 as const, kind: "release-manifest" as const, releaseKey, convergenceHash: releaseKey, files: [] };
+    const scheduledOperation = { id: "90-scheduled-capture", adapter: "test-production-boundary", action: "ensure" as const, target: "\\MPX\\Session Capture", desiredDigest: installerDigest("scheduled-task") };
+    const releaseRoot = path.join(env.MPX_APPS, "mpx", "releases", releaseKey);
+    await mkdir(releaseRoot, { recursive: true });
+    await writeFile(path.join(releaseRoot, "release-manifest.json"), canonicalJson(manifest));
+    await new NodeTransactionStore(path.join(env.LOCALAPPDATA, "mpx", "installer")).writeReceipt({
+      schemaVersion: 2,
+      kind: "ownership-receipt",
+      releaseKey,
+      convergenceHash: releaseKey,
+      files: [],
+      operations: [scheduledOperation],
+      operationLocators: [{ operationId: scheduledOperation.id, adapter: scheduledOperation.adapter, spec: null, bindingDigest: installerDigest({ operation: scheduledOperation, spec: null }) }],
+      installIntent: { schemaVersion: 1, kind: "install-intent", releaseKey, convergenceHash: releaseKey, components: ["cli"] },
+      installedAt: "2025-01-01T00:00:00.000Z",
+    });
+    const installerOperationAdapter: InstallerOperationAdapter = {
+      name: "test-production-boundary",
+      operations: async () => ({ automatic: [], scheduled: [scheduledOperation] }),
+      observe: async operation => operation.desiredDigest,
+      inspectScheduledTaskStatus: async () => ({ exists: true, state: "Ready", lastRunAt: "2025-01-02T00:00:00.000Z", lastResult: 0 }),
+      capture: async () => null,
+      apply: async () => undefined,
+      restore: async () => undefined,
+    };
+    const io = captureIo();
+    expect(await run(["--json", "--cwd", cwd, "session", "reconcile", "--capture", "scheduled"], io, {
+      env,
+      sessionStore: new SessionStore(await directory("mpx-cli-scheduled-sessions-")),
+      sessionDiscoveries: async () => [],
+      installerOperationAdapter,
+    })).toBe(0);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ ok: true, data: { kind: "session-reconcile" } });
+  });
+
   it("wires mpx dev lifecycle actions through the provider-neutral service",async()=>{
     const cwd=await fixture(managed("sample/app",4100)), io=captureIo();
     const calls:unknown[]=[];
@@ -476,6 +530,70 @@ describe("cli",()=>{
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"USAGE_ERROR"}});
   });
 
+  it("reports an unexpected internal source error only through the debug boundary while keeping JSON output private",async()=>{
+    const cwd=await fixture(valid),env:NodeJS.ProcessEnv={...await configuredLaunchEnv(cwd),LOCALAPPDATA:await directory("mpx-plan-debug-state-"),MPX_RELEASE_ROOT:await proofReleaseRoot()},io=captureIo(),errors:unknown[]=[];
+    const privateCatalogRoot=path.join(await directory("mpx-private-catalog-"),"missing");
+    expect(await run(["--json","--cwd",cwd,"launch","sbx-plan-export","--runtime","pi","--identity","work","--mode","project","--skill-policy","clean","--network-policy","minimal"],io,{env,catalogRoot:privateCatalogRoot,onInternalError:error=>errors.push(error)})).toBe(1);
+    expect(errors).toHaveLength(1);expect(errors[0]).toBeInstanceOf(Error);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"COMMAND_FAILED",message:"Command failed."}});
+    expect(io.out[0]).not.toContain(privateCatalogRoot);expect(io.out[0]).not.toContain(cwd);
+  });
+
+  it("exports from the bundled CLI in a realistic main Git checkout with release-owned catalog and evidence",async()=>{
+    const checkout=fileURLToPath(new URL("../../..",import.meta.url)),bundle=path.join(checkout,"bin","mpx.mjs"),env:NodeJS.ProcessEnv={...process.env,...await configuredLaunchEnv(checkout),LOCALAPPDATA:await directory("mpx-bundled-plan-state-")};
+    delete env.MPX_RELEASE_ROOT;delete env.MPX_DEV_MODE;
+    const before={checkout:await readdir(checkout),state:await readdir(env.LOCALAPPDATA!),appdata:await readdir(env.APPDATA!)};
+    const result=await execFile(process.execPath,[bundle,"--json","--cwd",checkout,"launch","sbx-plan-export","--runtime","pi","--identity","work","--mode","project","--skill-policy","clean","--workspace","clone","--network-policy","implementation"],{cwd:checkout,env});
+    const envelope=JSON.parse(result.stdout),text=result.stdout;
+    expect(parseSbxLaunchPlanExportV1(envelope.data)).toEqual(envelope.data);expect(envelope).toMatchObject({ok:true,data:{runtime:"pi",identity:{name:"work"},sandbox:{profile:"implementation"}}});
+    expect(text).not.toContain(checkout);expect(text).not.toContain(env.APPDATA!);expect(text).not.toContain(env.LOCALAPPDATA!);
+    expect({checkout:await readdir(checkout),state:await readdir(env.LOCALAPPDATA!),appdata:await readdir(env.APPDATA!)}).toEqual(before);
+  });
+
+  it("exports the selected open policy as allow-default with no remote profile or deny evidence",async()=>{
+    const cwd=await fixture(valid),env:NodeJS.ProcessEnv={...await configuredLaunchEnv(cwd),LOCALAPPDATA:await directory("mpx-open-plan-state-"),MPX_RELEASE_ROOT:await proofReleaseRoot()},io=captureIo(),catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    expect(await run(["--json","--cwd",cwd,"launch","sbx-plan-export","--runtime","pi","--identity","work","--mode","project","--skill-policy","clean","--network-policy","open"],io,{env,catalogRoot})).toBe(0);
+    const plan=JSON.parse(io.out[0]!).data;
+    expect(plan.sandbox).toMatchObject({profile:"open"});expect(plan.sandbox.createArgv).not.toContain("--profile");
+    expect(plan.policyMatrix).toEqual([{profile:"open",default:"allow",targets:[{target:"example.com:443",decision:"allow"}]}]);
+  });
+
+  it("exports a strict deterministic launch-bound sbx plan without process, daemon, auth, projection, or local-state mutation",async()=>{
+    const cwd=await fixture(valid), env:NodeJS.ProcessEnv={...await configuredLaunchEnv(cwd),LOCALAPPDATA:await directory("mpx-plan-state-"),MPX_RELEASE_ROOT:await proofReleaseRoot()}, catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    const before={cwd:await readdir(cwd),state:await readdir(env.LOCALAPPDATA!),appdata:await readdir(env["APPDATA"]!)};
+    const forbidden=vi.fn(async()=>{throw new Error("read-only export crossed a mutation/process boundary")});
+    const context={env,catalogRoot,sbxDiagnostics:forbidden,accountAuthVerifier:{verify:forbidden},rootAttestationService:{verify:forbidden},launchRoutes:{materialize:forbidden},launchExecutorAdapters:[{execute:forbidden}]} as never;
+    const argv=["--json","--cwd",cwd,"launch","sbx-plan-export","--runtime","pi","--identity","work","--mode","project","--skill-policy","clean","--network-policy","minimal"];
+    const first=captureIo(),second=captureIo();
+    expect(await run(argv,first,context),JSON.stringify(first.out)).toBe(0);expect(await run(argv,second,context),JSON.stringify(second.out)).toBe(0);
+    const one=JSON.parse(first.out[0]!).data,two=JSON.parse(second.out[0]!).data;
+    expect(parseSbxLaunchPlanExportV1(one)).toEqual(one);expect(two).toEqual(one);
+    expect(Object.keys(one)).toEqual(["schemaVersion","exportKey","launchKey","descriptorSha256","runtime","identity","artifact","evidence","sandbox","policyMatrix"]);
+    expect(one).toMatchObject({schemaVersion:1,runtime:"pi",identity:{name:"work",domain:"work"},sandbox:{profile:"minimal",proofSandboxName:expect.stringMatching(/^mpx-proof-[a-f0-9]{12}$/u)},policyMatrix:[{profile:"minimal"}]});expect(one.policyMatrix).toHaveLength(1);
+    expect(forbidden).not.toHaveBeenCalled();expect({cwd:await readdir(cwd),state:await readdir(env.LOCALAPPDATA!),appdata:await readdir(env["APPDATA"]!)}).toEqual(before);
+  });
+
+  it.each([
+    ["missing runtime",["--identity","work"],"RUNTIME"],
+    ["missing identity",["--runtime","pi"],"IDENTITY_REQUIRED"],
+    ["invalid runtime",["--runtime","ruby","--identity","work"],"RUNTIME_INVALID"],
+    ["host executor",["--runtime","pi","--identity","work","--executor","host"],"EXECUTOR_UNAVAILABLE"],
+  ])("rejects %s for sbx plan export",async(_label,options,code)=>{
+    const cwd=await fixture(valid),env={...await configuredLaunchEnv(cwd),LOCALAPPDATA:await directory("mpx-plan-reject-"),MPX_DEV_MODE:"1"},io=captureIo();
+    expect(await run(["--json","--cwd",cwd,"launch","sbx-plan-export",...options],io,{env,catalogRoot:fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url))})).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:expect.stringContaining(code)}});
+  });
+
+  it("changes the sbx export key when bound plan, artifact, or policy inputs change",async()=>{
+    const cwd=await fixture(valid),env:NodeJS.ProcessEnv={...await configuredLaunchEnv(cwd),LOCALAPPDATA:await directory("mpx-plan-keys-"),MPX_RELEASE_ROOT:await proofReleaseRoot()},catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    const exportPlan=async(extra:string[])=>{const io=captureIo();expect(await run(["--json","--cwd",cwd,"launch","sbx-plan-export","--runtime","pi","--identity","work","--mode","project","--skill-policy","clean",...extra],io,{env,catalogRoot}),JSON.stringify(io.out)).toBe(0);return JSON.parse(io.out[0]!).data;};
+    const baseline=await exportPlan(["--network-policy","minimal"]),planChanged=await exportPlan(["--network-policy","implementation"]);
+    const skillDirectory=path.join(cwd,".agents","skills","export-key");await mkdir(skillDirectory,{recursive:true});await writeFile(path.join(skillDirectory,"SKILL.md"),"---\nname: export-key\ndescription: Export key fixture\nmetadata:\n  mpx:\n    projectExposure: full\n---\nBOUND ARTIFACT CHANGE\n");
+    const artifactChanged=await exportPlan(["--network-policy","minimal"]);
+    expect(new Set([baseline.exportKey,planChanged.exportKey,artifactChanged.exportKey]).size).toBe(3);
+    expect(planChanged.sandbox.planKey).not.toBe(baseline.sandbox.planKey);expect(artifactChanged.artifact.artifactKey).not.toBe(baseline.artifact.artifactKey);
+  });
+
   it("resolves and inspects a launch without executing a harness",async()=>{
     const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
@@ -576,12 +694,12 @@ describe("cli",()=>{
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"STALE_ARTIFACT",message:"runtime operation requires the current exact v4 artifact"}});
   });
 
-  it("resolves runnable launch syntax before returning an actionable non-spawning Docker gate",async()=>{
-    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();
+  it("surfaces typed Docker admission setup errors instead of collapsing them into an unverified gate",async()=>{
+    const cwd=await fixture(valid), env=await configuredLaunchEnv(cwd), io=captureIo();env.LOCALAPPDATA=env.APPDATA;
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
     const rootAttestationService={verify:async(identity:{domain:string;name:string})=>({schemaVersion:1 as const,ref:"test-work",identity,runtime:"pi" as const,rootDigest:"a".repeat(64),mode:"root-attested" as const,createdAt:new Date(0).toISOString(),updatedAt:new Date(0).toISOString()})};
     expect(await run(["--json","--cwd",cwd,"launch","pi","--identity","work"],io,{env,catalogRoot,rootAttestationService:rootAttestationService as never,accountAuthVerifier:{verify:async()=>undefined},launchRoutes:{materialize:async()=>({})}})).toBe(1);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"EXECUTOR_GATE_UNVERIFIED",details:{executor:"docker"}}});
+    expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"PLAN_EXPORT_REQUIRED",details:{executor:"docker"}}});
   });
 
   it("launch surfaces injected sbx diagnostics before the unverified Docker gate",async()=>{
@@ -606,6 +724,19 @@ describe("cli",()=>{
     const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
     expect(await run(["--json","--cwd",cwd,"doctor"],io,{env,catalogRoot,sbxDiagnostics:async()=>({available:false,failureCodes:["SBX_NOT_FOUND"],readOnly:true})})).toBe(0);
     expect(JSON.parse(io.out[0]!).data.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({code:"SBX_NOT_FOUND",severity:"warning"})]));
+  });
+
+  it("doctor surfaces the default sbx diagnostic composition through a fake argv process transport",async()=>{
+    const cwd=await fixture(valid),env=await launchEnv(cwd),io=captureIo(),calls:string[][]=[];
+    const catalogRoot=fileURLToPath(new URL("../../../packages/skills/test/fixtures/catalog",import.meta.url));
+    const runner:BoundedProcessRunner={run:async request=>{calls.push([...request.argv]);const command=request.argv.join(" ");if(command==="version")return {exitCode:0,stdout:"sbx version: v0.40.0 def8cb0523a77e757bdd6ef52b459fe374f3783e\n",stderr:"",truncated:false};if(command==="--help")return {exitCode:0,stdout:"Available Commands:\n create x\n daemon x\n diagnose x\n exec x\n ls x\n policy x\n ports x\n rm x\n run x\n version x\n",stderr:"",truncated:false};if(command==="daemon status --json")return {exitCode:0,stdout:'{"status":"stopped","socket":"pipe"}',stderr:"",truncated:false};return {exitCode:0,stdout:'{"version":"1.0","checks":[{"name":"Authentication","status":"pass","message":"ok","detail":"","hint":""}],"summary":{"pass":1,"warn":0,"fail":0,"skip":0}}',stderr:"",truncated:false};}};
+    const sbxDiagnostics=()=>createDefaultSbxDiagnostics(env,cwd,{resolveExecutable:async()=>"C:/trusted/sbx.exe",runner});
+
+    expect(await run(["--json","--cwd",cwd,"doctor"],io,{env,catalogRoot,sbxDiagnostics})).toBe(0);
+
+    expect(JSON.parse(io.out[0]!).data.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({code:"VERSION_UNSUPPORTED",severity:"warning"}),expect.objectContaining({code:"DAEMON_STOPPED",severity:"warning"})]));
+    expect(calls.map(call=>call.join(" "))).toEqual(["version","--help","daemon status --json","diagnose --output json","policy ls --json"]);
+    expect(calls.flat()).not.toEqual(expect.arrayContaining(["start","reset","create","run","rm"]));
   });
 
   it("doctor warns deterministically for fixed-shared services without requiring a reservation",async()=>{
@@ -767,4 +898,18 @@ if ((Get-Location).Path -ne $before) { throw "location changed" }
     expect(await run(["--json","ports","kill","42","--pid","42"],io,{env:{},portService})).toBe(2);
     expect(JSON.parse(io.out[0]!)).toMatchObject({ok:false,error:{code:"USAGE_ERROR"}});
   });
+});
+
+it("exposes external verification only through mpx install verify", async () => {
+  const root = await directory("mpx-cli-external-verify-"), file = path.join(root, "intent-result.json"), releaseKey = "a".repeat(64);
+  const built = { schemaVersion: 1, kind: "install-intent-build-result", intent: { schemaVersion: 1, kind: "install-intent", releaseKey, convergenceHash: releaseKey, components: ["cli"] }, externalPlans: [] };
+  await writeFile(file, JSON.stringify(built));
+  const external = { schemaVersion: 1, kind: "install-external-verification", integrations: [] }, builderVerify = vi.fn(async () => external);
+  const verification = { schemaVersion: 1, kind: "install-verification", releaseKey: "", healthy: false, issues: ["receipt-missing"], checkedAt: "2025-01-01T00:00:00.000Z" };
+  const verify = vi.fn(async (_strict: boolean, source?: () => Promise<unknown>) => { if (source) await source(); return verification; });
+  const context = { env: {}, installOrchestrator: { verify }, installIntentBuilder: { verify: builderVerify } } as never;
+  expect(await run(["--json", "install", "verify"], captureIo(), context)).toBe(0);
+  expect(builderVerify).not.toHaveBeenCalled();
+  expect(await run(["--json", "install", "verify", "--external-plan", file], captureIo(), context)).toBe(0);
+  expect(builderVerify).toHaveBeenCalledExactlyOnceWith(built, undefined);
 });
