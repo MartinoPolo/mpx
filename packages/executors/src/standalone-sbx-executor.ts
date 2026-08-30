@@ -86,7 +86,7 @@ export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
         if(commands.ports.length>2){const ports=await lifecycleRun(commands.ports);if(ports.exitCode!==0)throw new ExecutionError("SBX_PORTS_FAILED","Standalone sbx port publication failed.");}
         for(const argv of commands.policyApply){const applied=await lifecycleRun(argv);if(applied.exitCode!==0)throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy materialization failed.");}
         const checks=[];for(const check of commands.policyChecks){const result=await lifecycleRun(check.argv);checks.push({target:check.target,exitCode:result.exitCode,stdout:result.stdout});}
-        try{parsePolicyEvidence({expected:commands.policyChecks.map(({target,decision})=>({target,decision})),checks});}catch{throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection did not match the selected targets.");}
+        try{parsePolicyEvidence({sandboxName:this.input.plan.appName,expected:commands.policyChecks.map(({target,decision})=>({target,decision})),checks});}catch{throw new ExecutionError("SBX_POLICY_FAILED","Standalone sbx policy inspection did not match the selected targets.");}
       }
       if(this.input.worker&&this.#resumeAction!=="attach"){
         const workerCommands=buildSbxCommandPlans(this.input.plan,{agent:this.input.agent,execArgv:this.input.worker.argv,ports:[]});

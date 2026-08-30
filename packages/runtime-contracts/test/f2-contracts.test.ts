@@ -7,6 +7,7 @@ import {
   createSandboxPlanV1,
   createSbxLaunchPlanExportV1,
   parseF2ProofReportV2,
+  parseSbxLaunchPlanExportDocumentV1,
   parseSbxLaunchPlanExportV1,
   validateF2ProofReportV2,
   parseRemoteToolRequestV1,
@@ -72,6 +73,21 @@ describe("Phase F2 proof contracts", () => {
     expect(()=>parseSbxLaunchPlanExportV1({...exportPlan,hostRoot:"C:/private"})).toThrow(/UNKNOWN_FIELD/u);
     expect(()=>createSbxLaunchPlanExportV1({...exportPlan,policyMatrix:[{profile:"minimal",default:"deny",targets:matrix[0]!.targets}]} as never)).toThrow(/POLICY_EVIDENCE_INVALID/u);
     expect(()=>createSbxLaunchPlanExportV1({...exportPlan,policyMatrix:[...matrix,{profile:"minimal",default:"deny",targets:matrix[0]!.targets}]} as never)).toThrow(/POLICY_EVIDENCE_INVALID/u);
+  });
+
+  it("unwraps only the exact warning-free CLI success envelope for a plan export", () => {
+    const matrix = [{profile:"implementation",default:"deny" as const,targets:[{target:"blocked.invalid:443",decision:"deny" as const}]}];
+    const plan=createSbxLaunchPlanExportV1({launchKey:h("1"),descriptorSha256:h("2"),runtime:"pi",identity:{name:"work",domain:"work"},artifact:{manifestKey:h("3"),artifactKey:h("4"),fileMapHash:h("5")},evidence:{sbxPinSha256:h("6"),runtimeToolInventorySha256:h("7"),executorEvidenceSha256:h("8")},sandbox:{planKey:h("9"),profile:"implementation",proofSandboxName:"mpx-proof-999999999999",createArgv:["create","--name","mpx-pi-work-123","shell","."]},policyMatrix:matrix});
+    const envelope={apiVersion:1,ok:true,data:plan,warnings:[]};
+    expect(parseSbxLaunchPlanExportDocumentV1(plan)).toEqual(plan);
+    expect(parseSbxLaunchPlanExportDocumentV1(envelope)).toEqual(plan);
+    for(const invalid of [
+      {...envelope,ok:false,error:{code:"FAILED"}},
+      {...envelope,warnings:["review"]},
+      {...envelope,extra:true},
+      {...envelope,data:{wrong:true}},
+      {...envelope,data:envelope},
+    ])expect(()=>parseSbxLaunchPlanExportDocumentV1(invalid)).toThrow();
   });
 
   it("requires exact V2 export binding and complete bounded policy decisions", () => {

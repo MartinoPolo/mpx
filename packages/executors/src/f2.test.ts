@@ -128,26 +128,33 @@ describe("sandbox policy evidence",()=>{
     expect(()=>verifyNoSharedSkillsMounts([{source:"C:/Users/me/.pi/skills",target:"/host-skills"}])).toThrow(/SHARED_SKILLS/u);
   });
 
-  it("accepts documented allowed and denied policy-check JSON without policy logs",()=>{
-    const evidence=parsePolicyEvidence({expected:[{target:"api.openai.com:443",decision:"allow"},{target:"blocked.invalid:443",decision:"deny"}],checks:[
-      {target:"api.openai.com:443",exitCode:0,stdout:JSON.stringify({action:"net:connect:tcp",allowed:true,resource_value:"api.openai.com:443",type:"network"})},
+  it("accepts the captured allowed v0.39 shape and preserves the captured denied shape",()=>{
+    const evidence=parsePolicyEvidence({sandboxName:"mpx-manual-policy-probe",expected:[{target:"example.com:443",decision:"allow"},{target:"blocked.invalid:443",decision:"deny"}],checks:[
+      {target:"example.com:443",exitCode:0,stdout:JSON.stringify({action:"net:connect:tcp",allowed:true,context:"sandbox:mpx-manual-policy-probe",governance:{active:false},resource_type:"net:domain",resource_value:"example.com:443",target:"example.com:443",type:"network"})},
       {target:"blocked.invalid:443",exitCode:1,stdout:JSON.stringify({action:"net:connect:tcp",allowed:false,resource_value:"blocked.invalid:443",type:"network",deny_kind:"implicit",reason:"default deny",rule:"default"})},
     ]});
-    expect(evidence).toMatchObject({verdict:"pass",decisions:[{target:"api.openai.com:443",decision:"allow",count:1},{target:"blocked.invalid:443",decision:"deny",count:1}]});
-    expect(()=>parsePolicyEvidence({...({expected:[{target:"x:443",decision:"deny"}],checks:[{target:"x:443",exitCode:1,stdout:JSON.stringify({action:"net:connect:tcp",allowed:false,resource_value:"x:443",type:"network"})}],logs:[{host:"x",count:1}]} as never)})).toThrow(/POLICY_EVIDENCE_INVALID/u);
+    expect(evidence).toMatchObject({verdict:"pass",decisions:[{target:"blocked.invalid:443",decision:"deny",count:1},{target:"example.com:443",decision:"allow",count:1}]});
+    expect(()=>parsePolicyEvidence({...({sandboxName:"mpx-proof-test",expected:[{target:"x:443",decision:"deny"}],checks:[{target:"x:443",exitCode:1,stdout:JSON.stringify({action:"net:connect:tcp",allowed:false,resource_value:"x:443",type:"network"})}],logs:[{host:"x",count:1}]} as never)})).toThrow(/POLICY_EVIDENCE_INVALID/u);
   });
 
+  const allowed={action:"net:connect:tcp",allowed:true,context:"sandbox:mpx-proof-test",governance:{active:false},resource_type:"net:domain",resource_value:"x:443",target:"x:443",type:"network"};
   it.each([
-    ["unknown field",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network",sandbox:"private"},0],
-    ["private field",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network",token:"secret"},0],
-    ["wrong resource",{action:"net:connect:tcp",allowed:true,resource_value:"y:443",type:"network"},0],
-    ["wrong action",{action:"connect",allowed:true,resource_value:"x:443",type:"network"},0],
-    ["wrong type",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"host"},0],
-    ["undocumented decision",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network",decision:"allow"},0],
-    ["allowed nonzero",{action:"net:connect:tcp",allowed:true,resource_value:"x:443",type:"network"},1],
-    ["denied zero",{action:"net:connect:tcp",allowed:false,resource_value:"x:443",type:"network"},0],
+    ["unknown field",{...allowed,sandbox:"private"},0],
+    ["private field",{...allowed,token:"secret"},0],
+    ["wrong context",{...allowed,context:"sandbox:other"},0],
+    ["wrong target",{...allowed,target:"y:443"},0],
+    ["wrong resource",{...allowed,resource_value:"y:443"},0],
+    ["wrong resource type",{...allowed,resource_type:"net:ip"},0],
+    ["governance without active",{...allowed,governance:{}},0],
+    ["non-boolean governance active",{...allowed,governance:{active:"false"}},0],
+    ["unknown governance field",{...allowed,governance:{active:false,mode:"private"}},0],
+    ["wrong action",{...allowed,action:"connect"},0],
+    ["wrong type",{...allowed,type:"host"},0],
+    ["undocumented decision",{...allowed,decision:"allow"},0],
+    ["allowed nonzero",allowed,1],
+    ["denied zero",{action:"net:connect:tcp",allowed:false,resource_value:"x:443",type:"network",deny_kind:"implicit",reason:"default deny",rule:"default"},0],
   ])("rejects %s policy-check evidence",(_label,json,exitCode)=>{
-    expect(()=>parsePolicyEvidence({expected:[{target:"x:443",decision:json.allowed?"allow":"deny"}],checks:[{target:"x:443",exitCode,stdout:JSON.stringify(json)}]})).toThrow(/POLICY_EVIDENCE_INVALID/u);
+    expect(()=>parsePolicyEvidence({sandboxName:"mpx-proof-test",expected:[{target:"x:443",decision:json.allowed?"allow":"deny"}],checks:[{target:"x:443",exitCode,stdout:JSON.stringify(json)}]})).toThrow(/POLICY_EVIDENCE_INVALID/u);
   });
 });
 

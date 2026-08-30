@@ -57,6 +57,10 @@ describe("run-f2-live-proof.ps1",()=>{
   ["check-unknown-field","POLICY_CHECK_MALFORMED"],
   ["check-private-field","POLICY_CHECK_MALFORMED"],
   ["check-wrong-action","POLICY_CHECK_MISMATCH"],
+  ["check-wrong-context","POLICY_CHECK_MISMATCH"],
+  ["check-wrong-target","POLICY_CHECK_MISMATCH"],
+  ["check-wrong-resource-type","POLICY_CHECK_MISMATCH"],
+  ["check-wrong-governance","POLICY_CHECK_MALFORMED"],
   ["check-wrong-type","POLICY_CHECK_MISMATCH"],
   ["check-wrong-resource","POLICY_CHECK_MISMATCH"],
  ])("rejects %s evidence and still cleans up",async(mode,code)=>{const f=await fixture(),result=await runProof(f,approved(f),mode),seen=await calls(f.calls);expect(result.ok).toBe(false);expect(result.stderr).toContain(code);expect(seen.at(-1)).toEqual(["rm","--force",f.plan.sandbox.proofSandboxName])});

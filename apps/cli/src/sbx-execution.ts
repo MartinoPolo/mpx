@@ -5,7 +5,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Canonical, type JsonValue } from "@mpx/core";
-import { parseF2ProofReportV1, parseF2ProofReportV2, parseSbxLaunchPlanExportV1, validateF2ProofReportV2, type F2ProofReportV1, type F2ProofReportV2, type SbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
+import { parseF2ProofReportV1, parseF2ProofReportV2, parseSbxLaunchPlanExportDocumentV1, validateF2ProofReportV2, type F2ProofReportV1, type F2ProofReportV2, type SbxLaunchPlanExportV1 } from "@mpx/runtime-contracts";
 import { buildF2ProofPolicyMatrix, buildSandboxPlanV1, diagnoseSbx, resolveTrustedSbxExecutable, SBX_V0_39_0_PIN, StandaloneSbxExecutorAdapter, type BoundedProcessRunner, type ClaudeVmProjection, type ProcessResult, type StandaloneSbxRunRequest, type SandboxLaunchPlanV1, type SbxPolicyName } from "@mpx/executors";
 
 export interface SbxProofSources { readonly sbxPinSha256:string; readonly runtimeToolInventorySha256:string; readonly executorEvidenceSha256:string }
@@ -72,7 +72,7 @@ export async function diagnoseConfiguredF2Proof(environment:NodeJS.ProcessEnv):P
   if((rawReport as {schemaVersion?:unknown})?.schemaVersion===1)return Object.freeze(["F2_PROOF_V2_REQUIRED"]);
   let report:F2ProofReportV2;try{report=parseF2ProofReportV2(rawReport);}catch{return Object.freeze(["F2_PROOF_INVALID"]);}
   const planFile=value(environment,"MPX_F2_PLAN_EXPORT_FILE");if(!planFile)return Object.freeze(["F2_PLAN_EXPORT_NOT_CONFIGURED"]);if(!path.isAbsolute(planFile))return Object.freeze(["F2_PLAN_EXPORT_INVALID"]);
-  let plan:SbxLaunchPlanExportV1;try{plan=parseSbxLaunchPlanExportV1(await boundedContractJson(planFile));}catch{return Object.freeze(["F2_PLAN_EXPORT_INVALID"]);}
+  let plan:SbxLaunchPlanExportV1;try{plan=parseSbxLaunchPlanExportDocumentV1(await boundedContractJson(planFile));}catch{return Object.freeze(["F2_PLAN_EXPORT_INVALID"]);}
   let sources:SbxProofSources;try{sources=await loadProductionSbxProofSources(environment);}catch{return Object.freeze(["F2_PACKAGED_EVIDENCE_INVALID"]);}
   const codes=[...(report.evidence.sbxPinSha256===sources.sbxPinSha256?[]:["SBX_PIN_DIGEST_DRIFT"]),...(report.evidence.runtimeToolInventorySha256===sources.runtimeToolInventorySha256?[]:["RUNTIME_TOOL_INVENTORY_DRIFT"]),...(report.evidence.executorEvidenceSha256===sources.executorEvidenceSha256?[]:["EXECUTOR_EVIDENCE_DRIFT"]),...validateF2ProofReportV2(report,plan).diagnostics.map(item=>item.code),...(report.verdict==="pass"?[]:["F2_PROOF_FAILED"])];return Object.freeze([...new Set(codes)]);
 }
@@ -84,7 +84,7 @@ async function readProof(input:ProductionSbxExecutionInput,planKey:string):Promi
   const raw=JSON.parse(await readFile(file,"utf8")) as {schemaVersion?:unknown};return input.planExport||raw.schemaVersion===2?parseF2ProofReportV2(raw):parseF2ProofReportV1(raw);
 }
 export async function createProductionSbxExecutionAdapter(input:ProductionSbxExecutionInput,dependencies?:SbxExecutionDependencies):Promise<SbxExecutionAdapter>{
-  const exportFile=value(input.environment,"MPX_F2_PLAN_EXPORT_FILE"),loadedExport=input.planExport??(dependencies===undefined&&exportFile&&path.isAbsolute(exportFile)?parseSbxLaunchPlanExportV1(JSON.parse(await readFile(exportFile,"utf8"))):undefined);
+  const exportFile=value(input.environment,"MPX_F2_PLAN_EXPORT_FILE"),loadedExport=input.planExport??(dependencies===undefined&&exportFile&&path.isAbsolute(exportFile)?parseSbxLaunchPlanExportDocumentV1(JSON.parse(await readFile(exportFile,"utf8"))):undefined);
   if(dependencies===undefined&&!loadedExport)throw new Error("PLAN_EXPORT_REQUIRED: production Docker admission requires an exact reviewed sandbox plan export.");
   const deps=dependencies??defaults(input.environment),sources=input.sources??await loadProductionSbxProofSources(input.environment),planned=planProductionSbxExecution({...input,sources}),locations=candidates(input.environment);
   if(loadedExport&&(loadedExport.sandbox.planKey!==planned.plan.planKey||loadedExport.runtime!==input.runtime||loadedExport.identity.name!==input.identity.name||loadedExport.identity.domain!==input.identity.domain||loadedExport.evidence.sbxPinSha256!==sources.sbxPinSha256||loadedExport.evidence.runtimeToolInventorySha256!==sources.runtimeToolInventorySha256||loadedExport.evidence.executorEvidenceSha256!==sources.executorEvidenceSha256||loadedExport.sandbox.profile!==planned.plan.networkPolicy.name||loadedExport.sandbox.proofSandboxName!==`mpx-proof-${planned.plan.planKey.slice(0,12)}`||JSON.stringify(loadedExport.sandbox.createArgv)!==JSON.stringify(productionProofCreateArgv(planned.plan))||JSON.stringify(loadedExport.policyMatrix)!==JSON.stringify(buildF2ProofPolicyMatrix(planned.plan.networkPolicy.name as SbxPolicyName))))throw new Error("PLAN_EXPORT_MISMATCH: reviewed export does not match the regenerated production sandbox plan.");
