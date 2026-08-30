@@ -38,7 +38,7 @@ Rollback snapshots are immutable content-addressed bytes retained for **30 days*
 
 ## Current blockers
 
-- pinned live standalone-`sbx` F2 attestation and default-executor decision;
+- retained launch-bound standalone-`sbx` V2 plan/report, host-Pi tool/OAuth and Claude routes, mount/port/containment observations, and default-executor decision;
 - completed normal-use observation window;
 - zero-finding installed four-route audit in asserted legacy-disabled mode;
 - separately confirmed exact-marker cutover followed by the full acceptance suite and live rollback proof.

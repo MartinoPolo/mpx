@@ -1,6 +1,6 @@
 # MPX Unified System Migration
 
-**Status:** Sole authoritative active migration plan; Phases B–F1 and G–I are implemented, the F2 host-Pi/sandbox-executor contracts and proof foundation are implemented with live standalone-sbx attestation pending, and Phase J tooling is implemented but live observation/cutover/rollback gates remain pending
+**Status:** Sole authoritative active migration plan; Phases B–F1 and G–I are implemented, the F2 contracts, proof foundation, and standalone-sbx v0.39 allowed-policy compatibility are implemented while repository-verifiable live acceptance remains pending, and Phase J tooling is implemented but live observation/cutover/rollback gates remain pending
 **Destination:** `${MPX_PROJECTS}/mpx`
 **Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates
 **Canonical project manifest:** `mpxconfig.json`
@@ -1113,7 +1113,7 @@ Implementation status describes repository code and focused automated evidence o
 | A | Baseline/snapshot and provenance contracts implemented; historical evidence retained. | Native recovery and machine-integration drill pending. |
 | B–E | Config, launch, ports, worktrees, providers, issues, review, CI, and development-service domain tooling implemented. | Real account/provider/project routes pending. |
 | F1 | Canonical runtime-neutral content, deterministic projections, runtime manifests, guards, and native inventory implemented. | Installed Claude/Pi observation pending. |
-| F2 | Standalone-sbx policy/proof contracts and host-Pi remote-executor foundation implemented. | Live `sbx` admission, OAuth isolation, and sandbox/container selection pending. |
+| F2 | Standalone-sbx policy/proof contracts, host-Pi remote-executor foundation, and v0.39 allowed-policy compatibility implemented. | Retained launch-bound V2 plan/report, host-Pi tool/OAuth and Claude routes, and mount/port/containment observations pending. |
 | G | Session lifecycle, discovery, binding, resume planning, and scheduled reconcile authority implemented. | Live provider session/resume and scheduled-task run pending. |
 | H | Target rollout adapters and fixture coverage implemented. | Named-target runs and Windows Terminal observation pending. |
 | I | Immutable installer plan/apply/verify/rollback and scheduling authority implemented. | User config, installation, native registration, and four account routes pending. |
@@ -1185,8 +1185,8 @@ Checkboxes are the sole migration acceptance ledger. `[x]` means reproducibly ev
 ### Live and manual gates
 
 - [x] Generated convergence is clean after a fresh full build/check in the consolidated working tree.
-- [x] The pinned standalone `sbx` v0.39.0 binary, daemon diagnostics, authentication, and user-selected global `allow-all` policy are present on this machine.
-- [ ] Live Phase F2 standalone-sbx executable/version/policy/mount proof passes. The current open-network run creates and cleans the proof sandbox but is blocked before report emission by strict v0.39 policy-check JSON compatibility.
+- [ ] Retain a launch-bound V2 plan/report proving the pinned standalone `sbx` v0.39.0 executable/evidence, policy preflight/create, evaluator allow decisions, and successful cleanup. A narrow personal-Pi/open invocation may have occurred, but no tracked plan/report closes repository-verifiable acceptance.
+- [ ] Observe and retain the effective mount table, version result, port publication, real traffic, containment boundaries, and post-cleanup zero-sandbox inventory.
 - [ ] Live Claude sandbox and host-Pi OAuth routes pass without credentials entering the sandbox.
 - [x] Standalone sbx is the approved sandbox product, with the user-selected global `allow-all`/MPX `open` network baseline explicitly treated as non-isolating.
 - [ ] Phase H named-target runs pass against every required real project/template.
