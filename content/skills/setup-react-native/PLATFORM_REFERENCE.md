@@ -13,12 +13,12 @@ Verify that the destination is a symbolic link resolving to the expected source.
 
 ## Failure handling
 
-| Failure | Outcome |
-| --- | --- |
-| Template absent or repository creation fails | Stop remote setup and report structured remediation. |
-| Default branch fails | Preserve pushed branches; report manual handoff. |
-| Protection fails | Record full error and unprotected branch; continue. |
-| Install/check fails | Preserve command/output and continue only if setup remains viable. |
-| Push fails | Preserve local commits and report remediation. |
+| Failure                                      | Outcome                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| Template absent or repository creation fails | Stop remote setup and report structured remediation.               |
+| Default branch fails                         | Preserve pushed branches; report manual handoff.                   |
+| Protection fails                             | Record full error and unprotected branch; continue.                |
+| Install/check fails                          | Preserve command/output and continue only if setup remains viable. |
+| Push fails                                   | Preserve local commits and report remediation.                     |
 
 Never print credentials or private repository data in diagnostics. The final report records success or accepted exception for repository creation, default branch, both protection branches, checks, push, and framework rule link.

@@ -1,6 +1,6 @@
 ---
 name: vocabulary
-description: "Creates or updates the domain language section of CONTEXT.md, confirming terms with the user first."
+description: 'Creates or updates the domain language section of CONTEXT.md, confirming terms with the user first.'
 metadata:
   mpx:
     skillPacks: [work]

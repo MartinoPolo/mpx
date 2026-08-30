@@ -1,11 +1,12 @@
 ---
 name: project-register
-description: "Registers an existing project with the workstation — one colour driving its Windows Terminal profile and icon, its VS Code Peacock theme and its Raycast quicklinks."
+description: 'Registers an existing project with the workstation — one colour driving its Windows Terminal profile and icon, its VS Code Peacock theme and its Raycast quicklinks.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # Register a project with the workstation
 
 Give a project one colour and one icon, then wire both into every surface that opens
@@ -20,11 +21,11 @@ read-and-follow, per the global "Cross-skill references" rule in `instructions/A
 
 Scripts live in `./scripts/`:
 
-| Script | Purpose |
-| --- | --- |
-| `wt-profile.mjs` | `colors`, `icons-dir`, `add` a Windows Terminal profile |
-| `peacock.mjs` | `used` colours across projects, `write` a project's `peacock.color` |
-| `make-icon.py` | Render the 256×256 profile icon |
+| Script           | Purpose                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| `wt-profile.mjs` | `colors`, `icons-dir`, `add` a Windows Terminal profile             |
+| `peacock.mjs`    | `used` colours across projects, `write` a project's `peacock.color` |
+| `make-icon.py`   | Render the 256×256 profile icon                                     |
 
 ## Process
 
@@ -87,7 +88,7 @@ preserve the existing repository and continue.
 One colour drives the Windows Terminal tab, the VS Code chrome and the icon plate, so the
 project reads the same in every window.
 
-Propose a colour that fits what the project *is* — read its `README.md` for the domain
+Propose a colour that fits what the project _is_ — read its `README.md` for the domain
 rather than reaching for the next unused hue. Check it against both lists from step 2 and
 pick again when it is close enough to an existing one to be confused at a glance;
 neighbouring shades of the same hue are the common trap.
@@ -136,7 +137,7 @@ GUID is placed explicitly. Use `AskUserQuestion` to ask which group the project 
 file to insert `{ "type": "profile", "profile": "<guid>" }` at the end of the chosen group.
 Two rules the menu depends on: keep every GUID comment-free JSON (Windows Terminal rejects
 trailing commas), and remember that the `ctrl+shift+<digit>` bindings target dropdown
-*positions* — inserting into a group above the work section shifts every number below it,
+_positions_ — inserting into a group above the work section shifts every number below it,
 so tell the user when the numbering moves.
 
 ### Step 7: Write the VS Code Peacock colour
@@ -163,11 +164,11 @@ two drift apart.
 The usual family, with `<letter>` the project's initial and the bare word going to
 whichever member the user reaches for most:
 
-| Quicklink | `link` |
-| --- | --- |
-| folder | the project path |
-| code | `file:///<project path>` + the VS Code `openWith` id |
-| term | `wt -p "<profile name>"` — the name from step 6 |
+| Quicklink                   | `link`                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| folder                      | the project path                                                                      |
+| code                        | `file:///<project path>` + the VS Code `openWith` id                                  |
+| term                        | `wt -p "<profile name>"` — the name from step 6                                       |
 | tracked work / reviews / CI | links returned by the configured `mpx issue`, `mpx review`, and `mpx ci` capabilities |
 
 Registering several projects in one sitting is worth batching: collect every project's

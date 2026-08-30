@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-performance
-description: "Read-only performance reviewer for changed code."
+description: 'Read-only performance reviewer for changed code.'
 model: openai-codex/gpt-5.6-terra
 thinking: medium
 tools: read,grep,find,ls,bash
 output_schema: findings
 
 ---
+
 # Reviewer: Performance
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.

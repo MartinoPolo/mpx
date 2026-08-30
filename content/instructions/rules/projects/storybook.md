@@ -2,8 +2,8 @@
 scope: project
 selector: storybook
 paths:
-  - "**/*.stories.svelte"
-applyTo: "**/*.stories.svelte"
+  - '**/*.stories.svelte'
+applyTo: '**/*.stories.svelte'
 ---
 
 # Storybook
@@ -149,4 +149,5 @@ Every `{#snippet template()}` must take `args` and spread it onto the meta `comp
 - bits-ui discriminated-union components (Accordion, Select, Slider, Calendar, RadioGroup, ToggleGroup): also `Omit` the discriminant keys from the args type (`'type' | 'value' | 'onValueChange'`, plus any variant-specific callback like Slider's `onValueCommit`) — the full prop union across variants is too complex for TS to check against a spread. If `Omit` over `ComponentProps` still errors as "too complex to represent," import the single-variant type directly from `bits-ui` (e.g. `CalendarSingleRootProps`) instead.
 - A template that renders no instance of the meta component (e.g. a story that only calls an imperative helper like `toast()` from a button) is exempt — there is nothing for `args` to bind to.
 </content>
+
 </invoke>

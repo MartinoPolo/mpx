@@ -1,6 +1,6 @@
 ---
 name: skill-audit
-description: "Audits one skill or every active skill root for portable discovery, authoring conventions, hierarchy, workflow endpoints, tool integrity, and stale or ineffective instructions; safely fixes mechanical drift."
+description: 'Audits one skill or every active skill root for portable discovery, authoring conventions, hierarchy, workflow endpoints, tool integrity, and stale or ineffective instructions; safely fixes mechanical drift.'
 metadata:
   mpx:
     skillPacks: [work]

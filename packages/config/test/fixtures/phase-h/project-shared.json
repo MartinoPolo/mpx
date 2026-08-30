@@ -1,1 +1,16 @@
-{"schemaVersion":1,"project":{"id":"phase-h/shared"},"repository":{"provider":"generic","remote":"origin"},"development":{"services":{"storybook":{"scope":"project","port":{"mode":"fixed-shared","preferred":6006},"environmentVariable":"STORYBOOK_URL","protocol":"http","start":{"type":"package-script","script":"storybook"}}}}}
+{
+  "schemaVersion": 1,
+  "project": { "id": "phase-h/shared" },
+  "repository": { "provider": "generic", "remote": "origin" },
+  "development": {
+    "services": {
+      "storybook": {
+        "scope": "project",
+        "port": { "mode": "fixed-shared", "preferred": 6006 },
+        "environmentVariable": "STORYBOOK_URL",
+        "protocol": "http",
+        "start": { "type": "package-script", "script": "storybook" }
+      }
+    }
+  }
+}

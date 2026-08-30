@@ -11,15 +11,15 @@ stop and ask the user.
 
 ## Capabilities
 
-| Intent | Contract |
-| --- | --- |
-| Create work | `mpx issue create --identity <launch-identity> --json` with title, body, semantic labels |
-| Read work | `mpx issue view --identity <launch-identity> --json --id <issue-id>` |
-| Update/comment | `mpx issue update --identity <launch-identity> --json --id <issue-id>` |
-| Open review | `mpx review create --identity <launch-identity> --json` with source and target branches |
-| Read review | `mpx review view --identity <launch-identity> --json --id <review-id>` |
-| Update review | `mpx review update --identity <launch-identity> --json --id <review-id>` |
-| Inspect CI | `mpx ci status --identity <launch-identity> --json` with explicit review or pipeline ID |
+| Intent         | Contract                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| Create work    | `mpx issue create --identity <launch-identity> --json` with title, body, semantic labels |
+| Read work      | `mpx issue view --identity <launch-identity> --json --id <issue-id>`                     |
+| Update/comment | `mpx issue update --identity <launch-identity> --json --id <issue-id>`                   |
+| Open review    | `mpx review create --identity <launch-identity> --json` with source and target branches  |
+| Read review    | `mpx review view --identity <launch-identity> --json --id <review-id>`                   |
+| Update review  | `mpx review update --identity <launch-identity> --json --id <review-id>`                 |
+| Inspect CI     | `mpx ci status --identity <launch-identity> --json` with explicit review or pipeline ID  |
 
 Use structured response IDs for every later operation. There is no implicit issue, review, or CI
 discovery. Preserve schema/version fields and fail closed on an unknown response version.

@@ -14,7 +14,15 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["identity", "included", "exclusionReasons", "exposure", "permissions", "metadataHash", "sourceHash"],
+        "required": [
+          "identity",
+          "included",
+          "exclusionReasons",
+          "exposure",
+          "permissions",
+          "metadataHash",
+          "sourceHash"
+        ],
         "properties": {
           "identity": { "type": "string", "minLength": 1 },
           "included": { "type": "boolean" },

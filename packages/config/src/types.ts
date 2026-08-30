@@ -1,41 +1,112 @@
 export type RepositoryProvider = string;
 export type IssueProvider = string;
-export const SKILL_PACKS = ["core", "work", "personal"] as const;
-export const EXPOSURES = ["full", "name-only", "explicit-only", "off"] as const;
+export const SKILL_PACKS = ['core', 'work', 'personal'] as const;
+export const EXPOSURES = ['full', 'name-only', 'explicit-only', 'off'] as const;
 export const MODE_RESOURCES = [
-  "selected-project", "identity-domain", "cloned-repositories", "assistant-input", "assistant-output",
-  "computer-control-config", "computer-control-executable-settings", "host",
+  'selected-project',
+  'identity-domain',
+  'cloned-repositories',
+  'assistant-input',
+  'assistant-output',
+  'computer-control-config',
+  'computer-control-executable-settings',
+  'host',
 ] as const;
-export const RESOURCE_ACCESS = ["read-only", "read-write", "staged-write"] as const;
+export const RESOURCE_ACCESS = ['read-only', 'read-write', 'staged-write'] as const;
 export type SkillPack = (typeof SKILL_PACKS)[number];
 export type Exposure = (typeof EXPOSURES)[number];
 export type ModeResource = (typeof MODE_RESOURCES)[number];
 export type ResourceAccess = (typeof RESOURCE_ACCESS)[number];
-export type Runtime = "claude" | "pi";
-export type Executor = "host" | "docker";
-export type WorkspaceStrategy = "clone" | "host-worktree" | "direct";
-export type NetworkPolicyPreset = "allow-all" | "balanced" | "deny-all";
-export interface IssueStates { todo: string; wip: string; review: string; done: string; archive?: string }
-export interface IssuesConfig { provider: IssueProvider; store?: string; view?: string; boardId?: string; boardName?: string; states?: IssueStates }
-export interface LocalIssueStoreRegistration { root: string }
-export interface LocalViewRegistration { vaultRoot: string; outputRoot: string; vaultSubtree: string; resumeBaseUrl: string }
-export interface PreparationStepBase { id: string; dependsOn?: string[]; required?: boolean; timeoutSeconds?: number; cwd?: string; environment?: string[] }
+export type Runtime = 'claude' | 'pi';
+export type Executor = 'host' | 'docker';
+export type WorkspaceStrategy = 'clone' | 'host-worktree' | 'direct';
+export type NetworkPolicyPreset = 'allow-all' | 'balanced' | 'deny-all';
+export interface IssueStates {
+  todo: string;
+  wip: string;
+  review: string;
+  done: string;
+  archive?: string;
+}
+export interface IssuesConfig {
+  provider: IssueProvider;
+  store?: string;
+  view?: string;
+  boardId?: string;
+  boardName?: string;
+  states?: IssueStates;
+}
+export interface LocalIssueStoreRegistration {
+  root: string;
+}
+export interface LocalViewRegistration {
+  vaultRoot: string;
+  outputRoot: string;
+  vaultSubtree: string;
+  resumeBaseUrl: string;
+}
+export interface PreparationStepBase {
+  id: string;
+  dependsOn?: string[];
+  required?: boolean;
+  timeoutSeconds?: number;
+  cwd?: string;
+  environment?: string[];
+}
 export type PreparationStep =
-  | (PreparationStepBase & { uses: "package-install" })
-  | (PreparationStepBase & { uses: "package-script"; script: string })
-  | (PreparationStepBase & { uses: "executable"; argv: string[] });
+  | (PreparationStepBase & { uses: 'package-install' })
+  | (PreparationStepBase & { uses: 'package-script'; script: string })
+  | (PreparationStepBase & { uses: 'executable'; argv: string[] });
 export interface PreparationPlan {
-  execution: "foreground" | "background" | "none";
+  execution: 'foreground' | 'background' | 'none';
   steps: readonly (PreparationStep & { required: boolean })[];
   order: readonly string[];
   logging: { readonly maxOutputBytes: 65536; readonly redactEnvironmentValues: true };
 }
-export type ServiceLauncher = { type:"package-script"; script:string } | { type:"external"; kind:"database" } | { type:"test-only" };
-export interface ServiceConfig { scope: "checkout" | "project"; port: { mode: "managed" | "fixed-shared"; preferred?: number; family?: string }; environmentVariable?: string; protocol?: "http" | "https" | "tcp"; start: ServiceLauncher }
-export interface ProjectConfig { $schema?: string; schemaVersion: 1; project: { id: string }; repository: { provider: RepositoryProvider; remote: string }; issues?: IssuesConfig; tooling?: { packageManager: "auto"|"pnpm"|"yarn"|"npm"|"bun"|"none" }; workflow?: { branch?: { base?: string; template?: string }; codeReview?: { openAsDraft?: boolean; markReady?: "human"|"agent"; merge?: "human"|"agent" } }; worktrees?: { postCreate?: { execution: "foreground"|"background"|"none"; steps?: PreparationStep[] } }; development?: { services: Record<string, ServiceConfig> } }
-export interface ExposureConfig { default?: Exposure; skills?: Record<string, Exposure> }
-export interface ContentScope { roots: string[]; skillPacks?: SkillPack[]; skillExposure?: ExposureConfig }
-export interface ProjectOverride { skillPacks?: SkillPack[]; skillExposure?: ExposureConfig }
+export type ServiceLauncher =
+  | { type: 'package-script'; script: string }
+  | { type: 'external'; kind: 'database' }
+  | { type: 'test-only' };
+export interface ServiceConfig {
+  scope: 'checkout' | 'project';
+  port: { mode: 'managed' | 'fixed-shared'; preferred?: number; family?: string };
+  environmentVariable?: string;
+  protocol?: 'http' | 'https' | 'tcp';
+  start: ServiceLauncher;
+}
+export interface ProjectConfig {
+  $schema?: string;
+  schemaVersion: 1;
+  project: { id: string };
+  repository: { provider: RepositoryProvider; remote: string };
+  issues?: IssuesConfig;
+  tooling?: { packageManager: 'auto' | 'pnpm' | 'yarn' | 'npm' | 'bun' | 'none' };
+  workflow?: {
+    branch?: { base?: string; template?: string };
+    codeReview?: {
+      openAsDraft?: boolean;
+      markReady?: 'human' | 'agent';
+      merge?: 'human' | 'agent';
+    };
+  };
+  worktrees?: {
+    postCreate?: { execution: 'foreground' | 'background' | 'none'; steps?: PreparationStep[] };
+  };
+  development?: { services: Record<string, ServiceConfig> };
+}
+export interface ExposureConfig {
+  default?: Exposure;
+  skills?: Record<string, Exposure>;
+}
+export interface ContentScope {
+  roots: string[];
+  skillPacks?: SkillPack[];
+  skillExposure?: ExposureConfig;
+}
+export interface ProjectOverride {
+  skillPacks?: SkillPack[];
+  skillExposure?: ExposureConfig;
+}
 export interface IdentityConfig {
   domain: string;
   runtimeRoots: Record<Runtime, string>;
@@ -44,8 +115,13 @@ export interface IdentityConfig {
   sshRoute?: string;
   mcpSharing?: { allow: string[]; shareNativeAuth: false };
 }
-export interface ModeConfig { resources: Partial<Record<ModeResource, ResourceAccess>> }
-export interface SkillPolicyConfig { skillPacks?: SkillPack[]; skillExposure: ExposureConfig & { default: Exposure } }
+export interface ModeConfig {
+  resources: Partial<Record<ModeResource, ResourceAccess>>;
+}
+export interface SkillPolicyConfig {
+  skillPacks?: SkillPack[];
+  skillExposure: ExposureConfig & { default: Exposure };
+}
 export interface NetworkPolicyConfig {
   preset?: NetworkPolicyPreset;
   extends?: string;
@@ -82,8 +158,30 @@ export interface UserConfig {
   localIssueStores?: Record<string, LocalIssueStoreRegistration>;
   localViews?: Record<string, LocalViewRegistration>;
 }
-export type CwdClassification = { status: "known"; domain: string; root: string } | { status: "unknown" };
-export type ContentScopeClassification = { status: "known"; contentScope: string; root: string } | { status: "unknown" };
-export interface ProvenanceEntry { pointer: string; source: "default"|"project"|"user-content-scope"|"user-project"|"runtime" }
-export interface ResolvedConfig { project: ProjectConfig; cwdClassification: CwdClassification & { status: "known" }; contentScope: { name: string; root: string; skillPacks: SkillPack[]; skillExposure: ExposureConfig; projectSkillExposure?: ExposureConfig }; provenance: ProvenanceEntry[] }
-export interface Diagnostic { code: string; severity: "error"|"warning"|"info"; message: string; pointer?: string; remediation?: string }
+export type CwdClassification =
+  { status: 'known'; domain: string; root: string } | { status: 'unknown' };
+export type ContentScopeClassification =
+  { status: 'known'; contentScope: string; root: string } | { status: 'unknown' };
+export interface ProvenanceEntry {
+  pointer: string;
+  source: 'default' | 'project' | 'user-content-scope' | 'user-project' | 'runtime';
+}
+export interface ResolvedConfig {
+  project: ProjectConfig;
+  cwdClassification: CwdClassification & { status: 'known' };
+  contentScope: {
+    name: string;
+    root: string;
+    skillPacks: SkillPack[];
+    skillExposure: ExposureConfig;
+    projectSkillExposure?: ExposureConfig;
+  };
+  provenance: ProvenanceEntry[];
+}
+export interface Diagnostic {
+  code: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  pointer?: string;
+  remediation?: string;
+}

@@ -3,11 +3,7 @@
   "$id": "https://mpx.dev/schemas/mpxconfig.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "project",
-    "repository"
-  ],
+  "required": ["schemaVersion", "project", "repository"],
   "properties": {
     "$schema": {
       "type": "string"
@@ -18,9 +14,7 @@
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id"
-      ],
+      "required": ["id"],
       "properties": {
         "id": {
           "type": "string",
@@ -32,10 +26,7 @@
     "repository": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "provider",
-        "remote"
-      ],
+      "required": ["provider", "remote"],
       "properties": {
         "provider": {
           "type": "string",
@@ -52,9 +43,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "provider"
-          ],
+          "required": ["provider"],
           "properties": {
             "provider": {
               "allOf": [
@@ -64,10 +53,7 @@
                 },
                 {
                   "not": {
-                    "enum": [
-                      "kanbanflow",
-                      "local"
-                    ]
+                    "enum": ["kanbanflow", "local"]
                   }
                 }
               ]
@@ -77,10 +63,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "provider",
-            "store"
-          ],
+          "required": ["provider", "store"],
           "properties": {
             "provider": { "const": "local" },
             "store": { "$ref": "#/$defs/logicalId" },
@@ -90,11 +73,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "provider",
-            "boardId",
-            "states"
-          ],
+          "required": ["provider", "boardId", "states"],
           "properties": {
             "provider": {
               "const": "kanbanflow"
@@ -109,12 +88,7 @@
             "states": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "todo",
-                "wip",
-                "review",
-                "done"
-              ],
+              "required": ["todo", "wip", "review", "done"],
               "properties": {
                 "todo": {
                   "type": "string"
@@ -142,14 +116,7 @@
       "additionalProperties": false,
       "properties": {
         "packageManager": {
-          "enum": [
-            "auto",
-            "pnpm",
-            "yarn",
-            "npm",
-            "bun",
-            "none"
-          ]
+          "enum": ["auto", "pnpm", "yarn", "npm", "bun", "none"]
         }
       }
     },
@@ -178,16 +145,10 @@
               "type": "boolean"
             },
             "markReady": {
-              "enum": [
-                "human",
-                "agent"
-              ]
+              "enum": ["human", "agent"]
             },
             "merge": {
-              "enum": [
-                "human",
-                "agent"
-              ]
+              "enum": ["human", "agent"]
             }
           }
         }
@@ -200,16 +161,10 @@
         "postCreate": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "execution"
-          ],
+          "required": ["execution"],
           "properties": {
             "execution": {
-              "enum": [
-                "foreground",
-                "background",
-                "none"
-              ]
+              "enum": ["foreground", "background", "none"]
             },
             "steps": {
               "type": "array",
@@ -237,9 +192,7 @@
                     "const": "none"
                   }
                 },
-                "required": [
-                  "execution"
-                ]
+                "required": ["execution"]
               },
               "then": {
                 "properties": {
@@ -257,9 +210,7 @@
     "development": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "services"
-      ],
+      "required": ["services"],
       "properties": {
         "services": {
           "type": "object",
@@ -275,10 +226,7 @@
     "installStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "uses"
-      ],
+      "required": ["id", "uses"],
       "properties": {
         "id": {
           "type": "string",
@@ -331,11 +279,7 @@
     "scriptStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "uses",
-        "script"
-      ],
+      "required": ["id", "uses", "script"],
       "properties": {
         "id": {
           "type": "string",
@@ -394,30 +338,18 @@
     "service": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "scope",
-        "port",
-        "start"
-      ],
+      "required": ["scope", "port", "start"],
       "properties": {
         "scope": {
-          "enum": [
-            "checkout",
-            "project"
-          ]
+          "enum": ["checkout", "project"]
         },
         "port": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "mode"
-          ],
+          "required": ["mode"],
           "properties": {
             "mode": {
-              "enum": [
-                "managed",
-                "fixed-shared"
-              ]
+              "enum": ["managed", "fixed-shared"]
             },
             "preferred": {
               "type": "integer",
@@ -437,17 +369,13 @@
                     "const": "fixed-shared"
                   }
                 },
-                "required": [
-                  "mode"
-                ]
+                "required": ["mode"]
               },
               "then": {
                 "properties": {
                   "preferred": {}
                 },
-                "required": [
-                  "preferred"
-                ]
+                "required": ["preferred"]
               }
             }
           ]
@@ -457,11 +385,7 @@
           "pattern": "^[A-Z_][A-Z0-9_]*$"
         },
         "protocol": {
-          "enum": [
-            "http",
-            "https",
-            "tcp"
-          ]
+          "enum": ["http", "https", "tcp"]
         },
         "start": {
           "oneOf": [
@@ -498,11 +422,7 @@
     "executableStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "uses",
-        "argv"
-      ],
+      "required": ["id", "uses", "argv"],
       "properties": {
         "id": {
           "type": "string",

@@ -1,13 +1,13 @@
-import path from "node:path";
-import { MpxError, parseStrictJson } from "@mpx/core";
-import type { JsonResourceStore } from "./system-integration.js";
-import { NativePowerShellRunner, type PowerShellResult, type PowerShellRunner } from "./adapter.js";
-import { decodeWindowsArgv, encodeWindowsArgv } from "./scheduled-task.js";
+import path from 'node:path';
+import { MpxError, parseStrictJson } from '@mpx/core';
+import type { JsonResourceStore } from './system-integration.js';
+import { NativePowerShellRunner, type PowerShellResult, type PowerShellRunner } from './adapter.js';
+import { decodeWindowsArgv, encodeWindowsArgv } from './scheduled-task.js';
 
-const REGISTRY_TARGET = "HKCU\\Environment";
+const REGISTRY_TARGET = 'HKCU\\Environment';
 const TASK_TARGET = /^\\MPX\\[^\\]+$/u;
 const SHORTCUT_TARGET = /^[A-Za-z]:\\.+\.lnk$/iu;
-const ENV = "NativeResourceJson";
+const ENV = 'NativeResourceJson';
 
 const REGISTRY_READ = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
 $p=Get-ItemProperty -LiteralPath 'HKCU:\Environment' -ErrorAction SilentlyContinue
@@ -67,39 +67,169 @@ ${TASK_PARTS}
 try{$t=Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop;$i=Get-ScheduledTaskInfo -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop}catch{if($_.CategoryInfo.Category-eq'ObjectNotFound'){@{exists=$false}|ConvertTo-Json -Compress;exit 0};throw}
 [ordered]@{exists=$true;state=[string]$t.State;lastResult=[int]$i.LastTaskResult;lastRunAt=if($i.LastRunTime -and $i.LastRunTime.Year -gt 1900){$i.LastRunTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')}else{$null};nextRunAt=if($i.NextRunTime -and $i.NextRunTime.Year -gt 1900){$i.NextRunTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')}else{$null}}|ConvertTo-Json -Compress`;
 
-export interface ScheduledTaskStatusEvidence { readonly exists: boolean; readonly state?: string; readonly lastResult?: number; readonly lastRunAt?: string; readonly nextRunAt?: string }
-
-function fail(code: string, message: string): never { throw new MpxError({ code, message }); }
-function stable(value: unknown): string { if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`; if (value && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(",")}}`; return JSON.stringify(value); }
-function classify(target: string): "registry" | "shortcut" | "task" {
-  if (target === REGISTRY_TARGET) return "registry";
-  if (SHORTCUT_TARGET.test(target) && path.win32.isAbsolute(target)) return "shortcut";
-  if (TASK_TARGET.test(target)) return "task";
-  return fail("WINDOWS_RESOURCE_INVALID", "Unsupported native Windows resource target.");
+export interface ScheduledTaskStatusEvidence {
+  readonly exists: boolean;
+  readonly state?: string;
+  readonly lastResult?: number;
+  readonly lastRunAt?: string;
+  readonly nextRunAt?: string;
 }
-export interface ProductionWindowsResourceStoreOptions { readonly platform?: NodeJS.Platform; readonly runner?: PowerShellRunner }
-export class ProductionWindowsResourceStore implements JsonResourceStore {
-  private readonly runner: PowerShellRunner; private readonly available: boolean;
-  constructor(options: ProductionWindowsResourceStoreOptions = {}) { this.available = (options.platform ?? process.platform) === "win32"; this.runner = options.runner ?? new NativePowerShellRunner(); }
-  private async invoke(script: string, data: unknown): Promise<unknown> {
-    if (!this.available) fail("WINDOWS_RESOURCE_UNAVAILABLE", "Native Windows resources are unavailable.");
-    let result: PowerShellResult; try { result = await this.runner.run(script, { [ENV]: JSON.stringify(data) }); } catch { return fail("WINDOWS_RESOURCE_FAILED", "Native Windows resource operation failed."); }
-    if (result.exitCode !== 0) fail("WINDOWS_RESOURCE_FAILED", "Native Windows resource operation failed.");
-    try { return result.stdout.trim() ? parseStrictJson(result.stdout) : null; } catch { return fail("WINDOWS_RESOURCE_MALFORMED", "Native Windows resource operation returned malformed JSON."); }
+
+function fail(code: string, message: string): never {
+  throw new MpxError({ code, message });
+}
+function stable(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stable).join(',')}]`;
   }
-  async read(target: string): Promise<unknown | undefined> { const kind = classify(target); const value = await this.invoke(kind === "registry" ? REGISTRY_READ : kind === "shortcut" ? SHORTCUT_READ : TASK_READ, { target }); if (value === null) return undefined; if (kind !== "registry" && value && typeof value === "object" && !Array.isArray(value)) { const { arguments: encoded, ...rest } = value as Record<string, unknown>; if (typeof encoded !== "string") fail("WINDOWS_RESOURCE_MALFORMED", "Native Windows resource arguments are malformed."); return { ...rest, argv: decodeWindowsArgv(encoded) }; } return value; }
-  async write(target: string, value: unknown): Promise<void> { const kind = classify(target); let encoded = value; if (kind !== "registry" && value && typeof value === "object" && !Array.isArray(value)) { const { argv, ...rest } = value as Record<string, unknown>; if (!Array.isArray(argv) || argv.some(argument => typeof argument !== "string")) fail("WINDOWS_RESOURCE_INVALID", "Native Windows resource arguments are invalid."); encoded = { ...rest, arguments: encodeWindowsArgv(argv as string[]) }; } await this.invoke(kind === "registry" ? REGISTRY_WRITE : kind === "shortcut" ? SHORTCUT_WRITE : TASK_WRITE, { target, value: encoded }); const actual = await this.read(target); if (stable(actual) !== stable(value)) fail("WINDOWS_RESOURCE_VERIFY_FAILED", "Native Windows resource did not reach desired state."); }
-  async remove(target: string): Promise<void> { const kind = classify(target); await this.invoke(kind === "registry" ? REGISTRY_REMOVE : kind === "shortcut" ? SHORTCUT_REMOVE : TASK_REMOVE, { target }); if (await this.read(target) !== undefined) fail("WINDOWS_RESOURCE_VERIFY_FAILED", "Native Windows resource removal was not confirmed."); }
-  async runScheduledTask(target: string): Promise<void> { if (classify(target) !== "task") fail("WINDOWS_RESOURCE_INVALID", "A scheduled task target is required."); await this.invoke(TASK_RUN, { target }); }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+function classify(target: string): 'registry' | 'shortcut' | 'task' {
+  if (target === REGISTRY_TARGET) {
+    return 'registry';
+  }
+  if (SHORTCUT_TARGET.test(target) && path.win32.isAbsolute(target)) {
+    return 'shortcut';
+  }
+  if (TASK_TARGET.test(target)) {
+    return 'task';
+  }
+  return fail('WINDOWS_RESOURCE_INVALID', 'Unsupported native Windows resource target.');
+}
+export interface ProductionWindowsResourceStoreOptions {
+  readonly platform?: NodeJS.Platform;
+  readonly runner?: PowerShellRunner;
+}
+export class ProductionWindowsResourceStore implements JsonResourceStore {
+  private readonly runner: PowerShellRunner;
+  private readonly available: boolean;
+  constructor(options: ProductionWindowsResourceStoreOptions = {}) {
+    this.available = (options.platform ?? process.platform) === 'win32';
+    this.runner = options.runner ?? new NativePowerShellRunner();
+  }
+  private async invoke(script: string, data: unknown): Promise<unknown> {
+    if (!this.available) {
+      fail('WINDOWS_RESOURCE_UNAVAILABLE', 'Native Windows resources are unavailable.');
+    }
+    let result: PowerShellResult;
+    try {
+      result = await this.runner.run(script, { [ENV]: JSON.stringify(data) });
+    } catch {
+      return fail('WINDOWS_RESOURCE_FAILED', 'Native Windows resource operation failed.');
+    }
+    if (result.exitCode !== 0) {
+      fail('WINDOWS_RESOURCE_FAILED', 'Native Windows resource operation failed.');
+    }
+    try {
+      return result.stdout.trim() ? parseStrictJson(result.stdout) : null;
+    } catch {
+      return fail(
+        'WINDOWS_RESOURCE_MALFORMED',
+        'Native Windows resource operation returned malformed JSON.',
+      );
+    }
+  }
+  async read(target: string): Promise<unknown | undefined> {
+    const kind = classify(target);
+    const value = await this.invoke(
+      kind === 'registry' ? REGISTRY_READ : kind === 'shortcut' ? SHORTCUT_READ : TASK_READ,
+      { target },
+    );
+    if (value === null) {
+      return undefined;
+    }
+    if (kind !== 'registry' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const { arguments: encoded, ...rest } = value as Record<string, unknown>;
+      if (typeof encoded !== 'string') {
+        fail('WINDOWS_RESOURCE_MALFORMED', 'Native Windows resource arguments are malformed.');
+      }
+      return { ...rest, argv: decodeWindowsArgv(encoded) };
+    }
+    return value;
+  }
+  async write(target: string, value: unknown): Promise<void> {
+    const kind = classify(target);
+    let encoded = value;
+    if (kind !== 'registry' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const { argv, ...rest } = value as Record<string, unknown>;
+      if (!Array.isArray(argv) || argv.some((argument) => typeof argument !== 'string')) {
+        fail('WINDOWS_RESOURCE_INVALID', 'Native Windows resource arguments are invalid.');
+      }
+      encoded = { ...rest, arguments: encodeWindowsArgv(argv as string[]) };
+    }
+    await this.invoke(
+      kind === 'registry' ? REGISTRY_WRITE : kind === 'shortcut' ? SHORTCUT_WRITE : TASK_WRITE,
+      { target, value: encoded },
+    );
+    const actual = await this.read(target);
+    if (stable(actual) !== stable(value)) {
+      fail(
+        'WINDOWS_RESOURCE_VERIFY_FAILED',
+        'Native Windows resource did not reach desired state.',
+      );
+    }
+  }
+  async remove(target: string): Promise<void> {
+    const kind = classify(target);
+    await this.invoke(
+      kind === 'registry' ? REGISTRY_REMOVE : kind === 'shortcut' ? SHORTCUT_REMOVE : TASK_REMOVE,
+      { target },
+    );
+    if ((await this.read(target)) !== undefined) {
+      fail('WINDOWS_RESOURCE_VERIFY_FAILED', 'Native Windows resource removal was not confirmed.');
+    }
+  }
+  async runScheduledTask(target: string): Promise<void> {
+    if (classify(target) !== 'task') {
+      fail('WINDOWS_RESOURCE_INVALID', 'A scheduled task target is required.');
+    }
+    await this.invoke(TASK_RUN, { target });
+  }
   async inspectScheduledTaskStatus(target: string): Promise<ScheduledTaskStatusEvidence> {
-    if (classify(target) !== "task") fail("WINDOWS_RESOURCE_INVALID", "A scheduled task target is required.");
+    if (classify(target) !== 'task') {
+      fail('WINDOWS_RESOURCE_INVALID', 'A scheduled task target is required.');
+    }
     const value = await this.invoke(TASK_STATUS, { target });
-    if (!value || typeof value !== "object" || Array.isArray(value)) fail("WINDOWS_RESOURCE_MALFORMED", "Scheduled task status is malformed.");
-    const record = value as Record<string, unknown>, keys = Object.keys(record);
-    if (record.exists === false && keys.length === 1) return { exists: false };
-    if (record.exists !== true || typeof record.state !== "string" || !Number.isSafeInteger(record.lastResult) || keys.some(key => !["exists", "state", "lastResult", "lastRunAt", "nextRunAt"].includes(key))) fail("WINDOWS_RESOURCE_MALFORMED", "Scheduled task status is malformed.");
-    const timestamp = (name: "lastRunAt" | "nextRunAt"): string | undefined => { const item = record[name]; if (item === null || item === undefined) return undefined; if (typeof item !== "string" || new Date(item).toISOString() !== item) fail("WINDOWS_RESOURCE_MALFORMED", "Scheduled task status timestamp is malformed."); return item; };
-    const lastRunAt = timestamp("lastRunAt"), nextRunAt = timestamp("nextRunAt");
-    return { exists: true, state: record.state, lastResult: record.lastResult as number, ...(lastRunAt ? { lastRunAt } : {}), ...(nextRunAt ? { nextRunAt } : {}) };
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      fail('WINDOWS_RESOURCE_MALFORMED', 'Scheduled task status is malformed.');
+    }
+    const record = value as Record<string, unknown>,
+      keys = Object.keys(record);
+    if (record.exists === false && keys.length === 1) {
+      return { exists: false };
+    }
+    if (
+      record.exists !== true ||
+      typeof record.state !== 'string' ||
+      !Number.isSafeInteger(record.lastResult) ||
+      keys.some((key) => !['exists', 'state', 'lastResult', 'lastRunAt', 'nextRunAt'].includes(key))
+    ) {
+      fail('WINDOWS_RESOURCE_MALFORMED', 'Scheduled task status is malformed.');
+    }
+    const timestamp = (name: 'lastRunAt' | 'nextRunAt'): string | undefined => {
+      const item = record[name];
+      if (item === null || item === undefined) {
+        return undefined;
+      }
+      if (typeof item !== 'string' || new Date(item).toISOString() !== item) {
+        fail('WINDOWS_RESOURCE_MALFORMED', 'Scheduled task status timestamp is malformed.');
+      }
+      return item;
+    };
+    const lastRunAt = timestamp('lastRunAt'),
+      nextRunAt = timestamp('nextRunAt');
+    return {
+      exists: true,
+      state: record.state,
+      lastResult: record.lastResult as number,
+      ...(lastRunAt ? { lastRunAt } : {}),
+      ...(nextRunAt ? { nextRunAt } : {}),
+    };
   }
 }

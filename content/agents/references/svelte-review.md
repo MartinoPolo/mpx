@@ -139,7 +139,7 @@ Runes are preferred for component-level state. Stores remain useful for:
 
 ```javascript
 // Convert between stores and runes when needed
-import { fromStore, toStore } from "svelte/store";
+import { fromStore, toStore } from 'svelte/store';
 
 // Store → reactive object
 const reactive = fromStore(existingStore);

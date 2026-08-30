@@ -1,17 +1,17 @@
-import { NodePreparationStore } from "../dist/node-preparation-adapters.js";
+import { NodePreparationStore } from '../dist/node-preparation-adapters.js';
 
 const [stateRoot, key] = process.argv.slice(2);
 const store = new NodePreparationStore(stateRoot);
 let captured;
 
-const reply = message => process.send?.(message);
-process.on("message", async message => {
-  if (message?.type === "capture") {
+const reply = (message) => process.send?.(message);
+process.on('message', async (message) => {
+  if (message?.type === 'capture') {
     captured = await store.load(key);
-    reply({ type: "captured", revision: captured?.revision });
+    reply({ type: 'captured', revision: captured?.revision });
     return;
   }
-  if (message?.type === "complete" && captured) {
+  if (message?.type === 'complete' && captured) {
     const status = message.status;
     const next = {
       ...captured,
@@ -19,13 +19,20 @@ process.on("message", async message => {
       status,
       updatedAt: Date.now(),
       finishedAt: Date.now(),
-      steps: captured.steps.map(step => ({ ...step, status, finishedAt: Date.now(), process: undefined })),
+      steps: captured.steps.map((step) => ({
+        ...step,
+        status,
+        finishedAt: Date.now(),
+        process: undefined,
+      })),
     };
     const swapped = await store.compareAndSwap(key, captured.revision, next);
-    reply({ type: "completion", status, swapped });
+    reply({ type: 'completion', status, swapped });
     return;
   }
-  if (message?.type === "stop") process.exit(0);
+  if (message?.type === 'stop') {
+    process.exit(0);
+  }
 });
 
-reply({ type: "online", pid: process.pid });
+reply({ type: 'online', pid: process.pid });

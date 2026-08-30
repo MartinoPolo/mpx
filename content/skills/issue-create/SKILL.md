@@ -7,6 +7,7 @@ metadata:
     skillPacks: [core]
     defaultExposure: name-only
 ---
+
 # Create an Issue
 
 Use [the canonical template](../epic-decompose/ISSUE_TEMPLATE.md) to create one well-scoped Issue.

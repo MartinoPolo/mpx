@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-best-practices
-description: "Read-only reviewer for language/framework best practices and conventions."
+description: 'Read-only reviewer for language/framework best practices and conventions.'
 model: openai-codex/gpt-5.6-terra
 thinking: medium
 tools: read,grep,find,ls,bash
 output_schema: findings
 
 ---
+
 # Reviewer: Best Practices
 
 First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.

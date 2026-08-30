@@ -1,12 +1,13 @@
 ---
 name: mpx-scanner-architecture
-description: "Lightweight architecture scanner for epic-end review. Flags structural concerns without designing solutions."
+description: 'Lightweight architecture scanner for epic-end review. Flags structural concerns without designing solutions.'
 model: openai-codex/gpt-5.6-terra
 thinking: medium
 tools: read,grep,find,ls,bash
 output_schema: findings
 
 ---
+
 # Scanner: Architecture
 
 Scan changed files for structural and architectural concerns. Flag issues — do not design solutions.

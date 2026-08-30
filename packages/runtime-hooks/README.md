@@ -10,10 +10,10 @@ The behavior was ported from the maintained MP hook sources at the Phase F migra
 baseline. Compact reinjection also used two non-Git local source files. Their SHA-256
 hashes record the exact reviewed baseline without creating a runtime dependency:
 
-| Logical source | SHA-256 |
-| --- | --- |
+| Logical source                   | SHA-256                                                            |
+| -------------------------------- | ------------------------------------------------------------------ |
 | `codex/hooks/compact-context.js` | `7c66b56f1936691b8fb8b2d4fe8267e411a8b818ee5feddf0855a17e9529e85d` |
-| `codex/hooks/shared.js` | `b0b3bf430c43062b228b210c72b522a44da44b05eafbf7609f813d990273ebe6` |
+| `codex/hooks/shared.js`          | `b0b3bf430c43062b228b210c72b522a44da44b05eafbf7609f813d990273ebe6` |
 
 No source content, machine credentials, sessions, or state is bundled.
 
@@ -46,17 +46,17 @@ No source content, machine credentials, sessions, or state is bundled.
 
 ## Behavior matrix
 
-| Behavior | Shared contract | Failure disposition |
-| --- | --- | --- |
-| Package manager | `evaluatePackagePolicy` | Wrong manager blocks; capability warnings allow |
-| Dangerous command | `classifyDangerousCommand` | Classification/input/infrastructure uncertainty blocks |
-| Pre-commit and secrets | `evaluatePreCommit` | Secret or check failure blocks; discovery failure is adapter-visible fail-open |
-| Fallow | `evaluateFallowGate` | Audit fail/old version blocks; unavailable/runtime error warns and allows |
-| Post-write quality | `planFileQuality` | Returns argv plans; adapter runs best-effort |
-| Post-command context | `extractPostCommandContext` | Missing/invalid assumptions produce no context |
-| Session context | `buildMachineContext`, `planSessionContext` | Missing roots produce no context |
-| Compaction | `planCompactionInjection` | Uses runtime default when canonical injection is unavailable |
-| Notification | `planNotification` | Top-level Windows turns use background flash/beep; delivery failure is ignored |
+| Behavior               | Shared contract                             | Failure disposition                                                            |
+| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| Package manager        | `evaluatePackagePolicy`                     | Wrong manager blocks; capability warnings allow                                |
+| Dangerous command      | `classifyDangerousCommand`                  | Classification/input/infrastructure uncertainty blocks                         |
+| Pre-commit and secrets | `evaluatePreCommit`                         | Secret or check failure blocks; discovery failure is adapter-visible fail-open |
+| Fallow                 | `evaluateFallowGate`                        | Audit fail/old version blocks; unavailable/runtime error warns and allows      |
+| Post-write quality     | `planFileQuality`                           | Returns argv plans; adapter runs best-effort                                   |
+| Post-command context   | `extractPostCommandContext`                 | Missing/invalid assumptions produce no context                                 |
+| Session context        | `buildMachineContext`, `planSessionContext` | Missing roots produce no context                                               |
+| Compaction             | `planCompactionInjection`                   | Uses runtime default when canonical injection is unavailable                   |
+| Notification           | `planNotification`                          | Top-level Windows turns use background flash/beep; delivery failure is ignored |
 
 ## Adapter gaps
 

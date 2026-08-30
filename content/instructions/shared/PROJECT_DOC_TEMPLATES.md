@@ -9,21 +9,27 @@ Replace `[Project Name]` when known.
 # [Project Name] Context
 
 ## What This Is
+
 [Three-sentence project summary]
 
 ## Domain Language
+
 [One-line definition-list entries]
 
 ## Relationships
+
 [Entity cardinalities such as 1:N and N:1]
 
 ## Flagged Ambiguities
+
 [Resolved term conflicts with rationale]
 
 ## Core Features
+
 [Feature index: name, status, MPX Issue ID, and design pointer]
 
 ## Key Constraints
+
 [Settled facts about the system]
 ```
 

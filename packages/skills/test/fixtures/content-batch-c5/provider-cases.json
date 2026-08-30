@@ -2,7 +2,12 @@
   {
     "provider": "github",
     "skill": "epic-decompose",
-    "required": ["provider is GitHub", "issue.sub-issue", "issue.template", "structured remediation"]
+    "required": [
+      "provider is GitHub",
+      "issue.sub-issue",
+      "issue.template",
+      "structured remediation"
+    ]
   },
   {
     "provider": "gitlab",

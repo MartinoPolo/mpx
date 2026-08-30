@@ -1,6 +1,6 @@
 ---
 name: agent-create
-description: "Creates or restructures a custom agent when a user needs a delegated role, distinct delegation branches, tools, workflow, or structured output."
+description: 'Creates or restructures a custom agent when a user needs a delegated role, distinct delegation branches, tools, workflow, or structured output.'
 metadata:
   mpx:
     skillPacks: [work]

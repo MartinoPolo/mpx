@@ -7,6 +7,7 @@ metadata:
     skillPacks: [work]
     defaultExposure: explicit-only
 ---
+
 # Batch Execute
 
 Orchestrate a bounded batch. Default to one worker at a time on one shared branch; isolated worktrees may run concurrently only when explicitly requested. See [REFERENCE.md](REFERENCE.md).

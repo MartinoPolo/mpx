@@ -10,10 +10,10 @@ directly.
 
 State the breadth and a stopping condition:
 
-| Breadth | Scope |
-| --- | --- |
-| `quick` | one known concept in its obvious location |
-| `medium` | obvious locations plus one alternate naming convention |
+| Breadth         | Scope                                                                       |
+| --------------- | --------------------------------------------------------------------------- |
+| `quick`         | one known concept in its obvious location                                   |
+| `medium`        | obvious locations plus one alternate naming convention                      |
 | `very thorough` | exhaust relevant conventions, sibling directories, configuration, and tests |
 
 Breadth controls search scope, not reasoning effort. `mpx-explorer` declares the `standard` model
@@ -44,15 +44,15 @@ dependencies.
 
 Resolve machine roots from the environment at execution time:
 
-| Variable | Purpose |
-| --- | --- |
-| `MPX_PROJECTS` | personal projects |
-| `MPX_WORK` | work repositories |
-| `MPX_CLONED` | cloned open-source repositories |
-| `MPX_APPS` | local applications |
-| `MPX_ONEDRIVE` | OneDrive root |
-| `MPX_AI_GENERATED` | generated deliverables |
-| `MPX_OBSIDIAN_VAULT` | Obsidian vault |
+| Variable             | Purpose                         |
+| -------------------- | ------------------------------- |
+| `MPX_PROJECTS`       | personal projects               |
+| `MPX_WORK`           | work repositories               |
+| `MPX_CLONED`         | cloned open-source repositories |
+| `MPX_APPS`           | local applications              |
+| `MPX_ONEDRIVE`       | OneDrive root                   |
+| `MPX_AI_GENERATED`   | generated deliverables          |
+| `MPX_OBSIDIAN_VAULT` | Obsidian vault                  |
 
 Values are private, per-machine, and never committed. An unset root is unavailable: name the
 missing variable and stop that branch. Do not guess paths. Canonical markdown does not interpolate

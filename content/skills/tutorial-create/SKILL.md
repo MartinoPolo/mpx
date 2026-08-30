@@ -1,11 +1,12 @@
 ---
 name: tutorial-create
-description: "Compiles an interactive, self-contained HTML tutorial from a topic or code showcase into the MPX_AI_GENERATED assets root."
+description: 'Compiles an interactive, self-contained HTML tutorial from a topic or code showcase into the MPX_AI_GENERATED assets root.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # Create Interactive Tutorial
 
 Generate a self-contained interactive HTML tutorial page. You author ONLY a compact `<slug>.source.md`; `scripts/compile.js` renders the final page from `TEMPLATE.html` (Shiki highlighting, theme, progress, quiz — all template-owned). the invocation input

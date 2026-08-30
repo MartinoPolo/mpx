@@ -1,6 +1,6 @@
 ---
 name: mpx-review-manager
-description: "Creates or updates GitHub PRs with conventional title/body format. Detects base branch, composes structured PR description."
+description: 'Creates or updates GitHub PRs with conventional title/body format. Detects base branch, composes structured PR description.'
 model: openai-codex/gpt-5.6-terra
 thinking: low
 tools: bash

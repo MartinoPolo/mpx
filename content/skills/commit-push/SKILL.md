@@ -1,6 +1,6 @@
 ---
 name: commit-push
-description: "Stages, commits, and pushes changes without opening a PR."
+description: 'Stages, commits, and pushes changes without opening a PR.'
 metadata:
   mpx:
     skillPacks: [work]

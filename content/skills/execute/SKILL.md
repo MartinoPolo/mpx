@@ -7,6 +7,7 @@ metadata:
     skillPacks: [core]
     defaultExposure: full
 ---
+
 # Execute an Issue
 
 Read [tests](tests.md), [mocking](mocking.md), and [close-out](CLOSE_OUT.md) when those phases begin.

@@ -1,15 +1,5 @@
 {
-  "unsafeArgv": [
-    [],
-    [""],
-    ["git\nstatus"]
-  ],
-  "unsafeCwd": [
-    "/tmp",
-    "C:\\tmp",
-    "../outside",
-    "packages/../../outside",
-    "\\\\server\\share"
-  ],
+  "unsafeArgv": [[], [""], ["git\nstatus"]],
+  "unsafeCwd": ["/tmp", "C:\\tmp", "../outside", "packages/../../outside", "\\\\server\\share"],
   "forbiddenEnvironment": ["NPM_TOKEN", "API_SECRET", "DATABASE_PASSWORD", "SSH_PRIVATE_KEY"]
 }

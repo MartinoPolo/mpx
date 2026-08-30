@@ -1,1 +1,16 @@
-{"schemaVersion":1,"project":{"id":"phase-h/database"},"repository":{"provider":"generic","remote":"origin"},"development":{"services":{"database":{"scope":"project","port":{"mode":"fixed-shared","preferred":5432},"environmentVariable":"DATABASE_URL","protocol":"tcp","start":{"type":"external","kind":"database"}}}}}
+{
+  "schemaVersion": 1,
+  "project": { "id": "phase-h/database" },
+  "repository": { "provider": "generic", "remote": "origin" },
+  "development": {
+    "services": {
+      "database": {
+        "scope": "project",
+        "port": { "mode": "fixed-shared", "preferred": 5432 },
+        "environmentVariable": "DATABASE_URL",
+        "protocol": "tcp",
+        "start": { "type": "external", "kind": "database" }
+      }
+    }
+  }
+}

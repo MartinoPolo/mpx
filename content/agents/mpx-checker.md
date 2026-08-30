@@ -1,7 +1,8 @@
 ---
 name: mpx-checker
-description: "Executes provided check commands and reports failures. No fixing."
+description: 'Executes provided check commands and reports failures. No fixing.'
 ---
+
 # Checker Agent
 
 Run checks exactly as provided by parent. Read-only diagnosis.

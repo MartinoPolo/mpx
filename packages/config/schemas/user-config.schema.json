@@ -3,118 +3,277 @@
   "$id": "https://mpx.dev/schemas/user-config.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["identities", "domains", "contentScopes", "modes", "skillPolicies", "presets", "launchDefaults", "networkPolicies", "executors"],
+  "required": [
+    "identities",
+    "domains",
+    "contentScopes",
+    "modes",
+    "skillPolicies",
+    "presets",
+    "launchDefaults",
+    "networkPolicies",
+    "executors"
+  ],
   "properties": {
     "identities": { "$ref": "#/$defs/identityMap" },
-    "domains": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/roots" } },
-    "contentScopes": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/contentScope" } },
-    "modes": { "type": "object", "propertyNames": { "enum": ["project", "developer", "personal-assistant", "computer-control", "unrestricted"] }, "additionalProperties": { "$ref": "#/$defs/mode" } },
-    "skillPolicies": { "type": "object", "propertyNames": { "enum": ["clean", "developer", "personal-assistant"] }, "additionalProperties": { "$ref": "#/$defs/skillPolicy" } },
-    "presets": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/preset" } },
+    "domains": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/roots" }
+    },
+    "contentScopes": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/contentScope" }
+    },
+    "modes": {
+      "type": "object",
+      "propertyNames": {
+        "enum": ["project", "developer", "personal-assistant", "computer-control", "unrestricted"]
+      },
+      "additionalProperties": { "$ref": "#/$defs/mode" }
+    },
+    "skillPolicies": {
+      "type": "object",
+      "propertyNames": { "enum": ["clean", "developer", "personal-assistant"] },
+      "additionalProperties": { "$ref": "#/$defs/skillPolicy" }
+    },
+    "presets": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/preset" }
+    },
     "launchDefaults": { "$ref": "#/$defs/launchDefaults" },
-    "networkPolicies": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/networkPolicy" } },
-    "executors": { "type": "object", "propertyNames": { "enum": ["host", "docker"] }, "additionalProperties": { "$ref": "#/$defs/empty" } },
-    "projects": { "type": "object", "propertyNames": { "$ref": "#/$defs/projectId" }, "additionalProperties": { "$ref": "#/$defs/override" } },
-    "localIssueStores": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/localIssueStore" } },
-    "localViews": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/localView" } }
+    "networkPolicies": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/networkPolicy" }
+    },
+    "executors": {
+      "type": "object",
+      "propertyNames": { "enum": ["host", "docker"] },
+      "additionalProperties": { "$ref": "#/$defs/empty" }
+    },
+    "projects": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/projectId" },
+      "additionalProperties": { "$ref": "#/$defs/override" }
+    },
+    "localIssueStores": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/localIssueStore" }
+    },
+    "localViews": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/localView" }
+    }
   },
   "$defs": {
     "id": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
-    "projectId": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$", "maxLength": 129 },
+    "projectId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+      "maxLength": 129
+    },
     "route": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
     "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
-    "roots": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/path" } },
+    "roots": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
     "empty": { "type": "object", "additionalProperties": false },
-    "localIssueStore": { "type": "object", "additionalProperties": false, "required": ["root"], "properties": { "root": { "$ref": "#/$defs/path" } } },
-    "localView": { "type": "object", "additionalProperties": false, "required": ["vaultRoot", "outputRoot", "vaultSubtree", "resumeBaseUrl"], "properties": { "vaultRoot": { "$ref": "#/$defs/path" }, "outputRoot": { "$ref": "#/$defs/path" }, "vaultSubtree": { "type": "string", "pattern": "^MPX(?:/[A-Za-z0-9._-]+)+$" }, "resumeBaseUrl": { "type": "string", "pattern": "^mpx://[A-Za-z0-9/?&=._%-]+$" } } },
+    "localIssueStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root"],
+      "properties": { "root": { "$ref": "#/$defs/path" } }
+    },
+    "localView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vaultRoot", "outputRoot", "vaultSubtree", "resumeBaseUrl"],
+      "properties": {
+        "vaultRoot": { "$ref": "#/$defs/path" },
+        "outputRoot": { "$ref": "#/$defs/path" },
+        "vaultSubtree": { "type": "string", "pattern": "^MPX(?:/[A-Za-z0-9._-]+)+$" },
+        "resumeBaseUrl": { "type": "string", "pattern": "^mpx://[A-Za-z0-9/?&=._%-]+$" }
+      }
+    },
     "mode": {
-      "type": "object", "additionalProperties": false, "required": ["resources"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resources"],
       "properties": {
         "resources": {
-          "type": "object", "minProperties": 1,
-          "propertyNames": { "enum": ["selected-project", "identity-domain", "cloned-repositories", "assistant-input", "assistant-output", "computer-control-config", "computer-control-executable-settings", "host"] },
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": [
+              "selected-project",
+              "identity-domain",
+              "cloned-repositories",
+              "assistant-input",
+              "assistant-output",
+              "computer-control-config",
+              "computer-control-executable-settings",
+              "host"
+            ]
+          },
           "additionalProperties": { "enum": ["read-only", "read-write", "staged-write"] }
         }
       }
     },
     "skillPolicy": {
-      "type": "object", "additionalProperties": false, "required": ["skillExposure"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skillExposure"],
       "properties": {
-        "skillPacks": { "type": "array", "items": { "enum": ["core", "work", "personal"] }, "uniqueItems": true },
+        "skillPacks": {
+          "type": "array",
+          "items": { "enum": ["core", "work", "personal"] },
+          "uniqueItems": true
+        },
         "skillExposure": { "$ref": "#/$defs/policyExposure" }
       }
     },
     "exposure": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "default": { "enum": ["full", "name-only", "explicit-only", "off"] },
-        "skills": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "enum": ["full", "name-only", "explicit-only", "off"] } }
+        "skills": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "enum": ["full", "name-only", "explicit-only", "off"] }
+        }
       }
     },
     "policyExposure": {
-      "type": "object", "additionalProperties": false, "required": ["default"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default"],
       "properties": {
         "default": { "enum": ["full", "name-only", "explicit-only", "off"] },
-        "skills": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "enum": ["full", "name-only", "explicit-only", "off"] } }
+        "skills": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "enum": ["full", "name-only", "explicit-only", "off"] }
+        }
       }
     },
     "override": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "skillPacks": { "type": "array", "items": { "enum": ["core", "work", "personal"] }, "uniqueItems": true },
+        "skillPacks": {
+          "type": "array",
+          "items": { "enum": ["core", "work", "personal"] },
+          "uniqueItems": true
+        },
         "skillExposure": { "$ref": "#/$defs/exposure" }
       }
     },
     "contentScope": {
-      "type": "object", "additionalProperties": false, "required": ["roots"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roots"],
       "properties": {
         "roots": { "$ref": "#/$defs/roots" },
-        "skillPacks": { "type": "array", "items": { "enum": ["core", "work", "personal"] }, "uniqueItems": true },
+        "skillPacks": {
+          "type": "array",
+          "items": { "enum": ["core", "work", "personal"] },
+          "uniqueItems": true
+        },
         "skillExposure": { "$ref": "#/$defs/exposure" }
       }
     },
-    "identityMap": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/identity" } },
+    "identityMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/identity" }
+    },
     "identity": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["domain", "runtimeRoots", "gitAuthorRoute"],
       "properties": {
         "domain": { "$ref": "#/$defs/id" },
         "runtimeRoots": {
-          "type": "object", "additionalProperties": false, "required": ["claude", "pi"],
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claude", "pi"],
           "properties": { "claude": { "$ref": "#/$defs/path" }, "pi": { "$ref": "#/$defs/path" } }
         },
         "gitAuthorRoute": { "$ref": "#/$defs/route" },
-        "providerRoutes": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/route" } },
+        "providerRoutes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/route" }
+        },
         "sshRoute": { "$ref": "#/$defs/route" },
         "mcpSharing": {
-          "type": "object", "additionalProperties": false, "required": ["allow", "shareNativeAuth"],
-          "properties": { "allow": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/route" } }, "shareNativeAuth": { "const": false } }
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allow", "shareNativeAuth"],
+          "properties": {
+            "allow": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/route" } },
+            "shareNativeAuth": { "const": false }
+          }
         }
       }
     },
     "preset": {
-      "type": "object", "additionalProperties": false,
-      "required": ["identity", "mode", "skillPolicy", "contentScope", "executor", "workspace", "networkPolicy"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "mode",
+        "skillPolicy",
+        "contentScope",
+        "executor",
+        "workspace",
+        "networkPolicy"
+      ],
       "properties": {
-        "identity": { "$ref": "#/$defs/id" }, "mode": { "$ref": "#/$defs/id" },
-        "skillPolicy": { "$ref": "#/$defs/id" }, "contentScope": { "$ref": "#/$defs/id" },
+        "identity": { "$ref": "#/$defs/id" },
+        "mode": { "$ref": "#/$defs/id" },
+        "skillPolicy": { "$ref": "#/$defs/id" },
+        "contentScope": { "$ref": "#/$defs/id" },
         "executor": { "enum": ["host", "docker"] },
         "workspace": { "enum": ["clone", "host-worktree", "direct"] },
         "networkPolicy": { "$ref": "#/$defs/id" }
       }
     },
     "identityPresetDefaults": {
-      "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/id" }
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/id" }
     },
     "launchDefaults": {
-      "type": "object", "additionalProperties": false, "required": ["scopes", "projects"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopes", "projects"],
       "properties": {
-        "scopes": { "type": "object", "propertyNames": { "$ref": "#/$defs/id" }, "additionalProperties": { "$ref": "#/$defs/identityPresetDefaults" } },
-        "projects": { "type": "object", "propertyNames": { "$ref": "#/$defs/projectId" }, "additionalProperties": { "$ref": "#/$defs/identityPresetDefaults" } }
+        "scopes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/identityPresetDefaults" }
+        },
+        "projects": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/projectId" },
+          "additionalProperties": { "$ref": "#/$defs/identityPresetDefaults" }
+        }
       }
     },
     "networkPolicy": {
-      "type": "object", "additionalProperties": false, "minProperties": 1,
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
       "properties": {
         "preset": { "enum": ["allow-all", "balanced", "deny-all"] },
         "extends": { "$ref": "#/$defs/id" },
@@ -124,8 +283,16 @@
         "requiredRuntimeEndpoints": { "type": "boolean" }
       },
       "oneOf": [
-        { "properties": { "preset": {}, "extends": {} }, "required": ["preset"], "not": { "properties": { "extends": {} }, "required": ["extends"] } },
-        { "properties": { "preset": {}, "extends": {} }, "required": ["extends"], "not": { "properties": { "preset": {} }, "required": ["preset"] } }
+        {
+          "properties": { "preset": {}, "extends": {} },
+          "required": ["preset"],
+          "not": { "properties": { "extends": {} }, "required": ["extends"] }
+        },
+        {
+          "properties": { "preset": {}, "extends": {} },
+          "required": ["extends"],
+          "not": { "properties": { "preset": {} }, "required": ["preset"] }
+        }
       ]
     }
   }

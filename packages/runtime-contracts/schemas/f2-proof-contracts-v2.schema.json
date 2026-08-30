@@ -3,15 +3,172 @@
   "$id": "https://mpx.local/schemas/f2-proof-contracts-v2.schema.json",
   "title": "MPX Phase F2 reviewed plan export and live proof",
   "$defs": {
-    "sha256": {"type":"string","pattern":"^[a-f0-9]{64}$"},
-    "identity": {"type":"object","additionalProperties":false,"required":["name","domain"],"properties":{"name":{"type":"string","maxLength":64},"domain":{"enum":["personal","work"]}}},
-    "artifact": {"type":"object","additionalProperties":false,"required":["manifestKey","artifactKey","fileMapHash"],"properties":{"manifestKey":{"$ref":"#/$defs/sha256"},"artifactKey":{"$ref":"#/$defs/sha256"},"fileMapHash":{"$ref":"#/$defs/sha256"}}},
-    "evidence": {"type":"object","additionalProperties":false,"required":["sbxPinSha256","runtimeToolInventorySha256","executorEvidenceSha256"],"properties":{"sbxPinSha256":{"$ref":"#/$defs/sha256"},"runtimeToolInventorySha256":{"$ref":"#/$defs/sha256"},"executorEvidenceSha256":{"$ref":"#/$defs/sha256"}}},
-    "sandbox": {"type":"object","additionalProperties":false,"required":["planKey","profile","proofSandboxName","createArgv"],"properties":{"planKey":{"$ref":"#/$defs/sha256"},"profile":{"enum":["open","deny-all","delivery","implementation","minimal","research"]},"proofSandboxName":{"type":"string","pattern":"^mpx-proof-[a-f0-9]{12}$"},"createArgv":{"type":"array","minItems":5,"maxItems":64,"items":{"type":"string","minLength":1,"maxLength":1024},"not":{"contains":{"const":"--profile"}}}}},
-    "target": {"type":"object","additionalProperties":false,"required":["target","decision"],"properties":{"target":{"type":"string","maxLength":256},"decision":{"enum":["allow","deny"]}}},
-    "profile": {"type":"object","additionalProperties":false,"required":["profile","default","targets"],"properties":{"profile":{"enum":["open","deny-all","delivery","implementation","minimal","research"]},"default":{"enum":["allow","deny"]},"targets":{"type":"array","minItems":1,"maxItems":32,"items":{"$ref":"#/$defs/target"}}}},
-    "decision": {"type":"object","additionalProperties":false,"required":["profile","target","decision","count"],"properties":{"profile":{"enum":["open","deny-all","delivery","implementation","minimal","research"]},"target":{"type":"string","maxLength":256},"decision":{"enum":["allow","deny"]},"count":{"const":1}}},
-    "SbxLaunchPlanExportV1": {"type":"object","additionalProperties":false,"required":["schemaVersion","exportKey","launchKey","descriptorSha256","runtime","identity","artifact","evidence","sandbox","policyMatrix"],"properties":{"schemaVersion":{"const":1},"exportKey":{"$ref":"#/$defs/sha256"},"launchKey":{"$ref":"#/$defs/sha256"},"descriptorSha256":{"$ref":"#/$defs/sha256"},"runtime":{"enum":["claude","pi"]},"identity":{"$ref":"#/$defs/identity"},"artifact":{"$ref":"#/$defs/artifact"},"evidence":{"$ref":"#/$defs/evidence"},"sandbox":{"$ref":"#/$defs/sandbox"},"policyMatrix":{"type":"array","minItems":1,"maxItems":1,"items":{"$ref":"#/$defs/profile"}}}},
-    "F2ProofReportV2": {"type":"object","additionalProperties":false,"required":["schemaVersion","reportKey","planExportKey","launchKey","descriptorSha256","runtime","identity","artifact","evidence","sandbox","policyMatrix","decisions","builtInClaudeEvidence","verdict"],"properties":{"schemaVersion":{"const":2},"reportKey":{"$ref":"#/$defs/sha256"},"planExportKey":{"$ref":"#/$defs/sha256"},"launchKey":{"$ref":"#/$defs/sha256"},"descriptorSha256":{"$ref":"#/$defs/sha256"},"runtime":{"enum":["claude","pi"]},"identity":{"$ref":"#/$defs/identity"},"artifact":{"$ref":"#/$defs/artifact"},"evidence":{"$ref":"#/$defs/evidence"},"sandbox":{"$ref":"#/$defs/sandbox"},"policyMatrix":{"type":"array","minItems":1,"maxItems":1,"items":{"$ref":"#/$defs/profile"}},"decisions":{"type":"array","minItems":1,"maxItems":32,"items":{"$ref":"#/$defs/decision"}},"builtInClaudeEvidence":{"type":["object","null"]},"verdict":{"enum":["pass","fail"]}}}
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "domain"],
+      "properties": {
+        "name": { "type": "string", "maxLength": 64 },
+        "domain": { "enum": ["personal", "work"] }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifestKey", "artifactKey", "fileMapHash"],
+      "properties": {
+        "manifestKey": { "$ref": "#/$defs/sha256" },
+        "artifactKey": { "$ref": "#/$defs/sha256" },
+        "fileMapHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sbxPinSha256", "runtimeToolInventorySha256", "executorEvidenceSha256"],
+      "properties": {
+        "sbxPinSha256": { "$ref": "#/$defs/sha256" },
+        "runtimeToolInventorySha256": { "$ref": "#/$defs/sha256" },
+        "executorEvidenceSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planKey", "profile", "proofSandboxName", "createArgv"],
+      "properties": {
+        "planKey": { "$ref": "#/$defs/sha256" },
+        "profile": {
+          "enum": ["open", "deny-all", "delivery", "implementation", "minimal", "research"]
+        },
+        "proofSandboxName": { "type": "string", "pattern": "^mpx-proof-[a-f0-9]{12}$" },
+        "createArgv": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 64,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "not": { "contains": { "const": "--profile" } }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "decision"],
+      "properties": {
+        "target": { "type": "string", "maxLength": 256 },
+        "decision": { "enum": ["allow", "deny"] }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "default", "targets"],
+      "properties": {
+        "profile": {
+          "enum": ["open", "deny-all", "delivery", "implementation", "minimal", "research"]
+        },
+        "default": { "enum": ["allow", "deny"] },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/target" }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "target", "decision", "count"],
+      "properties": {
+        "profile": {
+          "enum": ["open", "deny-all", "delivery", "implementation", "minimal", "research"]
+        },
+        "target": { "type": "string", "maxLength": 256 },
+        "decision": { "enum": ["allow", "deny"] },
+        "count": { "const": 1 }
+      }
+    },
+    "SbxLaunchPlanExportV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "exportKey",
+        "launchKey",
+        "descriptorSha256",
+        "runtime",
+        "identity",
+        "artifact",
+        "evidence",
+        "sandbox",
+        "policyMatrix"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "exportKey": { "$ref": "#/$defs/sha256" },
+        "launchKey": { "$ref": "#/$defs/sha256" },
+        "descriptorSha256": { "$ref": "#/$defs/sha256" },
+        "runtime": { "enum": ["claude", "pi"] },
+        "identity": { "$ref": "#/$defs/identity" },
+        "artifact": { "$ref": "#/$defs/artifact" },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "sandbox": { "$ref": "#/$defs/sandbox" },
+        "policyMatrix": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/profile" }
+        }
+      }
+    },
+    "F2ProofReportV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "reportKey",
+        "planExportKey",
+        "launchKey",
+        "descriptorSha256",
+        "runtime",
+        "identity",
+        "artifact",
+        "evidence",
+        "sandbox",
+        "policyMatrix",
+        "decisions",
+        "builtInClaudeEvidence",
+        "verdict"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "reportKey": { "$ref": "#/$defs/sha256" },
+        "planExportKey": { "$ref": "#/$defs/sha256" },
+        "launchKey": { "$ref": "#/$defs/sha256" },
+        "descriptorSha256": { "$ref": "#/$defs/sha256" },
+        "runtime": { "enum": ["claude", "pi"] },
+        "identity": { "$ref": "#/$defs/identity" },
+        "artifact": { "$ref": "#/$defs/artifact" },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "sandbox": { "$ref": "#/$defs/sandbox" },
+        "policyMatrix": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/profile" }
+        },
+        "decisions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/decision" }
+        },
+        "builtInClaudeEvidence": { "type": ["object", "null"] },
+        "verdict": { "enum": ["pass", "fail"] }
+      }
+    }
   }
 }

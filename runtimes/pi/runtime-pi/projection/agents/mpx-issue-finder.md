@@ -1,6 +1,6 @@
 ---
 name: mpx-issue-finder
-description: "Finds the issue that a PR branch closes. Given branch diff/commits, searches repo issues and returns the best match."
+description: 'Finds the issue that a PR branch closes. Given branch diff/commits, searches repo issues and returns the best match.'
 model: openai-codex/gpt-5.6-terra
 thinking: low
 tools: read,grep,find,ls,bash

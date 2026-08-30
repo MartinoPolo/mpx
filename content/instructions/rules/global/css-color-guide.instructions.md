@@ -18,11 +18,13 @@ Follow these rules when creating or modifying styles.
 ## Background Colors
 
 **Use:**
+
 - White, off-white (#ffffff, #f9fafb)
 - Light cool colors (light blues, light grays)
 - Subtle neutral tones (#f3f4f6, #e5e7eb)
 
 **Never use:**
+
 - Red, orange, yellow backgrounds
 - Purple, magenta, pink
 - Any saturated/hot color as primary background
@@ -30,11 +32,13 @@ Follow these rules when creating or modifying styles.
 ## Text Colors
 
 **High contrast (required):**
+
 - Dark text on light: #1f2937, #111827, #374151
 - Light text on dark: #f9fafb, #e5e7eb
 - Minimum contrast ratio: 4.5:1 (WCAG AA)
 
 **Never use:**
+
 - Yellow text (poor readability)
 - Pink text
 - Low contrast combinations
@@ -42,12 +46,14 @@ Follow these rules when creating or modifying styles.
 ## Hot Colors (Red, Orange, Yellow)
 
 **Reserve for:**
+
 - Error states and alerts
 - Warnings and critical actions
 - Delete/destructive buttons
 - Required field indicators
 
 **Never use for:**
+
 - Backgrounds
 - Regular buttons
 - Decorative elements
@@ -56,6 +62,7 @@ Follow these rules when creating or modifying styles.
 ## Gradients
 
 **Best practices:**
+
 - Keep color shifts minimal (#E6F2FF → #F5F7FA)
 - Stay within same color family
 - Prefer linear over radial for backgrounds
@@ -75,8 +82,8 @@ Follow these rules when creating or modifying styles.
 --bg-tertiary: #f3f4f6;
 
 /* Accent (use sparingly) */
---accent-primary: #2563eb;  /* Blue */
---accent-success: #059669;  /* Green */
---accent-warning: #d97706;  /* Amber - warnings only */
---accent-error: #dc2626;    /* Red - errors only */
+--accent-primary: #2563eb; /* Blue */
+--accent-success: #059669; /* Green */
+--accent-warning: #d97706; /* Amber - warnings only */
+--accent-error: #dc2626; /* Red - errors only */
 ```

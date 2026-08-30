@@ -2,11 +2,11 @@
 scope: project
 selector: sveltekit-paths
 paths:
-  - "**/*.svelte"
-  - "**/*.svelte.ts"
-  - "**/*.svelte.js"
-  - "**/src/routes/**/*.ts"
-applyTo: "**/*.svelte,**/*.svelte.ts,**/*.svelte.js,**/src/routes/**/*.ts"
+  - '**/*.svelte'
+  - '**/*.svelte.ts'
+  - '**/*.svelte.js'
+  - '**/src/routes/**/*.ts'
+applyTo: '**/*.svelte,**/*.svelte.ts,**/*.svelte.js,**/src/routes/**/*.ts'
 ---
 
 # SvelteKit Type-Safe Paths (≥ 2.26)
@@ -32,10 +32,10 @@ Use `resolve()` instead of `base` for all internal links and programmatic naviga
 In `.ts` files (universal load functions, client-side navigation):
 
 ```ts
-import { resolve } from "$app/paths";
-import { goto } from "$app/navigation";
+import { resolve } from '$app/paths';
+import { goto } from '$app/navigation';
 
-await goto(resolve("/blog/[slug]", { slug }));
+await goto(resolve('/blog/[slug]', { slug }));
 ```
 
 ## `asset` — type-safe static file references

@@ -4,18 +4,18 @@ Detection rules and safety heuristics for each domain. Platform-neutral — conc
 
 Every domain sub-agent returns groups in this shape:
 
-| Field | Meaning |
-| --- | --- |
-| `group` | Short label shown in the approval question, e.g. `Yarn cache` |
-| `domain` | Domain number 1-8, or `archive` |
-| `paths` | Full paths in the group |
-| `gb` | Logical size — a ceiling, not a promise |
-| `age` | Newest last-write across the group |
-| `destination` | `Fast` \| `RecycleBin` \| `Quarantine` \| `Elevated` \| `ReportOnly` |
-| `visual` | `true` when the group holds images or video → triggers the staging-folder review |
-| `confidence` | `high` \| `medium` \| `low` |
-| `reason` | One line the user can judge from |
-| `status` | `Candidate` \| `Protected` — protected items are listed, never proposed |
+| Field         | Meaning                                                                          |
+| ------------- | -------------------------------------------------------------------------------- |
+| `group`       | Short label shown in the approval question, e.g. `Yarn cache`                    |
+| `domain`      | Domain number 1-8, or `archive`                                                  |
+| `paths`       | Full paths in the group                                                          |
+| `gb`          | Logical size — a ceiling, not a promise                                          |
+| `age`         | Newest last-write across the group                                               |
+| `destination` | `Fast` \| `RecycleBin` \| `Quarantine` \| `Elevated` \| `ReportOnly`             |
+| `visual`      | `true` when the group holds images or video → triggers the staging-folder review |
+| `confidence`  | `high` \| `medium` \| `low`                                                      |
+| `reason`      | One line the user can judge from                                                 |
+| `status`      | `Candidate` \| `Protected` — protected items are listed, never proposed          |
 
 Confidence `low` groups are reported for information and left unproposed.
 

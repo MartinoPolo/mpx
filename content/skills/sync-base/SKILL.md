@@ -1,6 +1,6 @@
 ---
 name: sync-base
-description: "Merges the target base branch into the current branch, resolving conflicts and pushing the result."
+description: 'Merges the target base branch into the current branch, resolving conflicts and pushing the result.'
 metadata:
   mpx:
     skillPacks: [work]

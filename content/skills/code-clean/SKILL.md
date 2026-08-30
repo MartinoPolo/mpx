@@ -1,6 +1,6 @@
 ---
 name: code-clean
-description: "Deduplicates code, removes repetition, and deletes dead code in a given scope."
+description: 'Deduplicates code, removes repetition, and deletes dead code in a given scope.'
 metadata:
   mpx:
     skillPacks: [work]

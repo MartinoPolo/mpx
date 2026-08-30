@@ -1,11 +1,12 @@
 ---
 name: clean-pc
-description: "Full-disk cleanup sweep across caches, Docker/WSL, build output, apps, duplicates and installers, with per-group approval."
+description: 'Full-disk cleanup sweep across caches, Docker/WSL, build output, apps, duplicates and installers, with per-group approval.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # Clean PC
 
 Scan every local disk, rank what can be reclaimed, and remove only what the user approves group by group. the invocation input
@@ -106,13 +107,13 @@ Record every decision in `state.json`, declines included.
 
 Take a free-space snapshot, execute approved groups by destination, then snapshot again.
 
-| Destination | Route |
-| --- | --- |
-| `Fast` | `Invoke-Removal.ps1 -Destination Fast` — regenerable caches only |
-| `RecycleBin` | `Invoke-Removal.ps1 -Destination RecycleBin` — the default |
+| Destination  | Route                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------- |
+| `Fast`       | `Invoke-Removal.ps1 -Destination Fast` — regenerable caches only                      |
+| `RecycleBin` | `Invoke-Removal.ps1 -Destination RecycleBin` — the default                            |
 | `Quarantine` | `Invoke-Removal.ps1 -Destination Quarantine` — visual files, browsable and reversible |
-| `Elevated` | collected into one script, never run inline |
-| `ReportOnly` | ARCHIVE — no file operations |
+| `Elevated`   | collected into one script, never run inline                                           |
+| `ReportOnly` | ARCHIVE — no file operations                                                          |
 
 Run `-DryRun` first on any group above 5 GB.
 

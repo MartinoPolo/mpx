@@ -7,16 +7,16 @@
  * Fallback: "main"
  */
 
-const { execSync: defaultExecSync } = require("child_process");
+const { execSync: defaultExecSync } = require('child_process');
 
-const CANDIDATE_BRANCHES = ["dev", "develop", "main", "master"];
+const CANDIDATE_BRANCHES = ['dev', 'develop', 'main', 'master'];
 
 /**
  * Run a git command, return trimmed stdout or null on failure.
  */
 function gitExec(command, exec) {
   try {
-    return exec(command, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return exec(command, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch {
     return null;
   }
@@ -35,9 +35,13 @@ function remoteBranchExists(branch, exec) {
  */
 function commitsAhead(branch, exec) {
   const mergeBase = gitExec(`git merge-base origin/${branch} HEAD`, exec);
-  if (mergeBase === null) return null;
+  if (mergeBase === null) {
+    return null;
+  }
   const count = gitExec(`git rev-list --count ${mergeBase}..HEAD`, exec);
-  if (count === null) return null;
+  if (count === null) {
+    return null;
+  }
   const parsed = parseInt(count, 10);
   return Number.isNaN(parsed) ? null : parsed;
 }
@@ -64,10 +68,14 @@ function detectBaseBranch(explicitBranch, options = {}) {
   let bestCount = Infinity;
 
   for (const branch of CANDIDATE_BRANCHES) {
-    if (!remoteBranchExists(branch, exec)) continue;
+    if (!remoteBranchExists(branch, exec)) {
+      continue;
+    }
 
     const ahead = commitsAhead(branch, exec);
-    if (ahead === null) continue;
+    if (ahead === null) {
+      continue;
+    }
 
     // Strict less-than keeps the first (higher-priority) winner on ties
     if (ahead < bestCount) {
@@ -77,13 +85,13 @@ function detectBaseBranch(explicitBranch, options = {}) {
   }
 
   // 3. Return best match or fallback
-  return bestBranch ?? "main";
+  return bestBranch ?? 'main';
 }
 
 function main() {
   const explicitBranch = process.argv[2] || undefined;
   const result = detectBaseBranch(explicitBranch);
-  process.stdout.write(result + "\n");
+  process.stdout.write(result + '\n');
 }
 
 if (require.main === module) {

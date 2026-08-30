@@ -1,11 +1,12 @@
 ---
 name: video-to-image
-description: "Turns any YouTube video into a printable one-page sheet image, reading the video with the Gemini API and handing the composed prompt to ChatGPT for generation. Workout videos get a dedicated exercise mode; everything else becomes an infographic overview."
+description: 'Turns any YouTube video into a printable one-page sheet image, reading the video with the Gemini API and handing the composed prompt to ChatGPT for generation. Workout videos get a dedicated exercise mode; everything else becomes an infographic overview.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # Video to Sheet Image
 
 Turn a YouTube video into a one-page visual overview worth pinning to a wall or opening on a
@@ -18,13 +19,13 @@ by hand rather than an API call.
 
 ## Step 1: Parse the request
 
-| Input | Source | Default |
-| ---------- | ------------------------------------------------ | ---------------------------- |
-| Video URL | the first `https://` argument | required |
-| Focus | prose left over after the URL and the flags | whole video |
-| Mode | `--mode`, or the user's answer | required — ask |
-| Output dir | `--out` | `MPX_AI_GENERATED/_VIDEO_SHEETS` |
-| Model | `--model` | `gemini-3.6-flash` |
+| Input      | Source                                      | Default                          |
+| ---------- | ------------------------------------------- | -------------------------------- |
+| Video URL  | the first `https://` argument               | required                         |
+| Focus      | prose left over after the URL and the flags | whole video                      |
+| Mode       | `--mode`, or the user's answer              | required — ask                   |
+| Output dir | `--out`                                     | `MPX_AI_GENERATED/_VIDEO_SHEETS` |
+| Model      | `--model`                                   | `gemini-3.6-flash`               |
 
 **Mode picks the schema, and the user picks the mode.** `exercise` extracts a workout into
 exercises with drawable start and end positions. `generic` extracts any other video into
@@ -104,7 +105,17 @@ full resolution.
 The script prints one JSON line on success:
 
 ```json
-{ "slug": "...", "folderName": "[Channel] Video Title", "title": "...", "videoTitle": "...", "channel": "...", "mode": "exercise", "itemCount": 12, "promptFile": ".../prompt.md", "promptTokenCount": 45033 }
+{
+  "slug": "...",
+  "folderName": "[Channel] Video Title",
+  "title": "...",
+  "videoTitle": "...",
+  "channel": "...",
+  "mode": "exercise",
+  "itemCount": 12,
+  "promptFile": ".../prompt.md",
+  "promptTokenCount": 45033
+}
 ```
 
 `title` is Gemini's sheet header; `videoTitle` and `channel` are YouTube's own and name the

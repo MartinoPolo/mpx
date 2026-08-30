@@ -4,7 +4,14 @@
   "title": "RuntimeContextV1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "launchKey", "launchDescriptor", "manifestKey", "runtimeArtifact", "binding"],
+  "required": [
+    "schemaVersion",
+    "launchKey",
+    "launchDescriptor",
+    "manifestKey",
+    "runtimeArtifact",
+    "binding"
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "launchKey": { "type": "string", "minLength": 1 },
@@ -13,7 +20,11 @@
       "additionalProperties": false,
       "required": ["reference", "digest"],
       "properties": {
-        "reference": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:[\\\\/])(?![/\\\\]).+" },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![A-Za-z]:[\\\\/])(?![/\\\\]).+"
+        },
         "digest": { "type": "string", "minLength": 1 }
       }
     },

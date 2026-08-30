@@ -2,9 +2,9 @@
 scope: project
 selector: solid
 paths:
-  - "**/*.tsx"
-  - "**/*.jsx"
-applyTo: "**/*.tsx,**/*.jsx"
+  - '**/*.tsx'
+  - '**/*.jsx'
+applyTo: '**/*.tsx,**/*.jsx'
 ---
 
 # SolidJS

@@ -25,10 +25,10 @@ vague prompt.
 
 ## Verification ownership
 
-| Commands supplied? | Executor | Parent |
-| --- | --- | --- |
-| yes | runs the commands and reports exact results | may trust bounded evidence |
-| no | reports edits and tests designed during implementation | performs final verification |
+| Commands supplied? | Executor                                               | Parent                      |
+| ------------------ | ------------------------------------------------------ | --------------------------- |
+| yes                | runs the commands and reports exact results            | may trust bounded evidence  |
+| no                 | reports edits and tests designed during implementation | performs final verification |
 
 Do not invent project verification commands. In TDD work, focused red/green test commands are part
 of the implementation loop; record both the expected failing evidence and final passing evidence.
@@ -58,18 +58,23 @@ Scope: [name/id]
 Status: Completed | Partial | Blocked
 
 Completed:
+
 - [work item] — [file/test/command evidence]
 
 Skipped/Failed:
+
 - [work item] — [reason]
 
 Files Changed:
+
 - path/to/file
 
 Blockers:
+
 - [none or bounded blocker]
 
 Needs From Parent:
+
 - [none or exact capability/decision needed]
 ```
 

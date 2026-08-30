@@ -5,7 +5,7 @@ repository-neutral: confirm the repository's own contribution rules, branch name
 and access configuration before making changes.
 
 Gerrit is **not** GitHub: reviews are created by pushing commits rather than by
-opening pull requests. Each commit becomes a *change* identified by a `Change-Id`
+opening pull requests. Each commit becomes a _change_ identified by a `Change-Id`
 trailer, and is pushed to the magic ref `refs/for/<target-branch>`. A new patchset
 for an existing review is another push of a commit carrying the **same**
 `Change-Id`.

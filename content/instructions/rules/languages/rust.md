@@ -2,8 +2,8 @@
 scope: language
 selector: rust
 paths:
-  - "**/*.rs"
-applyTo: "**/*.rs"
+  - '**/*.rs'
+applyTo: '**/*.rs'
 ---
 
 # Rust

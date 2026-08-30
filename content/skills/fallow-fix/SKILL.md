@@ -1,6 +1,6 @@
 ---
 name: fallow-fix
-description: "Diagnoses and fixes fallow dead-code audit failures, suppressing or baselining findings when justified."
+description: 'Diagnoses and fixes fallow dead-code audit failures, suppressing or baselining findings when justified.'
 metadata:
   mpx:
     skillPacks: [work]

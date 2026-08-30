@@ -20,8 +20,12 @@ function getLength(value: string | string[]): number {
 }
 
 // ✅ `in` operator for discriminated interfaces
-interface Dog { bark(): void }
-interface Cat { meow(): void }
+interface Dog {
+  bark(): void;
+}
+interface Cat {
+  meow(): void;
+}
 
 function speak(animal: Dog | Cat) {
   if ('bark' in animal) animal.bark();
@@ -44,9 +48,7 @@ const config = { endpoint: '/api', method: 'GET' } as const;
 
 ```typescript
 // ✅ Invalid states become unrepresentable
-type Result<T, E> =
-  | { success: true; data: T }
-  | { success: false; error: E };
+type Result<T, E> = { success: true; data: T } | { success: false; error: E };
 
 function handleResult(result: Result<User, Error>) {
   if (result.success) {
@@ -74,11 +76,11 @@ function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
 ## Utility Types (avoid reinventing)
 
 ```typescript
-type PartialUser = Partial<User>;       // all optional
-type RequiredUser = Required<User>;     // all required
-type ReadonlyUser = Readonly<User>;     // all readonly
-type NameOnly = Pick<User, 'name'>;     // subset
-type WithoutId = Omit<User, 'id'>;      // exclude fields
+type PartialUser = Partial<User>; // all optional
+type RequiredUser = Required<User>; // all required
+type ReadonlyUser = Readonly<User>; // all readonly
+type NameOnly = Pick<User, 'name'>; // subset
+type WithoutId = Omit<User, 'id'>; // exclude fields
 type UserRecord = Record<string, User>; // index signature
 ```
 
@@ -107,7 +109,7 @@ const users = await Promise.all(ids.map(fetchUser));
 const results = await Promise.allSettled(ids.map(fetchUser));
 const users = results
   .filter((r): r is PromiseFulfilledResult<User> => r.status === 'fulfilled')
-  .map(r => r.value);
+  .map((r) => r.value);
 ```
 
 ## Race Condition Handling
@@ -116,7 +118,7 @@ const users = results
 // ❌ Stale response overwrites newer one
 useEffect(() => {
   fetch(`/api/search?q=${query}`)
-    .then(r => r.json())
+    .then((r) => r.json())
     .then(setResults); // old request may resolve last
 }, [query]);
 
@@ -124,9 +126,11 @@ useEffect(() => {
 useEffect(() => {
   const controller = new AbortController();
   fetch(`/api/search?q=${query}`, { signal: controller.signal })
-    .then(r => r.json())
+    .then((r) => r.json())
     .then(setResults)
-    .catch(e => { if (e.name !== 'AbortError') throw e; });
+    .catch((e) => {
+      if (e.name !== 'AbortError') throw e;
+    });
   return () => controller.abort();
 }, [query]);
 ```

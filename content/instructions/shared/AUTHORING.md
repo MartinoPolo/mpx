@@ -6,11 +6,11 @@ selection, see [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md). For agent-facing pr
 
 ## Canonical locations and identities
 
-| Artifact | Canonical path | Identity |
-| --- | --- | --- |
-| Skill | `content/skills/<name>/SKILL.md` | bare `<name>`; public projection `/mpx:<name>` |
-| Agent | `content/agents/mpx-<role>.md` | `mpx-<role>` |
-| Shared instruction | `content/instructions/shared/<NAME>.md` | no frontmatter identity |
+| Artifact           | Canonical path                          | Identity                                       |
+| ------------------ | --------------------------------------- | ---------------------------------------------- |
+| Skill              | `content/skills/<name>/SKILL.md`        | bare `<name>`; public projection `/mpx:<name>` |
+| Agent              | `content/agents/mpx-<role>.md`          | `mpx-<role>`                                   |
+| Shared instruction | `content/instructions/shared/<NAME>.md` | no frontmatter identity                        |
 
 Canonical content is runtime-neutral. Runtime adapters project identities, frontmatter, tool
 names, and invocation syntax; canonical files do not encode a particular harness. Keep the

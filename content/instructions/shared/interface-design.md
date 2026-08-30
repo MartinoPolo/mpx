@@ -52,10 +52,7 @@ Functions that return values are trivially testable — call them and assert on 
 ```typescript
 function calculateDiscount(order: Order, rules: DiscountRule[]): DiscountResult {
   const applicable = rules.filter((rule) => rule.matches(order));
-  const bestDiscount = applicable.reduce(
-    (best, rule) => Math.max(best, rule.percentage),
-    0,
-  );
+  const bestDiscount = applicable.reduce((best, rule) => Math.max(best, rule.percentage), 0);
   return { percentage: bestDiscount, appliedRule: applicable[0]?.name ?? null };
 }
 
@@ -67,13 +64,10 @@ function calculateDiscount(order: Order, rules: DiscountRule[]): DiscountResult 
 ```typescript
 function applyDiscount(order: Order, rules: DiscountRule[]) {
   const applicable = rules.filter((rule) => rule.matches(order));
-  const bestDiscount = applicable.reduce(
-    (best, rule) => Math.max(best, rule.percentage),
-    0,
-  );
+  const bestDiscount = applicable.reduce((best, rule) => Math.max(best, rule.percentage), 0);
   order.discount = bestDiscount; // mutates input
   order.discountRuleName = applicable[0]?.name ?? null; // mutates input
-  analyticsTracker.track("discount_applied", { percentage: bestDiscount }); // side effect
+  analyticsTracker.track('discount_applied', { percentage: bestDiscount }); // side effect
 }
 
 // Test: must inspect mutated order AND mock analytics tracker
@@ -117,8 +111,8 @@ interface Cache<T> {
 
 ## Summary
 
-| Principle                        | Makes testing easier because...              |
-| -------------------------------- | -------------------------------------------- |
-| Accept dependencies              | Tests inject fakes at boundaries             |
-| Return results                   | Tests assert on return values directly       |
-| Small surface area               | Fewer code paths to cover                    |
+| Principle           | Makes testing easier because...        |
+| ------------------- | -------------------------------------- |
+| Accept dependencies | Tests inject fakes at boundaries       |
+| Return results      | Tests assert on return values directly |
+| Small surface area  | Fewer code paths to cover              |

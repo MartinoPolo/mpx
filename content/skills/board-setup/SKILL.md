@@ -1,11 +1,12 @@
 ---
 name: board-setup
-description: "Sets up an Obsidian board for the project and links it into the repo through a BOARD.md symlink."
+description: 'Sets up an Obsidian board for the project and links it into the repo through a BOARD.md symlink.'
 metadata:
   mpx:
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---
+
 # board-setup
 
 One-time setup that creates this project's Obsidian **board** and links it into the repo, so `board-to-issues` and `batch-execute` can read requirements and pasted images. Read `./../shared/BOARD_CONVENTION.md` now — board format and link layout. the invocation input

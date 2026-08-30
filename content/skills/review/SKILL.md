@@ -1,12 +1,13 @@
 ---
 name: review
-description: "Reviews a branch, working diff, or provider Review across specialist axes and optionally applies fixes. Use when asked to review code, changes, or a Review."
+description: 'Reviews a branch, working diff, or provider Review across specialist axes and optionally applies fixes. Use when asked to review code, changes, or a Review.'
 triggers: reviewing a branch, working changes, or provider Review; full or partial specialist coverage; optional autofix
 metadata:
   mpx:
     skillPacks: [core]
     defaultExposure: full
 ---
+
 # Unified Review
 
 Review the intended change against its Issue and repository contracts. Run a review phase, then an optional fix phase. Prioritize actionable findings over summary.

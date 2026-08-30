@@ -10,5 +10,5 @@ exit /b %ERRORLEVEL%
 `;
 
 export function commandSelectorBytes() {
-  return Buffer.from(selector.replace(/\r?\n/gu, "\r\n"), "utf8");
+  return Buffer.from(selector.replace(/\r?\n/gu, '\r\n'), 'utf8');
 }

@@ -1,6 +1,6 @@
 ---
 name: skill-create
-description: "Creates or restructures a portable skill for supported runtimes when a user asks to add skill behavior, invocation branches, procedures, or reference material, then audits the result."
+description: 'Creates or restructures a portable skill for supported runtimes when a user asks to add skill behavior, invocation branches, procedures, or reference material, then audits the result.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -44,13 +44,13 @@ single sources for writing, invocation, naming, paths, grants, and versioning.
    ```yaml
    ---
    name: <skill-name>
-   description: "<portable purpose plus every distinct trigger branch>"
-   argument-hint: "[arguments]"
+   description: '<portable purpose plus every distinct trigger branch>'
+   argument-hint: '[arguments]'
    disable-model-invocation: true # omit for autonomous runtime discovery
    allowed-tools: <tools actually used>
    metadata:
      author: MartinoPolo
-     version: "0.1"
+     version: '0.1'
      category: <valid AUTHORING.md category>
    ---
    ```

@@ -4,12 +4,12 @@ Shared conventions for design initialization, briefs, variants, and refinement.
 
 ## Pipeline and layout
 
-| Stage | Runs | Produces |
-| --- | --- | --- |
-| design initialization | once per project | `designs/DESIGN_SYSTEM.md`, `designs/tokens.css` |
-| design brief | once per component | brief and semantic `Design needed` label |
-| mockup | after the brief | `variants/variant-<letter>.html` |
-| refinement | after selection | `refined.html`, `SUMMARY.md`, label removal |
+| Stage                 | Runs               | Produces                                         |
+| --------------------- | ------------------ | ------------------------------------------------ |
+| design initialization | once per project   | `designs/DESIGN_SYSTEM.md`, `designs/tokens.css` |
+| design brief          | once per component | brief and semantic `Design needed` label         |
+| mockup                | after the brief    | `variants/variant-<letter>.html`                 |
+| refinement            | after selection    | `refined.html`, `SUMMARY.md`, label removal      |
 
 ```text
 designs/

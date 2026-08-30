@@ -7,6 +7,7 @@ metadata:
     skillPacks: [core]
     defaultExposure: name-only
 ---
+
 # Ship
 
 The main agent orchestrates bounded results and never bypasses Review or CI gates.

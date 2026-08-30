@@ -58,26 +58,26 @@ Sourced from the official docs (legacy `generate_content` speech-generation page
 2026-07-25). The newer Interactions API path exists and is now recommended by Google; this
 script stays on the documented `generate_content` path until the newer one is verified here.
 
-| Fact | Value |
-| ------------------------ | ------------------------------------------------------------ |
-| Model | `gemini-2.5-flash-preview-tts` (`gemini-2.5-pro-preview-tts` also documented) |
-| Max speakers | 2 |
-| Context window | 32k tokens — the script chunks at 9000 characters |
-| Returned audio | raw PCM, 24 kHz, 16-bit, mono, with no WAV header |
-| Audio path | `response.candidates[0].content.parts[0].inline_data.data` |
-| Voices | 30 prebuilt names; `Kore` (firm) and `Puck` (upbeat) pair well |
-| Speaker matching | each `speaker=` value must match a name used in the prompt text |
-| Package | `google-genai` |
+| Fact             | Value                                                                         |
+| ---------------- | ----------------------------------------------------------------------------- |
+| Model            | `gemini-2.5-flash-preview-tts` (`gemini-2.5-pro-preview-tts` also documented) |
+| Max speakers     | 2                                                                             |
+| Context window   | 32k tokens — the script chunks at 9000 characters                             |
+| Returned audio   | raw PCM, 24 kHz, 16-bit, mono, with no WAV header                             |
+| Audio path       | `response.candidates[0].content.parts[0].inline_data.data`                    |
+| Voices           | 30 prebuilt names; `Kore` (firm) and `Puck` (upbeat) pair well                |
+| Speaker matching | each `speaker=` value must match a name used in the prompt text               |
+| Package          | `google-genai`                                                                |
 
 ## Failure handling
 
-| Symptom | Action |
-| ----------------------------------------- | --------------------------------------------------------- |
-| `google-genai is missing` | `pip install -U google-genai` |
+| Symptom                                       | Action                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `google-genai is missing`                     | `pip install -U google-genai`                                                                     |
 | `Set the GEMINI_API_KEY environment variable` | The variable is set at user scope; a shell that predates it needs a fresh Windows Terminal window |
-| Rate limit or transport error mid-run | The script already retries 4 times with exponential backoff before giving up |
-| Free-tier daily limit reached | Report it and offer tomorrow's NotebookLM quota instead |
-| Audio quality worse than NotebookLM | Expected — this backend trades dialogue quality for availability. Say so when delivering. |
+| Rate limit or transport error mid-run         | The script already retries 4 times with exponential backoff before giving up                      |
+| Free-tier daily limit reached                 | Report it and offer tomorrow's NotebookLM quota instead                                           |
+| Audio quality worse than NotebookLM           | Expected — this backend trades dialogue quality for availability. Say so when delivering.         |
 
 ## Status
 

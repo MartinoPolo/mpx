@@ -1,6 +1,6 @@
 ---
 name: design-refine
-description: "Applies refinement requirements to a chosen mockup variant, producing refined.html and SUMMARY.md, updating the brief, and unblocking the tracker issues/tasks that were gated on the design. Use when asked to refine a design, accept or select a variant, polish a mockup, or refine all pending designs."
+description: 'Applies refinement requirements to a chosen mockup variant, producing refined.html and SUMMARY.md, updating the brief, and unblocking the tracker issues/tasks that were gated on the design. Use when asked to refine a design, accept or select a variant, polish a mockup, or refine all pending designs.'
 metadata:
   mpx:
     skillPacks: [work]
@@ -80,21 +80,21 @@ Key structural changes from the base variant: [1–3 sentences].
 
 ### Codebase — use as-is
 
-| Component | Path | Usage | Key Props/Variants |
+| Component | Path                | Usage         | Key Props/Variants          |
 | --------- | ------------------- | ------------- | --------------------------- |
-| Button | `<discovered path>` | [where + how] | `variant="ghost" size="sm"` |
+| Button    | `<discovered path>` | [where + how] | `variant="ghost" size="sm"` |
 
 ### Adopt
 
-| Component | Source | Install command | Purpose |
-| --------- | -------- | ---------------------- | ---------------- |
-| [name] | [library] | `<detected pm command>` | [what it covers] |
+| Component | Source    | Install command         | Purpose          |
+| --------- | --------- | ----------------------- | ---------------- |
+| [name]    | [library] | `<detected pm command>` | [what it covers] |
 
 ### Build custom
 
-| Proposed Name | Description | Why existing components don't cover it |
+| Proposed Name | Description    | Why existing components don't cover it |
 | ------------- | -------------- | -------------------------------------- |
-| [name] | [what it does] | [reason] |
+| [name]        | [what it does] | [reason]                               |
 
 ## Implementation Notes
 
@@ -127,6 +127,7 @@ Ask for the design issue/task number if unknown, then comment on it (verb + conc
 Variant **<X>** refined: [comma-separated refinements]
 
 **Artifacts:**
+
 - `designs/<component-name>/refined.html` — open in browser to review
 - `designs/<component-name>/SUMMARY.md` — component map + implementation notes
 - `designs/<component-name>/DESIGN_BRIEF_<COMPONENT_NAME>.md` — updated brief
@@ -142,11 +143,11 @@ The `Design needed` gate maps to a concrete label/column per tracker — see
 
 1. **Find candidates** — these signals are complementary, use whichever return results:
 
-    - the design issue/task's child tasks
-    - open issues/tasks referencing `designs/<component-name>`
-    - open issues/tasks carrying the `Design needed` gate that mention `<component-name>`
+   - the design issue/task's child tasks
+   - open issues/tasks referencing `designs/<component-name>`
+   - open issues/tasks carrying the `Design needed` gate that mention `<component-name>`
 
-    Also parse open issue/task bodies for `Blocked by #<design-issue>`.
+   Also parse open issue/task bodies for `Blocked by #<design-issue>`.
 
 2. **Filter** to issues/tasks that genuinely depend on this design — skim the body when uncertain,
    so unrelated ones keep their labels.

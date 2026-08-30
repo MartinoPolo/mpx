@@ -2,9 +2,9 @@
 scope: language
 selector: typescript
 paths:
-  - "**/*.ts"
-  - "**/*.tsx"
-applyTo: "**/*.ts,**/*.tsx"
+  - '**/*.ts'
+  - '**/*.tsx'
+applyTo: '**/*.ts,**/*.tsx'
 ---
 
 # TypeScript
