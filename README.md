@@ -1,6 +1,6 @@
 # MPX
 
-MPX is a local-first control plane for launching Claude and Pi with explicit identity, workspace, skill, network, and executor boundaries. It also manages worktrees, development services, sessions, accounts, and local issue workflows without treating private runtime state as repository content.
+MPX is a skills-first local control plane for launching Claude and Pi with explicit identity, workspace, skill, network, and executor boundaries. Canonical skill payloads drive verified runtime-neutral plans, while thin runtime and CLI adapters expose them alongside worktrees, development services, sessions, accounts, and local issue workflows without treating private runtime state as repository content.
 
 ## Start here
 
@@ -10,7 +10,7 @@ MPX is a local-first control plane for launching Claude and Pi with explicit ide
 - **Develop:** use `mpx dev` and the managed-port model documented in [Runtime adapters](docs/RUNTIME_ADAPTERS.md), [Ports](docs/PORTS.md), and [Worktrees](docs/WORKTREES.md).
 - **Sessions and accounts:** see [Sessions installer](docs/SESSIONS_INSTALLER.md) and [Pi accounts](docs/PI_ACCOUNTS.md).
 - **Issues:** see [Issues](docs/ISSUES.md) and [local Markdown issues](docs/local-markdown-issues.md).
-- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md). Supporting evidence includes the [migration baseline](docs/MIGRATION_BASELINE.md) and [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
+- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md). Supporting evidence includes the [migration baseline](docs/MIGRATION_BASELINE.md) and [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
 
 ## Private-state boundary
 

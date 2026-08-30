@@ -2,6 +2,8 @@
 
 MPX resolves canonical content once into a runtime-neutral v4 manifest. The manifest records every canonical identity's inclusion decision, exposure, permissions, source hash, and metadata hash without embedding bodies, private roots, or runtime syntax. The logical skill artifact is distinct from each launch-bound reference to a full published runtime projection. Claude and Pi projections reference the same manifest key and have distinct artifact/file-map hashes.
 
+Runtime adapters consume verified runtime-neutral plans. They own only harness translation, projection assembly, and invocation wiring; canonical parsing, policy, provider logic, and application orchestration remain in their owning workspace packages.
+
 ## Four exposure states
 
 | Exposure        | Initial model context       | Model search | Human list/search/detail | Explicit human load |

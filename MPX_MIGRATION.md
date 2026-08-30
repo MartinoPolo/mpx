@@ -1210,3 +1210,115 @@ Checkboxes are the sole migration acceptance ledger. `[x]` means reproducibly ev
 - [ ] User explicitly approves and performs cutover.
 - [ ] Live rollback from the cutover state succeeds.
 - [ ] Legacy activation, repositories, and obsolete migration-only state are retired only after all prior gates pass.
+
+## 21. Skills-first repository structure migration
+
+[ADR 0003](docs/adr/0003-skills-first-test-layout.md) fixes the architecture and test-ownership decisions for this incremental migration.
+
+### Target tree
+
+```text
+content/
+  skills/                         # canonical payloads; payload-owned tests only
+packages/
+  <workspace>/
+    src/                          # production only
+    test/
+      unit/
+      fixtures/
+  skills/                         # contracts, frontmatter, inventory, policy,
+                                  # manifest, artifact, projection, loader, search
+runtimes/
+  claude/                         # thin plan adapter
+  pi/                             # thin plan adapter; tracked generated projection
+apps/
+  cli/                            # argv, IO, registration, composition
+                                 # over provider-neutral application operations
+tests/
+  contract/                       # cross-boundary only
+  integration/                    # cross-boundary only
+  e2e/                            # cross-boundary only
+```
+
+### Invariants
+
+- Keep `git mv`/path-only commits separate from behavior changes.
+- Add no legacy readers or fallbacks; transitional discovery is explicit and removed at the final gate.
+- Do not change canonical content paths or the hash algorithm.
+- Cross-workspace use goes through public workspace APIs only.
+- Every path move that affects convergence, path, hash, or provenance references updates and regenerates those references in the same commit; validation must not remain broken between stages.
+- Regenerate generated hashes through repository scripts; never hand-edit them.
+- Do not update the Fallow baseline to hide regressions.
+- Use pnpm only for MPX repository dependency, script, and check commands. Managed target projects continue to use the package manager configured in their project tooling.
+
+### Ordered stages
+
+#### A. Unify the harness (`chore(test): unify harness and discovery`)
+
+Unify taxonomy, configuration, scripts, and production-only TypeScript configurations while test discovery temporarily recognizes old and new paths.
+
+- **Accept:** category scripts select their intended suites once, package builds exclude tests, and current tests remain green.
+- **Rollback:** revert harness/configuration changes as one unit; no files have moved.
+
+#### B. Establish cross-boundary suites (`test: establish repository test categories`)
+
+Move cross-boundary suites out of workspace `src` and into root `tests/contract`, `tests/integration`, and `tests/e2e`, and add a distinct payload-test command for tests that ship with or validate skill payloads. Update and regenerate every affected convergence, path, hash, and provenance reference in each move commit.
+
+- **Accept:** cross-boundary suites no longer reside in workspace `src`, each category and payload command runs independently, aggregate commands invoke each exactly once, and generated validation and convergence checks pass after every commit.
+- **Rollback:** revert root suite moves, command wiring, and their atomically coupled generated references together without touching package unit-test ownership.
+
+#### C. Move package-owned tests (`refactor(test): move <workspace> unit tests`)
+
+Move unit tests and fixtures one workspace per commit, dependency-first. Cross-boundary suites have already moved in Stage B. Update and regenerate every affected convergence, path, hash, and provenance reference in the same workspace move commit.
+
+- **Accept:** the workspace build and unit suite pass from new paths; owner-local unit tests may import that workspace's internal modules, cross-workspace imports use public APIs, its `src` contains no tests or fixtures, and generated validation and convergence checks pass after every commit.
+- **Rollback:** revert only that workspace's path-only move, associated path configuration, and atomically coupled generated references together.
+
+#### D. Audit structural evidence (`chore(generated): audit test-layout evidence`)
+
+Perform the final evidence and path-reference audit, then retire obsolete path declarations. All required generated convergence, path, hash, and provenance updates have already traveled atomically with their Stage B or C moves; this stage must not defer or decouple them.
+
+- **Accept:** no obsolete path declarations remain, generated validation and convergence checks pass with script-generated diffs only, and content/hash semantics remain unchanged.
+- **Rollback:** revert only the final audit cleanup; do not revert or decouple generated evidence that traveled with Stage B or C moves.
+
+#### E. Refine the skills platform (`refactor(skills): separate platform internals`)
+
+Split `packages/skills` internally into contracts, frontmatter, inventory, policy, manifest, artifact, projection, loader, and search while preserving its public facade and serialized outputs.
+
+- **Accept:** consumers use the unchanged public facade, serialization snapshots are byte-stable, and skills has no config or runtime-adapter dependency.
+- **Rollback:** revert internal extraction commits behind the preserved facade.
+
+#### F. Introduce neutral projection plans (`refactor(runtime): consume skill projection plans`)
+
+Introduce `SkillProjectionPlan`, then migrate thin Claude and Pi adapters in that order. Preserve byte-level projection behavior and deliberate tracked Pi generation.
+
+- **Accept:** verified plans produce byte-identical projections, adapters contain only harness translation/assembly/wiring, and tracked Pi output converges.
+- **Rollback:** revert one adapter at a time to the prior facade; retain the neutral plan until both adapters are accepted.
+
+#### G. Extract application orchestration (`refactor(cli): extract application operations`)
+
+Move provider-neutral application orchestration behind public workspace APIs so the CLI retains only argv parsing, IO, command registration, and composition.
+
+- **Accept:** application-layer tests are provider-neutral, CLI contracts remain stable, and no domain orchestration remains in command adapters.
+- **Rollback:** revert one operation family at a time without changing public CLI envelopes.
+
+#### H. Enforce the final structure (`chore(test): enforce final layout`)
+
+Remove transitional discovery/configuration and add fail-closed structural gates.
+
+- **Accept:** only final paths are discovered, forbidden dependencies/layouts fail checks, and all quality, generated, convergence, type, and test gates pass.
+- **Rollback:** restore only transitional discovery for the failing category; do not add legacy production readers.
+
+### Scope exclusions
+
+This migration does not rewrite skill payloads; redesign schemas or the hash algorithm; redesign providers; perform live F2 acceptance or installer cutover; refresh vendor content; or relocate payload tests whose provenance requires them to ship with their skill.
+
+### Structural acceptance
+
+- [ ] No tests or fixtures remain under any workspace `src`.
+- [ ] Independent test-category commands run exactly once in aggregate.
+- [ ] Package builds emit no tests.
+- [ ] `packages/skills` no longer depends on config or runtime adapters.
+- [ ] Runtimes own no canonical parsing, policy, or provider logic.
+- [ ] The CLI application layer is provider-neutral.
+- [ ] Full quality, generated, convergence, and test gates pass.
