@@ -350,6 +350,45 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed provider-local test and fixture migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/provider-local/src/index.test.ts',
+        'packages/provider-local/test/unit/index.test.ts',
+      ],
+      [
+        'packages/provider-local/src/lock-process-fixture.mjs',
+        'packages/provider-local/test/fixtures/lock-process-fixture.mjs',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(2);
+    for (const [formerPath, targetPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(targetPath), targetPath).toBe(true);
+    }
+    expect(matchingTestCategories(migrationInventory[0][1]), migrationInventory[0][1]).toEqual([
+      'unit',
+    ]);
+
+    const providerLocalFiles = await filesBelow(root, 'packages/provider-local');
+    expect(
+      providerLocalFiles.filter(
+        (file) =>
+          file.startsWith('packages/provider-local/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(providerLocalFiles.filter((file) => file.includes('/fixtures/'))).toEqual([
+      'packages/provider-local/test/fixtures/lock-process-fixture.mjs',
+    ]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

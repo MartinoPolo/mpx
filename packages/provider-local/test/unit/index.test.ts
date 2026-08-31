@@ -19,10 +19,10 @@ import {
   createLocalIssueAdapter,
   rebuildObsidianIssueViews,
   rebuildObsidianSessionViews,
-} from './index.js';
+} from '../../src/index.js';
 
 const root = () => mkdtemp(path.join(tmpdir(), 'mpx-local-issues-'));
-const fixture = fileURLToPath(new URL('lock-process-fixture.mjs', import.meta.url));
+const fixture = fileURLToPath(new URL('../fixtures/lock-process-fixture.mjs', import.meta.url));
 const waitFor = (child: ChildProcess, type: string) =>
   new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {

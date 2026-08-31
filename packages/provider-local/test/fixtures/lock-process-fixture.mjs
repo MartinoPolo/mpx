@@ -1,4 +1,4 @@
-import { LocalIssueStore } from '../dist/index.js';
+import { LocalIssueStore } from '@mpx/provider-local';
 
 const [mode, root] = process.argv.slice(2);
 if (!mode || !root || !process.send) {
