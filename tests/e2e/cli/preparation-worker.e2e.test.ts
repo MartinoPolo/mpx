@@ -6,13 +6,13 @@ import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import type { PreparationPlan } from '@mpx/config';
 import { createPreparationApproval, preparationApprovalPhrases } from '@mpx/worktrees';
-import { preparationRuntime } from './context.js';
+import { preparationRuntime } from '../../../apps/cli/src/context.js';
 import {
   cleanupPreparationWorker,
   pollPreparationTerminal,
   preparationDiagnostic,
   shouldRetryUnknownPreparation,
-} from './preparation-worker-polling.js';
+} from '../../../apps/cli/src/preparation-worker-polling.js';
 
 const executeFile = promisify(execFile);
 const cleanup: string[] = [];
@@ -51,7 +51,7 @@ it('runs the production CLI preparation worker handshake through a trusted direc
     const runtime = preparationRuntime(
       stateRoot,
       { ...process.env, LOCALAPPDATA: localAppData },
-      path.resolve(import.meta.dirname, '../dist/main.js'),
+      path.resolve(import.meta.dirname, '../../../apps/cli/dist/main.js'),
     );
     const plan: PreparationPlan = {
       execution: 'background',

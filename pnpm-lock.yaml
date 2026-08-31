@@ -8,9 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:packages/config
       '@mpx/core':
         specifier: workspace:*
         version: link:packages/core
+      '@mpx/executors':
+        specifier: workspace:*
+        version: link:packages/executors
       '@mpx/provider-github':
         specifier: workspace:*
         version: link:packages/provider-github
@@ -20,6 +26,9 @@ importers:
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:packages/runtime-contracts
+      '@mpx/runtime-pi':
+        specifier: workspace:*
+        version: link:runtimes/pi/runtime-pi
       '@mpx/sessions':
         specifier: workspace:*
         version: link:packages/sessions

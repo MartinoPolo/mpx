@@ -24,7 +24,8 @@ describe('test taxonomy', () => {
     expect(classifyTestPath('packages/core/test/value.test.ts')).toBe('unit');
     expect(classifyTestPath('packages/core/test/unit/value.test.ts')).toBe('unit');
     expect(classifyTestPath('packages/core/src/value.integration.test.ts')).toBeUndefined();
-    expect(classifyTestPath('apps/cli/test/unit/value.e2e.test.ts')).toBe('e2e');
+    expect(classifyTestPath('apps/cli/test/unit/value.e2e.test.ts')).toBeUndefined();
+    expect(classifyTestPath('tests/e2e/cli/value.e2e.test.ts')).toBe('e2e');
     expect(classifyTestPath('tests/contract/public-api.test.ts')).toBe('contract');
     expect(classifyTestPath('tests/integration/scripts/example.test.mjs')).toBe('integration');
     expect(classifyTestPath('scripts/example.test.mjs')).toBeUndefined();
@@ -112,6 +113,31 @@ describe('test taxonomy', () => {
       expect(files.has(contractPath), contractPath).toBe(true);
       expect(classifyTestPath(contractPath), contractPath).toBe('contract');
       expect(files.has(formerPath), formerPath).toBe(false);
+    }
+  });
+
+  test('keeps the fixed CLI E2E cohort exclusively under root ownership', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      ['apps/cli/src/fake-pi-bridge.e2e.test.ts', 'tests/e2e/cli/fake-pi-bridge.e2e.test.ts'],
+      [
+        'apps/cli/src/preparation-worker.e2e.test.ts',
+        'tests/e2e/cli/preparation-worker.e2e.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(2);
+    for (const [formerPath, e2ePath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(e2ePath), e2ePath).toBe(true);
+      expect(matchingTestCategories(e2ePath), e2ePath).toEqual(['e2e']);
+    }
+  });
+
+  test('keeps every E2E-classified test under the root E2E directory', async () => {
+    const files = (await filesBelow(root)).filter((file) => /\.test\.(?:[cm]?[jt]sx?)$/.test(file));
+    const e2eTests = files.filter((file) => classifyTestPath(file) === 'e2e');
+    for (const file of e2eTests) {
+      expect(file, file).toMatch(/^tests\/e2e\//u);
     }
   });
 
@@ -372,6 +398,13 @@ describe('configuration structure', () => {
     const rootManifest = await json('package.json');
     expect(rootManifest.scripts['test:integration']).toBe(
       'pnpm --filter mpx... build && vitest run --config vitest.integration.config.ts',
+    );
+  });
+
+  test('builds the bounded CLI dependency closure before invoking E2E Vitest', async () => {
+    const rootManifest = await json('package.json');
+    expect(rootManifest.scripts['test:e2e']).toBe(
+      'pnpm --filter mpx... build && vitest run --config vitest.e2e.config.ts',
     );
   });
 

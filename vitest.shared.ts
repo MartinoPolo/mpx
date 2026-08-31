@@ -40,12 +40,7 @@ export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>
   ],
   contract: ['tests/contract/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
   integration: ['tests/integration/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
-  e2e: [
-    'tests/e2e/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'apps/*/{src,test}/**/*.e2e.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'packages/*/{src,test}/**/*.e2e.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'runtimes/*/*/{src,test}/**/*.e2e.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-  ],
+  e2e: ['tests/e2e/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
 };
 
 type CategoryIncludes = Readonly<Record<TestCategory, readonly string[]>>;
