@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@mpx/provider-github':
         specifier: workspace:*
         version: link:packages/provider-github
@@ -23,6 +26,9 @@ importers:
       '@mpx/windows':
         specifier: workspace:*
         version: link:packages/windows
+      '@mpx/worktrees':
+        specifier: workspace:*
+        version: link:packages/worktrees
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1

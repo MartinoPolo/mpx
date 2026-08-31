@@ -6,8 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
-import { createNodeLifecycleFoundation, WorktreeLifecycleService } from './index.js';
-import type { LifecycleDependencies, LifecycleReleaseIdentity } from './lifecycle.js';
+import {
+  createNodeLifecycleFoundation,
+  WorktreeLifecycleService,
+  type LifecycleDependencies,
+  type LifecycleReleaseIdentity,
+} from '@mpx/worktrees';
 
 const exec = promisify(execFile);
 
@@ -37,9 +41,7 @@ afterEach(async () => {
   }
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-const lifecycleWorker = fileURLToPath(
-  new URL('../test-fixtures/lifecycle-worker.mjs', import.meta.url),
-);
+const lifecycleWorker = fileURLToPath(new URL('./fixtures/lifecycle-worker.mjs', import.meta.url));
 const waitFor = <T extends { type: string }>(
   child: ChildProcess,
   type: string,

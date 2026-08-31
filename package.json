@@ -32,11 +32,13 @@
     "validate:generated": "node scripts/validate-generated.mjs"
   },
   "devDependencies": {
+    "@mpx/core": "workspace:*",
     "@mpx/provider-github": "workspace:*",
     "@mpx/providers": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/sessions": "workspace:*",
     "@mpx/windows": "workspace:*",
+    "@mpx/worktrees": "workspace:*",
     "@types/node": "^22.15.0",
     "esbuild": "0.25.12",
     "fallow": "^3.20.0",

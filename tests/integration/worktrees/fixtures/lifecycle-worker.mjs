@@ -1,5 +1,5 @@
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createNodeLifecycleFoundation, WorktreeLifecycleService } from '../dist/index.js';
+import { createNodeLifecycleFoundation, WorktreeLifecycleService } from '@mpx/worktrees';
 
 const send = (message) => process.send?.(message);
 const waitFor = (type) =>

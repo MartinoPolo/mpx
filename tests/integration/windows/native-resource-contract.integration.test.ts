@@ -12,7 +12,7 @@ import {
   type BinaryFileSystem,
   type JsonResourceStore,
   type OwnedResourceSpec,
-} from './system-integration.js';
+} from '@mpx/windows';
 
 class NativeFiles implements BinaryFileSystem {
   async read(target: string) {

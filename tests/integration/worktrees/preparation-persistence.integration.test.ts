@@ -6,15 +6,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   NodePreparationProcessAdapter,
   NodePreparationStore,
-  type NativeProcessCapabilities,
-} from './node-preparation-adapters.js';
-import {
   PreparationEngine,
+  type NativeProcessCapabilities,
   type OwnedProcess,
   type PreparationAdapters,
   type PreparationState,
   type PreparationStoreAdapter,
-} from './preparation-engine.js';
+} from '@mpx/worktrees';
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
@@ -140,10 +138,7 @@ function adapters(
 }
 
 async function startWorker(root: string, key: string): Promise<ChildProcess> {
-  const fixture = path.resolve(
-    import.meta.dirname,
-    '../test-fixtures/preparation-persisted-worker.mjs',
-  );
+  const fixture = path.resolve(import.meta.dirname, './fixtures/preparation-persisted-worker.mjs');
   const child = fork(fixture, [root, key], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
   children.push(child);
   await waitForMessage(child, 'online');

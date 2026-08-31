@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
-import { createNodeWorktreeIncludeDependencies } from './node-worktree-include-adapters.js';
-import { executeWorktreeIncludePlan, planWorktreeIncludes } from './worktree-include.js';
+import {
+  createNodeWorktreeIncludeDependencies,
+  executeWorktreeIncludePlan,
+  planWorktreeIncludes,
+} from '@mpx/worktrees';
 
 const execFileAsync = promisify(execFile);
 const temporary: string[] = [];

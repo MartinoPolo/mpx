@@ -23,7 +23,7 @@ describe('test taxonomy', () => {
     expect(classifyTestPath('packages/core/src/value.test.ts')).toBe('unit');
     expect(classifyTestPath('packages/core/test/value.test.ts')).toBe('unit');
     expect(classifyTestPath('packages/core/test/unit/value.test.ts')).toBe('unit');
-    expect(classifyTestPath('packages/core/src/value.integration.test.ts')).toBe('integration');
+    expect(classifyTestPath('packages/core/src/value.integration.test.ts')).toBeUndefined();
     expect(classifyTestPath('apps/cli/test/unit/value.e2e.test.ts')).toBe('e2e');
     expect(classifyTestPath('tests/contract/public-api.test.ts')).toBe('contract');
     expect(classifyTestPath('tests/integration/scripts/example.test.mjs')).toBe('integration');
@@ -132,6 +132,81 @@ describe('test taxonomy', () => {
       expect(files.has(formerPath), formerPath).toBe(false);
       expect(files.has(integrationPath), integrationPath).toBe(true);
       expect(matchingTestCategories(integrationPath), integrationPath).toEqual(['integration']);
+    }
+  });
+
+  test('keeps the fixed Windows and worktrees system integration cohort under root ownership', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/windows/src/adapter.integration.test.ts',
+        'tests/integration/windows/adapter.integration.test.ts',
+      ],
+      [
+        'packages/windows/src/native-resource-contract.integration.test.ts',
+        'tests/integration/windows/native-resource-contract.integration.test.ts',
+      ],
+      [
+        'packages/worktrees/src/lifecycle.integration.test.ts',
+        'tests/integration/worktrees/lifecycle.integration.test.ts',
+      ],
+      [
+        'packages/worktrees/src/preparation-persistence.integration.test.ts',
+        'tests/integration/worktrees/preparation-persistence.integration.test.ts',
+      ],
+      [
+        'packages/worktrees/src/worktree-include.integration.test.ts',
+        'tests/integration/worktrees/worktree-include.integration.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(5);
+    for (const [formerPath, integrationPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(integrationPath), integrationPath).toBe(true);
+      expect(matchingTestCategories(integrationPath), integrationPath).toEqual(['integration']);
+    }
+    const fixtureInventory = [
+      [
+        'packages/windows/test/fixtures/owned-process-tree.mjs',
+        'tests/integration/windows/fixtures/owned-process-tree.mjs',
+      ],
+      [
+        'packages/worktrees/test-fixtures/lifecycle-worker.mjs',
+        'tests/integration/worktrees/fixtures/lifecycle-worker.mjs',
+      ],
+      [
+        'packages/worktrees/test-fixtures/preparation-persisted-worker.mjs',
+        'tests/integration/worktrees/fixtures/preparation-persisted-worker.mjs',
+      ],
+    ];
+    expect(fixtureInventory).toHaveLength(3);
+    for (const [formerPath, fixturePath] of fixtureInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(fixturePath), fixturePath).toBe(true);
+    }
+  });
+
+  test('keeps root tests and fixtures on public package boundaries', async () => {
+    const sourceFiles = (await filesBelow(root, 'tests')).filter((file) =>
+      /\.(?:[cm]?[jt]sx?)$/u.test(file),
+    );
+    const privatePackageImport =
+      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"][^'"]*packages\/[^'"]+\/(?:dist|src)(?:\/[^'"]*)?['"]/u;
+    const violations = [];
+    for (const file of sourceFiles) {
+      const source = await readFile(path.join(root, file), 'utf8');
+      if (privatePackageImport.test(source)) {
+        violations.push(file);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  test('keeps every integration-classified test under the root integration directory', async () => {
+    const files = (await filesBelow(root)).filter((file) => /\.test\.(?:[cm]?[jt]sx?)$/.test(file));
+    const integrationTests = files.filter((file) => classifyTestPath(file) === 'integration');
+    for (const file of integrationTests) {
+      expect(file, file).toMatch(/^tests\/integration\//u);
     }
   });
 

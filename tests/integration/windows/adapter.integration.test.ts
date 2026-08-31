@@ -3,9 +3,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WindowsProcessCapabilities } from './index.js';
+import { WindowsProcessCapabilities } from '@mpx/windows';
 
-const fixture = path.resolve(import.meta.dirname, '../test/fixtures/owned-process-tree.mjs');
+const fixture = path.resolve(import.meta.dirname, './fixtures/owned-process-tree.mjs');
 const waitLimitMs = 5_000;
 const pollMs = 20;
 

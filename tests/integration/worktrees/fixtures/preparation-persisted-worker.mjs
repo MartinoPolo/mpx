@@ -1,4 +1,4 @@
-import { NodePreparationStore } from '../dist/node-preparation-adapters.js';
+import { NodePreparationStore } from '@mpx/worktrees';
 
 const [stateRoot, key] = process.argv.slice(2);
 const store = new NodePreparationStore(stateRoot);

@@ -39,12 +39,7 @@ export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>
     'content/skills/**/{test,tests,__tests__}/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
   ],
   contract: ['tests/contract/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
-  integration: [
-    'tests/integration/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'apps/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'packages/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'runtimes/*/*/{src,test}/**/*.integration.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-  ],
+  integration: ['tests/integration/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
   e2e: [
     'tests/e2e/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
     'apps/*/{src,test}/**/*.e2e.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
