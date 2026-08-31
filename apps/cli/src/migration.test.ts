@@ -473,7 +473,7 @@ describe('Phase J migration reconciliation', () => {
         afterOpen: async () => {
           const handle = await import('node:fs/promises').then((fs) => fs.open(exact, 'r+'));
           try {
-            await handle.write(Buffer.from('X'), 0, 1, 0);
+            await handle.truncate(1);
             await handle.sync();
           } finally {
             await handle.close();
