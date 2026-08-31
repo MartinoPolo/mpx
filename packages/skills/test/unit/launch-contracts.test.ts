@@ -9,7 +9,7 @@ import {
   inventoryCanonical,
   loadSkillBody,
   resolveManifest,
-} from '../src/index.js';
+} from '../../src/index.js';
 const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),

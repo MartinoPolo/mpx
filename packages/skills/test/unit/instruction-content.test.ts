@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-const instructionsRoot = path.resolve(import.meta.dirname, '../../../content/instructions');
+const instructionsRoot = path.resolve(import.meta.dirname, '../../../../content/instructions');
 
 type Rule = Readonly<{ file: string; scope: string; selector: string; applyTo: string }>;
 

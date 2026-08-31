@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { inventoryCanonical } from '../src/index.js';
-import semanticFixture from './fixtures/batch-c3-semantic.json' with { type: 'json' };
+import { inventoryCanonical } from '../../src/index.js';
+import semanticFixture from '../fixtures/batch-c3-semantic.json' with { type: 'json' };
 
-const root = path.resolve(import.meta.dirname, '../../../content/skills');
-const instructions = path.resolve(import.meta.dirname, '../../../content/instructions');
+const root = path.resolve(import.meta.dirname, '../../../../content/skills');
+const instructions = path.resolve(import.meta.dirname, '../../../../content/instructions');
 const identities = Object.keys(semanticFixture.skills);
 
 async function files(identity: string): Promise<string[]> {

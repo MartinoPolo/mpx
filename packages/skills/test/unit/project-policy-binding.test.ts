@@ -10,7 +10,7 @@ import {
   loadSkillBody,
   resolveManifest,
   type Exposure,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 const roots: string[] = [];
 afterEach(async () =>

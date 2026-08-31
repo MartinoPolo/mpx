@@ -227,6 +227,24 @@ describe('Phase J migration reconciliation', () => {
     ]);
   });
 
+  it('keeps the active semantic parity check aligned with the skills unit-test path', async () => {
+    const calls: string[][] = [];
+    await executeParityChecks({
+      repoRoot: path.resolve('.'),
+      exists: async () => true,
+      environment: { PNPM_HOME: path.resolve('pnpm-home') },
+      runner: async (request) => {
+        calls.push(request.args);
+        return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
+      },
+    });
+    const semanticArgs = calls.find((args) =>
+      args.includes('tests/contract/providers/conformance.test.ts'),
+    );
+    expect(semanticArgs).toContain('packages/skills/test/unit/canonical-content.test.ts');
+    expect(calls.flat()).not.toContain('packages/skills/test/canonical-content.test.ts');
+  });
+
   it('executes declared parity checks with bounded digest-only results and fail-closed gating', async () => {
     const calls: string[] = [];
     const results = await executeParityChecks({

@@ -198,7 +198,7 @@ const PARITY: readonly ParityDeclaration[] = [
     kind: 'vitest',
     entry: 'tests/contract/providers/conformance.test.ts',
     entries: [
-      'packages/skills/test/canonical-content.test.ts',
+      'packages/skills/test/unit/canonical-content.test.ts',
       'tests/contract/providers/conformance.test.ts',
     ],
     buildFilters: ['@mpx/skills...', '@mpx/provider-github...'],

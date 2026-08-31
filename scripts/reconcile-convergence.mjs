@@ -78,7 +78,7 @@ async function decision(entry) {
       destination: fromProvenance,
       adaptation: 'intentionally adapted into provider-neutral canonical content',
       test: fromProvenance.startsWith('content/skills/')
-        ? 'packages/skills/test/directory-inventory.test.ts'
+        ? 'packages/skills/test/unit/directory-inventory.test.ts'
         : fromProvenance,
     };
   }
@@ -88,7 +88,7 @@ async function decision(entry) {
       disposition: 'canonicalized',
       destination: skill,
       adaptation: 'merged source intent into the provider-neutral canonical skill',
-      test: 'packages/skills/test/directory-inventory.test.ts',
+      test: 'packages/skills/test/unit/directory-inventory.test.ts',
     };
   }
   if (/^(?:instructions|rules|rules-per-project)\//u.test(entry.path)) {
@@ -108,7 +108,7 @@ async function decision(entry) {
             disposition: 'canonicalized',
             destination,
             adaptation: 'preserved scope while normalizing runtime-neutral instruction paths',
-            test: 'packages/skills/test/instruction-content.test.ts',
+            test: 'packages/skills/test/unit/instruction-content.test.ts',
           };
         }
       }
@@ -135,7 +135,7 @@ async function decision(entry) {
           disposition: 'canonicalized',
           destination: ref,
           adaptation: 'preserved language review reference',
-          test: 'packages/skills/test/directory-inventory.test.ts',
+          test: 'packages/skills/test/unit/directory-inventory.test.ts',
         };
       }
     }
@@ -340,7 +340,7 @@ async function decision(entry) {
           ? 'content/instructions/runtime/claude/CLAUDE.md'
           : 'content/instructions/global/AGENTS.md',
       adaptation: 'merged runtime guidance into canonical scoped instructions',
-      test: 'packages/skills/test/instruction-content.test.ts',
+      test: 'packages/skills/test/unit/instruction-content.test.ts',
     };
   }
   if (entry.source === 'claude' && /^(?:docs\/|README\.md|WINDOWS-SETUP\.md)$/u.test(entry.path)) {

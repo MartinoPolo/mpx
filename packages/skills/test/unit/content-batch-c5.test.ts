@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { inventoryCanonical } from '../src/index.js';
-import providerCases from './fixtures/content-batch-c5/provider-cases.json' with { type: 'json' };
+import { inventoryCanonical } from '../../src/index.js';
+import providerCases from '../fixtures/content-batch-c5/provider-cases.json' with { type: 'json' };
 
-const root = path.resolve(import.meta.dirname, '../../../content/skills');
+const root = path.resolve(import.meta.dirname, '../../../../content/skills');
 const identities = [
   'batch-execute',
   'commit-push-review',

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { inventoryCanonical } from '../src/index.js';
+import { inventoryCanonical } from '../../src/index.js';
 
-const canonicalRoot = path.resolve(import.meta.dirname, '../../../content/skills');
+const canonicalRoot = path.resolve(import.meta.dirname, '../../../../content/skills');
 const workflowSkills = [
   'execute',
   'issue-create',

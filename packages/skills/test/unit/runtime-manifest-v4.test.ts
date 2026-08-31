@@ -7,7 +7,7 @@ import {
   inventoryCanonical,
   resolveManifest,
   type ResolveOptions,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 const roots: string[] = [];
 afterEach(async () =>

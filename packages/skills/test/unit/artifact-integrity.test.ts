@@ -9,7 +9,7 @@ import {
   inventoryCanonical,
   resolveManifest,
   verifyRuntimeSkillArtifact,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 const roots: string[] = [];
 afterEach(async () =>

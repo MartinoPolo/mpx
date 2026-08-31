@@ -8,7 +8,7 @@ import {
   SkillCatalogError,
   type ProjectSkillDirectoryEntry,
   type ProjectSkillFileSystem,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 function directories(count: number): ProjectSkillDirectoryEntry[] {
   return Array.from({ length: count }, (_, index) => ({

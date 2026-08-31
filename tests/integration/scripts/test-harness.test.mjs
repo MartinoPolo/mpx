@@ -150,6 +150,56 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed fifteen-suite skills unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = [
+      'artifact-integrity.test.ts',
+      'batch-c3-content.test.ts',
+      'canonical-content.test.ts',
+      'content-batch-c4.test.ts',
+      'content-batch-c5.test.ts',
+      'content-batch-c6.test.ts',
+      'directory-inventory.test.ts',
+      'four-state-v4.test.ts',
+      'instruction-content.test.ts',
+      'launch-contracts.test.ts',
+      'project-inventory-errors.test.ts',
+      'project-inventory-limits.test.ts',
+      'project-policy-binding.test.ts',
+      'runtime-manifest-v4.test.ts',
+      'skills.test.ts',
+    ];
+    expect(basenames).toHaveLength(15);
+    for (const basename of basenames) {
+      const formerPath = `packages/skills/test/${basename}`;
+      const unitPath = `packages/skills/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(classifyTestPath(unitPath), unitPath).toBe('unit');
+    }
+
+    const skillsFiles = await filesBelow(root, 'packages/skills');
+    expect(
+      skillsFiles.filter(
+        (file) =>
+          file.startsWith('packages/skills/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(skillsFiles.filter((file) => file.includes('/fixtures/'))).toEqual([
+      'packages/skills/test/fixtures/batch-c3-semantic.json',
+      'packages/skills/test/fixtures/catalog/review/SKILL.md',
+      'packages/skills/test/fixtures/content-batch-c4/harvest-cases.json',
+      'packages/skills/test/fixtures/content-batch-c4/recovery-cases.json',
+      'packages/skills/test/fixtures/content-batch-c5/provider-cases.json',
+    ]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

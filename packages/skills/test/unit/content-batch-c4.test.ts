@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { inventoryCanonical } from '../src/index.js';
+import { inventoryCanonical } from '../../src/index.js';
 
-const canonicalRoot = path.resolve(import.meta.dirname, '../../../content/skills');
-const fixtureRoot = path.join(import.meta.dirname, 'fixtures/content-batch-c4');
+const canonicalRoot = path.resolve(import.meta.dirname, '../../../../content/skills');
+const fixtureRoot = path.join(import.meta.dirname, '../fixtures/content-batch-c4');
 
 async function skill(identity: string): Promise<string> {
   return (await readFile(path.join(canonicalRoot, identity, 'SKILL.md'), 'utf8')).replaceAll(

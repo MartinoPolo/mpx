@@ -3,9 +3,9 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { inventoryCanonical } from '../src/index.js';
+import { inventoryCanonical } from '../../src/index.js';
 
-const root = path.resolve(import.meta.dirname, '../../../content/skills');
+const root = path.resolve(import.meta.dirname, '../../../../content/skills');
 const identities = [
   'board-setup',
   'board-to-issues',

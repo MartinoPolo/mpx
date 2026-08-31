@@ -8,7 +8,7 @@ import {
   MAX_SKILL_DIRECTORY_DEPTH,
   MAX_SKILL_DIRECTORY_DIRECTORIES,
   MAX_SKILL_DIRECTORY_FILES,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 const roots: string[] = [];
 afterEach(async () =>

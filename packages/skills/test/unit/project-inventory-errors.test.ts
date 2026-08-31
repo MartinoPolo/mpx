@@ -4,7 +4,7 @@ import {
   SkillCatalogError,
   type ProjectSkillDirectoryEntry,
   type ProjectSkillFileSystem,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 function failure(code: 'EACCES' | 'EIO' | 'ENOENT' | 'ENOTDIR'): NodeJS.ErrnoException {
   return Object.assign(new Error(code), { code });
