@@ -11,7 +11,7 @@ import {
   type ProviderProcessResult,
 } from '@mpx/providers';
 import { defineIssueAdapterConformance, type IssueConformanceDriver } from '@mpx/providers/testing';
-import { createKanbanFlowAdapter } from './index.js';
+import { createKanbanFlowAdapter } from '../../src/index.js';
 
 type WireTask = {
   _id: string;
