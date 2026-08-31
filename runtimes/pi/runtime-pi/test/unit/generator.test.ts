@@ -1,9 +1,77 @@
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { generatePiAgents } from '../../src/index.js';
 import { fileURLToPath } from 'node:url';
+
+async function writeAgentFixture(
+  root: string,
+  metadata: string,
+): Promise<{ source: string; output: string }> {
+  const source = path.join(root, 'source');
+  const output = path.join(root, 'out');
+  await mkdir(source);
+  await writeFile(
+    path.join(source, 'mpx-alpha.md'),
+    '---\nname: mpx-alpha\ndescription: alpha\n---\nBody\n',
+  );
+  await writeFile(path.join(source, 'metadata.json'), metadata);
+  return { source, output };
+}
+it('rethrows the native SyntaxError for malformed catalog JSON', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-json-'));
+  const fixture = await writeAgentFixture(root, '{');
+  let expected: SyntaxError;
+  try {
+    JSON.parse('{');
+    throw new Error('expected JSON parse failure');
+  } catch (error) {
+    expected = error as SyntaxError;
+  }
+  await expect(generatePiAgents(fixture)).rejects.toMatchObject({
+    constructor: SyntaxError,
+    name: 'SyntaxError',
+    message: expected.message,
+  });
+});
+
+it('preserves the generic Pi validation diagnostic', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-schema-'));
+  const fixture = await writeAgentFixture(root, JSON.stringify({ schemaVersion: 1, agents: [] }));
+  await expect(generatePiAgents(fixture)).rejects.toEqual(new Error('invalid agent metadata'));
+});
+
+it('preserves the Pi coverage diagnostic', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-coverage-'));
+  const fixture = await writeAgentFixture(root, JSON.stringify({ schemaVersion: 1, agents: {} }));
+  await expect(generatePiAgents(fixture)).rejects.toEqual(
+    new Error('agent metadata must exactly cover canonical agents'),
+  );
+});
+
+it('preserves the Pi unresolved selector diagnostic', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-selector-'));
+  const fixture = await writeAgentFixture(
+    root,
+    JSON.stringify({
+      schemaVersion: 1,
+      agents: {
+        'mpx-alpha': {
+          modelClass: 'terra',
+          thinking: 'low',
+          capabilities: ['read'],
+          nesting: ['mpx-missing*'],
+          outputSchema: 'text',
+        },
+      },
+    }),
+  );
+  await expect(generatePiAgents(fixture)).rejects.toEqual(
+    new Error("agent nesting selector 'mpx-missing*' does not resolve to a canonical identity"),
+  );
+});
+
 it('generates runtime metadata, the Explore alias, and detects exact catalog drift', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-'));
   const source = path.join(root, 'source');
@@ -88,7 +156,7 @@ it('expands approved nesting patterns to concrete canonical identities', async (
     JSON.stringify({
       schemaVersion: 1,
       agents: {
-        'mpx-parent': { ...metadata, nesting: ['mpx-reviewer-*'] },
+        'mpx-parent': { ...metadata, nesting: ['mpx-reviewer-b', 'mpx-reviewer-*'] },
         'mpx-reviewer-a': metadata,
         'mpx-reviewer-b': metadata,
       },
@@ -96,6 +164,7 @@ it('expands approved nesting patterns to concrete canonical identities', async (
   );
   await generatePiAgents({ source, output });
   const projected = await readFile(path.join(output, 'mpx-parent.md'), 'utf8');
-  expect(projected).toContain('allowed_subagents: mpx-reviewer-a,mpx-reviewer-b');
-  expect(projected).not.toContain('*');
+  expect(projected).toBe(
+    '---\nname: mpx-parent\ndescription: mpx-parent\nmodel: openai-codex/gpt-5.6-terra\nthinking: low\ntools: read\noutput_schema: text\nallowed_subagents: mpx-reviewer-b,mpx-reviewer-a\n\n---\nBody\n',
+  );
 });

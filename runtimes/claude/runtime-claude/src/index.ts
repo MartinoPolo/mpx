@@ -15,6 +15,14 @@ import {
   type SkillProjectionPlanEntry,
 } from '@mpx/skills';
 import {
+  AgentCatalogError,
+  parseAgentCatalogV1,
+  resolveAgentCatalogV1,
+  type AgentCapabilityV1,
+  type AgentModelClassV1,
+  type ResolvedAgentCatalogEntryV1,
+} from '@mpx/subagents';
+import {
   parseRuntimeCapabilityManifestV1,
   parseRuntimeContextV1,
   publishRuntimeArtifact,
@@ -273,21 +281,12 @@ function contained(root: string, candidate: string): boolean {
     (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
   );
 }
-type AgentClass = 'sol' | 'terra' | 'luna';
-type AgentCapability = 'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
-interface AgentMetadata {
-  modelClass: AgentClass;
-  thinking: 'low' | 'medium' | 'high';
-  capabilities: AgentCapability[];
-  nesting: string[];
-  outputSchema: string;
-}
-interface AgentCatalog {
-  schemaVersion: 1;
-  agents: Record<string, AgentMetadata>;
-}
-const claudeModels: Record<AgentClass, string> = { sol: 'opus', terra: 'sonnet', luna: 'haiku' };
-const claudeTools: Record<AgentCapability, string[]> = {
+const claudeModels: Record<AgentModelClassV1, string> = {
+  sol: 'opus',
+  terra: 'sonnet',
+  luna: 'haiku',
+};
+const claudeTools: Record<AgentCapabilityV1, string[]> = {
   read: ['Read'],
   search: ['Grep', 'Glob'],
   shell: ['Bash'],
@@ -301,33 +300,10 @@ const claudeTools: Record<AgentCapability, string[]> = {
     'mcp__mpx_gateway__source_check',
   ],
 };
-function expandAgentNesting(selectors: readonly string[], identities: readonly string[]): string[] {
-  const expanded = selectors.flatMap((selector) => {
-    const matches = selector.includes('*')
-      ? identities.filter((identity) =>
-          new RegExp(
-            `^${selector
-              .split('*')
-              .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
-              .join('.*')}$`,
-            'u',
-          ).test(identity),
-        )
-      : identities.filter((identity) => identity === selector);
-    if (matches.length === 0) {
-      throw new ClaudeRuntimeError(
-        'AGENT_METADATA_INVALID',
-        `agent nesting selector '${selector}' does not resolve to a canonical identity`,
-      );
-    }
-    return matches;
-  });
-  return [...new Set(expanded)];
-}
 function adaptClaudeAgent(
   text: string,
   identity: string,
-  metadata: AgentMetadata,
+  metadata: ResolvedAgentCatalogEntryV1,
 ): [string, string] {
   const marker = text.indexOf('\n---\n', 4);
   if (!text.startsWith('---\n') || marker < 0 || !text.includes(`\nname: ${identity}\n`)) {
@@ -360,39 +336,16 @@ async function canonicalAgents(root: string): Promise<Array<[string, string]>> {
   if (metadataStat && (!metadataStat.isFile() || metadataStat.isSymbolicLink())) {
     throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be a regular file');
   }
-  let catalog: AgentCatalog = { schemaVersion: 1, agents: {} };
+  let metadataText = '{"schemaVersion":1,"agents":{}}';
   if (metadataStat) {
     try {
-      catalog = JSON.parse(await readFile(metadataFile, 'utf8'));
+      metadataText = await readFile(metadataFile, 'utf8');
     } catch {
       throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be valid JSON');
     }
   }
-  const classes = new Set(['sol', 'terra', 'luna']),
-    thinking = new Set(['low', 'medium', 'high']),
-    capabilities = new Set(Object.keys(claudeTools));
-  if (
-    catalog.schemaVersion !== 1 ||
-    !catalog.agents ||
-    Array.isArray(catalog.agents) ||
-    !Object.entries(catalog.agents).every(
-      ([identity, agent]) =>
-        /^mpx-[a-z0-9-]+$/u.test(identity) &&
-        classes.has(agent?.modelClass) &&
-        thinking.has(agent?.thinking) &&
-        Array.isArray(agent?.capabilities) &&
-        agent.capabilities.length > 0 &&
-        agent.capabilities.every((item) => capabilities.has(item)) &&
-        Array.isArray(agent?.nesting) &&
-        agent.nesting.every((item) => typeof item === 'string') &&
-        typeof agent?.outputSchema === 'string' &&
-        agent.outputSchema.length > 0,
-    )
-  ) {
-    throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata schema is invalid');
-  }
   const result: Array<[string, string]> = [],
-    identities: string[] = [];
+    canonical: Array<[string, string]> = [];
   for (const entry of (await readdir(verifiedRoot, { withFileTypes: true })).sort((a, b) =>
     a.name.localeCompare(b.name),
   )) {
@@ -408,24 +361,32 @@ async function canonicalAgents(root: string): Promise<Array<[string, string]>> {
     if (!contained(verifiedRoot, resolved)) {
       throw new ClaudeRuntimeError('AGENT_ESCAPE', 'canonical agent escapes its verified root');
     }
-    const identity = entry.name.slice(0, -3),
-      agentMetadata = catalog.agents[identity];
-    if (!agentMetadata) {
-      throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', `missing metadata for ${identity}`);
-    }
-    identities.push(identity);
-    result.push(
-      adaptClaudeAgent(await readFile(file, 'utf8'), identity, {
-        ...agentMetadata,
-        nesting: expandAgentNesting(agentMetadata.nesting, Object.keys(catalog.agents).sort()),
-      }),
-    );
+    const identity = entry.name.slice(0, -3);
+    canonical.push([identity, await readFile(file, 'utf8')]);
   }
-  if (Object.keys(catalog.agents).sort().join() !== identities.sort().join()) {
-    throw new ClaudeRuntimeError(
-      'AGENT_METADATA_INVALID',
-      'agent metadata must exactly cover canonical agents',
+  try {
+    const catalog = resolveAgentCatalogV1(
+      parseAgentCatalogV1(metadataText),
+      canonical.map(([identity]) => identity),
     );
+    for (const [identity, text] of canonical) {
+      result.push(adaptClaudeAgent(text, identity, catalog.agents[identity]!));
+    }
+  } catch (error) {
+    if (!(error instanceof AgentCatalogError)) {
+      throw error;
+    }
+    const message =
+      error.code === 'AGENT_CATALOG_JSON_INVALID'
+        ? 'agent metadata must be valid JSON'
+        : error.code === 'AGENT_CATALOG_SCHEMA_INVALID'
+          ? 'agent metadata schema is invalid'
+          : error.code === 'AGENT_CATALOG_COVERAGE_INVALID'
+            ? error.missingIdentities.length > 0
+              ? `missing metadata for ${error.missingIdentities[0]}`
+              : 'agent metadata must exactly cover canonical agents'
+            : error.message;
+    throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', message);
   }
   const references = path.join(verifiedRoot, 'references');
   if (await lstat(references).catch(() => undefined)) {

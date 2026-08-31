@@ -21,6 +21,7 @@ import {
   diagnoseLegacyNamespaceConflicts,
   adaptClaudeNativeStatus,
   createClaudeDevServerCapability,
+  ClaudeRuntimeError,
 } from '../../src/index.js';
 import { renderClaudePortSegment } from '@mpx/status';
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@mpx/runtime-hooks';
@@ -501,6 +502,76 @@ describe('Claude projection', () => {
       }),
     ).rejects.toThrow(/SKILL_PROJECTION_PLAN_UNVERIFIED/);
   });
+  it('projects shared literal and wildcard nesting resolution to exact Claude output', async () => {
+    const f = await fixture();
+    const metadata = {
+      modelClass: 'terra',
+      thinking: 'low',
+      capabilities: ['read'],
+      nesting: [],
+      outputSchema: 'text',
+    };
+    for (const identity of ['mpx-parent', 'mpx-reviewer-a', 'mpx-reviewer-b']) {
+      await writeFile(
+        path.join(f.agents, `${identity}.md`),
+        `---\nname: ${identity}\ndescription: ${identity}\n---\nBody\n`,
+      );
+    }
+    await rm(path.join(f.agents, 'mpx-explorer.md'));
+    await writeFile(
+      path.join(f.agents, 'metadata.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: {
+          'mpx-parent': {
+            ...metadata,
+            nesting: ['mpx-reviewer-b', 'mpx-reviewer-*'],
+          },
+          'mpx-reviewer-a': metadata,
+          'mpx-reviewer-b': metadata,
+        },
+      }),
+    );
+    const outputRoot = path.join(f.root, 'nested-agent-output');
+    await buildClaudePlugin({ ...f, outputRoot });
+    expect(await readFile(path.join(outputRoot, 'agents', 'mpx-parent.md'), 'utf8')).toBe(
+      '---\nname: mpx-parent\ndescription: mpx-parent\nmodel: sonnet\neffort: low\ntools: Read, Agent\noutput-schema: text\nallowed-subagents: mpx-reviewer-b,mpx-reviewer-a\n\n---\nBody\n',
+    );
+  });
+
+  it('preserves the exact missing agent metadata diagnostic', async () => {
+    const f = await fixture();
+    await writeFile(
+      path.join(f.agents, 'metadata.json'),
+      JSON.stringify({ schemaVersion: 1, agents: {} }),
+    );
+    await expect(
+      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'missing-agent-metadata') }),
+    ).rejects.toEqual(
+      new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'missing metadata for mpx-explorer'),
+    );
+  });
+
+  it('keeps the generic diagnostic for unexpected-only agent metadata', async () => {
+    const f = await fixture();
+    const metadata = JSON.parse(await readFile(path.join(f.agents, 'metadata.json'), 'utf8')) as {
+      agents: Record<string, unknown>;
+    };
+    metadata.agents['mpx-unexpected'] = metadata.agents['mpx-explorer'];
+    await writeFile(
+      path.join(f.agents, 'metadata.json'),
+      JSON.stringify({ schemaVersion: 1, agents: metadata.agents }),
+    );
+    await expect(
+      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'unexpected-agent-metadata') }),
+    ).rejects.toEqual(
+      new ClaudeRuntimeError(
+        'AGENT_METADATA_INVALID',
+        'agent metadata must exactly cover canonical agents',
+      ),
+    );
+  });
+
   it('generates canonical agents, hooks, local status renderer, and settings', async () => {
     const f = await fixture(),
       out = path.join(f.root, 'out');

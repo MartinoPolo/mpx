@@ -19,10 +19,11 @@
   "dependencies": {
     "@mpx/dev-services": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
+    "@mpx/runtime-hooks": "workspace:*",
     "@mpx/runtime-tools": "workspace:*",
     "@mpx/skills": "workspace:*",
-    "@mpx/runtime-hooks": "workspace:*",
-    "@mpx/status": "workspace:*"
+    "@mpx/status": "workspace:*",
+    "@mpx/subagents": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

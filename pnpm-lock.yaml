@@ -521,6 +521,9 @@ importers:
       '@mpx/status':
         specifier: workspace:*
         version: link:../../../packages/status
+      '@mpx/subagents':
+        specifier: workspace:*
+        version: link:../../../packages/subagents
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
