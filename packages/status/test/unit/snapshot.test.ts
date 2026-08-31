@@ -8,7 +8,7 @@ import {
   parseStatusSnapshotV1,
   readStatusSnapshotV1,
   type StatusSnapshotV1,
-} from './index.js';
+} from '../../src/index.js';
 
 const validSnapshot: StatusSnapshotV1 = {
   schemaVersion: 1,

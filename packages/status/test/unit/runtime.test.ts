@@ -9,7 +9,7 @@ import {
   projectRuntimeStatusEnvelopeV1,
   type RuntimeStatusBindingV1,
   type RuntimeStatusEnvelopeV1,
-} from './index.js';
+} from '../../src/index.js';
 
 const binding: RuntimeStatusBindingV1 = {
   launchKey: 'launch-123',

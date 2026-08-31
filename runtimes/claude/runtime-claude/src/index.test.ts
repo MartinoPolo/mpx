@@ -1091,7 +1091,10 @@ it('rejects a relative Claude executable without changing argv construction', ()
 it('adapts native Claude status data into the launch-bound envelope and renders the full safe surface', async () => {
   const base = JSON.parse(
     await readFile(
-      new URL('../../../../packages/status/fixtures/runtime-claude-personal.json', import.meta.url),
+      new URL(
+        '../../../../packages/status/test/fixtures/runtime-claude-personal.json',
+        import.meta.url,
+      ),
       'utf8',
     ),
   );
@@ -1216,7 +1219,10 @@ it('projects only the launch-bound RuntimeStatusEnvelopeV1 when supplied', async
     out = path.join(f.root, 'runtime-status-out');
   const runtimeStatusEnvelope = JSON.parse(
     await readFile(
-      new URL('../../../../packages/status/fixtures/runtime-claude-personal.json', import.meta.url),
+      new URL(
+        '../../../../packages/status/test/fixtures/runtime-claude-personal.json',
+        import.meta.url,
+      ),
       'utf8',
     ),
   );

@@ -6,7 +6,7 @@ import {
   renderPiFixture,
   renderPortSegment,
   type StatusSnapshotV1,
-} from './index.js';
+} from '../../src/index.js';
 const fixture = async (name: string): Promise<{ snapshot: StatusSnapshotV1; text: string }> => ({
   snapshot: parseStatusSnapshotV1(
     JSON.parse(

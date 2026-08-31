@@ -6,7 +6,7 @@ import {
   parseStatusSnapshotV1,
   renderClaudePortSegment,
   renderPiPortSegment,
-} from './index.js';
+} from '../../src/index.js';
 
 const fixtureNames = [
   'valid',

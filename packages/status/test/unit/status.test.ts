@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectConfig } from '@mpx/config';
-import { createStatusProvider } from './index.js';
+import { createStatusProvider } from '../../src/index.js';
 
 const config: ProjectConfig = {
   schemaVersion: 1,

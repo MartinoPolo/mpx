@@ -454,6 +454,69 @@ describe('test taxonomy', () => {
     expect(runtimeToolsFiles.filter((file) => file.includes('/fixtures/'))).toEqual([]);
   });
 
+  test('preserves the fixed status test and fixture migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const testBasenames = [
+      'render.test.ts',
+      'runtime.test.ts',
+      'segment.test.ts',
+      'snapshot.test.ts',
+      'status.test.ts',
+    ];
+    const fixtureBasenames = [
+      'external-conflict.json',
+      'external-conflict.txt',
+      'fixed-shared.json',
+      'fixed-shared.txt',
+      'invalid.json',
+      'invalid.txt',
+      'missing.json',
+      'missing.txt',
+      'runtime-claude-personal.json',
+      'runtime-claude-work.json',
+      'runtime-pi-personal.json',
+      'runtime-pi-work.json',
+      'stale.json',
+      'stale.txt',
+      'unknown-listener.json',
+      'unknown-listener.txt',
+      'valid.json',
+      'valid.txt',
+    ];
+    expect(testBasenames).toHaveLength(5);
+    expect(fixtureBasenames).toHaveLength(18);
+    for (const basename of testBasenames) {
+      const formerPath = `packages/status/src/${basename}`;
+      const unitPath = `packages/status/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+    for (const basename of fixtureBasenames) {
+      const formerPath = `packages/status/fixtures/${basename}`;
+      const fixturePath = `packages/status/test/fixtures/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(fixturePath), fixturePath).toBe(true);
+    }
+
+    const statusFiles = await filesBelow(root, 'packages/status');
+    expect(
+      statusFiles.filter(
+        (file) =>
+          file.startsWith('packages/status/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(statusFiles.filter((file) => file.includes('/fixtures/'))).toEqual(
+      fixtureBasenames.map((basename) => `packages/status/test/fixtures/${basename}`),
+    );
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

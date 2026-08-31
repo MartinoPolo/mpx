@@ -172,7 +172,7 @@ async function decision(entry) {
       disposition: 'canonicalized',
       destination: 'packages/status/src/runtime.ts',
       adaptation: 'folded terminal progress into the shared status contract',
-      test: 'packages/status/src/runtime.test.ts',
+      test: 'packages/status/test/unit/runtime.test.ts',
     };
   }
   if (

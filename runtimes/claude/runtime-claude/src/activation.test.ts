@@ -25,7 +25,10 @@ const authority = (
 it('activates the generated Claude surface with launch-bound gateway, dev-service, live status, and cleanup authority', async () => {
   const base = JSON.parse(
     await readFile(
-      new URL('../../../../packages/status/fixtures/runtime-claude-personal.json', import.meta.url),
+      new URL(
+        '../../../../packages/status/test/fixtures/runtime-claude-personal.json',
+        import.meta.url,
+      ),
       'utf8',
     ),
   );

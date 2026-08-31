@@ -210,7 +210,7 @@ const PARITY: readonly ParityDeclaration[] = [
     kind: 'vitest',
     entry: 'packages/runtime-tools/test/unit/runtime-tools.test.ts',
   },
-  { id: 'status', kind: 'vitest', entry: 'packages/status/src/status.test.ts' },
+  { id: 'status', kind: 'vitest', entry: 'packages/status/test/unit/status.test.ts' },
   { id: 'dependencies', kind: 'node', entry: 'scripts/required-convergence.mjs' },
 ];
 const outputEvidence = (value: string) => ({
