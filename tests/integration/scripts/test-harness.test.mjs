@@ -200,6 +200,33 @@ describe('test taxonomy', () => {
     ]);
   });
 
+  test('preserves the fixed one-suite launch unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      ['packages/launch/src/launch.test.ts', 'packages/launch/test/unit/launch.test.ts'],
+    ];
+    expect(migrationInventory).toHaveLength(1);
+    for (const [formerPath, unitPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(classifyTestPath(unitPath), unitPath).toBe('unit');
+    }
+
+    const launchFiles = await filesBelow(root, 'packages/launch');
+    expect(
+      launchFiles.filter(
+        (file) =>
+          file.startsWith('packages/launch/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [
