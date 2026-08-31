@@ -1370,3 +1370,27 @@ describe('configuration structure', () => {
     expect(manifest.scripts.test).not.toContain('pnpm -r test');
   });
 });
+
+describe('Stage D generic layout guard', () => {
+  test('derives every workspace-owned test and fixture location from current workspace roots', async () => {
+    const files = await filesBelow(root);
+    for (const workspace of workspaceRoots) {
+      const owned = files.filter((file) => file.startsWith(`${workspace}/`));
+      expect(
+        owned.filter(
+          (file) =>
+            /\.test\.(?:[cm]?[jt]sx?)$/u.test(file) && !file.startsWith(`${workspace}/test/unit/`),
+        ),
+        workspace,
+      ).toEqual([]);
+      expect(
+        owned.filter(
+          (file) =>
+            file.startsWith(`${workspace}/src/`) &&
+            /(?:^|\/)(?:fixture|fixtures|__fixtures__|test-fixtures)(?:\/|$)/u.test(file),
+        ),
+        workspace,
+      ).toEqual([]);
+    }
+  });
+});
