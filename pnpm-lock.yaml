@@ -141,6 +141,9 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../core
+      '@mpx/skills':
+        specifier: workspace:*
+        version: link:../skills
       ajv:
         specifier: ^8.17.1
         version: 8.20.0
@@ -399,9 +402,6 @@ importers:
 
   packages/skills:
     dependencies:
-      '@mpx/config':
-        specifier: workspace:*
-        version: link:../config
       '@mpx/core':
         specifier: workspace:*
         version: link:../core

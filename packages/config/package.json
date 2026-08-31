@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@mpx/core": "workspace:*",
+    "@mpx/skills": "workspace:*",
     "ajv": "^8.17.1"
   }
 }

@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "default": "./dist/contracts.js"
     }
   },
   "scripts": {
@@ -17,7 +21,6 @@
     "check": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
-    "@mpx/config": "workspace:*",
     "@mpx/core": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*"
   },

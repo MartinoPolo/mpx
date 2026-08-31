@@ -1,7 +1,16 @@
+import type { ExposureConfig, SkillPack, SkillPolicyConfig } from '@mpx/skills/contracts';
+
+export {
+  EXPOSURES,
+  SKILL_PACKS,
+  type Exposure,
+  type ExposureConfig,
+  type SkillPack,
+  type SkillPolicyConfig,
+} from '@mpx/skills/contracts';
+
 export type RepositoryProvider = string;
 export type IssueProvider = string;
-export const SKILL_PACKS = ['core', 'work', 'personal'] as const;
-export const EXPOSURES = ['full', 'name-only', 'explicit-only', 'off'] as const;
 export const MODE_RESOURCES = [
   'selected-project',
   'identity-domain',
@@ -13,8 +22,6 @@ export const MODE_RESOURCES = [
   'host',
 ] as const;
 export const RESOURCE_ACCESS = ['read-only', 'read-write', 'staged-write'] as const;
-export type SkillPack = (typeof SKILL_PACKS)[number];
-export type Exposure = (typeof EXPOSURES)[number];
 export type ModeResource = (typeof MODE_RESOURCES)[number];
 export type ResourceAccess = (typeof RESOURCE_ACCESS)[number];
 export type Runtime = 'claude' | 'pi';
@@ -94,10 +101,6 @@ export interface ProjectConfig {
   };
   development?: { services: Record<string, ServiceConfig> };
 }
-export interface ExposureConfig {
-  default?: Exposure;
-  skills?: Record<string, Exposure>;
-}
 export interface ContentScope {
   roots: string[];
   skillPacks?: SkillPack[];
@@ -117,10 +120,6 @@ export interface IdentityConfig {
 }
 export interface ModeConfig {
   resources: Partial<Record<ModeResource, ResourceAccess>>;
-}
-export interface SkillPolicyConfig {
-  skillPacks?: SkillPack[];
-  skillExposure: ExposureConfig & { default: Exposure };
 }
 export interface NetworkPolicyConfig {
   preset?: NetworkPolicyPreset;

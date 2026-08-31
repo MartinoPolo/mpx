@@ -1287,9 +1287,9 @@ Perform the final evidence and path-reference audit, then retire obsolete path d
 
 #### E. Refine the skills platform (`refactor(skills): separate platform internals`)
 
-Split `packages/skills` internally into contracts, frontmatter, inventory, policy, manifest, artifact, projection, loader, and search while preserving its public facade and serialized outputs.
+Split `packages/skills` internally into contracts, frontmatter, inventory, policy, manifest, artifact, projection, loader, and search while preserving its unchanged root facade and serialized outputs. The narrow, side-effect-free `@mpx/skills/contracts` entry point is the canonical platform contract API used for config compatibility.
 
-- **Accept:** consumers use the unchanged public facade, serialization snapshots are byte-stable, and skills has no config or runtime-adapter dependency.
+- **Accept:** consumers retain the unchanged root facade, config compatibility uses `@mpx/skills/contracts`, serialization snapshots are byte-stable, and skills has no config or runtime-adapter dependency.
 - **Rollback:** revert internal extraction commits behind the preserved facade.
 
 #### F. Introduce neutral projection plans (`refactor(runtime): consume skill projection plans`)
@@ -1322,7 +1322,7 @@ This migration does not rewrite skill payloads; redesign schemas or the hash alg
 - [x] No tests or fixtures remain under any workspace `src`.
 - [x] Independent test-category commands run exactly once in aggregate.
 - [x] Package builds emit no tests.
-- [ ] `packages/skills` no longer depends on config or runtime adapters.
+- [x] `packages/skills` no longer depends on config or runtime adapters.
 - [ ] Runtimes own no canonical parsing, policy, or provider logic.
 - [ ] The CLI application layer is provider-neutral.
 - [ ] Full quality, generated, convergence, and test gates pass.

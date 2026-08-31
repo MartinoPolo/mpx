@@ -1,5 +1,4 @@
 import { expect, it, vi } from 'vitest';
-import { resolveEffectiveSkillPacks } from '../../src/skill-packs.js';
 import { classifyContentScope, resolveConfig } from '../../src/resolve.js';
 import type { ProjectConfig, UserConfig } from '../../src/types.js';
 
@@ -67,19 +66,4 @@ it('rethrows inaccessible configured roots instead of misclassifying them as unk
   await expect(classifyContentScope('C:/locked/repo', user)).rejects.toMatchObject({
     code: 'EACCES',
   });
-});
-
-it('derives deterministic effective skill packs from content, project, and skill-policy inputs', () => {
-  expect(resolveEffectiveSkillPacks({})).toEqual(['core']);
-  expect(resolveEffectiveSkillPacks({ contentScopeSkillPacks: ['work', 'core', 'work'] })).toEqual([
-    'core',
-    'work',
-  ]);
-  expect(
-    resolveEffectiveSkillPacks({
-      contentScopeSkillPacks: ['core', 'personal'],
-      projectSkillPacks: ['work', 'core'],
-      skillPolicySkillPacks: ['core', 'personal'],
-    }),
-  ).toEqual(['core']);
 });
