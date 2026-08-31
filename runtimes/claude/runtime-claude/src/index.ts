@@ -1,27 +1,16 @@
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  realpath,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   verifySkillProjectionPlan,
   type SkillProjectionPlan,
   type SkillProjectionPlanEntry,
 } from '@mpx/skills';
+import { AgentCatalogError, type AgentCapabilityV1, type AgentModelClassV1 } from '@mpx/subagents';
 import {
-  AgentCatalogError,
-  parseAgentCatalogV1,
-  resolveAgentCatalogV1,
-  type AgentCapabilityV1,
-  type AgentModelClassV1,
-  type ResolvedAgentCatalogEntryV1,
-} from '@mpx/subagents';
+  AgentDocumentError,
+  loadCanonicalAgentProjectionInputsV1,
+  renderCanonicalAgentDocumentV1,
+} from '@mpx/subagents/documents';
 import {
   parseRuntimeCapabilityManifestV1,
   parseRuntimeContextV1,
@@ -267,20 +256,6 @@ function stable(value: unknown): string {
   }
   return JSON.stringify(value);
 }
-async function verifiedDirectory(root: string, code: string, message: string): Promise<string> {
-  const stat = await lstat(root).catch(() => undefined);
-  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
-    throw new ClaudeRuntimeError(code, message);
-  }
-  return realpath(root);
-}
-function contained(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return (
-    relative === '' ||
-    (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
-  );
-}
 const claudeModels: Record<AgentModelClassV1, string> = {
   sol: 'opus',
   terra: 'sonnet',
@@ -300,123 +275,74 @@ const claudeTools: Record<AgentCapabilityV1, string[]> = {
     'mcp__mpx_gateway__source_check',
   ],
 };
-function adaptClaudeAgent(
-  text: string,
-  identity: string,
-  metadata: ResolvedAgentCatalogEntryV1,
-): [string, string] {
-  const marker = text.indexOf('\n---\n', 4);
-  if (!text.startsWith('---\n') || marker < 0 || !text.includes(`\nname: ${identity}\n`)) {
-    throw new ClaudeRuntimeError('AGENT_INVALID', `invalid canonical agent ${identity}`);
-  }
-  const projectedName = identity === 'mpx-explorer' ? 'Explore' : identity,
-    tools = [
-      ...new Set(metadata.capabilities.flatMap((capability) => claudeTools[capability] ?? [])),
-      ...(metadata.nesting.length ? ['Agent'] : []),
-    ];
-  const nesting = metadata.nesting.length
-    ? `\nallowed-subagents: ${metadata.nesting.join(',')}`
-    : '';
-  const frontmatter = text
-    .slice(0, marker)
-    .replace(`\nname: ${identity}\n`, `\nname: ${projectedName}\n`);
-  return [
-    `${projectedName}.md`,
-    `${frontmatter}\nmodel: ${claudeModels[metadata.modelClass]}\neffort: ${metadata.thinking}\ntools: ${tools.join(', ')}\noutput-schema: ${metadata.outputSchema}${nesting}\n${text.slice(marker)}`,
-  ];
-}
-async function canonicalAgents(root: string): Promise<Array<[string, string]>> {
-  const verifiedRoot = await verifiedDirectory(
-      root,
-      'AGENT_ROOT_INVALID',
-      'canonical agents root must be a real non-symlink directory',
-    ),
-    metadataFile = path.join(verifiedRoot, 'metadata.json'),
-    metadataStat = await lstat(metadataFile).catch(() => undefined);
-  if (metadataStat && (!metadataStat.isFile() || metadataStat.isSymbolicLink())) {
-    throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be a regular file');
-  }
-  let metadataText = '{"schemaVersion":1,"agents":{}}';
-  if (metadataStat) {
-    try {
-      metadataText = await readFile(metadataFile, 'utf8');
-    } catch {
-      throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be valid JSON');
-    }
-  }
-  const result: Array<[string, string]> = [],
-    canonical: Array<[string, string]> = [];
-  for (const entry of (await readdir(verifiedRoot, { withFileTypes: true })).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
-    if (!entry.isFile() || !/^mpx-[a-z0-9-]+\.md$/.test(entry.name)) {
-      continue;
-    }
-    const file = path.join(verifiedRoot, entry.name),
-      stat = await lstat(file);
-    if (stat.isSymbolicLink()) {
-      throw new ClaudeRuntimeError('AGENT_SYMLINK', 'canonical agent may not be a symlink');
-    }
-    const resolved = await realpath(file);
-    if (!contained(verifiedRoot, resolved)) {
-      throw new ClaudeRuntimeError('AGENT_ESCAPE', 'canonical agent escapes its verified root');
-    }
-    const identity = entry.name.slice(0, -3);
-    canonical.push([identity, await readFile(file, 'utf8')]);
-  }
+async function canonicalAgents(root: string): Promise<Array<[string, Uint8Array]>> {
   try {
-    const catalog = resolveAgentCatalogV1(
-      parseAgentCatalogV1(metadataText),
-      canonical.map(([identity]) => identity),
+    const canonical = await loadCanonicalAgentProjectionInputsV1(root, {
+      allowMissingMetadata: true,
+    });
+    const result: Array<[string, Uint8Array]> = canonical.entries.map((entry) => {
+      const projectedName = entry.identity === 'mpx-explorer' ? 'Explore' : entry.identity,
+        metadata = entry.metadata,
+        tools = [
+          ...new Set(metadata.capabilities.flatMap((capability) => claudeTools[capability] ?? [])),
+          ...(metadata.nesting.length ? ['Agent'] : []),
+        ],
+        fields = [
+          { name: 'model', value: claudeModels[metadata.modelClass] },
+          { name: 'effort', value: metadata.thinking },
+          { name: 'tools', value: tools.join(', ') },
+          { name: 'output-schema', value: metadata.outputSchema },
+          ...(metadata.nesting.length
+            ? [{ name: 'allowed-subagents', value: metadata.nesting.join(',') }]
+            : []),
+        ];
+      return [
+        `${projectedName}.md`,
+        renderCanonicalAgentDocumentV1(entry.document, { name: projectedName, fields }),
+      ];
+    });
+    result.push(
+      ...canonical.supportFiles.map((file): [string, Uint8Array] => [
+        file.relativePath,
+        file.bytes,
+      ]),
     );
-    for (const [identity, text] of canonical) {
-      result.push(adaptClaudeAgent(text, identity, catalog.agents[identity]!));
-    }
+    return result;
   } catch (error) {
-    if (!(error instanceof AgentCatalogError)) {
-      throw error;
+    if (error instanceof AgentCatalogError) {
+      const message =
+        error.code === 'AGENT_CATALOG_JSON_INVALID'
+          ? 'agent metadata must be valid JSON'
+          : error.code === 'AGENT_CATALOG_SCHEMA_INVALID'
+            ? 'agent metadata schema is invalid'
+            : error.code === 'AGENT_CATALOG_COVERAGE_INVALID'
+              ? error.missingIdentities.length > 0
+                ? `missing metadata for ${error.missingIdentities[0]}`
+                : 'agent metadata must exactly cover canonical agents'
+              : error.message;
+      throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', message);
     }
-    const message =
-      error.code === 'AGENT_CATALOG_JSON_INVALID'
-        ? 'agent metadata must be valid JSON'
-        : error.code === 'AGENT_CATALOG_SCHEMA_INVALID'
-          ? 'agent metadata schema is invalid'
-          : error.code === 'AGENT_CATALOG_COVERAGE_INVALID'
-            ? error.missingIdentities.length > 0
-              ? `missing metadata for ${error.missingIdentities[0]}`
-              : 'agent metadata must exactly cover canonical agents'
-            : error.message;
-    throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', message);
-  }
-  const references = path.join(verifiedRoot, 'references');
-  if (await lstat(references).catch(() => undefined)) {
-    const verifiedReferences = await verifiedDirectory(
-      references,
-      'AGENT_REFERENCE_INVALID',
-      'agent references root must be a real non-symlink directory',
-    );
-    for (const entry of (await readdir(verifiedReferences, { withFileTypes: true })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const file = path.join(verifiedReferences, entry.name),
-        stat = await lstat(file);
-      if (!entry.isFile() || stat.isSymbolicLink()) {
-        throw new ClaudeRuntimeError(
-          'AGENT_REFERENCE_INVALID',
-          'agent references must be regular files',
-        );
-      }
-      const resolved = await realpath(file);
-      if (!contained(verifiedReferences, resolved)) {
-        throw new ClaudeRuntimeError(
-          'AGENT_REFERENCE_INVALID',
-          'agent references must remain within the verified references root',
-        );
-      }
-      result.push([`references/${entry.name}`, await readFile(file, 'utf8')]);
+    if (error instanceof AgentDocumentError) {
+      const mappings: Partial<Record<typeof error.code, [string, string]>> = {
+        AGENT_ROOT_INVALID: [
+          'AGENT_ROOT_INVALID',
+          'canonical agents root must be a real non-symlink directory',
+        ],
+        AGENT_SYMLINK: ['AGENT_SYMLINK', 'canonical agent may not be a symlink'],
+        AGENT_ESCAPE: ['AGENT_ESCAPE', 'canonical agent escapes its verified root'],
+        AGENT_DOCUMENT_INVALID: ['AGENT_INVALID', error.message],
+        AGENT_METADATA_INVALID: ['AGENT_METADATA_INVALID', 'agent metadata must be valid JSON'],
+        AGENT_METADATA_FILE_INVALID: [
+          'AGENT_METADATA_INVALID',
+          'agent metadata must be a regular file',
+        ],
+        AGENT_REFERENCE_INVALID: ['AGENT_REFERENCE_INVALID', error.message],
+      };
+      const mapped = mappings[error.code] ?? [error.code, error.message];
+      throw new ClaudeRuntimeError(mapped[0], mapped[1]);
     }
+    throw error;
   }
-  return result;
 }
 export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<ClaudeProjection> {
   const skillPlan = verifySkillProjectionPlan(input.skillPlan);

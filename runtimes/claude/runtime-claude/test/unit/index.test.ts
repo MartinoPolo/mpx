@@ -502,6 +502,23 @@ describe('Claude projection', () => {
       }),
     ).rejects.toThrow(/SKILL_PROJECTION_PLAN_UNVERIFIED/);
   });
+  it('preserves canonical CRLF bytes in the Claude agent projection', async () => {
+    const f = await fixture();
+    await writeFile(
+      path.join(f.agents, 'mpx-explorer.md'),
+      '---\r\nname: mpx-explorer\r\ndescription: Exact Explore description\r\n---\r\nAGENT BODY\r\n',
+    );
+    const outputRoot = path.join(f.root, 'crlf-agent-output');
+
+    await buildClaudePlugin({ ...f, outputRoot });
+
+    expect(await readFile(path.join(outputRoot, 'agents', 'Explore.md'))).toEqual(
+      Buffer.from(
+        '---\r\nname: Explore\r\ndescription: Exact Explore description\r\nmodel: sonnet\r\neffort: low\r\ntools: Read, Grep, Glob, Bash\r\noutput-schema: text\r\n\r\n---\r\nAGENT BODY\r\n',
+      ),
+    );
+  });
+
   it('projects shared literal and wildcard nesting resolution to exact Claude output', async () => {
     const f = await fixture();
     const metadata = {
@@ -536,6 +553,43 @@ describe('Claude projection', () => {
     await buildClaudePlugin({ ...f, outputRoot });
     expect(await readFile(path.join(outputRoot, 'agents', 'mpx-parent.md'), 'utf8')).toBe(
       '---\nname: mpx-parent\ndescription: mpx-parent\nmodel: sonnet\neffort: low\ntools: Read, Agent\noutput-schema: text\nallowed-subagents: mpx-reviewer-b,mpx-reviewer-a\n\n---\nBody\n',
+    );
+  });
+
+  it('accepts an empty canonical agent directory without metadata for Claude', async () => {
+    const f = await fixture();
+    await rm(path.join(f.agents, 'mpx-explorer.md'));
+    await rm(path.join(f.agents, 'metadata.json'));
+    const outputRoot = path.join(f.root, 'empty-agents');
+
+    await buildClaudePlugin({ ...f, outputRoot });
+
+    expect(
+      Object.keys(await tree(outputRoot)).filter((file) => file.startsWith('agents/')),
+    ).toEqual([]);
+  });
+
+  it('maps absent metadata for canonical agents to the exact missing identity diagnostic', async () => {
+    const f = await fixture();
+    await rm(path.join(f.agents, 'metadata.json'));
+
+    await expect(
+      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'absent-agent-metadata') }),
+    ).rejects.toEqual(
+      new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'missing metadata for mpx-explorer'),
+    );
+  });
+
+  it('maps a non-regular metadata path to the prior exact Claude diagnostic', async () => {
+    const f = await fixture();
+    const metadataPath = path.join(f.agents, 'metadata.json');
+    await rm(metadataPath);
+    await mkdir(metadataPath);
+
+    await expect(
+      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'directory-agent-metadata') }),
+    ).rejects.toEqual(
+      new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be a regular file'),
     );
   });
 

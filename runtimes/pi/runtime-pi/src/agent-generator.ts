@@ -1,14 +1,11 @@
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { AgentCatalogError, type AgentCapabilityV1, type AgentModelClassV1 } from '@mpx/subagents';
 import {
-  AgentCatalogError,
-  parseAgentCatalogV1,
-  resolveAgentCatalogV1,
-  type AgentCapabilityV1,
-  type AgentModelClassV1,
-  type ResolvedAgentCatalogEntryV1,
-  type ResolvedAgentCatalogV1,
-} from '@mpx/subagents';
+  AgentDocumentError,
+  loadCanonicalAgentProjectionInputsV1,
+  renderCanonicalAgentDocumentV1,
+} from '@mpx/subagents/documents';
 export interface GeneratePiAgentsInput {
   source: string;
   output: string;
@@ -31,38 +28,11 @@ const piTools: Record<AgentCapabilityV1, string[]> = {
 function projectedAgentName(identity: string): string {
   return identity === 'mpx-explorer' ? 'Explore' : identity;
 }
-function adaptAgent(
-  source: string,
-  identity: string,
-  metadata: ResolvedAgentCatalogEntryV1,
-): string {
-  const normalized = source.replaceAll('\r\n', '\n');
-  const marker = normalized.indexOf('\n---\n', 4);
-  if (!normalized.startsWith('---\n') || marker < 0) {
-    throw new Error('canonical agent must have frontmatter');
-  }
-  const frontmatter = normalized
-    .slice(0, marker)
-    .replace(`\nname: ${identity}\n`, `\nname: ${projectedAgentName(identity)}\n`);
-  const tools = [
-    ...new Set(metadata.capabilities.flatMap((capability) => piTools[capability] ?? [])),
-  ];
-  const nesting = metadata.nesting.length
-    ? `\nallowed_subagents: ${metadata.nesting.join(',')}`
-    : '';
-  return `${frontmatter}\nmodel: ${piModels[metadata.modelClass]}\nthinking: ${metadata.thinking}\ntools: ${tools.join(',')}\noutput_schema: ${metadata.outputSchema}${nesting}\n${normalized.slice(marker)}`;
+function normalizePiLineEndings(bytes: Uint8Array): Uint8Array {
+  return Buffer.from(Buffer.from(bytes).toString('utf8').replaceAll('\r\n', '\n'));
 }
-async function readAgentCatalog(
-  source: string,
-  identities: readonly string[],
-): Promise<ResolvedAgentCatalogV1> {
-  try {
-    const catalog = parseAgentCatalogV1(await readFile(path.join(source, 'metadata.json'), 'utf8'));
-    return resolveAgentCatalogV1(catalog, identities);
-  } catch (error) {
-    if (!(error instanceof AgentCatalogError)) {
-      throw error;
-    }
+function translateError(error: unknown): never {
+  if (error instanceof AgentCatalogError) {
     if (error.code === 'AGENT_CATALOG_JSON_INVALID' && error.cause instanceof SyntaxError) {
       throw error.cause;
     }
@@ -74,22 +44,34 @@ async function readAgentCatalog(
     }
     throw new Error('invalid agent metadata');
   }
+  if (error instanceof AgentDocumentError) {
+    if (error.code === 'AGENT_DOCUMENT_INVALID') {
+      throw new Error('canonical agent must have frontmatter');
+    }
+    if (error.code === 'AGENT_METADATA_FILE_INVALID') {
+      throw new AgentDocumentError('AGENT_METADATA_INVALID', error.message);
+    }
+  }
+  throw error;
 }
 export async function generatePiAgents(
   input: GeneratePiAgentsInput,
 ): Promise<{ changed: string[]; drift: string[] }> {
-  const names = (await readdir(input.source))
-    .filter((name) => /^mpx-[a-z0-9-]+\.md$/u.test(name))
-    .sort();
-  const identities = names.map((name) => name.slice(0, -3));
-  const catalog = await readAgentCatalog(input.source, identities);
-  const changed: string[] = [];
-  const drift: string[] = [];
+  let canonical;
+  try {
+    canonical = await loadCanonicalAgentProjectionInputsV1(input.source);
+  } catch (error) {
+    translateError(error);
+  }
+  const changed: string[] = [],
+    drift: string[] = [];
   if (!input.check) {
     await mkdir(input.output, { recursive: true });
   }
-  const generatedNames = names.map((name) => `${projectedAgentName(name.slice(0, -3))}.md`);
-  const generated = new Set(generatedNames);
+  const generatedNames = canonical.entries.map(
+      (entry) => `${projectedAgentName(entry.identity)}.md`,
+    ),
+    generated = new Set(generatedNames);
   const extras = (await readdir(input.output).catch(() => [] as string[]))
     .filter((name) => /^(?:mpx-[a-z0-9-]+|Explore)\.md$/u.test(name) && !generated.has(name))
     .sort();
@@ -101,18 +83,30 @@ export async function generatePiAgents(
       changed.push(extra);
     }
   }
-  for (const name of names) {
-    const identity = name.slice(0, -3),
-      outputName = `${projectedAgentName(identity)}.md`;
-    const metadata = catalog.agents[identity]!;
-    const expected = adaptAgent(
-      await readFile(path.join(input.source, name), 'utf8'),
-      identity,
-      metadata,
+  for (const entry of canonical.entries) {
+    const outputName = `${projectedAgentName(entry.identity)}.md`,
+      metadata = entry.metadata;
+    const tools = [
+      ...new Set(metadata.capabilities.flatMap((capability) => piTools[capability] ?? [])),
+    ];
+    const fields = [
+      { name: 'model', value: piModels[metadata.modelClass] },
+      { name: 'thinking', value: metadata.thinking },
+      { name: 'tools', value: tools.join(',') },
+      { name: 'output_schema', value: metadata.outputSchema },
+      ...(metadata.nesting.length
+        ? [{ name: 'allowed_subagents', value: metadata.nesting.join(',') }]
+        : []),
+    ];
+    const expected = normalizePiLineEndings(
+      renderCanonicalAgentDocumentV1(entry.document, {
+        name: projectedAgentName(entry.identity),
+        fields,
+      }),
     );
-    const target = path.join(input.output, outputName);
-    const actual = await readFile(target, 'utf8').catch(() => undefined);
-    if (actual === expected) {
+    const target = path.join(input.output, outputName),
+      actual = await readFile(target).catch(() => undefined);
+    if (actual && Buffer.from(actual).equals(expected)) {
       continue;
     }
     if (input.check) {

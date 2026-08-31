@@ -36,6 +36,34 @@ it('rethrows the native SyntaxError for malformed catalog JSON', async () => {
   });
 });
 
+it('keeps metadata required for native Pi generation', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-metadata-required-'));
+  const fixture = await writeAgentFixture(root, '{}');
+  await import('node:fs/promises').then((fs) => fs.rm(path.join(fixture.source, 'metadata.json')));
+
+  await expect(generatePiAgents(fixture)).rejects.toMatchObject({
+    name: 'AgentDocumentError',
+    code: 'AGENT_METADATA_INVALID',
+    message: 'metadata could not be read',
+  });
+});
+
+it('preserves the native Pi diagnostic for a non-regular metadata path', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-metadata-directory-'));
+  const fixture = await writeAgentFixture(root, '{}');
+  const metadataPath = path.join(fixture.source, 'metadata.json');
+  await import('node:fs/promises').then(async (fs) => {
+    await fs.rm(metadataPath);
+    await fs.mkdir(metadataPath);
+  });
+
+  await expect(generatePiAgents(fixture)).rejects.toMatchObject({
+    name: 'AgentDocumentError',
+    code: 'AGENT_METADATA_INVALID',
+    message: 'metadata must be a regular non-symlink file',
+  });
+});
+
 it('preserves the generic Pi validation diagnostic', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-schema-'));
   const fixture = await writeAgentFixture(root, JSON.stringify({ schemaVersion: 1, agents: [] }));
@@ -69,6 +97,37 @@ it('preserves the Pi unresolved selector diagnostic', async () => {
   );
   await expect(generatePiAgents(fixture)).rejects.toEqual(
     new Error("agent nesting selector 'mpx-missing*' does not resolve to a canonical identity"),
+  );
+});
+
+it('normalizes canonical CRLF bytes to the native Pi LF projection', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-crlf-'));
+  const fixture = await writeAgentFixture(
+    root,
+    JSON.stringify({
+      schemaVersion: 1,
+      agents: {
+        'mpx-alpha': {
+          modelClass: 'terra',
+          thinking: 'low',
+          capabilities: ['read'],
+          nesting: [],
+          outputSchema: 'text',
+        },
+      },
+    }),
+  );
+  await writeFile(
+    path.join(fixture.source, 'mpx-alpha.md'),
+    '---\r\nname: mpx-alpha\r\ndescription: alpha\r\n---\r\nBody\r\n',
+  );
+
+  await generatePiAgents(fixture);
+
+  expect(await readFile(path.join(fixture.output, 'mpx-alpha.md'))).toEqual(
+    Buffer.from(
+      '---\nname: mpx-alpha\ndescription: alpha\nmodel: openai-codex/gpt-5.6-terra\nthinking: low\ntools: read\noutput_schema: text\n\n---\nBody\n',
+    ),
   );
 });
 

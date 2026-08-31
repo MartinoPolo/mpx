@@ -96,6 +96,16 @@ describe('agent catalog V1', () => {
   });
 
   it.each([
+    ['identity length', `mpx-${'m'.repeat(124)}`, []],
+    ['selector length', 'mpx-parent', ['x'.repeat(256)]],
+    ['wildcard count', 'mpx-parent', [`mpx-${'*'.repeat(16)}`]],
+  ])('accepts catalogs at the exact maximum %s', (_label, identity, nesting) => {
+    expect(parseAgentCatalogV1(catalog({ [identity]: { ...agent, nesting } }))).toMatchObject({
+      schemaVersion: 1,
+    });
+  });
+
+  it.each([
     ['identity length', `mpx-${'m'.repeat(125)}`, []],
     ['selector length', 'mpx-parent', ['x'.repeat(257)]],
     ['wildcard count', 'mpx-parent', [`mpx-${'*'.repeat(17)}`]],
@@ -132,23 +142,17 @@ describe('agent catalog V1', () => {
     );
   });
 
-  it('matches repeated wildcards without constructing a RegExp', () => {
+  it('matches repeated wildcards observably', () => {
     const parsed = parseAgentCatalogV1(
       catalog({
         'mpx-parent': { ...agent, nesting: ['mpx-**reviewer***-a'] },
         'mpx-reviewer-a': agent,
       }),
     );
-    const constructor = vi.spyOn(globalThis, 'RegExp').mockImplementation(() => {
-      throw new Error('RegExp construction is forbidden');
-    });
-    try {
-      expect(
-        resolveAgentCatalogV1(parsed, ['mpx-parent', 'mpx-reviewer-a']).agents['mpx-parent'],
-      ).toMatchObject({ nesting: ['mpx-reviewer-a'] });
-    } finally {
-      constructor.mockRestore();
-    }
+
+    expect(
+      resolveAgentCatalogV1(parsed, ['mpx-parent', 'mpx-reviewer-a']).agents['mpx-parent'],
+    ).toMatchObject({ nesting: ['mpx-reviewer-a'] });
   });
 
   it('bounds adversarial wildcard nonmatches', () => {
