@@ -115,6 +115,26 @@ describe('test taxonomy', () => {
     }
   });
 
+  test('keeps the fixed CLI integration cohort exclusively under root ownership', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'apps/cli/src/migration.integration.test.ts',
+        'tests/integration/cli/migration.integration.test.ts',
+      ],
+      [
+        'apps/cli/src/phase-g-subprocess.integration.test.ts',
+        'tests/integration/cli/phase-g-subprocess.integration.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(2);
+    for (const [formerPath, integrationPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(integrationPath), integrationPath).toBe(true);
+      expect(matchingTestCategories(integrationPath), integrationPath).toEqual(['integration']);
+    }
+  });
+
   test('keeps every contract-classified test under the root contract directory', async () => {
     const files = (await filesBelow(root)).filter((file) => /\.test\.(?:[cm]?[jt]sx?)$/.test(file));
     const contractTests = files.filter((file) => classifyTestPath(file) === 'contract');
@@ -270,6 +290,13 @@ describe('configuration structure', () => {
     const rootManifest = await json('package.json');
     expect(rootManifest.scripts['test:contract']).toMatch(
       /^pnpm --filter @mpx\/provider-github\.\.\. --filter @mpx\/runtime-contracts\.\.\. build && vitest run --config vitest\.contract\.config\.ts$/u,
+    );
+  });
+
+  test('builds the CLI dependency closure before invoking integration Vitest', async () => {
+    const rootManifest = await json('package.json');
+    expect(rootManifest.scripts['test:integration']).toBe(
+      'pnpm --filter mpx... build && vitest run --config vitest.integration.config.ts',
     );
   });
 

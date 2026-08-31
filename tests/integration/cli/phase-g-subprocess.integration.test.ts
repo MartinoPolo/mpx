@@ -2,10 +2,13 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
 import { SessionStore } from '@mpx/sessions';
 import { WindowsProcessCapabilities } from '@mpx/windows';
-import { productionSessionDiscoveries, productionSessionResumeDependencies } from './context.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  productionSessionDiscoveries,
+  productionSessionResumeDependencies,
+} from '../../../apps/cli/src/context.js';
 
 const roots: string[] = [],
   children: ChildProcess[] = [];

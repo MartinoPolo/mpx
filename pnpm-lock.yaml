@@ -17,6 +17,12 @@ importers:
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:packages/runtime-contracts
+      '@mpx/sessions':
+        specifier: workspace:*
+        version: link:packages/sessions
+      '@mpx/windows':
+        specifier: workspace:*
+        version: link:packages/windows
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1
