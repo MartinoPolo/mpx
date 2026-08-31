@@ -5,7 +5,7 @@ import type {
   ProviderProcessRequest,
   ProviderProcessResult,
 } from '@mpx/providers';
-import { createGitHubAdapters } from './index.js';
+import { createGitHubAdapters } from '../../src/index.js';
 
 const nativeReview = {
   number: 7,

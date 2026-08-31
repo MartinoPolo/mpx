@@ -4,7 +4,7 @@ import type {
   ProviderProcessRequest,
   ProviderProcessResult,
 } from '@mpx/providers';
-import { createGitHubAdapters } from './index.js';
+import { createGitHubAdapters } from '../../src/index.js';
 
 class FakeGh implements ProviderProcessExecutor {
   readonly requests: ProviderProcessRequest[] = [];

@@ -256,6 +256,40 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed two-suite provider-github unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/provider-github/src/index.test.ts',
+        'packages/provider-github/test/unit/index.test.ts',
+      ],
+      [
+        'packages/provider-github/src/repository.test.ts',
+        'packages/provider-github/test/unit/repository.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(2);
+    for (const [formerPath, unitPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const providerGitHubFiles = await filesBelow(root, 'packages/provider-github');
+    expect(
+      providerGitHubFiles.filter(
+        (file) =>
+          file.startsWith('packages/provider-github/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [
