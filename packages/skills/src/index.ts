@@ -44,6 +44,7 @@ export {
 } from './loader.js';
 export { resolveManifest } from './manifest.js';
 export { explainSkill } from './policy.js';
+export { rankSearchCandidatesSource } from './search-ranking.js';
 export {
   createSkillProjectionPlan,
   humanCompleteSkills,

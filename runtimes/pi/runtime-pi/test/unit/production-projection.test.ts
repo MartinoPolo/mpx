@@ -21,6 +21,7 @@ import {
   createSkillProjectionPlan,
   inventoryProjectSkills,
   loadSkillBody,
+  modelSearchSkillProjection,
   resolveManifest,
 } from '@mpx/skills';
 import {
@@ -638,7 +639,7 @@ describe('production Pi projection', () => {
       expect(normalizedTree.get(bundlePath), bundlePath).toEqual(completeTree.get(bundlePath));
     }
     expect(projectionContentDigest(completeTree, boundValues)).toBe(
-      '5f3b4a173c2fdda84b35ce27968b1c324676b329e9ef15280d47badee2e3a02b',
+      '2ce8d8d1690af876dff05ada317d4a8c2bfc1b63d6b29a5684450e968938d1d4',
     );
   });
 
@@ -667,14 +668,44 @@ describe('production Pi projection', () => {
     }
   });
 
-  it('changes the projection content digest after a one-byte mutation', () => {
-    const files = new Map([
-      ['extension.mjs', Buffer.from('export default 1;\n')],
-      ['vendor/runtime.mjs', Buffer.from('const bundle = 1;\n')],
-    ]);
-    const original = projectionContentDigest(files, []);
-    files.set('vendor/runtime.mjs', Buffer.from('const bundle = 2;\n'));
-    expect(projectionContentDigest(files, [])).not.toBe(original);
+  it('binds a one-byte support-file change into projected file metadata and its aggregate digest', async () => {
+    const f = await fixture();
+    const supportPath = path.join(f.canonicalRoot, 'full', 'guide.txt');
+    const build = async (suffix: string) => {
+      const skillPlan = await createSkillProjectionPlan({
+        manifest: f.manifest,
+        artifact: f.artifact,
+        catalog: f.catalog,
+        canonicalRoot: f.canonicalRoot,
+      });
+      const projection = await buildPiProjection({
+        ...f,
+        skillPlan,
+        artifactsRoot: await mkdtemp(path.join(tmpdir(), `pi-support-byte-${suffix}-`)),
+      });
+      const metadata = JSON.parse(
+        await readFile(path.join(projection.directory, '.mpx-runtime-artifact.json'), 'utf8'),
+      ) as { fileMap: Array<{ path: string; bytes: number; sha256: string }> };
+      return {
+        projection,
+        supportMetadata: required(
+          metadata.fileMap.find((entry) => entry.path === 'skills/full/guide.txt'),
+          'projected support-file metadata',
+        ),
+      };
+    };
+
+    await writeFile(supportPath, 'SUPPORT A\n');
+    const first = await build('a');
+    await writeFile(supportPath, 'SUPPORT B\n');
+    const second = await build('b');
+
+    expect(second.supportMetadata).not.toEqual(first.supportMetadata);
+    expect(second.supportMetadata.bytes).toBe(first.supportMetadata.bytes);
+    expect(second.supportMetadata.sha256).not.toBe(first.supportMetadata.sha256);
+    expect(second.projection.reference.fileMapHash).not.toBe(
+      first.projection.reference.fileMapHash,
+    );
   });
 
   it('accepts a canonical published file map with hyphenated agent names', async () => {
@@ -1241,6 +1272,50 @@ describe('production Pi projection', () => {
     expect(source).not.toMatch(/example\.invalid|Projection result|Fetched \$/u);
   });
 
+  it('intentionally aligns generated Pi model search with canonical projected skill ranking', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-search-ranking-')),
+    });
+    const module = await import(pathToFileURL(projection.extension).href);
+    let searchTool:
+      { execute(toolCallId: string, params: { query: string }): Promise<unknown> } | undefined;
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({
+      registerCommand() {},
+      registerTool(tool: {
+        name: string;
+        execute(id: string, params: { query: string }): Promise<unknown>;
+      }) {
+        if (tool.name === 'mpx_model_search') {
+          searchTool = tool;
+        }
+      },
+    });
+
+    for (const query of ['', '   ', 'FULL', 'full trigger', 'skill', 'missing', 'named full']) {
+      const expected = modelSearchSkillProjection(f.skillPlan, query, {
+        artifactKey: f.artifact.reference.artifactKey,
+      });
+      const result = (await required(searchTool, 'model search').execute('search', { query })) as {
+        details: { results: unknown };
+      };
+      expect(result.details.results, query).toEqual(expected);
+    }
+    expect(
+      (
+        (await required(searchTool, 'model search').execute('search', { query: 'trigger' })) as {
+          details: { results: Array<Record<string, unknown>> };
+        }
+      ).details.results[0],
+    ).not.toHaveProperty('triggers');
+    await expect(
+      required(searchTool, 'model search').execute('search', { query: ' '.repeat(201) }),
+    ).rejects.toThrow('QUERY_TOO_LONG');
+  });
+
   it('activates the generated extension with current tool, disclosure, command, status, and restart semantics', async () => {
     const f = await fixture();
     const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-projections-'));
@@ -1371,10 +1446,9 @@ describe('production Pi projection', () => {
               identity: 'full',
               publicName: '/mpx:full',
               description: 'Full skill',
-              triggers: 'full trigger',
-              score: 1,
+              score: 0,
             },
-            { identity: 'named', publicName: '/mpx:named', description: 'Named skill', score: 1 },
+            { identity: 'named', publicName: '/mpx:named', description: 'Named skill', score: 0 },
           ]),
         },
       ],
@@ -1384,10 +1458,9 @@ describe('production Pi projection', () => {
             identity: 'full',
             publicName: '/mpx:full',
             description: 'Full skill',
-            triggers: 'full trigger',
-            score: 1,
+            score: 0,
           },
-          { identity: 'named', publicName: '/mpx:named', description: 'Named skill', score: 1 },
+          { identity: 'named', publicName: '/mpx:named', description: 'Named skill', score: 0 },
         ],
       },
     });

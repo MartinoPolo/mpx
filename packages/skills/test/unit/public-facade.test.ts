@@ -64,6 +64,7 @@ it('keeps the root runtime facade limited to the established export names', () =
     'loadSkillProjectionBody',
     'modelSearchSkillProjection',
     'modelSearchSkills',
+    'rankSearchCandidatesSource',
     'resolveManifest',
     'searchSkills',
     'verifyRuntimeSkillArtifact',
