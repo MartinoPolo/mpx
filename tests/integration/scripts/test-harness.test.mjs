@@ -419,6 +419,41 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed two-suite runtime-tools unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/runtime-tools/test/runtime-tools.test.ts',
+        'packages/runtime-tools/test/unit/runtime-tools.test.ts',
+      ],
+      [
+        'packages/runtime-tools/test/runtime-tool-inventory.test.ts',
+        'packages/runtime-tools/test/unit/runtime-tool-inventory.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(2);
+    for (const [formerPath, unitPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const runtimeToolsFiles = await filesBelow(root, 'packages/runtime-tools');
+    expect(
+      runtimeToolsFiles.filter(
+        (file) =>
+          file.startsWith('packages/runtime-tools/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(runtimeToolsFiles.filter((file) => file.includes('/fixtures/'))).toEqual([]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

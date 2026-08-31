@@ -205,7 +205,11 @@ const PARITY: readonly ParityDeclaration[] = [
   },
   { id: 'generation', kind: 'node', entry: 'scripts/validate-generated.mjs' },
   { id: 'hooks', kind: 'vitest', entry: 'packages/runtime-hooks/test/unit/index.test.ts' },
-  { id: 'tools', kind: 'vitest', entry: 'packages/runtime-tools/test/runtime-tools.test.ts' },
+  {
+    id: 'tools',
+    kind: 'vitest',
+    entry: 'packages/runtime-tools/test/unit/runtime-tools.test.ts',
+  },
   { id: 'status', kind: 'vitest', entry: 'packages/status/src/status.test.ts' },
   { id: 'dependencies', kind: 'node', entry: 'scripts/required-convergence.mjs' },
 ];

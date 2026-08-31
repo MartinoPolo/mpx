@@ -7,7 +7,7 @@ import {
   type GatewayExecutor,
   type ProviderAdapter,
   type RuntimeToolCache,
-} from '../src/index.js';
+} from '../../src/index.js';
 
 const sha = (c: string) => c.repeat(64);
 function manifest(identity = 'personal') {
