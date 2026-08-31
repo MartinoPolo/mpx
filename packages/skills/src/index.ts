@@ -45,11 +45,23 @@ export {
 export { resolveManifest } from './manifest.js';
 export { explainSkill } from './policy.js';
 export {
+  createSkillProjectionPlan,
   humanCompleteSkills,
   humanListSkills,
   humanSkillDetail,
   initialModelContext,
+  loadSkillProjectionBody,
+  modelSearchSkillProjection,
+  verifySkillProjectionPlan,
   type HumanSkillName,
+  type ModelSearchSkillProjectionOptions,
+  type SkillProjectionBodyRequest,
+  type SkillProjectionDisclosure,
+  type SkillProjectionFile,
+  type SkillProjectionPlan,
+  type SkillProjectionPlanEntry,
+  type SkillProjectionPlanInput,
+  type SkillProjectionSearchResult,
 } from './projection.js';
 export {
   MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH,
