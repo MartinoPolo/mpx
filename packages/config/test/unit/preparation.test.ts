@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { doctor } from './doctor.js';
-import { preparationPlan } from './preparation.js';
-import { assertValid, validateProject } from './schema.js';
-import type { PreparationStep, ProjectConfig } from './types.js';
+import { doctor } from '../../src/doctor.js';
+import { preparationPlan } from '../../src/preparation.js';
+import { assertValid, validateProject } from '../../src/schema.js';
+import type { PreparationStep, ProjectConfig } from '../../src/types.js';
 
 const base = () => ({
   schemaVersion: 1 as const,
@@ -30,7 +30,7 @@ function configured(
   };
 }
 const malicious = JSON.parse(
-  readFileSync(new URL('../test/fixtures/preparation-malicious.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../fixtures/preparation-malicious.json', import.meta.url), 'utf8'),
 ) as {
   unsafeArgv: string[][];
   unsafeCwd: string[];

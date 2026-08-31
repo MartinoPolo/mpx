@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
-import { resolveEffectiveSkillPacks } from './skill-packs.js';
-import { classifyContentScope, resolveConfig } from './resolve.js';
-import type { ProjectConfig, UserConfig } from './types.js';
+import { resolveEffectiveSkillPacks } from '../../src/skill-packs.js';
+import { classifyContentScope, resolveConfig } from '../../src/resolve.js';
+import type { ProjectConfig, UserConfig } from '../../src/types.js';
 
 vi.mock('node:fs/promises', () => ({
   realpath: async (value: string) => {

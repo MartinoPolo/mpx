@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
-import { ConfigValidationError } from './schema.js';
-import { classifyCwd, classifyContentScope, resolveConfig } from './resolve.js';
-import { parseUserConfig } from './user-config.js';
-import type { ProjectConfig } from './types.js';
+import { ConfigValidationError } from '../../src/schema.js';
+import { classifyCwd, classifyContentScope, resolveConfig } from '../../src/resolve.js';
+import { parseUserConfig } from '../../src/user-config.js';
+import type { ProjectConfig } from '../../src/types.js';
 
 vi.mock('node:fs/promises', async (original) => {
   const actual = await original<typeof import('node:fs/promises')>();
@@ -25,7 +25,7 @@ const project: ProjectConfig = {
 };
 
 const text = readFileSync(
-  new URL('../test/fixtures/user-launch-contracts.json', import.meta.url),
+  new URL('../fixtures/user-launch-contracts.json', import.meta.url),
   'utf8',
 );
 const fixture = (): any => JSON.parse(text);

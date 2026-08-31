@@ -12,10 +12,10 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseStrictJson, StrictJsonError } from './strict-json.js';
-import { assertValid, validateProject } from './schema.js';
-import { parseUserConfig } from './user-config.js';
-import { confirmInit, planInit, rollbackConfirmedInit } from './init.js';
+import { parseStrictJson, StrictJsonError } from '../../src/strict-json.js';
+import { assertValid, validateProject } from '../../src/schema.js';
+import { parseUserConfig } from '../../src/user-config.js';
+import { confirmInit, planInit, rollbackConfirmedInit } from '../../src/init.js';
 const base = (provider = 'github') => ({
   schemaVersion: 1,
   project: { id: 'acme/app' },
@@ -140,7 +140,7 @@ it('interpolates only approved complete MPX root tokens', () => {
 it('rejects unknown skill packs', () =>
   expect(() => parseUserConfig(user('C:/work', 'unknown'))).toThrow());
 it('accepts the five Phase H service manifest shapes', async () => {
-  const root = new URL('../test/fixtures/phase-h/', import.meta.url);
+  const root = new URL('../fixtures/phase-h/', import.meta.url);
   for (const name of [
     'checkout.json',
     'coupled.json',
