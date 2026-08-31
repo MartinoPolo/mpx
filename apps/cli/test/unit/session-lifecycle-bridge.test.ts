@@ -5,7 +5,7 @@ import { createSessionLifecycleEventV1, type RuntimeContextV1 } from '@mpx/runti
 import type { LaunchDescriptor } from '@mpx/launch';
 import { SessionStore } from '@mpx/sessions';
 import { describe, expect, it } from 'vitest';
-import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
+import { ProductionSessionLifecycleBridge } from '../../src/session-lifecycle-bridge.js';
 
 const hash = (character: string) => character.repeat(64);
 function launchFixture(root: string): {

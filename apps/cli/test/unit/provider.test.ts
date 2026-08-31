@@ -4,8 +4,8 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { MpxError } from '@mpx/core';
 import type { ProviderInvocation, ProviderProcessRequest } from '@mpx/providers';
-import { captureIo } from './io.js';
-import { run } from './main.js';
+import { captureIo } from '../../src/io.js';
+import { run } from '../../src/main.js';
 
 async function project(config: Record<string, unknown>): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-provider-cli-'));

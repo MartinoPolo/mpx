@@ -30,9 +30,9 @@ export const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>
 export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
   unit: [
     'tests/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'apps/*/{src,test}/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'packages/*/{src,test}/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'runtimes/*/*/{src,test}/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'apps/*/test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'packages/*/test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'runtimes/*/*/test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
   ],
   payload: [
     'tests/payload/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
@@ -96,10 +96,7 @@ export function createWorkspaceUnitConfig(
     test: {
       environment: 'node',
       passWithNoTests: true,
-      include: [
-        'src/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-        'test/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-      ],
+      include: ['test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
       exclude: [
         ...EXCLUDED_TEST_PATHS,
         '**/*.integration.test.*',

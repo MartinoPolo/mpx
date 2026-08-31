@@ -28,10 +28,10 @@ import {
   NodeTransactionStore,
   type InstallerOperationAdapter,
 } from '@mpx/installer';
-import { createDefaultSbxDiagnostics } from './context.js';
+import { createDefaultSbxDiagnostics } from '../../src/context.js';
 import { parseSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
-import { run } from './main.js';
-import { captureIo } from './io.js';
+import { run } from '../../src/main.js';
+import { captureIo } from '../../src/io.js';
 
 const execFile = promisify(execFileCallback);
 
@@ -47,7 +47,7 @@ async function directory(prefix = 'mpx-cli-known-'): Promise<string> {
 async function proofReleaseRoot(): Promise<string> {
   const root = await directory('mpx-proof-release-'),
     evidenceRoot = path.join(root, 'evidence'),
-    source = fileURLToPath(new URL('../../../evidence/', import.meta.url));
+    source = fileURLToPath(new URL('../../../../evidence/', import.meta.url));
   await mkdir(evidenceRoot, { recursive: true });
   const executor = await readFile(path.join(source, 'executor-evidence.ts'));
   await writeFile(path.join(evidenceRoot, 'executor-evidence.ts'), executor);
@@ -1127,9 +1127,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         ['--json', '--cwd', cwd, 'skill', 'list', '--runtime', 'pi', '--skill-policy', 'clean'],
@@ -1147,9 +1145,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1179,9 +1175,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         ['--json', '--cwd', cwd, 'skill', 'list', '--identity', 'work', '--skill-policy', 'clean'],
@@ -1199,9 +1193,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         ['--json', '--cwd', cwd, 'skill', 'list', '--identity', 'work', '--runtime', 'pi'],
@@ -1219,9 +1211,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1251,9 +1241,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1301,9 +1289,7 @@ describe('cli', () => {
       path.join(directory, 'SKILL.md'),
       '---\nname: local\ndescription: Local project behavior\nmetadata:\n  mpx:\n    projectExposure: full\n---\nLOCAL BODY\n',
     );
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1334,9 +1320,7 @@ describe('cli', () => {
     const cwd = await directory(),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1366,9 +1350,7 @@ describe('cli', () => {
   it('binds the selected validated skill policy into artifact identity and disclosure', async () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
-      catalogRoot = fileURLToPath(
-        new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-      );
+      catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     const cleanIo = captureIo(),
       developerIo = captureIo();
     expect(
@@ -1428,9 +1410,7 @@ describe('cli', () => {
         },
       }),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1716,7 +1696,7 @@ describe('cli', () => {
   });
 
   it('exports from the bundled CLI in a realistic main Git checkout with release-owned catalog and evidence', async () => {
-    const checkout = fileURLToPath(new URL('../../..', import.meta.url)),
+    const checkout = fileURLToPath(new URL('../../../..', import.meta.url)),
       bundle = path.join(checkout, 'bin', 'mpx.mjs'),
       env: NodeJS.ProcessEnv = {
         ...process.env,
@@ -1779,9 +1759,7 @@ describe('cli', () => {
         MPX_RELEASE_ROOT: await proofReleaseRoot(),
       },
       io = captureIo(),
-      catalogRoot = fileURLToPath(
-        new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-      );
+      catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -1824,9 +1802,7 @@ describe('cli', () => {
         LOCALAPPDATA: await directory('mpx-plan-state-'),
         MPX_RELEASE_ROOT: await proofReleaseRoot(),
       },
-      catalogRoot = fileURLToPath(
-        new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-      );
+      catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     const before = {
       cwd: await readdir(cwd),
       state: await readdir(env.LOCALAPPDATA!),
@@ -1920,9 +1896,7 @@ describe('cli', () => {
     expect(
       await run(['--json', '--cwd', cwd, 'launch', 'sbx-plan-export', ...options], io, {
         env,
-        catalogRoot: fileURLToPath(
-          new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-        ),
+        catalogRoot: fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url)),
       }),
     ).toBe(1);
     expect(JSON.parse(io.out[0]!)).toMatchObject({
@@ -1938,9 +1912,7 @@ describe('cli', () => {
         LOCALAPPDATA: await directory('mpx-plan-keys-'),
         MPX_RELEASE_ROOT: await proofReleaseRoot(),
       },
-      catalogRoot = fileURLToPath(
-        new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-      );
+      catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     const exportPlan = async (extra: string[]) => {
       const io = captureIo();
       expect(
@@ -1988,9 +1960,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2057,9 +2027,7 @@ describe('cli', () => {
   it('resolves launch inspection in a known ordinary non-project directory only when an explicit non-project mode is selected', async () => {
     const cwd = await directory(),
       env = await configuredLaunchEnv(cwd),
-      catalogRoot = fileURLToPath(
-        new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-      );
+      catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
 
     const explicitIo = captureIo();
     expect(
@@ -2128,9 +2096,7 @@ describe('cli', () => {
       },
     });
     const io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2168,9 +2134,7 @@ describe('cli', () => {
       },
     });
     const io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2202,9 +2166,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2235,9 +2197,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2283,9 +2243,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2317,9 +2275,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2372,9 +2328,7 @@ describe('cli', () => {
       other = await mkdtemp(path.join(tmpdir(), 'mpx-known-')),
       env = await configuredLaunchEnv(cwd, { classifiedRoot: other }),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2413,9 +2367,7 @@ describe('cli', () => {
         extraDomains: { personal: [personal] },
       }),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         ['--json', '--cwd', cwd, 'launch', 'explain', '--identity', 'work', ...options],
@@ -2433,9 +2385,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(
         [
@@ -2472,9 +2422,7 @@ describe('cli', () => {
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
     env.LOCALAPPDATA = env.APPDATA;
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     const rootAttestationService = {
       verify: async (identity: { domain: string; name: string }) => ({
         schemaVersion: 1 as const,
@@ -2506,9 +2454,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(['--json', '--cwd', cwd, 'launch', 'pi', '--identity', 'work'], io, {
         env,
@@ -2556,9 +2502,7 @@ describe('cli', () => {
         ensured = true;
       },
     } as never;
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(['--json', '--cwd', cwd, 'doctor'], io, { env, portService, catalogRoot }),
     ).toBe(1);
@@ -2575,9 +2519,7 @@ describe('cli', () => {
     const cwd = await fixture(valid),
       env = await launchEnv(cwd),
       io = captureIo();
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(['--json', '--cwd', cwd, 'doctor'], io, {
         env,
@@ -2601,9 +2543,7 @@ describe('cli', () => {
       env = await launchEnv(cwd),
       io = captureIo(),
       calls: string[][] = [];
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     const runner: BoundedProcessRunner = {
       run: async (request) => {
         calls.push([...request.argv]);
@@ -2689,9 +2629,7 @@ describe('cli', () => {
       env = await launchEnv(cwd),
       io = captureIo();
     let resolved = false;
-    const catalogRoot = fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    );
+    const catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
     expect(
       await run(['--json', '--cwd', cwd, 'doctor'], io, {
         env,
@@ -2996,7 +2934,7 @@ describe('cli', () => {
   });
 
   it('ships source-only Bash and PowerShell cd wrappers without invoking them on load', async () => {
-    const root = fileURLToPath(new URL('../../..', import.meta.url));
+    const root = fileURLToPath(new URL('../../../..', import.meta.url));
     const bash = await readFile(path.join(root, 'scripts', 'mpx-worktree.bash'), 'utf8');
     const powershell = await readFile(path.join(root, 'scripts', 'mpx-worktree.ps1'), 'utf8');
     expect(bash).toContain('mpx worktree select --machine');

@@ -4,7 +4,7 @@ import {
   pollPreparationTerminal,
   preparationDiagnostic,
   shouldRetryUnknownPreparation,
-} from './preparation-worker-polling.js';
+} from '../../src/preparation-worker-polling.js';
 
 describe('preparation worker polling', () => {
   it.each(['ready', 'failed', 'cancelled', 'unknown'] as const)(

@@ -16,7 +16,7 @@ import {
   processCommandLines,
   rollbackDrill,
   runtimeAccessAudit,
-} from './migration.js';
+} from '../../src/migration.js';
 
 const exec = promisify(execFile);
 async function gitFixture(): Promise<string> {

@@ -41,9 +41,9 @@ describe('test taxonomy', () => {
     }
   });
 
-  test('classifies synthetic legacy and target paths by ownership and suffix', () => {
-    expect(classifyTestPath('packages/core/src/value.test.ts')).toBe('unit');
-    expect(classifyTestPath('packages/core/test/value.test.ts')).toBe('unit');
+  test('classifies synthetic target paths by ownership and suffix', () => {
+    expect(classifyTestPath('packages/core/src/value.test.ts')).toBeUndefined();
+    expect(classifyTestPath('packages/core/test/value.test.ts')).toBeUndefined();
     expect(classifyTestPath('packages/core/test/unit/value.test.ts')).toBe('unit');
     expect(classifyTestPath('packages/core/src/value.integration.test.ts')).toBeUndefined();
     expect(classifyTestPath('apps/cli/test/unit/value.e2e.test.ts')).toBeUndefined();
@@ -54,9 +54,9 @@ describe('test taxonomy', () => {
   });
 
   test('does not infer a category from incidental directory or stem words', () => {
-    expect(classifyTestPath('packages/core/src/integration/value.test.ts')).toBe('unit');
-    expect(classifyTestPath('packages/core/src/contracts.test.ts')).toBe('unit');
-    expect(classifyTestPath('packages/core/src/production.test.ts')).toBe('unit');
+    expect(classifyTestPath('packages/core/test/unit/integration/value.test.ts')).toBe('unit');
+    expect(classifyTestPath('packages/core/test/unit/contracts.test.ts')).toBe('unit');
+    expect(classifyTestPath('packages/core/test/unit/production.test.ts')).toBe('unit');
   });
 
   test('fails closed when include definitions overlap', () => {
@@ -213,9 +213,9 @@ describe('test taxonomy', () => {
             /\.test\.[cm]?[jt]sx?$/u.test(file)),
       ),
     ).toEqual([]);
+    expect(skillsFiles).not.toContain('packages/skills/test/fixtures/catalog/review/SKILL.md');
     expect(skillsFiles.filter((file) => file.includes('/fixtures/'))).toEqual([
       'packages/skills/test/fixtures/batch-c3-semantic.json',
-      'packages/skills/test/fixtures/catalog/review/SKILL.md',
       'packages/skills/test/fixtures/content-batch-c4/harvest-cases.json',
       'packages/skills/test/fixtures/content-batch-c4/recovery-cases.json',
       'packages/skills/test/fixtures/content-batch-c5/provider-cases.json',
@@ -1012,6 +1012,70 @@ describe('test taxonomy', () => {
     }
   });
 
+  test('preserves the fixed seventeen-suite and two-fixture CLI unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const suiteBasenames = [
+      'account-command.test.ts',
+      'claude-gateway.test.ts',
+      'context.test.ts',
+      'install-command.test.ts',
+      'install-fresh-process.test.ts',
+      'launch-execution.test.ts',
+      'local-issue.test.ts',
+      'main.test.ts',
+      'migration.test.ts',
+      'preparation-worker-polling.test.ts',
+      'provider.test.ts',
+      'sbx-execution.test.ts',
+      'session-branch-adapters.test.ts',
+      'session-command.test.ts',
+      'session-docker-resume.test.ts',
+      'session-lifecycle-bridge.test.ts',
+      'session-status-composition.test.ts',
+    ];
+    expect(suiteBasenames).toHaveLength(17);
+    for (const basename of suiteBasenames) {
+      const formerPath = `apps/cli/src/${basename}`;
+      const unitPath = `apps/cli/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const fixtureInventory = [
+      [
+        'apps/cli/src/fixtures/legacy-disabled-acceptance.json',
+        'apps/cli/test/fixtures/legacy-disabled-acceptance.json',
+      ],
+      [
+        'packages/skills/test/fixtures/catalog/review/SKILL.md',
+        'apps/cli/test/fixtures/skill-catalog/review/SKILL.md',
+      ],
+    ];
+    expect(fixtureInventory).toHaveLength(2);
+    for (const [formerPath, fixturePath] of fixtureInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(fixturePath), fixturePath).toBe(true);
+    }
+
+    const cliFiles = await filesBelow(root, 'apps/cli');
+    expect(
+      cliFiles.filter(
+        (file) =>
+          file.startsWith('apps/cli/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(
+      cliFiles.filter((file) => /^apps\/cli\/test\/[^/]+\.test\.[cm]?[jt]sx?$/u.test(file)),
+    ).toEqual([]);
+  });
+
   test('keeps the fixed CLI integration cohort exclusively under root ownership', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [
@@ -1190,8 +1254,7 @@ describe('configuration structure', () => {
     for (const workspace of workspaceRoots) {
       const config = await import(path.join(root, workspace, 'vitest.config.ts'));
       expect(config.default.test.include, workspace).toEqual([
-        'src/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-        'test/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+        'test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
       ]);
       expect(
         path.relative(path.join(root, workspace), path.join(root, 'tests', 'contract')),
@@ -1250,6 +1313,13 @@ describe('configuration structure', () => {
     }
   });
 
+  test('builds the full workspace before invoking root unit Vitest', async () => {
+    const rootManifest = await json('package.json');
+    expect(rootManifest.scripts['test:unit']).toBe(
+      'pnpm run build && vitest run --config vitest.unit.config.ts',
+    );
+  });
+
   test('keeps payload execution separate from root strict typechecking', async () => {
     const rootManifest = await json('package.json');
     expect(rootManifest.scripts['test:payload']).toBe(
@@ -1279,15 +1349,24 @@ describe('configuration structure', () => {
     );
   });
 
-  test('root aggregate invokes every category exactly once', async () => {
+  test('root aggregate invokes every category exactly once without a duplicate initial build', async () => {
     const manifest = await json('package.json');
     const invocations = manifest.scripts.test.split('&&').map((command) => command.trim());
+    expect(invocations).toEqual([
+      'pnpm run test:unit',
+      'pnpm run test:convergence',
+      'pnpm run test:payload',
+      'pnpm run test:contract',
+      'pnpm run test:integration',
+      'pnpm run test:e2e',
+    ]);
     for (const category of TEST_CATEGORIES) {
       expect(manifest.scripts[`test:${category}`]).toBeDefined();
       expect(invocations.filter((command) => command === `pnpm run test:${category}`)).toHaveLength(
         1,
       );
     }
+    expect(invocations).not.toContain('pnpm run build');
     expect(manifest.scripts.test).not.toContain('pnpm -r test');
   });
 });

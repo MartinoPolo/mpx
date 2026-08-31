@@ -41,7 +41,7 @@ import {
   verifyPreparationWorkerHandshake,
   windowsProcessIdentityInspector,
   worktrees,
-} from './context.js';
+} from '../../src/context.js';
 import { SessionService, SessionStore } from '@mpx/sessions';
 
 const exec = promisify(execFile);
@@ -352,7 +352,7 @@ it('selects only the packaged trusted catalog instead of a malicious cwd ancesto
   await mkdir(nested, { recursive: true });
   await writeFile(path.join(maliciousRoot, 'content', 'skills', 'shadow.txt'), 'shadowed');
 
-  const packaged = fileURLToPath(new URL('../../../content/skills', import.meta.url));
+  const packaged = fileURLToPath(new URL('../../../../content/skills', import.meta.url));
   await expect(catalogPath({ env: {} }, nested)).resolves.toBe(packaged);
 });
 

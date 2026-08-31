@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createRuntimeCapabilityManifestV1, type ToolAuthorityV1 } from '@mpx/runtime-contracts';
-import { materializeClaudeGateway } from './claude-gateway.js';
+import { materializeClaudeGateway } from '../../src/claude-gateway.js';
 
 const launchKey = 'a'.repeat(64);
 const authority = (name: string, routes: string[] = []): ToolAuthorityV1 => ({

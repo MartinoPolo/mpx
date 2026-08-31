@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { captureIo } from './io.js';
-import { run } from './main.js';
+import { captureIo } from '../../src/io.js';
+import { run } from '../../src/main.js';
 
 it('runs local create/show/update/close and dependency commands without an identity route', async () => {
   const cwd = await mkdtemp(path.join(tmpdir(), 'mpx-local-cli-')),

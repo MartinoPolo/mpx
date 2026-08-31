@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { SessionService, SessionStore, type SessionRecordV1 } from '@mpx/sessions';
-import { executeSessionCommand } from './session-command.js';
+import { executeSessionCommand } from '../../src/session-command.js';
 
 const identity = { domain: 'personal', name: 'me' };
 const record = (id: string): SessionRecordV1 => ({

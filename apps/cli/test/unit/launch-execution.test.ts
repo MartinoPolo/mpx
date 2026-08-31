@@ -13,15 +13,18 @@ import {
 import { sha256Canonical, type JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
 import { createF2ProofReportV1, revalidateRuntimeArtifact } from '@mpx/runtime-contracts';
-import { run } from './main.js';
-import { captureIo } from './io.js';
+import { run } from '../../src/main.js';
+import { captureIo } from '../../src/io.js';
 import {
   NodeLaunchStatusSnapshotMaterializer,
   resolveLaunchStatusSnapshotPath,
   type LaunchExecutionContext,
-} from './launch-execution.js';
-import { NodePrivateRouteMaterializer, defaultContext } from './context.js';
-import { loadProductionSbxProofSources, planProductionSbxExecution } from './sbx-execution.js';
+} from '../../src/launch-execution.js';
+import { NodePrivateRouteMaterializer, defaultContext } from '../../src/context.js';
+import {
+  loadProductionSbxProofSources,
+  planProductionSbxExecution,
+} from '../../src/sbx-execution.js';
 
 async function launchFixture(): Promise<{
   cwd: string;
@@ -75,9 +78,7 @@ async function launchFixture(): Promise<{
   return {
     cwd,
     env: { APPDATA: appdata, LOCALAPPDATA: appdata },
-    catalogRoot: fileURLToPath(
-      new URL('../../../packages/skills/test/fixtures/catalog', import.meta.url),
-    ),
+    catalogRoot: fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url)),
   };
 }
 

@@ -6,7 +6,7 @@ import { createRuntimeSessionObservationV1 } from '@mpx/runtime-contracts';
 import {
   NodeRuntimeStatusEnvelopeMaterializer,
   composeRuntimeSessionObservation,
-} from './launch-execution.js';
+} from '../../src/launch-execution.js';
 import { composeRuntimeStatusEnvelopeV1 } from '@mpx/status';
 
 it('composes a fresh session observation into the runtime status envelope', () => {

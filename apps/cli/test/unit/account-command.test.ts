@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RootAttestationService, RootAttestationStore } from '@mpx/sessions';
-import { executeAccountCommand, PiAuthAvailabilityProbe } from './account-command.js';
+import { executeAccountCommand, PiAuthAvailabilityProbe } from '../../src/account-command.js';
 
 const cleanup: string[] = [];
 afterEach(async () =>

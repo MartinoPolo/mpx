@@ -6,7 +6,7 @@ import {
   createProductionSessionBranchRuntimeAdapter,
   createWindowsTerminalBranchAdapter,
   diagnoseSessionBranchAdapters,
-} from './session-branch-adapters.js';
+} from '../../src/session-branch-adapters.js';
 
 const invocation = {
   executable: 'C:/Program Files/Claude/claude.exe',

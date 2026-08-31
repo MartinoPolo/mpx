@@ -16,7 +16,7 @@ import {
   type ReleaseManifestV1,
 } from '@mpx/installer';
 import { FakeBinaryFileSystem, FakeJsonResourceStore } from '@mpx/windows';
-import { executeInstallCommand } from './install-command.js';
+import { executeInstallCommand } from '../../src/install-command.js';
 
 const digest = 'a'.repeat(64);
 const intent: InstallIntentV1 = {

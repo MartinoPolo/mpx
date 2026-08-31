@@ -10,7 +10,7 @@ const execute = promisify(execFile);
 
 it('reports an uninstalled machine from mpx install verify in each fresh process', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-install-fresh-'));
-  const entry = fileURLToPath(new URL('../dist/main.js', import.meta.url));
+  const entry = fileURLToPath(new URL('../../dist/main.js', import.meta.url));
   const env = {
     ...process.env,
     MPX_APPS: path.join(root, 'apps'),
@@ -140,7 +140,7 @@ it('builds deterministic intent and prepare plans in fresh read-only processes',
     },
   };
   await writeFile(requestPath, JSON.stringify(request));
-  const entry = fileURLToPath(new URL('../dist/main.js', import.meta.url));
+  const entry = fileURLToPath(new URL('../../dist/main.js', import.meta.url));
   const env = {
     ...process.env,
     MPX_APPS: path.join(machine, 'apps'),
