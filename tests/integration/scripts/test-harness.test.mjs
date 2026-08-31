@@ -256,6 +256,53 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed six-suite and three-fixture ports unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const suiteBasenames = [
+      'adapters.test.ts',
+      'arithmetic.test.ts',
+      'lifecycle.test.ts',
+      'registry.test.ts',
+      'service-concurrency.test.ts',
+      'service.test.ts',
+    ];
+    const fixtureBasenames = ['ensure-worker.mjs', 'registry-worker.mjs', 'release-worker.mjs'];
+
+    expect(suiteBasenames).toHaveLength(6);
+    for (const basename of suiteBasenames) {
+      const formerPath = `packages/ports/src/${basename}`;
+      const unitPath = `packages/ports/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    expect(fixtureBasenames).toHaveLength(3);
+    for (const basename of fixtureBasenames) {
+      const formerPath = `packages/ports/test-fixtures/${basename}`;
+      const fixturePath = `packages/ports/test/fixtures/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(fixturePath), fixturePath).toBe(true);
+    }
+
+    const portsFiles = await filesBelow(root, 'packages/ports');
+    expect(
+      portsFiles.filter(
+        (file) =>
+          file.startsWith('packages/ports/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(portsFiles.filter((file) => file.includes('/fixtures/'))).toEqual(
+      fixtureBasenames.map((basename) => `packages/ports/test/fixtures/${basename}`),
+    );
+  });
+
   test('preserves the fixed two-suite provider-github unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

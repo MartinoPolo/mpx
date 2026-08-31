@@ -1,4 +1,4 @@
-import { PortService, RealGitWorktreeAdapter, RegistryStore } from '../dist/index.js';
+import { PortService, RealGitWorktreeAdapter, RegistryStore } from '@mpx/ports';
 
 const send = (message) => process.send?.(message);
 const waitFor = (type) =>

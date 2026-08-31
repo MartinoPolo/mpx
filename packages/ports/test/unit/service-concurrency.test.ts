@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
 import type { ProjectConfig } from '@mpx/config';
-import { RegistryStore } from './index.js';
+import { RegistryStore } from '../../src/index.js';
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
@@ -25,10 +25,8 @@ afterEach(async () => {
   }
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-const workerPath = fileURLToPath(new URL('../test-fixtures/ensure-worker.mjs', import.meta.url));
-const releaseWorkerPath = fileURLToPath(
-  new URL('../test-fixtures/release-worker.mjs', import.meta.url),
-);
+const workerPath = fileURLToPath(new URL('../fixtures/ensure-worker.mjs', import.meta.url));
+const releaseWorkerPath = fileURLToPath(new URL('../fixtures/release-worker.mjs', import.meta.url));
 const waitFor = <T extends { type: string }>(
   child: ChildProcess,
   type: string,

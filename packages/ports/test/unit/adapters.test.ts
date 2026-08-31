@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { GitExecutableError, RealGitWorktreeAdapter, parseWorktreePorcelainZ } from './index.js';
+import {
+  GitExecutableError,
+  RealGitWorktreeAdapter,
+  parseWorktreePorcelainZ,
+} from '../../src/index.js';
 
 const execFile = promisify(execFileCallback);
 const roots: string[] = [];

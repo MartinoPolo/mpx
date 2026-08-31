@@ -10,7 +10,7 @@ import {
   type GitWorktreeAdapter,
   type PortPlatformAdapter,
   type WorktreeIdentity,
-} from './index.js';
+} from '../../src/index.js';
 
 const roots: string[] = [];
 const temporary = async () => {

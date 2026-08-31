@@ -9,7 +9,7 @@ import {
   type PortPlatformAdapter,
   type RegistryState,
   type WorktreeIdentity,
-} from './index.js';
+} from '../../src/index.js';
 import type { ProjectConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
 const roots: string[] = [];

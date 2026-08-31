@@ -1,4 +1,4 @@
-import { RegistryStore } from '../dist/index.js';
+import { RegistryStore } from '@mpx/ports';
 
 const [mode, stateRoot, id] = process.argv.slice(2);
 const send = (message) => process.send?.(message);

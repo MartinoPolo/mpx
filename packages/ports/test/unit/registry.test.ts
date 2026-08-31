@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { InterprocessLock, RegistryStore, emptyRegistry, type LeaseRecord } from './index.js';
+import {
+  InterprocessLock,
+  RegistryStore,
+  emptyRegistry,
+  type LeaseRecord,
+} from '../../src/index.js';
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
@@ -21,7 +26,7 @@ afterEach(async () => {
   }
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-const workerPath = fileURLToPath(new URL('../test-fixtures/registry-worker.mjs', import.meta.url));
+const workerPath = fileURLToPath(new URL('../fixtures/registry-worker.mjs', import.meta.url));
 const spawnWorker = (mode: 'mutate' | 'crash', root: string, id: string) => {
   const child = fork(workerPath, [mode, root, id], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   children.push(child);

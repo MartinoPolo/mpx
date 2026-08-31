@@ -1,4 +1,4 @@
-import { PortService, RegistryStore } from '../dist/index.js';
+import { PortService, RegistryStore } from '@mpx/ports';
 
 process.on('message', async (message) => {
   if (message?.type !== 'go') {

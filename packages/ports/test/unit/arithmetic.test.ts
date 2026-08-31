@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocatePortMap, buildPortFamilies, type PortServiceDefinition } from './index.js';
+import { allocatePortMap, buildPortFamilies, type PortServiceDefinition } from '../../src/index.js';
 
 const service = (name: string, preferred: number, family?: string): PortServiceDefinition => ({
   name,
