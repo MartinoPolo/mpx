@@ -301,7 +301,7 @@ async function decision(entry) {
         destination: 'runtimes/claude/runtime-claude/src/index.ts',
         adaptation:
           'folded display behavior into the Claude runtime adapter and shared status contract',
-        test: 'runtimes/claude/runtime-claude/src/index.test.ts',
+        test: 'runtimes/claude/runtime-claude/test/unit/index.test.ts',
       };
     }
     if (/compaction/u.test(entry.path)) {
@@ -329,7 +329,7 @@ async function decision(entry) {
       disposition: 'Claude-specific',
       destination: 'runtimes/claude/runtime-claude/src/index.ts',
       adaptation: 'normalized into the generated Claude runtime projection',
-      test: 'runtimes/claude/runtime-claude/src/index.test.ts',
+      test: 'runtimes/claude/runtime-claude/test/unit/index.test.ts',
     };
   }
   if (entry.source === 'claude' && /^(?:CLAUDE\.md|AGENTS\.md)$/u.test(entry.path)) {

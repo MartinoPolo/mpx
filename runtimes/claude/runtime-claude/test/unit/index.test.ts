@@ -19,7 +19,7 @@ import {
   diagnoseLegacyNamespaceConflicts,
   adaptClaudeNativeStatus,
   createClaudeDevServerCapability,
-} from './index.js';
+} from '../../src/index.js';
 import { renderClaudePortSegment } from '@mpx/status';
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@mpx/runtime-hooks';
 import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
@@ -506,7 +506,7 @@ describe('Claude projection', () => {
   it('projects the exact production agent catalog with one harness-facing Explore', async () => {
     const f = await fixture(),
       out = path.join(f.root, 'production-agents'),
-      agents = path.resolve(import.meta.dirname, '../../../../content/agents');
+      agents = path.resolve(import.meta.dirname, '../../../../../content/agents');
     await buildClaudePlugin({ ...f, agents, outputRoot: out });
     const files = await tree(out),
       projected = Object.keys(files).filter((name) =>
@@ -1092,7 +1092,7 @@ it('adapts native Claude status data into the launch-bound envelope and renders 
   const base = JSON.parse(
     await readFile(
       new URL(
-        '../../../../packages/status/test/fixtures/runtime-claude-personal.json',
+        '../../../../../packages/status/test/fixtures/runtime-claude-personal.json',
         import.meta.url,
       ),
       'utf8',
@@ -1220,7 +1220,7 @@ it('projects only the launch-bound RuntimeStatusEnvelopeV1 when supplied', async
   const runtimeStatusEnvelope = JSON.parse(
     await readFile(
       new URL(
-        '../../../../packages/status/test/fixtures/runtime-claude-personal.json',
+        '../../../../../packages/status/test/fixtures/runtime-claude-personal.json',
         import.meta.url,
       ),
       'utf8',

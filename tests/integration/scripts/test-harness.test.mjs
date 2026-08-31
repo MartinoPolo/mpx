@@ -871,6 +871,33 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed three-suite Claude runtime unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = ['activation.test.ts', 'index.test.ts', 'runtime-tools.test.ts'];
+    expect(basenames).toHaveLength(3);
+    for (const basename of basenames) {
+      const formerPath = `runtimes/claude/runtime-claude/src/${basename}`;
+      const unitPath = `runtimes/claude/runtime-claude/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const claudeRuntimeFiles = await filesBelow(root, 'runtimes/claude/runtime-claude');
+    expect(
+      claudeRuntimeFiles.filter(
+        (file) =>
+          file.startsWith('runtimes/claude/runtime-claude/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('keeps the fixed CLI E2E cohort exclusively under root ownership', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

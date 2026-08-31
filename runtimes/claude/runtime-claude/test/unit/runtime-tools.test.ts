@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
-import { registerClaudeRuntimeTools } from './runtime-tools.js';
+import { registerClaudeRuntimeTools } from '../../src/runtime-tools.js';
 
 const sha = (value: string) => value.repeat(64);
 const authority = (name: string, routes: string[] = []) => ({

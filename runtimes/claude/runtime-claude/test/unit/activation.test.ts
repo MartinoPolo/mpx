@@ -2,7 +2,7 @@ import { PassThrough } from 'node:stream';
 import { readFile } from 'node:fs/promises';
 import { expect, it, vi } from 'vitest';
 import { createRuntimeCapabilityManifestV1, type ToolAuthorityV1 } from '@mpx/runtime-contracts';
-import { activateClaudePluginRuntime } from './index.js';
+import { activateClaudePluginRuntime } from '../../src/index.js';
 
 const launchKey = 'a'.repeat(64);
 const authority = (
@@ -26,7 +26,7 @@ it('activates the generated Claude surface with launch-bound gateway, dev-servic
   const base = JSON.parse(
     await readFile(
       new URL(
-        '../../../../packages/status/test/fixtures/runtime-claude-personal.json',
+        '../../../../../packages/status/test/fixtures/runtime-claude-personal.json',
         import.meta.url,
       ),
       'utf8',
