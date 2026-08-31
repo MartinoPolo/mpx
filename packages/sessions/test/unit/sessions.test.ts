@@ -32,7 +32,7 @@ import {
   type NativeBindingRecordV1,
   type SessionLifecycleBindingRecordV1,
   type SessionRecordV1,
-} from './index.js';
+} from '../../src/index.js';
 
 const instant = '2025-01-02T03:04:05.000Z',
   later = '2025-02-02T03:04:05.000Z',

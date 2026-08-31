@@ -12,7 +12,7 @@ import {
   createPiBranchAdapter,
   planWindowsTerminalTab,
   type BranchRequestV1,
-} from './index.js';
+} from '../../src/index.js';
 
 const digest = 'a'.repeat(64);
 const base: BranchRequestV1 = {
@@ -186,7 +186,7 @@ describe('conversation branching', () => {
 
   it('serializes native writer acquisition between two controller processes', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-branch-processes-')),
-      fixture = path.resolve(import.meta.dirname, '../test-fixtures/branch-lease-worker.mjs');
+      fixture = path.resolve(import.meta.dirname, '../fixtures/branch-lease-worker.mjs');
     const run = (owner: string, hold: number) =>
       spawn(process.execPath, [fixture, root, 'C:/shared repo', owner, String(hold)], {
         stdio: ['ignore', 'pipe', 'inherit'],

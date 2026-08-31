@@ -303,6 +303,46 @@ describe('test taxonomy', () => {
     );
   });
 
+  test('preserves the fixed three-suite and one-fixture sessions unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const suiteBasenames = ['account-attestation.test.ts', 'branch.test.ts', 'sessions.test.ts'];
+    const fixtureBasenames = ['branch-lease-worker.mjs'];
+
+    expect(suiteBasenames).toHaveLength(3);
+    for (const basename of suiteBasenames) {
+      const formerPath = `packages/sessions/src/${basename}`;
+      const unitPath = `packages/sessions/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    expect(fixtureBasenames).toHaveLength(1);
+    for (const basename of fixtureBasenames) {
+      const formerPath = `packages/sessions/test-fixtures/${basename}`;
+      const fixturePath = `packages/sessions/test/fixtures/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(fixturePath), fixturePath).toBe(true);
+    }
+
+    const sessionsFiles = await filesBelow(root, 'packages/sessions');
+    expect(
+      sessionsFiles.filter(
+        (file) =>
+          file.startsWith('packages/sessions/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(sessionsFiles.filter((file) => file.includes('/fixtures/'))).toEqual(
+      fixtureBasenames.map((basename) => `packages/sessions/test/fixtures/${basename}`),
+    );
+  });
+
   test('preserves the fixed seven-suite and four-fixture worktrees unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const suiteBasenames = [

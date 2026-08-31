@@ -12,7 +12,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { RootAttestationService, RootAttestationStore } from './account-attestation.js';
+import { RootAttestationService, RootAttestationStore } from '../../src/account-attestation.js';
 
 const roots: string[] = [];
 async function fixture() {

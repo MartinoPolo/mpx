@@ -1,4 +1,4 @@
-import { BranchLeaseStore } from '../dist/branch.js';
+import { BranchLeaseStore } from '@mpx/sessions';
 
 const [root, workspace, owner, holdText] = process.argv.slice(2);
 const store = new BranchLeaseStore(root, {

@@ -6604,7 +6604,7 @@
             "path": "plugins/mp/scripts/__tests__/detect-base-branch.test.ts",
             "sha256": "28bfd0ac1b06ffbdfc09d52235c93f116f3980cd12d318d9955dfc0a4c63d4d5"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6669,7 +6669,7 @@
             "path": "plugins/mp/scripts/__tests__/init-repo.test.ts",
             "sha256": "3b37b20c5d4ec726953d8de2198610eda3f32ff0a3620a1988bdc137dab0eac3"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6989,7 +6989,7 @@
             "path": "plugins/mp/scripts/detect-base-branch.js",
             "sha256": "2b0eee575cee7cb0f1e1b2c413278a03f55e66e443ad11d11fda503ad28e51b6"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7027,7 +7027,7 @@
             "path": "plugins/mp/scripts/detect-check-scripts.mjs",
             "sha256": "5a057334e270aa0c881583721ef4777b3cb66894fd8700f6b11f188d0ea3243c"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7065,7 +7065,7 @@
             "path": "plugins/mp/scripts/detect-project-scripts.mjs",
             "sha256": "e3a86583424f0d8fd9470a839d5ae8232c8afa6fb5f160675685e7de7def712f"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7130,7 +7130,7 @@
             "path": "plugins/mp/scripts/init-repo.mjs",
             "sha256": "b19f013ab571c1b80f9398715b6b68f862b703eb5321265191932a08beea7b65"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -9914,7 +9914,7 @@
             "path": "README.md",
             "sha256": "aa479d9f2d95adb7a460ae101c4483e7f71fe944d2286d4d31715d4884931878"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -10794,7 +10794,7 @@
             "path": "WINDOWS-SETUP.md",
             "sha256": "f910bee9d6858592d8c8ff1590c5ff44e9d112e41c27dbab23a6928cd2cf18c9"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -14599,7 +14599,7 @@
             "path": "README.md",
             "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -15035,7 +15035,7 @@
             "path": "WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
             "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48"
           },
-          "sha256": "e09394850cc64a32be111b45821aaa7e5ede38621a1cd36f6fb9becd0779d35b",
+          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }

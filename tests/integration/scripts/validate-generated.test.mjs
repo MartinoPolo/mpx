@@ -347,7 +347,7 @@ describe('generated repository validation', () => {
   it('does not classify source and documentation about sessions as private state', () => {
     for (const path of [
       'apps/cli/src/session-command.ts',
-      'packages/sessions/src/sessions.test.ts',
+      'packages/sessions/test/unit/sessions.test.ts',
       'docs/SESSIONS_INSTALLER.md',
     ]) {
       expect(
