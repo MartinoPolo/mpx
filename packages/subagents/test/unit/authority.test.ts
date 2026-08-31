@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
-import { bindChildLaunchAuthority } from './authority.js';
+import { bindChildLaunchAuthority } from '../../src/authority.js';
 
 const sha = 'a'.repeat(64);
 function parent() {

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ChildLaunchAuthorityV1 } from '@mpx/runtime-contracts';
-import { SubagentLifecycle } from './lifecycle.js';
-import type { AgentLaunchRequest, AgentRunner } from './contracts.js';
-import type { StrictWorktreeIsolation } from './isolation.js';
+import { SubagentLifecycle } from '../../src/lifecycle.js';
+import type { AgentLaunchRequest, AgentRunner } from '../../src/contracts.js';
+import type { StrictWorktreeIsolation } from '../../src/isolation.js';
 
 const authority = {
   identity: { name: 'personal' },

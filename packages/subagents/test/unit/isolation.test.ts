@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { StrictWorktreeIsolation } from './isolation.js';
+import { StrictWorktreeIsolation } from '../../src/isolation.js';
 
 const result = (status: string, worktreePath?: string) => ({
   schemaVersion: 1 as const,

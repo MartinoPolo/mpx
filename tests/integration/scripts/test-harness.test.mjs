@@ -517,6 +517,38 @@ describe('test taxonomy', () => {
     );
   });
 
+  test('preserves the fixed four-suite subagents unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = [
+      'authority.test.ts',
+      'isolation.test.ts',
+      'lifecycle.test.ts',
+      'state.test.ts',
+    ];
+    expect(basenames).toHaveLength(4);
+    for (const basename of basenames) {
+      const formerPath = `packages/subagents/src/${basename}`;
+      const unitPath = `packages/subagents/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const subagentsFiles = await filesBelow(root, 'packages/subagents');
+    expect(
+      subagentsFiles.filter(
+        (file) =>
+          file.startsWith('packages/subagents/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

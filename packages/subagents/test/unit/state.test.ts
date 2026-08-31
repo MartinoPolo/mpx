@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PrivateMemoryStore, resolvePrivateStatePath, TranscriptStore } from './state.js';
+import { PrivateMemoryStore, resolvePrivateStatePath, TranscriptStore } from '../../src/state.js';
 
 describe('private subagent state', () => {
   it('partitions memory by launch identity', () => {
