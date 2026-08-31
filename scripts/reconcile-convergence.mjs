@@ -164,7 +164,7 @@ async function decision(entry) {
       disposition: 'canonicalized',
       destination: 'packages/dev-services/src/index.ts',
       adaptation: 'reimplemented as the provider-neutral managed development service',
-      test: 'packages/dev-services/src/dev-services.test.ts',
+      test: 'packages/dev-services/test/unit/dev-services.test.ts',
     };
   }
   if (entry.source === 'pi' && entry.path.startsWith('extensions/terminal-progress')) {

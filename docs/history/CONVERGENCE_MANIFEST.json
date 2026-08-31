@@ -11956,12 +11956,12 @@
             "path": "extensions/dev-server-pane.ps1",
             "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -11995,12 +11995,12 @@
             "path": "extensions/dev-server-pane.ts",
             "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12033,12 +12033,12 @@
             "path": "extensions/dev-server/contract.ts",
             "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12071,12 +12071,12 @@
             "path": "extensions/dev-server/footer-format.test.ts",
             "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12109,12 +12109,12 @@
             "path": "extensions/dev-server/footer-format.ts",
             "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12147,12 +12147,12 @@
             "path": "extensions/dev-server/footer-lifecycle.test.ts",
             "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12185,12 +12185,12 @@
             "path": "extensions/dev-server/index.test.ts",
             "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12223,12 +12223,12 @@
             "path": "extensions/dev-server/index.ts",
             "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12261,12 +12261,12 @@
             "path": "extensions/dev-server/log-buffer.test.ts",
             "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12299,12 +12299,12 @@
             "path": "extensions/dev-server/log-buffer.ts",
             "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12337,12 +12337,12 @@
             "path": "extensions/dev-server/manager.test.ts",
             "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12375,12 +12375,12 @@
             "path": "extensions/dev-server/manager.ts",
             "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12413,12 +12413,12 @@
             "path": "extensions/dev-server/package.json",
             "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12451,12 +12451,12 @@
             "path": "extensions/dev-server/system-runtime.test.ts",
             "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
@@ -12489,12 +12489,12 @@
             "path": "extensions/dev-server/system-runtime.ts",
             "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715"
           },
-          "sha256": "bf26739ed7e2e434bb24e743a18b62b88c1195dbe360d033a07bef5ed47b13c7",
-          "reference": "packages/dev-services/src/dev-services.test.ts",
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/dev-services/src/dev-services.test.ts"
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",

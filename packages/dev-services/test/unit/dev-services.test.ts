@@ -17,7 +17,7 @@ import {
   validateStartRequest,
   type ManagedProcess,
   type RuntimeAdapter,
-} from './index.js';
+} from '../../src/index.js';
 
 class Child extends EventEmitter implements ManagedProcess {
   stdout = new PassThrough();

@@ -356,6 +356,41 @@ describe('test taxonomy', () => {
     );
   });
 
+  test('preserves the fixed two-suite dev-services unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/dev-services/src/dev-services.test.ts',
+        'packages/dev-services/test/unit/dev-services.test.ts',
+      ],
+      [
+        'packages/dev-services/src/docker-runtime.test.ts',
+        'packages/dev-services/test/unit/docker-runtime.test.ts',
+      ],
+    ];
+
+    expect(migrationInventory).toHaveLength(2);
+    for (const [formerPath, unitPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const devServicesFiles = await filesBelow(root, 'packages/dev-services');
+    expect(
+      devServicesFiles.filter(
+        (file) =>
+          file.startsWith('packages/dev-services/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('preserves the fixed four-suite Windows unit migration inventory and fixture', async () => {
     const files = new Set(await filesBelow(root));
     const suiteBasenames = [

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DockerRuntimeAdapter, type SandboxRuntimeHandle } from './index.js';
+import { DockerRuntimeAdapter, type SandboxRuntimeHandle } from '../../src/index.js';
 import { RemoteToolClient } from '@mpx/executors';
 const h = (c: string) => c.repeat(64);
 function fixture() {
