@@ -1,8 +1,46 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createPiRuntimeAdapter } from '../../src/index.js';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { SkillProjectionPlan } from '@mpx/skills';
+import {
+  createPiRuntimeAdapter,
+  type PiAdapterInput,
+  type PiProjectionBuildInput,
+} from '../../src/index.js';
 import { fixture } from '../fixtures/fixture.js';
 
 describe('Pi skill adapter', () => {
+  it('exposes only a verified projection plan for skill semantics at public boundaries', () => {
+    type RawProjectionInput =
+      | 'manifest'
+      | 'artifact'
+      | 'catalog'
+      | 'canonicalRoot'
+      | 'initialModelContext'
+      | 'modelSearchSkills'
+      | 'validatedSkillBytes';
+    expectTypeOf<PiAdapterInput['skillPlan']>().toEqualTypeOf<SkillProjectionPlan>();
+    expectTypeOf<PiProjectionBuildInput['skillPlan']>().toEqualTypeOf<SkillProjectionPlan>();
+    expectTypeOf<Extract<keyof PiAdapterInput, RawProjectionInput>>().toEqualTypeOf<never>();
+    expectTypeOf<
+      Extract<keyof PiProjectionBuildInput, RawProjectionInput>
+    >().toEqualTypeOf<never>();
+  });
+
+  it('rejects a mutated plan before registering any command', async () => {
+    const f = await fixture();
+    (f.skillPlan.entries[0] as { publicName: string }).publicName = '/mpx:changed';
+    const registerCommand = vi.fn();
+    await expect(
+      createPiRuntimeAdapter({
+        skillPlan: f.skillPlan,
+        context: f.context,
+        currentBinding: f.currentBinding,
+        expectedLaunch: f.expectedLaunch,
+        pi: { registerCommand, sendUserMessage: async () => undefined },
+      }),
+    ).rejects.toThrow('SKILL_PROJECTION_PLAN_CHANGED');
+    expect(registerCommand).not.toHaveBeenCalled();
+  });
+
   it('registers only included human /mpx commands and preserves four-state disclosure', async () => {
     const f = await fixture();
     const commands = new Map<string, (args: string) => Promise<void>>();

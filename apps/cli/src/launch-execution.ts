@@ -71,6 +71,7 @@ import {
 import {
   createSkillProjectionPlan,
   type CatalogSkill,
+  type SkillProjectionPlan,
   type ResolvedManifest,
   type RuntimeSkillArtifact,
 } from '@mpx/skills';
@@ -93,10 +94,7 @@ export interface LaunchProjection {
 }
 export interface LaunchProjectionBuildInput {
   readonly descriptor: LaunchDescriptor;
-  readonly manifest: ResolvedManifest;
-  readonly artifact: RuntimeSkillArtifact;
-  readonly catalog: readonly CatalogSkill[];
-  readonly canonicalRoot: string;
+  readonly skillPlan: SkillProjectionPlan;
   readonly agentsRoot: string;
   readonly artifactsRoot: string;
   readonly runtimeContext: RuntimeContextV1;
@@ -1217,16 +1215,13 @@ async function buildProductionProjection(
 ): Promise<LaunchProjection> {
   if (input.descriptor.runtime === 'pi') {
     return buildPiProjection({
-      manifest: input.manifest,
-      artifact: input.artifact,
-      catalog: input.catalog,
-      canonicalRoot: input.canonicalRoot,
+      skillPlan: input.skillPlan,
       context: input.runtimeContext,
       expectedLaunch: {
         launchKey: input.descriptor.launchKey,
         descriptorDigest: input.runtimeContext.launchDescriptor.digest,
       },
-      currentBinding: input.manifest.binding,
+      currentBinding: input.skillPlan.binding,
       artifactsRoot: input.artifactsRoot,
       statusSnapshot: input.statusSnapshot,
       runtimeStatusEnvelope: input.runtimeStatusEnvelope,
@@ -1236,14 +1231,8 @@ async function buildProductionProjection(
       ...(input.artifactRevalidator ? { artifactRevalidator: input.artifactRevalidator } : {}),
     });
   }
-  const skillPlan = await createSkillProjectionPlan({
-    manifest: input.manifest,
-    artifact: input.artifact,
-    catalog: input.catalog,
-    canonicalRoot: input.canonicalRoot,
-  });
   return publishClaudeProjection({
-    skillPlan,
+    skillPlan: input.skillPlan,
     agents: input.agentsRoot,
     artifactsRoot: input.artifactsRoot,
     statusSnapshot: input.statusSnapshot,
@@ -1280,7 +1269,7 @@ function productionRuntimeAdapters(input: {
     const statusSnapshotPath = await resolveLaunchStatusSnapshotPath({
       stateRoot: input.stateRoot,
       descriptor: input.descriptor,
-      repositoryId: input.projectionInput.manifest.binding.repositoryId,
+      repositoryId: input.projectionInput.skillPlan.binding.repositoryId,
       snapshot,
       ...(input.statusMaterializer ? { materializer: input.statusMaterializer } : {}),
     });
@@ -1304,9 +1293,9 @@ function productionRuntimeAdapters(input: {
     const expectedBinding = {
       launchKey: input.projectionInput.runtimeContext.launchKey,
       descriptorDigest: input.projectionInput.runtimeContext.launchDescriptor.digest,
-      runtimeArtifactKey: input.projectionInput.artifact.reference.artifactKey,
+      runtimeArtifactKey: input.projectionInput.skillPlan.artifactReference.artifactKey,
       runtime,
-      manifestKey: input.projectionInput.manifest.manifestKey,
+      manifestKey: input.projectionInput.skillPlan.manifestKey,
     };
     if (JSON.stringify(built.reference.launchBinding) !== JSON.stringify(expectedBinding)) {
       throw new MpxError({
@@ -1648,12 +1637,15 @@ export async function executeResolvedLaunch(input: {
       });
     }
   }
-  const projectionInput = {
-    descriptor: input.descriptor,
+  const skillPlan = await createSkillProjectionPlan({
     manifest: input.manifest,
     artifact: input.artifact,
     catalog: input.catalog,
     canonicalRoot: input.canonicalRoot,
+  });
+  const projectionInput = {
+    descriptor: input.descriptor,
+    skillPlan,
     agentsRoot: input.agentsRoot,
     artifactsRoot: input.artifactsRoot,
     runtimeContext,

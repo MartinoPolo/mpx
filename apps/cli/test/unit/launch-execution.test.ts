@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
   SBX_V0_39_0_PIN,
   compactLaunchBanner,
@@ -19,6 +19,7 @@ import {
   NodeLaunchStatusSnapshotMaterializer,
   resolveLaunchStatusSnapshotPath,
   type LaunchExecutionContext,
+  type LaunchProjectionBuildInput,
 } from '../../src/launch-execution.js';
 import { NodePrivateRouteMaterializer, defaultContext } from '../../src/context.js';
 import {
@@ -91,9 +92,9 @@ function publishedReference(
     launchBinding: {
       launchKey: input.runtimeContext.launchKey,
       descriptorDigest: input.runtimeContext.launchDescriptor.digest,
-      runtimeArtifactKey: input.artifact.reference.artifactKey,
+      runtimeArtifactKey: input.skillPlan.artifactReference.artifactKey,
       runtime: input.descriptor.runtime,
-      manifestKey: input.manifest.manifestKey,
+      manifestKey: input.skillPlan.manifestKey,
     },
   };
 }
@@ -225,6 +226,15 @@ async function provisionRoute(
 }
 
 describe('production private launch services', () => {
+  it('exposes only skillPlan to projection builders for skill semantics', () => {
+    type RawProjectionInput = 'manifest' | 'artifact' | 'catalog' | 'canonicalRoot';
+    expectTypeOf<LaunchProjectionBuildInput['skillPlan']>().toMatchTypeOf<
+      import('@mpx/skills').SkillProjectionPlan
+    >();
+    expectTypeOf<
+      Extract<keyof LaunchProjectionBuildInput, RawProjectionInput>
+    >().toEqualTypeOf<never>();
+  });
   it('provides production route and audit services on the default context', () => {
     expect(defaultContext.launchRoutes).toBeDefined();
     expect(defaultContext.launchAudit).toBeDefined();
@@ -462,9 +472,10 @@ describe('Phase F launch execution', () => {
         JSON.stringify(io),
       ).toBe(0);
       expect(childStatusPath).toContain(path.join(fixture.env.LOCALAPPDATA!, 'mpx', 'status'));
+      const { skillPlan: _skillPlan, ...serializableProjection } = builder.mock.calls[0]![0];
       const publicSurfaces = JSON.stringify({
         io,
-        projection: builder.mock.calls[0]![0],
+        projection: serializableProjection,
         auditRecords,
       });
       expect(publicSurfaces).not.toContain(childStatusPath);
@@ -1592,7 +1603,8 @@ describe('Phase F launch execution', () => {
       expect(builder).toHaveBeenCalledOnce();
       expect(validator).toHaveBeenCalledOnce();
       expect(execute).toHaveBeenCalledOnce();
-      expect(JSON.stringify(builder.mock.calls[0]![0])).not.toContain(`C:/native/work/${runtime}`);
+      const { skillPlan: _skillPlan, ...serializableProjection } = builder.mock.calls[0]![0];
+      expect(JSON.stringify(serializableProjection)).not.toContain(`C:/native/work/${runtime}`);
       expect(JSON.stringify(io)).not.toContain(`C:/native/work/${runtime}`);
     },
   );
@@ -1863,17 +1875,17 @@ describe('Phase F launch execution', () => {
         expect(input.descriptor.intendedPolicy.inputsDigest).toBe(
           sha256Canonical({
             schemaVersion: 1,
-            manifestKey: input.manifest.manifestKey,
+            manifestKey: input.skillPlan.manifestKey,
             skillArtifactKey: input.descriptor.skillArtifact.artifactKey,
           } as unknown as JsonValue),
         );
-        expect(input.catalog.find((skill) => skill.identity === 'local')).toMatchObject({
-          sourcePath: path.join(skillDirectory, 'SKILL.md'),
-          directoryHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        expect(input.skillPlan.entries.find((entry) => entry.identity === 'local')).toMatchObject({
+          source: {
+            kind: 'project',
+            directoryHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          },
+          skillFile: { relativePath: 'SKILL.md' },
         });
-        expect(
-          input.artifact.entries.find((entry) => entry.identity === 'local')?.source.kind,
-        ).toBe('project');
         return {
           directory: 'C:/immutable/pi',
           reference: publishedReference(input),

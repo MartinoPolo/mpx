@@ -13,6 +13,7 @@ import {
 import { validateArtifact, verifyRuntimeSkillArtifact } from './artifact.js';
 import { directoryDigest, enumerateSkillDirectory } from './inventory.js';
 import { loadSkillBody, type LoadedSkillBody, type SkillInvocation } from './loader.js';
+import { rankSearchCandidates } from './search-ranking.js';
 import { MAX_SKILL_SEARCH_QUERY_LENGTH, MAX_SKILL_SEARCH_RESULTS } from './search.js';
 
 export interface HumanSkillName {
@@ -373,28 +374,15 @@ export function modelSearchSkillProjection(
       `skill search queries are limited to ${MAX_SKILL_SEARCH_QUERY_LENGTH} characters`,
     );
   }
-  const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const limit = Math.max(
-    0,
-    Math.min(MAX_SKILL_SEARCH_RESULTS, options.limit ?? MAX_SKILL_SEARCH_RESULTS),
+  return rankSearchCandidates(
+    plan.modelSearchContext.map((item) => ({
+      identity: item.identity,
+      publicName: item.publicName,
+      description: item.description ?? '',
+      ...(item.triggers ? { triggers: item.triggers } : {}),
+    })),
+    query,
+    options.limit,
+    MAX_SKILL_SEARCH_RESULTS,
   );
-  return plan.modelSearchContext
-    .map((item) => {
-      const haystack =
-        `${item.identity} ${item.description ?? ''} ${item.triggers ?? ''}`.toLowerCase();
-      const score = terms.reduce(
-        (total, term) =>
-          total + (haystack.includes(term) ? (item.identity.includes(term) ? 3 : 1) : 0),
-        0,
-      );
-      return {
-        identity: item.identity,
-        publicName: item.publicName,
-        description: item.description ?? '',
-        score,
-      };
-    })
-    .filter((item) => terms.length === 0 || item.score > 0)
-    .sort((a, b) => b.score - a.score || a.identity.localeCompare(b.identity))
-    .slice(0, limit);
 }

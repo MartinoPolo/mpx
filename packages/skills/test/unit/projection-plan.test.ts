@@ -9,8 +9,10 @@ import {
   createSkillProjectionPlan,
   inventoryCanonical,
   inventoryProjectSkills,
+  humanSearchSkills,
   loadSkillProjectionBody,
   modelSearchSkillProjection,
+  modelSearchSkills,
   resolveManifest,
   verifySkillProjectionPlan,
 } from '../../src/index.js';
@@ -187,6 +189,68 @@ describe('process-local skill projection plans', () => {
         modelSearchSkillProjection(plan, 'full', { artifactKey: 'wrong-artifact-key' }),
       ),
     ).toBe('STALE_ARTIFACT');
+  });
+
+  it('keeps artifact and projection model search ranking identical', async () => {
+    const value = await fixture();
+    const plan = await createSkillProjectionPlan({
+      canonicalRoot: value.root,
+      manifest: value.manifest,
+      artifact: value.artifact,
+      catalog: value.catalog,
+    });
+    const artifactKey = value.artifact.reference.artifactKey;
+    for (const [query, limit] of [
+      ['', undefined],
+      ['named full', undefined],
+      ['description trigger', 1],
+      ['missing', 20],
+      ['full', 0],
+    ] as const) {
+      const options = limit === undefined ? { artifactKey } : { artifactKey, limit };
+      expect(modelSearchSkillProjection(plan, query, options)).toEqual(
+        modelSearchSkills(value.artifact, value.catalog, query, options),
+      );
+    }
+  });
+
+  it('keeps human-only entries out of model ranking without hiding them from human search', async () => {
+    const value = await fixture();
+    const artifactKey = value.artifact.reference.artifactKey;
+    expect(modelSearchSkills(value.artifact, value.catalog, 'explicit', { artifactKey })).toEqual(
+      [],
+    );
+    expect(humanSearchSkills(value.artifact, value.catalog, 'explicit')).toEqual([
+      {
+        identity: 'explicit',
+        publicName: '/mpx:explicit',
+        description: 'explicit café description',
+        score: 3,
+      },
+    ]);
+  });
+
+  it('preserves model search validation order for a wrong key and oversized query', async () => {
+    const value = await fixture();
+    const plan = await createSkillProjectionPlan({
+      canonicalRoot: value.root,
+      manifest: value.manifest,
+      artifact: value.artifact,
+      catalog: value.catalog,
+    });
+    const oversized = 'x'.repeat(201);
+    expect(
+      thrownCode(() =>
+        modelSearchSkillProjection(plan, oversized, { artifactKey: 'wrong-artifact-key' }),
+      ),
+    ).toBe('STALE_ARTIFACT');
+    expect(
+      thrownCode(() =>
+        modelSearchSkills(value.artifact, value.catalog, oversized, {
+          artifactKey: 'wrong-artifact-key',
+        }),
+      ),
+    ).toBe('QUERY_TOO_LONG');
   });
 
   it('snapshots project-relative provenance and rejects stale project support digests', async () => {

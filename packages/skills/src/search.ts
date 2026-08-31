@@ -6,6 +6,7 @@ import {
 } from './contracts.js';
 import { isProjectSkill } from './inventory.js';
 import { validateArtifact } from './artifact.js';
+import { rankSearchCandidates } from './search-ranking.js';
 
 export const MAX_SKILL_SEARCH_QUERY_LENGTH = 200;
 export const MAX_SKILL_SEARCH_RESULTS = 20;
@@ -41,35 +42,22 @@ function runSearchPipeline(
     );
   }
   validateArtifact(artifact, catalog, options.artifactKey);
-  const limit = Math.max(0, Math.min(options.maxResults, options.limit ?? options.maxResults));
-  const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   const source = new Map(catalog.map((skill) => [skill.identity, skill]));
-  return artifact.entries
-    .filter(options.allowsEntry)
-    .flatMap((entry) => {
-      const skill = source.get(entry.identity);
-      if (!skill) {
-        return [];
-      }
-      const haystack =
-        `${skill.identity} ${skill.description} ${isProjectSkill(skill) ? '' : (skill.triggers ?? '')}`.toLowerCase();
-      const score = terms.reduce(
-        (total, term) =>
-          total + (haystack.includes(term) ? (skill.identity.includes(term) ? 3 : 1) : 0),
-        0,
-      );
-      return [
-        {
-          identity: skill.identity,
-          publicName: entry.publicName,
-          description: skill.description,
-          score,
-        },
-      ];
-    })
-    .filter((result) => terms.length === 0 || result.score > 0)
-    .sort((a, b) => b.score - a.score || a.identity.localeCompare(b.identity))
-    .slice(0, limit);
+  const candidates = artifact.entries.filter(options.allowsEntry).flatMap((entry) => {
+    const skill = source.get(entry.identity);
+    if (!skill) {
+      return [];
+    }
+    return [
+      {
+        identity: skill.identity,
+        publicName: entry.publicName,
+        description: skill.description,
+        ...(isProjectSkill(skill) || !skill.triggers ? {} : { triggers: skill.triggers }),
+      },
+    ];
+  });
+  return rankSearchCandidates(candidates, query, options.limit, options.maxResults);
 }
 
 export function searchSkills(

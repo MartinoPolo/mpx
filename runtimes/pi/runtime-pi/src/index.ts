@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import {
   lstat,
@@ -15,7 +14,6 @@ import { fileURLToPath } from 'node:url';
 import { build as bundle } from 'esbuild';
 import {
   parseNativeSessionRefV1,
-  parseResolvedSkillManifestV4,
   parseRuntimeCapabilityManifestV1,
   parseRuntimeContextV1,
   publishRuntimeArtifact,
@@ -31,16 +29,11 @@ import {
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@mpx/runtime-hooks';
 import { RUNTIME_TOOL_NAMES } from '@mpx/runtime-tools';
 import {
-  initialModelContext,
-  enumerateSkillDirectory,
-  loadSkillBody,
-  MAX_SKILL_BODY_BYTES,
-  modelSearchSkills,
-  verifyRuntimeSkillArtifact,
-  type CatalogSkill,
+  loadSkillProjectionBody,
+  modelSearchSkillProjection,
+  verifySkillProjectionPlan,
   type LoadedSkillBody,
-  type ResolvedManifest,
-  type RuntimeSkillArtifact,
+  type SkillProjectionPlan,
 } from '@mpx/skills';
 import {
   parseRuntimeStatusEnvelopeV1,
@@ -76,17 +69,14 @@ export interface PiExtensionAPI {
 export interface PiAdapterInput {
   pi: PiExtensionAPI;
   context: RuntimeContextV1;
-  manifest: ResolvedManifest;
-  artifact: RuntimeSkillArtifact;
-  catalog: readonly CatalogSkill[];
-  canonicalRoot: string;
+  skillPlan: SkillProjectionPlan;
   currentBinding: RuntimeBinding;
   expectedLaunch: { launchKey: string; descriptorDigest: string };
 }
 export interface PiRuntimeAdapter {
   readonly runtime: 'pi';
-  readonly initialContext: ReturnType<typeof initialModelContext>;
-  modelSearch(query: string): ReturnType<typeof modelSearchSkills>;
+  readonly initialContext: SkillProjectionPlan['initialModelContext'];
+  modelSearch(query: string): ReturnType<typeof modelSearchSkillProjection>;
   loadForModel(identity: string): Promise<LoadedSkillBody>;
 }
 
@@ -99,25 +89,24 @@ export function renderPiStatusLine(value: unknown, input: { launchBanner: string
 }
 
 export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiRuntimeAdapter> {
+  const skillPlan = verifySkillProjectionPlan(input.skillPlan);
   const context = parseRuntimeContextV1(input.context);
-  if (context.runtimeArtifact.runtime !== 'pi') {
+  if (context.runtimeArtifact.runtime !== 'pi' || skillPlan.runtime !== 'pi') {
     restart([{ code: 'RUNTIME_MISMATCH' }]);
   }
   if (
-    input.artifact.schemaVersion !== 4 ||
-    input.artifact.runtime !== 'pi' ||
-    input.artifact.reference.artifactKey !== context.runtimeArtifact.artifactKey ||
-    input.artifact.reference.fileMapHash !== context.runtimeArtifact.fileMapHash
+    skillPlan.artifactReference.artifactKey !== context.runtimeArtifact.artifactKey ||
+    skillPlan.artifactReference.fileMapHash !== context.runtimeArtifact.fileMapHash
   ) {
     restart([{ code: 'ARTIFACT_BINDING_CHANGED' }]);
   }
 
   const assertBoundSync = (): void => {
-    verifyRuntimeSkillArtifact(input.artifact, input.manifest, input.catalog, { runtime: 'pi' });
+    verifySkillProjectionPlan(skillPlan);
     const rebound =
       context.launchKey !== input.expectedLaunch.launchKey ||
       context.launchDescriptor.digest !== input.expectedLaunch.descriptorDigest ||
-      context.manifestKey !== input.manifest.manifestKey ||
+      context.manifestKey !== skillPlan.manifestKey ||
       context.binding.projectId !== input.currentBinding.projectId ||
       context.binding.repositoryId !== input.currentBinding.repositoryId ||
       context.binding.contentScope !== input.currentBinding.contentScope;
@@ -130,8 +119,8 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
     const result = await validateRuntimeContext({
       context,
       expectedLaunch: input.expectedLaunch,
-      expectedManifestKey: input.manifest.manifestKey,
-      expectedRuntimeArtifact: input.artifact.reference,
+      expectedManifestKey: skillPlan.manifestKey,
+      expectedRuntimeArtifact: skillPlan.artifactReference,
       currentBinding: input.currentBinding,
     });
     if (!result.valid) {
@@ -139,26 +128,16 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
     }
   };
   await assertBound();
-  const modelContext = initialModelContext(input.artifact);
 
   const expand = async (
     identity: string,
     invocation: 'model' | 'human-explicit',
   ): Promise<LoadedSkillBody> => {
     await assertBound();
-    return loadSkillBody({
-      canonicalRoot: input.canonicalRoot,
-      manifest: input.manifest,
-      artifact: input.artifact,
-      runtime: 'pi',
-      identity,
-      invocation,
-    });
+    return loadSkillProjectionBody(skillPlan, { identity, invocation });
   };
 
-  for (const entry of [...input.artifact.entries].sort((a, b) =>
-    a.identity.localeCompare(b.identity),
-  )) {
+  for (const entry of skillPlan.entries) {
     if (!entry.permissions.humanInvocation) {
       continue;
     }
@@ -166,7 +145,7 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
       restart([{ code: 'PUBLIC_NAME_INVALID' }]);
     }
     input.pi.registerCommand(entry.publicName.slice(1), {
-      ...(entry.description ? { description: entry.description } : {}),
+      ...(entry.humanContext?.description ? { description: entry.humanContext.description } : {}),
       handler: async (_args: string) => {
         const loaded = await expand(entry.identity, 'human-explicit');
         await input.pi.sendUserMessage([{ type: 'text', text: loaded.wrappedBody }]);
@@ -176,10 +155,10 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
 
   return {
     runtime: 'pi',
-    initialContext: modelContext,
+    initialContext: skillPlan.initialModelContext,
     modelSearch: (query) => {
       assertBoundSync();
-      return modelSearchSkills(input.artifact, input.catalog, query, {
+      return modelSearchSkillProjection(skillPlan, query, {
         artifactKey: context.runtimeArtifact.artifactKey,
       });
     },
@@ -478,10 +457,7 @@ export function createPiProjection() {
   } as const;
 }
 export interface PiProjectionBuildInput {
-  readonly manifest: ResolvedManifest;
-  readonly artifact: RuntimeSkillArtifact;
-  readonly catalog: readonly CatalogSkill[];
-  readonly canonicalRoot: string;
+  readonly skillPlan: SkillProjectionPlan;
   readonly context: RuntimeContextV1;
   readonly expectedLaunch: { readonly launchKey: string; readonly descriptorDigest: string };
   readonly currentBinding: RuntimeBinding;
@@ -508,23 +484,6 @@ const packageRoot = fileURLToPath(new URL('..', import.meta.url));
 function jsonFile(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
-function digest(value: unknown): string {
-  return createHash('sha256')
-    .update(typeof value === 'string' || value instanceof Uint8Array ? value : stable(value))
-    .digest('hex');
-}
-function stable(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stable(item)).join(',')}]`;
-  }
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
 async function regularText(file: string, label: string): Promise<string> {
   const stat = await lstat(file).catch(() => undefined);
   if (!stat?.isFile() || stat.isSymbolicLink()) {
@@ -542,6 +501,7 @@ async function bundledSource(entry: string, label: string): Promise<string> {
   let pending = productionBundles.get(entry);
   if (!pending) {
     pending = bundle({
+      absWorkingDir: packageRoot,
       entryPoints: [path.join(packageRoot, 'src', entry)],
       bundle: true,
       platform: 'node',
@@ -726,70 +686,6 @@ async function copyGeneratedAssets(
   }
   await copyVendor(vendorRoot);
 }
-async function validatedSkillBytes(skill: CatalogSkill, loaded: LoadedSkillBody): Promise<Buffer> {
-  let handle;
-  try {
-    handle = await open(skill.sourcePath, 'r');
-    const opened = await handle.stat({ bigint: true });
-    const named = await lstat(skill.sourcePath, { bigint: true });
-    const resolved = await realpath(skill.sourcePath);
-    if (
-      !opened.isFile() ||
-      !named.isFile() ||
-      named.isSymbolicLink() ||
-      opened.dev !== named.dev ||
-      opened.ino !== named.ino ||
-      opened.size !== named.size ||
-      opened.size > BigInt(MAX_SKILL_BODY_BYTES) ||
-      !sameFilesystemPath(resolved, skill.realPath)
-    ) {
-      throw new Error('identity mismatch');
-    }
-    const bytes = Buffer.alloc(Number(opened.size));
-    let offset = 0;
-    while (offset < bytes.length) {
-      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
-      if (result.bytesRead === 0) {
-        throw new Error('short read');
-      }
-      offset += result.bytesRead;
-    }
-    if ((await handle.read(Buffer.alloc(1), 0, 1, bytes.length)).bytesRead !== 0) {
-      throw new Error('file grew');
-    }
-    const finalOpened = await handle.stat({ bigint: true });
-    const finalNamed = await lstat(skill.sourcePath, { bigint: true });
-    if (
-      !finalOpened.isFile() ||
-      !finalNamed.isFile() ||
-      finalNamed.isSymbolicLink() ||
-      finalOpened.dev !== opened.dev ||
-      finalOpened.ino !== opened.ino ||
-      finalNamed.dev !== opened.dev ||
-      finalNamed.ino !== opened.ino ||
-      finalOpened.size !== opened.size ||
-      finalNamed.size !== opened.size ||
-      finalOpened.mtimeNs !== opened.mtimeNs ||
-      finalOpened.ctimeNs !== opened.ctimeNs ||
-      finalNamed.mtimeNs !== named.mtimeNs ||
-      finalNamed.ctimeNs !== named.ctimeNs ||
-      digest(bytes) !== loaded.provenance.contentHash
-    ) {
-      throw new Error('content mismatch');
-    }
-    return bytes;
-  } catch {
-    throw new Error(`SKILL_CONTENT_STALE: skill '${skill.identity}' changed during Pi projection`);
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
-}
-function sameFilesystemPath(left: string, right: string): boolean {
-  return process.platform === 'win32'
-    ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
-    : path.resolve(left) === path.resolve(right);
-}
-
 function freezeProjection(published: PublishedRuntimeArtifact): PiPublishedProjection {
   const reference = Object.freeze({ ...published.reference });
   const directory = path.resolve(published.directory);
@@ -809,7 +705,10 @@ function freezeProjection(published: PublishedRuntimeArtifact): PiPublishedProje
 export async function buildPiProjection(
   input: PiProjectionBuildInput,
 ): Promise<PiPublishedProjection> {
-  const manifest = parseResolvedSkillManifestV4(input.manifest);
+  const skillPlan = verifySkillProjectionPlan(input.skillPlan);
+  if (skillPlan.runtime !== 'pi') {
+    throw new Error('Pi projection requires a Pi skill projection plan');
+  }
   const context = parseRuntimeContextV1(input.context);
   const statusSnapshot = parseStatusSnapshotV1(input.statusSnapshot);
   const unavailable = {
@@ -887,26 +786,22 @@ export async function buildPiProjection(
   ) {
     throw new Error('Pi runtime status envelope belongs to another launch');
   }
-  verifyRuntimeSkillArtifact(input.artifact, manifest, input.catalog, { runtime: 'pi' });
   if (
-    input.artifact.schemaVersion !== 4 ||
-    input.artifact.runtime !== 'pi' ||
-    input.artifact.manifestKey !== manifest.manifestKey ||
-    input.artifact.reference.artifactKey !== context.runtimeArtifact.artifactKey
+    skillPlan.manifestKey !== context.manifestKey ||
+    skillPlan.artifactReference.artifactKey !== context.runtimeArtifact.artifactKey
   ) {
     throw new Error('Pi projection requires its exact v4 Pi artifact and runtime context');
   }
   const validation = await validateRuntimeContext({
     context,
     expectedLaunch: input.expectedLaunch,
-    expectedManifestKey: manifest.manifestKey,
-    expectedRuntimeArtifact: input.artifact.reference,
+    expectedManifestKey: skillPlan.manifestKey,
+    expectedRuntimeArtifact: skillPlan.artifactReference,
     currentBinding: input.currentBinding,
   });
   if (!validation.valid) {
     restart(validation.diagnostics);
   }
-  const catalog = new Map(input.catalog.map((skill) => [skill.identity, skill]));
   const entries: Array<{
     identity: string;
     publicName: string;
@@ -917,45 +812,31 @@ export async function buildPiProjection(
     canonicalDescription?: string;
     canonicalTriggers?: string;
   }> = [];
-  const bodies = new Map<string, Buffer>();
-  for (const entry of [...input.artifact.entries].sort((a, b) =>
-    a.identity.localeCompare(b.identity),
-  )) {
-    const skill = catalog.get(entry.identity);
-    if (!skill) {
-      throw new Error(`STALE_CATALOG: missing ${entry.identity}`);
-    }
-    const invocation = entry.permissions.modelInvocation ? 'model' : 'human-explicit';
-    const loaded = await loadSkillBody({
-      canonicalRoot: input.canonicalRoot,
-      manifest,
-      artifact: input.artifact,
-      runtime: 'pi',
-      identity: entry.identity,
-      invocation,
-    });
-    bodies.set(entry.identity, await validatedSkillBytes(skill, loaded));
-    const triggers = 'triggers' in skill ? skill.triggers : undefined;
+  for (const entry of skillPlan.entries) {
     entries.push({
       identity: entry.identity,
       publicName: entry.publicName,
       exposure: entry.exposure,
-      contentHash: loaded.provenance.contentHash,
-      sourcePath: loaded.provenance.sourcePath,
-      ...(entry.permissions.humanInvocation ? { commandDescription: skill.description } : {}),
-      ...(entry.permissions.modelInvocation
+      contentHash: entry.source.contentHash,
+      sourcePath: entry.source.provenancePath,
+      ...(entry.humanContext?.description
+        ? { commandDescription: entry.humanContext.description }
+        : {}),
+      ...(entry.modelSearchContext?.description
         ? {
-            canonicalDescription: skill.description,
-            ...(triggers ? { canonicalTriggers: triggers } : {}),
+            canonicalDescription: entry.modelSearchContext.description,
+            ...(entry.modelSearchContext.triggers
+              ? { canonicalTriggers: entry.modelSearchContext.triggers }
+              : {}),
           }
         : {}),
     });
   }
-  const commandAllowlist = input.artifact.entries
+  const commandAllowlist = skillPlan.entries
     .filter((entry) => entry.permissions.humanInvocation)
     .map((entry) => entry.publicName.slice(1))
     .sort();
-  const modelSearchAllowlist = input.artifact.entries
+  const modelSearchAllowlist = skillPlan.entries
     .filter((entry) => entry.permissions.modelInvocation)
     .map((entry) => entry.identity)
     .sort();
@@ -985,8 +866,8 @@ export async function buildPiProjection(
   const descriptor = {
     schemaVersion: 1,
     runtime: 'pi',
-    manifestKey: manifest.manifestKey,
-    runtimeArtifact: input.artifact.reference,
+    manifestKey: skillPlan.manifestKey,
+    runtimeArtifact: skillPlan.artifactReference,
     runtimeContext: 'runtime-context.json',
     extension: 'extension.mjs',
     commandAllowlist,
@@ -1010,8 +891,8 @@ export async function buildPiProjection(
       staging,
       'extension.mjs',
       piExtensionSource({
-        manifestKey: manifest.manifestKey,
-        artifactKey: input.artifact.reference.artifactKey,
+        manifestKey: skillPlan.manifestKey,
+        artifactKey: skillPlan.artifactReference.artifactKey,
         launchBanner: input.launchBanner,
         runtimeStatusLine,
         commandAllowlist,
@@ -1031,13 +912,10 @@ export async function buildPiProjection(
     await emit(staging, 'status/runtime-status-envelope-v1.json', jsonFile(runtimeStatusEnvelope));
     await emit(staging, 'settings.json', jsonFile(piSettings));
     await emit(staging, 'keybindings.json', jsonFile(piKeybindings));
-    for (const [identity, body] of bodies) {
-      await emit(staging, `skills/${identity}/body.md`, body);
-      const skill = catalog.get(identity)!;
-      for (const support of await enumerateSkillDirectory(path.dirname(skill.sourcePath))) {
-        if (support.relativePath !== 'SKILL.md') {
-          await emit(staging, `skills/${identity}/${support.relativePath}`, support.bytes);
-        }
+    for (const entry of skillPlan.entries) {
+      await emit(staging, `skills/${entry.identity}/body.md`, entry.skillFile.bytes);
+      for (const support of entry.files) {
+        await emit(staging, `skills/${entry.identity}/${support.relativePath}`, support.bytes);
       }
     }
     await copyGeneratedAssets(
@@ -1048,9 +926,9 @@ export async function buildPiProjection(
     const launchBinding = {
       launchKey: context.launchKey,
       descriptorDigest: context.launchDescriptor.digest,
-      runtimeArtifactKey: input.artifact.reference.artifactKey,
+      runtimeArtifactKey: skillPlan.artifactReference.artifactKey,
       runtime: 'pi' as const,
-      manifestKey: manifest.manifestKey,
+      manifestKey: skillPlan.manifestKey,
     };
     const published = await publishRuntimeArtifact({
       sourceRoot: staging,

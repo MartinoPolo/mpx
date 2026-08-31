@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
-import { createRuntimeSkillArtifact, inventoryCanonical, resolveManifest } from '@mpx/skills';
+import {
+  createRuntimeSkillArtifact,
+  createSkillProjectionPlan,
+  inventoryCanonical,
+  resolveManifest,
+} from '@mpx/skills';
 import type { RuntimeStatusEnvelopeV1, StatusSnapshotV1 } from '@mpx/status';
 
 const exposures = [
@@ -39,6 +44,12 @@ export async function fixture() {
     },
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
+  const skillPlan = await createSkillProjectionPlan({
+    manifest,
+    artifact,
+    catalog,
+    canonicalRoot,
+  });
   const context = createRuntimeContextV1({
     launchKey: 'launch',
     launchDescriptor: { reference: 'launch.json', digest: 'digest' },
@@ -143,6 +154,7 @@ export async function fixture() {
     context,
     manifest,
     artifact,
+    skillPlan,
     catalog,
     canonicalRoot,
     currentBinding,

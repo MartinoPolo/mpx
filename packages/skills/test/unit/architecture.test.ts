@@ -14,6 +14,7 @@ const requiredModules = [
   'manifest.ts',
   'policy.ts',
   'projection.ts',
+  'search-ranking.ts',
   'search.ts',
 ];
 
