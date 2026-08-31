@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPiRuntimeCapabilityWiring, PI_CAPABILITY_IDS } from '../src/runtime-capabilities.js';
+import {
+  createPiRuntimeCapabilityWiring,
+  PI_CAPABILITY_IDS,
+} from '../../src/runtime-capabilities.js';
 
 describe('Pi runtime capability wiring', () => {
   it('activates the supported subagent bridge and keeps gateway capabilities explicitly unsupported', () => {

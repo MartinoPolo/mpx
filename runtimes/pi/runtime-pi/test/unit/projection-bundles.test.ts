@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { emitProductionBundles } from '../src/projection-bundles.js';
+import { emitProductionBundles } from '../../src/projection-bundles.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

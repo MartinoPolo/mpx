@@ -19,6 +19,28 @@ async function json(relative) {
 }
 
 describe('test taxonomy', () => {
+  test('lists files in deterministic path order', async () => {
+    const fixture = await mkdtemp(path.join(tmpdir(), 'mpx-files-below-'));
+    try {
+      await mkdir(path.join(fixture, 'middle'));
+      await Promise.all([
+        writeFile(path.join(fixture, 'z-last.ts'), ''),
+        writeFile(path.join(fixture, 'a-first.ts'), ''),
+        writeFile(path.join(fixture, 'middle', 'z-nested.ts'), ''),
+        writeFile(path.join(fixture, 'middle', 'a-nested.ts'), ''),
+      ]);
+
+      expect(await filesBelow(fixture)).toEqual([
+        'a-first.ts',
+        'middle/a-nested.ts',
+        'middle/z-nested.ts',
+        'z-last.ts',
+      ]);
+    } finally {
+      await rm(fixture, { recursive: true, force: true });
+    }
+  });
+
   test('classifies synthetic legacy and target paths by ownership and suffix', () => {
     expect(classifyTestPath('packages/core/src/value.test.ts')).toBe('unit');
     expect(classifyTestPath('packages/core/test/value.test.ts')).toBe('unit');
@@ -896,6 +918,73 @@ describe('test taxonomy', () => {
             /\.test\.[cm]?[jt]sx?$/u.test(file)),
       ),
     ).toEqual([]);
+  });
+
+  test('preserves the fixed twenty-one-suite and fixture Pi runtime unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = [
+      'adapter.test.ts',
+      'dev-services.test.ts',
+      'event-coordination.test.ts',
+      'footer.test.ts',
+      'generator.test.ts',
+      'hooks-wiring.test.ts',
+      'invocation.test.ts',
+      'keybindings-profile.test.ts',
+      'launch-private-client.test.ts',
+      'production-projection.test.ts',
+      'production-runtime.test.ts',
+      'profile.test.ts',
+      'projection-bundles.test.ts',
+      'projection.test.ts',
+      'runtime-capabilities.test.ts',
+      'runtime-status.test.ts',
+      'runtime-tools.test.ts',
+      'sandbox-executor.test.ts',
+      'sandbox-subagents.test.ts',
+      'subagent-bridge.test.ts',
+      'subagents-vendor.test.ts',
+    ];
+    expect(basenames).toHaveLength(21);
+    for (const basename of basenames) {
+      const formerPath = `runtimes/pi/runtime-pi/test/${basename}`;
+      const unitPath = `runtimes/pi/runtime-pi/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    expect(files.has('runtimes/pi/runtime-pi/test/fixture.ts')).toBe(false);
+    expect(files.has('runtimes/pi/runtime-pi/test/fixtures/fixture.ts')).toBe(true);
+
+    const piRuntimeFiles = await filesBelow(root, 'runtimes/pi/runtime-pi');
+    expect(
+      piRuntimeFiles.filter(
+        (file) =>
+          file.startsWith('runtimes/pi/runtime-pi/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(
+      piRuntimeFiles.filter((file) =>
+        /^runtimes\/pi\/runtime-pi\/test\/[^/]+\.test\.[cm]?[jt]sx?$/u.test(file),
+      ),
+    ).toEqual([]);
+
+    const vendorTests = [
+      'runtimes/pi/runtime-pi/vendor/subagents/group-join.test.ts',
+      'runtimes/pi/runtime-pi/vendor/subagents/invocation-config.test.ts',
+      'runtimes/pi/runtime-pi/vendor/subagents/notification-gate.test.ts',
+    ];
+    for (const vendorTest of vendorTests) {
+      expect(await readFile(path.join(root, vendorTest), 'utf8'), vendorTest).toBeTruthy();
+      expect(matchingTestCategories(vendorTest), vendorTest).toEqual([]);
+    }
   });
 
   test('keeps the fixed CLI E2E cohort exclusively under root ownership', async () => {

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPiFooterPortAdapter } from '../src/index.js';
+import { createPiFooterPortAdapter } from '../../src/index.js';
 const base = {
   schemaVersion: 1,
   project: { id: 'p', cwd: 'C:/p' },

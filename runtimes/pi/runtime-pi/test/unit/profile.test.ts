@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPiRuntimeProfileV1 } from '../src/profile.js';
+import { createPiRuntimeProfileV1 } from '../../src/profile.js';
 
 it('publishes an immutable account-safe Sol profile without native state', () => {
   const profile = createPiRuntimeProfileV1();

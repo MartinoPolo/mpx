@@ -3955,12 +3955,12 @@
             "path": "plugins/gh/agents/mp-ci-fixer.md",
             "sha256": "da30f2bac86aadb464afbeb9ba1c9a761615cef780dd88cc29f3be69826d114a"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "claude",
@@ -3993,12 +3993,12 @@
             "path": "plugins/gh/agents/mp-issue-finder.md",
             "sha256": "99638eaf7f8e889fda869f8a9f3494c8720b35662c6c5d7ccb78f69805201f8b"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "claude",
@@ -4031,12 +4031,12 @@
             "path": "plugins/gh/agents/mp-pr-manager.md",
             "sha256": "a0cbf7ec88e141292115d18490bb492b2fc6e323c98b723672f7aaf9174af3c0"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "claude",
@@ -4069,12 +4069,12 @@
             "path": "plugins/gh/agents/mp-unresolved-issue-tracker.md",
             "sha256": "78cc330e2474d2d7ad53eb943f2cd617a7e4e4124247bc2fe396c696ca989620"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "claude",
@@ -10859,12 +10859,12 @@
             "path": ".gitignore",
             "sha256": "63ef5be1dbaf6333248a868520088beb4e6fdc50647bab02a30f6e35e7b942a9"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -10897,12 +10897,12 @@
             "path": ".vscode/settings.json",
             "sha256": "22dc002f491b6d836a1f966ed4a9b68adebfb59692bbcac70161843f0cec8879"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -10962,12 +10962,12 @@
             "path": "agents/Explore.md",
             "sha256": "41c77cab3592b2a106467815408d5d6419c945d056ac092e2bab819cfa5f5641"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11000,12 +11000,12 @@
             "path": "agents/mp-check-fixer.md",
             "sha256": "9e9af2f3ee86e8c130335799bef23365d2f64adff8ddec20c60515b84a2f0685"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11038,12 +11038,12 @@
             "path": "agents/mp-checker.md",
             "sha256": "85bc89bceb47a84d3e61d7ddbeb9f9895f3e5fb279da351164050516ea3c9131"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11076,12 +11076,12 @@
             "path": "agents/mp-chrome-devtools-tester.md",
             "sha256": "3f4651841e0054773e3448c6959cb26ad8c88a7de080b7a476aa89694bef813d"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11114,12 +11114,12 @@
             "path": "agents/mp-ci-fixer.md",
             "sha256": "3f70f0a9613cb36cc9d883177ba6b1b0d9d3b0037c0253240dab1864fa3f7f47"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11152,12 +11152,12 @@
             "path": "agents/mp-context7-docs-fetcher.md",
             "sha256": "04a50d1d2990eb3a12662d98c98b33c3a1147ce4300a3d0ebda90f8858addfd6"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11190,12 +11190,12 @@
             "path": "agents/mp-executor.md",
             "sha256": "b78895c802b2cccb172c088c23cf38761220b6647fb1a376c8fbde2cbf152309"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11228,12 +11228,12 @@
             "path": "agents/mp-git-committer.md",
             "sha256": "369ea46ee09b5c61197793a29bb56b63c70e69b564c3ed7fc7f87886e437989c"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11266,12 +11266,12 @@
             "path": "agents/mp-issue-analyzer.md",
             "sha256": "043e49053870f49eb7c889f28f6d7fd5b792a2d7985085c6ca2fe25fe4650fda"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11304,12 +11304,12 @@
             "path": "agents/mp-issue-finder.md",
             "sha256": "28d32ffc41ca800ee74e9286369c42a4fe156164ad5eaf27a73fb88bee436343"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11342,12 +11342,12 @@
             "path": "agents/mp-pr-manager.md",
             "sha256": "b4fc4ba6777253b5c4a2186cb7ae830f0bd1b0a64fc166f5f84ebce7e6b991b3"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11380,12 +11380,12 @@
             "path": "agents/mp-reviewer-best-practices.md",
             "sha256": "b2b092f88d722b6fce24248ee0db105284b6ec454ab02d823a4766d2a506f284"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11418,12 +11418,12 @@
             "path": "agents/mp-reviewer-code-quality.md",
             "sha256": "4598eb021d4cae6a7fea2274a324e3618d8ec634e32d284beb6315425689a375"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11456,12 +11456,12 @@
             "path": "agents/mp-reviewer-error-handling.md",
             "sha256": "8abe2675acbc0e2d6824461161842f0d0a9ea3a37724c67f4bb6a3153b263b2a"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11494,12 +11494,12 @@
             "path": "agents/mp-reviewer-performance.md",
             "sha256": "b37dd26fb88d08aa611f52a1f7cf0c67dc48a153d9c3d368be2e3a9c3f5d5238"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11532,12 +11532,12 @@
             "path": "agents/mp-reviewer-security.md",
             "sha256": "83dcf87377392a9fe30065c58376b39e6d450f067b7f4c7a9f3133608d1fd9a4"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11570,12 +11570,12 @@
             "path": "agents/mp-reviewer-spec-alignment.md",
             "sha256": "bc655b6486f7f5be6a7e2f744d0f22ab0fc2e3c168390cb4ecf00e27a4d17bd2"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11608,12 +11608,12 @@
             "path": "agents/mp-reviewer-test-quality.md",
             "sha256": "0e0484b9651bff9876fb94e2478c6a55cbf4dabac9bd92f903b484499091e3b1"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11646,12 +11646,12 @@
             "path": "agents/mp-scanner-architecture.md",
             "sha256": "0f41feae097f6c2fde1f93e290d3e3b5885895db7459cf9c5e1c5e3d01c7b56f"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11684,12 +11684,12 @@
             "path": "agents/mp-tdd-executor.md",
             "sha256": "55d1d5fdccb704e83694dc6612d991dc1de96aa128344b1e3a93cc66b3e1da92"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11722,12 +11722,12 @@
             "path": "agents/mp-ui-variant-generator.md",
             "sha256": "e9b447c60cc75a356e6bd1ad9633a480b6e70faa25bfae316c302868ac276014"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11760,12 +11760,12 @@
             "path": "agents/mp-unresolved-issue-tracker.md",
             "sha256": "a2a61ca5deadd824270c59fbbe96e5918e692bc098c90397c6e42bf827b19773"
           },
-          "sha256": "6a4e34ae4adce9fc48dcfef763c64ed786d00b83c0fb8ec8405e503f9366971e",
-          "reference": "runtimes/pi/runtime-pi/test/generator.test.ts",
+          "sha256": "c31673c368a5c82b4e89c0aa18301ca1b0d1f5a24d56e87eeccb3c0534b4c06b",
+          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/generator.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
     },
     {
       "source": "pi",
@@ -11798,12 +11798,12 @@
             "path": "APPEND_SYSTEM.md",
             "sha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -12527,13 +12527,13 @@
             "path": "extensions/footer.ts",
             "sha256": "b4568515447542b309cc384688075172379f0b94d03a6d3c1509b7fa09565b8d"
           },
-          "sha256": "ef384d8778c28d5b919cf2d9ef77031c1296d1632aa5116ec3cb0d2d0bc38a42",
-          "reference": "runtimes/pi/runtime-pi/test/footer.test.ts",
+          "sha256": "0b5acb5f4c6d5cc5d06c8bc97a22425f4a9c0da78e617491fbb42c9586922dc4",
+          "reference": "runtimes/pi/runtime-pi/test/unit/footer.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "600d0a75dfbc030a128b77aa0c52202e98249e1db80a43e491c63377c893d6b1",
-      "test": "runtimes/pi/runtime-pi/test/footer.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/footer.test.ts"
     },
     {
       "source": "pi",
@@ -12631,12 +12631,12 @@
             "path": "extensions/kf-namespace-commands.ts",
             "sha256": "5f98a8dbdcb4e18ba27eb9eae54d917415cc3a8f91b7155198f99dfa1f3a25cb"
           },
-          "sha256": "b3a7e9de63e5f7536fa1c05da8220d4b3cc9863e50d1b5fed863df5a68d62342",
-          "reference": "runtimes/pi/runtime-pi/test/runtime-tools.test.ts",
+          "sha256": "fdc70d0a4dee60e0cb507f2e2ea01772baad4cfea41245f81e4d02b2b0cf0af0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/runtime-tools.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/runtime-tools.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/runtime-tools.test.ts"
     },
     {
       "source": "pi",
@@ -12669,12 +12669,12 @@
             "path": "extensions/mp-namespace-commands.ts",
             "sha256": "89515f968cc2050395f54b57f8285bfbd0fc7b4670e3a6373148e5176c3c2b00"
           },
-          "sha256": "b3a7e9de63e5f7536fa1c05da8220d4b3cc9863e50d1b5fed863df5a68d62342",
-          "reference": "runtimes/pi/runtime-pi/test/runtime-tools.test.ts",
+          "sha256": "fdc70d0a4dee60e0cb507f2e2ea01772baad4cfea41245f81e4d02b2b0cf0af0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/runtime-tools.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/runtime-tools.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/runtime-tools.test.ts"
     },
     {
       "source": "pi",
@@ -12707,12 +12707,12 @@
             "path": "extensions/subagents/abortable.ts",
             "sha256": "3bdbbdd2a6faee9f4b908184bc66d0fb4fc1419e820c7fcdba45a073540035a0"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12745,13 +12745,13 @@
             "path": "extensions/subagents/agent-manager.ts",
             "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "a1dd24e4c994ea54a60e23c2bf571cb7f07e8db089d8d04d6d92bb1724e5db7c",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12784,13 +12784,13 @@
             "path": "extensions/subagents/agent-runner.ts",
             "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "ca96535ae57adbcdff7c9fa561ef5fbcaca87680ed4b1f779bf03598e589ee81",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12823,12 +12823,12 @@
             "path": "extensions/subagents/agent-types.ts",
             "sha256": "8dfe097db687140d8dc732c7f170f267864674b2c062e9459f31be4d059fab9b"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12861,12 +12861,12 @@
             "path": "extensions/subagents/child-context.ts",
             "sha256": "72eaa951726bd406c829e0415f0f7beba8d5845cc594f2d3aaef15b4408f5d82"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12899,12 +12899,12 @@
             "path": "extensions/subagents/context.ts",
             "sha256": "3d0728d9cb8f308e289e0caa7afb64037d887288104ee25542f49e103281a11e"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12937,12 +12937,12 @@
             "path": "extensions/subagents/cross-extension-rpc.ts",
             "sha256": "f1d186b6c22a459df5ac211cbe6e0ac010ad787101bb4074b3c96372c2c14f88"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12975,12 +12975,12 @@
             "path": "extensions/subagents/custom-agents.ts",
             "sha256": "004d71a5a9012822a9270471f9c2b9e577ad7bf4d29443875f66bc6f39714f06"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13013,12 +13013,12 @@
             "path": "extensions/subagents/default-agents.ts",
             "sha256": "3ac0953f884d9906dd5be005b2e59b2a5c6808f9fd83b553b0921f8f38509d02"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13051,12 +13051,12 @@
             "path": "extensions/subagents/enabled-models.ts",
             "sha256": "ce3af5df01159c089d83986a1dfc84a2e4f8ff3c0054fc753f6d0df7af3a88f6"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13089,12 +13089,12 @@
             "path": "extensions/subagents/env.ts",
             "sha256": "8bc1ce780715660da3143bba30b966fd9e34bad501836376b07825cb42bf5c3b"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13127,12 +13127,12 @@
             "path": "extensions/subagents/group-join.test.ts",
             "sha256": "773b1d2717725253faef4bdc2188e76afb79c0cdb53813a65e562fa764d1481a"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13165,12 +13165,12 @@
             "path": "extensions/subagents/group-join.ts",
             "sha256": "38c424e4775b5bf2190f6926ff91192ff6ca7e9c7a235fa70c21c143efe5c3af"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13203,13 +13203,13 @@
             "path": "extensions/subagents/index.ts",
             "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "b960852aef2e59cc94ffec3f0d312e1859d62638550d49138e1f76ead6cd0220",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13242,12 +13242,12 @@
             "path": "extensions/subagents/invocation-config.test.ts",
             "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13280,13 +13280,13 @@
             "path": "extensions/subagents/invocation-config.ts",
             "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "930d472cc5d3d0b63f8acc2f1370d5e684b15f664962fc7391aed6fadee34402",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13319,12 +13319,12 @@
             "path": "extensions/subagents/LICENSE",
             "sha256": "e7d9d11c28cce34f09dc7d2b0a3a6609ccba5fbc8e926e6d1bfdf060930e9f05"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13357,12 +13357,12 @@
             "path": "extensions/subagents/memory.ts",
             "sha256": "d2a7684fa950a186705061d8e2903e464746b88d049a05d7e5a2c12523f378c3"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13395,13 +13395,13 @@
             "path": "extensions/subagents/model-resolver.ts",
             "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "0a38d761cfd98a993e58e39bcca5c676cfdfbd2310a04dfb93d1191bffcd7893",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13434,12 +13434,12 @@
             "path": "extensions/subagents/model-scope.ts",
             "sha256": "012dca4854bd59958a47fdf50e40d06fb86945c03f785d95dfec6c5479f8ddc8"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13472,12 +13472,12 @@
             "path": "extensions/subagents/nested-tools.ts",
             "sha256": "4f5e742c351bf1edb9d0b0edfb69b125f3ee37e47f27465de8855aea8202c0c7"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13537,12 +13537,12 @@
             "path": "extensions/subagents/notification-gate.test.ts",
             "sha256": "f3a6073e74fcf3c6b5f9c35e76a617c7fb25d014275eb8a4219fd8448138f1e0"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13575,12 +13575,12 @@
             "path": "extensions/subagents/notification-gate.ts",
             "sha256": "81b6a05b8eab30dd79b78b5407db3abb0fa846a7fe540763a0ce79cc038e3aea"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13613,12 +13613,12 @@
             "path": "extensions/subagents/output-file.ts",
             "sha256": "ca71b7e1262701db2293eac21cf880c83fadfdda6d85d2c31ca78b7989a24e95"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13705,12 +13705,12 @@
             "path": "extensions/subagents/prompts.ts",
             "sha256": "67d58e1aae6dd8b4337037955eaae74ef1075f722d5170a4a2818be7bfecc116"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13743,12 +13743,12 @@
             "path": "extensions/subagents/schedule-store.ts",
             "sha256": "565166b50098550a3574d583b6fc4c30756d0b1e4a32245a9f2577d27edf0357"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13781,12 +13781,12 @@
             "path": "extensions/subagents/schedule.ts",
             "sha256": "1911e6f6c7d8266b2ef2dff5dfd48e1880d620b3ec4407618280da104788f7e6"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13819,12 +13819,12 @@
             "path": "extensions/subagents/settings.ts",
             "sha256": "83a44bc37e41d6077aa053015828ef97885740318a816b8dddbebf1eec5bc478"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13857,12 +13857,12 @@
             "path": "extensions/subagents/skill-loader.ts",
             "sha256": "64d0a915ba6cdef899894d330caf8539e222c67646d60da81fcb6a2ac0d90043"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13895,12 +13895,12 @@
             "path": "extensions/subagents/status-note.ts",
             "sha256": "48c318ee289af5b5694c7f07daeda630d54a8b14f708b00024b2dec5e14488a9"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13933,13 +13933,13 @@
             "path": "extensions/subagents/types.ts",
             "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "c4680ceed3bac4b7542ffcaa8038c4e640913e16f56a77c27c8c79680897c422",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13972,13 +13972,13 @@
             "path": "extensions/subagents/ui/agent-widget.ts",
             "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "1b18ddc5f91e7d63ac302d6081dc96571a4d0c59c353cd6b4afc6482a9f2d4e2",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14011,12 +14011,12 @@
             "path": "extensions/subagents/ui/conversation-viewer.ts",
             "sha256": "91fa419a674ad5e8db95d73b3091c470dc6b78225f3737a44b70b2453432237e"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14049,12 +14049,12 @@
             "path": "extensions/subagents/ui/fleet-list.ts",
             "sha256": "e5984b04501e33d8dacd51b3861b5f9df26e8095aee75f182486651cb2fca7af"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14087,12 +14087,12 @@
             "path": "extensions/subagents/ui/schedule-menu.ts",
             "sha256": "e2f1971e6e7d63a6a8ea711134c00b0fa3584aa15ad8247b1910ca85ab13557a"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14125,12 +14125,12 @@
             "path": "extensions/subagents/ui/viewer-keys.ts",
             "sha256": "b89cf023e89855a3d8351366963855b401507aff1452216da83f6577db6d7204"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14163,12 +14163,12 @@
             "path": "extensions/subagents/usage.ts",
             "sha256": "faf27d43429c90fcf52d84ab2ea5a2ee5c9e59f372d953da7aaf72fab82bca44"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14201,13 +14201,13 @@
             "path": "extensions/subagents/VENDORED.md",
             "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "c8024974766ebbc2280a3d99ed8f3c49a7f0b6f8a07272ada001b574c6955aad",
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14240,12 +14240,12 @@
             "path": "extensions/subagents/worktree.ts",
             "sha256": "b0b4c596fddd1859a095a0d845005dfa62da6d02114c938ee1ef88ab445e3452"
           },
-          "sha256": "de10f2c2d9863c83cfdf94a57d343490d012eae987811f2b451f5a05653a441e",
-          "reference": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts",
+          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/subagents-vendor.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14468,13 +14468,13 @@
             "path": "keybindings.json",
             "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "81957c1d02b7d0cd7f55be83c0dc61303605c9d95cc67a7876a244d645bd714f",
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14638,12 +14638,12 @@
             "path": "scripts/generate-agents.mjs",
             "sha256": "6ef74d7cb0a4e8c528c38a2456791326f279ec55296d2eac5a809fded05f774f"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14730,12 +14730,12 @@
             "path": "scripts/setup-account-profile.sh",
             "sha256": "3a744ec6bc24e119574182f5d611296346404189bd3e973f546d169dd2f25dfb"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14768,12 +14768,12 @@
             "path": "scripts/terminal-color.mjs",
             "sha256": "401c92adce1fb1f2a06c9b726670da2aa786376c9fd0ca22944c80b1a4c806c2"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14806,13 +14806,13 @@
             "path": "settings.json",
             "sha256": "0e2a111ff1a6ca56d2baf757a8e38e9fd396c0161047d7eab00faf2f5ef6c56b"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
       "headSha256": "5c2b80766d46287f51484dcc08bb82c7a338bec1733b392303cc2d94ad10a90a",
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14921,12 +14921,12 @@
             "path": "subagents.json",
             "sha256": "26efb1903b193857b297e0e3cb8cb8aab2cfd79ae66e5d84478d2bd83e541e43"
           },
-          "sha256": "77e41f335f7f2a7703723cc33567eb247afe948460e2b4fc37dc714fd831797f",
-          "reference": "runtimes/pi/runtime-pi/test/profile.test.ts",
+          "sha256": "cfa236844406fc36403faa3916400111048948e5d20e24b124e0c218eb9d2257",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14959,12 +14959,12 @@
             "path": "themes/amber.json",
             "sha256": "8ca5d244f9685540e4b1eccc25d4a64c58d5a209ec5f53c2b2def8d6be2fa448"
           },
-          "sha256": "ef384d8778c28d5b919cf2d9ef77031c1296d1632aa5116ec3cb0d2d0bc38a42",
-          "reference": "runtimes/pi/runtime-pi/test/footer.test.ts",
+          "sha256": "0b5acb5f4c6d5cc5d06c8bc97a22425f4a9c0da78e617491fbb42c9586922dc4",
+          "reference": "runtimes/pi/runtime-pi/test/unit/footer.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/footer.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/footer.test.ts"
     },
     {
       "source": "pi",
@@ -14997,12 +14997,12 @@
             "path": "themes/green.json",
             "sha256": "f886293c918592c49cbe73891c4620769739c8acb449ed627f68ecb17ae1bf67"
           },
-          "sha256": "ef384d8778c28d5b919cf2d9ef77031c1296d1632aa5116ec3cb0d2d0bc38a42",
-          "reference": "runtimes/pi/runtime-pi/test/footer.test.ts",
+          "sha256": "0b5acb5f4c6d5cc5d06c8bc97a22425f4a9c0da78e617491fbb42c9586922dc4",
+          "reference": "runtimes/pi/runtime-pi/test/unit/footer.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/footer.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/footer.test.ts"
     },
     {
       "source": "pi",

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPiProjection } from '../src/index.js';
+import { createPiProjection } from '../../src/index.js';
 it('projects retained Pi UX and vendored orchestration without host mutation', () => {
   const p = createPiProjection();
   expect(p.settings).toMatchObject({

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPiRuntimeAdapter } from '../src/index.js';
-import { fixture } from './fixture.js';
+import { createPiRuntimeAdapter } from '../../src/index.js';
+import { fixture } from '../fixtures/fixture.js';
 
 describe('Pi skill adapter', () => {
   it('registers only included human /mpx commands and preserves four-state disclosure', async () => {

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPiRuntimeStatusAdapter, renderPiRuntimeStatus } from '../src/runtime-status.js';
+import { createPiRuntimeStatusAdapter, renderPiRuntimeStatus } from '../../src/runtime-status.js';
 import type { RuntimeStatusEnvelopeV1 } from '@mpx/status';
 
 const now = '2026-08-25T12:00:00.000Z';

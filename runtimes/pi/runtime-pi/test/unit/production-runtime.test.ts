@@ -4,8 +4,8 @@ import { createRuntimeCapabilityManifestV1, type ToolAuthorityV1 } from '@mpx/ru
 import {
   PHASE_F2_PI_ACTIVE_TOOLS,
   PHASE_F2_REMOTE_ATTESTATION_PATHS,
-} from '../src/sandbox-executor.js';
-import { activatePiProductionRuntime } from '../src/production-runtime.js';
+} from '../../src/sandbox-executor.js';
+import { activatePiProductionRuntime } from '../../src/production-runtime.js';
 
 const sha = (value: string) => value.repeat(64);
 const authority = (name: string): ToolAuthorityV1 => ({

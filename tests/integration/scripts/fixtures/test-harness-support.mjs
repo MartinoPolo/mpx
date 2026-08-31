@@ -25,7 +25,7 @@ export async function filesBelow(repositoryRoot, directory = '.') {
       return [relative.replace(/^\.\//, '')];
     }),
   );
-  return files.flat();
+  return files.flat().sort();
 }
 
 function parseWorkspacePatterns(source) {

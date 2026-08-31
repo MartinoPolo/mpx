@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { RUNTIME_TOOL_INVENTORY_SHA256 } from '@mpx/runtime-tools';
-import { parseLaunchPrivateClientConfig } from '../src/launch-private-client.js';
+import { parseLaunchPrivateClientConfig } from '../../src/launch-private-client.js';
 const h = (c: string) => c.repeat(64);
 const config = {
   schemaVersion: 1,

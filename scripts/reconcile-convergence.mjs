@@ -125,7 +125,7 @@ async function decision(entry) {
         disposition: 'canonicalized',
         destination,
         adaptation: 'canonicalized agent intent and generated runtime projection',
-        test: 'runtimes/pi/runtime-pi/test/generator.test.ts',
+        test: 'runtimes/pi/runtime-pi/test/unit/generator.test.ts',
       };
     }
     if (entry.path.includes('/references/')) {
@@ -148,7 +148,7 @@ async function decision(entry) {
         disposition: 'Pi-specific',
         destination,
         adaptation: 'vendored with license and checksum governance',
-        test: 'runtimes/pi/runtime-pi/test/subagents-vendor.test.ts',
+        test: 'runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts',
       };
     }
     return {
@@ -197,7 +197,7 @@ async function decision(entry) {
       disposition: 'Pi-specific',
       destination,
       adaptation: 'projected through the Pi status adapter',
-      test: 'runtimes/pi/runtime-pi/test/footer.test.ts',
+      test: 'runtimes/pi/runtime-pi/test/unit/footer.test.ts',
     };
   }
   if (
@@ -208,7 +208,7 @@ async function decision(entry) {
       disposition: 'Pi-specific',
       destination: 'runtimes/pi/runtime-pi/src/runtime-tools.ts',
       adaptation: 'replaced direct namespace commands with launch-bound runtime tools',
-      test: 'runtimes/pi/runtime-pi/test/runtime-tools.test.ts',
+      test: 'runtimes/pi/runtime-pi/test/unit/runtime-tools.test.ts',
     };
   }
   if (
@@ -232,7 +232,7 @@ async function decision(entry) {
       disposition: 'Pi-specific',
       destination: 'runtimes/pi/runtime-pi/src/profile.ts',
       adaptation: 'normalized into the generated Pi profile and launch-bound adapter',
-      test: 'runtimes/pi/runtime-pi/test/profile.test.ts',
+      test: 'runtimes/pi/runtime-pi/test/unit/profile.test.ts',
     };
   }
   if (

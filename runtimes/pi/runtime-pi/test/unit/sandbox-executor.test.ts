@@ -4,7 +4,7 @@ import {
   PHASE_F2_PI_ACTIVE_TOOLS,
   PHASE_F2_REMOTE_ATTESTATION_PATHS,
   activatePiSandboxExecutor,
-} from '../src/sandbox-executor.js';
+} from '../../src/sandbox-executor.js';
 
 function fakePi(initial = ['read', 'write', 'edit', 'bash', 'native_host_escape']) {
   let active = [...initial];

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
-import { createProjectionSubagentRuntime } from '../src/production-subagents.js';
+import { createProjectionSubagentRuntime } from '../../src/production-subagents.js';
 const h = (c: string) => c.repeat(64);
 const tool = (name: string) => ({
   schemaVersion: 1 as const,

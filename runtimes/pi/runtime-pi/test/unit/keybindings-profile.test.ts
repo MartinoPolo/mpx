@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPiRuntimeProfileV1 } from '../src/profile.js';
+import { createPiRuntimeProfileV1 } from '../../src/profile.js';
 
 it('projects the reviewed Pi model and alternate-screen keybindings', () => {
   expect(createPiRuntimeProfileV1().keybindings).toEqual({

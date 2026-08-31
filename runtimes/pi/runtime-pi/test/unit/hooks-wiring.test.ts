@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createPiHookWiring } from '../src/hooks-wiring.js';
+import { createPiHookWiring } from '../../src/hooks-wiring.js';
 
 it('maps all shared policy events with intentional failure behavior', () => {
   const hooks = createPiHookWiring();

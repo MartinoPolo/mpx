@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { Agent, AgentLaunchRequest } from '@mpx/subagents';
-import { activatePiSubagentBridge } from '../src/subagent-bridge.js';
+import { activatePiSubagentBridge } from '../../src/subagent-bridge.js';
 
 it('registers Agent/result/steer over the provider-neutral lifecycle and preserves fleet surfaces', async () => {
   const tools = new Map<

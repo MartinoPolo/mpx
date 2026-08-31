@@ -7,7 +7,7 @@ import {
   createSessionLifecycleBindingV1,
   type PublishedRuntimeArtifactReference,
 } from '@mpx/runtime-contracts';
-import { planPiInvocation, verifyPiResumeTarget } from '../src/index.js';
+import { planPiInvocation, verifyPiResumeTarget } from '../../src/index.js';
 
 const runtimeContext = createRuntimeContextV1({
   launchKey: 'a'.repeat(64),

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createLaunchBoundDevServer } from '../src/dev-services.js';
+import { createLaunchBoundDevServer } from '../../src/dev-services.js';
 
 it('registers dev services against the exact launch, worktree, ports, and executor and cleans up', async () => {
   const start = vi.fn(async (request) => ({ ...request, state: 'ready' }));

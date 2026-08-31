@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { generatePiAgents } from '../src/index.js';
+import { generatePiAgents } from '../../src/index.js';
 import { fileURLToPath } from 'node:url';
 it('generates runtime metadata, the Explore alias, and detects exact catalog drift', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-'));
@@ -46,16 +46,21 @@ it('generates runtime metadata, the Explore alias, and detects exact catalog dri
   await expect(readFile(path.join(output, 'notes.md'), 'utf8')).resolves.toBe('unrelated');
 });
 
-it('keeps the maintained projection at exactly 22 agents with one Explore alias and no drift', async () => {
-  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+it('keeps the maintained projection aligned with canonical agents, aliases, and drift', async () => {
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const source = path.resolve(packageRoot, '../../../content/agents');
   const output = path.join(packageRoot, 'projection/agents');
+  const catalog = JSON.parse(await readFile(path.join(source, 'metadata.json'), 'utf8')) as {
+    agents: Record<string, unknown>;
+  };
+  const expectedNames = Object.keys(catalog.agents)
+    .map((identity) => `${identity === 'mpx-explorer' ? 'Explore' : identity}.md`)
+    .sort();
+
   const result = await generatePiAgents({ source, output, check: true });
   expect(result.drift).toEqual([]);
-  const names = (await import('node:fs/promises').then((fs) => fs.readdir(output))).filter((name) =>
-    name.endsWith('.md'),
-  );
-  expect(names).toHaveLength(22);
+  const names = (await readdir(output)).filter((name) => name.endsWith('.md')).sort();
+  expect(names).toEqual(expectedNames);
   expect(names.filter((name) => name === 'Explore.md')).toHaveLength(1);
   expect(names).not.toContain('mpx-explorer.md');
 });

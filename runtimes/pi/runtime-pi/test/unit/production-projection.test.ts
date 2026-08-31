@@ -27,8 +27,8 @@ import {
   createPiRuntimeProjection,
   planPiInvocation,
   renderPiRuntimeStatus,
-} from '../src/index.js';
-import { fixture } from './fixture.js';
+} from '../../src/index.js';
+import { fixture } from '../fixtures/fixture.js';
 
 const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;

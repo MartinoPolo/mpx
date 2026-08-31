@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createPiEventCoordinator, formatInlineQuestions } from '../src/event-coordination.js';
+import { createPiEventCoordinator, formatInlineQuestions } from '../../src/event-coordination.js';
 
 it('coordinates auto-title, compaction, fullscreen, and settled notifications without native state', async () => {
   const title = vi.fn(),
