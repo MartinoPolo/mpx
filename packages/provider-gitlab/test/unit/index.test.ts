@@ -6,7 +6,7 @@ import type {
   ProviderProcessRequest,
   ProviderProcessResult,
 } from '@mpx/providers';
-import { createGitLabAdapters, gitlabProvider } from './index.js';
+import { createGitLabAdapters, gitlabProvider } from '../../src/index.js';
 
 class FakeGlab implements ProviderProcessExecutor {
   readonly requests: ProviderProcessRequest[] = [];
