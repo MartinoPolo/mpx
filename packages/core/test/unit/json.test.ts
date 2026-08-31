@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, parseStrictJson, sha256Canonical } from './json.js';
+import { canonicalJson, parseStrictJson, sha256Canonical } from '../../src/json.js';
 
 describe('strict JSON', () => {
   it('parses standard JSON', () =>

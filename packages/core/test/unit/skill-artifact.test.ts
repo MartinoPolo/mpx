@@ -4,7 +4,7 @@ import {
   isValidSkillArtifactReference,
   SKILL_ARTIFACT_SCHEMA_VERSION,
   type SkillArtifactReference,
-} from './skill-artifact.js';
+} from '../../src/skill-artifact.js';
 
 const facts = {
   runtime: 'pi' as const,

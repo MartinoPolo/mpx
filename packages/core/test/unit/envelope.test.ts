@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { errorEnvelope, successEnvelope } from './envelope.js';
-import { MpxError } from './errors.js';
+import { errorEnvelope, successEnvelope } from '../../src/envelope.js';
+import { MpxError } from '../../src/errors.js';
 
 describe('API envelopes', () => {
   it('constructs versioned success', () =>

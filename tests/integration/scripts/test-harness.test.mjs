@@ -116,6 +116,40 @@ describe('test taxonomy', () => {
     }
   });
 
+  test('preserves the fixed five-suite core unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      ['packages/core/src/envelope.test.ts', 'packages/core/test/unit/envelope.test.ts'],
+      ['packages/core/src/errors.test.ts', 'packages/core/test/unit/errors.test.ts'],
+      ['packages/core/src/json.test.ts', 'packages/core/test/unit/json.test.ts'],
+      ['packages/core/src/paths.test.ts', 'packages/core/test/unit/paths.test.ts'],
+      [
+        'packages/core/src/skill-artifact.test.ts',
+        'packages/core/test/unit/skill-artifact.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(5);
+    for (const [formerPath, unitPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(classifyTestPath(unitPath), unitPath).toBe('unit');
+    }
+
+    const coreFiles = await filesBelow(root, 'packages/core');
+    expect(
+      coreFiles.filter(
+        (file) =>
+          file.startsWith('packages/core/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('keeps the fixed CLI E2E cohort exclusively under root ownership', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

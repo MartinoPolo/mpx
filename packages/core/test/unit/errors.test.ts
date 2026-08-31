@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MpxError, serializePublicError } from './errors.js';
+import { MpxError, serializePublicError } from '../../src/errors.js';
 
 describe('public errors', () => {
   it('serializes declared safe fields', () => {
