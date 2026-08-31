@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PowerShellRunner } from './adapter.js';
-import { WindowsScheduledTaskAdapter, type ScheduledTaskSpec } from './scheduled-task.js';
+import type { PowerShellRunner } from '../../src/adapter.js';
+import { WindowsScheduledTaskAdapter, type ScheduledTaskSpec } from '../../src/scheduled-task.js';
 
 const spec: ScheduledTaskSpec = {
   taskPath: '\\MPX\\',

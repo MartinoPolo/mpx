@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { PowerShellResult, PowerShellRunner } from './adapter.js';
-import { ProductionWindowsResourceStore } from './production-resource.js';
+import type { PowerShellResult, PowerShellRunner } from '../../src/adapter.js';
+import { ProductionWindowsResourceStore } from '../../src/production-resource.js';
 
 interface RunnerCall {
   script: string;
@@ -128,7 +128,7 @@ describe('ProductionWindowsResourceStore', () => {
     const runner = new Runner();
     runner.outputs.push(
       await readFile(
-        fileURLToPath(new URL('../test/fixtures/powershell-scheduled-task.json', import.meta.url)),
+        fileURLToPath(new URL('../fixtures/powershell-scheduled-task.json', import.meta.url)),
         'utf8',
       ),
     );

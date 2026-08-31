@@ -356,6 +356,42 @@ describe('test taxonomy', () => {
     );
   });
 
+  test('preserves the fixed four-suite Windows unit migration inventory and fixture', async () => {
+    const files = new Set(await filesBelow(root));
+    const suiteBasenames = [
+      'adapter.test.ts',
+      'production-resource.test.ts',
+      'scheduled-task.test.ts',
+      'system-integration.test.ts',
+    ];
+
+    expect(suiteBasenames).toHaveLength(4);
+    for (const basename of suiteBasenames) {
+      const formerPath = `packages/windows/src/${basename}`;
+      const unitPath = `packages/windows/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const windowsFiles = await filesBelow(root, 'packages/windows');
+    expect(
+      windowsFiles.filter(
+        (file) =>
+          file.startsWith('packages/windows/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(windowsFiles.filter((file) => file.includes('/fixtures/'))).toEqual([
+      'packages/windows/test/fixtures/powershell-scheduled-task.json',
+    ]);
+  });
+
   test('preserves the fixed two-suite provider-github unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

@@ -6,7 +6,7 @@ import {
   OwnedJsonResourceAdapter,
   deterministicTerminalProfileGuid,
   type OwnedResourceSpec,
-} from './system-integration.js';
+} from '../../src/system-integration.js';
 
 const bashBlock = '# MPX aliases\ncc() { mpx launch claude "$@"; }\n';
 

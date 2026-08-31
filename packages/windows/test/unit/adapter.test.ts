@@ -1,8 +1,8 @@
 import net from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { MpxError } from '@mpx/core';
-import type { PowerShellRunner, SocketBinder } from './index.js';
-import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from './index.js';
+import type { PowerShellRunner, SocketBinder } from '../../src/index.js';
+import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from '../../src/index.js';
 
 const result = (stdout: string, exitCode = 0) => ({ stdout, stderr: 'sensitive stderr', exitCode });
 const runner = (...responses: Array<ReturnType<typeof result>>): PowerShellRunner => ({
