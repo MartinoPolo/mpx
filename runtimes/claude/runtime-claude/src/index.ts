@@ -10,21 +10,16 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  enumerateSkillDirectory,
-  loadSkillBody,
-  verifyRuntimeSkillArtifact,
-  type CatalogSkill,
-  type ResolvedManifest,
-  type RuntimeSkillArtifact,
+  verifySkillProjectionPlan,
+  type SkillProjectionPlan,
+  type SkillProjectionPlanEntry,
 } from '@mpx/skills';
 import {
-  parseResolvedSkillManifestV4,
   parseRuntimeCapabilityManifestV1,
   parseRuntimeContextV1,
   publishRuntimeArtifact,
   validateRuntimeContext,
   validateSessionLifecycleBindingV1,
-  RuntimeContractError,
   type NativeSessionRefV1,
   type PublishedRuntimeArtifactReference,
   type RuntimeContextV1,
@@ -72,10 +67,7 @@ export class ClaudeRuntimeError extends Error {
   }
 }
 export interface ClaudeBuildInput {
-  readonly manifest: ResolvedManifest;
-  readonly artifact: RuntimeSkillArtifact;
-  readonly catalog: readonly CatalogSkill[];
-  readonly canonical: string;
+  readonly skillPlan: SkillProjectionPlan;
   readonly agents: string;
   readonly outputRoot: string;
   readonly statusSnapshot: StatusSnapshotV1;
@@ -98,14 +90,11 @@ export interface ClaudePublishInput extends Omit<ClaudeBuildInput, 'outputRoot'>
   readonly artifactRevalidator?: Parameters<typeof publishRuntimeArtifact>[0]['revalidate'];
 }
 const q = (value: string) => JSON.stringify(value);
-function skillText(
-  entry: RuntimeSkillArtifact['entries'][number],
-  skill: CatalogSkill,
-  body: string,
-): string {
-  const description = entry.exposure === 'full' ? skill.description : `mpx skill ${entry.identity}`;
+function skillText(entry: SkillProjectionPlanEntry): string {
+  const description =
+    entry.exposure === 'full' ? entry.initialContext!.description! : `mpx skill ${entry.identity}`;
   const lines = ['---', `name: ${entry.identity}`, `description: ${q(description)}`];
-  const triggers = 'triggers' in skill ? skill.triggers : undefined;
+  const triggers = entry.initialContext?.triggers;
   if (entry.exposure === 'full' && triggers) {
     lines.push(`triggers: ${q(triggers)}`);
   }
@@ -113,9 +102,9 @@ function skillText(
     'user-invocable: true',
     ...(entry.exposure === 'explicit-only' ? ['disable-model-invocation: true'] : []),
     '---',
-    body,
+    entry.body,
   );
-  return `${lines.join('\n')}${body.endsWith('\n') ? '' : '\n'}`;
+  return `${lines.join('\n')}${entry.body.endsWith('\n') ? '' : '\n'}`;
 }
 async function write(
   root: string,
@@ -469,22 +458,11 @@ async function canonicalAgents(root: string): Promise<Array<[string, string]>> {
   return result;
 }
 export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<ClaudeProjection> {
-  const manifest = parseResolvedSkillManifestV4(input.manifest);
-  try {
-    verifyRuntimeSkillArtifact(input.artifact, manifest, input.catalog, { runtime: 'claude' });
-  } catch (error) {
-    if (error instanceof RuntimeContractError && error.details?.reason === 'file-map-binding') {
-      throw new ClaudeRuntimeError(
-        'STALE_ARTIFACT',
-        'runtime operation requires the current exact v4 artifact',
-      );
-    }
-    throw error;
-  }
-  if (input.artifact.runtime !== 'claude' || input.artifact.manifestKey !== manifest.manifestKey) {
+  const skillPlan = verifySkillProjectionPlan(input.skillPlan);
+  if (skillPlan.runtime !== 'claude') {
     throw new ClaudeRuntimeError(
       'ARTIFACT_BINDING_MISMATCH',
-      'Claude projection requires its exact v4 Claude artifact',
+      'Claude projection requires its exact v4 Claude skill plan',
     );
   }
   if (await lstat(input.outputRoot).catch(() => undefined)) {
@@ -493,27 +471,11 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
       'immutable projection destination already exists',
     );
   }
-  const catalog = new Map(input.catalog.map((x) => [x.identity, x]));
   const projected: Array<[string, string | Uint8Array]> = [];
-  for (const entry of input.artifact.entries) {
-    const skill = catalog.get(entry.identity);
-    if (!skill) {
-      throw new ClaudeRuntimeError('STALE_CATALOG', `missing ${entry.identity}`);
-    }
-    const invocation = entry.permissions.modelInvocation ? 'model' : 'human-explicit';
-    const loaded = await loadSkillBody({
-      canonicalRoot: input.canonical,
-      manifest: input.manifest,
-      artifact: input.artifact,
-      runtime: 'claude',
-      identity: entry.identity,
-      invocation,
-    });
-    projected.push([`skills/${entry.identity}/SKILL.md`, skillText(entry, skill, loaded.body)]);
-    for (const support of await enumerateSkillDirectory(path.dirname(skill.sourcePath))) {
-      if (support.relativePath !== 'SKILL.md') {
-        projected.push([`skills/${entry.identity}/${support.relativePath}`, support.bytes]);
-      }
+  for (const entry of skillPlan.entries) {
+    projected.push([`skills/${entry.identity}/SKILL.md`, skillText(entry)]);
+    for (const support of entry.files) {
+      projected.push([`skills/${entry.identity}/${support.relativePath}`, support.bytes]);
     }
   }
   const agents = await canonicalAgents(input.agents);
@@ -580,12 +542,12 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     await write(
       input.outputRoot,
       'settings.json',
-      `${JSON.stringify({ statusLine: { type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"' }, mpxArtifactKey: input.artifact.reference.artifactKey }, null, 2)}\n`,
+      `${JSON.stringify({ statusLine: { type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"' }, mpxArtifactKey: skillPlan.artifactReference.artifactKey }, null, 2)}\n`,
       files,
     );
     return {
       directory: input.outputRoot,
-      artifactKey: input.artifact.reference.artifactKey,
+      artifactKey: skillPlan.artifactReference.artifactKey,
       files: files.sort(),
     };
   } catch (error) {
@@ -596,8 +558,8 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
 export async function publishClaudeProjection(
   input: ClaudePublishInput,
 ): Promise<ClaudePublishedProjection> {
-  const context = parseRuntimeContextV1(input.runtimeContext),
-    manifest = parseResolvedSkillManifestV4(input.manifest);
+  const skillPlan = verifySkillProjectionPlan(input.skillPlan),
+    context = parseRuntimeContextV1(input.runtimeContext);
   await mkdir(input.artifactsRoot, { recursive: true });
   const staging = await mkdtemp(path.join(input.artifactsRoot, '.claude-build-'));
   await rm(staging, { recursive: true, force: true });
@@ -609,9 +571,9 @@ export async function publishClaudeProjection(
       launchBinding: {
         launchKey: context.launchKey,
         descriptorDigest: context.launchDescriptor.digest,
-        runtimeArtifactKey: input.artifact.reference.artifactKey,
+        runtimeArtifactKey: skillPlan.artifactReference.artifactKey,
         runtime: 'claude',
-        manifestKey: manifest.manifestKey,
+        manifestKey: skillPlan.manifestKey,
       },
       ...(input.artifactRevalidator ? { revalidate: input.artifactRevalidator } : {}),
     });
@@ -621,9 +583,9 @@ export async function publishClaudeProjection(
         launchKey: context.launchKey,
         descriptorDigest: context.launchDescriptor.digest,
       },
-      expectedManifestKey: manifest.manifestKey,
-      expectedRuntimeArtifact: input.artifact.reference,
-      currentBinding: manifest.binding,
+      expectedManifestKey: skillPlan.manifestKey,
+      expectedRuntimeArtifact: skillPlan.artifactReference,
+      currentBinding: skillPlan.binding,
     });
     if (!validation.valid) {
       throw new ClaudeRuntimeError(

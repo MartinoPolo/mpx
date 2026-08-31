@@ -68,7 +68,12 @@ import {
   type PiRuntimeProfileV1,
   type VerifiedPiResumeTarget,
 } from '@mpx/runtime-pi';
-import type { CatalogSkill, ResolvedManifest, RuntimeSkillArtifact } from '@mpx/skills';
+import {
+  createSkillProjectionPlan,
+  type CatalogSkill,
+  type ResolvedManifest,
+  type RuntimeSkillArtifact,
+} from '@mpx/skills';
 import {
   composeRuntimeStatusEnvelopeV1,
   parseRuntimeStatusEnvelopeV1,
@@ -1231,11 +1236,14 @@ async function buildProductionProjection(
       ...(input.artifactRevalidator ? { artifactRevalidator: input.artifactRevalidator } : {}),
     });
   }
-  return publishClaudeProjection({
+  const skillPlan = await createSkillProjectionPlan({
     manifest: input.manifest,
     artifact: input.artifact,
     catalog: input.catalog,
-    canonical: input.canonicalRoot,
+    canonicalRoot: input.canonicalRoot,
+  });
+  return publishClaudeProjection({
+    skillPlan,
     agents: input.agentsRoot,
     artifactsRoot: input.artifactsRoot,
     statusSnapshot: input.statusSnapshot,

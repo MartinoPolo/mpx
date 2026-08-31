@@ -1,4 +1,5 @@
 import { execFile as execFileCallback, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import {
   inventoryProjectSkills,
   resolveManifest,
   createRuntimeSkillArtifact,
+  createSkillProjectionPlan,
 } from '@mpx/skills';
 import {
   buildClaudePlugin,
@@ -25,6 +27,19 @@ import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@m
 import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
 
 const execFile = promisify(execFileCallback);
+type RawSkillProjectionInputKey = 'manifest' | 'artifact' | 'catalog' | 'canonicalRoot';
+type RequiresProjectionPlanBoundary<Input> = 'skillPlan' extends keyof Input
+  ? {} extends Pick<Input, 'skillPlan'>
+    ? false
+    : Extract<keyof Input, RawSkillProjectionInputKey> extends never
+      ? true
+      : false
+  : false;
+type Assert<Condition extends true> = Condition;
+const publicProjectionInputContract: [
+  Assert<RequiresProjectionPlanBoundary<Parameters<typeof buildClaudePlugin>[0]>>,
+  Assert<RequiresProjectionPlanBoundary<Parameters<typeof publishClaudeProjection>[0]>>,
+] = [true, true];
 const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((x) => rm(x, { recursive: true, force: true }))),
@@ -86,9 +101,12 @@ async function fixture() {
     await mkdir(path.join(canonical, name));
     await writeFile(
       path.join(canonical, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: secret ${name} description\ntriggers: trigger ${name}\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nBODY ${name}\n`,
+      `---\nname: ${name}\ndescription: secret ${name} description\ntriggers: trigger ${name}\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nBODY ${name}${name === 'full' ? ' café' : ''}\n`,
     );
   }
+  await mkdir(path.join(canonical, 'full', 'references'));
+  await writeFile(path.join(canonical, 'full', 'references', 'guide.txt'), 'nested café\n');
+  await writeFile(path.join(canonical, 'explicit', 'asset.bin'), Uint8Array.from([0, 255, 1, 128]));
   await writeFile(
     path.join(agents, 'mpx-explorer.md'),
     '---\nname: mpx-explorer\ndescription: Exact Explore description\n---\nAGENT BODY\n',
@@ -123,6 +141,12 @@ async function fixture() {
     enabledPacks: ['core'],
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
+  const skillPlan = await createSkillProjectionPlan({
+    manifest,
+    artifact,
+    catalog,
+    canonicalRoot: canonical,
+  });
   const runtimeContext = createRuntimeContextV1({
     launchKey: 'a'.repeat(64),
     launchDescriptor: { reference: 'launch.json', digest: 'b'.repeat(64) },
@@ -137,6 +161,7 @@ async function fixture() {
     catalog,
     manifest,
     artifact,
+    skillPlan,
     statusSnapshot,
     launchBanner,
     runtimeContext,
@@ -156,6 +181,27 @@ async function tree(root: string) {
   }
   await walk(root);
   return out;
+}
+async function byteTree(root: string) {
+  const out: Record<string, { bytes: string; sha256: string }> = {};
+  async function walk(directory: string) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(file);
+      } else {
+        const bytes = await readFile(file);
+        out[path.relative(root, file).replaceAll('\\', '/')] = {
+          bytes: bytes.toString('hex'),
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+        };
+      }
+    }
+  }
+  await walk(root);
+  return Object.fromEntries(
+    Object.entries(out).sort(([left], [right]) => left.localeCompare(right)),
+  );
 }
 async function linkDirectory(target: string, link: string) {
   await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir');
@@ -294,62 +340,87 @@ async function expectGuardRejected(file: string, environment: NodeJS.ProcessEnv)
   expect(result.code).toBe(2);
   expect(result.stderr).toContain('RESTART_REQUIRED');
 }
-function changedArtifact<T>(value: T, change: (copy: any) => void): T {
-  const copy = structuredClone(value);
-  change(copy);
-  return copy;
-}
-async function expectArtifactRejectedWithoutWrites(
+async function expectPlanRejectedWithoutWrites(
   f: Awaited<ReturnType<typeof fixture>>,
-  artifact: any,
+  skillPlan: any,
   name: string,
 ) {
   const outputRoot = path.join(f.root, name);
-  await expect(buildClaudePlugin({ ...f, artifact, outputRoot })).rejects.toThrow(
-    /RUNTIME_ARTIFACT_TAMPERED/,
+  await expect(buildClaudePlugin({ ...f, skillPlan, outputRoot })).rejects.toThrow(
+    /SKILL_PROJECTION_PLAN/,
   );
   await expect(lstat(outputRoot)).rejects.toMatchObject({ code: 'ENOENT' });
 }
 describe('Claude projection', () => {
-  it('rejects a tampered artifact entry before filesystem side effects', async () => {
-    const f = await fixture();
-    await expectArtifactRejectedWithoutWrites(
-      f,
-      changedArtifact(f.artifact, (a) => (a.entries[0].metadataHash = '0'.repeat(64))),
-      'tampered-entry',
-    );
+  it('publishes a plan-only input contract for build and publication consumers', () => {
+    expect(publicProjectionInputContract).toEqual([true, true]);
   });
-  it('rejects tampered artifact permissions before filesystem side effects', async () => {
+  it('rejects an unverified or changed skill plan before filesystem side effects', async () => {
     const f = await fixture();
-    await expectArtifactRejectedWithoutWrites(
-      f,
-      changedArtifact(f.artifact, (a) => (a.entries[0].permissions.humanInvocation = false)),
-      'tampered-permission',
-    );
+    await expectPlanRejectedWithoutWrites(f, structuredClone(f.skillPlan), 'unverified-plan');
+    const changed = f.skillPlan as any;
+    changed.entries[0].body = 'tampered';
+    await expectPlanRejectedWithoutWrites(f, changed, 'changed-plan');
   });
-  it('rejects tampered artifact exposure before filesystem side effects', async () => {
-    const f = await fixture();
-    await expectArtifactRejectedWithoutWrites(
-      f,
-      changedArtifact(f.artifact, (a) => (a.entries[0].exposure = 'off')),
-      'tampered-exposure',
-    );
+  it('rejects an invalid publication plan before creating its artifacts directory', async () => {
+    const f = await fixture(),
+      artifactsRoot = path.join(f.root, 'invalid-publication');
+    await expect(
+      publishClaudeProjection({
+        ...f,
+        skillPlan: structuredClone(f.skillPlan),
+        artifactsRoot,
+      }),
+    ).rejects.toThrow(/SKILL_PROJECTION_PLAN_UNVERIFIED/);
+    await expect(lstat(artifactsRoot)).rejects.toMatchObject({ code: 'ENOENT' });
   });
-  it('rejects an extra artifact entry before filesystem side effects', async () => {
-    const f = await fixture();
-    await expectArtifactRejectedWithoutWrites(
-      f,
-      changedArtifact(f.artifact, (a) => a.entries.push({ ...a.entries[0], identity: 'extra' })),
-      'extra-entry',
+  it('matches the complete Claude projection golden across skill exposures and harness files', async () => {
+    const f = await fixture(),
+      out = path.join(f.root, 'golden');
+    await buildClaudePlugin({ ...f, outputRoot: out });
+    const projected = await byteTree(out);
+    expect(Object.keys(projected)).toEqual([
+      '.claude-plugin/plugin.json',
+      'agents/Explore.md',
+      'hooks/dangerous-command-policy.mjs',
+      'hooks/hooks.json',
+      'hooks/runtime-guard.mjs',
+      'runtime-context.json',
+      'settings.json',
+      'skills/explicit/asset.bin',
+      'skills/explicit/SKILL.md',
+      'skills/full/references/guide.txt',
+      'skills/full/SKILL.md',
+      'skills/named/SKILL.md',
+      'status/status-line.mjs',
+      'status/status-snapshot.json',
+    ]);
+    expect(Buffer.from(projected['skills/full/SKILL.md']!.bytes, 'hex').toString('utf8')).toBe(
+      '---\nname: full\ndescription: "secret full description"\ntriggers: "trigger full"\nuser-invocable: true\n---\nBODY full café\n',
     );
-  });
-  it('rejects a missing artifact entry before filesystem side effects', async () => {
-    const f = await fixture();
-    await expectArtifactRejectedWithoutWrites(
-      f,
-      changedArtifact(f.artifact, (a) => a.entries.pop()),
-      'missing-entry',
+    expect(Buffer.from(projected['skills/named/SKILL.md']!.bytes, 'hex').toString('utf8')).toBe(
+      '---\nname: named\ndescription: "mpx skill named"\nuser-invocable: true\n---\nBODY named\n',
     );
+    expect(Buffer.from(projected['skills/explicit/SKILL.md']!.bytes, 'hex').toString('utf8')).toBe(
+      '---\nname: explicit\ndescription: "mpx skill explicit"\nuser-invocable: true\ndisable-model-invocation: true\n---\nBODY explicit\n',
+    );
+    expect(projected['skills/full/references/guide.txt']!.bytes).toBe(
+      Buffer.from('nested café\n').toString('hex'),
+    );
+    expect(projected['skills/explicit/asset.bin']!.bytes).toBe('00ff0180');
+    expect(Buffer.from(projected['runtime-context.json']!.bytes, 'hex').toString('utf8')).toBe(
+      `${JSON.stringify(f.runtimeContext, null, 2)}\n`,
+    );
+    expect(Buffer.from(projected['settings.json']!.bytes, 'hex').toString('utf8')).toBe(
+      `${JSON.stringify({ statusLine: { type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"' }, mpxArtifactKey: f.skillPlan.artifactReference.artifactKey }, null, 2)}\n`,
+    );
+    expect(
+      Object.fromEntries(
+        Object.entries(projected)
+          .filter(([name]) => name !== 'runtime-context.json' && name !== 'settings.json')
+          .map(([name, value]) => [name, value.sha256]),
+      ),
+    ).toMatchSnapshot();
   });
   it('projects the four exposure states with exact mpx namespace and non-leaking discovery', async () => {
     const f = await fixture(),
@@ -357,7 +428,9 @@ describe('Claude projection', () => {
     await buildClaudePlugin({ ...f, outputRoot: out });
     const files = await tree(out);
     expect(Object.keys(files).filter((x) => x.startsWith('skills/'))).toEqual([
+      'skills/explicit/asset.bin',
       'skills/explicit/SKILL.md',
+      'skills/full/references/guide.txt',
       'skills/full/SKILL.md',
       'skills/named/SKILL.md',
     ]);
@@ -389,6 +462,12 @@ describe('Claude projection', () => {
       enabledPacks: ['core'],
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
+    const skillPlan = await createSkillProjectionPlan({
+      manifest,
+      artifact,
+      catalog,
+      canonicalRoot: f.canonical,
+    });
     const runtimeContext = createRuntimeContextV1({
       ...f.runtimeContext,
       manifestKey: manifest.manifestKey,
@@ -396,7 +475,7 @@ describe('Claude projection', () => {
       binding: manifest.binding,
     });
     const outputRoot = path.join(f.root, 'project-out');
-    await buildClaudePlugin({ ...f, catalog, manifest, artifact, runtimeContext, outputRoot });
+    await buildClaudePlugin({ ...f, skillPlan, runtimeContext, outputRoot });
     expect(await readFile(path.join(outputRoot, 'skills', 'local', 'SKILL.md'), 'utf8')).toContain(
       'LOCAL BODY',
     );
@@ -414,13 +493,13 @@ describe('Claude projection', () => {
     for (const rel of Object.keys(await tree(a))) {
       expect((await lstat(path.join(a, rel))).isSymbolicLink()).toBe(false);
     }
-    const altered = {
-      ...f.artifact,
-      reference: { ...f.artifact.reference, artifactKey: 'different' },
-    };
     await expect(
-      buildClaudePlugin({ ...f, artifact: altered, outputRoot: path.join(f.root, 'c') }),
-    ).rejects.toThrow(/STALE_ARTIFACT/);
+      buildClaudePlugin({
+        ...f,
+        skillPlan: structuredClone(f.skillPlan),
+        outputRoot: path.join(f.root, 'c'),
+      }),
+    ).rejects.toThrow(/SKILL_PROJECTION_PLAN_UNVERIFIED/);
   });
   it('generates canonical agents, hooks, local status renderer, and settings', async () => {
     const f = await fixture(),
@@ -693,8 +772,15 @@ describe('Claude projection', () => {
   it('rejects selected skill and Bash policy tamper before use', async () => {
     const f = await fixture();
     await writeFile(path.join(f.canonical, 'full', 'guide.md'), 'trusted guide\n');
+    const skillPlan = await createSkillProjectionPlan({
+      manifest: f.manifest,
+      artifact: f.artifact,
+      catalog: f.catalog,
+      canonicalRoot: f.canonical,
+    });
     const published = await publishClaudeProjection({
         ...f,
+        skillPlan,
         artifactsRoot: path.join(f.root, 'selected-artifacts'),
       }),
       guard = path.join(published.directory, 'hooks', 'runtime-guard.mjs'),
