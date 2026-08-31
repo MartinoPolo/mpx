@@ -227,73 +227,76 @@ describe('Phase J migration reconciliation', () => {
     ]);
   });
 
-  it('keeps the active semantic parity check aligned with the skills unit-test path', async () => {
-    const calls: string[][] = [];
-    await executeParityChecks({
+  it('executes the exact current parity declarations and semantic build closure', async () => {
+    const calls: { program: string; args: string[] }[] = [];
+    const results = await executeParityChecks({
       repoRoot: path.resolve('.'),
       exists: async () => true,
       environment: { PNPM_HOME: path.resolve('pnpm-home') },
       runner: async (request) => {
-        calls.push(request.args);
+        calls.push({ program: request.program, args: request.args });
         return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
       },
     });
-    const semanticArgs = calls.find((args) =>
-      args.includes('tests/contract/providers/conformance.test.ts'),
-    );
-    expect(semanticArgs).toContain('packages/skills/test/unit/canonical-content.test.ts');
-    expect(calls.flat()).not.toContain('packages/skills/test/canonical-content.test.ts');
-  });
-
-  it('keeps the active hooks parity check aligned with the runtime-hooks unit-test path', async () => {
-    const calls: string[][] = [];
-    await executeParityChecks({
-      repoRoot: path.resolve('.'),
-      exists: async () => true,
-      environment: { PNPM_HOME: path.resolve('pnpm-home') },
-      runner: async (request) => {
-        calls.push(request.args);
-        return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
+    expect(results.map(({ id, status }) => ({ id, status }))).toEqual([
+      { id: 'semantic', status: 'passed' },
+      { id: 'generation', status: 'passed' },
+      { id: 'hooks', status: 'passed' },
+      { id: 'tools', status: 'passed' },
+      { id: 'status', status: 'passed' },
+      { id: 'dependencies', status: 'passed' },
+    ]);
+    expect(calls).toEqual([
+      {
+        program: expect.stringMatching(/[\\/]pnpm(?:\.exe)?$/u),
+        args: ['--filter', '@mpx/skills...', '--filter', '@mpx/provider-github...', 'build'],
       },
-    });
-    expect(
-      calls.some((args) => args.includes('packages/runtime-hooks/test/unit/index.test.ts')),
-    ).toBe(true);
-    expect(calls.flat()).not.toContain('packages/runtime-hooks/src/index.test.ts');
-  });
-
-  it('keeps the active tools parity check aligned with the runtime-tools unit-test path', async () => {
-    const calls: string[][] = [];
-    await executeParityChecks({
-      repoRoot: path.resolve('.'),
-      exists: async () => true,
-      environment: { PNPM_HOME: path.resolve('pnpm-home') },
-      runner: async (request) => {
-        calls.push(request.args);
-        return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
+      {
+        program: process.execPath,
+        args: [
+          path.join(path.resolve('.'), 'node_modules', 'vitest', 'vitest.mjs'),
+          'run',
+          'packages/skills/test/unit/canonical-content.test.ts',
+          'tests/contract/providers/conformance.test.ts',
+          '--reporter=dot',
+        ],
       },
-    });
-    expect(
-      calls.some((args) => args.includes('packages/runtime-tools/test/unit/runtime-tools.test.ts')),
-    ).toBe(true);
-    expect(calls.flat()).not.toContain('packages/runtime-tools/test/runtime-tools.test.ts');
-  });
-
-  it('keeps the active status parity check aligned with the status unit-test path', async () => {
-    const calls: string[][] = [];
-    await executeParityChecks({
-      repoRoot: path.resolve('.'),
-      exists: async () => true,
-      environment: { PNPM_HOME: path.resolve('pnpm-home') },
-      runner: async (request) => {
-        calls.push(request.args);
-        return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
+      {
+        program: process.execPath,
+        args: [path.resolve('scripts/validate-generated.mjs')],
       },
-    });
-    expect(calls.some((args) => args.includes('packages/status/test/unit/status.test.ts'))).toBe(
-      true,
-    );
-    expect(calls.flat()).not.toContain('packages/status/src/status.test.ts');
+      {
+        program: process.execPath,
+        args: [
+          path.join(path.resolve('.'), 'node_modules', 'vitest', 'vitest.mjs'),
+          'run',
+          'packages/runtime-hooks/test/unit/index.test.ts',
+          '--reporter=dot',
+        ],
+      },
+      {
+        program: process.execPath,
+        args: [
+          path.join(path.resolve('.'), 'node_modules', 'vitest', 'vitest.mjs'),
+          'run',
+          'packages/runtime-tools/test/unit/runtime-tools.test.ts',
+          '--reporter=dot',
+        ],
+      },
+      {
+        program: process.execPath,
+        args: [
+          path.join(path.resolve('.'), 'node_modules', 'vitest', 'vitest.mjs'),
+          'run',
+          'packages/status/test/unit/status.test.ts',
+          '--reporter=dot',
+        ],
+      },
+      {
+        program: process.execPath,
+        args: [path.resolve('scripts/required-convergence.mjs')],
+      },
+    ]);
   });
 
   it('executes declared parity checks with bounded digest-only results and fail-closed gating', async () => {

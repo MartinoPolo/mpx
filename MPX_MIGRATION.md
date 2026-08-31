@@ -25,6 +25,10 @@ Deliver one installed `mpx` CLI, one canonical skill/agent source, one Claude Co
 
 The new and old systems coexist at the installation level during migration. New MPX code does not carry runtime fallbacks for `.worktree-hub.json`, `.mpx/kanbanflow.json`, `statusline-projects.json`, or old command namespaces. One-time migration tools and rollback snapshots are allowed; permanent compatibility branches are not.
 
+### Convergence lifecycle decision
+
+`docs/history/CONVERGENCE_MANIFEST.json` remains immutable Phase J migration evidence. Normal `pnpm test` is self-contained and does not read mutable external source roots; explicit `test:convergence` and `convergence:verify` commands, source-snapshot tooling, and CLI migration consumers remain active until Phase J cutover, rollback, and legacy-retirement gates are complete. After those gates—not before—the active external convergence/source-snapshot tooling and CLI consumers are retired, while the historical manifest and reports remain archived. This decision does not claim Phase J completion.
+
 ## 2. Decisions fixed by this plan
 
 ### Naming
@@ -1315,9 +1319,9 @@ This migration does not rewrite skill payloads; redesign schemas or the hash alg
 
 ### Structural acceptance
 
-- [ ] No tests or fixtures remain under any workspace `src`.
-- [ ] Independent test-category commands run exactly once in aggregate.
-- [ ] Package builds emit no tests.
+- [x] No tests or fixtures remain under any workspace `src`.
+- [x] Independent test-category commands run exactly once in aggregate.
+- [x] Package builds emit no tests.
 - [ ] `packages/skills` no longer depends on config or runtime adapters.
 - [ ] Runtimes own no canonical parsing, policy, or provider logic.
 - [ ] The CLI application layer is provider-neutral.

@@ -17,7 +17,7 @@
   "includeEntryExports": true,
   "duplicates": {
     "minOccurrences": 3,
-    "ignore": ["**/*.test.ts", "**/test-fixtures/**"]
+    "ignore": ["**/*.test.ts"]
   },
   "rules": {
     "unused-files": "error",

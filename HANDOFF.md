@@ -4,90 +4,35 @@
 
 ## Checkpoint
 
-- Clean `main` at HEAD `47db12f` (`test(tooling): enforce final unit test layout`).
+- Stage D structural cleanup is complete and verified.
 - Nothing has been pushed.
+- Use `git log` and `git status` for the exact commit and integration state.
 
 ## Completed
 
-- Quality tooling is merged.
-- Stage A unified the strict test harness, build, and typecheck boundaries.
-- Stage B established the root contract, integration, and end-to-end categories and their payload categories.
-- Stage C moved every owned unit test and fixture to workspace `test/unit` and `test/fixtures` directories.
-- Payload and Pi vendor tests remain explicit exceptions.
-- A generic final-layout guard is in place.
-- Root `test:unit` builds first, and aggregate category commands execute each category once.
-
-## Verification
-
-The final guard passed the focused harness, `pnpm run typecheck`, `pnpm run check:quality`, `pnpm run validate:generated`, and `git diff --check`. The full categories and full test passed immediately before the final guard.
-
-Current convergence and the full aggregate are blocked by external drift. Do not describe the current checkout as fully green.
+- Stages A–C established the final test categories and moved owned workspace tests and fixtures to `test/unit` and `test/fixtures`.
+- Stage D replaced historical move inventories with compact repository-derived structural guarantees.
+- Normal `pnpm test` is now self-contained and invokes unit, payload, contract, integration, and E2E exactly once without external convergence.
+- Explicit `test:convergence` and `convergence:verify` remain available for Phase J migration review.
+- The first three structural acceptance items in `MPX_MIGRATION.md` are evidenced; later architecture and full-gate items remain pending.
 
 ## External blocker — do not modify automatically
 
-The user-owned `$MPX_PROJECTS/mpx-pi/APPEND_SYSTEM.md` differs from the committed convergence snapshot. Its current hash prefix is `624f55`; the recorded prefix is `42a85e`. This causes `CONVERGENCE_SOURCE_DRIFT: pi:APPEND_SYSTEM.md`.
+Active convergence verification remains blocked by the user-owned `$MPX_PROJECTS/mpx-pi/APPEND_SYSTEM.md`, which differs from the immutable convergence snapshot (`624f55` current hash prefix versus recorded `42a85e`). This causes `CONVERGENCE_SOURCE_DRIFT: pi:APPEND_SYSTEM.md`.
 
-Do not revert the external file, regenerate the manifest, or rebind evidence without user review. `pnpm run validate:generated` without source verification passes.
+Do not revert the external file, regenerate the manifest, rebind evidence, or run external convergence without user review. Explicit convergence remains pending that review.
 
-## Next session — Stage D
+## Remaining implementation stages
 
-- Replace hard-coded historical move ledgers and former-path declarations in the large harness with compact, generic final-layout, category, workspace, script, typecheck, and public-boundary guards.
-- Remove the stale `.fallowrc.json` `**/test-fixtures/**` entry.
-- After evidence review, check only the first three structural acceptance boxes in `MPX_MIGRATION.md`.
-- Preserve the historical PHASE_J parity snapshot.
-- Audit active paths and hashes.
-- Defer CLI-internal root integration and end-to-end seams to Stage G.
-
-## Remaining plan
+Consult the active migration authority and current `git log`/`git status` before selecting the next work:
 
 - **Stage E:** Move skill internals behind stable facades.
 - **Stage F:** Introduce a neutral `SkillProjectionPlan` with thin runtimes.
 - **Stage G:** Introduce a provider-neutral application package and thin CLI.
 - **Stage H:** Remove transitional machinery and complete final gates.
 
-## Reliability
+## Preserved evidence and boundaries
 
-- `de2b30e` fixes session-lock `EPERM` handling.
-- `73d4101` makes the migration race deterministic.
-- Installer simulation occasionally nears its timeout under load. Investigate if it repeats; never increase the timeout blindly.
-
-## Start commands
-
-Run in Bash using `$MPX_PROJECTS`:
-
-```bash
-cd "$MPX_PROJECTS/mpx"
-git status --short --branch
-git log -1 --oneline
-
-git -C "$MPX_PROJECTS/mpx-pi" status --short --branch
-git -C "$MPX_PROJECTS/mpx-pi" diff -- APPEND_SYSTEM.md
-
-pnpm run typecheck
-pnpm run check:quality
-pnpm run validate:generated
-git diff --check
-```
-
-Run convergence and the full test only after deliberate review and resolution of the external drift:
-
-```bash
-pnpm run test:convergence
-pnpm test
-```
-
-## Temporary branches and worktrees
-
-- `main` contains the accepted work.
-- `$MPX_PROJECTS/mpx.worktrees/skills-first-*` worktrees and pi-agent worktrees or refs may remain.
-- Do not merge them again. Prune them only after checking for unique intentional work.
-- The stopped Stage D branch was squash-integrated as `47db12f`.
-
-## Do not
-
-- Do not push.
-- Do not hand-edit hashes.
-- Do not refresh the Fallow baseline.
-- Do not move payload or vendor tests.
-- Do not rewrite historical snapshots.
-- Do not edit the external Pi repository without user review.
+- `docs/history/CONVERGENCE_MANIFEST.json` and historical Phase J reports remain immutable migration evidence.
+- Fallow baseline, convergence scripts, provenance, external repositories, payload/vendor locations, and CLI-internal root integration/E2E seams are unchanged.
+- Do not push, hand-edit hashes, refresh the Fallow baseline, move payload/vendor tests, rewrite historical snapshots, or edit the external Pi repository without user review.
