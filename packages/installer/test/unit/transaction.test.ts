@@ -11,7 +11,7 @@ import {
   type InstallOperationV1,
   type SideEffectAdapter,
   type StoredTransaction,
-} from './transaction.js';
+} from '../../src/transaction.js';
 
 async function captureAggregateError(action: () => Promise<unknown>): Promise<AggregateError> {
   try {

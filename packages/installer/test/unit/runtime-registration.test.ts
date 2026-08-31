@@ -13,7 +13,7 @@ import {
   type ProjectionFileV1,
   type ProjectionRole,
   type RuntimeRegistrationInput,
-} from './runtime-registration.js';
+} from '../../src/runtime-registration.js';
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {

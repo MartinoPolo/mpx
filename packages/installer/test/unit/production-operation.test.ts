@@ -8,12 +8,12 @@ import {
   installerDigest,
   type InstallIntentV1,
   type ReleaseManifestV1,
-} from './immutable-core.js';
+} from '../../src/immutable-core.js';
 import {
   NodeBinaryFileSystem,
   ProductionInstallerOperationAdapter,
-} from './production-operation.js';
-import { ImmutableInstallerService, MemoryTransactionStore } from './transaction.js';
+} from '../../src/production-operation.js';
+import { ImmutableInstallerService, MemoryTransactionStore } from '../../src/transaction.js';
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {

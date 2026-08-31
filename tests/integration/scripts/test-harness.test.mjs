@@ -391,6 +391,49 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed fourteen-suite installer unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = [
+      'composition.test.ts',
+      'external-integrations.test.ts',
+      'immutable-core.test.ts',
+      'install-intent-builder.test.ts',
+      'installed-runner-authority.test.ts',
+      'orchestration.test.ts',
+      'production-operation.test.ts',
+      'production-simulation.test.ts',
+      'runtime-registration.test.ts',
+      'selector-operation.test.ts',
+      'service.test.ts',
+      'transaction-lock.test.ts',
+      'transaction.test.ts',
+      'windows-integration.test.ts',
+    ];
+
+    expect(basenames).toHaveLength(14);
+    for (const basename of basenames) {
+      const formerPath = `packages/installer/src/${basename}`;
+      const unitPath = `packages/installer/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const installerFiles = await filesBelow(root, 'packages/installer');
+    expect(
+      installerFiles.filter(
+        (file) =>
+          file.startsWith('packages/installer/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('preserves the fixed four-suite Windows unit migration inventory and fixture', async () => {
     const files = new Set(await filesBelow(root));
     const suiteBasenames = [

@@ -9,7 +9,7 @@ import {
   type ImmutableRunnerAuthority,
   type InstalledRunnerEvidence,
   type RunnerFileVerifier,
-} from './index.js';
+} from '../../src/index.js';
 import type { ScheduledTaskAdapter, ScheduledTaskInspection } from '@mpx/windows';
 const runner: InstalledRunnerEvidence = {
   path: 'C:\\_MP_apps\\mpx\\runner.exe',

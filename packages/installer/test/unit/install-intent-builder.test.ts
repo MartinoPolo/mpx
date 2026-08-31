@@ -12,7 +12,7 @@ import {
   type InstallIntentBuildResultV1,
   type InstallIntentRequestV1,
   type ReleaseManifestV1,
-} from './index.js';
+} from '../../src/index.js';
 
 const sha = (letter: string): string => letter.repeat(64);
 const baseRequest = (): InstallIntentRequestV1 => ({

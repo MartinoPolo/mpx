@@ -4,17 +4,24 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
-import { activateRelease, installerDigest, type InstallIntentV1 } from './immutable-core.js';
-import { NodeInstalledRunnerAuthority } from './installed-runner-authority.js';
-import { InstallOrchestrator, NodeCurrentReleaseBuilder } from './orchestration.js';
+import {
+  activateRelease,
+  installerDigest,
+  type InstallIntentV1,
+} from '../../src/immutable-core.js';
+import { NodeInstalledRunnerAuthority } from '../../src/installed-runner-authority.js';
+import { InstallOrchestrator, NodeCurrentReleaseBuilder } from '../../src/orchestration.js';
 import {
   NodeBinaryFileSystem,
   ProductionInstallerOperationAdapter,
-} from './production-operation.js';
-import { buildWindowsIntegrationSpecs } from './windows-integration.js';
-import { createRuntimeRegistrationMatrix, type ProjectionFileV1 } from './runtime-registration.js';
-import { NodeTransactionStore } from './transaction.js';
-import type { InstallExternalVerificationResultV1 } from './install-intent-builder.js';
+} from '../../src/production-operation.js';
+import { buildWindowsIntegrationSpecs } from '../../src/windows-integration.js';
+import {
+  createRuntimeRegistrationMatrix,
+  type ProjectionFileV1,
+} from '../../src/runtime-registration.js';
+import { NodeTransactionStore } from '../../src/transaction.js';
+import type { InstallExternalVerificationResultV1 } from '../../src/install-intent-builder.js';
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {

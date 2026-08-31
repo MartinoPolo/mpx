@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { FakeBinaryFileSystem, FakeJsonResourceStore } from '@mpx/windows';
-import type { InstallIntentV1, ReleaseManifestV1 } from './immutable-core.js';
-import { ProductionInstallerOperationAdapter } from './production-operation.js';
+import type { InstallIntentV1, ReleaseManifestV1 } from '../../src/immutable-core.js';
+import { ProductionInstallerOperationAdapter } from '../../src/production-operation.js';
 
 it('excludes the active-release selector from the reversible operation set', async () => {
   const releaseKey = 'a'.repeat(64),

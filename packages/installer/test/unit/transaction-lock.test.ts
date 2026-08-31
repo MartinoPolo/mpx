@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { NodeTransactionStore } from './transaction.js';
+import { NodeTransactionStore } from '../../src/transaction.js';
 
 it('publishes complete lock owner metadata before entering', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-lock-owner-'));

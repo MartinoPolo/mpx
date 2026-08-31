@@ -8,7 +8,7 @@ import {
   RaycastPlanningAdapter,
   classifyExternalAction,
   parseInstallIntentV1,
-} from './index.js';
+} from '../../src/index.js';
 
 const temporary = () => mkdtemp(path.join(tmpdir(), 'mpx-external-'));
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildManagedLauncherBody, buildWindowsIntegrationSpecs } from './windows-integration.js';
+import {
+  buildManagedLauncherBody,
+  buildWindowsIntegrationSpecs,
+} from '../../src/windows-integration.js';
 
 describe('Phase I Windows integration specification', () => {
   it('renders normal aliases and direct aliases that require both a TTY and explicit reason without bypass flags', () => {

@@ -2,10 +2,10 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { activateRelease } from './immutable-core.js';
-import { NodeInstalledRunnerAuthority } from './installed-runner-authority.js';
-import { NodeCurrentReleaseBuilder } from './orchestration.js';
-import { MemoryTransactionStore } from './transaction.js';
+import { activateRelease } from '../../src/immutable-core.js';
+import { NodeInstalledRunnerAuthority } from '../../src/installed-runner-authority.js';
+import { NodeCurrentReleaseBuilder } from '../../src/orchestration.js';
+import { MemoryTransactionStore } from '../../src/transaction.js';
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-installed-runner-'));

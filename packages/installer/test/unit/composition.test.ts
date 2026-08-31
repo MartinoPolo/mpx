@@ -1,13 +1,17 @@
 import { lstat } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { FakeBinaryFileSystem, FakeJsonResourceStore } from '@mpx/windows';
-import { parseInstallIntentV1, installerDigest, type ReleaseManifestV1 } from './immutable-core.js';
+import {
+  parseInstallIntentV1,
+  installerDigest,
+  type ReleaseManifestV1,
+} from '../../src/immutable-core.js';
 import {
   createRuntimeRegistrationMatrix,
   registerStaticMcp,
   type ProjectionFileV1,
-} from './runtime-registration.js';
-import { ProductionInstallerOperationAdapter } from './production-operation.js';
+} from '../../src/runtime-registration.js';
+import { ProductionInstallerOperationAdapter } from '../../src/production-operation.js';
 
 const sha = (value: string) => installerDigest(value);
 function files(runtime: 'claude' | 'pi'): ProjectionFileV1[] {

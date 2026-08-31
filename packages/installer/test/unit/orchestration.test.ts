@@ -6,14 +6,14 @@ import {
   type InstallIntentV1,
   type InstallOperationV1,
   type ScheduledTaskStatusEvidenceV1,
-} from './immutable-core.js';
-import { MemoryTransactionStore, installerDigest } from './transaction.js';
+} from '../../src/immutable-core.js';
+import { MemoryTransactionStore, installerDigest } from '../../src/transaction.js';
 import {
   InstallOrchestrator,
   NodeCurrentReleaseBuilder,
   type InstallerOperationAdapter,
-} from './orchestration.js';
-import type { InstallExternalVerificationResultV1 } from './install-intent-builder.js';
+} from '../../src/orchestration.js';
+import type { InstallExternalVerificationResultV1 } from '../../src/install-intent-builder.js';
 
 class FixtureAdapter implements InstallerOperationAdapter {
   readonly name = 'fixture';

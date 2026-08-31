@@ -16,7 +16,7 @@ import {
   publishRelease,
   readActiveRelease,
   type OwnershipReceiptV1,
-} from './immutable-core.js';
+} from '../../src/immutable-core.js';
 
 const temporary = () => mkdtemp(path.join(tmpdir(), 'mpx-release-'));
 
