@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { NodePreparationStore, PreparationStateLock } from '../dist/node-preparation-adapters.js';
+import { NodePreparationStore, PreparationStateLock } from '@mpx/worktrees';
 
 const [mode, root, key] = process.argv.slice(2);
 const lockPath = path.join(

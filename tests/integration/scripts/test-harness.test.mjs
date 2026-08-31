@@ -303,6 +303,59 @@ describe('test taxonomy', () => {
     );
   });
 
+  test('preserves the fixed seven-suite and four-fixture worktrees unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const suiteBasenames = [
+      'index.test.ts',
+      'lifecycle.test.ts',
+      'node-lifecycle-adapters.test.ts',
+      'node-preparation-adapters.test.ts',
+      'preparation-engine.test.ts',
+      'trusted-executable.test.ts',
+      'worktree-include.test.ts',
+    ];
+    const fixtureBasenames = [
+      'activating-inert-worker.mjs',
+      'delayed-inert-worker.mjs',
+      'lock-crash-worker.mjs',
+      'preparation-cas-worker.mjs',
+    ];
+
+    expect(suiteBasenames).toHaveLength(7);
+    for (const basename of suiteBasenames) {
+      const formerPath = `packages/worktrees/src/${basename}`;
+      const unitPath = `packages/worktrees/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    expect(fixtureBasenames).toHaveLength(4);
+    for (const basename of fixtureBasenames) {
+      const formerPath = `packages/worktrees/test-fixtures/${basename}`;
+      const fixturePath = `packages/worktrees/test/fixtures/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(fixturePath), fixturePath).toBe(true);
+    }
+
+    const worktreesFiles = await filesBelow(root, 'packages/worktrees');
+    expect(
+      worktreesFiles.filter(
+        (file) =>
+          file.startsWith('packages/worktrees/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+    expect(worktreesFiles.filter((file) => file.includes('/fixtures/'))).toEqual(
+      fixtureBasenames.map((basename) => `packages/worktrees/test/fixtures/${basename}`),
+    );
+  });
+
   test('preserves the fixed two-suite provider-github unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

@@ -24,7 +24,7 @@ import {
   detectPackageManager,
   resolvePreparationPackageManager,
   type PreparationProcessIdentityInspector,
-} from './node-preparation-adapters.js';
+} from '../../src/node-preparation-adapters.js';
 import {
   PreparationEngine,
   createPreparationApproval,
@@ -32,8 +32,8 @@ import {
   type BackgroundPreparationRequest,
   type PreparationAdapters,
   type PreparationState,
-} from './preparation-engine.js';
-import { resolveTrustedExecutable, type ResolvedExecutable } from './trusted-executable.js';
+} from '../../src/preparation-engine.js';
+import { resolveTrustedExecutable, type ResolvedExecutable } from '../../src/trusted-executable.js';
 import type { PreparationPlan } from '@mpx/config';
 
 const exec = promisify(execFile);
@@ -432,7 +432,7 @@ it('does not let a stale preparation lock releaser delete its replacement', asyn
 it('waits out ownerless grace after a process crashes before publishing CAS ownership', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare ownerless crash '));
   roots.push(root);
-  const fixture = path.resolve(import.meta.dirname, '../test-fixtures/preparation-cas-worker.mjs');
+  const fixture = path.resolve(import.meta.dirname, '../fixtures/preparation-cas-worker.mjs');
   const child = fork(fixture, ['ownerless', root, 'ownerless-crash'], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
@@ -481,7 +481,7 @@ it('waits out ownerless grace after a process crashes before publishing CAS owne
 it('recovers a real cross-process CAS lock after its owner crashes', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare crash '));
   roots.push(root);
-  const fixture = path.resolve(import.meta.dirname, '../test-fixtures/preparation-cas-worker.mjs');
+  const fixture = path.resolve(import.meta.dirname, '../fixtures/preparation-cas-worker.mjs');
   const child = fork(fixture, ['crash', root, 'crash-key'], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
@@ -523,7 +523,7 @@ it('recovers a real cross-process CAS lock after its owner crashes', async () =>
 it('serializes compare-and-swap writers between two processes', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare processes '));
   roots.push(root);
-  const fixture = path.resolve(import.meta.dirname, '../test-fixtures/preparation-cas-worker.mjs');
+  const fixture = path.resolve(import.meta.dirname, '../fixtures/preparation-cas-worker.mjs');
   const first = fork(fixture, ['cas', root, 'shared'], {
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
@@ -906,10 +906,7 @@ it('activates an acknowledged worker only after its verified identity is durably
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare activation-'));
   roots.push(root);
   const activationMarker = path.join(root, 'activated');
-  const workerEntry = path.resolve(
-    import.meta.dirname,
-    '../test-fixtures/activating-inert-worker.mjs',
-  );
+  const workerEntry = path.resolve(import.meta.dirname, '../fixtures/activating-inert-worker.mjs');
   const processAdapter = new NodePreparationProcessAdapter(
     {
       inspect: async (pid) => ({ pid, startFingerprint: `birth-${pid}` }),
@@ -950,10 +947,7 @@ it('activates an acknowledged worker only after its verified identity is durably
 it('bounds inert-worker cleanup when durable verification persistence fails and tree termination hangs', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare persistence failure-'));
   roots.push(root);
-  const workerEntry = path.resolve(
-    import.meta.dirname,
-    '../test-fixtures/activating-inert-worker.mjs',
-  );
+  const workerEntry = path.resolve(import.meta.dirname, '../fixtures/activating-inert-worker.mjs');
   let childPid = 0;
   const processAdapter = new NodePreparationProcessAdapter(
     {
@@ -1036,10 +1030,7 @@ it('removes the request and waits for actual child exit when an acknowledged wor
   const root = await mkdtemp(path.join(tmpdir(), 'mpx prepare background-'));
   roots.push(root);
   const exitMarker = path.join(root, 'worker-exited');
-  const workerEntry = path.resolve(
-    import.meta.dirname,
-    '../test-fixtures/delayed-inert-worker.mjs',
-  );
+  const workerEntry = path.resolve(import.meta.dirname, '../fixtures/delayed-inert-worker.mjs');
   const processAdapter = new NodePreparationProcessAdapter(
     { inspect: async () => undefined, terminateTree: async () => undefined },
     root,

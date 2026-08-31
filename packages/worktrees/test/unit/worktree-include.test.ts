@@ -4,7 +4,7 @@ import {
   planWorktreeIncludes,
   parseWorktreeInclude,
   type WorktreeIncludeDependencies,
-} from './worktree-include.js';
+} from '../../src/worktree-include.js';
 
 describe('.worktreeinclude parsing', () => {
   it('preserves Git-ignore rules while rejecting absolute and traversing patterns', () => {

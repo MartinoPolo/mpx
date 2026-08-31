@@ -292,7 +292,7 @@ async function decision(entry) {
         disposition: 'canonicalized',
         destination: 'packages/worktrees/src/lifecycle.ts',
         adaptation: 'reimplemented with provider-neutral worktree lifecycle contracts',
-        test: 'packages/worktrees/src/lifecycle.test.ts',
+        test: 'packages/worktrees/test/unit/lifecycle.test.ts',
       };
     }
     if (/status|terminal|account-color|usage/u.test(entry.path)) {

@@ -10,8 +10,8 @@ import {
   NodeLifecycleStateStore,
   NodeRepositoryLock,
   type ProcessIdentityInspector,
-} from './node-lifecycle-adapters.js';
-import { deriveLifecycleKey, type LifecycleState } from './lifecycle.js';
+} from '../../src/node-lifecycle-adapters.js';
+import { deriveLifecycleKey, type LifecycleState } from '../../src/lifecycle.js';
 
 const roots: string[] = [];
 const children: ChildProcess[] = [];
@@ -23,9 +23,7 @@ afterEach(async () => {
   }
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-const crashWorker = fileURLToPath(
-  new URL('../test-fixtures/lock-crash-worker.mjs', import.meta.url),
-);
+const crashWorker = fileURLToPath(new URL('../fixtures/lock-crash-worker.mjs', import.meta.url));
 const waitForCreated = (child: ChildProcess) =>
   new Promise<void>((resolve, reject) => {
     const timer = setTimeout(

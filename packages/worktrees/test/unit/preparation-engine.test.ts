@@ -9,7 +9,7 @@ import {
   type PreparationAdapters,
   type SpawnRequest,
   type SpawnResult,
-} from './preparation-engine.js';
+} from '../../src/preparation-engine.js';
 
 const root = 'C:\\repos\\app.worktrees\\feature';
 const plan = (

@@ -11,12 +11,12 @@ import {
   preparationApprovalPhrases,
   type PreparationAdapters,
   type PreparationState,
-} from './preparation-engine.js';
+} from '../../src/preparation-engine.js';
 import {
   productionTrustedExecutablePolicy,
   resolveTrustedExecutable,
   revalidateTrustedExecutable,
-} from './trusted-executable.js';
+} from '../../src/trusted-executable.js';
 
 const execFileAsync = promisify(execFile);
 const roots: string[] = [];

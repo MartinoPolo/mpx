@@ -7,8 +7,8 @@ import {
   type LifecycleDependencies,
   type LifecycleState,
   type LifecycleReleaseIdentity,
-} from './lifecycle.js';
-import type { WorktreeInventoryEntry } from './index.js';
+} from '../../src/lifecycle.js';
+import type { WorktreeInventoryEntry } from '../../src/index.js';
 
 const config: ProjectConfig = {
   schemaVersion: 1,

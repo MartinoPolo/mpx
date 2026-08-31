@@ -19,7 +19,7 @@ import {
   type FileSystemAdapter,
   type GitAdapter,
   type RepositoryLock,
-} from './index.js';
+} from '../../src/index.js';
 
 const execFileAsync = promisify(execFile);
 const temporary: string[] = [];

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { NodeRepositoryLock } from '../dist/index.js';
+import { NodeRepositoryLock } from '@mpx/worktrees';
 
 const [mode, directory, key] = process.argv.slice(2);
 if (mode === 'owned') {
