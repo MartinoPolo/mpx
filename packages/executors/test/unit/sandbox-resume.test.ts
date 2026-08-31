@@ -5,7 +5,7 @@ import {
   decideSandboxResume,
   parseSbxListV1,
   planF2SandboxSessionResume,
-} from './index.js';
+} from '../../src/index.js';
 import { createF2ProofReportV1, createSandboxPlanV1, f2Sha256 } from '@mpx/runtime-contracts';
 const h = (c: string) => c.repeat(64);
 const expected = {

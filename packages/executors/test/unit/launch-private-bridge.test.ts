@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type Server } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FakeSandboxWorker, createSandboxHandle } from './production-remote.js';
+import { FakeSandboxWorker, createSandboxHandle } from '../../src/production-remote.js';
 import {
   connectLaunchPrivateBridge,
   startLaunchPrivateBridge,
   type LaunchPrivateBridge,
-} from './launch-private-bridge.js';
+} from '../../src/launch-private-bridge.js';
 
 const h = (c: string) => c.repeat(64);
 const roots: string[] = [];

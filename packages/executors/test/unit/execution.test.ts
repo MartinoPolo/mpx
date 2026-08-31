@@ -6,7 +6,7 @@ import { sha256Canonical } from '@mpx/core';
 import type { JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
 import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
-import type { ProcessRequest } from './index.js';
+import type { ProcessRequest } from '../../src/index.js';
 import {
   ExecutorRegistry,
   ExecutionService,
@@ -21,7 +21,7 @@ import {
   sanitizeHostReason,
   type LaunchAuditRecord,
   type LaunchAuditStore,
-} from './index.js';
+} from '../../src/index.js';
 
 const hash = (value: string) => value.repeat(64);
 const artifactReference = (runtime: 'claude' | 'pi' = 'pi') => ({
@@ -670,7 +670,7 @@ describe('trust and privacy boundaries', () => {
   });
 
   it('does not publish obsolete private-route writer APIs', async () => {
-    const exports = await import('./index.js');
+    const exports = await import('../../src/index.js');
     expect(exports).not.toHaveProperty('materializePrivateRoutes');
     expect(exports).not.toHaveProperty('PrivateRouteStore');
   });

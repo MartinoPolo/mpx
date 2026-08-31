@@ -4,7 +4,7 @@ import {
   type BoundedProcessRunner,
   type ProcessResult,
   type SbxFailureCode,
-} from './index.js';
+} from '../../src/index.js';
 
 const executable = 'C:/trusted/sbx.exe';
 const pin = { version: '0.39.0', buildCommit: 'def8cb0523a77e757bdd6ef52b459fe374f3783e' };

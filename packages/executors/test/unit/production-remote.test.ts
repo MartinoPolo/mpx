@@ -6,7 +6,7 @@ import {
   ProductionRemoteExecutorRegistry,
   attestRemoteToolSet,
   createSandboxHandle,
-} from './index.js';
+} from '../../src/index.js';
 
 const h = (value: string) => value.repeat(64);
 const binding = {

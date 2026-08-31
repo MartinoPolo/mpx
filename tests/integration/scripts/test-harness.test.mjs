@@ -836,6 +836,41 @@ describe('test taxonomy', () => {
     ).toEqual([]);
   });
 
+  test('preserves the fixed seven-suite executors unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const basenames = [
+      'execution.test.ts',
+      'f2.test.ts',
+      'launch-private-bridge.test.ts',
+      'production-remote.test.ts',
+      'sandbox-resume.test.ts',
+      'sbx-client.test.ts',
+      'standalone-sbx-executor.test.ts',
+    ];
+    expect(basenames).toHaveLength(7);
+    for (const basename of basenames) {
+      const formerPath = `packages/executors/src/${basename}`;
+      const unitPath = `packages/executors/test/unit/${basename}`;
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const executorFiles = await filesBelow(root, 'packages/executors');
+    expect(
+      executorFiles.filter(
+        (file) =>
+          file.startsWith('packages/executors/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('keeps the fixed CLI E2E cohort exclusively under root ownership', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

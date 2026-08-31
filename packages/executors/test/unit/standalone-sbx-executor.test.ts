@@ -8,9 +8,9 @@ import {
   PHASE_F2_REMOTE_TOOL_PATHS,
   attestRemoteToolSet,
   createSandboxHandle,
-} from './production-remote.js';
-import { buildSandboxPlanV1 } from './sandbox-plan.js';
-import { StandaloneSbxExecutorAdapter } from './standalone-sbx-executor.js';
+} from '../../src/production-remote.js';
+import { buildSandboxPlanV1 } from '../../src/sandbox-plan.js';
+import { StandaloneSbxExecutorAdapter } from '../../src/standalone-sbx-executor.js';
 
 const h = (value: string) => value.repeat(64).slice(0, 64);
 const success = (argv: readonly string[]) => {
@@ -316,7 +316,7 @@ describe('production standalone sbx executor', () => {
         environment: Readonly<Record<string, string>>;
         stdin?: Uint8Array;
       }> = [];
-    const fakeSbx = fileURLToPath(new URL('../../../scripts/fake-sbx.mjs', import.meta.url));
+    const fakeSbx = fileURLToPath(new URL('../../../../scripts/fake-sbx.mjs', import.meta.url));
     const invokeFake = (request: { argv: readonly string[]; stdin?: Uint8Array }) =>
       new Promise<{ exitCode: number; stdout: string; stderr: string; truncated: false }>(
         (resolve, reject) => {

@@ -20,7 +20,7 @@ import {
   runFakeSbxProof,
   resolveTrustedSbxExecutable,
   type BoundedProcessRunner,
-} from './index.js';
+} from '../../src/index.js';
 
 const h = (c: string) => c.repeat(64);
 const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '', truncated: false });
