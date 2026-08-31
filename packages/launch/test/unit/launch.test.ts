@@ -9,8 +9,8 @@ import {
   resolveLaunchSelection,
   serializeLaunchAudit,
   serializeLaunchPublic,
-} from './index.js';
-import type { ResolveLaunchInput } from './index.js';
+} from '../../src/index.js';
+import type { ResolveLaunchInput } from '../../src/index.js';
 
 const realpathFailures = new Map<string, string>();
 
@@ -150,7 +150,7 @@ afterEach(() => {
 
 describe('launch resolution', () => {
   it('uses one exported canonical native-root digest', async () => {
-    const { canonicalNativeRootDigest } = await import('./index.js');
+    const { canonicalNativeRootDigest } = await import('../../src/index.js');
     expect(canonicalNativeRootDigest('C:\\Native\\Pi\\')).toBe(
       canonicalNativeRootDigest('c:/native/pi'),
     );
