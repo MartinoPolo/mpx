@@ -389,6 +389,36 @@ describe('test taxonomy', () => {
     ]);
   });
 
+  test('preserves the fixed one-suite runtime-hooks unit migration inventory', async () => {
+    const files = new Set(await filesBelow(root));
+    const migrationInventory = [
+      [
+        'packages/runtime-hooks/src/index.test.ts',
+        'packages/runtime-hooks/test/unit/index.test.ts',
+      ],
+    ];
+    expect(migrationInventory).toHaveLength(1);
+    for (const [formerPath, unitPath] of migrationInventory) {
+      expect(files.has(formerPath), formerPath).toBe(false);
+      expect(files.has(unitPath), unitPath).toBe(true);
+      expect(matchingTestCategories(unitPath), unitPath).toEqual(['unit']);
+    }
+
+    const runtimeHooksFiles = await filesBelow(root, 'packages/runtime-hooks');
+    expect(
+      runtimeHooksFiles.filter(
+        (file) =>
+          file.startsWith('packages/runtime-hooks/src/') &&
+          (file
+            .split('/')
+            .some((segment) =>
+              ['fixture', 'fixtures', '__fixtures__', 'test-fixtures'].includes(segment),
+            ) ||
+            /\.test\.[cm]?[jt]sx?$/u.test(file)),
+      ),
+    ).toEqual([]);
+  });
+
   test('preserves the fixed four-suite config unit migration inventory', async () => {
     const files = new Set(await filesBelow(root));
     const migrationInventory = [

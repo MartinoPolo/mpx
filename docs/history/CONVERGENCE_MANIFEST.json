@@ -5844,12 +5844,12 @@
             "path": "plugins/mp/hooks/__tests__/compact-instructions.test.ts",
             "sha256": "c0bb1ce8a9879bcf90d2d200ca0fe67997e9cac4f288f52ae93faad94a42d9ae"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -5882,12 +5882,12 @@
             "path": "plugins/mp/hooks/__tests__/dangerous-command-guard.test.ts",
             "sha256": "7a7c3a4cea2a48639382fbde33f8713921e2c3a190425554ecc057fbd04fc2ea"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -5920,12 +5920,12 @@
             "path": "plugins/mp/hooks/__tests__/enforce-pkg-mgr.test.ts",
             "sha256": "dd54fa6b701e609a6cef43573f7f7b37c0f0827f3d49703daa5c6ee11da6174a"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -5958,12 +5958,12 @@
             "path": "plugins/mp/hooks/__tests__/fallow-gate.test.ts",
             "sha256": "160da3f4e2bc04cb963a4773b9a53630c45456f3a6a249a6da834f4d5ee20140"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -5996,12 +5996,12 @@
             "path": "plugins/mp/hooks/__tests__/post-bash-context.test.ts",
             "sha256": "f971eadf8c65e93a100f3e251a2ce55cf367b253cded289b7c63b9507516e744"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6034,12 +6034,12 @@
             "path": "plugins/mp/hooks/__tests__/pre-commit-gate.test.ts",
             "sha256": "313ba3f369da52e33833efe5f415dbb27318c6994381cf091335706a051db8fc"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6072,12 +6072,12 @@
             "path": "plugins/mp/hooks/compact-instructions.mjs",
             "sha256": "f49abee58dc1fc01be090a9c2398a16340e4f046ca2fe106e682a79c47c9f2d5"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6110,12 +6110,12 @@
             "path": "plugins/mp/hooks/dangerous-command-guard.mjs",
             "sha256": "b8e32c9f2d4213be1200d8d7750ff7692dbc7fafeb910f4f9a7d3a64e302f876"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6148,12 +6148,12 @@
             "path": "plugins/mp/hooks/enforce-pkg-mgr.mjs",
             "sha256": "62e3277ab605befbb07fcca801e978414159ba6cfd3618f697edcace6048e27c"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6186,12 +6186,12 @@
             "path": "plugins/mp/hooks/fallow-gate.mjs",
             "sha256": "871fb909b87906625295002e460bc0552c657328da5e371800f52cd88e6136f8"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6224,12 +6224,12 @@
             "path": "plugins/mp/hooks/format-lint-file.mjs",
             "sha256": "f11ce3bd38e94d97a05b7cc40bf47b4d53a47c7af1e8ac1271c35c0b8b405fc3"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6262,12 +6262,12 @@
             "path": "plugins/mp/hooks/hooks.json",
             "sha256": "ba1c2177a519abf21e6fc29b76880939c96c62f0acf3fcb5ea91a8fa91ed2b1a"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6300,12 +6300,12 @@
             "path": "plugins/mp/hooks/machine-paths.mjs",
             "sha256": "4342eeeecdfd00d86b8e0937cd3dd0528152cbada7bbc80795acf1c0cae50dba"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6338,12 +6338,12 @@
             "path": "plugins/mp/hooks/notify-flash-beep.ps1",
             "sha256": "291793140aa7d0e814bc8e72596e41e01c16d93e342445424c0ced8237d61951"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6376,12 +6376,12 @@
             "path": "plugins/mp/hooks/notify.mjs",
             "sha256": "2de52bcc8fcaa0db858cf4c03cc673b6331cb5297b26c4ea46c889d965178030"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6414,12 +6414,12 @@
             "path": "plugins/mp/hooks/post-bash-context.mjs",
             "sha256": "a3e19ed455db172e0273d75092689834cb1fa5849889cb3fb66df5b3102f3fb5"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6452,12 +6452,12 @@
             "path": "plugins/mp/hooks/pre-commit-gate.mjs",
             "sha256": "fb60e620d1b495999a32e83dd29bf451f18262254d0adbfc9b8477236d856afd"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6490,12 +6490,12 @@
             "path": "plugins/mp/hooks/shared.mjs",
             "sha256": "c682e59d81b9b3972a10d69b2d711739186bc138786ac27eb28ed40465775dc7"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -6566,12 +6566,12 @@
             "path": "plugins/mp/scripts/__tests__/compaction.test.ts",
             "sha256": "199c5a8a62c6635afaac51b7139e1fa511ff66f22db06484a0019e1f438a891e"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -7168,12 +7168,12 @@
             "path": "plugins/mp/scripts/lib/compaction.mts",
             "sha256": "fd2ea3238a4126acd87d78121252320353884ddeda5f6740e297846031bffcf8"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "claude",
@@ -11917,12 +11917,12 @@
             "path": "extensions/compact-instructions.ts",
             "sha256": "a7ed48c8268aa2a5500dbcd7c5d32bbeaff43b35c4190ccd54fee04673a6c4e2"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "pi",
@@ -12593,12 +12593,12 @@
             "path": "extensions/guard-hooks.ts",
             "sha256": "279e634ec872110cc0e4ec0172f8cd313460b7f8224c3fd5b371fc807cba1dab"
           },
-          "sha256": "c5b4c84bf41cfc11a3a959dd59862316a3bd7460077c3ab99f131e881395f853",
-          "reference": "packages/runtime-hooks/src/index.test.ts",
+          "sha256": "08da5b5f56e4e1134e7b4fb73a311566de12786b9d709ca4f7939c0965da8cae",
+          "reference": "packages/runtime-hooks/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "packages/runtime-hooks/src/index.test.ts"
+      "test": "packages/runtime-hooks/test/unit/index.test.ts"
     },
     {
       "source": "pi",

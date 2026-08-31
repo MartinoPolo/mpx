@@ -204,7 +204,7 @@ const PARITY: readonly ParityDeclaration[] = [
     buildFilters: ['@mpx/skills...', '@mpx/provider-github...'],
   },
   { id: 'generation', kind: 'node', entry: 'scripts/validate-generated.mjs' },
-  { id: 'hooks', kind: 'vitest', entry: 'packages/runtime-hooks/src/index.test.ts' },
+  { id: 'hooks', kind: 'vitest', entry: 'packages/runtime-hooks/test/unit/index.test.ts' },
   { id: 'tools', kind: 'vitest', entry: 'packages/runtime-tools/test/runtime-tools.test.ts' },
   { id: 'status', kind: 'vitest', entry: 'packages/status/src/status.test.ts' },
   { id: 'dependencies', kind: 'node', entry: 'scripts/required-convergence.mjs' },

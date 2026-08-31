@@ -25,7 +25,7 @@ import {
   selectPreCommitCheck,
   validateCommitFormat,
   adaptClaudeHookEvent,
-} from './index.js';
+} from '../../src/index.js';
 
 function project(files: Record<string, string> = {}): string {
   const root = mkdtempSync(path.join(tmpdir(), 'mpx-hooks-'));
@@ -559,7 +559,7 @@ describe('CODEX mirror disposition', () => {
   it('inventories only the reviewed non-private hook without private contents or an absolute home path', () => {
     const inventory = readFileSync(
       fileURLToPath(
-        new URL('../../../docs/inventory/codex-mirror-disposition.json', import.meta.url),
+        new URL('../../../../docs/inventory/codex-mirror-disposition.json', import.meta.url),
       ),
       'utf8',
     );

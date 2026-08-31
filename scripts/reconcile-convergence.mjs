@@ -183,7 +183,7 @@ async function decision(entry) {
       disposition: 'canonicalized',
       destination: 'packages/runtime-hooks/src/index.ts',
       adaptation: 'reimplemented with shared runtime guard policy',
-      test: 'packages/runtime-hooks/src/index.test.ts',
+      test: 'packages/runtime-hooks/test/unit/index.test.ts',
     };
   }
   if (
@@ -263,7 +263,7 @@ async function decision(entry) {
       disposition: 'canonicalized',
       destination: 'packages/runtime-hooks/src/index.ts',
       adaptation: 'reimplemented as shared launch-bound runtime guard policy',
-      test: 'packages/runtime-hooks/src/index.test.ts',
+      test: 'packages/runtime-hooks/test/unit/index.test.ts',
     };
   }
   if (entry.source === 'claude' && entry.path.startsWith('plugins/mp/scripts/')) {
@@ -309,7 +309,7 @@ async function decision(entry) {
         disposition: 'canonicalized',
         destination: 'packages/runtime-hooks/src/index.ts',
         adaptation: 'reimplemented as shared compaction policy',
-        test: 'packages/runtime-hooks/src/index.test.ts',
+        test: 'packages/runtime-hooks/test/unit/index.test.ts',
       };
     }
     return {

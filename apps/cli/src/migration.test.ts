@@ -245,6 +245,23 @@ describe('Phase J migration reconciliation', () => {
     expect(calls.flat()).not.toContain('packages/skills/test/canonical-content.test.ts');
   });
 
+  it('keeps the active hooks parity check aligned with the runtime-hooks unit-test path', async () => {
+    const calls: string[][] = [];
+    await executeParityChecks({
+      repoRoot: path.resolve('.'),
+      exists: async () => true,
+      environment: { PNPM_HOME: path.resolve('pnpm-home') },
+      runner: async (request) => {
+        calls.push(request.args);
+        return { status: 'passed', exitCode: 0, stdout: '', stderr: '' };
+      },
+    });
+    expect(
+      calls.some((args) => args.includes('packages/runtime-hooks/test/unit/index.test.ts')),
+    ).toBe(true);
+    expect(calls.flat()).not.toContain('packages/runtime-hooks/src/index.test.ts');
+  });
+
   it('executes declared parity checks with bounded digest-only results and fail-closed gating', async () => {
     const calls: string[] = [];
     const results = await executeParityChecks({
