@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   rename,
+  rm,
   stat,
   symlink,
   utimes,
@@ -11,7 +12,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import {
   createSessionLifecycleBindingV1,
   createSessionLifecycleEventV1,
@@ -51,9 +52,17 @@ const launch: LaunchSnapshotV1 = {
   artifactKey: 'artifact',
   manifestKey: 'manifest',
 };
+const temporaryRoots: string[] = [];
 async function temporary(): Promise<string> {
-  return mkdtemp(path.join(tmpdir(), 'mpx-sessions-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-sessions-'));
+  temporaryRoots.push(root);
+  return root;
 }
+afterEach(async () => {
+  await Promise.all(
+    temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
+});
 function nativeBinding(overrides: Partial<NativeBindingRecordV1> = {}): NativeBindingRecordV1 {
   return {
     schemaVersion: 1,
@@ -209,6 +218,37 @@ it('serializes concurrent read-modify-write transactions', async () => {
     ),
   );
   expect((await store.read(identity, 'claude')).records).toHaveLength(20);
+});
+
+it('retries ownership validation when Windows temporarily denies a lock owner read', async () => {
+  const root = await temporary();
+  let ownerReadWasDenied = false,
+    renameWasDenied = false;
+  const store = new SessionStore(root, {
+    releaseLock: {
+      readOwner: async (file) => {
+        if (renameWasDenied && !ownerReadWasDenied) {
+          ownerReadWasDenied = true;
+          throw Object.assign(new Error('temporarily denied'), { code: 'EPERM' });
+        }
+        return JSON.parse(await readFile(file, 'utf8')) as unknown;
+      },
+      rename: async (source, target) => {
+        if (!renameWasDenied) {
+          renameWasDenied = true;
+          throw Object.assign(new Error('temporarily denied'), { code: 'EPERM' });
+        }
+        await rename(source, target);
+      },
+      wait: async () => undefined,
+    },
+  });
+  const lock = `${store.registryPath(identity, 'claude')}.lock`;
+
+  await expect(store.put(record())).resolves.toMatchObject({ recordId: 'record-abc' });
+  await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(renameWasDenied).toBe(true);
+  expect(ownerReadWasDenied).toBe(true);
 });
 
 it('removes a newly-created lock when owner initialization fails', async () => {

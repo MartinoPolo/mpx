@@ -39,6 +39,11 @@ const encode = (value: string): string => Buffer.from(value, 'utf8').toString('b
 const decode = (value: string): string => Buffer.from(value, 'base64url').toString('utf8');
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
+interface ReleaseLockBoundary {
+  readonly readOwner: (file: string) => Promise<unknown>;
+  readonly rename: (source: string, target: string) => Promise<void>;
+  readonly wait: (milliseconds: number) => Promise<void>;
+}
 export interface StoreOptions {
   readonly lockWaitMs?: number;
   readonly staleLockMs?: number;
@@ -46,6 +51,7 @@ export interface StoreOptions {
   readonly afterLockInitializerCreated?: (lock: string, token: string) => Promise<void>;
   readonly isPidAlive?: (pid: number) => boolean | undefined | Promise<boolean | undefined>;
   readonly processId?: number;
+  readonly releaseLock?: ReleaseLockBoundary;
 }
 export class SessionStore {
   private readonly lockWaitMs: number;
@@ -55,6 +61,9 @@ export class SessionStore {
     ((lock: string, token: string) => Promise<void>) | undefined;
   private readonly isPidAlive: (pid: number) => boolean | undefined | Promise<boolean | undefined>;
   private readonly processId: number;
+  private readonly releaseReadOwner: (file: string) => Promise<unknown>;
+  private readonly releaseRename: (source: string, target: string) => Promise<void>;
+  private readonly releaseWait: (milliseconds: number) => Promise<void>;
   constructor(
     readonly stateRoot: string,
     options: StoreOptions = {},
@@ -74,6 +83,10 @@ export class SessionStore {
         }
       });
     this.processId = options.processId ?? process.pid;
+    this.releaseReadOwner =
+      options.releaseLock?.readOwner ?? ((file) => this.readJson(file, 16_384));
+    this.releaseRename = options.releaseLock?.rename ?? rename;
+    this.releaseWait = options.releaseLock?.wait ?? wait;
   }
 
   partitionDirectory(identity: IdentityV1, runtime: RuntimeName): string {
@@ -324,44 +337,47 @@ export class SessionStore {
     await rm(tombstone, { recursive: true, force: true });
     return true;
   }
-  private async removeOwnedLock(lock: string, ownerToken: string): Promise<void> {
-    let owner: unknown;
-    try {
-      owner = await this.readJson(path.join(lock, 'owner.json'), 16_384);
-    } catch (error) {
-      if (missing(error)) {
-        return;
-      }
-      throw error;
-    }
-    if (
-      !owner ||
-      typeof owner !== 'object' ||
-      (owner as { ownerToken?: unknown }).ownerToken !== ownerToken
-    ) {
-      return;
-    }
-    const tombstone = `${lock}.released-${ownerToken}`,
-      releaseDeadline = Date.now() + 2_000;
+  private async stillOwns(lock: string, ownerToken: string, deadline: number): Promise<boolean> {
     while (true) {
       try {
-        await rename(lock, tombstone);
+        const owner = await this.releaseReadOwner(path.join(lock, 'owner.json'));
+        return Boolean(
+          owner &&
+          typeof owner === 'object' &&
+          (owner as { ownerToken?: unknown }).ownerToken === ownerToken,
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return false;
+        }
+        if ((error as NodeJS.ErrnoException).code !== 'EPERM' || Date.now() >= deadline) {
+          throw error;
+        }
+        await this.releaseWait(25);
+      }
+    }
+  }
+  private async removeOwnedLock(lock: string, ownerToken: string): Promise<void> {
+    const releaseDeadline = Date.now() + 2_000;
+    if (!(await this.stillOwns(lock, ownerToken, releaseDeadline))) {
+      return;
+    }
+    const tombstone = `${lock}.released-${ownerToken}`;
+    while (true) {
+      try {
+        await this.releaseRename(lock, tombstone);
         break;
       } catch (error) {
         if (missing(error) || (error as NodeJS.ErrnoException).code === 'EEXIST') {
           return;
         }
-        if ((error as NodeJS.ErrnoException).code === 'EPERM' && Date.now() < releaseDeadline) {
-          const current = (await this.readJson(path.join(lock, 'owner.json'), 16_384).catch(
-            () => undefined,
-          )) as { ownerToken?: unknown } | undefined;
-          if (current?.ownerToken !== ownerToken) {
-            return;
-          }
-          await wait(25);
-          continue;
+        if ((error as NodeJS.ErrnoException).code !== 'EPERM' || Date.now() >= releaseDeadline) {
+          throw error;
         }
-        throw error;
+        if (!(await this.stillOwns(lock, ownerToken, releaseDeadline))) {
+          return;
+        }
+        await this.releaseWait(25);
       }
     }
     await rm(tombstone, { recursive: true, force: true });
