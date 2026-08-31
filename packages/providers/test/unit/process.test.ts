@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { probeProvider, runProviderCommand, type ProviderProcessExecutor } from './index.js';
+import {
+  probeProvider,
+  runProviderCommand,
+  type ProviderProcessExecutor,
+} from '../../src/index.js';
 
 const request = {
   providerId: 'github',

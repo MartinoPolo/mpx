@@ -6,7 +6,7 @@ import {
   type IssueV1,
   type ProviderAdapter,
   type ProviderDescriptor,
-} from './index.js';
+} from '../../src/index.js';
 
 const registry = new ProviderRegistry();
 const github = registry.get('github');

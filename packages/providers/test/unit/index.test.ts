@@ -10,7 +10,7 @@ import {
   REVIEW_CAPABILITIES,
   providerRegistry,
   type ProviderDescriptor,
-} from './index.js';
+} from '../../src/index.js';
 
 describe('provider contracts', () => {
   it('publishes the migration capability contract', () => {
