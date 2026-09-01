@@ -21,7 +21,9 @@ import {
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
 import {
+  loadProductionSbxProofSources,
   NodeLaunchStatusSnapshotMaterializer,
+  planProductionSbxExecution,
   resolveLaunchStatusSnapshotPath,
 } from '@mpx/application/node';
 import {
@@ -29,10 +31,6 @@ import {
   type LaunchExecutionContext,
 } from '../../src/launch-execution.js';
 import { NodePrivateRouteMaterializer, defaultContext } from '../../src/context.js';
-import {
-  loadProductionSbxProofSources,
-  planProductionSbxExecution,
-} from '../../src/sbx-execution.js';
 
 async function launchFixture(): Promise<{
   cwd: string;

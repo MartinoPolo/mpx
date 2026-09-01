@@ -130,15 +130,31 @@ describe('@mpx/application architecture', () => {
     });
   });
 
-  it('exports Node account composition without leaking it from the neutral root', async () => {
+  it('exports Node adapters without leaking them from the neutral root', async () => {
     const node = await import('../../src/node/index.js');
     const root = await import('../../src/index.js');
     expect(node).toMatchObject({
       createNodeAccountApplicationService: expect.any(Function),
       createPiAuthAvailabilityProbe: expect.any(Function),
+      createDefaultSbxDiagnostics: expect.any(Function),
+      createProductionSbxExecutionAdapter: expect.any(Function),
+      createProductionSessionDockerResumeAdmission: expect.any(Function),
+      diagnoseConfiguredF2Proof: expect.any(Function),
+      loadProductionSbxProofSources: expect.any(Function),
+      planProductionSbxExecution: expect.any(Function),
     });
-    expect(root).not.toHaveProperty('createNodeAccountApplicationService');
-    expect(root).not.toHaveProperty('createPiAuthAvailabilityProbe');
+    for (const name of [
+      'createNodeAccountApplicationService',
+      'createPiAuthAvailabilityProbe',
+      'createDefaultSbxDiagnostics',
+      'createProductionSbxExecutionAdapter',
+      'createProductionSessionDockerResumeAdmission',
+      'diagnoseConfiguredF2Proof',
+      'loadProductionSbxProofSources',
+      'planProductionSbxExecution',
+    ]) {
+      expect(root).not.toHaveProperty(name);
+    }
   });
 
   it('keeps generic application operation contracts out of provider-specific services', async () => {

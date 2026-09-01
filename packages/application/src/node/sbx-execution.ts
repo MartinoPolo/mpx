@@ -95,7 +95,7 @@ function resolveProductionReleaseRoot(
     return path.dirname(directory);
   }
   if (value(environment, 'MPX_DEV_MODE') === '1') {
-    return path.resolve(directory, '../../..');
+    return path.resolve(directory, '../../../..');
   }
   throw new Error('Immutable MPX release root is unavailable outside explicit development mode.');
 }
@@ -207,6 +207,75 @@ const processEnvironment = (environment: NodeJS.ProcessEnv) =>
       (name) => (value(environment, name) === undefined ? [] : [[name, value(environment, name)!]]),
     ),
   );
+
+export interface DefaultSbxDiagnosticDependencies {
+  resolveExecutable?: () => Promise<string>;
+  runner?: BoundedProcessRunner;
+}
+
+/** Performs the production read-only standalone-sbx diagnostic probe. */
+export async function createDefaultSbxDiagnostics(
+  environment: NodeJS.ProcessEnv,
+  operationCwd: string,
+  dependencies: DefaultSbxDiagnosticDependencies = {},
+): Promise<{
+  readonly available: boolean;
+  readonly failureCodes: readonly string[];
+  readonly readOnly: true;
+}> {
+  const locations = candidates(environment);
+  let executable: string;
+  try {
+    executable = dependencies.resolveExecutable
+      ? await dependencies.resolveExecutable()
+      : await resolveTrustedSbxExecutable({
+          candidates: locations.candidates,
+          projectRoot: operationCwd,
+          trustedRoots: locations.trustedRoots,
+          expectedSha256: SBX_V0_39_0_PIN.windowsBinarySha256,
+          inspect: async (file) => {
+            const info = await lstat(file),
+              canonical = await realpath(file);
+            return {
+              file: info.isFile() && !info.isSymbolicLink(),
+              realpath: canonical,
+              sha256: await sha256File(canonical),
+            };
+          },
+        });
+  } catch {
+    return { available: false, failureCodes: ['SBX_NOT_FOUND'], readOnly: true };
+  }
+  const runner: BoundedProcessRunner = dependencies.runner ?? {
+    run: (request) =>
+      new Promise((resolve, reject) => {
+        execFile(
+          request.executable,
+          [...request.argv],
+          {
+            cwd: request.cwd,
+            env: processEnvironment(environment),
+            timeout: request.timeoutMs,
+            maxBuffer: request.maxOutputBytes,
+            windowsHide: true,
+          },
+          (error, stdout, stderr) => {
+            const code =
+              error && typeof (error as { code?: unknown }).code === 'number'
+                ? (error as { code: number }).code
+                : 0;
+            if (error && typeof (error as { code?: unknown }).code !== 'number') {
+              reject(error);
+            } else {
+              resolve({ exitCode: code, stdout, stderr, truncated: false });
+            }
+          },
+        );
+      }),
+  };
+  return diagnoseSbx({ executable, cwd: operationCwd, runner, pin: SBX_V0_39_0_PIN });
+}
+
 function nodeRun(
   environment: NodeJS.ProcessEnv,
 ): (request: StandaloneSbxRunRequest) => Promise<ProcessResult> {

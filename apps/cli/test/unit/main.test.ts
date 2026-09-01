@@ -28,7 +28,7 @@ import {
   NodeTransactionStore,
   type InstallerOperationAdapter,
 } from '@mpx/installer';
-import { createDefaultSbxDiagnostics } from '../../src/context.js';
+import { createDefaultSbxDiagnostics } from '@mpx/application/node';
 import { parseSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';

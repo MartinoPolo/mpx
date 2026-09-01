@@ -48,7 +48,6 @@ import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@
 import {
   catalogPath,
   configuredProviderApplicationService,
-  createDefaultSbxDiagnostics,
   defaultContext,
   immutableInstaller,
   installIntentBuilder,
@@ -98,20 +97,19 @@ function resolveScheduledCaptureAuthority(
   );
 }
 import {
+  createDefaultSbxDiagnostics,
   createNodeDevService,
   createNodeLifecycleApplicationService,
   createNodeSessionApplicationService,
   createNodeSessionLegacyImport,
-  executeInternalPreparationWorker,
-} from '@mpx/application/node';
-import { createProductionSessionDockerResumeAdmission } from './session-docker-resume.js';
-import {
   createProductionSbxExecutionAdapter,
+  createProductionSessionDockerResumeAdmission,
   diagnoseConfiguredF2Proof,
+  executeInternalPreparationWorker,
   loadProductionSbxProofSources,
   planProductionSbxExecution,
   productionProofCreateArgv,
-} from './sbx-execution.js';
+} from '@mpx/application/node';
 import {
   BranchLeaseStore,
   BranchLineageStore,

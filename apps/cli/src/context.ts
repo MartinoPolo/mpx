@@ -1,6 +1,4 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import {
   access,
   lstat,
@@ -21,10 +19,12 @@ import {
 } from '@mpx/application';
 import {
   createNodeWorktreeLifecycleService,
+  createProductionSessionDockerResumeAdmission,
   preparationRuntime as nodePreparationRuntime,
   windowsProcessIdentityInspector,
   type CliPreparationRuntime,
   type PreparationRuntime,
+  type SbxExecutionDependencies,
 } from '@mpx/application/node';
 import { MpxError } from '@mpx/core';
 import {
@@ -65,10 +65,6 @@ import {
 } from '@mpx/launch';
 import {
   FileLaunchAuditStore,
-  SBX_V0_39_0_PIN,
-  diagnoseSbx,
-  resolveTrustedSbxExecutable,
-  type BoundedProcessRunner,
   type F2SandboxSessionResumeAdmission,
   type LaunchAuditStartRecord,
   type LaunchAuditStore,
@@ -76,7 +72,6 @@ import {
   type RouteMaterializer,
 } from '@mpx/executors';
 import type { LaunchExecutionContext } from './launch-execution.js';
-import type { SbxExecutionDependencies } from './sbx-execution.js';
 import {
   ClaudeActiveScanner,
   PiV2ActiveRegistryScanner,
@@ -114,7 +109,6 @@ import {
 } from '@mpx/installer';
 import { WindowsScheduledTaskAdapter } from '@mpx/windows';
 import { PiResumeTargetError, verifyPiResumeTarget } from '@mpx/runtime-pi';
-import { createProductionSessionDockerResumeAdmission } from './session-docker-resume.js';
 
 export type CliPortService = Pick<
   PortService,
@@ -224,99 +218,6 @@ export interface CliContext extends LaunchExecutionContext {
     descriptors: readonly ProviderDescriptor[];
     adapters: readonly ProviderAdapter[];
   }>;
-}
-
-async function sha256File(file: string): Promise<string> {
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(file)) {
-    hash.update(chunk);
-  }
-  return hash.digest('hex');
-}
-export interface DefaultSbxDiagnosticDependencies {
-  resolveExecutable?: () => Promise<string>;
-  runner?: BoundedProcessRunner;
-}
-export async function createDefaultSbxDiagnostics(
-  environment: NodeJS.ProcessEnv,
-  operationCwd: string,
-  dependencies: DefaultSbxDiagnosticDependencies = {},
-): Promise<{
-  readonly available: boolean;
-  readonly failureCodes: readonly string[];
-  readonly readOnly: true;
-}> {
-  const value = (name: string): string | undefined =>
-    Object.entries(environment).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
-  const pathDirectories = (value('PATH') ?? '')
-    .split(path.delimiter)
-    .filter((directory) => path.isAbsolute(directory));
-  const configured = value('MPX_SBX_EXECUTABLE');
-  const candidates = [
-    ...(configured ? [configured] : []),
-    ...pathDirectories.flatMap((directory) => [path.join(directory, 'sbx.exe')]),
-  ];
-  const trustedRoots = [
-    ...(configured && path.isAbsolute(configured) ? [path.dirname(configured)] : []),
-    ...pathDirectories,
-    ...(value('MPX_APPS') ? [value('MPX_APPS')!] : []),
-    ...(value('LOCALAPPDATA') ? [path.join(value('LOCALAPPDATA')!, 'DockerSandboxes', 'bin')] : []),
-  ].filter((root) => path.isAbsolute(root));
-  let executable: string | undefined;
-  try {
-    executable = dependencies.resolveExecutable
-      ? await dependencies.resolveExecutable()
-      : await resolveTrustedSbxExecutable({
-          candidates,
-          projectRoot: operationCwd,
-          trustedRoots,
-          expectedSha256: SBX_V0_39_0_PIN.windowsBinarySha256,
-          inspect: async (file) => {
-            const info = await lstat(file),
-              canonical = await realpath(file);
-            return {
-              file: info.isFile() && !info.isSymbolicLink(),
-              realpath: canonical,
-              sha256: await sha256File(canonical),
-            };
-          },
-        });
-  } catch {
-    return { available: false, failureCodes: ['SBX_NOT_FOUND'], readOnly: true };
-  }
-  const probeEnvironment = Object.fromEntries(
-    ['SYSTEMROOT', 'WINDIR', 'LOCALAPPDATA', 'APPDATA', 'USERPROFILE', 'TEMP', 'TMP'].flatMap(
-      (name) => (value(name) === undefined ? [] : [[name, value(name)!]]),
-    ),
-  );
-  const runner: BoundedProcessRunner = dependencies.runner ?? {
-    run: (request) =>
-      new Promise((resolve, reject) => {
-        execFile(
-          request.executable,
-          [...request.argv],
-          {
-            cwd: request.cwd,
-            env: probeEnvironment,
-            timeout: request.timeoutMs,
-            maxBuffer: request.maxOutputBytes,
-            windowsHide: true,
-          },
-          (error, stdout, stderr) => {
-            const code =
-              error && typeof (error as { code?: unknown }).code === 'number'
-                ? (error as { code: number }).code
-                : 0;
-            if (error && typeof (error as { code?: unknown }).code !== 'number') {
-              reject(error);
-            } else {
-              resolve({ exitCode: code, stdout, stderr, truncated: false });
-            }
-          },
-        );
-      }),
-  };
-  return diagnoseSbx({ executable, cwd: operationCwd, runner, pin: SBX_V0_39_0_PIN });
 }
 
 const builtInProviderExecutables = new Set(['gh', 'glab', 'kf']);

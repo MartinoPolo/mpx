@@ -32,7 +32,8 @@ const inventory = {
   runtimeToolInventorySha256: sha(stable(entries)),
   executorEvidenceSource: 'packages/executors/src/index.ts',
   executorEvidenceBindingSha256: sha(await readFile(executorFile)),
-  productionBackend: 'apps/cli/src/sbx-execution.ts#createProductionSbxExecutionAdapter',
+  productionBackend:
+    'packages/application/src/node/sbx-execution.ts#createProductionSbxExecutionAdapter',
   lifecycleAdapter:
     'packages/executors/src/standalone-sbx-executor.ts#StandaloneSbxLifecycleAdapter',
   counts: {

@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createF2ProofReportV1, f2Sha256 } from '@mpx/runtime-contracts';
 import { buildSandboxPlanV1 } from '@mpx/executors';
 import { sha256Canonical } from '@mpx/core';
-import { createProductionSessionDockerResumeAdmission } from '../../src/session-docker-resume.js';
+import { createProductionSessionDockerResumeAdmission } from '../../src/node/session-docker-resume.js';
 
 const roots: string[] = [];
 afterEach(async () => {

@@ -15,7 +15,7 @@ import {
   diagnoseConfiguredF2Proof,
   loadProductionSbxProofSources,
   planProductionSbxExecution,
-} from '../../src/sbx-execution.js';
+} from '../../src/node/sbx-execution.js';
 
 const h = (value: string) => value.repeat(64).slice(0, 64);
 const sha = (value: Uint8Array | string) => createHash('sha256').update(value).digest('hex');
