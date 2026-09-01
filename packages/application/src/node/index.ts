@@ -8,6 +8,7 @@ import {
 } from '../lifecycle-application-service.js';
 
 export * from './account-application-service.js';
+export * from './local-issue-view-rebuilder.js';
 export * from './pi-auth-availability.js';
 export * from './preparation-worker-polling.js';
 export * from './preparation-lifecycle.js';
@@ -15,6 +16,7 @@ export * from './preparation-status.js';
 export * from './worktree-lifecycle.js';
 export * from './session-legacy-import.js';
 export * from './session-application-service.js';
+export * from './session-branch-adapters.js';
 export * from './sbx-execution.js';
 export * from './session-docker-resume.js';
 

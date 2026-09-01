@@ -27,6 +27,7 @@
     "@mpx/executors": "workspace:*",
     "@mpx/launch": "workspace:*",
     "@mpx/ports": "workspace:*",
+    "@mpx/provider-local": "workspace:*",
     "@mpx/providers": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/sessions": "workspace:*",

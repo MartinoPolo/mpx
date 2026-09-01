@@ -162,6 +162,9 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../ports
+      '@mpx/provider-local':
+        specifier: workspace:*
+        version: link:../provider-local
       '@mpx/providers':
         specifier: workspace:*
         version: link:../providers

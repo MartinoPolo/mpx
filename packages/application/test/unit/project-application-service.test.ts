@@ -128,30 +128,175 @@ describe('ProjectApplicationService', () => {
     });
   });
 
-  it('aggregates domain diagnostics in stable source order and derives failure status', async () => {
+  it('resolves a selected local store and view before invoking the structural rebuilder', async () => {
+    const rebuild = vi.fn(async () => ({ rebuilt: 3 }));
+    const localProject: ProjectConfig = {
+      ...project,
+      issues: { provider: 'local', store: 'work-items', view: 'vault' },
+    };
+    const localUser = {
+      ...user,
+      localIssueStores: { 'work-items': { root: 'C:/issues' } },
+      localViews: {
+        vault: {
+          vaultRoot: 'C:/vault',
+          outputRoot: 'Projects',
+          vaultSubtree: 'MPX/Issues',
+          resumeBaseUrl: 'mpx://resume',
+        },
+      },
+    } satisfies UserConfig;
     const service = setup({
+      discoverProjectConfig: async () => ({ ...found, config: localProject }),
+      loadUserConfig: async () => localUser,
+      localIssueViewRebuilder: { rebuild },
+    });
+
+    await expect(
+      service.rebuildLocalIssueView({
+        cwd: 'C:/repo',
+        appdata: 'C:/Users/test/AppData',
+        environment: {},
+      }),
+    ).resolves.toEqual({ data: { rebuilt: 3 } });
+    expect(rebuild).toHaveBeenCalledWith({
+      storeRoot: 'C:/issues',
+      projectId: 'synthetic/project',
+      view: {
+        vaultRoot: 'C:/vault',
+        outputRoot: 'Projects',
+        resumeBaseUrl: 'mpx://resume',
+      },
+    });
+  });
+
+  it('rejects an unselected local view before loading required user configuration', async () => {
+    const load = vi.fn(async () => user);
+    await expect(
+      setup({
+        loadUserConfig: load,
+        localIssueViewRebuilder: { rebuild: vi.fn() },
+      }).rebuildLocalIssueView({
+        cwd: 'C:/repo',
+        appdata: 'C:/Users/test/AppData',
+        environment: {},
+      }),
+    ).rejects.toMatchObject({
+      code: 'LOCAL_VIEW_UNAVAILABLE',
+      message: 'The project must select logical local store and view registrations.',
+    });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('owns doctor diagnostic sequencing and only snapshots managed services', async () => {
+    const order: string[] = [];
+    const managedProject: ProjectConfig = {
+      ...project,
+      development: {
+        services: {
+          zed: {
+            scope: 'checkout',
+            port: { mode: 'fixed-shared', preferred: 4200 },
+            start: { type: 'package-script', script: 'zed' },
+          },
+          app: {
+            scope: 'checkout',
+            port: { mode: 'managed', preferred: 4173 },
+            start: { type: 'package-script', script: 'dev' },
+          },
+        },
+      },
+    };
+    const service = setup({
+      discoverProjectConfig: async () => {
+        order.push('discover');
+        return { ...found, config: managedProject };
+      },
+      loadUserConfig: async () => {
+        order.push('config');
+        return user;
+      },
+      inventoryCanonical: async () => {
+        order.push('canonical');
+        return [];
+      },
+      inventoryProjectSkills: async () => {
+        order.push('project');
+        return { skills: [], diagnostics: [] };
+      },
+      sbxDiagnostics: async () => {
+        order.push('sbx');
+        return { available: false, failureCodes: ['Z_CODE', 'A_CODE', 'A_CODE'], readOnly: true };
+      },
+      sbxProofDiagnostics: async () => {
+        order.push('proof');
+        return ['PROOF'];
+      },
+      branchDiagnostics: async () => {
+        order.push('branch');
+        return {
+          runtime: { available: true },
+          terminal: { available: false, code: 'WINDOWS_TERMINAL_UNAVAILABLE' },
+          terminalConfigured: true,
+        };
+      },
+      statusSnapshot: async (request: { configHash: string }) => {
+        order.push('status');
+        expect(request.configHash).toBeTruthy();
+        return { diagnostics: [{ code: 'PORT', message: 'missing', severity: 'error' }] };
+      },
+      resolveConfig: async () => {
+        order.push('resolve');
+        return {
+          project: managedProject,
+          cwdClassification: { status: 'known', domain: 'work', root: 'C:/work' },
+          contentScope: { name: 'work', root: 'C:/work', skillPacks: [], skillExposure: {} },
+          provenance: [],
+        };
+      },
       configDoctor: () => [{ code: 'CFG', message: 'config', severity: 'warning', pointer: '/x' }],
       skillDoctor: () => [{ code: 'SKILL', message: 'skill', path: 'skill.md' }],
     });
-    await expect(
-      service.doctor({
-        cwd: 'C:/repo',
-        user,
-        canonical: [],
-        projectInventory: { skills: [], diagnostics: [] },
-        additionalDiagnostics: [{ code: 'EXTRA', message: 'extra', severity: 'error' }],
-      }),
-    ).resolves.toEqual({
-      data: {
-        diagnostics: [
-          { code: 'CFG', message: 'config', severity: 'warning', details: { pointer: '/x' } },
-          { code: 'SKILL', message: 'skill', severity: 'error', details: { path: 'skill.md' } },
-          { code: 'EXTRA', message: 'extra', severity: 'error' },
-        ],
-        cwdClassification: { status: 'known', domain: 'work', root: 'C:/work' },
-        resolvedContentScope: 'work',
-      },
-      exitCode: 1,
+    const result = await service.doctor({
+      cwd: 'C:/repo',
+      appdata: 'C:/Users/test/AppData',
+      environment: {},
+      catalogRoot: 'C:/catalog',
     });
+    expect(order).toEqual([
+      'discover',
+      'config',
+      'canonical',
+      'project',
+      'sbx',
+      'proof',
+      'branch',
+      'status',
+      'resolve',
+    ]);
+    expect(result.exitCode).toBe(1);
+    expect(result.data.diagnostics.map(({ code }) => code)).toEqual([
+      'CFG',
+      'SKILL',
+      'A_CODE',
+      'Z_CODE',
+      'PROOF',
+      'WINDOWS_TERMINAL_UNAVAILABLE',
+      'FIXED_SHARED_LIMITATION',
+      'PORT',
+    ]);
+  });
+
+  it('rejects mutable sandbox diagnostics before later diagnostic side effects', async () => {
+    const branchDiagnostics = vi.fn();
+    await expect(
+      setup({
+        inventoryCanonical: async () => [],
+        inventoryProjectSkills: async () => ({ skills: [], diagnostics: [] }),
+        sbxDiagnostics: async () => ({ available: true, failureCodes: [], readOnly: false }),
+        branchDiagnostics,
+      }).doctor({ cwd: 'C:/repo', environment: {}, catalogRoot: 'C:/catalog' }),
+    ).rejects.toMatchObject({ code: 'SBX_DIAGNOSTICS_UNSAFE' });
+    expect(branchDiagnostics).not.toHaveBeenCalled();
   });
 });

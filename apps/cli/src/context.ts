@@ -18,6 +18,7 @@ import {
   type LifecycleWorktreeService,
 } from '@mpx/application';
 import {
+  createNodeLocalIssueViewRebuilder,
   createNodeWorktreeLifecycleService,
   createProductionSessionDockerResumeAdmission,
   preparationRuntime as nodePreparationRuntime,
@@ -38,11 +39,7 @@ import { createStatusProvider, type StatusProvider } from '@mpx/status';
 import { createGitHubAdapters } from '@mpx/provider-github';
 import { createGitLabAdapters } from '@mpx/provider-gitlab';
 import { createKanbanFlowAdapter } from '@mpx/provider-kanbanflow';
-import {
-  createLocalIssueAdapter,
-  LocalIssueStore,
-  rebuildObsidianIssueViews,
-} from '@mpx/provider-local';
+import { createLocalIssueAdapter } from '@mpx/provider-local';
 import {
   BUILTIN_PROVIDERS,
   ProviderRegistry,
@@ -181,7 +178,7 @@ export interface CliContext extends LaunchExecutionContext {
   sbxDiagnostics?: () => Promise<{
     readonly available: boolean;
     readonly failureCodes: readonly string[];
-    readonly readOnly: true;
+    readonly readOnly: boolean;
   }>;
   sessionStore?: SessionStore;
   sessionStoreFactory?: (stateRoot: string) => SessionStore;
@@ -648,15 +645,15 @@ export async function providerService(
         });
       }
       localOnChanged = async () => {
-        await rebuildObsidianIssueViews(
-          new LocalIssueStore(localRoot!, { projectId: config.project.id }),
-          {
+        await createNodeLocalIssueViewRebuilder().rebuild({
+          storeRoot: localRoot!,
+          projectId: config.project.id,
+          view: {
             vaultRoot: view.vaultRoot,
             outputRoot: view.outputRoot,
-            projectId: config.project.id,
             resumeBaseUrl: view.resumeBaseUrl,
           },
-        );
+        });
       };
     }
   }

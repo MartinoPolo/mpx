@@ -23,6 +23,7 @@ import {
 } from '@mpx/application';
 import {
   createNodeAccountApplicationService,
+  createNodeLocalIssueViewRebuilder,
   createPiAuthAvailabilityProbe,
 } from '@mpx/application/node';
 import {
@@ -41,7 +42,6 @@ import {
   sanitizeHostReason,
 } from '@mpx/executors';
 import { createSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
-import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/provider-local';
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from '@mpx/status';
 import { expandBranchTemplate } from '@mpx/worktrees';
 import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@mpx/skills';
@@ -68,8 +68,9 @@ import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js'
 import {
   createProductionSessionBranchRuntimeAdapter,
   createWindowsTerminalBranchAdapter,
+  diagnoseNodeSessionBranchAdapters,
   diagnoseSessionBranchAdapters,
-} from './session-branch-adapters.js';
+} from '@mpx/application/node';
 import {
   currentLaunchTuple,
   directProcessTty,
@@ -268,9 +269,25 @@ function parse(argv: readonly string[]): Parsed {
   };
 }
 function projectApplication(context: CliContext): ProjectApplicationService {
+  const sbxDiagnostics = context.sbxDiagnostics
+    ? async (_request: { cwd: string }) => context.sbxDiagnostics!()
+    : context === defaultContext
+      ? ({ cwd }: { cwd: string }) => createDefaultSbxDiagnostics(context.env, cwd)
+      : undefined;
   return createProjectApplicationService({
     path: { join: path.join, basename: path.basename, isAbsolute: path.isAbsolute },
+    catalogRoot: (cwd) => catalogPath(context, cwd),
     access: context.accessFile ?? access,
+    ...(context.discoverProjectConfig
+      ? { discoverProjectConfig: context.discoverProjectConfig }
+      : {}),
+    inventoryCanonical,
+    inventoryProjectSkills,
+    localIssueViewRebuilder: createNodeLocalIssueViewRebuilder(),
+    ...(sbxDiagnostics ? { sbxDiagnostics } : {}),
+    sbxProofDiagnostics: () => diagnoseConfiguredF2Proof(context.env),
+    branchDiagnostics: () => diagnoseNodeSessionBranchAdapters(context.env),
+    statusSnapshot: (request) => status(context, context.portService).snapshot(request),
     ensureProject: (request) => ports(context).ensure(request),
   });
 }
@@ -1297,33 +1314,12 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     if (action !== 'rebuild' || args.length) {
       throw new UsageError('view requires rebuild');
     }
-    const found = await project(parsed, context),
-      issues = found.config.issues;
-    if (issues?.provider !== 'local' || !issues.store || !issues.view) {
-      throw new MpxError({
-        code: 'LOCAL_VIEW_UNAVAILABLE',
-        message: 'The project must select logical local store and view registrations.',
-      });
-    }
-    const user = await requiredUserConfig(context),
-      storeRegistration = user.localIssueStores?.[issues.store],
-      view = user.localViews?.[issues.view];
-    if (!storeRegistration || !view) {
-      throw new MpxError({
-        code: 'LOCAL_VIEW_UNAVAILABLE',
-        message: 'The selected logical local store or view is not registered.',
-      });
-    }
-    data = await rebuildObsidianIssueViews(
-      new LocalIssueStore(storeRegistration.root, { projectId: found.config.project.id }),
-      {
-        vaultRoot: view.vaultRoot,
-        outputRoot: view.outputRoot,
-        projectId: found.config.project.id,
-        resumeBaseUrl: view.resumeBaseUrl,
-      },
-    );
-    return { data, warnings };
+    const result = await projectApplication(context).rebuildLocalIssueView({
+      cwd: parsed.cwd,
+      ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
+      environment: context.env,
+    });
+    return { ...result, warnings };
   }
   if (['issue', 'review', 'ci'].includes(group)) {
     const actions =
@@ -2190,107 +2186,10 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     return { ...result, warnings };
   }
   if (group === 'doctor' && !action) {
-    const found = await project(parsed, context),
-      user = await userConfig(context);
-    const catalog = await inventoryCanonical(await catalogPath(context, parsed.cwd));
-    const local = await inventoryProjectSkills(found.root, catalog);
-    const diagnostics: Diagnostic[] = [];
-    const sbxProbe =
-      context.sbxDiagnostics ??
-      (context === defaultContext
-        ? () => createDefaultSbxDiagnostics(context.env, parsed.cwd)
-        : undefined);
-    if (sbxProbe) {
-      const sbx = await sbxProbe();
-      if (!sbx.readOnly) {
-        throw new MpxError({
-          code: 'SBX_DIAGNOSTICS_UNSAFE',
-          message: 'Sandbox diagnostics must be read-only.',
-        });
-      }
-      for (const code of [...new Set(sbx.failureCodes)].sort()) {
-        diagnostics.push({
-          code,
-          message: `Standalone sbx diagnostic: ${code}.`,
-          severity: 'warning',
-          details: { executor: 'docker' },
-        });
-      }
-      for (const code of await diagnoseConfiguredF2Proof(context.env)) {
-        diagnostics.push({
-          code,
-          message: `Standalone sbx proof diagnostic: ${code}.`,
-          severity: 'warning',
-          details: { executor: 'docker' },
-        });
-      }
-    }
-    const branchAdapters = await diagnoseSessionBranchAdapters({
-      runtimeAvailable: true,
-      ...(context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE
-        ? { terminalCandidate: context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE }
-        : {}),
-      trustedRoots: [
-        context.env.WINDIR,
-        context.env.LOCALAPPDATA
-          ? path.join(context.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps')
-          : undefined,
-      ].filter((value): value is string => Boolean(value && path.isAbsolute(value))),
-    });
-    if (!branchAdapters.runtime.available) {
-      diagnostics.push({
-        code: branchAdapters.runtime.code,
-        message: 'Production session branch runtime execution is unavailable.',
-        severity: 'warning',
-      });
-    }
-    if (context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE && !branchAdapters.terminal.available) {
-      diagnostics.push({
-        code: branchAdapters.terminal.code,
-        message:
-          'Configured Windows Terminal is unavailable or untrusted; side-by-side tabs are disabled.',
-        severity: 'warning',
-      });
-    }
-    const services = Object.entries(found.config.development?.services ?? {}).sort(
-      ([left], [right]) => left.localeCompare(right),
-    );
-    for (const [name, service] of services) {
-      if (service.port.mode === 'fixed-shared') {
-        diagnostics.push({
-          code: 'FIXED_SHARED_LIMITATION',
-          message: `Service ${name} uses a fixed-shared port that MPX cannot reserve exclusively.`,
-          severity: 'warning',
-          details: {
-            service: name,
-            ...(service.port.preferred === undefined ? {} : { port: service.port.preferred }),
-          },
-        });
-      }
-    }
-    if (services.some(([, service]) => service.port.mode === 'managed')) {
-      const request = {
-        cwd: parsed.cwd,
-        projectRoot: found.root,
-        config: found.config,
-        configHash: sha256Canonical(found.config as unknown as JsonValue),
-      };
-      const snapshot = await status(context, ports(context)).snapshot(request);
-      diagnostics.push(
-        ...snapshot.diagnostics.map(({ code, message, severity, serviceId }) => ({
-          code,
-          message,
-          severity,
-          ...(serviceId ? { details: { service: serviceId } } : {}),
-        })),
-      );
-    }
     const result = await projectApplication(context).doctor({
       cwd: parsed.cwd,
-      user,
-      canonical: catalog,
-      projectInventory: local,
-      additionalDiagnostics: diagnostics,
+      ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
+      environment: context.env,
     });
     return { ...result, warnings };
   }

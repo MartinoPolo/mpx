@@ -114,6 +114,25 @@ export async function createWindowsTerminalBranchAdapter(input: {
   });
 }
 
+export async function diagnoseNodeSessionBranchAdapters(
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  const terminalCandidate = environment.MPX_WINDOWS_TERMINAL_EXECUTABLE;
+  return Object.freeze({
+    ...(await diagnoseSessionBranchAdapters({
+      runtimeAvailable: true,
+      ...(terminalCandidate ? { terminalCandidate } : {}),
+      trustedRoots: [
+        environment.WINDIR,
+        environment.LOCALAPPDATA
+          ? path.join(environment.LOCALAPPDATA, 'Microsoft', 'WindowsApps')
+          : undefined,
+      ].filter((value): value is string => Boolean(value && path.isAbsolute(value))),
+    })),
+    terminalConfigured: Boolean(terminalCandidate),
+  });
+}
+
 export async function diagnoseSessionBranchAdapters(input: {
   readonly runtimeAvailable: boolean;
   readonly terminalCandidate?: string;

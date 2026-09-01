@@ -111,9 +111,9 @@ describe('@mpx/application architecture', () => {
     expect(violations).toEqual([]);
   });
 
-  it('recursively excludes concrete providers, runtimes, and CLI internals', async () => {
+  it('keeps CLI internals out of both neutral and Node application modules', async () => {
     const source = await sourceText(path.resolve(import.meta.dirname, '../../src'));
-    expect(source).not.toMatch(/@mpx\/(?:provider-|runtime-(?:claude|pi))|apps\/cli/u);
+    expect(source).not.toMatch(/apps\/cli/u);
   });
 
   it('exposes provider-neutral operation facades from the importable package root', async () => {
@@ -135,6 +135,11 @@ describe('@mpx/application architecture', () => {
     const root = await import('../../src/index.js');
     expect(node).toMatchObject({
       createNodeAccountApplicationService: expect.any(Function),
+      createNodeLocalIssueViewRebuilder: expect.any(Function),
+      createProductionSessionBranchRuntimeAdapter: expect.any(Function),
+      createWindowsTerminalBranchAdapter: expect.any(Function),
+      diagnoseNodeSessionBranchAdapters: expect.any(Function),
+      diagnoseSessionBranchAdapters: expect.any(Function),
       createPiAuthAvailabilityProbe: expect.any(Function),
       createDefaultSbxDiagnostics: expect.any(Function),
       createProductionSbxExecutionAdapter: expect.any(Function),
@@ -145,6 +150,11 @@ describe('@mpx/application architecture', () => {
     });
     for (const name of [
       'createNodeAccountApplicationService',
+      'createNodeLocalIssueViewRebuilder',
+      'createProductionSessionBranchRuntimeAdapter',
+      'createWindowsTerminalBranchAdapter',
+      'diagnoseNodeSessionBranchAdapters',
+      'diagnoseSessionBranchAdapters',
       'createPiAuthAvailabilityProbe',
       'createDefaultSbxDiagnostics',
       'createProductionSbxExecutionAdapter',

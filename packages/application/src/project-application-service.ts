@@ -18,8 +18,8 @@ import {
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
 import {
   doctor as skillDoctor,
-  type CanonicalSkill,
-  type ProjectSkill,
+  inventoryCanonical,
+  inventoryProjectSkills,
   type ResolveOptions,
 } from '@mpx/skills';
 import type { ApplicationOperationResult } from './contracts.js';
@@ -33,6 +33,18 @@ export interface ProjectEnsureResult {
   readonly lease: unknown;
   readonly warnings: readonly { code: string; message: string; port?: number }[];
 }
+export interface LocalIssueViewRebuildRequest {
+  readonly storeRoot: string;
+  readonly projectId: string;
+  readonly view: {
+    readonly vaultRoot: string;
+    readonly outputRoot: string;
+    readonly resumeBaseUrl: string;
+  };
+}
+export interface LocalIssueViewRebuilder {
+  rebuild(request: LocalIssueViewRebuildRequest): Promise<unknown>;
+}
 export interface ProjectApplicationDependencies {
   readonly path: ProjectPathOperations;
   access(file: string): Promise<void>;
@@ -41,8 +53,39 @@ export interface ProjectApplicationDependencies {
   resolveConfig?: typeof resolveConfig;
   configDoctor?: typeof configDoctor;
   skillDoctor?: typeof skillDoctor;
+  catalogRoot?(cwd: string): Promise<string>;
+  inventoryCanonical?: typeof inventoryCanonical;
+  inventoryProjectSkills?: typeof inventoryProjectSkills;
+  sbxDiagnostics?(request: { cwd: string }): Promise<{
+    readonly available: boolean;
+    readonly failureCodes: readonly string[];
+    readonly readOnly: boolean;
+  }>;
+  sbxProofDiagnostics?(): Promise<readonly string[]>;
+  branchDiagnostics?(): Promise<{
+    readonly runtime:
+      { readonly available: true } | { readonly available: false; readonly code: string };
+    readonly terminal:
+      | { readonly available: true; readonly executable: string }
+      | { readonly available: false; readonly code: string };
+    readonly terminalConfigured: boolean;
+  }>;
+  statusSnapshot?(request: {
+    cwd: string;
+    projectRoot: string;
+    config: ProjectConfig;
+    configHash: string;
+  }): Promise<{
+    readonly diagnostics: readonly {
+      code: string;
+      message: string;
+      severity: Diagnostic['severity'];
+      serviceId?: string | null;
+    }[];
+  }>;
   confirmInit?: typeof confirmInit;
   rollbackConfirmedInit?: typeof rollbackConfirmedInit;
+  localIssueViewRebuilder?: LocalIssueViewRebuilder;
   ensureProject?(request: {
     cwd: string;
     projectRoot: string;
@@ -256,6 +299,47 @@ export class ProjectApplicationService {
     };
   }
   // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
+  async rebuildLocalIssueView(request: {
+    cwd: string;
+    appdata?: string;
+    environment: Record<string, string | undefined>;
+  }): Promise<ApplicationOperationResult<unknown>> {
+    const found = await this.discover(request.cwd);
+    const issues = found.config.issues;
+    if (issues?.provider !== 'local' || !issues.store || !issues.view) {
+      throw new MpxError({
+        code: 'LOCAL_VIEW_UNAVAILABLE',
+        message: 'The project must select logical local store and view registrations.',
+      });
+    }
+    const user = await this.requiredUserConfig(request);
+    const store = user.localIssueStores?.[issues.store];
+    const view = user.localViews?.[issues.view];
+    if (!store || !view) {
+      throw new MpxError({
+        code: 'LOCAL_VIEW_UNAVAILABLE',
+        message: 'The selected logical local store or view is not registered.',
+      });
+    }
+    if (!this.dependencies.localIssueViewRebuilder) {
+      throw new MpxError({
+        code: 'LOCAL_VIEW_UNAVAILABLE',
+        message: 'The selected logical local store or view is not registered.',
+      });
+    }
+    return {
+      data: await this.dependencies.localIssueViewRebuilder.rebuild({
+        storeRoot: store.root,
+        projectId: found.config.project.id,
+        view: {
+          vaultRoot: view.vaultRoot,
+          outputRoot: view.outputRoot,
+          resumeBaseUrl: view.resumeBaseUrl,
+        },
+      }),
+    };
+  }
+  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   async config(
     request:
       | { cwd: string; action: 'show' }
@@ -371,13 +455,9 @@ export class ProjectApplicationService {
   // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   async doctor(request: {
     cwd: string;
-    user: UserConfig;
-    canonical: readonly CanonicalSkill[];
-    projectInventory: {
-      skills: ProjectSkill[];
-      diagnostics: { code: string; message: string; path?: string }[];
-    };
-    additionalDiagnostics?: readonly Diagnostic[];
+    appdata?: string;
+    environment: Record<string, string | undefined>;
+    catalogRoot?: string;
   }): Promise<
     ApplicationOperationResult<{
       diagnostics: Diagnostic[];
@@ -386,13 +466,107 @@ export class ProjectApplicationService {
     }>
   > {
     const found = await this.discover(request.cwd);
+    const user = await this.optionalUserConfig({
+      ...(request.appdata ? { appdata: request.appdata } : {}),
+      environment: request.environment,
+    });
+    const catalogRoot = request.catalogRoot ?? (await this.dependencies.catalogRoot?.(request.cwd));
+    if (!catalogRoot) {
+      throw new MpxError({
+        code: 'SKILL_CATALOG_UNAVAILABLE',
+        message: 'Canonical skill catalog was not found.',
+      });
+    }
+    const canonical = await (this.dependencies.inventoryCanonical ?? inventoryCanonical)(
+      catalogRoot,
+    );
+    const projectInventory = await (
+      this.dependencies.inventoryProjectSkills ?? inventoryProjectSkills
+    )(found.root, canonical);
+    const additionalDiagnostics: Diagnostic[] = [];
+    if (this.dependencies.sbxDiagnostics) {
+      const sbx = await this.dependencies.sbxDiagnostics({ cwd: request.cwd });
+      if (!sbx.readOnly) {
+        throw new MpxError({
+          code: 'SBX_DIAGNOSTICS_UNSAFE',
+          message: 'Sandbox diagnostics must be read-only.',
+        });
+      }
+      for (const code of [...new Set(sbx.failureCodes)].sort()) {
+        additionalDiagnostics.push({
+          code,
+          message: `Standalone sbx diagnostic: ${code}.`,
+          severity: 'warning',
+          details: { executor: 'docker' },
+        });
+      }
+      for (const code of (await this.dependencies.sbxProofDiagnostics?.()) ?? []) {
+        additionalDiagnostics.push({
+          code,
+          message: `Standalone sbx proof diagnostic: ${code}.`,
+          severity: 'warning',
+          details: { executor: 'docker' },
+        });
+      }
+    }
+    const branch = await this.dependencies.branchDiagnostics?.();
+    if (branch && !branch.runtime.available) {
+      additionalDiagnostics.push({
+        code: branch.runtime.code,
+        message: 'Production session branch runtime execution is unavailable.',
+        severity: 'warning',
+      });
+    }
+    if (branch?.terminalConfigured && !branch.terminal.available) {
+      additionalDiagnostics.push({
+        code: branch.terminal.code,
+        message:
+          'Configured Windows Terminal is unavailable or untrusted; side-by-side tabs are disabled.',
+        severity: 'warning',
+      });
+    }
+    const services = Object.entries(found.config.development?.services ?? {}).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
+    for (const [name, service] of services) {
+      if (service.port.mode === 'fixed-shared') {
+        additionalDiagnostics.push({
+          code: 'FIXED_SHARED_LIMITATION',
+          message: `Service ${name} uses a fixed-shared port that MPX cannot reserve exclusively.`,
+          severity: 'warning',
+          details: {
+            service: name,
+            ...(service.port.preferred === undefined ? {} : { port: service.port.preferred }),
+          },
+        });
+      }
+    }
+    if (
+      this.dependencies.statusSnapshot &&
+      services.some(([, service]) => service.port.mode === 'managed')
+    ) {
+      const snapshot = await this.dependencies.statusSnapshot({
+        cwd: request.cwd,
+        projectRoot: found.root,
+        config: found.config,
+        configHash: sha256Canonical(found.config as unknown as JsonValue),
+      });
+      additionalDiagnostics.push(
+        ...snapshot.diagnostics.map(({ code, message, severity, serviceId }) => ({
+          code,
+          message,
+          severity,
+          ...(serviceId ? { details: { service: serviceId } } : {}),
+        })),
+      );
+    }
     const resolved = await (this.dependencies.resolveConfig ?? resolveConfig)(
       found.config,
-      request.user,
+      user,
       request.cwd,
     );
     const diagnostics: Diagnostic[] = [
-      ...(this.dependencies.configDoctor ?? configDoctor)(found.config, request.user).map(
+      ...(this.dependencies.configDoctor ?? configDoctor)(found.config, user).map(
         ({ code, message, severity, pointer }: ConfigDiagnostic) => ({
           code,
           message,
@@ -400,16 +574,15 @@ export class ProjectApplicationService {
           ...(pointer ? { details: { pointer } } : {}),
         }),
       ),
-      ...(this.dependencies.skillDoctor ?? skillDoctor)(
-        request.canonical,
-        request.projectInventory,
-      ).map(({ code, message, path }) => ({
-        code,
-        message,
-        severity: 'error' as const,
-        ...(path ? { details: { path } } : {}),
-      })),
-      ...(request.additionalDiagnostics ?? []),
+      ...(this.dependencies.skillDoctor ?? skillDoctor)(canonical, projectInventory).map(
+        ({ code, message, path }) => ({
+          code,
+          message,
+          severity: 'error' as const,
+          ...(path ? { details: { path } } : {}),
+        }),
+      ),
+      ...additionalDiagnostics,
     ];
     return {
       data: {

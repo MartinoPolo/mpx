@@ -5,8 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createProductionSessionBranchRuntimeAdapter,
   createWindowsTerminalBranchAdapter,
+  diagnoseNodeSessionBranchAdapters,
   diagnoseSessionBranchAdapters,
-} from '../../src/session-branch-adapters.js';
+} from '../../src/node/session-branch-adapters.js';
 
 const invocation = {
   executable: 'C:/Program Files/Claude/claude.exe',
@@ -82,6 +83,20 @@ describe('production session branch adapters', () => {
     expect(run).toHaveBeenCalledWith(
       expect.objectContaining({ executable: wt, shell: false, cwd: invocation.cwd }),
     );
+  });
+
+  it('composes Node doctor branch diagnostics from environment without side effects', async () => {
+    await expect(
+      diagnoseNodeSessionBranchAdapters({
+        WINDIR: 'C:/Windows',
+        LOCALAPPDATA: 'C:/Users/test/AppData/Local',
+        MPX_WINDOWS_TERMINAL_EXECUTABLE: 'C:/missing/wt.exe',
+      }),
+    ).resolves.toMatchObject({
+      runtime: { available: true },
+      terminal: { available: false, code: 'WINDOWS_TERMINAL_UNAVAILABLE' },
+      terminalConfigured: true,
+    });
   });
 
   it('reports runtime and optional terminal production availability without side effects', async () => {
