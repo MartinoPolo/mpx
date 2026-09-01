@@ -18,4 +18,4 @@ Tracked files contain source, schemas, generated projections, and public evidenc
 
 ## Platform support status
 
-Windows is the current implementation and acceptance target. Portable Node/TypeScript domain packages are designed to run on Linux and macOS, but installation, native integration, launcher behavior, sandbox execution, and end-to-end runtime routes have not yet been documented or accepted on either platform. Linux/macOS support must not be treated as complete until those manual gates pass.
+Windows is the current implementation and acceptance target. Portable Node/TypeScript domain packages are designed to run on Linux and macOS, but installation, native integration, launcher behavior, sandbox execution, and end-to-end runtime routes have not been verified or accepted on either platform. See [Linux and macOS portability](docs/PORTABILITY.md) for repository checks, unsupported surfaces, and the required manual evidence. Linux/macOS support must not be treated as complete until those gates pass.

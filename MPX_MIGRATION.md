@@ -1195,8 +1195,10 @@ Checkboxes are the sole migration acceptance ledger. `[x]` means reproducibly ev
 - [x] Standalone sbx is the approved sandbox product, with the user-selected global `allow-all`/MPX `open` network baseline explicitly treated as non-isolating.
 - [ ] Phase H named-target runs pass against every required real project/template.
 - [ ] Windows Terminal profile/start-directory/alias behavior is observed interactively.
-- [ ] Linux portability is documented in README and verified on Linux.
-- [ ] macOS portability is documented in README and verified on macOS.
+- [x] Linux portability requirements and evidence gates are documented in README and `docs/PORTABILITY.md`.
+- [ ] Linux portability is verified on Linux.
+- [x] macOS portability requirements and evidence gates are documented in README and `docs/PORTABILITY.md`.
+- [ ] macOS portability is verified on macOS.
 - [ ] User-local config is reviewed and installed.
 - [ ] Immutable MPX installation is applied and verified on the live machine.
 - [ ] Claude and Pi native runtime/plugin/extension registration is verified.
