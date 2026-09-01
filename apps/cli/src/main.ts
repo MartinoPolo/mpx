@@ -18,6 +18,7 @@ import {
   SessionResumeLaunchApplicationService,
   resolveLaunchSkills,
   type AccountApplicationService,
+  type MigrationAction,
   type ProjectApplicationService,
   type SkillApplicationService,
 } from '@mpx/application';
@@ -25,6 +26,7 @@ import {
   createNodeAccountApplicationService,
   createNodeInstallApplicationService,
   createNodeLocalIssueViewRebuilder,
+  createNodeMigrationApplicationService,
   createPiAuthAvailabilityProbe,
 } from '@mpx/application/node';
 import {
@@ -127,7 +129,6 @@ import {
   type ConversationBranchPlanV1,
   type ResumePlanV1,
 } from '@mpx/sessions';
-import { executeMigrationCommand } from './migration.js';
 
 interface Parsed {
   command: string[];
@@ -798,8 +799,8 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       throw new UsageError(usage);
     }
     return {
-      data: await executeMigrationCommand({
-        action,
+      data: await createNodeMigrationApplicationService().execute({
+        action: action as MigrationAction,
         repoRoot: parsed.cwd,
         env: context.env,
         legacyDisabled: parsed.options.get('legacy-disabled') === true,

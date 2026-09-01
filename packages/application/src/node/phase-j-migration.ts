@@ -16,6 +16,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { MpxError } from '@mpx/core';
+import {
+  MigrationApplicationService,
+  type MigrationApplicationRequest,
+} from '../migration-application-service.js';
 
 const execFile = promisify(execFileCallback);
 const OLD_REFERENCE =
@@ -1337,4 +1341,12 @@ export async function executeMigrationCommand(input: {
     return { ...buildCutoverPlan({ gatePassed: liveGatePassed, markerInspections }), observation };
   }
   throw new Error(`Unknown migration action: ${input.action}`);
+}
+
+/** Composes the neutral migration facade with the complete Node Phase-J workflow. */
+export function createNodeMigrationApplicationService(): MigrationApplicationService {
+  return new MigrationApplicationService({
+    execute: (request: MigrationApplicationRequest) =>
+      executeMigrationCommand({ ...request, env: { ...request.env } }),
+  });
 }

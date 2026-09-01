@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { executeMigrationCommand } from '../../../apps/cli/src/migration.js';
+import { executeMigrationCommand } from '../../../packages/application/src/node/index.js';
 
 const exec = promisify(execFile);
 const roots: string[] = [];

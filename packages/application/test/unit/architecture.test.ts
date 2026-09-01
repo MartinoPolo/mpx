@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -123,6 +123,7 @@ describe('@mpx/application architecture', () => {
       LifecycleApplicationService: expect.any(Function),
       LaunchApplicationService: expect.any(Function),
       InstallApplicationService: expect.any(Function),
+      MigrationApplicationService: expect.any(Function),
       SessionApplicationService: expect.any(Function),
       SessionResumeLaunchApplicationService: expect.any(Function),
       createProjectApplicationService: expect.any(Function),
@@ -139,6 +140,7 @@ describe('@mpx/application architecture', () => {
       createNodeInstallApplicationService: expect.any(Function),
       createNodeInstallProtocolInput: expect.any(Function),
       createNodeLocalIssueViewRebuilder: expect.any(Function),
+      createNodeMigrationApplicationService: expect.any(Function),
       createProductionSessionBranchRuntimeAdapter: expect.any(Function),
       createWindowsTerminalBranchAdapter: expect.any(Function),
       diagnoseNodeSessionBranchAdapters: expect.any(Function),
@@ -156,6 +158,7 @@ describe('@mpx/application architecture', () => {
       'createNodeInstallApplicationService',
       'createNodeInstallProtocolInput',
       'createNodeLocalIssueViewRebuilder',
+      'createNodeMigrationApplicationService',
       'createProductionSessionBranchRuntimeAdapter',
       'createWindowsTerminalBranchAdapter',
       'diagnoseNodeSessionBranchAdapters',
@@ -170,6 +173,16 @@ describe('@mpx/application architecture', () => {
     ]) {
       expect(root).not.toHaveProperty(name);
     }
+  });
+
+  it('keeps the Phase-J implementation out of the CLI source tree', async () => {
+    const cliRoot = path.resolve(import.meta.dirname, '../../../../apps/cli/src');
+    await expect(access(path.join(cliRoot, 'migration.ts'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    const source = await sourceText(cliRoot);
+    expect(source).not.toContain('captureSourceDrift');
+    expect(source).not.toContain('persistMigrationObservation');
   });
 
   it('uses installer contracts as types only from the neutral install service', async () => {

@@ -20,6 +20,7 @@ export * from './session-branch-adapters.js';
 export * from './sbx-execution.js';
 export * from './session-docker-resume.js';
 export * from './install-application-service.js';
+export * from './phase-j-migration.js';
 
 /** Concrete Node process/state adapter; kept out of the provider-neutral package root. */
 export function createNodeDevService(
