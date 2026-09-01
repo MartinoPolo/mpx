@@ -32,7 +32,6 @@ import {
 import {
   errorEnvelope,
   MpxError,
-  sha256Canonical,
   successEnvelope,
   type Diagnostic,
   type JsonValue,
@@ -268,6 +267,20 @@ async function userConfig(context: CliContext): Promise<UserConfig> {
   return projectApplication(context).optionalUserConfig({
     ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
     environment: context.env,
+  });
+}
+function portsApplication(context: CliContext) {
+  const projects = projectApplication(context);
+  return createNodeLifecycleApplicationService({
+    ports: ports(context),
+    projects: {
+      discover: (cwd) => projects.discover(cwd),
+      userConfig: () =>
+        projects.optionalUserConfig({
+          ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
+          environment: context.env,
+        }),
+    },
   });
 }
 async function requiredUserConfig(context: CliContext): Promise<UserConfig> {
@@ -1171,17 +1184,19 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     group === 'ports' &&
     ['ensure', 'resolve', 'list', 'inspect', 'kill', 'release', 'reconcile'].includes(action ?? '')
   ) {
-    const service = ports(context);
+    const application = portsApplication(context);
     if (action === 'list') {
       if (args.length) {
         throw new UsageError('ports list accepts no arguments');
       }
-      data = await createNodeLifecycleApplicationService({ ports: service }).listPorts();
+      data = await application.listPorts();
     } else if (action === 'inspect') {
       if (args.length) {
         throw new UsageError('ports inspect accepts no arguments');
       }
-      data = await service.inspect();
+      const result = await application.port('inspect', { cwd: parsed.cwd });
+      data = result.data;
+      warnings = [...result.warnings];
     } else if (action === 'kill') {
       const optionPid = parsed.options.get('pid');
       if (args.length > 1 || (optionPid !== undefined && args.length !== 0)) {
@@ -1197,52 +1212,30 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         throw new UsageError('ports kill requires a positive integer PID');
       }
       const pid = Number(raw);
-      data = await createNodeLifecycleApplicationService({ ports: service }).killPortProcess(pid);
+      data = await application.killPortProcess(pid);
     } else if (action === 'release') {
       if (args.length) {
         throw new UsageError('ports release accepts no arguments');
       }
-      data = await createNodeLifecycleApplicationService({ ports: service }).releasePorts({
-        cwd: parsed.cwd,
-      });
+      data = await application.releasePorts({ cwd: parsed.cwd });
     } else if (action === 'reconcile') {
       if (args.length) {
         throw new UsageError('ports reconcile accepts no arguments');
       }
-      if (parsed.options.get('rebuild') === true) {
-        const [user, found] = await Promise.all([userConfig(context), project(parsed, context)]);
-        const roots = [
-          ...new Set(
-            [...Object.values(user.domains).flat(), found.root].map((root) => path.resolve(root)),
-          ),
-        ];
-        data = await service.rebuild({ roots });
-      } else {
-        data = await service.reconcile({ cwd: parsed.cwd });
-      }
+      const result = await application.port('reconcile', {
+        cwd: parsed.cwd,
+        rebuild: parsed.options.get('rebuild') === true,
+      });
+      data = result.data;
+      warnings = [...result.warnings];
     } else {
       if (args.length) {
         throw new UsageError(`ports ${action} accepts no arguments`);
       }
-      const found = await project(parsed, context);
-      const request = {
-        cwd: parsed.cwd,
-        projectRoot: found.root,
-        config: found.config,
-        configHash: sha256Canonical(found.config as unknown as JsonValue),
-      };
-      if (action === 'ensure') {
-        const result = await service.ensure(request);
-        data = result.lease;
-        warnings = result.warnings.map((warning) => ({
-          code: warning.code,
-          message: warning.message,
-          severity: 'warning',
-          ...(warning.port === undefined ? {} : { details: { port: warning.port } }),
-        }));
-      } else {
-        data = await service.resolve(request);
-      }
+      const operation = action === 'ensure' ? 'ensure' : 'resolve';
+      const result = await application.port(operation, { cwd: parsed.cwd });
+      data = result.data;
+      warnings = [...result.warnings];
     }
     return { data, warnings };
   }

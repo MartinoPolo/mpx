@@ -115,6 +115,137 @@ describe('LifecycleApplicationService', () => {
     });
   });
 
+  it('discovers project integrity and translates ensure warnings at the application boundary', async () => {
+    const ensure = vi.fn(async () => ({
+      lease: { leaseId: 'lease', services: { api: 4310 } },
+      warnings: [{ code: 'FIXED_SHARED_DUPLICATE', message: 'shared', port: 4310 }],
+    }));
+    const service = new LifecycleApplicationService({
+      path: { resolve: (value) => value },
+      projects: {
+        discover: vi.fn(async () => ({ root: '/repo', config })),
+        userConfig: vi.fn(),
+      },
+      ports: { resolve: vi.fn(), ensure },
+    });
+
+    await expect(service.port('ensure', { cwd: '/repo/wt' })).resolves.toEqual({
+      data: { leaseId: 'lease', services: { api: 4310 } },
+      warnings: [
+        {
+          code: 'FIXED_SHARED_DUPLICATE',
+          message: 'shared',
+          severity: 'warning',
+          details: { port: 4310 },
+        },
+      ],
+    });
+    expect(ensure).toHaveBeenCalledExactlyOnceWith({
+      cwd: '/repo/wt',
+      projectRoot: '/repo',
+      config,
+      configHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+  });
+
+  it('selects resolve without ensuring and returns the existing lease unchanged', async () => {
+    const lease = { leaseId: 'lease', services: { api: 4310 }, ownerRoot: '/repo' };
+    const ensure = vi.fn();
+    const resolve = vi.fn(async () => lease);
+    const service = new LifecycleApplicationService({
+      path: { resolve: (value) => value },
+      projects: {
+        discover: vi.fn(async () => ({ root: '/repo', config })),
+        userConfig: vi.fn(),
+      },
+      ports: { resolve, ensure },
+    });
+
+    await expect(service.port('resolve', { cwd: '/repo/wt' })).resolves.toEqual({
+      data: lease,
+      warnings: [],
+    });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it('inspects ports without loading project or user configuration', async () => {
+    const inspect = vi.fn(async () => [{ port: 4310, pid: 42 }]);
+    const discover = vi.fn();
+    const userConfig = vi.fn();
+    const service = new LifecycleApplicationService({
+      path: { resolve: (value) => value },
+      projects: { discover, userConfig },
+      ports: { resolve: vi.fn(), inspect },
+    });
+
+    await expect(service.port('inspect', { cwd: '/irrelevant' })).resolves.toEqual({
+      data: [{ port: 4310, pid: 42 }],
+      warnings: [],
+    });
+    expect(discover).not.toHaveBeenCalled();
+    expect(userConfig).not.toHaveBeenCalled();
+  });
+
+  it('reconciles the current checkout without loading configuration when rebuild is false', async () => {
+    const reconcile = vi.fn(async () => ({ removed: ['old'], repaired: [], orphaned: [] }));
+    const discover = vi.fn();
+    const userConfig = vi.fn();
+    const service = new LifecycleApplicationService({
+      path: { resolve: (value) => value },
+      projects: { discover, userConfig },
+      ports: { resolve: vi.fn(), reconcile },
+    });
+
+    await expect(service.port('reconcile', { cwd: '/repo/wt', rebuild: false })).resolves.toEqual({
+      data: { removed: ['old'], repaired: [], orphaned: [] },
+      warnings: [],
+    });
+    expect(reconcile).toHaveBeenCalledExactlyOnceWith({ cwd: '/repo/wt' });
+    expect(discover).not.toHaveBeenCalled();
+    expect(userConfig).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds from concurrently loaded, normalized, insertion-ordered unique roots', async () => {
+    let resolveUserConfig!: (value: { domains: Record<string, readonly string[]> }) => void;
+    const userConfigGate = new Promise<{ domains: Record<string, readonly string[]> }>(
+      (resolve) => {
+        resolveUserConfig = resolve;
+      },
+    );
+    let resolveProject!: (value: { root: string; config: ProjectConfig }) => void;
+    const projectGate = new Promise<{ root: string; config: ProjectConfig }>((resolve) => {
+      resolveProject = resolve;
+    });
+    const userConfig = vi.fn(() => userConfigGate);
+    const discover = vi.fn(() => projectGate);
+    const rebuild = vi.fn(async (request: { roots: string[] }) => ({
+      discovered: 2,
+      rebuilt: 2,
+      roots: request.roots.length,
+    }));
+    const service = new LifecycleApplicationService({
+      path: { resolve: (value) => `/normalized/${value.replace(/^\/+/, '')}` },
+      projects: { discover, userConfig },
+      ports: { resolve: vi.fn(), rebuild },
+    });
+
+    const result = service.port('reconcile', { cwd: '/repo/wt', rebuild: true });
+    expect(userConfig).toHaveBeenCalledOnce();
+    expect(discover).toHaveBeenCalledOnce();
+
+    resolveProject({ root: '/repo', config });
+    resolveUserConfig({ domains: { first: ['/repo', '/known'], second: ['/known'] } });
+
+    await expect(result).resolves.toEqual({
+      data: { discovered: 2, rebuilt: 2, roots: 2 },
+      warnings: [],
+    });
+    expect(rebuild).toHaveBeenCalledExactlyOnceWith({
+      roots: ['/normalized/repo', '/normalized/known'],
+    });
+  });
+
   it('constructs stable port release and sorted list results', async () => {
     const release = vi.fn(async () => undefined);
     const service = new LifecycleApplicationService({

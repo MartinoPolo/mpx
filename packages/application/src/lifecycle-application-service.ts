@@ -43,16 +43,82 @@ export interface LifecycleDevService {
   stop(id: string): Promise<DevServiceSnapshot>;
 }
 
+export interface LifecyclePortLease {
+  readonly leaseId?: string;
+  readonly services: Record<string, number>;
+  readonly ownerRoot?: string;
+}
+export interface LifecyclePortWarning {
+  readonly code: string;
+  readonly message: string;
+  readonly port?: number;
+}
+export interface LifecyclePortDiagnostic {
+  readonly code: string;
+  readonly message: string;
+  readonly severity: 'warning';
+  readonly details?: { readonly port: number };
+}
+export interface LifecyclePortInspection {
+  readonly port: number;
+  readonly pid?: number;
+  readonly address?: string;
+  readonly processName?: string;
+  readonly executable?: string;
+  readonly projectPath?: string;
+  readonly startedAt?: string;
+}
+export interface LifecyclePortReconcileResult {
+  readonly removed: string[];
+  readonly repaired: string[];
+  readonly orphaned?: readonly unknown[];
+}
+export interface LifecyclePortRebuildResult {
+  readonly discovered: number;
+  readonly rebuilt: number;
+  readonly roots: number;
+}
 export interface LifecyclePortService {
   resolve(
     request: LifecycleProjectRequest & { configHash: string },
-  ): Promise<
-    | { services: Record<string, number>; ownerRoot?: string }
-    | { lease: { services: Record<string, number>; ownerRoot?: string } }
-  >;
+  ): Promise<LifecyclePortLease | { lease: LifecyclePortLease }>;
+  ensure?(request: LifecycleProjectRequest & { configHash: string }): Promise<{
+    lease: LifecyclePortLease;
+    warnings: readonly LifecyclePortWarning[];
+  }>;
+  inspect?(): Promise<readonly LifecyclePortInspection[]>;
+  reconcile?(request: { cwd: string }): Promise<LifecyclePortReconcileResult>;
+  rebuild?(request: { roots: string[] }): Promise<LifecyclePortRebuildResult>;
   list?(): Promise<readonly { leaseId: string }[]>;
   release?(request: { cwd: string }): Promise<void>;
   kill?(pid: number): Promise<void>;
+}
+
+export interface LifecyclePortProjects {
+  discover(cwd: string): Promise<{ root: string; config: ProjectConfig }>;
+  userConfig(): Promise<{ domains: Readonly<Record<string, readonly string[]>> }>;
+}
+export interface LifecyclePortOperationResult<Data> {
+  readonly data: Data;
+  readonly warnings: readonly LifecyclePortDiagnostic[];
+}
+export interface LifecyclePortOperationMap {
+  ensure: {
+    request: { cwd: string };
+    result: LifecyclePortOperationResult<LifecyclePortLease>;
+  };
+  resolve: {
+    request: { cwd: string };
+    result: LifecyclePortOperationResult<LifecyclePortLease>;
+  };
+  inspect: {
+    request: { cwd: string };
+    result: LifecyclePortOperationResult<readonly LifecyclePortInspection[]>;
+  };
+  reconcile: {
+    request: { cwd: string; rebuild?: boolean };
+    result: LifecyclePortOperationResult<LifecyclePortReconcileResult | LifecyclePortRebuildResult>;
+  };
 }
 
 export interface ListWorktreesRequest {
@@ -132,6 +198,7 @@ export interface LifecycleApplicationDependencies {
   path: LifecyclePath;
   devService?: LifecycleDevService;
   ports?: LifecyclePortService;
+  projects?: LifecyclePortProjects;
   worktrees?: LifecycleWorktreeService;
   status?: LifecycleStatusProvider;
   pause?: (milliseconds: number) => Promise<void>;
@@ -250,6 +317,90 @@ export class LifecycleApplicationService {
     });
   }
 
+  async port<Action extends keyof LifecyclePortOperationMap>(
+    action: Action,
+    request: LifecyclePortOperationMap[Action]['request'],
+  ): Promise<LifecyclePortOperationMap[Action]['result']> {
+    const ports = this.dependencies.ports;
+    if (!ports) {
+      throw new Error('Port state management is unavailable.');
+    }
+    if (action === 'inspect') {
+      if (!ports.inspect) {
+        throw new Error('Port inspection is unavailable.');
+      }
+      return {
+        data: await ports.inspect(),
+        warnings: [],
+      } as LifecyclePortOperationMap[Action]['result'];
+    }
+    if (action === 'reconcile') {
+      const reconcileRequest = request as LifecyclePortOperationMap['reconcile']['request'];
+      if (!reconcileRequest.rebuild) {
+        if (!ports.reconcile) {
+          throw new Error('Port reconciliation is unavailable.');
+        }
+        return {
+          data: await ports.reconcile({ cwd: reconcileRequest.cwd }),
+          warnings: [],
+        } as LifecyclePortOperationMap[Action]['result'];
+      }
+      if (!ports.rebuild) {
+        throw new Error('Port rebuilding is unavailable.');
+      }
+      const projects = this.portProjects();
+      const [user, project] = await Promise.all([
+        projects.userConfig(),
+        projects.discover(reconcileRequest.cwd),
+      ]);
+      const roots = [
+        ...new Set(
+          [...Object.values(user.domains).flat(), project.root].map((root) =>
+            this.dependencies.path.resolve(root),
+          ),
+        ),
+      ];
+      return {
+        data: await ports.rebuild({ roots }),
+        warnings: [],
+      } as LifecyclePortOperationMap[Action]['result'];
+    }
+    const projectRequest = request as { cwd: string };
+    const found = await this.portProjects().discover(projectRequest.cwd);
+    const integrityRequest = {
+      cwd: projectRequest.cwd,
+      projectRoot: found.root,
+      config: found.config,
+      configHash: sha256Canonical(found.config as unknown as JsonValue),
+    };
+    if (action === 'ensure') {
+      if (!ports.ensure) {
+        throw new Error('Port ensuring is unavailable.');
+      }
+      const result = await ports.ensure(integrityRequest);
+      return {
+        data: result.lease,
+        warnings: result.warnings.map((warning) => ({
+          code: warning.code,
+          message: warning.message,
+          severity: 'warning' as const,
+          ...(warning.port === undefined ? {} : { details: { port: warning.port } }),
+        })),
+      } as LifecyclePortOperationMap[Action]['result'];
+    }
+    const resolved = await ports.resolve(integrityRequest);
+    return {
+      data: 'lease' in resolved ? resolved.lease : resolved,
+      warnings: [],
+    } as LifecyclePortOperationMap[Action]['result'];
+  }
+  private portProjects(): LifecyclePortProjects {
+    const projects = this.dependencies.projects;
+    if (!projects) {
+      throw new Error('Project configuration loading is unavailable.');
+    }
+    return projects;
+  }
   async listPorts(): Promise<readonly { leaseId: string }[]> {
     if (!this.dependencies.ports?.list) {
       throw new Error('Port listing is unavailable.');

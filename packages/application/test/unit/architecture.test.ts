@@ -111,6 +111,19 @@ describe('@mpx/application architecture', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps ports orchestration and integrity construction out of the CLI handler', async () => {
+    const main = await readFile(
+      path.resolve(import.meta.dirname, '../../../../apps/cli/src/main.ts'),
+      'utf8',
+    );
+    const handler = main.slice(
+      main.indexOf("group === 'ports'"),
+      main.indexOf("group === 'status'"),
+    );
+    expect(handler).not.toMatch(/\bservice\.(?:inspect|reconcile|rebuild|ensure|resolve)\s*\(/u);
+    expect(handler).not.toMatch(/sha256Canonical|configHash|Object\.values\([^)]*domains/u);
+  });
+
   it('keeps CLI internals out of both neutral and Node application modules', async () => {
     const source = await sourceText(path.resolve(import.meta.dirname, '../../src'));
     expect(source).not.toMatch(/apps\/cli/u);
