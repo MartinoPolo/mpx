@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
-} from '../../../apps/cli/src/context.js';
+} from '@mpx/application/node';
 
 const roots: string[] = [],
   children: ChildProcess[] = [];
@@ -47,18 +47,21 @@ describe('Phase G credential-free subprocess boundaries', () => {
       MPX_CAPTURE: capture,
       NODE_OPTIONS: `--require=${preload}`,
     };
-    const discoveries = await productionSessionDiscoveries(f.user, f.store, environment);
+    const discoveries = await productionSessionDiscoveries({
+      user: f.user,
+      store: f.store,
+      environment,
+    });
     const claude = discoveries.find((item) => item.scanner.runtime === 'claude')!;
     await expect(claude.scanner.scan()).resolves.toMatchObject({
       status: 'available',
       sessions: [{ nativeSessionId: 'session-real', pid: 4242 }],
     });
-    const dependencies = await productionSessionResumeDependencies(
-      f.user,
-      f.store,
-      undefined,
+    const dependencies = await productionSessionResumeDependencies({
+      user: f.user,
+      store: f.store,
       environment,
-    )({ runtime: 'claude' } as never);
+    })({ runtime: 'claude' } as never);
     await expect(
       dependencies.verifyNativeTarget(
         f.claude,
@@ -117,12 +120,14 @@ describe('Phase G credential-free subprocess boundaries', () => {
           registeredAt: new Date().toISOString(),
         }),
       );
-      const discoveries = await productionSessionDiscoveries(
-        f.user,
-        f.store,
-        {},
-        { resolve: async (_identity, runtime) => (runtime === 'pi' ? 'account:fixture' : null) },
-      );
+      const discoveries = await productionSessionDiscoveries({
+        user: f.user,
+        store: f.store,
+        environment: {},
+        accountResolver: {
+          resolve: async (_identity, runtime) => (runtime === 'pi' ? 'account:fixture' : null),
+        },
+      });
       await expect(
         discoveries.find((item) => item.scanner.runtime === 'pi')!.scanner.scan(),
       ).resolves.toMatchObject({

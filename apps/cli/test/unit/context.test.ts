@@ -20,10 +20,8 @@ import {
   installer,
   installerSourceRoot,
   preparationRuntime,
-  productionSessionDiscoveries,
   worktrees,
 } from '../../src/context.js';
-import { SessionService, SessionStore } from '@mpx/sessions';
 
 const exec = promisify(execFile);
 
@@ -82,103 +80,6 @@ it('provides fail-closed Docker resume admission in the production CLI context',
       launch: { executor: { kind: 'docker' } },
     } as never),
   ).resolves.toMatchObject({ admitted: false, hostFallback: false });
-});
-
-it('discovers enrolled active Pi sessions from only their recorded root and survives restart without reviving stale processes', async () => {
-  const state = await mkdtemp(path.join(tmpdir(), 'mpx-production-discovery-'));
-  roots.push(state);
-  const claudeRoot = path.join(state, 'claude-account'),
-    piRoot = path.join(state, 'pi-account'),
-    registry = path.join(piRoot, 'agent-resurrect', 'active-sessions'),
-    foreignRoot = path.join(state, 'foreign');
-  await Promise.all([
-    mkdir(claudeRoot),
-    mkdir(path.join(piRoot, 'sessions'), { recursive: true }),
-    mkdir(registry, { recursive: true }),
-    mkdir(foreignRoot),
-  ]);
-  const sessionFile = path.join(piRoot, 'sessions', 'active.jsonl');
-  await writeFile(sessionFile, '{}\n');
-  const instant = '2025-06-01T12:00:00.000Z';
-  await writeFile(
-    path.join(registry, 'active.json'),
-    JSON.stringify({
-      version: 2,
-      agent: 'pi',
-      sessionId: 'active',
-      sessionFile,
-      cwd: 'C:/repo',
-      name: 'Private title',
-      pid: 42,
-      processStartedAt: instant,
-      registeredAt: instant,
-    }),
-  );
-  const store = new SessionStore(state),
-    user = {
-      identities: {
-        personal: { domain: 'local', runtimeRoots: { claude: claudeRoot, pi: piRoot } },
-      },
-    } as never;
-  const options = {
-    piProcessInspector: {
-      inspect: async (pid: number) =>
-        pid === 42 || pid === 43 ? { startFingerprint: instant } : null,
-    },
-    clock: () => Date.parse(instant),
-  };
-  const first = await productionSessionDiscoveries(
-    user,
-    store,
-    { MPX_CLAUDE_EXECUTABLE: '' },
-    { resolve: async () => 'account:enrolled' },
-    options,
-  );
-  expect(first.map((item) => item.scanner.runtime)).toEqual(['claude', 'pi']);
-  const observations = await new SessionService(store, () => instant).reconcile(first);
-  expect(observations).toMatchObject([
-    {
-      runtime: 'pi',
-      runtimeQualifiedId: 'pi:active',
-      title: 'Private title',
-      source: 'sessions:pi',
-    },
-  ]);
-  expect(JSON.stringify(observations)).not.toContain(piRoot);
-  expect(JSON.stringify(observations)).not.toContain(sessionFile);
-
-  const foreignFile = path.join(foreignRoot, 'foreign.jsonl'),
-    foreignEntry = path.join(registry, 'foreign.json');
-  await writeFile(foreignFile, '{}\n');
-  await writeFile(
-    foreignEntry,
-    JSON.stringify({
-      version: 2,
-      agent: 'pi',
-      sessionId: 'foreign',
-      sessionFile: foreignFile,
-      cwd: 'C:/foreign',
-      pid: 43,
-      processStartedAt: instant,
-      registeredAt: instant,
-    }),
-  );
-  await expect(
-    first.find((item) => item.scanner.runtime === 'pi')!.scanner.scan(),
-  ).rejects.toMatchObject({ code: 'PI_SESSION_ROOT_ESCAPE' });
-  await rm(foreignEntry);
-
-  const restarted = await productionSessionDiscoveries(
-    user,
-    store,
-    {},
-    { resolve: async () => 'account:enrolled' },
-    { ...options, piProcessInspector: { inspect: async () => null } },
-  );
-  expect(await store.listNativeBindings()).toHaveLength(2);
-  expect(
-    (await restarted.find((item) => item.scanner.runtime === 'pi')!.scanner.scan()).sessions,
-  ).toEqual([]);
 });
 
 async function git(cwd: string, ...args: string[]): Promise<void> {

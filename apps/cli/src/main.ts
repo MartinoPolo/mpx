@@ -55,9 +55,7 @@ import {
   immutableInstaller,
   installIntentBuilder,
   ports,
-  productionSessionDiscoveries,
   productionSessionProcessInspector,
-  productionSessionResumeDependencies,
   sessions,
   stateRoot,
   status,
@@ -67,12 +65,14 @@ import {
 import { executeSessionCommand } from './session-command.js';
 import { executeInstallCommand } from './install-command.js';
 import { executeAccountCommand } from './account-command.js';
-import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
 import {
   createProductionSessionBranchRuntimeAdapter,
   createWindowsTerminalBranchAdapter,
   diagnoseNodeSessionBranchAdapters,
   diagnoseSessionBranchAdapters,
+  ProductionSessionLifecycleBridge,
+  productionSessionDiscoveries,
+  productionSessionResumeDependencies,
 } from '@mpx/application/node';
 import {
   currentLaunchTuple,
@@ -659,17 +659,19 @@ async function executeProductionSessionResume(
               ? resumeContext
               : {
                   ...resumeContext,
-                  launchLifecycleBridge: new ProductionSessionLifecycleBridge(
+                  launchLifecycleBridge: new ProductionSessionLifecycleBridge({
                     store,
-                    resumeContext.nativeAccountBindingResolver
-                      ? (name, runtime) =>
-                          resumeContext.nativeAccountBindingResolver!.resolve(
-                            { domain: userConfig.identities[name]!.domain, name },
-                            runtime,
-                            userConfig.identities[name]!.runtimeRoots[runtime],
-                          )
-                      : undefined,
-                  ),
+                    ...(resumeContext.nativeAccountBindingResolver
+                      ? {
+                          accountBindingRef: (name: string, runtime: 'claude' | 'pi') =>
+                            resumeContext.nativeAccountBindingResolver!.resolve(
+                              { domain: userConfig.identities[name]!.domain, name },
+                              runtime,
+                              userConfig.identities[name]!.runtimeRoots[runtime],
+                            ),
+                        }
+                      : {}),
+                  }),
                 };
           const snapshot = project
             ? async (): Promise<StatusSnapshotV1> =>
@@ -899,17 +901,19 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
             resolveLifecycle = resolve;
             rejectLifecycle = reject;
           });
-          const bridge = new ProductionSessionLifecycleBridge(
-            sessionStore,
-            context.nativeAccountBindingResolver
-              ? (name, runtime) =>
-                  context.nativeAccountBindingResolver!.resolve(
-                    { domain: user.identities[name]!.domain, name },
-                    runtime,
-                    user.identities[name]!.runtimeRoots[runtime],
-                  )
-              : undefined,
-            async () => {
+          const bridge = new ProductionSessionLifecycleBridge({
+            store: sessionStore,
+            ...(context.nativeAccountBindingResolver
+              ? {
+                  accountBindingRef: (name: string, runtime: 'claude' | 'pi') =>
+                    context.nativeAccountBindingResolver!.resolve(
+                      { domain: user.identities[name]!.domain, name },
+                      runtime,
+                      user.identities[name]!.runtimeRoots[runtime],
+                    ),
+                }
+              : {}),
+            onSessionsChanged: async () => {
               const records = await new SessionService(sessionStore).list({
                 runtime: plan.child.runtime,
               });
@@ -926,7 +930,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
                 });
               }
             },
-          );
+          });
           const synthetic: ResumePlanV1 = {
             schemaVersion: 1,
             newLaunchRequired: true,
@@ -1178,12 +1182,14 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     };
     const resumeDependencies =
       context.sessionResumeDependencies ??
-      productionSessionResumeDependencies(
+      productionSessionResumeDependencies({
         user,
-        sessionStore,
-        context.nativeAccountBindingVerifier ?? account?.verifier,
-        context.env,
-      );
+        store: sessionStore,
+        ...((context.nativeAccountBindingVerifier ?? account?.verifier)
+          ? { verifier: (context.nativeAccountBindingVerifier ?? account?.verifier)! }
+          : {}),
+        environment: context.env,
+      });
     const application = createNodeSessionApplicationService({
       store: sessionStore,
       processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
@@ -1195,12 +1201,14 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       discoveries:
         context.sessionDiscoveries ??
         (() =>
-          productionSessionDiscoveries(
+          productionSessionDiscoveries({
             user,
-            sessionStore,
-            context.env,
-            context.nativeAccountBindingResolver ?? account?.resolver,
-          )),
+            store: sessionStore,
+            environment: context.env,
+            ...((context.nativeAccountBindingResolver ?? account?.resolver)
+              ? { accountResolver: (context.nativeAccountBindingResolver ?? account?.resolver)! }
+              : {}),
+          })),
       legacyImport: createNodeSessionLegacyImport({ store: sessionStore, resolveIdentity }),
       ...(branchService ? { branchService } : {}),
       ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
@@ -1883,9 +1891,9 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
             ? executionContext
             : {
                 ...executionContext,
-                launchLifecycleBridge: new ProductionSessionLifecycleBridge(
-                  sessions(executionContext),
-                  async (name, selectedRuntime) =>
+                launchLifecycleBridge: new ProductionSessionLifecycleBridge({
+                  store: sessions(executionContext),
+                  accountBindingRef: async (name, selectedRuntime) =>
                     selectedRuntime === 'pi' &&
                     piAttestation &&
                     name === piAttestation.identity.name
@@ -1895,7 +1903,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
                           selectedRuntime,
                           user.identities[name]!.runtimeRoots[selectedRuntime],
                         ) ?? null),
-                ),
+                }),
               };
         return executeResolvedLaunch({
           descriptor,

@@ -48,14 +48,20 @@ export interface SessionLifecycleBridge {
   observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
 }
 export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge {
-  constructor(
-    private readonly store: SessionStore,
-    private readonly accountBindingRef?: (
-      identity: string,
-      runtime: 'claude' | 'pi',
-    ) => Promise<string | null>,
-    private readonly onSessionsChanged?: () => Promise<void>,
-  ) {}
+  private readonly store: SessionStore;
+  private readonly accountBindingRef:
+    ((identity: string, runtime: 'claude' | 'pi') => Promise<string | null>) | undefined;
+  private readonly onSessionsChanged: (() => Promise<void>) | undefined;
+
+  constructor(input: {
+    store: SessionStore;
+    accountBindingRef?: (identity: string, runtime: 'claude' | 'pi') => Promise<string | null>;
+    onSessionsChanged?: () => Promise<void>;
+  }) {
+    this.store = input.store;
+    this.accountBindingRef = input.accountBindingRef;
+    this.onSessionsChanged = input.onSessionsChanged;
+  }
   async prepare(input: {
     descriptor: LaunchDescriptor;
     runtimeContext: RuntimeContextV1;

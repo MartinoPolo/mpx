@@ -157,6 +157,9 @@ describe('@mpx/application architecture', () => {
       NodePrivateRouteMaterializer: expect.any(Function),
       NodeProviderProcessExecutor: expect.any(Function),
       NodeRepositorySelectorResolver: expect.any(Function),
+      ProductionSessionLifecycleBridge: expect.any(Function),
+      productionSessionDiscoveries: expect.any(Function),
+      productionSessionResumeDependencies: expect.any(Function),
     });
     for (const name of [
       'createNodeAccountApplicationService',
@@ -180,6 +183,9 @@ describe('@mpx/application architecture', () => {
       'NodePrivateRouteMaterializer',
       'NodeProviderProcessExecutor',
       'NodeRepositorySelectorResolver',
+      'ProductionSessionLifecycleBridge',
+      'productionSessionDiscoveries',
+      'productionSessionResumeDependencies',
     ]) {
       expect(root).not.toHaveProperty(name);
     }
@@ -193,6 +199,16 @@ describe('@mpx/application architecture', () => {
     expect(context).not.toMatch(
       /(?:class|abstract class)\s+(?:NodeProviderProcessExecutor|NodeRepositorySelectorResolver|NodePrivateRouteMaterializer)\b/u,
     );
+  });
+
+  it('keeps production session Node adapter implementations out of the CLI source tree', async () => {
+    const cliRoot = path.resolve(import.meta.dirname, '../../../../apps/cli/src');
+    await expect(access(path.join(cliRoot, 'session-lifecycle-bridge.ts'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    const context = await readFile(path.join(cliRoot, 'context.ts'), 'utf8');
+    expect(context).not.toContain('function productionSessionResumeDependencies');
+    expect(context).not.toContain('function productionSessionDiscoveries');
   });
 
   it('keeps the Phase-J implementation out of the CLI source tree', async () => {

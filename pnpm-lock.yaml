@@ -171,6 +171,9 @@ importers:
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
+      '@mpx/runtime-pi':
+        specifier: workspace:*
+        version: link:../../runtimes/pi/runtime-pi
       '@mpx/sessions':
         specifier: workspace:*
         version: link:../sessions

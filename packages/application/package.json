@@ -34,6 +34,7 @@
     "@mpx/provider-local": "workspace:*",
     "@mpx/providers": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
+    "@mpx/runtime-pi": "workspace:*",
     "@mpx/sessions": "workspace:*",
     "@mpx/skills": "workspace:*",
     "@mpx/status": "workspace:*",
