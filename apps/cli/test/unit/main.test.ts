@@ -935,6 +935,132 @@ describe('cli', () => {
     expect(executeResume).toHaveBeenCalledOnce();
   });
 
+  it('hands confirmed resume to Node production composition before lazy status and state factories', async () => {
+    const cwd = await fixture(valid),
+      configuredEnv = await configuredLaunchEnv(cwd),
+      env = { ...configuredEnv, LOCALAPPDATA: undefined },
+      store = new SessionStore(await directory('mpx-cli-node-resume-')),
+      now = '2025-01-01T00:00:00.000Z',
+      identity = { domain: 'work', name: 'work' },
+      rootDigest = 'b'.repeat(64);
+    await store.saveNativeBinding({
+      schemaVersion: 1,
+      ref: 'binding',
+      identity,
+      runtime: 'claude',
+      recordedRootDigest: rootDigest,
+      accountBindingRef: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new SessionService(store).save({
+      schemaVersion: 1,
+      recordId: 'resume-node-composition',
+      runtimeQualifiedId: 'claude:resume-node-composition',
+      runtime: 'claude',
+      identity,
+      nativeBindingRef: 'binding',
+      nativeSessionRef: { kind: 'native-id', value: 'resume-node-composition' },
+      launch: {
+        launchKey: 'old-launch',
+        descriptorDigest: 'a'.repeat(64),
+        mode: 'interactive',
+        skillPolicy: 'standard',
+        contentScope: 'work',
+        executor: { kind: 'docker' },
+        workspace: 'direct',
+        networkPolicy: 'restricted',
+        grants: [],
+        artifactKey: 'artifact',
+        manifestKey: 'manifest',
+      },
+      location: { cwd, project: 'sample/app', repository: 'sample/repository', worktree: null },
+      metadata: { title: null, model: null, effort: null },
+      liveness: 'inactive',
+      process: null,
+      workflow: {
+        status: 'unfinished',
+        inbox: true,
+        nextAction: null,
+        priority: null,
+        note: null,
+        relatedIssue: null,
+        relatedReview: null,
+      },
+      resume: { state: 'unknown', diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null },
+      timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null },
+      lifecycle: { bindingId: null, sequence: 0, timestamp: null },
+    });
+    const admission = vi.fn(async () => ({
+      admitted: false as const,
+      code: 'F2_ADMISSION_DENIED' as const,
+      hostFallback: false as const,
+      recreate: { required: true as const, reasons: ['proof unavailable'] },
+    }));
+    const statusProviderFactory = vi.fn(() => {
+      throw new Error('status composition must remain behind Docker admission');
+    });
+    const context = {
+      env,
+      sessionStore: store,
+      sessionDiscoveries: async () => [],
+      sessionProcessInspector: { inspect: async () => ({ status: 'absent' as const }) },
+      sessionResumeDependencies: async () => ({
+        resolveConfiguredRoot: async () => ({
+          root: 'C:/native/claude-work',
+          canonicalRootDigest: rootDigest,
+          identity,
+          runtime: 'claude' as const,
+        }),
+        verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' as const }),
+      }),
+      sessionDockerResumeAdmission: admission,
+      portService: {} as never,
+      statusProviderFactory,
+    };
+    const previewIo = captureIo();
+    expect(
+      await run(
+        ['--json', '--cwd', cwd, 'session', 'resume', 'resume-node-composition', '--dry-run'],
+        previewIo,
+        context,
+      ),
+    ).toBe(0);
+    const preview = JSON.parse(previewIo.out[0]!).data;
+    const executeIo = captureIo();
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          cwd,
+          'session',
+          'resume',
+          'resume-node-composition',
+          '--confirm-plan',
+          preview.confirmationDigest,
+        ],
+        executeIo,
+        context,
+      ),
+    ).toBe(1);
+    expect(JSON.parse(executeIo.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'SESSION_RESUME_F2_ADMISSION_DENIED' },
+    });
+    expect(admission).toHaveBeenCalledOnce();
+    expect(admission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeQualifiedId: 'claude:resume-node-composition',
+        nativeBindingRef: 'binding',
+        nativeSessionRef: { kind: 'native-id', value: 'resume-node-composition' },
+        cwd,
+        launch: expect.objectContaining({ executor: { kind: 'docker' } }),
+      }),
+    );
+    expect(statusProviderFactory).not.toHaveBeenCalled();
+  });
+
   it('passes an injected Pi process inspector through the real session reconcile path', async () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),

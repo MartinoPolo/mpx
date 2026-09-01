@@ -56,3 +56,4 @@ export * from './provider-application-service.js';
 export * from './private-route-materializer.js';
 export * from './session-lifecycle-bridge.js';
 export * from './session-production-adapters.js';
+export * from './session-resume-launch.js';

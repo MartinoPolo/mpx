@@ -160,6 +160,8 @@ describe('@mpx/application architecture', () => {
       ProductionSessionLifecycleBridge: expect.any(Function),
       productionSessionDiscoveries: expect.any(Function),
       productionSessionResumeDependencies: expect.any(Function),
+      createNodeSessionResumeLaunchApplicationService: expect.any(Function),
+      executeNodeSessionResumeLaunch: expect.any(Function),
     });
     for (const name of [
       'createNodeAccountApplicationService',
@@ -186,6 +188,8 @@ describe('@mpx/application architecture', () => {
       'ProductionSessionLifecycleBridge',
       'productionSessionDiscoveries',
       'productionSessionResumeDependencies',
+      'createNodeSessionResumeLaunchApplicationService',
+      'executeNodeSessionResumeLaunch',
     ]) {
       expect(root).not.toHaveProperty(name);
     }
@@ -238,6 +242,15 @@ describe('@mpx/application architecture', () => {
     }
     const source = await sourceText(path.resolve(import.meta.dirname, '../../src'));
     expect(source).not.toMatch(/\bCliContext\b|apps[\\/]cli/u);
+  });
+
+  it('keeps session resume launch composition out of CLI main', async () => {
+    const main = await readFile(
+      path.resolve(import.meta.dirname, '../../../../apps/cli/src/main.ts'),
+      'utf8',
+    );
+    expect(main).not.toContain('new SessionResumeLaunchApplicationService');
+    expect(main).not.toContain('resolveLaunchSkills(');
   });
 
   it('keeps the Phase-J implementation out of the CLI source tree', async () => {
