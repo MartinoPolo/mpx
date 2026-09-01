@@ -32,6 +32,7 @@
     "validate:generated": "node scripts/validate-generated.mjs"
   },
   "devDependencies": {
+    "@mpx/application": "workspace:*",
     "@mpx/config": "workspace:*",
     "@mpx/core": "workspace:*",
     "@mpx/executors": "workspace:*",

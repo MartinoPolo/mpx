@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@mpx/application':
+        specifier: workspace:*
+        version: link:packages/application
       '@mpx/config':
         specifier: workspace:*
         version: link:packages/config
@@ -147,13 +150,31 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../core
+      '@mpx/dev-services':
+        specifier: workspace:*
+        version: link:../dev-services
+      '@mpx/ports':
+        specifier: workspace:*
+        version: link:../ports
       '@mpx/providers':
         specifier: workspace:*
         version: link:../providers
       '@mpx/skills':
         specifier: workspace:*
         version: link:../skills
+      '@mpx/status':
+        specifier: workspace:*
+        version: link:../status
+      '@mpx/windows':
+        specifier: workspace:*
+        version: link:../windows
+      '@mpx/worktrees':
+        specifier: workspace:*
+        version: link:../worktrees
     devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

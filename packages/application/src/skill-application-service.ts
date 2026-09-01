@@ -48,7 +48,6 @@ export interface SkillApplicationRequest {
 
 export class SkillApplicationService {
   constructor(private readonly dependencies: SkillApplicationDependencies) {}
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   assertConfiguredBindings(request: {
     user: UserConfig;
     identity?: string;
@@ -67,7 +66,6 @@ export class SkillApplicationService {
       });
     }
   }
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   async execute(request: SkillApplicationRequest): Promise<ApplicationOperationResult<unknown>> {
     this.assertConfiguredBindings({
       user: request.user,

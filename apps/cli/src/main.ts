@@ -58,7 +58,6 @@ import {
   configuredProviderApplicationService,
   createDefaultSbxDiagnostics,
   defaultContext,
-  executeInternalPreparationWorker,
   immutableInstaller,
   installIntentBuilder,
   ports,
@@ -106,7 +105,11 @@ function resolveScheduledCaptureAuthority(
     }
   );
 }
-import { defaultDevService, executeDevCommand } from './dev-command.js';
+import {
+  createNodeDevService,
+  createNodeLifecycleApplicationService,
+  executeInternalPreparationWorker,
+} from '@mpx/application/node';
 import { createProductionSessionDockerResumeAdmission } from './session-docker-resume.js';
 import {
   createProductionSbxExecutionAdapter,
@@ -1390,7 +1393,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     }
     const service =
       context.devService ??
-      (executor === 'docker' ? undefined : defaultDevService(context.env, found.root));
+      (executor === 'docker' ? undefined : createNodeDevService(context.env, found.root));
     if (!service || (executor === 'docker' && service.runtimeKind !== 'docker')) {
       throw new MpxError({
         code: 'DEV_EXECUTOR_UNSUPPORTED',
@@ -1404,14 +1407,15 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         message: 'The development-service adapter does not match the selected executor.',
       });
     }
-    data = await executeDevCommand({
+    data = await createNodeLifecycleApplicationService({
+      devService: service,
+      ...(action === 'start' ? { ports: ports(context) } : {}),
+    }).dev({
       action,
       ...(id ? { id } : {}),
       cwd: parsed.cwd,
       config: found.config,
       projectRoot: found.root,
-      ...(action === 'start' ? { portService: ports(context) as never } : {}),
-      service,
       executor,
       ...(lines === undefined ? {} : { lines }),
     });
@@ -2164,7 +2168,9 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       action ?? '',
     )
   ) {
-    const service = worktrees(context, parsed.cwd);
+    const service = createNodeLifecycleApplicationService({
+      worktrees: worktrees(context, parsed.cwd),
+    });
     const stringOption = (name: string): string | undefined => {
       const value = parsed.options.get(name);
       return typeof value === 'string' ? value : undefined;
@@ -2206,70 +2212,76 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
           })
         : undefined;
       const branch = args[0] ?? expanded!;
-      const execution = stringOption('execution');
-      if (execution !== undefined && !['foreground', 'background', 'none'].includes(execution)) {
+      const executionOption = stringOption('execution');
+      if (
+        executionOption !== undefined &&
+        executionOption !== 'foreground' &&
+        executionOption !== 'background' &&
+        executionOption !== 'none'
+      ) {
         throw new UsageError('--execution must be foreground, background, or none');
       }
-      data = await service.create({
+      const base = stringOption('base');
+      const approval = preparationApproval();
+      const includeApproval = stringOption('include-approval');
+      const sourceRoot = stringOption('source');
+      data = await service.worktree('create', {
         cwd: parsed.cwd,
         branch,
-        ...(stringOption('base') ? { base: stringOption('base') } : {}),
-        ...(template ? { template } : {}),
-        ...(stringOption('slug') ? { slug: stringOption('slug') } : {}),
-        ...(stringOption('author') ? { author: stringOption('author') } : {}),
-        ...(stringOption('issue') ? { issue: stringOption('issue') } : {}),
-        ...(execution ? { execution } : {}),
-        ...(preparationApproval() ? { approval: preparationApproval() } : {}),
-        ...(stringOption('include-approval')
-          ? { includeApproval: stringOption('include-approval') }
-          : {}),
-        ...(stringOption('source') ? { sourceRoot: stringOption('source') } : {}),
+        ...(base ? { base } : {}),
+        ...(executionOption ? { execution: executionOption } : {}),
+        ...(approval ? { approval } : {}),
+        ...(includeApproval ? { includeApproval } : {}),
+        ...(sourceRoot ? { sourceRoot } : {}),
       });
     } else if (action === 'remove') {
       if (args.length !== 1) {
         throw new UsageError('worktree remove requires exactly one path');
       }
-      data = await service.remove({ cwd: parsed.cwd, worktreePath: args[0]! });
+      data = await service.worktree('remove', { cwd: parsed.cwd, worktreePath: args[0]! });
     } else if (action === 'list') {
       if (args.length) {
         throw new UsageError('worktree list accepts no arguments');
       }
-      data = await service.list({ cwd: parsed.cwd });
+      data = await service.worktree('list', { cwd: parsed.cwd });
     } else if (action === 'status') {
       if (args.length) {
         throw new UsageError('worktree status accepts no arguments');
       }
-      data = await service.status({ cwd: parsed.cwd });
+      data = await service.worktree('status', { cwd: parsed.cwd });
     } else if (action === 'prepare') {
       if (args.length !== 1) {
         throw new UsageError('worktree prepare requires exactly one lifecycle key');
       }
-      data = await service.prepare({
+      const approval = preparationApproval();
+      data = await service.worktree('prepare', {
         cwd: parsed.cwd,
         key: args[0]!,
-        ...(preparationApproval() ? { approval: preparationApproval() } : {}),
+        ...(approval ? { approval } : {}),
       });
     } else if (action === 'cancel') {
       if (args.length !== 1) {
         throw new UsageError('worktree cancel requires exactly one lifecycle key');
       }
-      data = await service.cancel({ cwd: parsed.cwd, key: args[0]! });
+      data = await service.worktree('cancel', { cwd: parsed.cwd, key: args[0]! });
     } else if (action === 'reconcile') {
       if (args.length) {
         throw new UsageError('worktree reconcile accepts no arguments');
       }
-      data = await service.reconcile({
+      const orphanApproval = stringOption('orphan-approval');
+      data = await service.worktree('reconcile', {
         cwd: parsed.cwd,
-        ...(stringOption('orphan-approval')
-          ? { orphanApproval: stringOption('orphan-approval') }
-          : {}),
+        ...(orphanApproval ? { orphanApproval } : {}),
       });
     } else {
       const selectedPath = stringOption('path') ?? args[0];
       if (args.length > (stringOption('path') ? 0 : 1) || !selectedPath) {
         throw new UsageError('worktree select requires exactly one explicit path');
       }
-      const selected = await service.select({ cwd: parsed.cwd, path: selectedPath });
+      const selected = await service.worktree('select', {
+        cwd: parsed.cwd,
+        path: selectedPath,
+      });
       data = selected;
       if (parsed.options.get('machine') === true) {
         return { data, warnings, machinePath: selected.path };
@@ -2286,7 +2298,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       if (args.length) {
         throw new UsageError('ports list accepts no arguments');
       }
-      data = [...(await service.list())].sort((a, b) => a.leaseId.localeCompare(b.leaseId));
+      data = await createNodeLifecycleApplicationService({ ports: service }).listPorts();
     } else if (action === 'inspect') {
       if (args.length) {
         throw new UsageError('ports inspect accepts no arguments');
@@ -2307,14 +2319,14 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         throw new UsageError('ports kill requires a positive integer PID');
       }
       const pid = Number(raw);
-      await service.kill(pid);
-      data = { killed: true, pid };
+      data = await createNodeLifecycleApplicationService({ ports: service }).killPortProcess(pid);
     } else if (action === 'release') {
       if (args.length) {
         throw new UsageError('ports release accepts no arguments');
       }
-      await service.release({ cwd: parsed.cwd });
-      data = { released: true };
+      data = await createNodeLifecycleApplicationService({ ports: service }).releasePorts({
+        cwd: parsed.cwd,
+      });
     } else if (action === 'reconcile') {
       if (args.length) {
         throw new UsageError('ports reconcile accepts no arguments');
@@ -2358,12 +2370,9 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
   }
   if (group === 'status' && !action) {
     const found = await project(parsed, context);
-    data = await status(context, context.portService).snapshot({
-      cwd: parsed.cwd,
-      projectRoot: found.root,
-      config: found.config,
-      configHash: sha256Canonical(found.config as unknown as JsonValue),
-    });
+    data = await createNodeLifecycleApplicationService({
+      status: status(context, context.portService),
+    }).currentStatus({ cwd: parsed.cwd, projectRoot: found.root, config: found.config });
     return { data, warnings };
   }
   if (group === 'init' && !action) {

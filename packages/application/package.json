@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "default": "./dist/node/index.js"
     }
   },
   "scripts": {
@@ -19,10 +23,16 @@
   "dependencies": {
     "@mpx/config": "workspace:*",
     "@mpx/core": "workspace:*",
+    "@mpx/dev-services": "workspace:*",
+    "@mpx/ports": "workspace:*",
     "@mpx/providers": "workspace:*",
-    "@mpx/skills": "workspace:*"
+    "@mpx/skills": "workspace:*",
+    "@mpx/status": "workspace:*",
+    "@mpx/windows": "workspace:*",
+    "@mpx/worktrees": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

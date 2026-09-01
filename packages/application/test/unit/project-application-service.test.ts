@@ -105,6 +105,29 @@ describe('ProjectApplicationService', () => {
     expect(rollback).toHaveBeenCalledWith(confirmation);
   });
 
+  it('reports both failures when init publication and rollback reject with domain errors', async () => {
+    const confirmation = {
+      plan: { schemaVersion: 1 as const, cwd: 'C:/new', actions: [] },
+      manifestPath: 'C:/new/mpxconfig.json',
+      created: true,
+    };
+    const service = setup({
+      discoverProjectConfig: vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(found),
+      confirmInit: async () => confirmation,
+      rollbackConfirmedInit: async () => {
+        throw new MpxError({ code: 'ROLLBACK_DENIED', message: 'rollback failed' });
+      },
+      ensureProject: async () => {
+        throw new MpxError({ code: 'PORT_FAILED', message: 'publication failed' });
+      },
+    });
+
+    await expect(service.init({ cwd: 'C:/new', confirm: true })).rejects.toMatchObject({
+      code: 'INIT_ROLLBACK_FAILED',
+      details: { originalCode: 'PORT_FAILED', rollbackCode: 'ROLLBACK_DENIED' },
+    });
+  });
+
   it('aggregates domain diagnostics in stable source order and derives failure status', async () => {
     const service = setup({
       configDoctor: () => [{ code: 'CFG', message: 'config', severity: 'warning', pointer: '/x' }],

@@ -6,13 +6,13 @@ import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import type { PreparationPlan } from '@mpx/config';
 import { createPreparationApproval, preparationApprovalPhrases } from '@mpx/worktrees';
-import { preparationRuntime } from '../../../apps/cli/src/context.js';
 import {
+  preparationRuntime,
   cleanupPreparationWorker,
   pollPreparationTerminal,
   preparationDiagnostic,
   shouldRetryUnknownPreparation,
-} from '../../../apps/cli/src/preparation-worker-polling.js';
+} from '@mpx/application/node';
 
 const executeFile = promisify(execFile);
 const cleanup: string[] = [];

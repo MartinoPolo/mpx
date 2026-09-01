@@ -2997,12 +2997,10 @@ describe('cli', () => {
       'cancel',
       'reconcile',
     ]);
-    expect(calls[0]![1]).toMatchObject({
+    expect(calls[0]![1]).toEqual({
       cwd,
       branch: 'feature/x',
       base: 'origin/main',
-      template: '{slug}',
-      slug: 'feature x',
       execution: 'foreground',
     });
     expect(calls[4]![1]).toMatchObject({
