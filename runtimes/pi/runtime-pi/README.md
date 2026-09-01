@@ -5,10 +5,11 @@ on the provenance repository and does not project credentials, sessions, trust, 
 
 ## CLI-facing exports
 
-- `buildPiProjection(input): Promise<PiPublishedProjection>` / `createPiRuntimeProjection(input)` — validate neutral v4 inputs, emit policy-scoped standalone projection files, and publish them through the runtime-contract artifact store.
+- `createPiRuntimeProfileV1(modelSelection, capabilityIds)` — translate config-owned model selection into an immutable Pi profile.
+- `profileSettings(profile)` / `createPiProjection(profile)` — derive immutable settings, keybindings, and projection data from that explicit profile.
+- `buildPiProjection(input): Promise<PiPublishedProjection>` / `createPiRuntimeProjection(input)` — validate neutral v4 inputs (including `piRuntimeProfile`), emit policy-scoped standalone projection files, and publish them through the runtime-contract artifact store.
 - `createPiRuntimeAdapter` — validate a launch binding and install `/mpx:*` commands.
 - `planPiInvocation` — return a hermetic executable/arguments/environment plan; it can consume `PiPublishedProjection` directly. Launchers must pass `statusSnapshotPath` so the child-only `MPX_STATUS_SNAPSHOT_FILE` binding points at the validated read-only Phase C snapshot. The extension refreshes that file asynchronously; the projected launch snapshot is only an older-launcher compatibility fallback.
-- `createPiProjection`, `piSettings`, `piKeybindings` — immutable projection data.
 - `createPiFooterPortAdapter` — asynchronous validated shared status segment.
 - `generatePiAgents` — deterministic canonical-agent projection/drift check.
 - `guardPiCommand` — shared runtime hook classification.

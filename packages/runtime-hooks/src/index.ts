@@ -1563,3 +1563,116 @@ export function adaptClaudeHookEvent(
     evaluated,
   };
 }
+
+const DEFAULT_PROJECTED_ENVIRONMENT: ProjectEnvironment = Object.freeze({
+  packageManager: 'pnpm',
+  runner: Object.freeze(['pnpm', 'exec']),
+  toolchain: 'classic',
+  framework: null,
+  python: false,
+});
+
+/**
+ * Provider-neutral defaults formerly composed by the Pi projection adapter.
+ * Runtime adapters only normalize native events and deliver these evaluator results.
+ */
+export function createDefaultProjectedRuntimePolicies(
+  options: {
+    readonly environment?: ProjectEnvironment;
+    readonly processEnvironment?: Readonly<Record<string, string | undefined>>;
+    readonly platform?: NodeJS.Platform;
+  } = {},
+) {
+  const environment = options.environment ?? DEFAULT_PROJECTED_ENVIRONMENT;
+  return Object.freeze({
+    session: () => planSessionContext(options.processEnvironment ?? process.env),
+    toolCall(input: Record<string, unknown>) {
+      const command = String(input.command ?? '');
+      const packageDecision = evaluatePackagePolicy(command, environment.packageManager);
+      if (packageDecision.action === 'block') {
+        return packageDecision;
+      }
+      const precommit = evaluatePreCommit({
+        command,
+        packageManager: environment.packageManager,
+        toolchain: environment.toolchain,
+        framework: environment.framework,
+        scripts: {},
+        staged: Array.isArray(input.staged)
+          ? (input.staged as Array<{ file: string; diff: string }>)
+          : [],
+      });
+      if (precommit.action === 'block') {
+        return precommit;
+      }
+      const fallow = evaluateFallowGate({
+        command,
+        minimumVersion: '2.46.0',
+        ...(input.fallow && typeof input.fallow === 'object'
+          ? {
+              runner: { description: 'fallow', version: '2.46.0' },
+              audit: { stdout: '', stderr: '', ...(input.fallow as { status: number }) },
+            }
+          : {}),
+      });
+      return fallow.warning
+        ? { action: 'allow' as const, warning: fallow.warning }
+        : { action: 'allow' as const };
+    },
+    postWrite: (file: string) =>
+      planFileQuality({
+        relativeFile: file,
+        toolchain: environment.toolchain,
+        runner: environment.runner as readonly [string, ...string[]],
+        configs: [],
+      }),
+    postCommand: (command: string, stderr: string) =>
+      extractPostCommandContext({
+        operation: 'package-install',
+        exitCode: 0,
+        stderr: /(?:npm|pnpm|yarn|bun)\s+(?:install|add)/u.test(command) ? stderr : '',
+      }),
+    compact: (manualInstructions: string) =>
+      planCompactionInjection({
+        manualInstructions,
+        canonicalInstructions: 'Preserve immutable launch authority.',
+        environment,
+      }),
+    notification: () =>
+      planNotification({
+        event: 'turn-settled',
+        platform: options.platform ?? process.platform,
+        sessionRole: 'top-level',
+      }),
+  });
+}
+
+export const defaultProjectedRuntimePolicies = createDefaultProjectedRuntimePolicies();
+
+export interface RuntimeCommandPolicySourcePlanV1 {
+  readonly schemaVersion: 1;
+  readonly packageDecision: string;
+  readonly preCommitDecision: string;
+  readonly fallowDecision: string;
+}
+
+/**
+ * Deterministic dependency-free policy fragments inserted into immutable runtime adapters.
+ *
+ * CODE CONTRACT: these V1 fragments duplicate canonical evaluator behavior because projected
+ * hooks cannot import workspace packages. Every intended overlap belongs in the parity matrix.
+ * Historical V1 compatibility is explicit: its pre-commit fragment scans `.lockb` files while
+ * `shouldScanStagedFile` skips them. Do not broaden a parity claim or change projected bytes
+ * without updating that matrix and the compatibility note.
+ */
+export function projectRuntimeCommandPolicySourceV1(): RuntimeCommandPolicySourcePlanV1 {
+  return Object.freeze({
+    schemaVersion: 1,
+    packageDecision: String.raw`function packageDecision(command,selected=manager()){if(!selected)return null;const primary=typeof command==="string"?command.trim().split(/\s+/u)[0]:"";if(["npm","pnpm","yarn","bun"].includes(primary)&&primary!==selected)return{code:"WRONG_PACKAGE_MANAGER",message:"This project uses "+selected+"; use it instead of "+primary+"."};if(selected==="bun"&&/(?:^|\s)npx\s/u.test(command))return{code:"WRONG_PACKAGE_RUNNER",message:"This project uses bunx instead of npx."};if(/(?:^|[;&|]\s*|\s)npx\s+tsc(?:\s|$)/u.test(command))return{code:"DIRECT_TSC",message:"Use "+selected+" run typecheck or the project check script."};return null}
+`,
+    preCommitDecision: String.raw`function preCommit(command){if(!/(?:^|[\s;&|()])git\s+commit(?:\s|$)/u.test(command))return null;const names=run("git",["diff","--cached","--name-only","-z"],10000);if(names.status!==0)return{warning:"pre-commit: staged files unavailable; skipped (fail-open)."};for(const file of names.stdout.split("\0").filter(Boolean).slice(0,1000)){if(/(?:\.lock$|lock\.(?:json|yaml)$|\.env\.(?:example|sample|template)$|\.(?:test|spec)\.[jt]sx?$)/u.test(file))continue;const diff=run("git",["diff","--cached","--unified=0","--",file],10000);if(diff.status!==0)continue;if(diff.stdout.split("\n").some(line=>line.startsWith("+")&&!line.startsWith("+++")&&/(?:AKIA[0-9A-Z]{16}|gh[po]_[a-zA-Z0-9]{36}|-----BEGIN[A-Z ]*PRIVATE KEY-----|xox[bpors]-[a-zA-Z0-9-]+|\b(?:password|secret|api_key|apikey|auth_token)\b\s*[:=]\s*["']?[^"'\s]{8,})/iu.test(line)))return{block:{code:"STAGED_SECRET",message:"Remove staged secrets before committing ("+file+")."}}}const check=process.env.MPX_PRECOMMIT_CHECK,selected=manager();if(check&&selected){const checked=run(selected,["run",check]);if(checked.status!==0)return{block:{code:"PRE_COMMIT_CHECK_FAILED",message:check+" failed before commit.\n"+(checked.stderr||checked.stdout).split("\n").slice(-50).join("\n")}}}const subject=command.match(/-m\s+["']([^"']+)["']/u)?.[1];if(subject&&!/^(?:feat|fix|refactor|chore|docs|style|test|perf|ci|build|revert)(?:\(.+\))?: .+/u.test(subject))return{warning:"Warning: commit message does not match conventional format: type(scope): description"};return null}
+`,
+    fallowDecision: String.raw`function fallow(command){if(!process.env.MPX_FALLOW_EXECUTABLE||!/(^|[\s;|&()])git\s+(?:commit|push)(?:\s|$)/u.test(command))return null;const executable=process.env.MPX_FALLOW_EXECUTABLE,version=run(executable,["--version"],5000);if(version.status!==0)return{warning:"fallow-gate: fallow binary not found; skipping."};const audit=run(executable,["audit","--json"],30000);let parsed;try{parsed=JSON.parse(audit.stdout)}catch{}if(parsed?.verdict==="fail")return{block:{code:"FALLOW_AUDIT_FAILED",message:"Blocked by fallow."}};if(audit.status!==0||parsed?.error===true)return{warning:"fallow-gate: audit runtime error; skipping."};return null}
+`,
+  });
+}

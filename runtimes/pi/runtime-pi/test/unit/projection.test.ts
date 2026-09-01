@@ -1,7 +1,22 @@
 import { expect, it } from 'vitest';
-import { createPiProjection } from '../../src/index.js';
+import { createPiProjection, createPiRuntimeProfileV1 } from '../../src/index.js';
 it('projects retained Pi UX and vendored orchestration without host mutation', () => {
-  const p = createPiProjection();
+  const p = createPiProjection(
+    createPiRuntimeProfileV1(
+      {
+        schemaVersion: 1,
+        runtime: 'pi',
+        provider: 'openai-codex',
+        defaultModel: 'openai-codex/gpt-5.6-sol',
+        enabledModels: [
+          'openai-codex/gpt-5.6-luna',
+          'openai-codex/gpt-5.6-sol',
+          'openai-codex/gpt-5.6-terra',
+        ],
+      },
+      [],
+    ),
+  );
   expect(p.settings).toMatchObject({
     compaction: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
     terminal: { showTerminalProgress: false },

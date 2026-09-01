@@ -2,12 +2,14 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
   buildCompactContext,
   buildMachineContext,
   classifyDangerousCommand,
   dangerousCommandPolicyModuleSource,
+  defaultProjectedRuntimePolicies,
   detectProjectEnvironment,
   evaluateFallowGate,
   evaluatePackagePolicy,
@@ -19,10 +21,12 @@ import {
   planFileQuality,
   planNotification,
   planSessionContext,
+  projectRuntimeCommandPolicySourceV1,
   readCompactInstructions,
   resolveGuardObservations,
   scanAddedSecrets,
   selectPreCommitCheck,
+  shouldScanStagedFile,
   validateCommitFormat,
   adaptClaudeHookEvent,
 } from '../../src/index.js';
@@ -331,6 +335,94 @@ describe('event-order-neutral guard contract', () => {
         { policy: 'dangerous-command', infrastructureFailure: 'classifier unavailable' },
       ]),
     ).toMatchObject({ action: 'block', code: 'GUARD_INFRASTRUCTURE_FAILURE' });
+  });
+});
+
+describe('projected command policy ownership', () => {
+  it('provides the former Pi projected policy behavior as a neutral default bundle', () => {
+    expect(defaultProjectedRuntimePolicies.toolCall({ command: 'npm install' })).toMatchObject({
+      action: 'block',
+      code: 'WRONG_PACKAGE_MANAGER',
+      replacement: 'pnpm',
+    });
+    expect(defaultProjectedRuntimePolicies.postWrite('src/example.ts')).toEqual([]);
+    expect(
+      defaultProjectedRuntimePolicies.postCommand(
+        'pnpm install',
+        'found 1 vulnerability in dependency tree',
+      ),
+    ).toBe('Package install detected vulnerabilities. Consider running the project audit policy.');
+    expect(defaultProjectedRuntimePolicies.compact('Keep local context.')).toMatchObject({
+      action: 'inject',
+      instructions: 'Keep local context.\n\nPreserve immutable launch authority.',
+    });
+    expect(defaultProjectedRuntimePolicies.notification()).toEqual(
+      planNotification({
+        event: 'turn-settled',
+        platform: process.platform,
+        sessionRole: 'top-level',
+      }),
+    );
+  });
+
+  it('returns deterministic frozen source fragments for runtime insertion', () => {
+    const first = projectRuntimeCommandPolicySourceV1();
+    expect(first).toEqual(projectRuntimeCommandPolicySourceV1());
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(first.packageDecision).toContain('function packageDecision(command,selected=manager())');
+    expect(first.preCommitDecision.endsWith('\n')).toBe(true);
+    expect(first.fallowDecision.endsWith('\n')).toBe(true);
+  });
+
+  it('keeps the dependency-free V1 duplicates on their documented canonical parity matrix', () => {
+    const source = projectRuntimeCommandPolicySourceV1();
+    const packageContext = vm.createContext({ manager: () => 'pnpm' });
+    vm.runInContext(`${source.packageDecision};this.evaluate=packageDecision`, packageContext);
+    const projectedPackage = packageContext.evaluate as (
+      command: string,
+    ) => { code: string } | null;
+    for (const [command, expectedCode] of [
+      ['pnpm install', null],
+      ['npm install', 'WRONG_PACKAGE_MANAGER'],
+      ['npx tsc', 'DIRECT_TSC'],
+    ] as const) {
+      const canonical = evaluatePackagePolicy(command, 'pnpm');
+      expect(projectedPackage(command)?.code ?? null, command).toBe(expectedCode);
+      expect(canonical.action === 'block' ? canonical.code : null, command).toBe(expectedCode);
+    }
+
+    const projectedPreCommit = (file: string, diff: string) => {
+      const context = vm.createContext({
+        process: { env: {} },
+        run: (_executable: string, args: string[]) =>
+          args.includes('--name-only')
+            ? { status: 0, stdout: `${file}\0`, stderr: '' }
+            : { status: 0, stdout: diff, stderr: '' },
+        manager: () => 'pnpm',
+      });
+      vm.runInContext(`${source.preCommitDecision};this.evaluate=preCommit`, context);
+      return (context.evaluate as (command: string) => { block?: { code: string } } | null)(
+        'git commit -m "fix(test): parity"',
+      )?.block?.code;
+    };
+    const secretDiff = '+const api_key = "12345678"';
+    for (const file of ['src/app.ts', 'package-lock.json', 'src/app.test.ts']) {
+      const canonical = evaluatePreCommit({
+        command: 'git commit -m "fix(test): parity"',
+        packageManager: 'pnpm',
+        toolchain: 'classic',
+        framework: null,
+        scripts: {},
+        staged: [{ file, diff: secretDiff }],
+      });
+      expect(projectedPreCommit(file, secretDiff), file).toBe(
+        canonical.action === 'block' ? canonical.code : undefined,
+      );
+    }
+
+    // Deliberate V1 compatibility: projected hooks still scan .lockb while canonical policy skips it.
+    expect(projectedPreCommit('bun.lockb', secretDiff)).toBe('STAGED_SECRET');
+    expect(shouldScanStagedFile('bun.lockb')).toBe(false);
   });
 });
 

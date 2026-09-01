@@ -1,14 +1,19 @@
 export const PI_RUNTIME_PROFILE_SCHEMA_VERSION = 1 as const;
 
+/** Structural boundary supplied by config composition; runtime-pi does not select providers or models. */
+export interface PiModelSelectionV1 {
+  readonly schemaVersion: 1;
+  readonly runtime: 'pi';
+  readonly provider: string;
+  readonly defaultModel: string;
+  readonly enabledModels: readonly string[];
+}
+
 export interface PiRuntimeProfileV1 {
   readonly schemaVersion: 1;
-  readonly provider: 'openai-codex';
-  readonly model: 'gpt-5.6-sol';
-  readonly models: readonly [
-    'openai-codex/gpt-5.6-luna',
-    'openai-codex/gpt-5.6-sol',
-    'openai-codex/gpt-5.6-terra',
-  ];
+  readonly provider: string;
+  readonly model: string;
+  readonly models: readonly string[];
   readonly thinking: 'medium';
   readonly theme: 'dark';
   readonly tuiMode: 'fullscreen';
@@ -28,15 +33,24 @@ function freeze<T>(value: T): T {
   return value;
 }
 
-/** Account-safe projection settings only. Native Pi auth, sessions, trust decisions and caches never enter this profile. */
+/** Account-safe Pi translation only; model identity selection belongs to config composition. */
 export function createPiRuntimeProfileV1(
-  capabilityIds: readonly string[] = [],
+  modelSelection: PiModelSelectionV1,
+  capabilityIds: readonly string[],
 ): PiRuntimeProfileV1 {
+  const prefix = `${modelSelection.provider}/`;
+  if (
+    modelSelection.runtime !== 'pi' ||
+    !modelSelection.defaultModel.startsWith(prefix) ||
+    !modelSelection.enabledModels.includes(modelSelection.defaultModel)
+  ) {
+    throw new TypeError('Pi model selection is inconsistent');
+  }
   return freeze({
     schemaVersion: PI_RUNTIME_PROFILE_SCHEMA_VERSION,
-    provider: 'openai-codex',
-    model: 'gpt-5.6-sol',
-    models: ['openai-codex/gpt-5.6-luna', 'openai-codex/gpt-5.6-sol', 'openai-codex/gpt-5.6-terra'],
+    provider: modelSelection.provider,
+    model: modelSelection.defaultModel.slice(prefix.length),
+    models: [...modelSelection.enabledModels],
     thinking: 'medium',
     theme: 'dark',
     tuiMode: 'fullscreen',

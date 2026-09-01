@@ -4,87 +4,10 @@ import {
   type AgentLaunchRequest,
 } from '@mpx/subagents';
 import type { ChildLaunchAuthorityV1, RuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
-import {
-  evaluateFallowGate,
-  evaluatePackagePolicy,
-  evaluatePreCommit,
-  extractPostCommandContext,
-  planCompactionInjection,
-  planFileQuality,
-  planNotification,
-  planSessionContext,
-} from '@mpx/runtime-hooks';
-import { parseRuntimeStatusEnvelopeV1 } from '@mpx/status';
 
-const environment = {
-  packageManager: 'pnpm' as const,
-  runner: ['pnpm', 'exec'] as const,
-  toolchain: 'classic' as const,
-  framework: null,
-  python: false,
-};
-export const projectionRuntimePolicies = Object.freeze({
-  parseStatus: parseRuntimeStatusEnvelopeV1,
-  session: () => planSessionContext(process.env),
-  toolCall(input: Record<string, unknown>) {
-    const command = String(input.command ?? '');
-    const packageDecision = evaluatePackagePolicy(command, environment.packageManager);
-    if (packageDecision.action === 'block') {
-      return packageDecision;
-    }
-    const precommit = evaluatePreCommit({
-      command,
-      packageManager: environment.packageManager,
-      toolchain: environment.toolchain,
-      framework: environment.framework,
-      scripts: {},
-      staged: Array.isArray(input.staged)
-        ? (input.staged as Array<{ file: string; diff: string }>)
-        : [],
-    });
-    if (precommit.action === 'block') {
-      return precommit;
-    }
-    const fallow = evaluateFallowGate({
-      command,
-      minimumVersion: '2.46.0',
-      ...(input.fallow && typeof input.fallow === 'object'
-        ? {
-            runner: { description: 'fallow', version: '2.46.0' },
-            audit: { stdout: '', stderr: '', ...(input.fallow as { status: number }) },
-          }
-        : {}),
-    });
-    return fallow.warning
-      ? { action: 'allow' as const, warning: fallow.warning }
-      : { action: 'allow' as const };
-  },
-  postWrite: (file: string) =>
-    planFileQuality({
-      relativeFile: file,
-      toolchain: environment.toolchain,
-      runner: environment.runner,
-      configs: [],
-    }),
-  postCommand: (command: string, stderr: string) =>
-    extractPostCommandContext({
-      operation: 'package-install',
-      exitCode: 0,
-      stderr: /(?:npm|pnpm|yarn|bun)\s+(?:install|add)/u.test(command) ? stderr : '',
-    }),
-  compact: (manualInstructions: string) =>
-    planCompactionInjection({
-      manualInstructions,
-      canonicalInstructions: 'Preserve immutable launch authority.',
-      environment,
-    }),
-  notification: () =>
-    planNotification({
-      event: 'turn-settled',
-      platform: process.platform,
-      sessionRole: 'top-level',
-    }),
-});
+// Pi only wires the provider-neutral bundle; policy defaults remain owned by runtime-hooks.
+export { defaultProjectedRuntimePolicies as projectionRuntimePolicies } from '@mpx/runtime-hooks';
+
 export interface ProjectionSubagentRuntime {
   launch(params: Record<string, unknown>): Promise<unknown>;
   result(id: string): Promise<string>;

@@ -14,6 +14,7 @@ function deferred<T>() {
 it('starts every production bundle request together and emits their stable filenames in order', async () => {
   const requests = new Map([
     ['production-subagents.ts', deferred<string>()],
+    ['production-status.ts', deferred<string>()],
     ['production-runtime.ts', deferred<string>()],
     ['launch-private-client.ts', deferred<string>()],
   ]);
@@ -32,16 +33,19 @@ it('starts every production bundle request together and emits their stable filen
 
   expect(started).toEqual([
     'production-subagents.ts',
+    'production-status.ts',
     'production-runtime.ts',
     'launch-private-client.ts',
   ]);
   requests.get('launch-private-client.ts')!.resolve('client');
   requests.get('production-runtime.ts')!.resolve('runtime');
+  requests.get('production-status.ts')!.resolve('status');
   requests.get('production-subagents.ts')!.resolve('subagents');
   await emission;
 
   expect(emitted).toEqual([
     ['production-subagents.mjs', 'subagents'],
+    ['production-status.mjs', 'status'],
     ['production-runtime.mjs', 'runtime'],
     ['launch-private-client.mjs', 'client'],
   ]);
@@ -56,6 +60,6 @@ it('emits no production bundles when any bundle request fails', async () => {
 
   await expect(emitProductionBundles(emit, bundle)).rejects.toBe(failure);
 
-  expect(bundle).toHaveBeenCalledTimes(3);
+  expect(bundle).toHaveBeenCalledTimes(4);
   expect(emit).not.toHaveBeenCalled();
 });

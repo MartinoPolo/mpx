@@ -5,6 +5,11 @@ const productionBundleFiles = [
     filename: 'production-subagents.mjs',
   },
   {
+    entry: 'production-status.ts',
+    label: 'production status',
+    filename: 'production-status.mjs',
+  },
+  {
     entry: 'production-runtime.ts',
     label: 'production runtime',
     filename: 'production-runtime.mjs',

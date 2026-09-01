@@ -37,7 +37,7 @@ import {
   type LaunchPrivateBridge,
   type LaunchPrivateBridgeConfig,
 } from '@mpx/executors';
-import type { ProjectConfig } from '@mpx/config';
+import { defaultRuntimeModelSelectionV1, type ProjectConfig } from '@mpx/config';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
   createRuntimeCapabilityManifestV1,
@@ -1083,7 +1083,9 @@ function runtimeWiring(
     ].sort((left, right) => left - right),
   );
   const piProfile =
-    descriptor.runtime === 'pi' ? createPiRuntimeProfileV1(PI_CAPABILITY_IDS) : undefined;
+    descriptor.runtime === 'pi'
+      ? createPiRuntimeProfileV1(defaultRuntimeModelSelectionV1('pi'), PI_CAPABILITY_IDS)
+      : undefined;
   const capability = createRuntimeCapabilityManifestV1({
     runtime: descriptor.runtime,
     launchKey: descriptor.launchKey,
@@ -1226,6 +1228,7 @@ async function buildProductionProjection(
       statusSnapshot: input.statusSnapshot,
       runtimeStatusEnvelope: input.runtimeStatusEnvelope,
       runtimeCapabilityManifest: input.runtimeCapabilityManifest,
+      piRuntimeProfile: input.piRuntimeProfile!,
       runtimeLaunchBinding: { ...input.runtimeLaunchBinding, runtime: 'pi' },
       launchBanner: input.launchBanner,
       ...(input.artifactRevalidator ? { artifactRevalidator: input.artifactRevalidator } : {}),

@@ -172,6 +172,7 @@ describe('production Pi projection', () => {
         artifactsRoot,
         statusSnapshot: f.statusSnapshot,
         runtimeStatusEnvelope: f.runtimeStatusEnvelope,
+        piRuntimeProfile: f.piRuntimeProfile,
         launchBanner: f.launchBanner,
       }),
     ).rejects.toThrow('SKILL_PROJECTION_PLAN_UNVERIFIED');
@@ -192,6 +193,7 @@ describe('production Pi projection', () => {
         artifactsRoot,
         statusSnapshot: f.statusSnapshot,
         runtimeStatusEnvelope: f.runtimeStatusEnvelope,
+        piRuntimeProfile: f.piRuntimeProfile,
         launchBanner: f.launchBanner,
       }),
     ).rejects.toThrow('SKILL_PROJECTION_PLAN_CHANGED');
@@ -561,6 +563,7 @@ describe('production Pi projection', () => {
           [
             'launch-private-client.mjs',
             'production-runtime.mjs',
+            'production-status.mjs',
             'production-subagents.mjs',
           ].includes(entry.path)
         ) {
@@ -634,12 +637,13 @@ describe('production Pi projection', () => {
     for (const bundlePath of [
       'launch-private-client.mjs',
       'production-runtime.mjs',
+      'production-status.mjs',
       'production-subagents.mjs',
     ]) {
       expect(normalizedTree.get(bundlePath), bundlePath).toEqual(completeTree.get(bundlePath));
     }
     expect(projectionContentDigest(completeTree, boundValues)).toBe(
-      '2ce8d8d1690af876dff05ada317d4a8c2bfc1b63d6b29a5684450e968938d1d4',
+      '07954466ff4662ea8ef125793bb01c31cc0595d8ca5113bbae9c3e1482fa2c87',
     );
   });
 
@@ -1243,6 +1247,69 @@ describe('production Pi projection', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('executes every projected production policy handler with its previous outcomes', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-policy-handlers-')),
+    });
+    const module = await import(
+      `${pathToFileURL(projection.extension).href}?policy-handlers=${Date.now()}`
+    );
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    const notifications: Array<[string, string]> = [];
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({
+      registerCommand() {},
+      registerTool() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+
+    const productionHandler = (name: string) =>
+      required(required(events.get(name), `${name} handlers`)[0], `${name} production handler`);
+    await expect(
+      productionHandler('tool_call')({ toolName: 'bash', input: { command: 'npm install' } }),
+    ).resolves.toMatchObject({
+      block: true,
+      reason: 'WRONG_PACKAGE_MANAGER: This project uses pnpm; use it instead of npm.',
+    });
+    await expect(
+      productionHandler('tool_result')({ toolName: 'write', input: { path: 'src/example.ts' } }),
+    ).resolves.toEqual({ additionalContext: 'post-write quality: []' });
+    await expect(
+      productionHandler('tool_result')({
+        toolName: 'bash',
+        input: { command: 'pnpm install' },
+        result: { stderr: 'found 1 vulnerability in dependency tree' },
+      }),
+    ).resolves.toEqual({
+      additionalContext:
+        'Package install detected vulnerabilities. Consider running the project audit policy.',
+    });
+    await expect(
+      productionHandler('session_before_compact')({ customInstructions: 'Keep local context.' }),
+    ).resolves.toEqual({
+      instructions: 'Keep local context.\n\nPreserve immutable launch authority.',
+    });
+    await expect(
+      productionHandler('agent_settled')(
+        {},
+        {
+          ui: {
+            notify(message: string, level: string) {
+              notifications.push([message, level]);
+            },
+            setWidget() {},
+          },
+        },
+      ),
+    ).resolves.toBeUndefined();
+    expect(notifications).toEqual([['Agent settled.', 'info']]);
+  });
+
   it('does not fabricate production gateway or development-service results when no launch adapters are supplied', async () => {
     const f = await fixture();
     const projection = await buildPiProjection({
@@ -1270,6 +1337,42 @@ describe('production Pi projection', () => {
     ]);
     const source = await readFile(projection.extension, 'utf8');
     expect(source).not.toMatch(/example\.invalid|Projection result|Fetched \$/u);
+  });
+
+  it('normalizes malformed generated Pi search tool queries without native type errors', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-search-malformed-')),
+    });
+    const module = await import(pathToFileURL(projection.extension).href);
+    let searchTool: { execute(toolCallId: string, params: unknown): Promise<unknown> } | undefined;
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    await module.activate({
+      registerCommand() {},
+      registerTool(tool: { name: string; execute(id: string, params: unknown): Promise<unknown> }) {
+        if (tool.name === 'mpx_model_search') {
+          searchTool = tool;
+        }
+      },
+    });
+
+    const execute = required(searchTool, 'model search').execute;
+    for (const [params, normalized] of [
+      [{}, ''],
+      [{ query: null }, ''],
+      [{ query: 123 }, '123'],
+      [{ query: {} }, '[object Object]'],
+    ] as const) {
+      const result = (await execute('search', params)) as { details: { results: unknown } };
+      expect(result.details.results, normalized).toEqual(
+        modelSearchSkillProjection(f.skillPlan, normalized, {
+          artifactKey: f.artifact.reference.artifactKey,
+        }),
+      );
+    }
+    await expect(execute('search', { query: ' '.repeat(201) })).rejects.toThrow('QUERY_TOO_LONG');
   });
 
   it('intentionally aligns generated Pi model search with canonical projected skill ranking', async () => {

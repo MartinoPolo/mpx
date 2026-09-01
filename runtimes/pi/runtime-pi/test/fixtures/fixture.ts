@@ -9,6 +9,7 @@ import {
   resolveManifest,
 } from '@mpx/skills';
 import type { RuntimeStatusEnvelopeV1, StatusSnapshotV1 } from '@mpx/status';
+import { createPiRuntimeProfileV1 } from '../../src/profile.js';
 
 const exposures = [
   ['full', 'full', 'Full skill', 'full trigger'],
@@ -150,8 +151,23 @@ export async function fixture() {
       items: [{ id: 'refresh', enabled: true, narrowLabel: 'R', wideLabel: 'Refresh' }],
     },
   };
+  const piRuntimeProfile = createPiRuntimeProfileV1(
+    {
+      schemaVersion: 1,
+      runtime: 'pi',
+      provider: 'openai-codex',
+      defaultModel: 'openai-codex/gpt-5.6-sol',
+      enabledModels: [
+        'openai-codex/gpt-5.6-luna',
+        'openai-codex/gpt-5.6-sol',
+        'openai-codex/gpt-5.6-terra',
+      ],
+    },
+    [],
+  );
   return {
     context,
+    piRuntimeProfile,
     manifest,
     artifact,
     skillPlan,
