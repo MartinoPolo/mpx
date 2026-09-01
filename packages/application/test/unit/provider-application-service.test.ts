@@ -149,6 +149,35 @@ describe('ProviderApplicationService', () => {
     expect(createProviderService).not.toHaveBeenCalled();
   });
 
+  it('rejects a dual-role provider capability that does not belong to the requested role', () => {
+    const dualRole = descriptor('dual', ['repository', 'issues'], ['review.view', 'issue.list']);
+    const routePolicy = { requiresRoute: vi.fn(() => true) };
+    const service = createProviderApplicationService({
+      registry: {
+        list: () => [dualRole],
+        get: () => dualRole,
+        assertCapability: () => undefined,
+      },
+      routePolicy,
+      createProviderService: async () => ({ invoke: async () => ({}) }),
+      probe: async () => ({ status: 'ready' }),
+    });
+
+    expect(() =>
+      service.prepareInvocation({
+        project: {
+          schemaVersion: 1,
+          project: { id: 'sample' },
+          repository: { provider: 'dual', remote: 'origin' },
+          issues: { provider: 'dual' },
+        },
+        role: 'issues',
+        capability: 'review.view',
+      }),
+    ).toThrow();
+    expect(routePolicy.requiresRoute).not.toHaveBeenCalled();
+  });
+
   it('requires the selected identity route according to the injected neutral policy', () => {
     const { service } = setup();
     expect(() =>

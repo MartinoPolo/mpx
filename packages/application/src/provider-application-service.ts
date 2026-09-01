@@ -140,10 +140,18 @@ export class ProviderApplicationService {
     const providerId = selectedProvider(request.project, request.role);
     const descriptor = this.dependencies.registry.get(providerId, request.role);
     this.dependencies.registry.assertCapability(providerId, request.capability);
+    const roleCapabilities = capabilitiesForProviderRole(descriptor.capabilities, request.role);
+    if (!roleCapabilities.includes(request.capability as ProviderCapability)) {
+      throw operationError(
+        'PROVIDER_CAPABILITY_UNSUPPORTED',
+        `Provider '${providerId}' does not support capability '${request.capability}' for role '${request.role}'.`,
+        { capability: request.capability },
+      );
+    }
     const routeRequired = this.dependencies.routePolicy.requiresRoute({
       providerId,
       role: request.role,
-      capabilities: capabilitiesForProviderRole(descriptor.capabilities, request.role),
+      capabilities: roleCapabilities,
     });
     const route = request.identity?.providerRoutes?.[providerId];
     if (routeRequired && request.identityName === undefined) {
