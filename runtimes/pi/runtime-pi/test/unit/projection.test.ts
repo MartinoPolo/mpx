@@ -41,3 +41,21 @@ it('projects retained Pi UX and vendored orchestration without host mutation', (
   expect(p.unsupported).not.toContain('F2 host replacement');
   expect(p.unsupported).toContain('live sbx/auth attestation');
 });
+
+it('rejects a forged runtime profile at the public projection boundary', () => {
+  const profile = createPiRuntimeProfileV1(
+    {
+      schemaVersion: 1,
+      runtime: 'pi',
+      provider: 'openai-codex',
+      defaultModel: 'openai-codex/gpt-5.6-sol',
+      enabledModels: ['openai-codex/gpt-5.6-sol'],
+    },
+    [],
+  );
+  const forged = { ...profile, models: ['anthropic/claude'] };
+
+  expect(() => createPiProjection(forged)).toThrowError(
+    expect.objectContaining({ code: 'PI_RUNTIME_PROFILE_INVALID' }),
+  );
+});

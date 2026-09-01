@@ -27,10 +27,11 @@
     "@mpx/subagents": "workspace:*"
   },
   "devDependencies": {
+    "@mpx/config": "workspace:*",
+    "@mpx/windows": "workspace:*",
     "@types/node": "^22.15.0",
     "esbuild": "0.28.2",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@mpx/windows": "workspace:*"
+    "vitest": "^3.2.4"
   }
 }

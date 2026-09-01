@@ -7,15 +7,15 @@ import {
   renderCanonicalAgentDocumentV1,
 } from '@mpx/subagents/documents';
 export interface GeneratePiAgentsInput {
-  source: string;
-  output: string;
-  check?: boolean;
+  readonly source: string;
+  readonly output: string;
+  readonly check?: boolean;
+  readonly modelMappings: {
+    readonly schemaVersion: 1;
+    readonly runtime: 'pi';
+    readonly models: Readonly<Record<AgentModelClassV1, string>>;
+  };
 }
-const piModels: Record<AgentModelClassV1, string> = {
-  sol: 'openai-codex/gpt-5.6-sol',
-  terra: 'openai-codex/gpt-5.6-terra',
-  luna: 'openai-codex/gpt-5.6-luna',
-};
 const piTools: Record<AgentCapabilityV1, string[]> = {
   read: ['read'],
   search: ['grep', 'find', 'ls'],
@@ -90,7 +90,7 @@ export async function generatePiAgents(
       ...new Set(metadata.capabilities.flatMap((capability) => piTools[capability] ?? [])),
     ];
     const fields = [
-      { name: 'model', value: piModels[metadata.modelClass] },
+      { name: 'model', value: input.modelMappings.models[metadata.modelClass] },
       { name: 'thinking', value: metadata.thinking },
       { name: 'tools', value: tools.join(',') },
       { name: 'output_schema', value: metadata.outputSchema },

@@ -5,10 +5,20 @@ import { expect, it } from 'vitest';
 import { generatePiAgents } from '../../src/index.js';
 import { fileURLToPath } from 'node:url';
 
+const modelMappings = Object.freeze({
+  schemaVersion: 1 as const,
+  runtime: 'pi' as const,
+  models: Object.freeze({
+    luna: 'openai-codex/gpt-5.6-luna',
+    sol: 'openai-codex/gpt-5.6-sol',
+    terra: 'openai-codex/gpt-5.6-terra',
+  }),
+});
+
 async function writeAgentFixture(
   root: string,
   metadata: string,
-): Promise<{ source: string; output: string }> {
+): Promise<{ source: string; output: string; modelMappings: typeof modelMappings }> {
   const source = path.join(root, 'source');
   const output = path.join(root, 'out');
   await mkdir(source);
@@ -17,7 +27,7 @@ async function writeAgentFixture(
     '---\nname: mpx-alpha\ndescription: alpha\n---\nBody\n',
   );
   await writeFile(path.join(source, 'metadata.json'), metadata);
-  return { source, output };
+  return { source, output, modelMappings };
 }
 it('rethrows the native SyntaxError for malformed catalog JSON', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-json-'));
@@ -131,6 +141,35 @@ it('normalizes canonical CRLF bytes to the native Pi LF projection', async () =>
   );
 });
 
+it('translates the supplied Pi agent model mappings', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-mapping-'));
+  const fixture = await writeAgentFixture(
+    root,
+    JSON.stringify({
+      schemaVersion: 1,
+      agents: {
+        'mpx-alpha': {
+          modelClass: 'terra',
+          thinking: 'low',
+          capabilities: ['read'],
+          nesting: [],
+          outputSchema: 'text',
+        },
+      },
+    }),
+  );
+  await generatePiAgents({
+    ...fixture,
+    modelMappings: {
+      ...modelMappings,
+      models: { ...modelMappings.models, terra: 'provider/custom-terra' },
+    },
+  });
+  expect(await readFile(path.join(fixture.output, 'mpx-alpha.md'), 'utf8')).toContain(
+    'model: provider/custom-terra',
+  );
+});
+
 it('generates runtime metadata, the Explore alias, and detects exact catalog drift', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'pi-agent-'));
   const source = path.join(root, 'source');
@@ -155,7 +194,7 @@ it('generates runtime metadata, the Explore alias, and detects exact catalog dri
       },
     }),
   );
-  expect(await generatePiAgents({ source, output })).toEqual({
+  expect(await generatePiAgents({ source, output, modelMappings })).toEqual({
     changed: ['Explore.md'],
     drift: [],
   });
@@ -166,9 +205,11 @@ it('generates runtime metadata, the Explore alias, and detects exact catalog dri
   expect(projected).not.toContain('model: inherit');
   await expect(readFile(path.join(output, 'mpx-explorer.md'), 'utf8')).rejects.toThrow();
   await writeFile(path.join(output, 'mpx-stale.md'), 'stale');
-  expect((await generatePiAgents({ source, output, check: true })).drift).toEqual(['mpx-stale.md']);
+  expect((await generatePiAgents({ source, output, modelMappings, check: true })).drift).toEqual([
+    'mpx-stale.md',
+  ]);
   await writeFile(path.join(output, 'notes.md'), 'unrelated');
-  await generatePiAgents({ source, output });
+  await generatePiAgents({ source, output, modelMappings });
   await expect(readFile(path.join(output, 'mpx-stale.md'), 'utf8')).rejects.toThrow();
   await expect(readFile(path.join(output, 'notes.md'), 'utf8')).resolves.toBe('unrelated');
 });
@@ -184,7 +225,7 @@ it('keeps the maintained projection aligned with canonical agents, aliases, and 
     .map((identity) => `${identity === 'mpx-explorer' ? 'Explore' : identity}.md`)
     .sort();
 
-  const result = await generatePiAgents({ source, output, check: true });
+  const result = await generatePiAgents({ source, output, modelMappings, check: true });
   expect(result.drift).toEqual([]);
   const names = (await readdir(output)).filter((name) => name.endsWith('.md')).sort();
   expect(names).toEqual(expectedNames);
@@ -221,7 +262,7 @@ it('expands approved nesting patterns to concrete canonical identities', async (
       },
     }),
   );
-  await generatePiAgents({ source, output });
+  await generatePiAgents({ source, output, modelMappings });
   const projected = await readFile(path.join(output, 'mpx-parent.md'), 'utf8');
   expect(projected).toBe(
     '---\nname: mpx-parent\ndescription: mpx-parent\nmodel: openai-codex/gpt-5.6-terra\nthinking: low\ntools: read\noutput_schema: text\nallowed_subagents: mpx-reviewer-b,mpx-reviewer-a\n\n---\nBody\n',

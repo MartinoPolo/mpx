@@ -2,7 +2,9 @@
 
 MPX resolves canonical content once into a runtime-neutral v4 manifest. The manifest records every canonical identity's inclusion decision, exposure, permissions, source hash, and metadata hash without embedding bodies, private roots, or runtime syntax. The logical skill artifact is distinct from each launch-bound reference to a full published runtime projection. Claude and Pi projections reference the same manifest key and have distinct artifact/file-map hashes.
 
-Runtime adapters consume verified runtime-neutral plans. They own only harness translation, projection assembly, and invocation wiring; canonical parsing, policy, provider logic, and application orchestration remain in their owning workspace packages.
+Runtime adapters consume verified runtime-neutral plans. They own only harness translation, projection assembly, and invocation wiring; canonical parsing, policy, provider logic, model-selection defaults, and application orchestration remain in their owning workspace packages.
+
+`@mpx/config` owns the immutable, validated `RuntimeAgentModelMappingsV1` defaults alongside `RuntimeModelSelectionV1`. The mappings translate the neutral `luna`/`sol`/`terra` agent classes to Claude aliases or full Pi provider/model identifiers. Runtime build and generation APIs require the mappings as explicit inputs and contain no built-in provider/model catalog. CLI composition supplies the config defaults for launch builds. The tracked Pi generation script also resolves the Pi default from config and passes it to the generator; the generator itself only translates the supplied mapping. This boundary does not add a user-config schema surface.
 
 ## Four exposure states
 

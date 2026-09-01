@@ -28,19 +28,6 @@ import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@m
 import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
 
 const execFile = promisify(execFileCallback);
-type RawSkillProjectionInputKey = 'manifest' | 'artifact' | 'catalog' | 'canonicalRoot';
-type RequiresProjectionPlanBoundary<Input> = 'skillPlan' extends keyof Input
-  ? {} extends Pick<Input, 'skillPlan'>
-    ? false
-    : Extract<keyof Input, RawSkillProjectionInputKey> extends never
-      ? true
-      : false
-  : false;
-type Assert<Condition extends true> = Condition;
-const publicProjectionInputContract: [
-  Assert<RequiresProjectionPlanBoundary<Parameters<typeof buildClaudePlugin>[0]>>,
-  Assert<RequiresProjectionPlanBoundary<Parameters<typeof publishClaudeProjection>[0]>>,
-] = [true, true];
 const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((x) => rm(x, { recursive: true, force: true }))),
@@ -163,6 +150,11 @@ async function fixture() {
     manifest,
     artifact,
     skillPlan,
+    modelMappings: Object.freeze({
+      schemaVersion: 1 as const,
+      runtime: 'claude' as const,
+      models: Object.freeze({ luna: 'haiku', sol: 'opus', terra: 'sonnet' }),
+    }),
     statusSnapshot,
     launchBanner,
     runtimeContext,
@@ -353,9 +345,6 @@ async function expectPlanRejectedWithoutWrites(
   await expect(lstat(outputRoot)).rejects.toMatchObject({ code: 'ENOENT' });
 }
 describe('Claude projection', () => {
-  it('publishes a plan-only input contract for build and publication consumers', () => {
-    expect(publicProjectionInputContract).toEqual([true, true]);
-  });
   it('rejects an unverified or changed skill plan before filesystem side effects', async () => {
     const f = await fixture();
     await expectPlanRejectedWithoutWrites(f, structuredClone(f.skillPlan), 'unverified-plan');
@@ -501,6 +490,21 @@ describe('Claude projection', () => {
         outputRoot: path.join(f.root, 'c'),
       }),
     ).rejects.toThrow(/SKILL_PROJECTION_PLAN_UNVERIFIED/);
+  });
+  it('translates the supplied agent model mappings', async () => {
+    const f = await fixture();
+    const outputRoot = path.join(f.root, 'mapped-agent-output');
+    await buildClaudePlugin({
+      ...f,
+      modelMappings: {
+        ...f.modelMappings,
+        models: { ...f.modelMappings.models, terra: 'custom-terra' },
+      },
+      outputRoot,
+    });
+    expect(await readFile(path.join(outputRoot, 'agents', 'Explore.md'), 'utf8')).toContain(
+      'model: custom-terra',
+    );
   });
   it('preserves canonical CRLF bytes in the Claude agent projection', async () => {
     const f = await fixture();

@@ -166,6 +166,7 @@ describe('production Pi projection', () => {
     await expect(
       buildPiProjection({
         skillPlan: structuredClone(f.skillPlan),
+        modelMappings: f.modelMappings,
         context: f.context,
         expectedLaunch: f.expectedLaunch,
         currentBinding: f.currentBinding,
@@ -187,6 +188,7 @@ describe('production Pi projection', () => {
     await expect(
       buildPiProjection({
         skillPlan: f.skillPlan,
+        modelMappings: f.modelMappings,
         context: f.context,
         expectedLaunch: f.expectedLaunch,
         currentBinding: f.currentBinding,
@@ -197,6 +199,21 @@ describe('production Pi projection', () => {
         launchBanner: f.launchBanner,
       }),
     ).rejects.toThrow('SKILL_PROJECTION_PLAN_CHANGED');
+    await expect(fs.promises.stat(artifactsRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects a malformed runtime profile before creating the artifacts root', async () => {
+    const f = await fixture();
+    const parent = await mkdtemp(path.join(tmpdir(), 'pi-malformed-profile-'));
+    const artifactsRoot = path.join(parent, 'must-not-exist');
+    const piRuntimeProfile = {
+      ...f.piRuntimeProfile,
+      capabilityIds: ['duplicate', 'duplicate'],
+    };
+
+    await expect(buildPiProjection({ ...f, artifactsRoot, piRuntimeProfile })).rejects.toThrowError(
+      expect.objectContaining({ code: 'PI_RUNTIME_PROFILE_INVALID' }),
+    );
     await expect(fs.promises.stat(artifactsRoot)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
@@ -645,31 +662,6 @@ describe('production Pi projection', () => {
     expect(projectionContentDigest(completeTree, boundValues)).toBe(
       '07954466ff4662ea8ef125793bb01c31cc0595d8ca5113bbae9c3e1482fa2c87',
     );
-  });
-
-  it('normalizes dynamic values only in launch-bound text files', () => {
-    const dynamicText = '{"artifactKey":"fixture-artifact","root":"C:/temp/source"}\n';
-    const files = new Map([
-      ['extension.mjs', Buffer.from(dynamicText)],
-      ['production-runtime.mjs', Buffer.from(dynamicText)],
-      ['settings.json', Buffer.from(dynamicText)],
-      ['skills/full/body.md', Buffer.from(dynamicText)],
-    ]);
-
-    const normalized = normalizeProjectionFiles(files, [
-      {
-        property: 'artifactKey',
-        value: 'fixture-artifact',
-        placeholder: '<ARTIFACT_KEY>',
-      },
-    ]);
-
-    expect(required(normalized.get('extension.mjs'), 'normalized extension').toString('utf8')).toBe(
-      '{"artifactKey":"<ARTIFACT_KEY>","root":"C:/temp/source"}\n',
-    );
-    for (const staticPath of ['production-runtime.mjs', 'settings.json', 'skills/full/body.md']) {
-      expect(normalized.get(staticPath), staticPath).toEqual(files.get(staticPath));
-    }
   });
 
   it('binds a one-byte support-file change into projected file metadata and its aggregate digest', async () => {

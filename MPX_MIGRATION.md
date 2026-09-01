@@ -1294,6 +1294,8 @@ Split `packages/skills` internally into contracts, frontmatter, inventory, polic
 
 #### F. Introduce neutral projection plans (`refactor(runtime): consume skill projection plans`)
 
+**Status: complete.** `SkillProjectionPlan` is consumed by both thin adapters, and config now owns the explicit runtime agent model mappings supplied by CLI composition and tracked Pi generation.
+
 Introduce `SkillProjectionPlan`, then migrate thin Claude and Pi adapters in that order. Preserve byte-level projection behavior and deliberate tracked Pi generation.
 
 - **Accept:** verified plans produce byte-identical projections, adapters contain only harness translation/assembly/wiring, and tracked Pi output converges.
@@ -1323,6 +1325,6 @@ This migration does not rewrite skill payloads; redesign schemas or the hash alg
 - [x] Independent test-category commands run exactly once in aggregate.
 - [x] Package builds emit no tests.
 - [x] `packages/skills` no longer depends on config or runtime adapters.
-- [ ] Runtimes own no canonical parsing, policy, or provider logic.
+- [x] Runtimes own no canonical parsing, policy, or provider logic.
 - [ ] The CLI application layer is provider-neutral.
 - [ ] Full quality, generated, convergence, and test gates pass.

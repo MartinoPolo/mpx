@@ -19,6 +19,10 @@ describe('Pi skill adapter', () => {
       | 'validatedSkillBytes';
     expectTypeOf<PiAdapterInput['skillPlan']>().toEqualTypeOf<SkillProjectionPlan>();
     expectTypeOf<PiProjectionBuildInput['skillPlan']>().toEqualTypeOf<SkillProjectionPlan>();
+    expectTypeOf<PiProjectionBuildInput>().toHaveProperty('modelMappings');
+    expectTypeOf<
+      {} extends Pick<PiProjectionBuildInput, 'modelMappings'> ? true : false
+    >().toEqualTypeOf<false>();
     expectTypeOf<Extract<keyof PiAdapterInput, RawProjectionInput>>().toEqualTypeOf<never>();
     expectTypeOf<
       Extract<keyof PiProjectionBuildInput, RawProjectionInput>

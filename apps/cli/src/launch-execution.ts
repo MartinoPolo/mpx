@@ -37,7 +37,11 @@ import {
   type LaunchPrivateBridge,
   type LaunchPrivateBridgeConfig,
 } from '@mpx/executors';
-import { defaultRuntimeModelSelectionV1, type ProjectConfig } from '@mpx/config';
+import {
+  defaultRuntimeAgentModelMappingsV1,
+  defaultRuntimeModelSelectionV1,
+  type ProjectConfig,
+} from '@mpx/config';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
   createRuntimeCapabilityManifestV1,
@@ -1218,6 +1222,7 @@ async function buildProductionProjection(
   if (input.descriptor.runtime === 'pi') {
     return buildPiProjection({
       skillPlan: input.skillPlan,
+      modelMappings: defaultRuntimeAgentModelMappingsV1('pi'),
       context: input.runtimeContext,
       expectedLaunch: {
         launchKey: input.descriptor.launchKey,
@@ -1236,6 +1241,7 @@ async function buildProductionProjection(
   }
   return publishClaudeProjection({
     skillPlan: input.skillPlan,
+    modelMappings: defaultRuntimeAgentModelMappingsV1('claude'),
     agents: input.agentsRoot,
     artifactsRoot: input.artifactsRoot,
     statusSnapshot: input.statusSnapshot,

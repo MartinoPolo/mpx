@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defaultRuntimeAgentModelMappingsV1 } from '@mpx/config';
 import { generatePiAgents } from './agent-generator.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -7,7 +8,12 @@ const root = path.resolve(here, '../../../../');
 const source = path.join(root, 'content', 'agents');
 const output = path.join(here, '..', 'projection', 'agents');
 const check = process.argv.includes('--check');
-const result = await generatePiAgents({ source, output, check });
+const result = await generatePiAgents({
+  source,
+  output,
+  check,
+  modelMappings: defaultRuntimeAgentModelMappingsV1('pi'),
+});
 if (result.drift.length) {
   console.error(`Generated Pi agents drifted: ${result.drift.join(', ')}`);
   process.exitCode = 1;

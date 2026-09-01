@@ -45,7 +45,8 @@ import {
   type RuntimeStatusEnvelopeV1,
   type StatusSnapshotV1,
 } from '@mpx/status';
-import { profileSettings, type PiRuntimeProfileV1 } from './profile.js';
+import type { GeneratePiAgentsInput } from './agent-generator.js';
+import { parsePiRuntimeProfileV1, profileSettings, type PiRuntimeProfileV1 } from './profile.js';
 import { emitProductionBundles } from './projection-bundles.js';
 import { renderPiRuntimeStatus } from './runtime-status.js';
 
@@ -429,10 +430,11 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
 }
 
 export function createPiProjection(piProfile: PiRuntimeProfileV1) {
+  const parsedProfile = parsePiRuntimeProfileV1(piProfile);
   return {
-    profile: piProfile,
-    settings: profileSettings(piProfile),
-    keybindings: piProfile.keybindings,
+    profile: parsedProfile,
+    settings: profileSettings(parsedProfile),
+    keybindings: parsedProfile.keybindings,
     themes: [
       { name: 'dark', status: 'active' },
       { name: 'green', status: 'identity-canvas' },
@@ -457,6 +459,7 @@ export function createPiProjection(piProfile: PiRuntimeProfileV1) {
 }
 export interface PiProjectionBuildInput {
   readonly skillPlan: SkillProjectionPlan;
+  readonly modelMappings: GeneratePiAgentsInput['modelMappings'];
   readonly context: RuntimeContextV1;
   readonly expectedLaunch: { readonly launchKey: string; readonly descriptorDigest: string };
   readonly currentBinding: RuntimeBinding;
@@ -622,6 +625,7 @@ async function copyGeneratedAssets(
   staging: string,
   assetsRoot: string,
   provenanceFile: string,
+  modelMappings: GeneratePiAgentsInput['modelMappings'],
 ): Promise<void> {
   const verifiedAssetsRoot = await realDirectoryRoot(assetsRoot, 'Pi generated assets root');
   const agentsRoot = path.join(verifiedAssetsRoot, 'agents');
@@ -641,10 +645,17 @@ async function copyGeneratedAssets(
     }
     const content = await regularText(file, 'generated agent');
     const expectedName = entry.name === 'Explore.md' ? 'Explore' : entry.name.slice(0, -3);
-    if (!content.startsWith('---\n') || !content.includes(`\nname: ${expectedName}\n`)) {
+    const normalized = content.replaceAll('\r\n', '\n');
+    const projectedModel = normalized.match(/\nmodel: ([^\n]+)\n/u)?.[1];
+    if (
+      !normalized.startsWith('---\n') ||
+      !normalized.includes(`\nname: ${expectedName}\n`) ||
+      !projectedModel ||
+      !Object.values(modelMappings.models).includes(projectedModel)
+    ) {
       throw new Error(`invalid generated agent ${entry.name}`);
     }
-    await emit(staging, `agents/${entry.name}`, content.replaceAll('\r\n', '\n'));
+    await emit(staging, `agents/${entry.name}`, normalized);
   }
   for (const theme of ['amber', 'green'] as const) {
     const file = path.join(verifiedThemesRoot, `${theme}.json`);
@@ -706,14 +717,15 @@ function freezeProjection(published: PublishedRuntimeArtifact): PiPublishedProje
 export async function buildPiProjection(
   input: PiProjectionBuildInput,
 ): Promise<PiPublishedProjection> {
+  const piRuntimeProfile = parsePiRuntimeProfileV1(input.piRuntimeProfile);
   const skillPlan = verifySkillProjectionPlan(input.skillPlan);
   if (skillPlan.runtime !== 'pi') {
     throw new Error('Pi projection requires a Pi skill projection plan');
   }
   const context = parseRuntimeContextV1(input.context);
   const statusSnapshot = parseStatusSnapshotV1(input.statusSnapshot);
-  const piSettings = profileSettings(input.piRuntimeProfile);
-  const piKeybindings = input.piRuntimeProfile.keybindings;
+  const piSettings = profileSettings(piRuntimeProfile);
+  const piKeybindings = piRuntimeProfile.keybindings;
   const unavailable = {
     source: 'derived' as const,
     state: 'unavailable' as const,
@@ -925,6 +937,7 @@ export async function buildPiProjection(
       staging,
       input.assetsRoot ?? path.join(packageRoot, 'projection'),
       input.vendorProvenanceFile ?? path.join(packageRoot, 'vendor', 'subagents', 'VENDORED.md'),
+      input.modelMappings,
     );
     const launchBinding = {
       launchKey: context.launchKey,

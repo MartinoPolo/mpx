@@ -67,6 +67,11 @@ export class ClaudeRuntimeError extends Error {
 export interface ClaudeBuildInput {
   readonly skillPlan: SkillProjectionPlan;
   readonly agents: string;
+  readonly modelMappings: {
+    readonly schemaVersion: 1;
+    readonly runtime: 'claude';
+    readonly models: Readonly<Record<AgentModelClassV1, string>>;
+  };
   readonly outputRoot: string;
   readonly statusSnapshot: StatusSnapshotV1;
   readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
@@ -255,11 +260,6 @@ function stable(value: unknown): string {
   }
   return JSON.stringify(value);
 }
-const claudeModels: Record<AgentModelClassV1, string> = {
-  sol: 'opus',
-  terra: 'sonnet',
-  luna: 'haiku',
-};
 const claudeTools: Record<AgentCapabilityV1, string[]> = {
   read: ['Read'],
   search: ['Grep', 'Glob'],
@@ -274,7 +274,10 @@ const claudeTools: Record<AgentCapabilityV1, string[]> = {
     'mcp__mpx_gateway__source_check',
   ],
 };
-async function canonicalAgents(root: string): Promise<Array<[string, Uint8Array]>> {
+async function canonicalAgents(
+  root: string,
+  modelMappings: ClaudeBuildInput['modelMappings'],
+): Promise<Array<[string, Uint8Array]>> {
   try {
     const canonical = await loadCanonicalAgentProjectionInputsV1(root, {
       allowMissingMetadata: true,
@@ -287,7 +290,7 @@ async function canonicalAgents(root: string): Promise<Array<[string, Uint8Array]
           ...(metadata.nesting.length ? ['Agent'] : []),
         ],
         fields = [
-          { name: 'model', value: claudeModels[metadata.modelClass] },
+          { name: 'model', value: modelMappings.models[metadata.modelClass] },
           { name: 'effort', value: metadata.thinking },
           { name: 'tools', value: tools.join(', ') },
           { name: 'output-schema', value: metadata.outputSchema },
@@ -364,7 +367,7 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
       projected.push([`skills/${entry.identity}/${support.relativePath}`, support.bytes]);
     }
   }
-  const agents = await canonicalAgents(input.agents);
+  const agents = await canonicalAgents(input.agents, input.modelMappings);
   const runtimeContext = parseRuntimeContextV1(input.runtimeContext),
     runtimeStatus = input.runtimeStatusEnvelope
       ? parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope)

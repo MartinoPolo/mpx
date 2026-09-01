@@ -4,7 +4,7 @@
 
 ## Checkpoint
 
-- Stage E is complete and verified.
+- Stage F is complete and verified.
 - Nothing has been pushed.
 - Use `git log` and `git status` for the exact commit and integration state.
 
@@ -13,23 +13,27 @@
 - Stages A–C established the final test categories and moved owned workspace tests and fixtures to `test/unit` and `test/fixtures`.
 - Stage D replaced historical move inventories with compact repository-derived structural guarantees.
 - Stage E split skill-platform internals behind the unchanged root facade, exposed the narrow side-effect-free `@mpx/skills/contracts` API for config compatibility, and removed skills dependencies on config and runtime adapters.
+- Stage F introduced neutral verified skill projection plans for both runtimes and moved `luna`/`sol`/`terra` harness/provider mapping ownership into `@mpx/config`; CLI composition and the tracked Pi script now supply mappings explicitly while runtime production modules retain only translation/assembly/wiring.
 - Normal `pnpm test` is self-contained and invokes unit, payload, contract, integration, and E2E exactly once without external convergence.
-- The first four structural acceptance items in `MPX_MIGRATION.md` are evidenced; later architecture and full-gate items remain pending.
+- The runtime structural acceptance item in `MPX_MIGRATION.md` is now evidenced; CLI extraction and the full gate remain pending.
 
 ## External blocker — do not modify automatically
 
 Explicit convergence verification remains deferred and external. The user-owned `$MPX_PROJECTS/mpx-pi/APPEND_SYSTEM.md` differs from the immutable convergence snapshot (`624f55` hash prefix versus recorded `42a85e`), which produces `CONVERGENCE_SOURCE_DRIFT: pi:APPEND_SYSTEM.md`.
 
-Do not revert the external file, regenerate the manifest, rebind evidence, or run explicit convergence without user review.
+Do not revert the external file, regenerate the manifest, rebind evidence, or run explicit convergence without user review. This external convergence drift is not part of Stage F acceptance.
+
+A separate Pi search correction remains outside Stage F; do not conflate it with the mapping-ownership work or the external convergence drift.
 
 ## Next implementation stage
 
-- **Stage F:** Introduce a neutral `SkillProjectionPlan`, then migrate the Claude adapter followed by the Pi adapter while preserving projection behavior.
+- **Stage G:** Extract provider-neutral application orchestration so CLI modules retain only argv parsing, IO, command registration, and composition.
 
-Later Stages G and H remain pending. Stage F completion does not imply those stages or the full gates are complete.
+Stage H and the full gates remain pending. Stage F completion does not imply Stage G/H or CLI/full-gate completion.
 
 ## Preserved evidence and boundaries
 
-- `docs/history/CONVERGENCE_MANIFEST.json` and historical Phase J reports remain immutable migration evidence.
+- Historical source snapshots, their dispositions, and historical Phase J reports remain immutable migration evidence.
+- Supported script-generated active convergence evidence hashes may update atomically with the referenced repository artifacts; these updates are not source-snapshot recapture and must not be hand-edited.
 - Fallow baseline, convergence scripts, provenance, external repositories, payload/vendor locations, and CLI-internal root integration/E2E seams are unchanged.
 - Do not push, hand-edit hashes, refresh the Fallow baseline, move payload/vendor tests, rewrite historical snapshots, or edit the external Pi repository without user review.

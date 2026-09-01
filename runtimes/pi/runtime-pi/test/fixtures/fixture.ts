@@ -167,6 +167,15 @@ export async function fixture() {
   );
   return {
     context,
+    modelMappings: Object.freeze({
+      schemaVersion: 1 as const,
+      runtime: 'pi' as const,
+      models: Object.freeze({
+        luna: 'openai-codex/gpt-5.6-luna',
+        sol: 'openai-codex/gpt-5.6-sol',
+        terra: 'openai-codex/gpt-5.6-terra',
+      }),
+    }),
     piRuntimeProfile,
     manifest,
     artifact,
