@@ -89,18 +89,6 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../../packages/ports
-      '@mpx/provider-github':
-        specifier: workspace:*
-        version: link:../../packages/provider-github
-      '@mpx/provider-gitlab':
-        specifier: workspace:*
-        version: link:../../packages/provider-gitlab
-      '@mpx/provider-kanbanflow':
-        specifier: workspace:*
-        version: link:../../packages/provider-kanbanflow
-      '@mpx/provider-local':
-        specifier: workspace:*
-        version: link:../../packages/provider-local
       '@mpx/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -165,6 +153,15 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../ports
+      '@mpx/provider-github':
+        specifier: workspace:*
+        version: link:../provider-github
+      '@mpx/provider-gitlab':
+        specifier: workspace:*
+        version: link:../provider-gitlab
+      '@mpx/provider-kanbanflow':
+        specifier: workspace:*
+        version: link:../provider-kanbanflow
       '@mpx/provider-local':
         specifier: workspace:*
         version: link:../provider-local

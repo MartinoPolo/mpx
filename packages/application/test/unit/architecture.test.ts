@@ -152,6 +152,11 @@ describe('@mpx/application architecture', () => {
       diagnoseConfiguredF2Proof: expect.any(Function),
       loadProductionSbxProofSources: expect.any(Function),
       planProductionSbxExecution: expect.any(Function),
+      createNodeConfiguredProviderApplicationService: expect.any(Function),
+      createNodeProviderService: expect.any(Function),
+      NodePrivateRouteMaterializer: expect.any(Function),
+      NodeProviderProcessExecutor: expect.any(Function),
+      NodeRepositorySelectorResolver: expect.any(Function),
     });
     for (const name of [
       'createNodeAccountApplicationService',
@@ -170,9 +175,24 @@ describe('@mpx/application architecture', () => {
       'diagnoseConfiguredF2Proof',
       'loadProductionSbxProofSources',
       'planProductionSbxExecution',
+      'createNodeConfiguredProviderApplicationService',
+      'createNodeProviderService',
+      'NodePrivateRouteMaterializer',
+      'NodeProviderProcessExecutor',
+      'NodeRepositorySelectorResolver',
     ]) {
       expect(root).not.toHaveProperty(name);
     }
+  });
+
+  it('keeps concrete provider and route class declarations out of CLI context', async () => {
+    const context = await readFile(
+      path.resolve(import.meta.dirname, '../../../../apps/cli/src/context.ts'),
+      'utf8',
+    );
+    expect(context).not.toMatch(
+      /(?:class|abstract class)\s+(?:NodeProviderProcessExecutor|NodeRepositorySelectorResolver|NodePrivateRouteMaterializer)\b/u,
+    );
   });
 
   it('keeps the Phase-J implementation out of the CLI source tree', async () => {

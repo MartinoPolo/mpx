@@ -30,7 +30,8 @@ import {
   productionRuntimeAdapters,
   type LaunchExecutionContext,
 } from '../../src/launch-execution.js';
-import { NodePrivateRouteMaterializer, defaultContext } from '../../src/context.js';
+import { NodePrivateRouteMaterializer } from '@mpx/application/node';
+import { defaultContext } from '../../src/context.js';
 
 async function launchFixture(): Promise<{
   cwd: string;

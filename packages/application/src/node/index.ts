@@ -48,3 +48,6 @@ export function createNodeLifecycleApplicationService(
   return new LifecycleApplicationService({ ...dependencies, path: { resolve: path.resolve } });
 }
 export * from './launch-execution-adapters.js';
+export * from './provider-process-adapters.js';
+export * from './provider-application-service.js';
+export * from './private-route-materializer.js';
