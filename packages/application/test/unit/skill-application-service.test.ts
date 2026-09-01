@@ -54,6 +54,32 @@ const binding = {
 };
 
 describe('SkillApplicationService', () => {
+  it('preserves canonical inventory, project discovery, project inventory, and classification order', async () => {
+    const events: string[] = [];
+    const app = createSkillApplicationService({
+      inventoryCanonical: async () => {
+        events.push('canonical');
+        return [skill];
+      },
+      discoverProjectConfig: async () => {
+        events.push('discovery');
+        return project;
+      },
+      inventoryProjectSkills: async () => {
+        events.push('project');
+        return { skills: [], diagnostics: [] };
+      },
+      classifyCwd: async () => {
+        events.push('classification');
+        return { domain: 'work', contentScope: 'work' };
+      },
+    });
+
+    await app.execute({ ...binding, action: 'explain', value: 'mp-test' });
+
+    expect(events).toEqual(['canonical', 'discovery', 'project', 'classification']);
+  });
+
   it('composes canonical and project inventory into a launch-bound list result', async () => {
     const result = await service().execute({ ...binding, action: 'list' });
     expect(result.data).toMatchObject({

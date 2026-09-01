@@ -237,14 +237,99 @@ describe('launch execution application service', () => {
       },
       'docker',
     );
-    expect(requests.api).toMatchObject({ executable: 'pnpm', cwd: 'C:/worktree', ports: [4310] });
-    expect(Object.isFrozen(requests.api)).toBe(true);
+    expect(requests).toEqual({
+      api: {
+        id: 'api',
+        executable: 'pnpm',
+        args: ['run', 'dev:api'],
+        cwd: 'C:/worktree',
+        ports: [4310],
+        assignment: { worktreeRoot: 'C:/worktree', ports: [4310] },
+        executor: 'docker',
+        environment: { API_URL: 'http://localhost:4310' },
+      },
+    });
+    const assertDeeplyFrozen = (value: unknown): void => {
+      if (value !== null && typeof value === 'object') {
+        expect(Object.isFrozen(value)).toBe(true);
+        Object.values(value).forEach(assertDeeplyFrozen);
+      }
+    };
+    assertDeeplyFrozen(requests);
   });
 
   it('fails closed when the immutable current launch tuple is absent', () => {
     expect(() => currentLaunchTuple({})).toThrowError(
       expect.objectContaining({ code: 'LAUNCH_CONTEXT_REQUIRED' }),
     );
+  });
+
+  it('accepts only the exact context/projection tuple and sanitizes every invalid binding', () => {
+    const context = {
+      schemaVersion: 1,
+      launchKey: hash('a'),
+      launchDescriptor: { reference: 'launch.json', digest: hash('b') },
+      manifestKey: hash('c'),
+      runtimeArtifact: {
+        schemaVersion: 4,
+        runtime: 'pi',
+        manifestKey: hash('c'),
+        artifactKey: hash('d'),
+        fileMapHash: hash('e'),
+      },
+      binding: { projectId: 'sample/app', repositoryId: 'sample/repo', contentScope: 'personal' },
+    };
+    const projection = {
+      projectionKey: hash('f'),
+      fileMapHash: hash('9'),
+      launchBinding: {
+        launchKey: hash('a'),
+        descriptorDigest: hash('b'),
+        runtimeArtifactKey: hash('d'),
+        runtime: 'pi',
+        manifestKey: hash('c'),
+      },
+    };
+    const environment = (contextValue: unknown, projectionValue: unknown) => ({
+      MPX_RUNTIME_CONTEXT: JSON.stringify(contextValue),
+      MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projectionValue),
+    });
+    expect(currentLaunchTuple(environment(context, projection))).toMatchObject({
+      launchKey: hash('a'),
+      projectionKey: hash('f'),
+    });
+    const secret = 'RAW-PRIVATE-CONTEXT';
+    const invalid = [
+      { context: secret, projection },
+      { context, projection: { ...projection, extra: true } },
+      {
+        context,
+        projection: {
+          ...projection,
+          launchBinding: { ...projection.launchBinding, descriptorDigest: hash('0') },
+        },
+      },
+      {
+        context,
+        projection: {
+          ...projection,
+          launchBinding: { ...projection.launchBinding, runtime: 'claude' },
+        },
+      },
+      {
+        context: { ...context, binding: { ...context.binding, contentScope: 42 } },
+        projection,
+      },
+    ];
+    for (const candidate of invalid) {
+      try {
+        currentLaunchTuple(environment(candidate.context, candidate.projection));
+        throw new Error('expected rejection');
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'LAUNCH_CONTEXT_INVALID' });
+        expect(String((error as Error).message)).not.toContain(secret);
+      }
+    }
   });
 
   it('stops at an executor gate before composer, routes, status, or lifecycle effects', async () => {

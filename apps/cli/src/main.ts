@@ -7,7 +7,6 @@ import {
   ConfigValidationError,
   StrictJsonError,
   discoverProjectConfig,
-  resolveEffectiveSkillPacks,
   resolveKnownLaunchCwdClassification,
   type DiscoveredConfig,
   type UserConfig,
@@ -15,12 +14,12 @@ import {
 import {
   createProjectApplicationService,
   createSkillApplicationService,
-  resolveProjectSkillOptions,
+  LaunchApplicationService,
+  resolveLaunchSkills,
   type ProjectApplicationService,
   type SkillApplicationService,
 } from '@mpx/application';
 import {
-  createSkillArtifactReference,
   errorEnvelope,
   MpxError,
   sha256Canonical,
@@ -32,7 +31,6 @@ import {
   canonicalNativeRootDigest,
   resolveLaunch,
   resolveLaunchSelection,
-  serializeLaunchPublic,
   type ResolveLaunchSelectionInput,
   type ShortLaunchAlias,
 } from '@mpx/launch';
@@ -46,13 +44,7 @@ import { createSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
 import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/provider-local';
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from '@mpx/status';
 import { expandBranchTemplate } from '@mpx/worktrees';
-import {
-  createRuntimeSkillArtifact,
-  inventoryCanonical,
-  inventoryProjectSkills,
-  resolveManifest,
-  SkillCatalogError,
-} from '@mpx/skills';
+import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@mpx/skills';
 import {
   catalogPath,
   configuredProviderApplicationService,
@@ -367,8 +359,6 @@ function requiredOption(parsed: Parsed, name: string): string {
   }
   return value;
 }
-const resolveOptions = resolveProjectSkillOptions;
-
 function unexpectedCommandError(error: unknown, context: CliContext): MpxError {
   try {
     context.onInternalError?.(error);
@@ -602,63 +592,26 @@ async function executeProductionSessionResume(
       message: 'The current launch identity does not match the recorded domain.',
     });
   }
-  const opts = resolveOptions(user, {
-    identity: plan.identity.name,
-    skillPolicy: plan.launch.skillPolicy,
-    contentScope: plan.launch.contentScope,
-    repositoryId,
-    ...(projectId ? { projectId } : {}),
-  });
-  const canonicalRoot = await catalogPath(context, cwd),
-    canonicalCatalog = await inventoryCanonical(canonicalRoot);
-  const projectInventory = found
-    ? await inventoryProjectSkills(found.root, canonicalCatalog)
-    : { skills: [], diagnostics: [] };
-  if (projectInventory.diagnostics.length) {
-    throw new SkillCatalogError(projectInventory.diagnostics);
-  }
-  const catalog = [...canonicalCatalog, ...projectInventory.skills].sort((left, right) =>
-    left.identity.localeCompare(right.identity),
-  );
-  const manifest = resolveManifest(catalog, opts),
-    artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: plan.runtime });
-  const scope = user.contentScopes[plan.launch.contentScope],
-    projectOverride = projectId ? user.projects?.[projectId] : undefined;
-  if (!scope) {
+  if (!user.contentScopes[plan.launch.contentScope]) {
     throw new MpxError({
       code: 'SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE',
       message: 'The recorded content scope is no longer configured.',
     });
   }
-  const skillArtifact = createSkillArtifactReference({
-    runtime: plan.runtime,
-    identity: plan.identity.name,
-    skillPolicy: plan.launch.skillPolicy,
-    contentScope: plan.launch.contentScope,
-    projectId: projectId ?? null,
-    catalogHash: sha256Canonical(
-      catalog.map((skill) => ({
-        identity: skill.identity,
-        contentHash: skill.contentHash,
-        ...('directoryHash' in skill
-          ? {
-              origin: 'project',
-              directoryHash: skill.directoryHash,
-              realPath: skill.realPath,
-              realProjectRoot: skill.realProjectRoot,
-            }
-          : { origin: 'canonical' }),
-      })) as unknown as JsonValue,
-    ),
-    enabledPacks: resolveEffectiveSkillPacks({
-      contentScopeSkillPacks: scope.skillPacks,
-      projectSkillPacks: projectOverride?.skillPacks,
-      skillPolicySkillPacks: selection.skillPolicy.declaration.skillPacks,
-    }),
-    skillPolicyConfig: selection.skillPolicy.declaration as unknown as JsonValue,
-    contentScopeExposure: (scope.skillExposure ?? {}) as unknown as JsonValue,
-    projectExposure: (projectOverride?.skillExposure ?? null) as unknown as JsonValue,
-  });
+  const canonicalRoot = await catalogPath(context, cwd);
+  const { catalog, manifest, artifact, skillArtifact } = await resolveLaunchSkills(
+    {
+      userConfig: user,
+      ...(found ? { project: found } : {}),
+      repositoryId: plan.repositoryId,
+      canonicalRoot,
+      identity: plan.identity.name,
+      skillPolicy: plan.launch.skillPolicy,
+      contentScope: plan.launch.contentScope,
+      runtime: plan.runtime,
+    },
+    { inventoryCanonical, inventoryProjectSkills },
+  );
   let resumeContext = context;
   if (
     plan.launch.executor.kind === 'docker' &&
@@ -1636,9 +1589,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       ? (action as ShortLaunchAlias)
       : undefined;
     const user = await requiredUserConfig(context);
-    const found = await discoverProjectConfig(parsed.cwd);
-    const projectId = found?.config.project.id,
-      repositoryId = projectId ?? 'unbound/runtime';
+    const projectDiscovery = context.discoverProjectConfig ?? discoverProjectConfig;
     const stringOption = (name: string): string | undefined => {
       const value = parsed.options.get(name);
       return typeof value === 'string' ? value : undefined;
@@ -1673,40 +1624,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         message: `Workspace strategy '${workspaceOption}' is invalid.`,
       });
     }
-    const common = (runtime?: 'claude' | 'pi', identity?: string): ResolveLaunchSelectionInput => ({
-      userConfig: user,
-      cwd: parsed.cwd,
-      ...(runtime ? { runtime } : {}),
-      ...(identity ? { identity } : {}),
-      ...(alias ? { alias } : {}),
-      ...(modeOption ? { mode: modeOption } : {}),
-      ...(skillPolicyOption ? { skillPolicy: skillPolicyOption } : {}),
-      ...(contentScopeOption ? { contentScope: contentScopeOption } : {}),
-      ...(action === 'sbx-plan-export'
-        ? { executor: 'docker' as const }
-        : executorOption === 'host' || executorOption === 'docker'
-          ? { executor: executorOption }
-          : {}),
-      ...(workspaceOption === 'clone' ||
-      workspaceOption === 'host-worktree' ||
-      workspaceOption === 'direct'
-        ? { workspace: workspaceOption }
-        : {}),
-      ...(networkPolicyOption ? { networkPolicy: networkPolicyOption } : {}),
-      ...(presetOption ? { preset: presetOption } : {}),
-      ...(projectId ? { projectId } : {}),
-    });
-    const publicSelection = (selection: Awaited<ReturnType<typeof resolveLaunchSelection>>) => ({
-      mode: { name: selection.mode.name },
-      skillPolicy: { name: selection.skillPolicy.name },
-      contentScope: selection.contentScope,
-      executor: selection.executor,
-      workspace: selection.workspace,
-      networkPolicy: { name: selection.networkPolicy.name },
-      preset: selection.preset,
-      provenance: selection.provenance,
-      cwdClassification: selection.cwdClassification,
-    });
     if (action === 'explain' && !identityOption) {
       if (
         modeOption ||
@@ -1725,20 +1642,24 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
             'Direct launch overrides require --identity; candidate explanation never infers one.',
         });
       }
-      const candidates = [];
-      for (const identity of Object.keys(user.identities).sort()) {
-        const selection = await resolveLaunchSelection(common(runtimeOption ?? 'pi', identity));
-        candidates.push({
-          identity,
-          ...publicSelection(selection),
-          identityDomainCompatible:
-            selection.identity.domain === selection.cwdClassification.domain,
-        });
-      }
-      return {
-        data: { schemaVersion: 1, identity: null, runtime: runtimeOption ?? null, candidates },
-        warnings,
-      };
+      const candidateService = new LaunchApplicationService({
+        discoverProjectConfig: projectDiscovery,
+        inventoryCanonical,
+        inventoryProjectSkills,
+        statusSnapshot: async () => {
+          throw new Error('candidate status is unreachable');
+        },
+        executorEvidence: async () => {
+          throw new Error('candidate evidence is unreachable');
+        },
+      });
+      const result = await candidateService.prepareCandidates({
+        operation: 'explain',
+        cwd: parsed.cwd,
+        userConfig: user,
+        ...(runtimeOption ? { runtime: runtimeOption } : {}),
+      });
+      return { data: result.data, warnings };
     }
     if (!identityOption && !alias) {
       throw new MpxError({
@@ -1759,347 +1680,190 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       });
     }
     const runtime = runtimeOption ?? (alias ? undefined : 'pi');
-    const launchInput = common(runtime, identityOption);
-    const selection = await resolveLaunchSelection(launchInput);
+    if (action === 'explain' && runtimeOption === undefined) {
+      const selectionService = new LaunchApplicationService({
+        discoverProjectConfig: projectDiscovery,
+        inventoryCanonical,
+        inventoryProjectSkills,
+        statusSnapshot: async () => {
+          throw new Error('selection status is unreachable');
+        },
+        executorEvidence: async () => {
+          throw new Error('selection evidence is unreachable');
+        },
+      });
+      const result = await selectionService.explainSelection({
+        userConfig: user,
+        cwd: parsed.cwd,
+        ...(identityOption ? { identity: identityOption } : {}),
+        ...(alias ? { alias } : {}),
+        ...(modeOption ? { mode: modeOption } : {}),
+        ...(skillPolicyOption ? { skillPolicy: skillPolicyOption } : {}),
+        ...(contentScopeOption ? { contentScope: contentScopeOption } : {}),
+        ...(executorOption === 'host' || executorOption === 'docker'
+          ? { executor: executorOption }
+          : {}),
+        ...(workspaceOption === 'clone' ||
+        workspaceOption === 'host-worktree' ||
+        workspaceOption === 'direct'
+          ? { workspace: workspaceOption }
+          : {}),
+        ...(networkPolicyOption ? { networkPolicy: networkPolicyOption } : {}),
+        ...(presetOption ? { preset: presetOption } : {}),
+      });
+      return { data: result.data, warnings: [...warnings, ...result.warnings] };
+    }
+    let executionContext = context;
     let piAttestation: Awaited<ReturnType<RootAttestationService['verify']>> | undefined;
-    let beforeChildExecution: (() => Promise<void>) | undefined;
     const requirePiAccountPreflight =
       context.env.LOCALAPPDATA !== undefined &&
       (context.launchExecutorAdapters === undefined ||
         context.rootAttestationService !== undefined ||
         context.accountAuthVerifier !== undefined);
-    if (action === 'explain' && runtimeOption === undefined) {
-      if (projectId && selection.identity.domain !== selection.cwdClassification.domain) {
-        throw new MpxError({
-          code: 'IDENTITY_DOMAIN_MISMATCH',
-          message: `Identity '${selection.identity.name}' cannot launch in domain '${selection.cwdClassification.domain}' without an explicit grant.`,
-        });
-      }
-      return {
-        data: {
-          schemaVersion: 1,
-          runtime: null,
-          identity: selection.identity,
-          selection: publicSelection(selection),
-        },
-        warnings,
-      };
-    }
-    if (
-      action !== 'explain' &&
-      action !== 'sbx-plan-export' &&
-      selection.executor === 'docker' &&
-      context.sbxDiagnostics
-    ) {
-      const sbx = await context.sbxDiagnostics(),
-        code = sbx.failureCodes[0];
-      if (!sbx.readOnly) {
-        throw new MpxError({
-          code: 'SBX_DIAGNOSTICS_UNSAFE',
-          message: 'Sandbox diagnostics must be read-only.',
-        });
-      }
-      if (code) {
-        throw new MpxError({
-          code,
-          message: `Standalone sbx launch diagnostic: ${code}.`,
-          details: { executor: 'docker' },
-        });
-      }
-    }
-    const opts = resolveOptions(user, {
-      identity: selection.identity.name,
-      skillPolicy: selection.skillPolicy.name,
-      contentScope: selection.contentScope.name,
-      repositoryId,
-      ...(projectId ? { projectId } : {}),
-    });
-    const canonicalRoot = await catalogPath(context, parsed.cwd),
-      canonicalCatalog = await inventoryCanonical(canonicalRoot);
-    const projectInventory = found
-      ? await inventoryProjectSkills(found.root, canonicalCatalog)
-      : { skills: [], diagnostics: [] };
-    if (projectInventory.diagnostics.length) {
-      throw new SkillCatalogError(projectInventory.diagnostics);
-    }
-    const catalog = [...canonicalCatalog, ...projectInventory.skills].sort((left, right) =>
-      left.identity.localeCompare(right.identity),
-    );
-    const manifest = resolveManifest(catalog, opts),
-      artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: selection.runtime });
-    const scope = user.contentScopes[selection.contentScope.name]!,
-      projectOverride = projectId ? user.projects?.[projectId] : undefined;
-    const skillArtifact = createSkillArtifactReference({
-      runtime: selection.runtime,
-      identity: selection.identity.name,
-      skillPolicy: selection.skillPolicy.name,
-      contentScope: selection.contentScope.name,
-      projectId: projectId ?? null,
-      catalogHash: sha256Canonical(
-        catalog.map((skill) => ({
-          identity: skill.identity,
-          contentHash: skill.contentHash,
-          ...('directoryHash' in skill
-            ? {
-                origin: 'project',
-                directoryHash: skill.directoryHash,
-                realPath: skill.realPath,
-                realProjectRoot: skill.realProjectRoot,
+    const canonicalRoot = await catalogPath(context, parsed.cwd);
+    const tty = context.launchTty ?? directProcessTty();
+    const service = new LaunchApplicationService({
+      discoverProjectConfig: projectDiscovery,
+      inventoryCanonical,
+      inventoryProjectSkills,
+      statusSnapshot: ({ cwd, projectRoot, config }) =>
+        status(context).snapshot({
+          cwd,
+          projectRoot,
+          config,
+          configHash: sha256Canonical(config as unknown as JsonValue),
+        }),
+      ...(action !== 'explain' && action !== 'sbx-plan-export' && context.sbxDiagnostics
+        ? {
+            dockerDiagnostics: async () => {
+              const sbx = await context.sbxDiagnostics!(),
+                code = sbx.failureCodes[0];
+              if (!sbx.readOnly) {
+                throw new MpxError({
+                  code: 'SBX_DIAGNOSTICS_UNSAFE',
+                  message: 'Sandbox diagnostics must be read-only.',
+                });
               }
-            : { origin: 'canonical' }),
-        })) as unknown as JsonValue,
-      ),
-      enabledPacks: resolveEffectiveSkillPacks({
-        contentScopeSkillPacks: scope.skillPacks,
-        projectSkillPacks: projectOverride?.skillPacks,
-        skillPolicySkillPacks: selection.skillPolicy.declaration.skillPacks,
-      }),
-      skillPolicyConfig: selection.skillPolicy.declaration as unknown as JsonValue,
-      contentScopeExposure: (scope.skillExposure ?? {}) as unknown as JsonValue,
-      projectExposure: (projectOverride?.skillExposure ?? null) as unknown as JsonValue,
-    });
-    const statusSnapshot = found
-      ? async (): Promise<StatusSnapshotV1> =>
-          status(context).snapshot({
-            cwd: parsed.cwd,
-            projectRoot: found.root,
-            config: found.config,
-            configHash: sha256Canonical(found.config as unknown as JsonValue),
-          })
-      : async (): Promise<StatusSnapshotV1> =>
-          parseStatusSnapshotV1({
-            schemaVersion: 1,
-            project: { id: repositoryId, cwd: parsed.cwd },
-            worktree: { id: null, path: null, role: null, branch: null },
-            portResolution: 'missing',
-            services: [],
-            diagnostics: [],
-          });
-    let executionContext = context;
-    if (
-      action !== 'explain' &&
-      action !== 'sbx-plan-export' &&
-      selection.executor === 'docker' &&
-      context.launchExecutorAdapters === undefined &&
-      context.env.LOCALAPPDATA
-    ) {
-      try {
-        const snapshot = await statusSnapshot(),
-          configured = user.identities[selection.identity.name]!,
-          network =
+              if (code) {
+                throw new MpxError({
+                  code,
+                  message: `Standalone sbx launch diagnostic: ${code}.`,
+                  details: { executor: 'docker' },
+                });
+              }
+            },
+          }
+        : {}),
+      dockerAdmission: async ({ selection, statusSnapshot }) => {
+        if (context.launchExecutorAdapters !== undefined || !context.env.LOCALAPPDATA) {
+          return;
+        }
+        try {
+          const snapshot = await statusSnapshot();
+          const configured = user.identities[selection.identity.name]!;
+          const network =
             namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
             namedSbxPolicies['deny-all'];
-        const adapter = await createProductionSbxExecutionAdapter(
-          {
-            environment: context.env,
-            cwd: parsed.cwd,
-            stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
-            runtime: selection.runtime,
-            identity: {
-              name: selection.identity.name,
-              domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
+          const adapter = await createProductionSbxExecutionAdapter(
+            {
+              environment: context.env,
+              cwd: parsed.cwd,
+              stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
+              runtime: selection.runtime,
+              identity: {
+                name: selection.identity.name,
+                domain: configured.domain === 'personal' ? 'personal' : 'work',
+              },
+              workspaceMode: selection.workspace,
+              worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
+              ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
+              workspaceRoot: parsed.cwd,
+              gitCommonDir: path.join(parsed.cwd, '.git'),
+              nativeRoots: Object.values(user.identities).flatMap((identity) =>
+                Object.values(identity.runtimeRoots),
+              ),
+              credentialRoots: [],
+              oppositeDomainRoots: Object.values(user.identities)
+                .filter((identity) => identity.domain !== configured.domain)
+                .flatMap((identity) => Object.values(identity.runtimeRoots)),
+              network: {
+                name:
+                  selection.networkPolicy.name in namedSbxPolicies
+                    ? selection.networkPolicy.name
+                    : 'deny-all',
+                allow: network.allow,
+              },
+              ports: snapshot.services.flatMap((entry) =>
+                entry.port === null ? [] : [entry.port],
+              ),
             },
-            workspaceMode: selection.workspace,
-            worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-            ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-            workspaceRoot: parsed.cwd,
-            gitCommonDir: path.join(parsed.cwd, '.git'),
-            nativeRoots: Object.values(user.identities).flatMap((identity) =>
-              Object.values(identity.runtimeRoots),
-            ),
-            credentialRoots: [],
-            oppositeDomainRoots: Object.values(user.identities)
-              .filter((identity) => identity.domain !== configured.domain)
-              .flatMap((identity) => Object.values(identity.runtimeRoots)),
-            network: {
-              name:
-                selection.networkPolicy.name in namedSbxPolicies
-                  ? selection.networkPolicy.name
-                  : 'deny-all',
-              allow: network.allow,
-            },
-            ports: snapshot.services.flatMap((service) =>
-              service.port === null ? [] : [service.port],
-            ),
-          },
-          context.launchSbxExecutionDependencies,
-        );
-        executionContext = {
-          ...context,
-          launchExecutorAdapters: [adapter],
-          ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
-        };
-      } catch (failure) {
-        if (failure instanceof MpxError) {
-          throw failure;
-        }
-        const message =
-            failure instanceof Error ? failure.message : 'Docker admission setup failed.',
-          matched = /^([A-Z][A-Z0-9_]+)(?::|\b)/u.exec(message);
-        throw new MpxError({
-          code: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
-          message: 'Docker admission setup failed closed.',
-          details: {
-            executor: 'docker',
-            diagnostic: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
-          },
-        });
-      }
-    }
-    const readOnlyPlan = action === 'explain' || action === 'sbx-plan-export';
-    const evidence = readOnlyPlan
-        ? {
-            status: 'unverified' as const,
-            verifier: 'launch-explain',
-            evidenceDigest: sha256Canonical({
-              executor: selection.executor,
-              operation: action,
-            } as unknown as JsonValue),
+            context.launchSbxExecutionDependencies,
+          );
+          executionContext = {
+            ...context,
+            launchExecutorAdapters: [adapter],
+            ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
+          };
+        } catch (failure) {
+          if (failure instanceof MpxError) {
+            throw failure;
           }
-        : await executorEvidence(executionContext, selection.executor),
-      tty = context.launchTty ?? directProcessTty();
-    let hostApproval: { reason: string; approvalKey: string } | undefined;
-    if (selection.executor === 'host' && !readOnlyPlan) {
-      if (parsed.json || !tty.direct) {
-        throw new MpxError({
-          code: 'HOST_TTY_REQUIRED',
-          message: 'Host approval requires a current direct interactive TTY.',
-          remediation: 'Run the explicit host launch interactively, or use Docker.',
-        });
-      }
-      if (!reasonOption?.trim()) {
-        throw new MpxError({
-          code: 'HOST_REASON_REQUIRED',
-          message: 'Host execution requires a nonempty reason.',
-        });
-      }
-      if (
-        !(await tty.confirm(
-          `Approve elevated host compatibility execution — ${sanitizeHostReason(reasonOption)}`,
-        ))
-      ) {
-        throw new MpxError({
-          code: 'HOST_APPROVAL_DENIED',
-          message: 'Host execution was not approved.',
-        });
-      }
-      hostApproval = {
-        reason: reasonOption,
-        approvalKey: sha256Canonical({
-          cwd: parsed.cwd,
-          runtime: selection.runtime,
-          identity: selection.identity.name,
-          reason: reasonOption,
-        } as unknown as JsonValue),
-      };
-    }
-    const grantOptions = parsed.options.get('grant');
-    const descriptor = await resolveLaunch({
-      ...launchInput,
-      ...(Array.isArray(grantOptions) ? { grants: grantOptions } : {}),
-      ...(reasonOption ? { reason: reasonOption } : {}),
-      ...(hostApproval ? { hostApproval } : {}),
-      skillArtifact,
-      selectedNativeRuntimeRoot:
-        user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],
-      ...(projectId ? { projectId } : {}),
-      repositoryId,
-      dockerAvailability:
-        evidence.status === 'verified'
-          ? 'available'
-          : evidence.status === 'unavailable'
-            ? 'unavailable'
-            : 'unverified',
-      executorVerification: evidence,
-      policyInputs: {
-        schemaVersion: 1,
-        manifestKey: manifest.manifestKey,
-        skillArtifactKey: skillArtifact.artifactKey,
+          const message =
+            failure instanceof Error ? failure.message : 'Docker admission setup failed.';
+          const matched = /^([A-Z][A-Z0-9_]+)(?::|\b)/u.exec(message);
+          throw new MpxError({
+            code: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
+            message: 'Docker admission setup failed closed.',
+            details: {
+              executor: 'docker',
+              diagnostic: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
+            },
+          });
+        }
       },
-    });
-    if (action === 'explain') {
-      return { data: serializeLaunchPublic(descriptor), warnings };
-    }
-    if (action === 'sbx-plan-export') {
-      if (!context.env.LOCALAPPDATA) {
-        throw new MpxError({
-          code: 'STATE_ROOT_REQUIRED',
-          message: 'LOCALAPPDATA is required to plan a production sandbox.',
-        });
-      }
-      const configured = user.identities[selection.identity.name]!,
-        network =
-          namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-          namedSbxPolicies['deny-all'],
-        sources = await loadProductionSbxProofSources(context.env);
-      const planned = planProductionSbxExecution({
-        environment: context.env,
-        cwd: parsed.cwd,
-        stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
-        runtime: selection.runtime,
-        identity: {
-          name: selection.identity.name,
-          domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
-        },
-        workspaceMode: selection.workspace,
-        worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-        ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-        workspaceRoot: parsed.cwd,
-        gitCommonDir: path.join(parsed.cwd, '.git'),
-        nativeRoots: Object.values(user.identities).flatMap((identity) =>
-          Object.values(identity.runtimeRoots),
-        ),
-        credentialRoots: [],
-        oppositeDomainRoots: Object.values(user.identities)
-          .filter((identity) => identity.domain !== configured.domain)
-          .flatMap((identity) => Object.values(identity.runtimeRoots)),
-        network: {
-          name:
-            selection.networkPolicy.name in namedSbxPolicies
-              ? selection.networkPolicy.name
-              : 'deny-all',
-          allow: network.allow,
-        },
-        ports: [],
-        sources,
-      });
-      const portableArgv = productionProofCreateArgv(planned.plan);
-      const exportPlan = createSbxLaunchPlanExportV1({
-        launchKey: descriptor.launchKey,
-        descriptorSha256: sha256Canonical(descriptor as unknown as JsonValue),
-        runtime: selection.runtime,
-        identity: {
-          name: selection.identity.name,
-          domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
-        },
-        artifact: {
-          manifestKey: artifact.reference.manifestKey,
-          artifactKey: artifact.reference.artifactKey,
-          fileMapHash: artifact.reference.fileMapHash,
-        },
-        evidence: {
-          sbxPinSha256: sources.sbxPinSha256,
-          runtimeToolInventorySha256: sources.runtimeToolInventorySha256,
-          executorEvidenceSha256: sources.executorEvidenceSha256,
-        },
-        sandbox: {
-          planKey: planned.plan.planKey,
-          profile: planned.plan.networkPolicy.name,
-          proofSandboxName: `mpx-proof-${planned.plan.planKey.slice(0, 12)}`,
-          createArgv: portableArgv,
-        },
-        policyMatrix: buildF2ProofPolicyMatrix(
-          planned.plan.networkPolicy.name as keyof typeof namedSbxPolicies,
-        ),
-      });
-      return { data: exportPlan, warnings };
-    }
-    if (selection.runtime === 'pi' && evidence.status === 'verified' && requirePiAccountPreflight) {
-      const accountService =
-        context.rootAttestationService ??
-        new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-      const configured = user.identities[selection.identity.name]!,
-        auth =
+      executorEvidence: (executor) => executorEvidence(executionContext, executor),
+      approveHost: async (selection) => {
+        if (parsed.json || !tty.direct) {
+          throw new MpxError({
+            code: 'HOST_TTY_REQUIRED',
+            message: 'Host approval requires a current direct interactive TTY.',
+            remediation: 'Run the explicit host launch interactively, or use Docker.',
+          });
+        }
+        if (!reasonOption?.trim()) {
+          throw new MpxError({
+            code: 'HOST_REASON_REQUIRED',
+            message: 'Host execution requires a nonempty reason.',
+          });
+        }
+        if (
+          !(await tty.confirm(
+            `Approve elevated host compatibility execution — ${sanitizeHostReason(reasonOption)}`,
+          ))
+        ) {
+          throw new MpxError({
+            code: 'HOST_APPROVAL_DENIED',
+            message: 'Host execution was not approved.',
+          });
+        }
+        return {
+          reason: reasonOption,
+          approvalKey: sha256Canonical({
+            cwd: parsed.cwd,
+            runtime: selection.runtime,
+            identity: selection.identity.name,
+            reason: reasonOption,
+          } as unknown as JsonValue),
+        };
+      },
+      accountPreflight: async ({ runtimeRoot, identity }) => {
+        if (!requirePiAccountPreflight) {
+          return;
+        }
+        const accountService =
+          context.rootAttestationService ??
+          new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+        const auth =
           context.accountAuthVerifier ??
           productionPiAuthProbe({
             cwd: parsed.cwd,
@@ -2108,59 +1872,181 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
               ? { resolver: context.launchExecutableResolver }
               : {}),
           });
-      piAttestation = await accountService.verify(selection.identity, configured.runtimeRoots.pi);
-      await auth.verify(configured.runtimeRoots.pi);
-      const attestationRef = piAttestation.ref;
-      beforeChildExecution = async () => {
-        await accountService.verify(selection.identity, configured.runtimeRoots.pi, attestationRef);
-        await auth.verify(configured.runtimeRoots.pi);
-      };
-    }
-    const appData = context.env.APPDATA;
-    if (!appData) {
-      throw new MpxError({
-        code: 'USER_CONFIG_ROOT_MISSING',
-        message: 'APPDATA is required to publish immutable runtime projections.',
-      });
-    }
-    const launchContext =
-      executionContext.launchLifecycleBridge ||
-      executionContext.launchRuntimeAdapters ||
-      !executionContext.env.LOCALAPPDATA
-        ? executionContext
-        : {
-            ...executionContext,
-            launchLifecycleBridge: new ProductionSessionLifecycleBridge(
-              sessions(executionContext),
-              async (name, runtime) =>
-                runtime === 'pi' && piAttestation && name === piAttestation.identity.name
-                  ? piAttestation.ref
-                  : (executionContext.nativeAccountBindingResolver?.resolve(
-                      { domain: user.identities[name]!.domain, name },
-                      runtime,
-                      user.identities[name]!.runtimeRoots[runtime],
-                    ) ?? null),
-            ),
-          };
-    const processResult = await executeResolvedLaunch({
-      descriptor,
-      manifest,
-      artifact,
-      catalog,
-      canonicalRoot,
-      agentsRoot: path.join(path.dirname(canonicalRoot), 'agents'),
-      artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
-      stateRoot: context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, 'mpx') : '',
-      cwd: parsed.cwd,
-      environment: context.env,
-      context: launchContext,
-      tty,
-      nativeRuntimeRoot: user.identities[selection.identity.name]!.runtimeRoots[selection.runtime],
-      statusSnapshot,
-      ...(found ? { projectConfig: found.config, projectRoot: found.root } : {}),
-      ...(beforeChildExecution ? { beforeChildExecution } : {}),
+        piAttestation = await accountService.verify(identity, runtimeRoot);
+        await auth.verify(runtimeRoot);
+        return async () => {
+          await accountService.verify(identity, runtimeRoot, piAttestation!.ref);
+          await auth.verify(runtimeRoot);
+        };
+      },
+      sandboxExport: async ({ descriptor, selection, artifact }) => {
+        if (!context.env.LOCALAPPDATA) {
+          throw new MpxError({
+            code: 'STATE_ROOT_REQUIRED',
+            message: 'LOCALAPPDATA is required to plan a production sandbox.',
+          });
+        }
+        const configured = user.identities[selection.identity.name]!;
+        const network =
+          namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
+          namedSbxPolicies['deny-all'];
+        const sources = await loadProductionSbxProofSources(context.env);
+        const planned = planProductionSbxExecution({
+          environment: context.env,
+          cwd: parsed.cwd,
+          stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
+          runtime: selection.runtime,
+          identity: {
+            name: selection.identity.name,
+            domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
+          },
+          workspaceMode: selection.workspace,
+          worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
+          ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
+          workspaceRoot: parsed.cwd,
+          gitCommonDir: path.join(parsed.cwd, '.git'),
+          nativeRoots: Object.values(user.identities).flatMap((identity) =>
+            Object.values(identity.runtimeRoots),
+          ),
+          credentialRoots: [],
+          oppositeDomainRoots: Object.values(user.identities)
+            .filter((identity) => identity.domain !== configured.domain)
+            .flatMap((identity) => Object.values(identity.runtimeRoots)),
+          network: {
+            name:
+              selection.networkPolicy.name in namedSbxPolicies
+                ? selection.networkPolicy.name
+                : 'deny-all',
+            allow: network.allow,
+          },
+          ports: [],
+          sources,
+        });
+        return createSbxLaunchPlanExportV1({
+          launchKey: descriptor.launchKey,
+          descriptorSha256: sha256Canonical(descriptor as unknown as JsonValue),
+          runtime: selection.runtime,
+          identity: {
+            name: selection.identity.name,
+            domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
+          },
+          artifact: {
+            manifestKey: artifact.reference.manifestKey,
+            artifactKey: artifact.reference.artifactKey,
+            fileMapHash: artifact.reference.fileMapHash,
+          },
+          evidence: {
+            sbxPinSha256: sources.sbxPinSha256,
+            runtimeToolInventorySha256: sources.runtimeToolInventorySha256,
+            executorEvidenceSha256: sources.executorEvidenceSha256,
+          },
+          sandbox: {
+            planKey: planned.plan.planKey,
+            profile: planned.plan.networkPolicy.name,
+            proofSandboxName: `mpx-proof-${planned.plan.planKey.slice(0, 12)}`,
+            createArgv: productionProofCreateArgv(planned.plan),
+          },
+          policyMatrix: buildF2ProofPolicyMatrix(
+            planned.plan.networkPolicy.name as keyof typeof namedSbxPolicies,
+          ),
+        });
+      },
+      launchExecution: async ({
+        descriptor,
+        manifest,
+        artifact,
+        catalog,
+        canonicalRoot,
+        cwd,
+        nativeRuntimeRoot,
+        statusSnapshot,
+        project: bound,
+        beforeChildExecution,
+      }) => {
+        const appData = context.env.APPDATA;
+        if (!appData) {
+          throw new MpxError({
+            code: 'USER_CONFIG_ROOT_MISSING',
+            message: 'APPDATA is required to publish immutable runtime projections.',
+          });
+        }
+        const launchContext =
+          executionContext.launchLifecycleBridge ||
+          executionContext.launchRuntimeAdapters ||
+          !executionContext.env.LOCALAPPDATA
+            ? executionContext
+            : {
+                ...executionContext,
+                launchLifecycleBridge: new ProductionSessionLifecycleBridge(
+                  sessions(executionContext),
+                  async (name, selectedRuntime) =>
+                    selectedRuntime === 'pi' &&
+                    piAttestation &&
+                    name === piAttestation.identity.name
+                      ? piAttestation.ref
+                      : (executionContext.nativeAccountBindingResolver?.resolve(
+                          { domain: user.identities[name]!.domain, name },
+                          selectedRuntime,
+                          user.identities[name]!.runtimeRoots[selectedRuntime],
+                        ) ?? null),
+                ),
+              };
+        return executeResolvedLaunch({
+          descriptor,
+          manifest,
+          artifact,
+          catalog,
+          canonicalRoot,
+          agentsRoot: path.join(path.dirname(canonicalRoot), 'agents'),
+          artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
+          stateRoot: context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, 'mpx') : '',
+          cwd,
+          environment: context.env,
+          context: launchContext,
+          tty,
+          nativeRuntimeRoot,
+          statusSnapshot,
+          ...(bound ? { projectConfig: bound.config, projectRoot: bound.root } : {}),
+          ...(beforeChildExecution ? { beforeChildExecution } : {}),
+        });
+      },
     });
-    return { data: null, warnings, silent: true, exitCode: processResult.exitCode };
+    const prepared = await service.prepare({
+      operation:
+        action === 'explain'
+          ? 'explain'
+          : action === 'sbx-plan-export'
+            ? 'sbx-plan-export'
+            : 'launch',
+      cwd: parsed.cwd,
+      catalogRoot: canonicalRoot,
+      userConfig: user,
+      ...(runtime ? { runtime } : {}),
+      ...(identityOption ? { identity: identityOption } : {}),
+      ...(alias ? { alias } : {}),
+      ...(modeOption ? { mode: modeOption } : {}),
+      ...(skillPolicyOption ? { skillPolicy: skillPolicyOption } : {}),
+      ...(contentScopeOption ? { contentScope: contentScopeOption } : {}),
+      ...(action === 'sbx-plan-export'
+        ? { executor: 'docker' as const }
+        : executorOption === 'host' || executorOption === 'docker'
+          ? { executor: executorOption }
+          : {}),
+      ...(workspaceOption === 'clone' ||
+      workspaceOption === 'host-worktree' ||
+      workspaceOption === 'direct'
+        ? { workspace: workspaceOption }
+        : {}),
+      ...(networkPolicyOption ? { networkPolicy: networkPolicyOption } : {}),
+      ...(presetOption ? { preset: presetOption } : {}),
+    });
+    const grantOptions = parsed.options.get('grant');
+    const resolved = await service.resolve(prepared, {
+      ...(Array.isArray(grantOptions) ? { grants: grantOptions } : {}),
+      ...(reasonOption ? { reason: reasonOption } : {}),
+    });
+    const result = await service.execute(resolved);
+    return { ...result, warnings };
   }
   if (
     group === 'worktree' &&

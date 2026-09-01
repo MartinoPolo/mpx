@@ -1714,14 +1714,29 @@ describe('cli', () => {
         { env },
       ),
     ).toBe(0);
-    expect(JSON.parse(io.out[0]!).data).toMatchObject({
+    expect(JSON.parse(io.out[0]!).data).toEqual({
       schemaVersion: 1,
       runtime: null,
       identity: { name: 'work', domain: 'work' },
       selection: {
+        mode: { name: 'project' },
+        skillPolicy: { name: 'clean' },
+        contentScope: { name: 'work' },
+        executor: 'docker',
         workspace: 'host-worktree',
         networkPolicy: { name: 'minimal' },
-        provenance: { workspace: 'explicit', networkPolicy: 'explicit' },
+        preset: 'work-project',
+        provenance: {
+          runtime: 'explicit',
+          identity: 'explicit',
+          mode: 'user-project',
+          skillPolicy: 'user-project',
+          contentScope: 'user-project',
+          executor: 'user-project',
+          workspace: 'explicit',
+          networkPolicy: 'explicit',
+        },
+        cwdClassification: { domain: 'work', contentScope: 'work' },
       },
     });
   });
@@ -2102,6 +2117,51 @@ describe('cli', () => {
     });
     expect(text).not.toContain('runtimeRoots');
     expect(text).not.toContain('C:/native');
+  });
+
+  it('discovers an ordinary launch project exactly once and binds that snapshot throughout preparation', async () => {
+    const cwd = await fixture(valid),
+      env = await configuredLaunchEnv(cwd),
+      io = captureIo(),
+      catalogRoot = fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url));
+    const config = JSON.parse(valid);
+    const discover = vi
+      .fn()
+      .mockResolvedValueOnce({ root: cwd, path: path.join(cwd, 'mpxconfig.json'), config })
+      .mockResolvedValueOnce({
+        root: cwd,
+        path: path.join(cwd, 'mpxconfig.json'),
+        config: { ...config, project: { id: 'changed/project' } },
+      });
+
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          cwd,
+          'launch',
+          'explain',
+          '--runtime',
+          'pi',
+          '--identity',
+          'work',
+          '--mode',
+          'project',
+          '--skill-policy',
+          'clean',
+          '--executor',
+          'docker',
+        ],
+        io,
+        { env, catalogRoot, discoverProjectConfig: discover } as never,
+      ),
+    ).toBe(0);
+    expect(discover).toHaveBeenCalledOnce();
+    expect(JSON.parse(io.out[0]!).data.binding).toEqual({
+      projectId: 'sample/app',
+      repositoryId: 'sample/app',
+    });
   });
 
   it('resolves launch inspection in a known ordinary non-project directory only when an explicit non-project mode is selected', async () => {

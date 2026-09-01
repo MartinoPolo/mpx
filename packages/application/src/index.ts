@@ -4,3 +4,5 @@ export * from './provider-application-service.js';
 export * from './skill-application-service.js';
 export * from './lifecycle-application-service.js';
 export * from './launch-execution-service.js';
+export * from './launch-application-service.js';
+export * from './launch-skill-resolution.js';

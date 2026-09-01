@@ -26,7 +26,12 @@ import {
   type PreparationRuntime,
 } from '@mpx/application/node';
 import { MpxError } from '@mpx/core';
-import { isSafeRouteLabel, loadUserConfig, type ProjectConfig } from '@mpx/config';
+import {
+  discoverProjectConfig,
+  isSafeRouteLabel,
+  loadUserConfig,
+  type ProjectConfig,
+} from '@mpx/config';
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from '@mpx/ports';
 import { createStatusProvider, type StatusProvider } from '@mpx/status';
 import { createGitHubAdapters } from '@mpx/provider-github';
@@ -154,6 +159,7 @@ export interface NativeAccountBindingResolver {
 export interface CliContext extends LaunchExecutionContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
+  discoverProjectConfig?: typeof discoverProjectConfig;
   accessFile?: (file: string) => Promise<void>;
   /** Debug/test-only sink for unexpected errors. Never included in public CLI output. */
   onInternalError?: (error: unknown) => void;

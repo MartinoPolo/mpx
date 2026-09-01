@@ -46,6 +46,7 @@ describe('@mpx/application architecture', () => {
     const application = await import('../../src/index.js');
     expect(application).toMatchObject({
       LifecycleApplicationService: expect.any(Function),
+      LaunchApplicationService: expect.any(Function),
       createProjectApplicationService: expect.any(Function),
       createProviderApplicationService: expect.any(Function),
       createSkillApplicationService: expect.any(Function),

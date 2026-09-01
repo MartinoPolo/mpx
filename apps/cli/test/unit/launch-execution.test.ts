@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   SBX_V0_39_0_PIN,
   compactLaunchBanner,
@@ -27,7 +27,6 @@ import {
 import {
   productionRuntimeAdapters,
   type LaunchExecutionContext,
-  type LaunchProjectionBuildInput,
 } from '../../src/launch-execution.js';
 import { NodePrivateRouteMaterializer, defaultContext } from '../../src/context.js';
 import {
@@ -234,15 +233,6 @@ async function provisionRoute(
 }
 
 describe('production private launch services', () => {
-  it('exposes only skillPlan to projection builders for skill semantics', () => {
-    type RawProjectionInput = 'manifest' | 'artifact' | 'catalog' | 'canonicalRoot';
-    expectTypeOf<LaunchProjectionBuildInput['skillPlan']>().toMatchTypeOf<
-      import('@mpx/skills').SkillProjectionPlan
-    >();
-    expectTypeOf<
-      Extract<keyof LaunchProjectionBuildInput, RawProjectionInput>
-    >().toEqualTypeOf<never>();
-  });
   it('provides production route and audit services on the default context', () => {
     expect(defaultContext.launchRoutes).toBeDefined();
     expect(defaultContext.launchAudit).toBeDefined();
@@ -352,7 +342,11 @@ describe('production private launch services', () => {
         validator: async () => undefined,
       });
       const invocation = await adapter!.prepare({ routes: {} } as never);
-      expect(invocation.argv).toEqual(expect.arrayContaining(['--resume', resumeTarget.value]));
+      const resumeIndexes = invocation.argv.flatMap((value, index) =>
+        value === '--resume' ? [index] : [],
+      );
+      expect(resumeIndexes).toEqual([expect.any(Number)]);
+      expect(invocation.argv[resumeIndexes[0]! + 1]).toBe(resumeTarget.value);
     } finally {
       await rm(stateRoot, { recursive: true, force: true });
     }
@@ -2004,6 +1998,10 @@ describe('Phase F launch execution', () => {
           },
           skillFile: { relativePath: 'SKILL.md' },
         });
+        expect(input).not.toHaveProperty('manifest');
+        expect(input).not.toHaveProperty('artifact');
+        expect(input).not.toHaveProperty('catalog');
+        expect(input).not.toHaveProperty('canonicalRoot');
         return {
           directory: 'C:/immutable/pi',
           reference: publishedReference(input),
