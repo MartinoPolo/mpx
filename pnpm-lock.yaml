@@ -156,6 +156,9 @@ importers:
       '@mpx/executors':
         specifier: workspace:*
         version: link:../executors
+      '@mpx/installer':
+        specifier: workspace:*
+        version: link:../installer
       '@mpx/launch':
         specifier: workspace:*
         version: link:../launch

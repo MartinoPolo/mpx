@@ -122,6 +122,7 @@ describe('@mpx/application architecture', () => {
       AccountApplicationService: expect.any(Function),
       LifecycleApplicationService: expect.any(Function),
       LaunchApplicationService: expect.any(Function),
+      InstallApplicationService: expect.any(Function),
       SessionApplicationService: expect.any(Function),
       SessionResumeLaunchApplicationService: expect.any(Function),
       createProjectApplicationService: expect.any(Function),
@@ -135,6 +136,8 @@ describe('@mpx/application architecture', () => {
     const root = await import('../../src/index.js');
     expect(node).toMatchObject({
       createNodeAccountApplicationService: expect.any(Function),
+      createNodeInstallApplicationService: expect.any(Function),
+      createNodeInstallProtocolInput: expect.any(Function),
       createNodeLocalIssueViewRebuilder: expect.any(Function),
       createProductionSessionBranchRuntimeAdapter: expect.any(Function),
       createWindowsTerminalBranchAdapter: expect.any(Function),
@@ -150,6 +153,8 @@ describe('@mpx/application architecture', () => {
     });
     for (const name of [
       'createNodeAccountApplicationService',
+      'createNodeInstallApplicationService',
+      'createNodeInstallProtocolInput',
       'createNodeLocalIssueViewRebuilder',
       'createProductionSessionBranchRuntimeAdapter',
       'createWindowsTerminalBranchAdapter',
@@ -165,6 +170,28 @@ describe('@mpx/application architecture', () => {
     ]) {
       expect(root).not.toHaveProperty(name);
     }
+  });
+
+  it('uses installer contracts as types only from the neutral install service', async () => {
+    const source = await readFile(
+      path.resolve(import.meta.dirname, '../../src/install-application-service.ts'),
+      'utf8',
+    );
+    const parsed = ts.createSourceFile(
+      'install-application-service.ts',
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    const installerImports = parsed.statements.filter(
+      (statement): statement is ts.ImportDeclaration =>
+        ts.isImportDeclaration(statement) &&
+        ts.isStringLiteral(statement.moduleSpecifier) &&
+        statement.moduleSpecifier.text === '@mpx/installer',
+    );
+    expect(installerImports).toHaveLength(1);
+    expect(installerImports[0]?.importClause?.isTypeOnly).toBe(true);
   });
 
   it('keeps generic application operation contracts out of provider-specific services', async () => {

@@ -25,6 +25,7 @@
     "@mpx/core": "workspace:*",
     "@mpx/dev-services": "workspace:*",
     "@mpx/executors": "workspace:*",
+    "@mpx/installer": "workspace:*",
     "@mpx/launch": "workspace:*",
     "@mpx/ports": "workspace:*",
     "@mpx/provider-local": "workspace:*",

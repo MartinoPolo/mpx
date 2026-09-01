@@ -23,6 +23,7 @@ import {
 } from '@mpx/application';
 import {
   createNodeAccountApplicationService,
+  createNodeInstallApplicationService,
   createNodeLocalIssueViewRebuilder,
   createPiAuthAvailabilityProbe,
 } from '@mpx/application/node';
@@ -1215,16 +1216,13 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     return { data: result.data, warnings: [...result.warnings] };
   }
   if (group === 'install') {
-    const needsBuilder =
-      action === 'intent' ||
-      action === 'prepare' ||
-      (action === 'verify' && typeof parsed.options.get('external-plan') === 'string');
+    const application = createNodeInstallApplicationService({
+      orchestrator: immutableInstaller(context),
+      builder: () => installIntentBuilder(context),
+    });
     const result = await executeInstallCommand(
       { action, args, options: parsed.options },
-      {
-        orchestrator: immutableInstaller(context),
-        ...(needsBuilder ? { builder: installIntentBuilder(context) } : {}),
-      },
+      { application },
     );
     return { data: result.data, warnings };
   }
