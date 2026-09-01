@@ -190,6 +190,57 @@ describe('provider CLI', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it('preserves hosted identity validation before issue-create required flags', async () => {
+    const cwd = await project(config('github', 'github')),
+      io = captureIo(),
+      invoke = vi.fn();
+    expect(
+      await run(['--json', '--cwd', cwd, 'issue', 'create'], io, {
+        env: {},
+        providerService: { invoke },
+      }),
+    ).toBe(1);
+    expect(io.out).toHaveLength(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'IDENTITY_REQUIRED',
+        message: 'Provider commands require an explicit identity.',
+      },
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['move', ['--id', '3']],
+    ['dependency', ['add', '--id', '3']],
+  ] as const)(
+    'preserves unsupported issue %s validation before malformed or missing flags',
+    async (action, trailingArguments) => {
+      const cwd = await project(config('github', 'github')),
+        env = await identityEnv(cwd, { github: 'work-gh' }),
+        io = captureIo(),
+        invoke = vi.fn();
+      expect(
+        await run(
+          ['--json', '--cwd', cwd, 'issue', action, ...trailingArguments, '--identity', 'work'],
+          io,
+          { env, providerService: { invoke } },
+        ),
+      ).toBe(1);
+      expect(io.out).toHaveLength(1);
+      expect(JSON.parse(io.out[0]!)).toMatchObject({
+        ok: false,
+        error: {
+          code: 'CAPABILITY_UNSUPPORTED',
+          message: `Provider 'github' does not support issue.${action === 'dependency' ? 'dependency.add' : action}.`,
+          capability: `issue.${action === 'dependency' ? 'dependency.add' : action}`,
+        },
+      });
+      expect(invoke).not.toHaveBeenCalled();
+    },
+  );
+
   it('validates required explicit provider arguments in one error envelope', async () => {
     const cwd = await project(config('github', 'github')),
       env = await identityEnv(cwd, { github: 'work-gh' }),
@@ -627,9 +678,74 @@ describe('provider CLI', () => {
         route: providerId === 'github' ? 'work-gh' : 'work-kf',
         input,
       });
-      expect(io.out).toHaveLength(1);
+      expect(io.err).toEqual([]);
+      expect(io.out).toEqual([
+        `${JSON.stringify({
+          apiVersion: 1,
+          ok: true,
+          data: { schemaVersion: 1 },
+          warnings: [],
+        })}\n`,
+      ]);
     },
   );
+
+  it('diagnoses default incapable providers without requiring identity routes', async () => {
+    const cwd = await project(config('generic', 'none')),
+      env = await identityEnv(cwd, {}),
+      io = captureIo(),
+      execute = vi.fn();
+
+    expect(
+      await run(['--json', '--cwd', cwd, 'provider', 'doctor', '--identity', 'work'], io, {
+        env,
+        providerProcessExecutor: { execute },
+      }),
+    ).toBe(0);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: true,
+      data: {
+        providers: [
+          { role: 'issues', provider: 'none', route: null, status: 'unsupported' },
+          { role: 'repository', provider: 'generic', route: null, status: 'unsupported' },
+        ],
+      },
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('preflights a synthetic incapable provider before identity and required flags', async () => {
+    const cwd = await project(config('generic', 'trusted-issues')),
+      io = captureIo();
+    const descriptor = {
+      id: 'trusted-issues',
+      roles: ['issues'],
+      capabilities: [],
+      backend: 'trusted-sdk',
+      schema: { type: 'object', properties: {}, additionalProperties: false },
+    } as const;
+    const adapter = {
+      providerId: 'trusted-issues',
+      role: 'issues',
+      backend: 'trusted-sdk',
+      capabilities: [],
+      routeRequired: false,
+      invoke: vi.fn(),
+    } as const;
+
+    expect(
+      await run(['--json', '--cwd', cwd, 'issue', 'create'], io, {
+        env: {},
+        trustedProviderComposition: { descriptors: [descriptor], adapters: [adapter] },
+      }),
+      io.out.join('\n'),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'CAPABILITY_UNSUPPORTED', capability: 'issue.create' },
+    });
+    expect(adapter.invoke).not.toHaveBeenCalled();
+  });
 
   it('diagnoses the trusted providers selected by strict project roles with real redacted probes', async () => {
     const cwd = await project(config()),
@@ -679,6 +795,8 @@ describe('provider CLI', () => {
       { argv: ['kf', 'issue', 'list', '--json'], route: 'work-kf', cwd },
       { argv: ['gh', 'auth', 'status'], route: 'work-gh', cwd },
     ]);
+    expect(io.err).toEqual([]);
+    expect(JSON.parse(io.out[0]!)).toHaveProperty('warnings', []);
     expect(io.out[0]).not.toContain('secret');
   });
 });

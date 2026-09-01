@@ -15,6 +15,7 @@
     "check": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
+    "@mpx/application": "workspace:*",
     "@mpx/core": "workspace:*",
     "@mpx/dev-services": "workspace:*",
     "@mpx/config": "workspace:*",

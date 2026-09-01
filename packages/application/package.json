@@ -1,0 +1,28 @@
+{
+  "name": "@mpx/application",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:unit": "pnpm --filter @mpx/application... build && vitest run",
+    "test": "pnpm run test:unit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "check": "pnpm run build && pnpm run typecheck"
+  },
+  "dependencies": {
+    "@mpx/config": "workspace:*",
+    "@mpx/core": "workspace:*",
+    "@mpx/providers": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

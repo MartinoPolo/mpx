@@ -30,6 +30,15 @@ export type ReviewCapability = (typeof REVIEW_CAPABILITIES)[number];
 export type CiCapability = (typeof CI_CAPABILITIES)[number];
 export type ProviderCapability = IssueCapability | ReviewCapability | CiCapability;
 export type ProviderRole = 'repository' | 'issues';
+
+export const capabilitiesForProviderRole = (
+  capabilities: readonly ProviderCapability[],
+  role: ProviderRole,
+): readonly ProviderCapability[] =>
+  capabilities.filter((capability) =>
+    role === 'issues' ? capability.startsWith('issue.') : !capability.startsWith('issue.'),
+  );
+
 export type TrustedBackendId =
   'gh' | 'glab' | 'git-ssh' | 'kf' | 'filesystem' | 'none' | (string & {});
 export type ProviderErrorCode =
@@ -272,7 +281,9 @@ function validateDescriptor(descriptor: ProviderDescriptor): void {
         capability,
       });
     }
-    const role = capability.startsWith('issue.') ? 'issues' : 'repository';
+    const role = capabilitiesForProviderRole([capability as ProviderCapability], 'issues').length
+      ? 'issues'
+      : 'repository';
     if (!descriptor.roles.includes(role)) {
       throw new ProviderError(
         'PROVIDER_INVALID',

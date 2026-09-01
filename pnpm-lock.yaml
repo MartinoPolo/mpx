@@ -62,6 +62,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@mpx/application':
+        specifier: workspace:*
+        version: link:../../packages/application
       '@mpx/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -129,6 +132,25 @@ importers:
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
+
+  packages/application:
+    dependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../config
+      '@mpx/core':
+        specifier: workspace:*
+        version: link:../core
+      '@mpx/providers':
+        specifier: workspace:*
+        version: link:../providers
+    devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

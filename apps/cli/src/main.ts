@@ -43,7 +43,6 @@ import {
   sanitizeHostReason,
 } from '@mpx/executors';
 import { createSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
-import { probeProvider, type ProviderRegistry } from '@mpx/providers';
 import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/provider-local';
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from '@mpx/status';
 import { expandBranchTemplate } from '@mpx/worktrees';
@@ -64,18 +63,16 @@ import {
 } from '@mpx/skills';
 import {
   catalogPath,
-  configuredProviderRegistry,
+  configuredProviderApplicationService,
   createDefaultSbxDiagnostics,
   defaultContext,
   executeInternalPreparationWorker,
   immutableInstaller,
   installIntentBuilder,
-  NodeProviderProcessExecutor,
   ports,
   productionSessionDiscoveries,
   productionSessionProcessInspector,
   productionSessionResumeDependencies,
-  providerService,
   sessions,
   stateRoot,
   status,
@@ -438,48 +435,6 @@ function requiredOption(parsed: Parsed, name: string): string {
   }
   return value;
 }
-async function providerBinding(
-  parsed: Parsed,
-  context: CliContext,
-  role: 'repository' | 'issues',
-  capability: string,
-) {
-  const found = await project(parsed);
-  const providerId =
-    role === 'repository'
-      ? found.config.repository.provider
-      : (found.config.issues?.provider ?? 'none');
-  const registry: ProviderRegistry = configuredProviderRegistry(context);
-  registry.assertCapability(providerId, capability);
-  if (providerId === 'local') {
-    return { found, providerId, route: undefined };
-  }
-  const identityName = stringOption(parsed, 'identity');
-  if (identityName === undefined) {
-    throw new MpxError({
-      code: 'IDENTITY_REQUIRED',
-      message: 'Provider commands require an explicit identity.',
-    });
-  }
-  const user = await requiredUserConfig(context),
-    identity = user.identities[identityName];
-  if (!identity) {
-    throw new MpxError({
-      code: 'IDENTITY_UNKNOWN',
-      message: `Unknown identity '${identityName}'.`,
-    });
-  }
-  const route = identity.providerRoutes?.[providerId];
-  if (!route) {
-    throw new MpxError({
-      code: 'PROVIDER_ROUTE_REQUIRED',
-      message: `Identity '${identityName}' has no route for provider '${providerId}'.`,
-      remediation: 'Configure identity.providerRoutes for the selected provider.',
-    });
-  }
-  return { found, providerId, route };
-}
-
 async function knownCwdClassification(
   cwd: string,
   user: UserConfig,
@@ -1699,29 +1654,21 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         ? `issue.dependency.${dependencyAction}`
         : `${group}.${normalizedAction}`;
     const role = group === 'issue' ? 'issues' : 'repository';
-    const binding = await providerBinding(parsed, context, role, capability);
-    if (
-      group === 'review' &&
-      action === 'ready' &&
-      binding.found.config.workflow?.codeReview?.markReady === 'human'
-    ) {
-      throw new MpxError({
-        code: 'WORKFLOW_POLICY_DENIED',
-        message: 'Project workflow policy requires a human to mark reviews ready.',
-        capability,
-      });
-    }
-    if (
-      group === 'review' &&
-      action === 'merge' &&
-      binding.found.config.workflow?.codeReview?.merge === 'human'
-    ) {
-      throw new MpxError({
-        code: 'WORKFLOW_POLICY_DENIED',
-        message: 'Project workflow policy requires a human to merge reviews.',
-        capability,
-      });
-    }
+    const found = await project(parsed);
+    const identityName = stringOption(parsed, 'identity');
+    const identity =
+      identityName === undefined
+        ? undefined
+        : (await requiredUserConfig(context)).identities[identityName];
+    const applicationService = configuredProviderApplicationService(context);
+    const prepared = applicationService.prepareInvocation({
+      project: found.config,
+      role,
+      capability,
+      ...(identityName === undefined ? {} : { identityName }),
+      ...(identity === undefined ? {} : { identity }),
+      cwd: found.root,
+    });
     let input: Record<string, unknown> = {};
     if (group === 'issue') {
       if (action === 'list') {
@@ -1780,7 +1727,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
           body: requiredOption(parsed, 'body'),
           sourceBranch: requiredOption(parsed, 'source-branch'),
           targetBranch: requiredOption(parsed, 'target-branch'),
-          draft: binding.found.config.workflow?.codeReview?.openAsDraft ?? false,
+          draft: found.config.workflow?.codeReview?.openAsDraft ?? false,
         };
       } else if (action === 'update') {
         input = {
@@ -1803,18 +1750,8 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       const id = requiredOption(parsed, 'run-id');
       input = { id, runId: id };
     }
-    data = await (
-      await providerService(context, binding.found.config, binding.found.root, {
-        providerId: binding.providerId,
-        capability,
-      })
-    ).invoke({
-      providerId: binding.providerId,
-      capability,
-      ...(binding.route === undefined ? {} : { route: binding.route }),
-      input: asJson(input),
-    });
-    return { data, warnings };
+    const result = await applicationService.invokePrepared(prepared, asJson(input));
+    return { ...result, warnings };
   }
   if (group === 'launch' && action === 'resolve') {
     throw new UsageError("launch resolve was replaced by 'mpx launch explain'");
@@ -2810,96 +2747,39 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       if (role !== undefined && role !== 'repository' && role !== 'issues') {
         throw new UsageError('--role must be repository or issues');
       }
-      data = configuredProviderRegistry(context).list(role);
-      return { data, warnings };
+      const result = configuredProviderApplicationService(context).list(
+        role === undefined ? {} : { role },
+      );
+      return { ...result, warnings };
     }
     if (action === 'doctor') {
       if (args.length) {
         throw new UsageError('provider doctor accepts no arguments');
       }
       const identityName = stringOption(parsed, 'identity');
-      if (identityName === undefined) {
-        throw new MpxError({
-          code: 'IDENTITY_REQUIRED',
-          message: 'Provider doctor requires an explicit identity.',
-        });
-      }
-      const [found, user] = await Promise.all([project(parsed), requiredUserConfig(context)]),
-        identity = user.identities[identityName];
-      if (!identity) {
-        throw new MpxError({
-          code: 'IDENTITY_UNKNOWN',
-          message: `Unknown identity '${identityName}'.`,
-        });
-      }
-      const selections: ['issues' | 'repository', string][] = [
-        ['issues', found.config.issues?.provider ?? 'none'],
-        ['repository', found.config.repository.provider],
-      ];
-      const executor =
-        context.providerProcessExecutor ?? new NodeProviderProcessExecutor(context.env);
-      const providers = await Promise.all(
-        selections.map(async ([role, provider]) => {
-          const descriptor = configuredProviderRegistry(context).get(provider, role),
-            route = identity.providerRoutes?.[provider];
-          if (descriptor.capabilities.length > 0 && !route) {
-            throw new MpxError({
-              code: 'PROVIDER_ROUTE_REQUIRED',
-              message: `Identity '${identityName}' has no route for provider '${provider}'.`,
-              remediation: 'Configure identity.providerRoutes for the selected provider.',
-            });
-          }
-          const probe = await probeProvider(
-            {
-              providerId: provider,
-              role,
-              ...(route === undefined ? {} : { route }),
-              cwd: found.root,
-            },
-            executor,
-          );
-          return {
-            role,
-            provider,
-            backend: descriptor.backend,
-            capabilities: descriptor.capabilities.filter((capability) =>
-              role === 'issues'
-                ? capability.startsWith('issue.')
-                : !capability.startsWith('issue.'),
-            ),
-            route: route ?? null,
-            ...probe,
-          };
-        }),
-      );
-      data = { schemaVersion: 1, identity: identityName, providers };
-      return {
-        data,
-        warnings,
-        exitCode: providers.some((provider) => provider.status === 'error') ? 1 : 0,
-      };
+      const found = await project(parsed);
+      const identity =
+        identityName === undefined
+          ? undefined
+          : (await requiredUserConfig(context)).identities[identityName];
+      const result = await configuredProviderApplicationService(context).doctor({
+        project: found.config,
+        ...(identityName === undefined ? {} : { identityName }),
+        ...(identity === undefined ? {} : { identity }),
+        cwd: found.root,
+      });
+      return { ...result, warnings };
     }
     const role = args[0];
     if (role !== 'repository' && role !== 'issues') {
       throw new UsageError('provider explain requires repository or issues');
     }
     const found = await project(parsed);
-    const providerId =
-      role === 'repository'
-        ? found.config.repository.provider
-        : (found.config.issues?.provider ?? 'none');
-    const descriptor = configuredProviderRegistry(context).get(providerId, role);
-    data = {
+    const result = configuredProviderApplicationService(context).explain({
+      project: found.config,
       role,
-      provider: descriptor.id,
-      adapter: descriptor.backend,
-      capabilities: descriptor.capabilities.filter((capability) =>
-        role === 'issues' ? capability.startsWith('issue.') : !capability.startsWith('issue.'),
-      ),
-      route: null,
-      routeSelection: 'identity-required',
-    };
-    return { data, warnings };
+    });
+    return { ...result, warnings };
   }
   if (
     group === 'skill' &&

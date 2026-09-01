@@ -13,6 +13,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createProviderApplicationService } from '@mpx/application';
 import { MpxError } from '@mpx/core';
 import {
   isSafeRouteLabel,
@@ -35,6 +36,7 @@ import {
   BUILTIN_PROVIDERS,
   ProviderRegistry,
   ProviderService,
+  probeProvider,
   providerRegistry,
   type ProviderAdapter,
   type ProviderDescriptor,
@@ -717,7 +719,7 @@ export class NodeRepositorySelectorResolver implements CliRepositorySelectorReso
   }
 }
 
-export function configuredProviderRegistry(context: CliContext): ProviderRegistry {
+function configuredProviderRegistry(context: CliContext): ProviderRegistry {
   const extensions = context.trustedProviderComposition?.descriptors ?? [];
   return extensions.length === 0
     ? providerRegistry
@@ -814,6 +816,25 @@ export async function providerService(
     ) ?? []),
   ];
   return new ProviderService(configuredProviderRegistry(context), adapters);
+}
+
+export function configuredProviderApplicationService(context: CliContext) {
+  const executor = context.providerProcessExecutor ?? new NodeProviderProcessExecutor(context.env);
+  return createProviderApplicationService({
+    registry: configuredProviderRegistry(context),
+    routePolicy: {
+      requiresRoute: ({ providerId, capabilities }) =>
+        providerId !== 'local' && capabilities.length > 0,
+    },
+    createProviderService: async ({ project, providerId, capability, cwd }) => {
+      const service = await providerService(context, project, cwd ?? process.cwd(), {
+        providerId,
+        capability,
+      });
+      return { invoke: (request) => service.invoke(request) };
+    },
+    probe: (request) => probeProvider(request, executor),
+  });
 }
 
 function privateRouteError(

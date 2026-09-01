@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILTIN_PROVIDERS,
   CI_CAPABILITIES,
+  capabilitiesForProviderRole,
   ISSUE_CAPABILITIES,
   LOCAL_ISSUE_CAPABILITIES,
   ProviderError,
@@ -39,6 +40,23 @@ describe('provider contracts', () => {
       ],
       ci: ['ci.status', 'ci.watch', 'ci.logs', 'ci.retry'],
     });
+  });
+
+  it('classifies provider capabilities through one provider-neutral role helper', () => {
+    const capabilities = [
+      'review.view',
+      'issue.list',
+      'ci.status',
+      'issue.dependency.add',
+    ] as const;
+    expect(capabilitiesForProviderRole(capabilities, 'issues')).toEqual([
+      'issue.list',
+      'issue.dependency.add',
+    ]);
+    expect(capabilitiesForProviderRole(capabilities, 'repository')).toEqual([
+      'review.view',
+      'ci.status',
+    ]);
   });
 
   it('lists built-ins deterministically and by role', () => {

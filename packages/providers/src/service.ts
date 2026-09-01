@@ -1,6 +1,7 @@
 import type { JsonValue } from '@mpx/core';
 import type { ProviderCapabilityInputMap, ProviderCapabilityOutputMap } from './contracts.js';
 import {
+  capabilitiesForProviderRole,
   ProviderError,
   type ProviderCapability,
   type ProviderRole,
@@ -32,7 +33,7 @@ export interface ProviderAdapter {
 }
 
 const roleFor = (capability: ProviderCapability): ProviderRole =>
-  capability.startsWith('issue.') ? 'issues' : 'repository';
+  capabilitiesForProviderRole([capability], 'issues').length ? 'issues' : 'repository';
 const keyFor = (providerId: string, role: ProviderRole): string => `${providerId}:${role}`;
 const sameCapabilities = (
   left: readonly ProviderCapability[],
@@ -58,9 +59,7 @@ export class ProviderAdapterRegistry {
         );
       }
       const descriptor = providers.get(adapter.providerId, adapter.role);
-      const expected = descriptor.capabilities.filter(
-        (capability) => roleFor(capability) === adapter.role,
-      );
+      const expected = capabilitiesForProviderRole(descriptor.capabilities, adapter.role);
       if (
         adapter.backend !== descriptor.backend ||
         !sameCapabilities(adapter.capabilities, expected)
