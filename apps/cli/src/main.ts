@@ -15,6 +15,7 @@ import {
   createProjectApplicationService,
   createSkillApplicationService,
   LaunchApplicationService,
+  SessionResumeLaunchApplicationService,
   resolveLaunchSkills,
   type AccountApplicationService,
   type ProjectApplicationService,
@@ -32,13 +33,7 @@ import {
   type Diagnostic,
   type JsonValue,
 } from '@mpx/core';
-import {
-  canonicalNativeRootDigest,
-  resolveLaunch,
-  resolveLaunchSelection,
-  type ResolveLaunchSelectionInput,
-  type ShortLaunchAlias,
-} from '@mpx/launch';
+import { canonicalNativeRootDigest, resolveLaunch, type ShortLaunchAlias } from '@mpx/launch';
 import {
   ExecutionError,
   buildF2ProofPolicyMatrix,
@@ -457,377 +452,319 @@ async function executeProductionSessionResume(
   context: CliContext,
   branchInvocation?: { readonly executable: string; readonly argv: readonly string[] },
 ): Promise<unknown> {
-  const dockerAdmission =
-    plan.launch.executor.kind === 'docker'
-      ? await (
-          context.sessionDockerResumeAdmission ??
-          createProductionSessionDockerResumeAdmission(context.env)
-        )(plan)
-      : undefined;
-  if (dockerAdmission && !dockerAdmission.admitted) {
-    throw new SessionError(
-      'SESSION_RESUME_F2_ADMISSION_DENIED',
-      'Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.',
-      { hostFallback: false, action: 'recreate', admissionCode: dockerAdmission.code },
-    );
-  }
   const store = sessions(context);
-  let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>> | undefined;
-  let reverifyPiAccount: (() => Promise<void>) | undefined;
-  if (plan.runtime === 'pi') {
-    try {
-      nativeBinding = await store.readNativeBinding(plan.nativeBindingRef);
-    } catch {
-      throw new SessionError(
-        'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-        'The recorded Pi account binding is unavailable.',
-      );
-    }
-    const configured = user.identities[plan.identity.name];
-    const accountRef = nativeBinding.accountBindingRef;
-    if (
-      !configured ||
-      configured.domain !== plan.identity.domain ||
-      nativeBinding.runtime !== 'pi' ||
-      nativeBinding.identity.domain !== plan.identity.domain ||
-      nativeBinding.identity.name !== plan.identity.name
-    ) {
-      throw new SessionError(
-        'SESSION_RESUME_ACCOUNT_MISMATCH',
-        'The recorded Pi account binding does not match the configured identity.',
-      );
-    }
-    if (accountRef === null) {
-      throw new SessionError(
-        'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-        'The recorded Pi account binding is unavailable.',
-      );
-    }
-    const configuredRoot = configured.runtimeRoots.pi;
-    const accountService =
-      context.rootAttestationService ??
-      new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-    const auth = context.accountAuthVerifier ?? productionPiAuthProbe(context, plan.cwd);
-    reverifyPiAccount = async () => {
+  const application = new SessionResumeLaunchApplicationService({
+    dockerAdmission: (resumePlan) =>
+      (
+        context.sessionDockerResumeAdmission ??
+        createProductionSessionDockerResumeAdmission(context.env)
+      )(resumePlan),
+    piPreflight: async (resumePlan, userConfig) => {
+      let nativeBinding: Awaited<ReturnType<typeof store.readNativeBinding>>;
       try {
-        const matchingRefs = await accountService.store?.list();
-        if (matchingRefs && matchingRefs.filter((record) => record.ref === accountRef).length > 1) {
-          throw Object.assign(new Error('duplicate'), { code: 'ACCOUNT_ROOT_DUPLICATE' });
-        }
-        await accountService.verify(plan.identity, configuredRoot, accountRef);
-        await auth.verify(configuredRoot);
-      } catch (error) {
-        const code = (error as { code?: unknown }).code;
-        if (code === 'ACCOUNT_ROOT_DUPLICATE' || code === 'ACCOUNT_IDENTITY_DUPLICATE') {
-          throw new SessionError(
-            'SESSION_RESUME_ACCOUNT_DUPLICATE',
-            'The recorded Pi account binding is duplicated.',
-          );
-        }
-        if (code === 'ACCOUNT_ROOT_CHANGED' || code === 'ACCOUNT_BINDING_MISMATCH') {
-          throw new SessionError(
-            'SESSION_RESUME_ACCOUNT_MISMATCH',
-            'The recorded Pi account binding no longer matches the configured identity and root.',
-          );
-        }
+        nativeBinding = await store.readNativeBinding(resumePlan.nativeBindingRef);
+      } catch {
         throw new SessionError(
           'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-          'The recorded Pi account binding or live OAuth is unavailable.',
+          'The recorded Pi account binding is unavailable.',
         );
       }
-    };
-    await reverifyPiAccount();
-  }
-  const cwd = plan.cwd;
-  if (!path.isAbsolute(cwd)) {
-    throw new MpxError({
-      code: 'SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE',
-      message: 'The recorded workspace is not an absolute launch cwd.',
-    });
-  }
-  const found = await discoverProjectConfig(cwd);
-  const projectId = plan.projectId ?? undefined;
-  if ((found?.config.project.id ?? null) !== plan.projectId) {
-    throw new MpxError({
-      code: 'SESSION_RESUME_LAUNCH_BINDING_MISMATCH',
-      message: 'The current project binding does not match the recorded launch.',
-    });
-  }
-  if (plan.repositoryId === null) {
-    throw new MpxError({
-      code: 'SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE',
-      message: 'The recorded launch lacks a repository binding.',
-    });
-  }
-  const repositoryId = plan.repositoryId;
-  const selectionInput: ResolveLaunchSelectionInput = {
-    userConfig: user,
-    cwd,
-    runtime: plan.runtime,
-    identity: plan.identity.name,
-    mode: plan.launch.mode,
-    skillPolicy: plan.launch.skillPolicy,
-    contentScope: plan.launch.contentScope,
-    executor: plan.launch.executor.kind,
-    workspace: plan.launch.workspace as 'clone' | 'host-worktree' | 'direct',
-    networkPolicy: plan.launch.networkPolicy,
-    ...(projectId ? { projectId } : {}),
-  };
-  if (
-    !(['clone', 'host-worktree', 'direct'] as const).includes(
-      plan.launch.workspace as 'clone' | 'host-worktree' | 'direct',
-    )
-  ) {
-    throw new MpxError({
-      code: 'SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE',
-      message: 'The recorded launch lacks a valid workspace strategy.',
-    });
-  }
-  const selection = await resolveLaunchSelection(selectionInput);
-  if (selection.identity.domain !== plan.identity.domain) {
-    throw new MpxError({
-      code: 'SESSION_RESUME_IDENTITY_MISMATCH',
-      message: 'The current launch identity does not match the recorded domain.',
-    });
-  }
-  if (!user.contentScopes[plan.launch.contentScope]) {
-    throw new MpxError({
-      code: 'SESSION_RESUME_LAUNCH_SNAPSHOT_INCOMPLETE',
-      message: 'The recorded content scope is no longer configured.',
-    });
-  }
-  const canonicalRoot = await catalogPath(context, cwd);
-  const { catalog, manifest, artifact, skillArtifact } = await resolveLaunchSkills(
-    {
-      userConfig: user,
-      ...(found ? { project: found } : {}),
-      repositoryId: plan.repositoryId,
-      canonicalRoot,
-      identity: plan.identity.name,
-      skillPolicy: plan.launch.skillPolicy,
-      contentScope: plan.launch.contentScope,
-      runtime: plan.runtime,
-    },
-    { inventoryCanonical, inventoryProjectSkills },
-  );
-  let resumeContext = context;
-  if (
-    plan.launch.executor.kind === 'docker' &&
-    context.launchExecutorAdapters === undefined &&
-    context.env.LOCALAPPDATA
-  ) {
-    try {
-      const snapshot = found
-        ? await status(context).snapshot({
-            cwd,
-            projectRoot: found.root,
-            config: found.config,
-            configHash: sha256Canonical(found.config as unknown as JsonValue),
-          })
-        : parseStatusSnapshotV1({
-            schemaVersion: 1,
-            project: { id: repositoryId, cwd },
-            worktree: { id: null, path: null, role: null, branch: null },
-            portResolution: 'missing',
-            services: [],
-            diagnostics: [],
-          });
-      const configured = user.identities[plan.identity.name]!,
-        network =
-          namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-          namedSbxPolicies['deny-all'];
-      const adapter = await createProductionSbxExecutionAdapter(
-        {
-          environment: context.env,
-          cwd,
-          stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
-          runtime: plan.runtime,
-          identity: {
-            name: plan.identity.name,
-            domain: plan.identity.domain === 'personal' ? 'personal' : 'work',
-          },
-          workspaceMode: selection.workspace,
-          worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-          ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-          workspaceRoot: cwd,
-          gitCommonDir: path.join(cwd, '.git'),
-          nativeRoots: Object.values(user.identities).flatMap((identity) =>
-            Object.values(identity.runtimeRoots),
-          ),
-          credentialRoots: [],
-          oppositeDomainRoots: Object.values(user.identities)
-            .filter((identity) => identity.domain !== configured.domain)
-            .flatMap((identity) => Object.values(identity.runtimeRoots)),
-          network: {
-            name:
-              selection.networkPolicy.name in namedSbxPolicies
-                ? selection.networkPolicy.name
-                : 'deny-all',
-            allow: network.allow,
-          },
-          ports: snapshot.services.flatMap((service) =>
-            service.port === null ? [] : [service.port],
-          ),
-        },
-        context.launchSbxExecutionDependencies,
-      );
-      if (dockerAdmission?.admitted) {
-        adapter.setResumeAction(dockerAdmission.action);
+      const configured = userConfig.identities[resumePlan.identity.name];
+      const accountRef = nativeBinding.accountBindingRef;
+      if (
+        !configured ||
+        configured.domain !== resumePlan.identity.domain ||
+        nativeBinding.runtime !== 'pi' ||
+        nativeBinding.identity.domain !== resumePlan.identity.domain ||
+        nativeBinding.identity.name !== resumePlan.identity.name
+      ) {
+        throw new SessionError(
+          'SESSION_RESUME_ACCOUNT_MISMATCH',
+          'The recorded Pi account binding does not match the configured identity.',
+        );
       }
-      resumeContext = {
-        ...context,
-        launchExecutorAdapters: [adapter],
-        ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
+      if (accountRef === null) {
+        throw new SessionError(
+          'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
+          'The recorded Pi account binding is unavailable.',
+        );
+      }
+      const accountService =
+        context.rootAttestationService ??
+        new RootAttestationService(new RootAttestationStore(stateRoot(context)));
+      const auth = context.accountAuthVerifier ?? productionPiAuthProbe(context, resumePlan.cwd);
+      return {
+        nativeBinding,
+        reverify: async () => {
+          try {
+            const matchingRefs = await accountService.store?.list();
+            if (
+              matchingRefs &&
+              matchingRefs.filter((record) => record.ref === accountRef).length > 1
+            ) {
+              throw Object.assign(new Error('duplicate'), { code: 'ACCOUNT_ROOT_DUPLICATE' });
+            }
+            await accountService.verify(
+              resumePlan.identity,
+              configured.runtimeRoots.pi,
+              accountRef,
+            );
+            await auth.verify(configured.runtimeRoots.pi);
+          } catch (error) {
+            const code = (error as { code?: unknown }).code;
+            if (code === 'ACCOUNT_ROOT_DUPLICATE' || code === 'ACCOUNT_IDENTITY_DUPLICATE') {
+              throw new SessionError(
+                'SESSION_RESUME_ACCOUNT_DUPLICATE',
+                'The recorded Pi account binding is duplicated.',
+              );
+            }
+            if (code === 'ACCOUNT_ROOT_CHANGED' || code === 'ACCOUNT_BINDING_MISMATCH') {
+              throw new SessionError(
+                'SESSION_RESUME_ACCOUNT_MISMATCH',
+                'The recorded Pi account binding no longer matches the configured identity and root.',
+              );
+            }
+            throw new SessionError(
+              'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
+              'The recorded Pi account binding or live OAuth is unavailable.',
+            );
+          }
+        },
       };
-    } catch {
-      /* Exact production proof remains unavailable and the typed Docker gate denies resume. */
-    }
-  }
-  const evidence = await executorEvidence(resumeContext, plan.launch.executor.kind);
-  const descriptor = await resolveLaunch({
-    ...selectionInput,
-    grants: plan.launch.grants.map((grant) => `${grant.access}:${grant.resource}`),
-    ...(plan.launch.executor.kind === 'host'
-      ? {
-          reason: 'confirmed session resume',
-          hostApproval: {
-            reason: 'confirmed session resume',
-            approvalKey: sha256Canonical({
-              confirmationDigest: plan.confirmationDigest,
-            } as unknown as JsonValue),
-          },
+    },
+    isAbsolutePath: path.isAbsolute,
+    discoverProjectConfig: (cwd) => discoverProjectConfig(cwd),
+    canonicalRoot: (cwd) => catalogPath(context, cwd),
+    rebuildSkills: async ({ plan: resumePlan, userConfig, project, repositoryId, canonicalRoot }) =>
+      resolveLaunchSkills(
+        {
+          userConfig,
+          ...(project ? { project } : {}),
+          repositoryId,
+          canonicalRoot,
+          identity: resumePlan.identity.name,
+          skillPolicy: resumePlan.launch.skillPolicy,
+          contentScope: resumePlan.launch.contentScope,
+          runtime: resumePlan.runtime,
+        },
+        { inventoryCanonical, inventoryProjectSkills },
+      ),
+    prepareExecutor: async ({
+      plan: resumePlan,
+      userConfig,
+      project,
+      repositoryId,
+      selection,
+      dockerAdmission,
+    }) => {
+      let resumeContext = context;
+      if (
+        resumePlan.launch.executor.kind === 'docker' &&
+        context.launchExecutorAdapters === undefined &&
+        context.env.LOCALAPPDATA
+      ) {
+        try {
+          const snapshot = project
+            ? await status(context).snapshot({
+                cwd: resumePlan.cwd,
+                projectRoot: project.root,
+                config: project.config,
+                configHash: sha256Canonical(project.config as unknown as JsonValue),
+              })
+            : parseStatusSnapshotV1({
+                schemaVersion: 1,
+                project: { id: repositoryId, cwd: resumePlan.cwd },
+                worktree: { id: null, path: null, role: null, branch: null },
+                portResolution: 'missing',
+                services: [],
+                diagnostics: [],
+              });
+          const configured = userConfig.identities[resumePlan.identity.name]!;
+          const network =
+            namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
+            namedSbxPolicies['deny-all'];
+          const adapter = await createProductionSbxExecutionAdapter(
+            {
+              environment: context.env,
+              cwd: resumePlan.cwd,
+              stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
+              runtime: resumePlan.runtime,
+              identity: {
+                name: resumePlan.identity.name,
+                domain: resumePlan.identity.domain === 'personal' ? 'personal' : 'work',
+              },
+              workspaceMode: selection.workspace,
+              worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
+              ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
+              workspaceRoot: resumePlan.cwd,
+              gitCommonDir: path.join(resumePlan.cwd, '.git'),
+              nativeRoots: Object.values(userConfig.identities).flatMap((identity) =>
+                Object.values(identity.runtimeRoots),
+              ),
+              credentialRoots: [],
+              oppositeDomainRoots: Object.values(userConfig.identities)
+                .filter((identity) => identity.domain !== configured.domain)
+                .flatMap((identity) => Object.values(identity.runtimeRoots)),
+              network: {
+                name:
+                  selection.networkPolicy.name in namedSbxPolicies
+                    ? selection.networkPolicy.name
+                    : 'deny-all',
+                allow: network.allow,
+              },
+              ports: snapshot.services.flatMap((service) =>
+                service.port === null ? [] : [service.port],
+              ),
+            },
+            context.launchSbxExecutionDependencies,
+          );
+          if (dockerAdmission?.admitted) {
+            adapter.setResumeAction(dockerAdmission.action);
+          }
+          resumeContext = {
+            ...context,
+            launchExecutorAdapters: [adapter],
+            ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
+          };
+        } catch {
+          /* Exact production proof remains unavailable and the typed Docker gate denies resume. */
         }
-      : {}),
-    skillArtifact,
-    selectedNativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime],
-    ...(projectId ? { projectId } : {}),
-    repositoryId,
-    dockerAvailability:
-      evidence.status === 'verified'
-        ? 'available'
-        : evidence.status === 'unavailable'
-          ? 'unavailable'
-          : 'unverified',
-    executorVerification: evidence,
-    policyInputs: {
-      schemaVersion: 1,
-      manifestKey: manifest.manifestKey,
-      skillArtifactKey: skillArtifact.artifactKey,
+      }
+      const evidence = await executorEvidence(resumeContext, resumePlan.launch.executor.kind);
+      return {
+        evidence,
+        execute: async (input) => {
+          const nativeBinding = input.nativeBinding as Awaited<
+            ReturnType<typeof store.readNativeBinding>
+          >;
+          const launchContext =
+            resumeContext.launchLifecycleBridge || resumeContext.launchRuntimeAdapters
+              ? resumeContext
+              : {
+                  ...resumeContext,
+                  launchLifecycleBridge: new ProductionSessionLifecycleBridge(
+                    store,
+                    resumeContext.nativeAccountBindingResolver
+                      ? (name, runtime) =>
+                          resumeContext.nativeAccountBindingResolver!.resolve(
+                            { domain: userConfig.identities[name]!.domain, name },
+                            runtime,
+                            userConfig.identities[name]!.runtimeRoots[runtime],
+                          )
+                      : undefined,
+                  ),
+                };
+          const snapshot = project
+            ? async (): Promise<StatusSnapshotV1> =>
+                status(context).snapshot({
+                  cwd: resumePlan.cwd,
+                  projectRoot: project.root,
+                  config: project.config,
+                  configHash: sha256Canonical(project.config as unknown as JsonValue),
+                })
+            : async (): Promise<StatusSnapshotV1> =>
+                parseStatusSnapshotV1({
+                  schemaVersion: 1,
+                  project: { id: repositoryId, cwd: resumePlan.cwd },
+                  worktree: { id: null, path: null, role: null, branch: null },
+                  portResolution: 'missing',
+                  services: [],
+                  diagnostics: [],
+                });
+          return executeResolvedLaunch({
+            descriptor: input.descriptor,
+            manifest: input.manifest,
+            artifact: input.artifact,
+            catalog: input.catalog,
+            canonicalRoot: input.canonicalRoot,
+            agentsRoot: path.join(path.dirname(input.canonicalRoot), 'agents'),
+            artifactsRoot: input.roots.artifactsRoot,
+            stateRoot: input.roots.stateRoot,
+            cwd: input.cwd,
+            environment: context.env,
+            context: launchContext,
+            tty: context.launchTty ?? directProcessTty(),
+            nativeRuntimeRoot: input.nativeRuntimeRoot,
+            statusSnapshot: snapshot,
+            ...(input.beforeChildExecution
+              ? { beforeChildExecution: input.beforeChildExecution }
+              : {}),
+            ...(branchInvocation
+              ? { branch: { nativeBinding, invocation: branchInvocation } }
+              : { resume: { nativeBinding, nativeSessionRef: resumePlan.nativeSessionRef } }),
+          });
+        },
+      };
     },
-  });
-  const descriptorDigest = sha256Canonical(descriptor as unknown as JsonValue);
-  const currentLaunch = {
-    launchKey: descriptor.launchKey,
-    descriptorDigest,
-    mode: descriptor.mode,
-    skillPolicy: descriptor.skillPolicy,
-    contentScope: descriptor.contentScope.name,
-    executor: { kind: descriptor.executor.name },
-    workspace: descriptor.workspace,
-    networkPolicy: descriptor.networkPolicy.name,
-    grants: descriptor.grants,
-    artifactKey: artifact.reference.artifactKey,
-    manifestKey: manifest.manifestKey,
-  };
-  const {
-    launchKey: currentLaunchKey,
-    descriptorDigest: currentDescriptorDigest,
-    ...currentPolicyAxes
-  } = currentLaunch;
-  const {
-    launchKey: previousLaunchKey,
-    descriptorDigest: previousDescriptorDigest,
-    ...recordedPolicyAxes
-  } = plan.launch;
-  if (
-    previousLaunchKey !== plan.previousLaunch.launchKey ||
-    previousDescriptorDigest !== plan.previousLaunch.descriptorDigest ||
-    descriptor.runtime !== plan.runtime ||
-    descriptor.identity.domain !== plan.identity.domain ||
-    descriptor.identity.name !== plan.identity.name ||
-    sha256Canonical(currentPolicyAxes as unknown as JsonValue) !==
-      sha256Canonical(recordedPolicyAxes as unknown as JsonValue)
-  ) {
-    throw new SessionError(
-      'SESSION_RESUME_PLAN_STALE',
-      'Current capability, policy, grant, artifact, or manifest evidence differs from the explicitly confirmed resume plan.',
-    );
-  }
-  const appData = context.env.APPDATA,
-    localAppData = context.env.LOCALAPPDATA;
-  if (!appData || !localAppData) {
-    throw new MpxError({
-      code: 'STATE_ROOT_UNAVAILABLE',
-      message: 'APPDATA and LOCALAPPDATA are required for resume execution.',
-    });
-  }
-  nativeBinding = nativeBinding ?? (await store.readNativeBinding(plan.nativeBindingRef));
-  const beforeChildExecution = reverifyPiAccount;
-  const launchContext =
-    resumeContext.launchLifecycleBridge || resumeContext.launchRuntimeAdapters
-      ? resumeContext
-      : {
-          ...resumeContext,
-          launchLifecycleBridge: new ProductionSessionLifecycleBridge(
-            store,
-            resumeContext.nativeAccountBindingResolver
-              ? (name, runtime) =>
-                  resumeContext.nativeAccountBindingResolver!.resolve(
-                    { domain: user.identities[name]!.domain, name },
-                    runtime,
-                    user.identities[name]!.runtimeRoots[runtime],
-                  )
-              : undefined,
-          ),
-        };
-  const snapshot = found
-    ? async (): Promise<StatusSnapshotV1> =>
-        status(context).snapshot({
-          cwd,
-          projectRoot: found.root,
-          config: found.config,
-          configHash: sha256Canonical(found.config as unknown as JsonValue),
-        })
-    : async (): Promise<StatusSnapshotV1> =>
-        parseStatusSnapshotV1({
+    resolveDescriptor: async ({
+      plan: resumePlan,
+      userConfig,
+      projectId,
+      repositoryId,
+      skills,
+      evidence,
+    }) =>
+      resolveLaunch({
+        userConfig,
+        cwd: resumePlan.cwd,
+        runtime: resumePlan.runtime,
+        identity: resumePlan.identity.name,
+        mode: resumePlan.launch.mode,
+        skillPolicy: resumePlan.launch.skillPolicy,
+        contentScope: resumePlan.launch.contentScope,
+        executor: resumePlan.launch.executor.kind,
+        workspace: resumePlan.launch.workspace as 'clone' | 'host-worktree' | 'direct',
+        networkPolicy: resumePlan.launch.networkPolicy,
+        grants: resumePlan.launch.grants.map((grant) => `${grant.access}:${grant.resource}`),
+        ...(resumePlan.launch.executor.kind === 'host'
+          ? {
+              reason: 'confirmed session resume',
+              hostApproval: {
+                reason: 'confirmed session resume',
+                approvalKey: sha256Canonical({
+                  confirmationDigest: resumePlan.confirmationDigest,
+                } as unknown as JsonValue),
+              },
+            }
+          : {}),
+        skillArtifact: skills.skillArtifact,
+        selectedNativeRuntimeRoot:
+          userConfig.identities[resumePlan.identity.name]!.runtimeRoots[resumePlan.runtime],
+        ...(projectId ? { projectId } : {}),
+        repositoryId,
+        dockerAvailability:
+          evidence.status === 'verified'
+            ? 'available'
+            : evidence.status === 'unavailable'
+              ? 'unavailable'
+              : 'unverified',
+        executorVerification: evidence,
+        policyInputs: {
           schemaVersion: 1,
-          project: { id: repositoryId, cwd },
-          worktree: { id: null, path: null, role: null, branch: null },
-          portResolution: 'missing',
-          services: [],
-          diagnostics: [],
+          manifestKey: skills.manifest.manifestKey,
+          skillArtifactKey: skills.skillArtifact.artifactKey,
+        },
+      }),
+    descriptorDigest: (descriptor) => sha256Canonical(descriptor as unknown as JsonValue),
+    requireExecutionRoots: async () => {
+      const appData = context.env.APPDATA;
+      const localAppData = context.env.LOCALAPPDATA;
+      if (!appData || !localAppData) {
+        throw new MpxError({
+          code: 'STATE_ROOT_UNAVAILABLE',
+          message: 'APPDATA and LOCALAPPDATA are required for resume execution.',
         });
-  const result = await executeResolvedLaunch({
-    descriptor,
-    manifest,
-    artifact,
-    catalog,
-    canonicalRoot,
-    agentsRoot: path.join(path.dirname(canonicalRoot), 'agents'),
-    artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
-    stateRoot: path.join(localAppData, 'mpx'),
-    cwd,
-    environment: context.env,
-    context: launchContext,
-    tty: context.launchTty ?? directProcessTty(),
-    nativeRuntimeRoot: user.identities[plan.identity.name]!.runtimeRoots[plan.runtime],
-    statusSnapshot: snapshot,
-    ...(branchInvocation
-      ? { branch: { nativeBinding, invocation: branchInvocation } }
-      : { resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef } }),
-    ...(beforeChildExecution ? { beforeChildExecution } : {}),
-  });
-  return {
-    ...result,
-    resumeLaunch: {
-      previousLaunchKey,
-      previousDescriptorDigest,
-      newLaunchKey: currentLaunchKey,
-      newDescriptorDigest: currentDescriptorDigest,
+      }
+      return {
+        artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
+        stateRoot: path.join(localAppData, 'mpx'),
+      };
     },
-  };
+    readNativeBinding: (ref) => store.readNativeBinding(ref),
+  });
+  const prepared = await application.prepare(plan, user);
+  return application.execute(prepared);
 }
-
 async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResult> {
   const [group, action, ...args] = parsed.command;
   if (!group) {

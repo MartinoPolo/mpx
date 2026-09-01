@@ -123,6 +123,7 @@ describe('@mpx/application architecture', () => {
       LifecycleApplicationService: expect.any(Function),
       LaunchApplicationService: expect.any(Function),
       SessionApplicationService: expect.any(Function),
+      SessionResumeLaunchApplicationService: expect.any(Function),
       createProjectApplicationService: expect.any(Function),
       createProviderApplicationService: expect.any(Function),
       createSkillApplicationService: expect.any(Function),

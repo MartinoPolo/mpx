@@ -97,6 +97,7 @@ interface PreparedFacts {
 interface ResolvedFacts extends PreparedFacts {
   readonly descriptor: LaunchDescriptor;
   readonly evidence: ExecutorVerificationEvidence;
+  readonly preparedExecutor?: PreparedLaunchExecutor;
 }
 declare const preparedBrand: unique symbol;
 declare const resolvedBrand: unique symbol;
@@ -105,6 +106,23 @@ export interface PreparedLaunch {
 }
 export interface ResolvedApplicationLaunch {
   readonly [resolvedBrand]: true;
+}
+
+export interface LaunchExecutionInput {
+  readonly descriptor: LaunchDescriptor;
+  readonly manifest: ResolvedManifest;
+  readonly artifact: RuntimeSkillArtifact;
+  readonly catalog: readonly CatalogSkill[];
+  readonly canonicalRoot: string;
+  readonly cwd: string;
+  readonly nativeRuntimeRoot: string;
+  readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
+  readonly project?: DiscoveredConfig;
+  readonly beforeChildExecution?: () => Promise<void>;
+}
+export interface PreparedLaunchExecutor {
+  readonly evidence: ExecutorVerificationEvidence;
+  readonly execute: (input: LaunchExecutionInput) => Promise<{ readonly exitCode: number }>;
 }
 
 export interface LaunchApplicationDependencies {
@@ -128,23 +146,13 @@ export interface LaunchApplicationDependencies {
     readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
   }): Promise<void>;
   executorEvidence(executor: 'host' | 'docker'): Promise<ExecutorVerificationEvidence>;
+  prepareExecutor?(executor: 'host' | 'docker'): Promise<PreparedLaunchExecutor>;
   approveHost?(selection: Readonly<LaunchSelection>): Promise<HostApproval>;
   accountPreflight?(input: {
     readonly runtimeRoot: string;
     readonly identity: LaunchSelection['identity'];
   }): Promise<void | (() => Promise<void>)>;
-  launchExecution?(input: {
-    readonly descriptor: LaunchDescriptor;
-    readonly manifest: ResolvedManifest;
-    readonly artifact: RuntimeSkillArtifact;
-    readonly catalog: readonly CatalogSkill[];
-    readonly canonicalRoot: string;
-    readonly cwd: string;
-    readonly nativeRuntimeRoot: string;
-    readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
-    readonly project?: DiscoveredConfig;
-    readonly beforeChildExecution?: () => Promise<void>;
-  }): Promise<{ readonly exitCode: number }>;
+  launchExecution?(input: LaunchExecutionInput): Promise<{ readonly exitCode: number }>;
   sandboxExport?(input: {
     readonly descriptor: LaunchDescriptor;
     readonly selection: LaunchSelection;
@@ -329,6 +337,9 @@ export class LaunchApplicationService {
         statusSnapshot: facts.statusSnapshot,
       });
     }
+    const preparedExecutor = readOnly
+      ? undefined
+      : await this.dependencies.prepareExecutor?.(facts.selection.executor);
     const evidence = readOnly
       ? {
           status: 'unverified' as const,
@@ -338,7 +349,8 @@ export class LaunchApplicationService {
             operation: facts.request.operation,
           } as unknown as JsonValue),
         }
-      : await this.dependencies.executorEvidence(facts.selection.executor);
+      : (preparedExecutor?.evidence ??
+        (await this.dependencies.executorEvidence(facts.selection.executor)));
     const hostApproval =
       input.hostApproval ??
       (!readOnly && facts.selection.executor === 'host'
@@ -381,7 +393,12 @@ export class LaunchApplicationService {
       },
     });
     const token = freezeToken<ResolvedApplicationLaunch>();
-    this.#resolved.set(token as object, { ...facts, descriptor, evidence });
+    this.#resolved.set(token as object, {
+      ...facts,
+      descriptor,
+      evidence,
+      ...(preparedExecutor ? { preparedExecutor } : {}),
+    });
     return token;
   }
 
@@ -434,13 +451,14 @@ export class LaunchApplicationService {
         beforeChildExecution = result;
       }
     }
-    if (!this.dependencies.launchExecution) {
+    const execute = facts.preparedExecutor?.execute ?? this.dependencies.launchExecution;
+    if (!execute) {
       throw new MpxError({
         code: 'LAUNCH_EXECUTION_UNAVAILABLE',
         message: 'Launch execution is unavailable.',
       });
     }
-    const result = await this.dependencies.launchExecution({
+    const result = await execute({
       descriptor: facts.descriptor,
       manifest: facts.manifest,
       artifact: facts.artifact,

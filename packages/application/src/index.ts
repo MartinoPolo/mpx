@@ -8,3 +8,4 @@ export * from './launch-execution-service.js';
 export * from './launch-application-service.js';
 export * from './launch-skill-resolution.js';
 export * from './session-application-service.js';
+export * from './session-resume-launch-application-service.js';

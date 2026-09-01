@@ -822,6 +822,119 @@ describe('cli', () => {
     });
   });
 
+  it('serializes a confirmed session resume through production CLI composition without invoking a live child', async () => {
+    const cwd = await fixture(valid),
+      env = await configuredLaunchEnv(cwd),
+      store = new SessionStore(await directory('mpx-cli-session-resume-')),
+      now = '2025-01-01T00:00:00.000Z',
+      identity = { domain: 'work', name: 'work' },
+      rootDigest = 'b'.repeat(64);
+    await store.saveNativeBinding({
+      schemaVersion: 1,
+      ref: 'binding',
+      identity,
+      runtime: 'claude',
+      recordedRootDigest: rootDigest,
+      accountBindingRef: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new SessionService(store).save({
+      schemaVersion: 1,
+      recordId: 'resume-compatible',
+      runtimeQualifiedId: 'claude:resume-compatible',
+      runtime: 'claude',
+      identity,
+      nativeBindingRef: 'binding',
+      nativeSessionRef: { kind: 'native-id', value: 'resume-compatible' },
+      launch: {
+        launchKey: 'old-launch',
+        descriptorDigest: 'a'.repeat(64),
+        mode: 'interactive',
+        skillPolicy: 'standard',
+        contentScope: 'work',
+        executor: { kind: 'host' },
+        workspace: 'direct',
+        networkPolicy: 'restricted',
+        grants: [],
+        artifactKey: 'artifact',
+        manifestKey: 'manifest',
+      },
+      location: { cwd, project: 'sample/app', repository: 'sample/repository', worktree: null },
+      metadata: { title: null, model: null, effort: null },
+      liveness: 'inactive',
+      process: null,
+      workflow: {
+        status: 'unfinished',
+        inbox: true,
+        nextAction: null,
+        priority: null,
+        note: null,
+        relatedIssue: null,
+        relatedReview: null,
+      },
+      resume: { state: 'unknown', diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null },
+      timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null },
+      lifecycle: { bindingId: null, sequence: 0, timestamp: null },
+    });
+    const executeResume = vi.fn(async (resumePlan) => ({
+      exitCode: 0,
+      launchKey: resumePlan.launch.launchKey,
+    }));
+    const context = {
+      env,
+      sessionStore: store,
+      sessionDiscoveries: async () => [],
+      sessionProcessInspector: { inspect: async () => ({ status: 'absent' as const }) },
+      sessionResumeDependencies: async () => ({
+        resolveConfiguredRoot: async () => ({
+          root: 'C:/native/claude-work',
+          canonicalRootDigest: rootDigest,
+          identity,
+          runtime: 'claude' as const,
+        }),
+        verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' as const }),
+      }),
+      sessionResumeExecutor: executeResume,
+    };
+    const previewIo = captureIo();
+    expect(
+      await run(
+        ['--json', '--cwd', cwd, 'session', 'resume', 'resume-compatible', '--dry-run'],
+        previewIo,
+        context,
+      ),
+    ).toBe(0);
+    const preview = JSON.parse(previewIo.out[0]!).data;
+    const executeIo = captureIo();
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          cwd,
+          'session',
+          'resume',
+          'resume-compatible',
+          '--confirm-plan',
+          preview.confirmationDigest,
+        ],
+        executeIo,
+        context,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(executeIo.out[0]!)).toMatchObject({
+      ok: true,
+      data: {
+        schemaVersion: 1,
+        kind: 'session-resume',
+        result: { exitCode: 0, launchKey: 'old-launch' },
+      },
+      warnings: [],
+    });
+    expect(executeResume).toHaveBeenCalledOnce();
+  });
+
   it('passes an injected Pi process inspector through the real session reconcile path', async () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),

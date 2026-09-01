@@ -170,6 +170,29 @@ describe('LaunchApplicationService', () => {
     expect(events).toEqual(['admission', 'evidence', 'account', 'execute']);
   });
 
+  it('inseparably pairs prepared Docker evidence with its exact execution callback', async () => {
+    const fallbackEvidence = vi.fn(dependencies().executorEvidence);
+    const fallbackExecution = vi.fn(dependencies().launchExecution);
+    const pairedExecution = vi.fn(async () => ({ exitCode: 9 }));
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      executorEvidence: fallbackEvidence,
+      launchExecution: fallbackExecution,
+      prepareExecutor: async () => ({
+        evidence: { status: 'verified', verifier: 'paired', evidenceDigest: 'b'.repeat(64) },
+        execute: pairedExecution,
+      }),
+    });
+    const prepared = await service.prepare(request);
+    const resolved = await service.resolve(prepared);
+    const result = await service.execute(resolved);
+    expect(service.descriptor(resolved).executorVerification).toMatchObject({ verifier: 'paired' });
+    expect(result.exitCode).toBe(9);
+    expect(pairedExecution).toHaveBeenCalledTimes(1);
+    expect(fallbackEvidence).not.toHaveBeenCalled();
+    expect(fallbackExecution).not.toHaveBeenCalled();
+  });
+
   it('keeps explain read-only while returning exact public launch serialization', async () => {
     const events: string[] = [];
     const service = new LaunchApplicationService(dependencies(events));
