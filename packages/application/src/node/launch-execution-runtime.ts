@@ -6,15 +6,14 @@ import type {
   LaunchRuntimeResumeTarget,
   LaunchStatusSnapshotMaterializer,
   RuntimeStatusEnvelopeMaterializer,
-} from '@mpx/application';
-export { executionMpxError } from '@mpx/application';
+} from '../launch-execution-service.js';
 import {
   NodeRuntimeStatusEnvelopeMaterializer,
   nodeDockerGate,
   nodeHostExecutor,
   resolveLaunchStatusSnapshotPath,
   type TrustedRuntimeExecutable,
-} from '@mpx/application/node';
+} from './launch-execution-adapters.js';
 import { MpxError } from '@mpx/core';
 import {
   ExecutionError,
@@ -152,7 +151,7 @@ export function executorAdapter(
   );
 }
 
-export async function executorEvidence(
+export async function collectNodeExecutorEvidence(
   context: LaunchExecutionContext,
   name: 'docker' | 'host',
 ): Promise<VerificationEvidence> {

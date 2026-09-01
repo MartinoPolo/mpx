@@ -211,6 +211,35 @@ describe('@mpx/application architecture', () => {
     expect(context).not.toContain('function productionSessionDiscoveries');
   });
 
+  it('owns launch execution and the Claude gateway exclusively in the Node entrypoint', async () => {
+    const cliRoot = path.resolve(import.meta.dirname, '../../../../apps/cli/src');
+    const node = await import('../../src/node/index.js');
+    const root = await import('../../src/index.js');
+    for (const file of [
+      'launch-execution.ts',
+      'launch-execution-runtime.ts',
+      'claude-gateway.ts',
+    ]) {
+      await expect(access(path.join(cliRoot, file))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+    expect(node).toMatchObject({
+      executeResolvedNodeLaunch: expect.any(Function),
+      collectNodeExecutorEvidence: expect.any(Function),
+      productionRuntimeAdapters: expect.any(Function),
+      materializeClaudeGateway: expect.any(Function),
+    });
+    for (const name of [
+      'executeResolvedNodeLaunch',
+      'collectNodeExecutorEvidence',
+      'productionRuntimeAdapters',
+      'materializeClaudeGateway',
+    ]) {
+      expect(root).not.toHaveProperty(name);
+    }
+    const source = await sourceText(path.resolve(import.meta.dirname, '../../src'));
+    expect(source).not.toMatch(/\bCliContext\b|apps[\\/]cli/u);
+  });
+
   it('keeps the Phase-J implementation out of the CLI source tree', async () => {
     const cliRoot = path.resolve(import.meta.dirname, '../../../../apps/cli/src');
     await expect(access(path.join(cliRoot, 'migration.ts'))).rejects.toMatchObject({

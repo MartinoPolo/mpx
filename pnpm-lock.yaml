@@ -92,18 +92,9 @@ importers:
       '@mpx/providers':
         specifier: workspace:*
         version: link:../../packages/providers
-      '@mpx/runtime-claude':
-        specifier: workspace:*
-        version: link:../../runtimes/claude/runtime-claude
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../../packages/runtime-contracts
-      '@mpx/runtime-pi':
-        specifier: workspace:*
-        version: link:../../runtimes/pi/runtime-pi
-      '@mpx/runtime-tools':
-        specifier: workspace:*
-        version: link:../../packages/runtime-tools
       '@mpx/sessions':
         specifier: workspace:*
         version: link:../../packages/sessions
@@ -168,12 +159,18 @@ importers:
       '@mpx/providers':
         specifier: workspace:*
         version: link:../providers
+      '@mpx/runtime-claude':
+        specifier: workspace:*
+        version: link:../../runtimes/claude/runtime-claude
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
       '@mpx/runtime-pi':
         specifier: workspace:*
         version: link:../../runtimes/pi/runtime-pi
+      '@mpx/runtime-tools':
+        specifier: workspace:*
+        version: link:../runtime-tools
       '@mpx/sessions':
         specifier: workspace:*
         version: link:../sessions

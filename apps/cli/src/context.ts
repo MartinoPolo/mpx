@@ -17,6 +17,7 @@ import {
   type CliPreparationRuntime,
   type PreparationRuntime,
   type SbxExecutionDependencies,
+  type LaunchExecutionContext,
 } from '@mpx/application/node';
 import { MpxError } from '@mpx/core';
 import { discoverProjectConfig, type ProjectConfig } from '@mpx/config';
@@ -35,7 +36,6 @@ import {
   type LaunchAuditTerminalRecord,
   type RouteMaterializer,
 } from '@mpx/executors';
-import type { LaunchExecutionContext } from './launch-execution.js';
 import {
   SessionStore,
   type BranchArgvExecutionAdapter,

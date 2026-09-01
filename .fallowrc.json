@@ -11,6 +11,7 @@
     "**/dist/**",
     "**/coverage/**",
     "artifacts/**",
+    "bin/claude-gateway.js",
     "bin/mpx.mjs",
     "runtimes/pi/runtime-pi/projection/agents/**",
     "runtimes/pi/runtime-pi/vendor/**"

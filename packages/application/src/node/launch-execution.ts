@@ -2,7 +2,7 @@ import {
   executeResolvedLaunch as executeApplicationLaunch,
   type LaunchExecutionRequest,
   type LaunchRuntimeComposer,
-} from '@mpx/application';
+} from '../launch-execution-service.js';
 import {
   NodeRuntimeStatusEnvelopeMaterializer,
   nodeDockerGate,
@@ -10,7 +10,7 @@ import {
   resolveLaunchStatusSnapshotPath,
   resolveTrustedRuntimeExecutable,
   type TrustedRuntimeExecutable,
-} from '@mpx/application/node';
+} from './launch-execution-adapters.js';
 import {
   ExecutionError,
   compactLaunchBanner,
@@ -32,8 +32,7 @@ import {
 } from './launch-execution-runtime.js';
 
 export * from './launch-execution-runtime.js';
-export { currentLaunchTuple } from '@mpx/application';
-export { resolveTrustedRuntimeExecutable } from '@mpx/application/node';
+export { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
 
 export interface LaunchExecutionInput extends LaunchExecutionRequest {
   readonly context: LaunchExecutionContext;
@@ -142,7 +141,7 @@ function productionComposer(
 }
 
 /** CLI composition supplies only concrete runtime projection and platform ports. */
-export const executeResolvedLaunch = async (
+export const executeResolvedNodeLaunch = async (
   input: LaunchExecutionInput,
 ): Promise<ProcessResult> => {
   if (!input.context.launchRoutes) {

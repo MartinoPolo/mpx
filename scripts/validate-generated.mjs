@@ -29,6 +29,7 @@ const ACTIVE_COMPATIBILITY_DOCS = new Set([
 // tracked CLI bundle has its own narrow bound because bundling legitimately exceeds it.
 export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
 export const MAX_GENERATED_CLI_BUNDLE_BYTES = 2 * 1024 * 1024;
+const GENERATED_CLI_BUNDLES = new Set(['bin/mpx.mjs', 'bin/claude-gateway.js']);
 export const FILE_READ_CONCURRENCY = 8;
 
 const diagnostic = (code, file, message) => ({ code, file, message });
@@ -569,7 +570,7 @@ export async function repositoryFiles(root, names, options = {}) {
   const trackedFiles = new Set((options.trackedFiles ?? []).map(normalized));
   const maxBytesFor = (file) =>
     configuredMaxFileBytes ??
-    (file === 'bin/mpx.mjs' && trackedFiles.has(file)
+    (GENERATED_CLI_BUNDLES.has(file) && trackedFiles.has(file)
       ? MAX_GENERATED_CLI_BUNDLE_BYTES
       : MAX_TEXT_FILE_BYTES);
   const concurrency = Math.min(

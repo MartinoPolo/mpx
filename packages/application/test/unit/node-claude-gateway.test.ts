@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createRuntimeCapabilityManifestV1, type ToolAuthorityV1 } from '@mpx/runtime-contracts';
-import { materializeClaudeGateway } from '../../src/claude-gateway.js';
+import { materializeClaudeGateway } from '../../src/node/index.js';
 
 const launchKey = 'a'.repeat(64);
 const authority = (name: string, routes: string[] = []): ToolAuthorityV1 => ({
@@ -19,15 +19,15 @@ const authority = (name: string, routes: string[] = []): ToolAuthorityV1 => ({
   timeout: { maxMs: 5000 },
   cache: { mode: 'disabled', maxBytes: 0 },
 });
-function capability(identity: 'personal' | 'work') {
+function capability(identity: 'personal' | 'work', routes = ['mcp:fixture']) {
   return createRuntimeCapabilityManifestV1({
     runtime: 'claude',
     launchKey,
     identity: { name: identity, domain: identity, nativeRuntimeRootDigest: 'b'.repeat(64) },
     binding: { projectId: 'app', repositoryId: 'repo', contentScope: identity },
     executor: 'host',
-    tools: [authority('mcp', ['mcp:fixture']), authority('dev_server')],
-    routes: ['mcp:fixture'],
+    tools: [authority('mcp', routes), authority('dev_server')],
+    routes,
     resources: [],
     mounts: [],
     destinations: [],
@@ -142,6 +142,47 @@ describe('Claude production aggregate gateway', () => {
       });
     },
   );
+  it('materializes stable bytes with explicitly ordered routes across equivalent input order', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-gateway-stable-'));
+    const routeFiles = Object.fromEntries(
+      await Promise.all(
+        ['alpha', 'zeta'].map(async (label) => {
+          const file = path.join(root, `${label}.json`);
+          await writeFile(
+            file,
+            JSON.stringify({
+              mcpServers: {
+                [label]: { type: 'stdio', command: process.execPath, args: [label] },
+              },
+            }),
+          );
+          return [`mcp:${label}`, file];
+        }),
+      ),
+    );
+    const input = {
+      stateRoot: root,
+      capability: capability('personal', ['mcp:zeta', 'mcp:alpha']),
+      launchBinding: binding,
+    };
+    const first = await materializeClaudeGateway({
+      ...input,
+      routes: { 'mcp:zeta': routeFiles['mcp:zeta'], 'mcp:alpha': routeFiles['mcp:alpha'] },
+    });
+    const firstState = await readFile(first.statePath),
+      firstConfig = await readFile(first.configPath);
+    const second = await materializeClaudeGateway({
+      ...input,
+      routes: { 'mcp:alpha': routeFiles['mcp:alpha'], 'mcp:zeta': routeFiles['mcp:zeta'] },
+    });
+    const secondState = await readFile(second.statePath),
+      secondConfig = await readFile(second.configPath);
+
+    expect(Object.keys(JSON.parse(secondState.toString()).mcpRoutes)).toEqual(['alpha', 'zeta']);
+    expect(secondState).toEqual(firstState);
+    expect(secondConfig).toEqual(firstConfig);
+  });
+
   it('denies an unselected route at the aggregate boundary', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-gateway-deny-')),
       route = path.join(root, 'route.json');

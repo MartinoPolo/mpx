@@ -14,6 +14,8 @@ import {
 import {
   createProjectApplicationService,
   createSkillApplicationService,
+  currentLaunchTuple,
+  executionMpxError,
   LaunchApplicationService,
   SessionResumeLaunchApplicationService,
   resolveLaunchSkills,
@@ -26,8 +28,12 @@ import {
   createNodeAccountApplicationService,
   createNodeInstallApplicationService,
   createNodeLocalIssueViewRebuilder,
+  collectNodeExecutorEvidence,
   createNodeMigrationApplicationService,
   createPiAuthAvailabilityProbe,
+  directProcessTty,
+  executeResolvedNodeLaunch,
+  resolveTrustedRuntimeExecutable,
 } from '@mpx/application/node';
 import {
   errorEnvelope,
@@ -74,14 +80,6 @@ import {
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
 } from '@mpx/application/node';
-import {
-  currentLaunchTuple,
-  directProcessTty,
-  executeResolvedLaunch,
-  executionMpxError,
-  executorEvidence,
-  resolveTrustedRuntimeExecutable,
-} from './launch-execution.js';
 import { processIo, type CliIo } from './io.js';
 
 function resolveScheduledCaptureAuthority(
@@ -647,7 +645,10 @@ async function executeProductionSessionResume(
           /* Exact production proof remains unavailable and the typed Docker gate denies resume. */
         }
       }
-      const evidence = await executorEvidence(resumeContext, resumePlan.launch.executor.kind);
+      const evidence = await collectNodeExecutorEvidence(
+        resumeContext,
+        resumePlan.launch.executor.kind,
+      );
       return {
         evidence,
         execute: async (input) => {
@@ -690,7 +691,7 @@ async function executeProductionSessionResume(
                   services: [],
                   diagnostics: [],
                 });
-          return executeResolvedLaunch({
+          return executeResolvedNodeLaunch({
             descriptor: input.descriptor,
             manifest: input.manifest,
             artifact: input.artifact,
@@ -1743,7 +1744,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
           });
         }
       },
-      executorEvidence: (executor) => executorEvidence(executionContext, executor),
+      executorEvidence: (executor) => collectNodeExecutorEvidence(executionContext, executor),
       approveHost: async (selection) => {
         if (parsed.json || !tty.direct) {
           throw new MpxError({
@@ -1905,7 +1906,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
                         ) ?? null),
                 }),
               };
-        return executeResolvedLaunch({
+        return executeResolvedNodeLaunch({
           descriptor,
           manifest,
           artifact,

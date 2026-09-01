@@ -48,6 +48,9 @@ export function createNodeLifecycleApplicationService(
   return new LifecycleApplicationService({ ...dependencies, path: { resolve: path.resolve } });
 }
 export * from './launch-execution-adapters.js';
+export * from './launch-execution-runtime.js';
+export * from './launch-execution.js';
+export * from './claude-gateway.js';
 export * from './provider-process-adapters.js';
 export * from './provider-application-service.js';
 export * from './private-route-materializer.js';

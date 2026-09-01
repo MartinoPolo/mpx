@@ -119,7 +119,10 @@ export async function materializeClaudeGateway(
   const adjacent = fileURLToPath(new URL('./claude-gateway.js', import.meta.url));
   const gatewayEntry = existsSync(adjacent)
     ? adjacent
-    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/claude-gateway.js');
+    : path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../../dist/node/claude-gateway.js',
+      );
   await atomic(configPath, {
     mcpServers: {
       mpx_gateway: {

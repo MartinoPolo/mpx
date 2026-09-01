@@ -7,6 +7,7 @@ fallow-baselines/
 .worktree-install.log
 
 # Generated and vendored runtime content
+bin/claude-gateway.js
 bin/mpx.mjs
 runtimes/pi/runtime-pi/projection/agents/
 runtimes/pi/runtime-pi/vendor/

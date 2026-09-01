@@ -22,39 +22,27 @@ await Promise.all([
     path.join(evidence, 'executor-evidence.ts'),
   ),
 ]);
-await build({
-  entryPoints: [path.join(root, 'apps', 'cli', 'dist', 'main.js')],
-  outfile: path.join(output, 'mpx.mjs'),
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  target: 'node22',
-  packages: 'bundle',
-  plugins: [
-    {
-      name: 'inline-config-schemas',
-      setup(buildApi) {
-        buildApi.onLoad(
-          { filter: /packages[\\/]config[\\/]dist[\\/]schema\.js$/ },
-          async (args) => {
-            const source = await readFile(args.path, 'utf8');
-            const schemas = path.join(root, 'packages', 'config', 'schemas');
-            const project = JSON.stringify(
-              JSON.parse(await readFile(path.join(schemas, 'mpxconfig.schema.json'), 'utf8')),
-            );
-            const user = JSON.stringify(
-              JSON.parse(await readFile(path.join(schemas, 'user-config.schema.json'), 'utf8')),
-            );
-            const readFileSyncImportPattern =
-              /^import \{ readFileSync \} from ['"]node:fs['"];\r?\n/mu;
-            const loadFunctionPattern = /function load\(name\)\s*\{[\s\S]*?\n\}/u;
-            const withoutReadFileSyncImport = source.replace(readFileSyncImportPattern, '');
-            if (withoutReadFileSyncImport === source) {
-              throw new Error(`Expected readFileSync import in ${args.path}`);
-            }
-            const contents = withoutReadFileSyncImport.replace(
-              loadFunctionPattern,
-              `function load(name) {
+const inlineConfigSchemas = {
+  name: 'inline-config-schemas',
+  setup(buildApi) {
+    buildApi.onLoad({ filter: /packages[\\/]config[\\/]dist[\\/]schema\.js$/ }, async (args) => {
+      const source = await readFile(args.path, 'utf8');
+      const schemas = path.join(root, 'packages', 'config', 'schemas');
+      const project = JSON.stringify(
+        JSON.parse(await readFile(path.join(schemas, 'mpxconfig.schema.json'), 'utf8')),
+      );
+      const user = JSON.stringify(
+        JSON.parse(await readFile(path.join(schemas, 'user-config.schema.json'), 'utf8')),
+      );
+      const readFileSyncImportPattern = /^import \{ readFileSync \} from ['"]node:fs['"];\r?\n/mu;
+      const loadFunctionPattern = /function load\(name\)\s*\{[\s\S]*?\n\}/u;
+      const withoutReadFileSyncImport = source.replace(readFileSyncImportPattern, '');
+      if (withoutReadFileSyncImport === source) {
+        throw new Error(`Expected readFileSync import in ${args.path}`);
+      }
+      const contents = withoutReadFileSyncImport.replace(
+        loadFunctionPattern,
+        `function load(name) {
                 if (name === "mpxconfig.schema.json") {
                   return ${project};
                 }
@@ -63,24 +51,38 @@ await build({
                 }
                 throw new Error('Unknown bundled config schema: ' + name);
               }`,
-            );
-            if (contents === withoutReadFileSyncImport) {
-              throw new Error(`Expected load(name) function in ${args.path}`);
-            }
-            return {
-              loader: 'js',
-              contents,
-            };
-          },
-        );
-      },
-    },
-  ],
+      );
+      if (contents === withoutReadFileSyncImport) {
+        throw new Error(`Expected load(name) function in ${args.path}`);
+      }
+      return { loader: 'js', contents };
+    });
+  },
+};
+const bundleOptions = {
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  packages: 'bundle',
+  plugins: [inlineConfigSchemas],
   sourcemap: false,
   minify: true,
   legalComments: 'none',
   banner: {
     js: 'import { createRequire as __mpxCreateRequire } from "node:module"; const require = __mpxCreateRequire(import.meta.url);',
   },
-});
+};
+await Promise.all([
+  build({
+    ...bundleOptions,
+    entryPoints: [path.join(root, 'apps', 'cli', 'dist', 'main.js')],
+    outfile: path.join(output, 'mpx.mjs'),
+  }),
+  build({
+    ...bundleOptions,
+    entryPoints: [path.join(root, 'packages', 'application', 'dist', 'node', 'claude-gateway.js')],
+    outfile: path.join(output, 'claude-gateway.js'),
+  }),
+]);
 await writeFile(path.join(output, 'mpx.cmd'), commandSelectorBytes());
