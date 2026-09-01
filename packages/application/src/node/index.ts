@@ -11,6 +11,8 @@ export * from './preparation-worker-polling.js';
 export * from './preparation-lifecycle.js';
 export * from './preparation-status.js';
 export * from './worktree-lifecycle.js';
+export * from './session-legacy-import.js';
+export * from './session-application-service.js';
 
 /** Concrete Node process/state adapter; kept out of the provider-neutral package root. */
 export function createNodeDevService(

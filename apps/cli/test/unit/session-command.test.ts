@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { SessionService, SessionStore, type SessionRecordV1 } from '@mpx/sessions';
+import {
+  createNodeSessionApplicationService,
+  createNodeSessionLegacyImport,
+  type NodeSessionApplicationDependencies,
+} from '@mpx/application/node';
+import { SessionError, SessionService, SessionStore, type SessionRecordV1 } from '@mpx/sessions';
 import { executeSessionCommand } from '../../src/session-command.js';
 
 const identity = { domain: 'personal', name: 'me' };
@@ -36,12 +41,18 @@ const record = (id: string): SessionRecordV1 => ({
   },
   lifecycle: { bindingId: null, sequence: 0, timestamp: null },
 });
-async function fixture() {
+async function fixture(overrides: Partial<Omit<NodeSessionApplicationDependencies, 'store'>> = {}) {
   const store = new SessionStore(await mkdtemp(path.join(tmpdir(), 'mpx-cli-session-')));
   await new SessionService(store).save(record('session-one'));
-  return { store, resolveIdentity: async () => identity };
+  const resolveIdentity = async () => identity;
+  const application = createNodeSessionApplicationService({
+    store,
+    resolveIdentity,
+    legacyImport: createNodeSessionLegacyImport({ store, resolveIdentity }),
+    ...overrides,
+  });
+  return { store, application };
 }
-
 describe('session command', () => {
   it('returns versioned filtered list data', async () => {
     const result = await executeSessionCommand(
@@ -56,7 +67,8 @@ describe('session command', () => {
   });
 
   it('passes an injected absent process inspector through reconcile', async () => {
-    const context = await fixture();
+    const inspect = vi.fn(async () => ({ status: 'absent' as const }));
+    const context = await fixture({ processInspector: { inspect } });
     const activePiRecord: SessionRecordV1 = {
       ...record('pi-active'),
       runtimeQualifiedId: 'pi:active',
@@ -66,11 +78,7 @@ describe('session command', () => {
       process: { pid: 42, startFingerprint: 'start' },
     };
     await new SessionService(context.store).save(activePiRecord);
-    const inspect = vi.fn(async () => ({ status: 'absent' as const }));
-    await executeSessionCommand(
-      { action: 'reconcile', args: [], options: new Map() },
-      { ...context, processInspector: { inspect } },
-    );
+    await executeSessionCommand({ action: 'reconcile', args: [], options: new Map() }, context);
     expect(inspect).toHaveBeenCalledWith(42);
     expect(await new SessionService(context.store).show('pi:active')).toMatchObject({
       liveness: 'inactive',
@@ -244,258 +252,202 @@ describe('session command', () => {
     expect(result.data.legacy.quarantine).toEqual([]);
   });
 
-  it('returns a branch plan without applying side effects before confirmation', async () => {
-    const context = await fixture(),
-      service = new SessionService(context.store),
-      now = new Date().toISOString();
-    await context.store.saveNativeBinding({
-      schemaVersion: 1,
-      ref: 'binding',
-      identity,
-      runtime: 'claude',
-      recordedRootDigest: 'b'.repeat(64),
-      accountBindingRef: null,
-      createdAt: now,
-      updatedAt: now,
+  it('rejects malformed legacy mapping syntax after reconcile admission', async () => {
+    const prepared = {} as never;
+    const prepareReconcile = vi.fn(async () => prepared);
+    const reconcile = vi.fn();
+
+    await expect(
+      executeSessionCommand(
+        {
+          action: 'reconcile',
+          args: [],
+          options: new Map<string, string | string[]>([
+            ['import-legacy', ['legacy.json']],
+            ['map-account', ['missing-target=']],
+          ]),
+        },
+        { application: { prepareReconcile, reconcile } as never },
+      ),
+    ).rejects.toMatchObject({
+      code: 'SESSION_USAGE_ERROR',
+      message: '--map-account requires SOURCE=TARGET',
     });
-    await service.save({
-      ...record('session-one'),
-      launch: {
-        launchKey: 'launch',
-        descriptorDigest: 'a'.repeat(64),
-        mode: 'interactive',
-        skillPolicy: 'standard',
-        contentScope: 'repo',
-        executor: { kind: 'host' },
-        workspace: 'direct',
-        networkPolicy: 'restricted',
-        grants: [],
-        artifactKey: 'artifact',
-        manifestKey: 'manifest',
-      },
-    });
-    const plan = vi.fn(async (request: unknown) => ({
-        schemaVersion: 1 as const,
-        kind: 'session-branch-plan' as const,
-        confirmationDigest: 'c'.repeat(64),
-        request,
-      })),
-      apply = vi.fn();
-    const result = await executeSessionCommand(
-      { action: 'branch', args: ['session-one'], options: new Map([['workspace', 'isolated']]) },
-      { ...context, branchService: { plan, apply } as never },
-    );
-    expect(result.data).toMatchObject({
-      kind: 'session-branch-plan',
-      confirmationDigest: 'c'.repeat(64),
-    });
-    expect(apply).not.toHaveBeenCalled();
+    expect(prepareReconcile).toHaveBeenCalledWith({ captureScheduled: false });
+    expect(reconcile).not.toHaveBeenCalled();
   });
 
-  it('applies only the digest-confirmed branch plan', async () => {
-    const context = await fixture(),
-      service = new SessionService(context.store),
-      now = new Date().toISOString(),
-      confirmationDigest = 'c'.repeat(64);
-    await context.store.saveNativeBinding({
-      schemaVersion: 1,
-      ref: 'binding',
-      identity,
-      runtime: 'claude',
-      recordedRootDigest: 'b'.repeat(64),
-      accountBindingRef: null,
-      createdAt: now,
-      updatedAt: now,
+  it('validates Pi root mapping syntax before requiring an account mapping', async () => {
+    const prepareReconcile = vi.fn(async () => ({}) as never);
+    const reconcile = vi.fn();
+
+    await expect(
+      executeSessionCommand(
+        {
+          action: 'reconcile',
+          args: [],
+          options: new Map<string, string | string[]>([
+            ['import-legacy', ['legacy.json']],
+            ['map-pi-root', ['missing-root=']],
+          ]),
+        },
+        { application: { prepareReconcile, reconcile } as never },
+      ),
+    ).rejects.toMatchObject({
+      code: 'SESSION_USAGE_ERROR',
+      message: '--map-pi-root requires SOURCE=TARGET',
     });
-    await service.save({
-      ...record('session-one'),
-      launch: {
-        launchKey: 'launch',
-        descriptorDigest: 'a'.repeat(64),
-        mode: 'interactive',
-        skillPolicy: 'standard',
-        contentScope: 'repo',
-        executor: { kind: 'host' },
-        workspace: 'direct',
-        networkPolicy: 'restricted',
-        grants: [],
-        artifactKey: 'artifact',
-        manifestKey: 'manifest',
-      },
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit account mapping before reconciliation', async () => {
+    const prepareReconcile = vi.fn(async () => ({}) as never);
+    const reconcile = vi.fn();
+
+    await expect(
+      executeSessionCommand(
+        {
+          action: 'reconcile',
+          args: [],
+          options: new Map<string, string | string[]>([['import-legacy', ['legacy.json']]]),
+        },
+        { application: { prepareReconcile, reconcile } as never },
+      ),
+    ).rejects.toMatchObject({
+      code: 'SESSION_USAGE_ERROR',
+      message: 'legacy import requires explicit --map-account mappings',
     });
-    const planned = {
-        schemaVersion: 1 as const,
-        kind: 'session-branch-plan' as const,
-        confirmationDigest,
-      },
-      plan = vi.fn(async () => planned),
-      apply = vi.fn(async () => ({
-        schemaVersion: 1,
-        kind: 'session-branch-apply',
-        writerLease: null,
-      }));
-    await executeSessionCommand(
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it('reports an unbound parent before invalid branch options', async () => {
+    await expect(
+      executeSessionCommand(
+        {
+          action: 'branch',
+          args: ['session-one'],
+          options: new Map([['workspace', 'invalid']]),
+        },
+        await fixture({ branchService: { plan: vi.fn(), apply: vi.fn() } as never }),
+      ),
+    ).rejects.toMatchObject({ code: 'SESSION_BRANCH_LAUNCH_UNBOUND' });
+  });
+
+  it.each([
+    ['workspace', 'invalid', '--workspace must be default, isolated, or shared'],
+    ['intent', 'invalid', '--intent must be read or modify'],
+  ])('rejects invalid branch --%s after preparing the parent', async (name, value, message) => {
+    const prepareBranch = vi.fn(async () => ({}) as never);
+
+    await expect(
+      executeSessionCommand(
+        { action: 'branch', args: ['session-one'], options: new Map([[name, value]]) },
+        { application: { prepareBranch } as never },
+      ),
+    ).rejects.toMatchObject({ code: 'SESSION_USAGE_ERROR', message });
+    expect(prepareBranch).toHaveBeenCalledWith('session-one');
+  });
+
+  it('forwards parsed branch arguments and the prepared token to the application', async () => {
+    const prepared = {} as never;
+    const prepareBranch = vi.fn(async () => prepared);
+    const branch = vi.fn(async () => ({ kind: 'branch-result' }));
+    const result = await executeSessionCommand(
       {
         action: 'branch',
         args: ['session-one'],
-        options: new Map([['confirm-plan', confirmationDigest]]),
+        options: new Map<string, string | boolean>([
+          ['workspace', 'shared'],
+          ['intent', 'read'],
+          ['branch', 'feature/child'],
+          ['terminal-tab', true],
+          ['terminal-title', 'Child'],
+          ['acknowledge-shared-risk', true],
+          ['confirm-plan', 'confirmation'],
+          ['dry-run', true],
+        ]),
       },
-      { ...context, branchService: { plan, apply } as never },
+      {
+        application: { prepareBranch, branch } as never,
+        terminalExecutable: 'C:/terminal.exe',
+      },
     );
-    expect(apply).toHaveBeenCalledWith(planned, confirmationDigest);
+
+    expect(prepareBranch).toHaveBeenCalledWith('session-one');
+    expect(branch).toHaveBeenCalledWith(prepared, {
+      workspace: 'shared',
+      intent: 'read',
+      branch: 'feature/child',
+      terminal: { executable: 'C:/terminal.exe', title: 'Child' },
+      acknowledgeSharedRisk: true,
+      confirmation: 'confirmation',
+      dryRun: true,
+    });
+    expect(result).toEqual({ data: { kind: 'branch-result' }, warnings: [] });
   });
 
-  it('admits scheduled capture only with Phase I immutable runner authority', async () => {
-    const context = await fixture(),
-      inspect = vi.fn(async () => ({ installed: true, authorityDigest: 'a'.repeat(64) })),
-      discoveries = vi.fn(async () => []);
-    await expect(
-      executeSessionCommand(
-        { action: 'reconcile', args: [], options: new Map([['capture', 'scheduled']]) },
-        { ...context, discoveries, scheduledCaptureAuthority: { inspect } },
-      ),
-    ).resolves.toMatchObject({ data: { schemaVersion: 1, kind: 'session-reconcile' } });
-    expect(inspect).toHaveBeenCalledOnce();
-    expect(discoveries).toHaveBeenCalledOnce();
-  });
+  it('delegates scheduled capture admission to the application service', async () => {
+    const prepared = {} as never;
+    const prepareReconcile = vi.fn(async () => prepared);
+    const reconcile = vi.fn(async () => ({ data: 'reconciled', warnings: [] }));
 
-  it('keeps scheduled capture fail-closed without immutable runner authority', async () => {
-    const context = await fixture(),
-      discoveries = vi.fn(async () => []);
-    await expect(
-      executeSessionCommand(
-        { action: 'reconcile', args: [], options: new Map([['capture', 'scheduled']]) },
-        { ...context, discoveries },
-      ),
-    ).rejects.toMatchObject({ code: 'SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE' });
-    expect(discoveries).not.toHaveBeenCalled();
-  });
-
-  it('verifies an existing resume target before consuming pending lifecycle events and then replans', async () => {
-    const context = await fixture(),
-      service = new SessionService(context.store),
-      now = new Date().toISOString(),
-      order: string[] = [];
-    const launch = {
-      launchKey: 'old-launch',
-      descriptorDigest: 'a'.repeat(64),
-      mode: 'interactive',
-      skillPolicy: 'standard',
-      contentScope: 'repo',
-      executor: { kind: 'host' },
-      workspace: 'direct',
-      networkPolicy: 'restricted',
-      grants: [{ resource: 'repo', access: 'read' }],
-      artifactKey: 'artifact',
-      manifestKey: 'manifest',
-    } as const;
-    await context.store.saveNativeBinding({
-      schemaVersion: 1,
-      ref: 'binding',
-      identity,
-      runtime: 'claude',
-      recordedRootDigest: 'b'.repeat(64),
-      accountBindingRef: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await service.save({ ...record('session-one'), launch });
-    vi.spyOn(context.store, 'listLifecycleBindingIds').mockImplementation(async () => {
-      order.push('consume');
-      return [];
-    });
-    const resumeDependencies = async () => ({
-      resolveConfiguredRoot: async () => {
-        order.push('verify');
-        return {
-          root: 'C:/native',
-          canonicalRootDigest: 'b'.repeat(64),
-          identity,
-          runtime: 'claude' as const,
-        };
-      },
-      verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' as const }),
-    });
     await executeSessionCommand(
-      { action: 'resume', args: ['session-one'], options: new Map() },
-      { ...context, resumeDependencies },
+      { action: 'reconcile', args: [], options: new Map([['capture', 'scheduled']]) },
+      { application: { prepareReconcile, reconcile } as never },
     );
-    expect(order).toEqual(['verify', 'consume', 'verify']);
+
+    expect(prepareReconcile).toHaveBeenCalledWith({ captureScheduled: true });
+    expect(reconcile).toHaveBeenCalledWith(prepared, {});
   });
 
-  it('does not consume pending lifecycle events when resume verification fails', async () => {
-    const context = await fixture(),
-      consumed = vi.spyOn(context.store, 'listLifecycleBindingIds');
-    const failure = new Error('root replaced');
+  it('admits scheduled capture before parsing legacy mappings', async () => {
+    const failure = new SessionError(
+      'SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE',
+      'Installed scheduled capture has no valid immutable runner authority.',
+    );
+    const prepareReconcile = vi.fn(async () => {
+      throw failure;
+    });
+    const reconcile = vi.fn();
+
     await expect(
       executeSessionCommand(
-        { action: 'resume', args: ['session-one'], options: new Map() },
         {
-          ...context,
-          resumeDependencies: async () => {
-            throw failure;
-          },
+          action: 'reconcile',
+          args: [],
+          options: new Map<string, string | string[]>([
+            ['capture', 'scheduled'],
+            ['import-legacy', ['legacy.json']],
+            ['map-account', ['missing-target=']],
+          ]),
         },
+        { application: { prepareReconcile, reconcile } as never },
       ),
     ).rejects.toBe(failure);
-    expect(consumed).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
   });
 
-  it('rejects command confirmation after the recorded resume policy changes', async () => {
-    const context = await fixture(),
-      service = new SessionService(context.store),
-      now = new Date().toISOString();
-    const launch = {
-      launchKey: 'old-launch',
-      descriptorDigest: 'a'.repeat(64),
-      mode: 'interactive',
-      skillPolicy: 'standard',
-      contentScope: 'repo',
-      executor: { kind: 'host' },
-      workspace: 'direct',
-      networkPolicy: 'restricted',
-      grants: [{ resource: 'repo', access: 'read' }],
-      artifactKey: 'artifact',
-      manifestKey: 'manifest',
-    } as const;
-    await context.store.saveNativeBinding({
-      schemaVersion: 1,
-      ref: 'binding',
-      identity,
-      runtime: 'claude',
-      recordedRootDigest: 'b'.repeat(64),
-      accountBindingRef: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await service.save({ ...record('session-one'), launch });
-    const resumeDependencies = async () => ({
-      resolveConfiguredRoot: async () => ({
-        root: 'C:/native',
-        canonicalRootDigest: 'b'.repeat(64),
-        identity,
-        runtime: 'claude' as const,
-      }),
-      verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' as const }),
-    });
-    const planned = (await executeSessionCommand(
-      { action: 'resume', args: ['session-one'], options: new Map() },
-      { ...context, resumeDependencies },
-    )) as { data: { confirmationDigest: string } };
-    await service.save({
-      ...(await service.show('session-one')),
-      launch: { ...launch, grants: [{ resource: 'repo', access: 'write' }] },
-    });
+  it('forwards parsed resume arguments and returns application data', async () => {
+    const resume = vi.fn(async () => ({ kind: 'resume-result' }));
+
     await expect(
       executeSessionCommand(
         {
           action: 'resume',
           args: ['session-one'],
-          options: new Map([['confirm-plan', planned.data.confirmationDigest]]),
+          options: new Map<string, string | boolean>([
+            ['confirm-plan', 'confirmation'],
+            ['dry-run', true],
+          ]),
         },
-        { ...context, resumeDependencies, executeResume: async () => ({}) },
+        { application: { resume } as never },
       ),
-    ).rejects.toMatchObject({ code: 'SESSION_RESUME_CONFIRMATION_MISMATCH' });
+    ).resolves.toEqual({ data: { kind: 'resume-result' }, warnings: [] });
+    expect(resume).toHaveBeenCalledWith({
+      id: 'session-one',
+      confirmation: 'confirmation',
+      dryRun: true,
+    });
   });
 });
 

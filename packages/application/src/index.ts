@@ -6,3 +6,4 @@ export * from './lifecycle-application-service.js';
 export * from './launch-execution-service.js';
 export * from './launch-application-service.js';
 export * from './launch-skill-resolution.js';
+export * from './session-application-service.js';

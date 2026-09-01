@@ -1,26 +1,11 @@
-import { lstat, readdir } from 'node:fs/promises';
-import path from 'node:path';
 import {
-  LifecycleEventDirectoryConsumer,
-  LegacySessionImporter,
   SessionError,
-  SessionService,
-  SessionStore,
-  planResume,
-  stableDigest,
-  verifyResumeConfirmation,
-  type BranchRequestV1,
-  type ConversationBranchService,
   type IdentityV1,
-  type ResumeDependencies,
-  type ResumePlanV1,
-  type RuntimeDiscovery,
   type SessionListFilter,
-  type SessionProcessInspector,
-  type SessionRecordV1,
   type WorkflowStatus,
 } from '@mpx/sessions';
 import type { Diagnostic } from '@mpx/core';
+import type { SessionApplication, SessionLegacyImportRequest } from '@mpx/application';
 
 export interface SessionCommandInput {
   readonly action: string | undefined;
@@ -28,23 +13,8 @@ export interface SessionCommandInput {
   readonly options: ReadonlyMap<string, string | boolean | string[]>;
 }
 export interface SessionCommandContext {
-  readonly store: SessionStore;
-  resolveIdentity(name: string): Promise<IdentityV1>;
-  readonly discoveries?: () => Promise<
-    readonly {
-      scanner: RuntimeDiscovery;
-      context?: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
-    }[]
-  >;
-  readonly processInspector?: SessionProcessInspector;
-  readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
-  readonly executeResume?: (plan: ResumePlanV1) => Promise<unknown>;
-  readonly branchService?: Pick<ConversationBranchService, 'plan' | 'apply'>;
+  readonly application: SessionApplication;
   readonly terminalExecutable?: string;
-  /** Installed scheduler observation only; granting authority remains a Phase I responsibility. */
-  readonly scheduledCaptureAuthority?: {
-    inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>>;
-  };
 }
 export interface SessionCommandResult {
   readonly data: unknown;
@@ -62,6 +32,18 @@ const repeated = (input: SessionCommandInput, name: string): string[] => {
 const usage = (message: string): never => {
   throw new SessionError('SESSION_USAGE_ERROR', message);
 };
+function mappings(
+  input: SessionCommandInput,
+  name: 'map-account' | 'map-pi-root',
+): ReadonlyArray<Readonly<{ source: string; target: string }>> {
+  return repeated(input, name).map((value) => {
+    const separator = value.indexOf('=');
+    if (separator < 1 || separator === value.length - 1) {
+      usage(`--${name} requires SOURCE=TARGET`);
+    }
+    return { source: value.slice(0, separator), target: value.slice(separator + 1) };
+  });
+}
 function runtimeOption(input: SessionCommandInput): 'claude' | 'pi' | undefined {
   const runtime = text(input, 'runtime');
   if (runtime !== undefined && runtime !== 'claude' && runtime !== 'pi') {
@@ -78,7 +60,7 @@ async function requiredIdentity(
   if (!name) {
     usage(`session ${action} requires --identity`);
   }
-  return context.resolveIdentity(name as string);
+  return context.application.resolveIdentity(name as string);
 }
 const confirmationOption = (input: SessionCommandInput): string | undefined =>
   text(input, 'confirm-plan');
@@ -99,17 +81,6 @@ function requiredSafeText(input: SessionCommandInput, name: string): string {
     usage(`--${name} contains invalid characters`);
   }
   return value;
-}
-async function consumePending(
-  context: SessionCommandContext,
-  service: SessionService,
-): Promise<number> {
-  const consumer = new LifecycleEventDirectoryConsumer(context.store, service);
-  let consumed = 0;
-  for (const bindingId of await context.store.listLifecycleBindingIds()) {
-    consumed += await consumer.consume(bindingId);
-  }
-  return consumed;
 }
 async function filter(
   input: SessionCommandInput,
@@ -147,7 +118,7 @@ async function filter(
       ? { workflowStatus: state as WorkflowStatus }
       : {}),
     ...(status ? { workflowStatus: status as WorkflowStatus } : {}),
-    ...(identityName ? { identity: await context.resolveIdentity(identityName) } : {}),
+    ...(identityName ? { identity: await context.application.resolveIdentity(identityName) } : {}),
   };
 }
 function limit(input: SessionCommandInput): number | undefined {
@@ -161,23 +132,11 @@ function limit(input: SessionCommandInput): number | undefined {
   }
   return value;
 }
-function mapping(values: readonly string[], label: string): Map<string, string> {
-  const result = new Map<string, string>();
-  for (const value of values) {
-    const at = value.indexOf('=');
-    if (at < 1 || at === value.length - 1) {
-      usage(`${label} requires SOURCE=TARGET`);
-    }
-    result.set(value.slice(0, at), value.slice(at + 1));
-  }
-  return result;
-}
-
 export async function executeSessionCommand(
   input: SessionCommandInput,
   context: SessionCommandContext,
 ): Promise<SessionCommandResult> {
-  const service = new SessionService(context.store, undefined, context.processInspector);
+  const application = context.application;
   const actions = [
     'list',
     'show',
@@ -195,25 +154,25 @@ export async function executeSessionCommand(
     usage(`session requires ${actions.join(', ')}`);
   }
   const action = input.action as (typeof actions)[number];
-  const read = ['list', 'show', 'save', 'handoff', 'complete', 'completion', 'inbox'].includes(
-    action,
-  );
-  if (read) {
-    await consumePending(context, service);
-  }
   if (action === 'list') {
     if (input.args.length) {
       usage('session list accepts no positional arguments');
     }
-    const records = (await service.list(await filter(input, context))).slice(0, limit(input));
-    return { data: { schemaVersion: 1, kind: 'session-list', records }, warnings: [] };
+    const selectedLimit = limit(input);
+    return {
+      data: await application.list({
+        filter: await filter(input, context),
+        ...(selectedLimit === undefined ? {} : { limit: selectedLimit }),
+      }),
+      warnings: [],
+    };
   }
   if (action === 'show') {
     if (input.args.length !== 1) {
       usage('session show requires one id');
     }
     return {
-      data: { schemaVersion: 1, kind: 'session-show', record: await service.show(input.args[0]!) },
+      data: await application.show(input.args[0]!),
       warnings: [],
     };
   }
@@ -238,11 +197,11 @@ export async function executeSessionCommand(
     };
     const observation =
       action === 'handoff'
-        ? await service.handoff(input.args[0]!, {
+        ? await application.handoff(input.args[0]!, {
             ...request,
             disposition: request.disposition as 'paused' | 'unfinished',
           })
-        : await service.complete(input.args[0]!, request);
+        : await application.complete(input.args[0]!, request);
     return { data: observation, warnings: [] };
   }
   if (action === 'mark') {
@@ -274,23 +233,23 @@ export async function executeSessionCommand(
         ? {}
         : { relatedReview: text(input, 'related-review')! }),
     };
-    const record = await service.mark(input.args[0]!, status, workflowOptions);
-    return { data: { schemaVersion: 1, kind: 'session-mark', record }, warnings: [] };
+    return { data: await application.mark(input.args[0]!, status, workflowOptions), warnings: [] };
   }
   if (action === 'inbox') {
     if (input.args.length) {
       usage('session inbox accepts no positional arguments');
     }
-    const selected = (await service.inbox())
-      .filter((record) => {
-        const runtime = text(input, 'runtime'),
-          status = text(input, 'status');
-        return (
-          (!runtime || record.runtime === runtime) && (!status || record.workflow.status === status)
-        );
-      })
-      .slice(0, limit(input));
-    return { data: { schemaVersion: 1, kind: 'session-inbox', records: selected }, warnings: [] };
+    const runtime = text(input, 'runtime'),
+      status = text(input, 'status'),
+      selectedLimit = limit(input);
+    return {
+      data: await application.inbox({
+        ...(runtime ? { runtime } : {}),
+        ...(status ? { status } : {}),
+        ...(selectedLimit === undefined ? {} : { limit: selectedLimit }),
+      }),
+      warnings: [],
+    };
   }
   if (action === 'save') {
     const all = input.options.get('all-active') === true;
@@ -304,7 +263,7 @@ export async function executeSessionCommand(
       data: {
         schemaVersion: 1,
         kind: 'session-capture',
-        captures: await service.capture(all ? undefined : input.args),
+        captures: (await application.save(all ? undefined : input.args)).captures,
       },
       warnings: [],
     };
@@ -317,194 +276,37 @@ export async function executeSessionCommand(
     if (captureMode !== undefined && captureMode !== 'scheduled') {
       usage('--capture must be scheduled');
     }
-    if (captureMode === 'scheduled') {
-      const authority = await context.scheduledCaptureAuthority?.inspect().catch(() => undefined);
-      if (
-        !authority?.installed ||
-        !authority.authorityDigest ||
-        !/^[a-f0-9]{64}$/u.test(authority.authorityDigest)
-      ) {
-        throw new SessionError(
-          'SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE',
-          'Installed scheduled capture has no valid immutable runner authority.',
-        );
-      }
-    }
+    const prepared = await application.prepareReconcile({
+      captureScheduled: captureMode === 'scheduled',
+    });
     const sources = repeated(input, 'import-legacy');
-    let legacy: unknown = null;
+    let legacy: SessionLegacyImportRequest | undefined;
     if (sources.length) {
-      const accounts = mapping(repeated(input, 'map-account'), '--map-account');
-      const roots = mapping(repeated(input, 'map-pi-root'), '--map-pi-root');
-      if (!accounts.size) {
+      const accountMappings = mappings(input, 'map-account').map(({ source, target }) => ({
+        source,
+        identity: target,
+      }));
+      const piRootMappings = mappings(input, 'map-pi-root').map(({ source, target }) => ({
+        identity: source,
+        nativeRoot: target,
+      }));
+      if (!accountMappings.length) {
         usage('legacy import requires explicit --map-account mappings');
       }
-      const bindings = await context.store.listNativeBindings();
-      const mappings: Record<
-        string,
-        { identity: IdentityV1; nativeBindingRef: string; nativeRoot?: string }
-      > = {};
-      for (const [source, identityName] of accounts) {
-        const identity = await context.resolveIdentity(identityName);
-        const runtime = source.startsWith('pi:') ? 'pi' : 'claude';
-        const binding = bindings.find(
-          (item) =>
-            item.runtime === runtime &&
-            item.identity.domain === identity.domain &&
-            item.identity.name === identity.name,
-        );
-        if (!binding) {
-          throw new SessionError(
-            'LEGACY_MAPPING_REQUIRED',
-            `Mapped ${runtime} identity has no native binding`,
-          );
-        }
-        if (runtime === 'pi') {
-          const nativeRoot = roots.get(identityName);
-          if (!nativeRoot) {
-            throw new SessionError(
-              'LEGACY_MAPPING_REQUIRED',
-              "Mapped Pi source requires its identity's explicit --map-pi-root",
-            );
-          }
-          mappings[source] = { identity, nativeBindingRef: binding.ref, nativeRoot };
-        } else {
-          mappings[source] = { identity, nativeBindingRef: binding.ref };
-          mappings[`claude:${source}`] = mappings[source]!;
-        }
-      }
-      if (![...accounts.keys()].some((key) => key.startsWith('pi:')) && roots.size === 1) {
-        const [identityName, nativeRoot] = [...roots.entries()][0]!;
-        const identity = await context.resolveIdentity(identityName);
-        const binding = bindings.find(
-          (item) =>
-            item.runtime === 'pi' &&
-            item.identity.domain === identity.domain &&
-            item.identity.name === identity.name,
-        );
-        if (!binding) {
-          throw new SessionError(
-            'LEGACY_MAPPING_REQUIRED',
-            'Mapped Pi identity has no native binding',
-          );
-        }
-        mappings.pi = { identity, nativeBindingRef: binding.ref, nativeRoot };
-      }
-      const importFiles: string[] = [];
-      for (const source of sources) {
-        const info = await lstat(source);
-        if (info.isSymbolicLink()) {
-          throw new SessionError(
-            'LEGACY_SOURCE_UNSAFE',
-            'Legacy import source must not be a symlink.',
-          );
-        }
-        if (info.isFile()) {
-          importFiles.push(source);
-        } else if (info.isDirectory()) {
-          const names = (await readdir(source)).filter((name) => name.endsWith('.json')).sort();
-          if (names.length > 128) {
-            throw new SessionError(
-              'LEGACY_SOURCE_LIMIT',
-              'Legacy registry directory contains too many entries.',
-            );
-          }
-          const directoryMapping = mappings[`pi:${source}`];
-          for (const name of names) {
-            const file = path.join(source, name),
-              entry = await lstat(file);
-            if (entry.isSymbolicLink() || !entry.isFile()) {
-              throw new SessionError(
-                'LEGACY_SOURCE_UNSAFE',
-                'Legacy registry entries must be regular files.',
-              );
-            }
-            importFiles.push(file);
-            if (directoryMapping) {
-              mappings[`pi:${file}`] = directoryMapping;
-            }
-          }
-        } else {
-          throw new SessionError(
-            'LEGACY_SOURCE_UNSAFE',
-            'Legacy import source must be a regular file or directory.',
-          );
-        }
-      }
-      const importer = new LegacySessionImporter(context.store);
-      const plan = await importer.planFiles(importFiles, mappings);
-      const confirmation = confirmationOption(input);
-      legacy = confirmation === undefined ? plan : await importer.import(plan, confirmation);
+      legacy = {
+        sources,
+        accountMappings,
+        piRootMappings,
+        ...(confirmationOption(input) ? { confirmation: confirmationOption(input)! } : {}),
+      };
     }
-    const bindingIds = await context.store.listLifecycleBindingIds();
-    const discoveries = context.discoveries ? await context.discoveries() : [];
-    const sourceDiagnostics: {
-      runtime: 'claude' | 'pi';
-      identity: IdentityV1 | null;
-      status: 'available' | 'unavailable' | 'malformed';
-      diagnostic: string | null;
-    }[] = [];
-    const instrumented = discoveries.map((item) => ({
-      ...item,
-      scanner: {
-        runtime: item.scanner.runtime,
-        scan: async () => {
-          const result = await item.scanner.scan();
-          sourceDiagnostics.push({
-            runtime: item.scanner.runtime,
-            identity: item.context?.identity ?? null,
-            status: result.status,
-            diagnostic: result.diagnostic,
-          });
-          return result;
-        },
-      },
-    }));
-    const observations = await service.reconcile(instrumented, bindingIds);
-    const captures: never[] = [];
-    const warnings: Diagnostic[] = sourceDiagnostics
-      .filter((item) => item.diagnostic !== null)
-      .map((item) => ({
-        code: item.diagnostic!,
-        message: 'Runtime session discovery was unavailable or malformed.',
-        severity: 'warning',
-      }));
-    if (!context.discoveries) {
-      warnings.push({
-        code: 'SESSION_DISCOVERY_UNAVAILABLE',
-        message: 'Runtime discovery scanners are not configured.',
-        severity: 'warning',
-      });
-    }
-    return {
-      data: {
-        schemaVersion: 1,
-        kind: 'session-reconcile',
-        observations,
-        diagnostics: sourceDiagnostics,
-        captures,
-        legacy,
-      },
-      warnings,
-    };
+    return application.reconcile(prepared, legacy ? { legacy } : {});
   }
   if (action === 'branch') {
     if (input.args.length !== 1) {
       usage('session branch requires one parent id');
     }
-    if (!context.branchService) {
-      throw new SessionError(
-        'SESSION_BRANCH_NOT_CONFIGURED',
-        'Conversation branching is unavailable.',
-      );
-    }
-    const parent = await service.show(input.args[0]!);
-    if (parent.launch === null) {
-      throw new SessionError(
-        'SESSION_BRANCH_LAUNCH_UNBOUND',
-        'The parent has no immutable launch identity.',
-      );
-    }
-    const binding = await context.store.readNativeBinding(parent.nativeBindingRef);
+    const prepared = await application.prepareBranch(input.args[0]!);
     const selected = text(input, 'workspace') ?? 'default';
     if (!['default', 'isolated', 'shared'].includes(selected)) {
       usage('--workspace must be default, isolated, or shared');
@@ -513,112 +315,35 @@ export async function executeSessionCommand(
     if (intent !== 'read' && intent !== 'modify') {
       usage('--intent must be read or modify');
     }
-    const branch = text(input, 'branch') ?? `mpx/session-${parent.recordId}`;
-    const childId = `${parent.runtime}:pending-${stableDigest({ parent: parent.runtimeQualifiedId, branch }).slice(0, 24)}`;
     const terminalEnabled = input.options.get('terminal-tab') === true;
-    const request: BranchRequestV1 = {
-      schemaVersion: 1,
-      parent: {
-        runtimeQualifiedId: parent.runtimeQualifiedId,
-        nativeSessionRef: parent.nativeSessionRef,
-      },
-      child: { runtimeQualifiedId: childId, runtime: parent.runtime },
-      launchIdentity: {
-        identity: parent.identity,
-        rootDigest: binding.recordedRootDigest,
-        nativeBindingRef: binding.ref,
-        mode: parent.launch.mode,
-        executor: parent.launch.executor.kind,
-        skillPolicy: parent.launch.skillPolicy,
-        contentScope: parent.launch.contentScope,
-        workspace: parent.launch.workspace,
-        networkPolicy: parent.launch.networkPolicy,
-        grants: parent.launch.grants,
-        artifactKey: parent.launch.artifactKey,
-        manifestKey: parent.launch.manifestKey,
-        launchKey: parent.launch.launchKey,
-        descriptorDigest: parent.launch.descriptorDigest,
-      },
-      workspace: {
-        selection: selected as 'default' | 'isolated' | 'shared',
-        intent: intent as 'read' | 'modify',
-        cwd: parent.location.cwd,
-        projectRef: parent.location.project,
-        repositoryRef: parent.location.repository,
-        worktreeRef: parent.location.worktree,
-        branch,
-      },
-      files: {
-        sharing: selected === 'shared' ? 'shared' : 'isolated',
-        collisionDisclosure:
-          selected === 'shared'
-            ? ['concurrent changes share the current checkout']
-            : ['repository history and configured external services may still collide'],
-        duplicateWriterRiskAcknowledged: input.options.get('acknowledge-shared-risk') === true,
-      },
-      terminal: terminalEnabled
-        ? {
-            enabled: true,
-            ...(context.terminalExecutable ? { executable: context.terminalExecutable } : {}),
-            title: text(input, 'terminal-title') ?? `MPX ${childId}`,
-          }
-        : { enabled: false },
-    };
-    const plan = await context.branchService.plan(request),
-      confirmation = confirmationOption(input);
-    if (!confirmation || input.options.get('dry-run') === true) {
-      return { data: plan, warnings: [] };
-    }
-    const applied = await context.branchService.apply(plan, confirmation);
+    const terminal = terminalEnabled
+      ? {
+          ...(context.terminalExecutable ? { executable: context.terminalExecutable } : {}),
+          ...(text(input, 'terminal-title') ? { title: text(input, 'terminal-title')! } : {}),
+        }
+      : undefined;
     return {
-      data: {
-        ...applied,
-        writerLease:
-          applied.writerLease === null
-            ? null
-            : {
-                owner: applied.writerLease.owner,
-                workspaceDigest: applied.writerLease.workspaceDigest,
-              },
-      },
+      data: await application.branch(prepared, {
+        workspace: selected as 'default' | 'isolated' | 'shared',
+        intent: intent as 'read' | 'modify',
+        ...(text(input, 'branch') ? { branch: text(input, 'branch')! } : {}),
+        ...(terminal ? { terminal } : {}),
+        acknowledgeSharedRisk: input.options.get('acknowledge-shared-risk') === true,
+        ...(confirmationOption(input) ? { confirmation: confirmationOption(input)! } : {}),
+        dryRun: input.options.get('dry-run') === true,
+      }),
       warnings: [],
     };
   }
   if (input.args.length !== 1) {
     usage('session resume requires one id');
   }
-  if (!context.resumeDependencies) {
-    throw new SessionError(
-      'SESSION_RESUME_NOT_CONFIGURED',
-      'Production resume dependencies are unavailable.',
-    );
-  }
-  const record = await service.show(input.args[0]!);
-  await planResume(context.store, record, await context.resumeDependencies(record));
-  await consumePending(context, service);
-  const current = await service.show(input.args[0]!);
-  const replanned = await planResume(
-    context.store,
-    current,
-    await context.resumeDependencies(current),
-  );
-  const confirmation = confirmationOption(input);
-  if (confirmation === undefined || input.options.get('dry-run') === true) {
-    return { data: replanned, warnings: [] };
-  }
-  verifyResumeConfirmation(replanned, confirmation);
-  if (!context.executeResume) {
-    throw new SessionError(
-      'SESSION_RESUME_EXECUTION_UNAVAILABLE',
-      'Resume execution is unavailable.',
-    );
-  }
   return {
-    data: {
-      schemaVersion: 1,
-      kind: 'session-resume',
-      result: await context.executeResume(replanned),
-    },
+    data: await application.resume({
+      id: input.args[0]!,
+      ...(confirmationOption(input) ? { confirmation: confirmationOption(input)! } : {}),
+      dryRun: input.options.get('dry-run') === true,
+    }),
     warnings: [],
   };
 }

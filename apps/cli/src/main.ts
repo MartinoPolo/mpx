@@ -100,6 +100,8 @@ function resolveScheduledCaptureAuthority(
 import {
   createNodeDevService,
   createNodeLifecycleApplicationService,
+  createNodeSessionApplicationService,
+  createNodeSessionLegacyImport,
   executeInternalPreparationWorker,
 } from '@mpx/application/node';
 import { createProductionSessionDockerResumeAdmission } from './session-docker-resume.js';
@@ -1234,46 +1236,49 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       );
     }
     const scheduledCaptureAuthority = resolveScheduledCaptureAuthority(context);
+    const resolveIdentity = async (name: string) => {
+      const identity = user.identities[name];
+      if (!identity) {
+        throw new MpxError({ code: 'IDENTITY_UNKNOWN', message: `Unknown identity '${name}'.` });
+      }
+      return { domain: identity.domain, name };
+    };
+    const resumeDependencies =
+      context.sessionResumeDependencies ??
+      productionSessionResumeDependencies(
+        user,
+        sessionStore,
+        context.nativeAccountBindingVerifier ?? account?.verifier,
+        context.env,
+      );
+    const application = createNodeSessionApplicationService({
+      store: sessionStore,
+      processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
+      resumeDependencies,
+      executeConfirmedResume:
+        context.sessionResumeExecutor ??
+        ((plan) => executeProductionSessionResume(plan, user, context)),
+      resolveIdentity,
+      discoveries:
+        context.sessionDiscoveries ??
+        (() =>
+          productionSessionDiscoveries(
+            user,
+            sessionStore,
+            context.env,
+            context.nativeAccountBindingResolver ?? account?.resolver,
+          )),
+      legacyImport: createNodeSessionLegacyImport({ store: sessionStore, resolveIdentity }),
+      ...(branchService ? { branchService } : {}),
+      ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
+    });
     const result = await executeSessionCommand(
       { action, args, options: parsed.options },
       {
-        store: sessionStore,
-        resolveIdentity: async (name) => {
-          const identity = user.identities[name];
-          if (!identity) {
-            throw new MpxError({
-              code: 'IDENTITY_UNKNOWN',
-              message: `Unknown identity '${name}'.`,
-            });
-          }
-          return { domain: identity.domain, name };
-        },
-        discoveries:
-          context.sessionDiscoveries ??
-          (() =>
-            productionSessionDiscoveries(
-              user,
-              sessionStore,
-              context.env,
-              context.nativeAccountBindingResolver ?? account?.resolver,
-            )),
-        processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
-        resumeDependencies:
-          context.sessionResumeDependencies ??
-          productionSessionResumeDependencies(
-            user,
-            sessionStore,
-            context.nativeAccountBindingVerifier ?? account?.verifier,
-            context.env,
-          ),
-        executeResume:
-          context.sessionResumeExecutor ??
-          ((plan) => executeProductionSessionResume(plan, user, context)),
-        ...(branchService ? { branchService } : {}),
+        application,
         ...(terminalAvailability.terminal.available
           ? { terminalExecutable: terminalAvailability.terminal.executable }
           : {}),
-        ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
       },
     );
     return { data: result.data, warnings: [...result.warnings] };
