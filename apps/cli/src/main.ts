@@ -15,7 +15,6 @@ import {
   createSkillApplicationService,
   currentLaunchTuple,
   executionMpxError,
-  LaunchApplicationService,
   type AccountApplicationService,
   type MigrationAction,
   type ProjectApplicationService,
@@ -25,12 +24,9 @@ import {
   createNodeAccountApplicationService,
   createNodeInstallApplicationService,
   createNodeLocalIssueViewRebuilder,
-  collectNodeExecutorEvidence,
+  createNodeLaunchApplicationService,
   createNodeMigrationApplicationService,
-  createPiAuthAvailabilityProbe,
-  directProcessTty,
   executeNodeSessionResumeLaunch,
-  executeResolvedNodeLaunch,
   resolveTrustedRuntimeExecutable,
 } from '@mpx/application/node';
 import {
@@ -42,13 +38,7 @@ import {
   type JsonValue,
 } from '@mpx/core';
 import type { ShortLaunchAlias } from '@mpx/launch';
-import {
-  ExecutionError,
-  buildF2ProofPolicyMatrix,
-  namedSbxPolicies,
-  sanitizeHostReason,
-} from '@mpx/executors';
-import { createSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
+import { ExecutionError } from '@mpx/executors';
 import { expandBranchTemplate } from '@mpx/worktrees';
 import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@mpx/skills';
 import {
@@ -70,7 +60,6 @@ import { executeInstallCommand } from './install-command.js';
 import { executeAccountCommand } from './account-command.js';
 import {
   diagnoseNodeSessionBranchAdapters,
-  ProductionSessionLifecycleBridge,
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
 } from '@mpx/application/node';
@@ -99,14 +88,10 @@ import {
   createNodeSessionApplicationService,
   createNodeSessionBranchProduction,
   createNodeSessionLegacyImport,
-  createProductionSbxExecutionAdapter,
   diagnoseConfiguredF2Proof,
   executeInternalPreparationWorker,
-  loadProductionSbxProofSources,
-  planProductionSbxExecution,
-  productionProofCreateArgv,
 } from '@mpx/application/node';
-import { RootAttestationService, RootAttestationStore, type ResumePlanV1 } from '@mpx/sessions';
+import type { ResumePlanV1 } from '@mpx/sessions';
 
 interface Parsed {
   command: string[];
@@ -289,19 +274,6 @@ async function requiredUserConfig(context: CliContext): Promise<UserConfig> {
   return projectApplication(context).requiredUserConfig({
     ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
     environment: context.env,
-  });
-}
-function productionPiAuthProbe(context: CliContext, cwd: string) {
-  return createPiAuthAvailabilityProbe({
-    cwd,
-    environment: context.env,
-    resolveTrustedExecutable: () =>
-      resolveTrustedRuntimeExecutable({
-        runtime: 'pi',
-        cwd,
-        environment: context.env,
-        ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
-      }),
   });
 }
 function productionAccountApplication(
@@ -940,16 +912,16 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
             'Direct launch overrides require --identity; candidate explanation never infers one.',
         });
       }
-      const candidateService = new LaunchApplicationService({
+      const candidateService = createNodeLaunchApplicationService({
+        cwd: parsed.cwd,
+        userConfig: user,
+        environment: context.env,
+        context,
+        interaction: { json: parsed.json },
         discoverProjectConfig: projectDiscovery,
-        inventoryCanonical,
-        inventoryProjectSkills,
-        statusSnapshot: async () => {
-          throw new Error('candidate status is unreachable');
-        },
-        executorEvidence: async () => {
-          throw new Error('candidate evidence is unreachable');
-        },
+        status: () => status(context),
+        sessions: () => sessions(context),
+        stateRoot: () => stateRoot(context),
       });
       const result = await candidateService.prepareCandidates({
         operation: 'explain',
@@ -979,16 +951,16 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     }
     const runtime = runtimeOption ?? (alias ? undefined : 'pi');
     if (action === 'explain' && runtimeOption === undefined) {
-      const selectionService = new LaunchApplicationService({
+      const selectionService = createNodeLaunchApplicationService({
+        cwd: parsed.cwd,
+        userConfig: user,
+        environment: context.env,
+        context,
+        interaction: { json: parsed.json },
         discoverProjectConfig: projectDiscovery,
-        inventoryCanonical,
-        inventoryProjectSkills,
-        statusSnapshot: async () => {
-          throw new Error('selection status is unreachable');
-        },
-        executorEvidence: async () => {
-          throw new Error('selection evidence is unreachable');
-        },
+        status: () => status(context),
+        sessions: () => sessions(context),
+        stateRoot: () => stateRoot(context),
       });
       const result = await selectionService.explainSelection({
         userConfig: user,
@@ -1011,295 +983,25 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       });
       return { data: result.data, warnings: [...warnings, ...result.warnings] };
     }
-    let executionContext = context;
-    let piAttestation: Awaited<ReturnType<RootAttestationService['verify']>> | undefined;
-    const requirePiAccountPreflight =
-      context.env.LOCALAPPDATA !== undefined &&
-      (context.launchExecutorAdapters === undefined ||
-        context.rootAttestationService !== undefined ||
-        context.accountAuthVerifier !== undefined);
     const canonicalRoot = await catalogPath(context, parsed.cwd);
-    const tty = context.launchTty ?? directProcessTty();
-    const service = new LaunchApplicationService({
+    const service = createNodeLaunchApplicationService({
+      cwd: parsed.cwd,
+      catalogRoot: canonicalRoot,
+      userConfig: user,
+      environment: context.env,
+      context,
+      interaction: {
+        json: parsed.json,
+        ...(reasonOption ? { reason: reasonOption } : {}),
+        ...(context.launchTty ? { tty: context.launchTty } : {}),
+      },
       discoverProjectConfig: projectDiscovery,
-      inventoryCanonical,
-      inventoryProjectSkills,
-      statusSnapshot: ({ cwd, projectRoot, config }) =>
-        status(context).snapshot({
-          cwd,
-          projectRoot,
-          config,
-          configHash: sha256Canonical(config as unknown as JsonValue),
-        }),
+      status: () => status(context),
+      sessions: () => sessions(context),
+      stateRoot: () => stateRoot(context),
       ...(action !== 'explain' && action !== 'sbx-plan-export' && context.sbxDiagnostics
-        ? {
-            dockerDiagnostics: async () => {
-              const sbx = await context.sbxDiagnostics!(),
-                code = sbx.failureCodes[0];
-              if (!sbx.readOnly) {
-                throw new MpxError({
-                  code: 'SBX_DIAGNOSTICS_UNSAFE',
-                  message: 'Sandbox diagnostics must be read-only.',
-                });
-              }
-              if (code) {
-                throw new MpxError({
-                  code,
-                  message: `Standalone sbx launch diagnostic: ${code}.`,
-                  details: { executor: 'docker' },
-                });
-              }
-            },
-          }
+        ? { sbxDiagnostics: context.sbxDiagnostics }
         : {}),
-      dockerAdmission: async ({ selection, statusSnapshot }) => {
-        if (context.launchExecutorAdapters !== undefined || !context.env.LOCALAPPDATA) {
-          return;
-        }
-        try {
-          const snapshot = await statusSnapshot();
-          const configured = user.identities[selection.identity.name]!;
-          const network =
-            namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-            namedSbxPolicies['deny-all'];
-          const adapter = await createProductionSbxExecutionAdapter(
-            {
-              environment: context.env,
-              cwd: parsed.cwd,
-              stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
-              runtime: selection.runtime,
-              identity: {
-                name: selection.identity.name,
-                domain: configured.domain === 'personal' ? 'personal' : 'work',
-              },
-              workspaceMode: selection.workspace,
-              worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-              ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-              workspaceRoot: parsed.cwd,
-              gitCommonDir: path.join(parsed.cwd, '.git'),
-              nativeRoots: Object.values(user.identities).flatMap((identity) =>
-                Object.values(identity.runtimeRoots),
-              ),
-              credentialRoots: [],
-              oppositeDomainRoots: Object.values(user.identities)
-                .filter((identity) => identity.domain !== configured.domain)
-                .flatMap((identity) => Object.values(identity.runtimeRoots)),
-              network: {
-                name:
-                  selection.networkPolicy.name in namedSbxPolicies
-                    ? selection.networkPolicy.name
-                    : 'deny-all',
-                allow: network.allow,
-              },
-              ports: snapshot.services.flatMap((entry) =>
-                entry.port === null ? [] : [entry.port],
-              ),
-            },
-            context.launchSbxExecutionDependencies,
-          );
-          executionContext = {
-            ...context,
-            launchExecutorAdapters: [adapter],
-            ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
-          };
-        } catch (failure) {
-          if (failure instanceof MpxError) {
-            throw failure;
-          }
-          const message =
-            failure instanceof Error ? failure.message : 'Docker admission setup failed.';
-          const matched = /^([A-Z][A-Z0-9_]+)(?::|\b)/u.exec(message);
-          throw new MpxError({
-            code: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
-            message: 'Docker admission setup failed closed.',
-            details: {
-              executor: 'docker',
-              diagnostic: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
-            },
-          });
-        }
-      },
-      executorEvidence: (executor) => collectNodeExecutorEvidence(executionContext, executor),
-      approveHost: async (selection) => {
-        if (parsed.json || !tty.direct) {
-          throw new MpxError({
-            code: 'HOST_TTY_REQUIRED',
-            message: 'Host approval requires a current direct interactive TTY.',
-            remediation: 'Run the explicit host launch interactively, or use Docker.',
-          });
-        }
-        if (!reasonOption?.trim()) {
-          throw new MpxError({
-            code: 'HOST_REASON_REQUIRED',
-            message: 'Host execution requires a nonempty reason.',
-          });
-        }
-        if (
-          !(await tty.confirm(
-            `Approve elevated host compatibility execution — ${sanitizeHostReason(reasonOption)}`,
-          ))
-        ) {
-          throw new MpxError({
-            code: 'HOST_APPROVAL_DENIED',
-            message: 'Host execution was not approved.',
-          });
-        }
-        return {
-          reason: reasonOption,
-          approvalKey: sha256Canonical({
-            cwd: parsed.cwd,
-            runtime: selection.runtime,
-            identity: selection.identity.name,
-            reason: reasonOption,
-          } as unknown as JsonValue),
-        };
-      },
-      accountPreflight: async ({ runtimeRoot, identity }) => {
-        if (!requirePiAccountPreflight) {
-          return;
-        }
-        const accountService =
-          context.rootAttestationService ??
-          new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-        const auth = context.accountAuthVerifier ?? productionPiAuthProbe(context, parsed.cwd);
-        piAttestation = await accountService.verify(identity, runtimeRoot);
-        await auth.verify(runtimeRoot);
-        return async () => {
-          await accountService.verify(identity, runtimeRoot, piAttestation!.ref);
-          await auth.verify(runtimeRoot);
-        };
-      },
-      sandboxExport: async ({ descriptor, selection, artifact }) => {
-        if (!context.env.LOCALAPPDATA) {
-          throw new MpxError({
-            code: 'STATE_ROOT_REQUIRED',
-            message: 'LOCALAPPDATA is required to plan a production sandbox.',
-          });
-        }
-        const configured = user.identities[selection.identity.name]!;
-        const network =
-          namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-          namedSbxPolicies['deny-all'];
-        const sources = await loadProductionSbxProofSources(context.env);
-        const planned = planProductionSbxExecution({
-          environment: context.env,
-          cwd: parsed.cwd,
-          stateRoot: path.join(context.env.LOCALAPPDATA, 'mpx'),
-          runtime: selection.runtime,
-          identity: {
-            name: selection.identity.name,
-            domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
-          },
-          workspaceMode: selection.workspace,
-          worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-          ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-          workspaceRoot: parsed.cwd,
-          gitCommonDir: path.join(parsed.cwd, '.git'),
-          nativeRoots: Object.values(user.identities).flatMap((identity) =>
-            Object.values(identity.runtimeRoots),
-          ),
-          credentialRoots: [],
-          oppositeDomainRoots: Object.values(user.identities)
-            .filter((identity) => identity.domain !== configured.domain)
-            .flatMap((identity) => Object.values(identity.runtimeRoots)),
-          network: {
-            name:
-              selection.networkPolicy.name in namedSbxPolicies
-                ? selection.networkPolicy.name
-                : 'deny-all',
-            allow: network.allow,
-          },
-          ports: [],
-          sources,
-        });
-        return createSbxLaunchPlanExportV1({
-          launchKey: descriptor.launchKey,
-          descriptorSha256: sha256Canonical(descriptor as unknown as JsonValue),
-          runtime: selection.runtime,
-          identity: {
-            name: selection.identity.name,
-            domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
-          },
-          artifact: {
-            manifestKey: artifact.reference.manifestKey,
-            artifactKey: artifact.reference.artifactKey,
-            fileMapHash: artifact.reference.fileMapHash,
-          },
-          evidence: {
-            sbxPinSha256: sources.sbxPinSha256,
-            runtimeToolInventorySha256: sources.runtimeToolInventorySha256,
-            executorEvidenceSha256: sources.executorEvidenceSha256,
-          },
-          sandbox: {
-            planKey: planned.plan.planKey,
-            profile: planned.plan.networkPolicy.name,
-            proofSandboxName: `mpx-proof-${planned.plan.planKey.slice(0, 12)}`,
-            createArgv: productionProofCreateArgv(planned.plan),
-          },
-          policyMatrix: buildF2ProofPolicyMatrix(
-            planned.plan.networkPolicy.name as keyof typeof namedSbxPolicies,
-          ),
-        });
-      },
-      launchExecution: async ({
-        descriptor,
-        manifest,
-        artifact,
-        catalog,
-        canonicalRoot,
-        cwd,
-        nativeRuntimeRoot,
-        statusSnapshot,
-        project: bound,
-        beforeChildExecution,
-      }) => {
-        const appData = context.env.APPDATA;
-        if (!appData) {
-          throw new MpxError({
-            code: 'USER_CONFIG_ROOT_MISSING',
-            message: 'APPDATA is required to publish immutable runtime projections.',
-          });
-        }
-        const launchContext =
-          executionContext.launchLifecycleBridge ||
-          executionContext.launchRuntimeAdapters ||
-          !executionContext.env.LOCALAPPDATA
-            ? executionContext
-            : {
-                ...executionContext,
-                launchLifecycleBridge: new ProductionSessionLifecycleBridge({
-                  store: sessions(executionContext),
-                  accountBindingRef: async (name, selectedRuntime) =>
-                    selectedRuntime === 'pi' &&
-                    piAttestation &&
-                    name === piAttestation.identity.name
-                      ? piAttestation.ref
-                      : (executionContext.nativeAccountBindingResolver?.resolve(
-                          { domain: user.identities[name]!.domain, name },
-                          selectedRuntime,
-                          user.identities[name]!.runtimeRoots[selectedRuntime],
-                        ) ?? null),
-                }),
-              };
-        return executeResolvedNodeLaunch({
-          descriptor,
-          manifest,
-          artifact,
-          catalog,
-          canonicalRoot,
-          agentsRoot: path.join(path.dirname(canonicalRoot), 'agents'),
-          artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
-          stateRoot: context.env.LOCALAPPDATA ? path.join(context.env.LOCALAPPDATA, 'mpx') : '',
-          cwd,
-          environment: context.env,
-          context: launchContext,
-          tty,
-          nativeRuntimeRoot,
-          statusSnapshot,
-          ...(bound ? { projectConfig: bound.config, projectRoot: bound.root } : {}),
-          ...(beforeChildExecution ? { beforeChildExecution } : {}),
-        });
-      },
     });
     const prepared = await service.prepare({
       operation:

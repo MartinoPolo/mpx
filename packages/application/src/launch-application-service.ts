@@ -119,10 +119,16 @@ export interface LaunchExecutionInput {
   readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
   readonly project?: DiscoveredConfig;
   readonly beforeChildExecution?: () => Promise<void>;
+  readonly accountBindingRef?: string;
 }
 export interface PreparedLaunchExecutor {
   readonly evidence: ExecutorVerificationEvidence;
   readonly execute: (input: LaunchExecutionInput) => Promise<{ readonly exitCode: number }>;
+}
+
+export interface AccountPreflightResult {
+  readonly beforeChildExecution: () => Promise<void>;
+  readonly accountBindingRef?: string;
 }
 
 export interface LaunchApplicationDependencies {
@@ -144,14 +150,14 @@ export interface LaunchApplicationDependencies {
   dockerAdmission?(input: {
     readonly selection: Readonly<LaunchSelection>;
     readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
-  }): Promise<void>;
+  }): Promise<void | PreparedLaunchExecutor>;
   executorEvidence(executor: 'host' | 'docker'): Promise<ExecutorVerificationEvidence>;
   prepareExecutor?(executor: 'host' | 'docker'): Promise<PreparedLaunchExecutor>;
   approveHost?(selection: Readonly<LaunchSelection>): Promise<HostApproval>;
   accountPreflight?(input: {
     readonly runtimeRoot: string;
     readonly identity: LaunchSelection['identity'];
-  }): Promise<void | (() => Promise<void>)>;
+  }): Promise<void | (() => Promise<void>) | AccountPreflightResult>;
   launchExecution?(input: LaunchExecutionInput): Promise<{ readonly exitCode: number }>;
   sandboxExport?(input: {
     readonly descriptor: LaunchDescriptor;
@@ -331,15 +337,16 @@ export class LaunchApplicationService {
       throw invalidState();
     }
     const readOnly = facts.request.operation !== 'launch';
-    if (!readOnly && facts.selection.executor === 'docker') {
-      await this.dependencies.dockerAdmission?.({
-        selection: this.selection(state),
-        statusSnapshot: facts.statusSnapshot,
-      });
-    }
+    const admittedExecutor =
+      !readOnly && facts.selection.executor === 'docker'
+        ? await this.dependencies.dockerAdmission?.({
+            selection: this.selection(state),
+            statusSnapshot: facts.statusSnapshot,
+          })
+        : undefined;
     const preparedExecutor = readOnly
       ? undefined
-      : await this.dependencies.prepareExecutor?.(facts.selection.executor);
+      : (admittedExecutor ?? (await this.dependencies.prepareExecutor?.(facts.selection.executor)));
     const evidence = readOnly
       ? {
           status: 'unverified' as const,
@@ -441,6 +448,7 @@ export class LaunchApplicationService {
       };
     }
     let beforeChildExecution: (() => Promise<void>) | undefined;
+    let accountBindingRef: string | undefined;
     if (facts.selection.runtime === 'pi' && facts.evidence.status === 'verified') {
       const result = await this.dependencies.accountPreflight?.({
         runtimeRoot:
@@ -449,6 +457,9 @@ export class LaunchApplicationService {
       });
       if (typeof result === 'function') {
         beforeChildExecution = result;
+      } else if (result) {
+        beforeChildExecution = result.beforeChildExecution;
+        accountBindingRef = result.accountBindingRef;
       }
     }
     const execute = facts.preparedExecutor?.execute ?? this.dependencies.launchExecution;
@@ -472,6 +483,7 @@ export class LaunchApplicationService {
       statusSnapshot: facts.statusSnapshot,
       ...(facts.found ? { project: facts.found } : {}),
       ...(beforeChildExecution ? { beforeChildExecution } : {}),
+      ...(accountBindingRef ? { accountBindingRef } : {}),
     });
     return { data: null, warnings: [], silent: true, exitCode: result.exitCode };
   }

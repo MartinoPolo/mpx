@@ -193,6 +193,53 @@ describe('LaunchApplicationService', () => {
     expect(fallbackExecution).not.toHaveBeenCalled();
   });
 
+  it('keeps admission executors and account bindings private to interleaved resolved launches', async () => {
+    let admitted = 0;
+    let preflighted = 0;
+    const executions: Array<{ verifier: string; accountBindingRef?: string }> = [];
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      dockerAdmission: async () => {
+        const launch = ++admitted;
+        return {
+          evidence: {
+            status: 'verified' as const,
+            verifier: `docker-${launch}`,
+            evidenceDigest: String(launch).repeat(64),
+          },
+          execute: async (input) => {
+            executions.push({
+              verifier: input.descriptor.executorVerification.verifier,
+              ...(input.accountBindingRef ? { accountBindingRef: input.accountBindingRef } : {}),
+            });
+            return { exitCode: launch };
+          },
+        };
+      },
+      accountPreflight: async () => {
+        const launch = ++preflighted;
+        return {
+          accountBindingRef: `account-${launch}`,
+          beforeChildExecution: async () => undefined,
+        };
+      },
+    });
+    const preparedA = await service.prepare(request);
+    const preparedB = await service.prepare(request);
+    const resolvedA = await service.resolve(preparedA);
+    const resolvedB = await service.resolve(preparedB);
+
+    expect((await service.execute(resolvedA)).exitCode).toBe(1);
+    expect((await service.execute(resolvedB)).exitCode).toBe(2);
+    expect(executions).toEqual([
+      { verifier: 'docker-1', accountBindingRef: 'account-1' },
+      { verifier: 'docker-2', accountBindingRef: 'account-2' },
+    ]);
+    await expect(service.execute(Object.freeze({}) as never)).rejects.toMatchObject({
+      code: 'LAUNCH_STATE_INVALID',
+    });
+  });
+
   it('keeps explain read-only while returning exact public launch serialization', async () => {
     const events: string[] = [];
     const service = new LaunchApplicationService(dependencies(events));

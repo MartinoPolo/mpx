@@ -51,6 +51,7 @@ export function createNodeLifecycleApplicationService(
 export * from './launch-execution-adapters.js';
 export * from './launch-execution-runtime.js';
 export * from './launch-execution.js';
+export * from './launch-production.js';
 export * from './claude-gateway.js';
 export * from './provider-process-adapters.js';
 export * from './provider-application-service.js';

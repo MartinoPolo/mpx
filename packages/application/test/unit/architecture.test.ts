@@ -246,6 +246,26 @@ describe('@mpx/application architecture', () => {
     expect(source).not.toMatch(/\bCliContext\b|apps[\\/]cli/u);
   });
 
+  it('keeps production launch composition in the Node-only factory', async () => {
+    const main = await readFile(
+      path.resolve(import.meta.dirname, '../../../../apps/cli/src/main.ts'),
+      'utf8',
+    );
+    const node = await import('../../src/node/index.js');
+    const root = await import('../../src/index.js');
+    expect(node).toMatchObject({ createNodeLaunchApplicationService: expect.any(Function) });
+    expect(root).not.toHaveProperty('createNodeLaunchApplicationService');
+    for (const marker of [
+      'new LaunchApplicationService',
+      'createProductionSbxExecutionAdapter',
+      'loadProductionSbxProofSources',
+      'executeResolvedNodeLaunch',
+      'new RootAttestationService',
+    ]) {
+      expect(main).not.toContain(marker);
+    }
+  });
+
   it('keeps session resume launch composition out of CLI main', async () => {
     const main = await readFile(
       path.resolve(import.meta.dirname, '../../../../apps/cli/src/main.ts'),

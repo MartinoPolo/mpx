@@ -34,7 +34,7 @@ import {
 export * from './launch-execution-runtime.js';
 export { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
 
-export interface LaunchExecutionInput extends LaunchExecutionRequest {
+export interface NodeLaunchExecutionInput extends LaunchExecutionRequest {
   readonly context: LaunchExecutionContext;
   readonly tty?: DirectTty;
   readonly agentsRoot: string;
@@ -44,7 +44,7 @@ export interface LaunchExecutionInput extends LaunchExecutionRequest {
 }
 
 function productionComposer(
-  input: LaunchExecutionInput,
+  input: NodeLaunchExecutionInput,
   preflightResult: () => TrustedRuntimeExecutable | undefined,
 ): LaunchRuntimeComposer {
   return async (composition) => {
@@ -142,7 +142,7 @@ function productionComposer(
 
 /** CLI composition supplies only concrete runtime projection and platform ports. */
 export const executeResolvedNodeLaunch = async (
-  input: LaunchExecutionInput,
+  input: NodeLaunchExecutionInput,
 ): Promise<ProcessResult> => {
   if (!input.context.launchRoutes) {
     throw new ExecutionError(
