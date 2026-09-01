@@ -1,137 +1,144 @@
 # Session Handoff
 
-Date: 2026-09-01
+Date: 2026-09-02
 
 **Authority:** `MPX_MIGRATION.md` defines migration scope and acceptance. This file is continuity context only.
 
-## Repository State
+## Outcome
 
-- `main` is at `ead99c8` (`refactor(application): extract session operations`).
-- `main` is ahead of private `origin/main`; nothing from this continuation was pushed.
-- The G4c worktree and temporary branch were removed after their final tree was proven identical to `ead99c8`.
-- Only the main worktree and local `main` branch remain.
-- Stages through the session-operation extraction are integrated and verified, but Stage G as a whole is not yet complete.
-- No `.mpx/` context directory exists.
+All repository-local migration work that can be completed without live credentials, user-owned external mutations, another operating system, or human observation/approval is complete on `skills-first-finish` at `dff624c`.
 
-## Progress This Session
+- Skills-first Stage G application extraction is complete.
+- Stage H structural implementation is complete.
+- Stage H acceptance remains pending because explicit convergence is blocked by external source drift.
+- Only live, external, other-OS, and human-approved gates remain.
+- Nothing from this branch has been pushed.
 
-- Finished the interrupted G4c session-operation extraction.
-- Added provider-neutral `SessionApplicationService` under `packages/application/src/session-application-service.ts`.
-- Added concrete Node composition under `packages/application/src/node/session-application-service.ts`.
-- Moved one-time legacy session filesystem/import behavior into `packages/application/src/node/session-legacy-import.ts`.
-- Reduced `apps/cli/src/session-command.ts` to argv grammar, usage validation, request mapping, and result forwarding.
-- Updated `apps/cli/src/main.ts` to compose the Node service with production store, discovery, branch, resume, identity, and scheduled-authority adapters.
-- Regenerated deterministic `bin/mpx.mjs` through the supported bundle script.
-- Strengthened root-application architecture tests with TypeScript AST inspection of runtime imports and re-exports.
-- Added real-store application tests for reconcile, branch, and resume ordering.
-- Added real-filesystem tests for unsafe legacy sources and bounded directory import.
+## Completed Application Boundary
 
-## Final G4c Behavior
+Root `@mpx/application` now owns provider-neutral sequencing for:
 
-- Root `@mpx/application` imports session domain contracts as types only. It has no Node, filesystem, runtime-adapter, provider, Windows, or CLI runtime dependency.
-- `createNodeSessionApplicationService` wires `SessionStore`, `SessionService`, lifecycle consumption, resume planning, and confirmation verification.
-- `createNodeSessionLegacyImport` owns native-binding lookup, identity mapping, source traversal, safety checks, planning, and confirmed import.
-- Session reconcile preserves this compatibility order:
-  1. Validate positional and `--capture` grammar.
-  2. Application admits immutable scheduled-capture authority.
-  3. CLI parses `--map-account` syntax.
-  4. CLI parses `--map-pi-root` syntax.
-  5. CLI requires an account mapping.
-  6. Application plans/imports legacy records.
-  7. Application discovers and reconciles runtime sessions.
-- Scheduled admission uses a service-bound, one-use `PreparedSessionReconcile` token so callers cannot bypass or replay admission.
-- Branch preparation loads and validates the parent and native binding before CLI workspace/intent validation, preserving established error precedence.
-- Branch execution uses a service-bound `PreparedSessionBranch` token and derives immutable branch requests from prepared state.
-- Resume preserves initial verification → lifecycle consumption → reload/replan → confirmation verification → execution. Initial verification failure consumes nothing.
-- CLI envelopes, warnings, grammar, aliases, error messages, and persisted session formats remain stable.
+- Providers, projects/configuration, skills, launch preparation/execution, lifecycle, worktrees, development services, ports, status, sessions, accounts, installation protocol, local views/doctor, and Phase-J migration.
+- Opaque service-bound prepared launch, session reconcile, branch, and resume states.
+- Exact compatibility ordering for provider preflight, optional config loading, launch selection, session reconcile/import, branch parent/native binding, account verification, executor evidence, and resume confirmation.
+
+`@mpx/application/node` now owns concrete composition for:
+
+- Provider process/repository/private-route adapters.
+- Account attestation and bounded Pi OAuth probes.
+- Session discovery, lifecycle, branch, resume, legacy import, and Docker admission.
+- Launch runtime projection/execution, sandbox adapters, proof loading, Claude gateway, and production launch policy composition.
+- Provider-local view rebuilding, Windows Terminal/branch adapters, installer protocol input, and Phase-J filesystem/process reconciliation.
+
+The CLI now retains argv grammar, usage validation, aliases, IO/rendering, envelopes, exits, command registration, TTY interaction, and structural composition.
+
+## Final Structural Enforcement
+
+Stage H added fail-closed repository gates for:
+
+- Public cross-workspace imports and declared package exports.
+- Forbidden relative/absolute/deep workspace imports.
+- Tests, specs, and fixtures under workspace `src`.
+- Final-only `.test`/`.spec` discovery and production TypeScript exclusions.
+- Removal of transitional root-unit discovery.
+- Deterministic, non-mutating source-to-bundle checks for `bin/mpx.mjs` and `bin/claude-gateway.js`.
+- Mandatory exact Phase-J owned-activation inventory before cutover planning.
+- Node-only application exports and root application neutrality.
+
+The generated Claude gateway is now a deterministic adjacent companion executable rather than an implicit missing bundled path.
 
 ## Verification
 
-- Focused session/application/architecture tests pass.
-- `pnpm run typecheck` passes.
-- `pnpm run check:quality` passes, including Prettier, Oxlint, and Fallow regression checks.
-- `pnpm run validate:generated` passes.
-- Full `pnpm test` passes across unit, payload, contract, integration, and E2E categories.
-- Repeated `scripts/bundle-cli.mjs` generation produced the same tracked bundle hash.
-- `git diff --check` and protected-path review pass.
-- Spec-alignment, code-quality, security, error-handling, and test-quality reviews found no remaining G4c blockers.
-- One earlier full run hit unrelated transient Windows `EPERM` installer rename and delayed process-tree timing failures. Both passed immediately in narrow reruns and subsequent full runs.
+The final repository-local gate passed at `dff624c`:
 
-## Completed Migration Checkpoints
+- `pnpm run check`
+- `pnpm run typecheck`
+- `pnpm test`
+- `git diff --check`
 
-- Stages A–D established the final test taxonomy, moved package-owned tests/fixtures, and added repository-derived layout guards.
-- Stage E separated skill-platform internals behind stable public APIs.
-- Stage F introduced verified neutral skill projection plans and moved runtime policy/model ownership into workspace packages.
-- Stage G completed these application cohorts:
-  - Provider operations.
-  - Project/config and skill operations.
-  - Provider capability-role correction.
-  - Lifecycle/dev/ports/status/worktree/preparation operations.
-  - Launch execution sequencing.
-  - Launch preparation, explanation, skill resolution, and resume repository binding.
-  - Session list/show/inbox/mark/save/disposition/reconcile/branch/resume operations.
+Full test categories passed:
 
-## Key Decisions
+- Unit
+- Payload
+- Contract
+- Integration
+- E2E
 
-- `content/skills` remains canonical; runtimes consume verified neutral plans.
-- Root `@mpx/application` remains provider/runtime/Windows/Node-neutral and side-effect-light.
-- Concrete process/filesystem/session composition belongs under `@mpx/application/node`.
-- CLI retains argv grammar, aliases, TTY/human rendering, envelopes, stdout/stderr, exits, and concrete composition.
-- Application owns provider-neutral workflow sequencing, policy admission, prepared-state integrity, and typed results.
-- Prepared states are opaque, immutable, service-bound capabilities, not caller-controlled booleans or forgeable plans.
-- Legacy session import remains an explicit one-time adapter, never a permanent fallback reader.
-- Normal `pnpm test` remains self-contained; explicit convergence is separate and human-reviewed.
-- Use pnpm exclusively for package commands.
+Additional evidence throughout the extraction included focused application/CLI suites, quality and Fallow regression checks, generated validation, structure validation, deterministic repeated dual-bundle generation, and architecture/spec/security/error-handling/test-quality reviews.
 
-## Dead Ends & Mistakes
+Explicit convergence was intentionally not run.
 
-- The first G4c pass changed branch error precedence by validating workspace/intent before loading the parent.
-- Reconcile initially ran discovery before legacy import, leaving imported sessions outside the same reconciliation.
-- Scheduled authority was initially duplicated between CLI and application, then briefly moved after legacy grammar parsing. The prepared-reconcile capability now preserves both ownership and precedence.
-- The first root service runtime-imported Node-backed session implementations. Concrete construction now lives under the Node export.
-- Raw `SOURCE=TARGET` parsing briefly leaked into the Node adapter. CLI now translates those flags into structured mappings.
-- A precommit fixer incorrectly moved branch option validation before parent preparation. This was reverted because main’s existing error precedence is a compatibility contract.
-- Narrow Vitest runs against workspace package imports require relevant packages to be built first; otherwise tests may load stale `dist` output.
-- Do not use ancestry or `git cherry` alone to classify squash-integrated branches; compare trees/blobs and current behavior.
+## Integrated Commits on This Branch
 
-## Next Steps
+- `a4f98af refactor(application): extract account orchestration`
+- `a886cc3 refactor(application): extract session resume launch workflow`
+- `cd37f10 refactor(application): move sandbox adapters to node`
+- `5adc611 refactor(application): extract view and doctor workflows`
+- `6b6049f refactor(application): extract install protocol service`
+- `6a14365 refactor(application): extract phase-j migration service`
+- `bf2db4c refactor(application): move provider adapters to node`
+- `cb871b5 refactor(application): move session adapters to node`
+- `fb7ec03 refactor(application): move launch adapters to node`
+- `7b37f5c refactor(application): compose session resume in node`
+- `33aa28e refactor(application): compose session branch in node`
+- `79feedd refactor(application): compose launch workflow in node`
+- `4767c7d refactor(application): extract ports workflow`
+- `b7a9f0f chore(test): enforce final repository structure`
+- `dff624c docs(portability): document verification boundaries`
 
-1. Read the Stage G section and current CLI composition before choosing the next operation family.
-2. Inventory remaining domain orchestration in `apps/cli/src/main.ts` and command modules. Likely candidates include account, installer, migration, and remaining sandbox composition.
-3. Extract one coherent operation family at a time into root-neutral application contracts plus Node composition where required.
-4. Preserve exact CLI loading/error precedence, especially optional user config and provider identity/route handling.
-5. Run focused tests first, then `pnpm run typecheck`, quality, generated validation, full tests, deterministic bundling, and protected-path review.
-6. Complete Stage H final-structure and fail-closed gates only after all Stage G operation families are accepted.
-7. Keep F2 live proof and Stage H/I/J live rollout/cutover work behind their explicit human gates.
+## Remaining HITL and External Gates
 
-## External and Live Blockers
+### External convergence
 
-- Explicit convergence remains blocked by user-owned external drift, including `$MPX_PROJECTS/mpx-pi/APPEND_SYSTEM.md` (`CONVERGENCE_SOURCE_DRIFT: pi:APPEND_SYSTEM.md`).
-- Do not revert external files, regenerate/rebind convergence evidence, or run explicit convergence without user review.
-- F2 standalone-sbx live proof requires human-reviewed daemon/auth/live execution.
-- Stage H live rollout, Stage I installation, and Stage J observation/cutover/rollback remain pending.
+- Explicit convergence reads user-owned `${MPX_PROJECTS}/mpx-claude-code` and `${MPX_PROJECTS}/mpx-pi` sources.
+- `${MPX_PROJECTS}/mpx-pi/APPEND_SYSTEM.md` currently differs from the immutable recorded evidence.
+- Do not revert the external file or regenerate/rebind `docs/history/CONVERGENCE_MANIFEST.json` without human review.
+
+### F2 live proof
+
+- Retain a launch-bound V2 plan/report for pinned standalone `sbx` v0.39.0.
+- Observe mounts, version, ports, real traffic, containment limits, cleanup, and zero remaining sandboxes.
+- Verify live Claude sandbox and host-Pi OAuth routes without credentials entering the sandbox.
+
+### Real targets and interactive observation
+
+- Run every named real project/template target.
+- Observe Windows Terminal profile, start-directory, and alias behavior interactively.
+- Verify Linux on Linux and macOS on macOS using `docs/PORTABILITY.md`.
+
+### Installation and account routes
+
+- Review/install user-local configuration.
+- Apply and verify the immutable live installation.
+- Verify Claude/Pi registration and personal/work Claude/Pi routes.
+- Verify the installed scheduled reconcile task.
+- Evidence real Git author/SSH, Obsidian, Raycast, provider, and native session-resume routes.
+
+### Observation, cutover, and rollback
+
+- Complete the required observation window.
+- Pass the zero-legacy activation/config audit.
+- Obtain explicit user approval and perform cutover.
+- Prove live rollback.
+- Retire legacy activation/repositories/migration-only state only after all prior gates pass.
 
 ## Critical Files
 
-- `MPX_MIGRATION.md` — authoritative migration plan and acceptance ledger.
-- `packages/application/src/session-application-service.ts` — neutral session orchestration and prepared capabilities.
-- `packages/application/src/node/session-application-service.ts` — concrete Node session composition.
-- `packages/application/src/node/session-legacy-import.ts` — one-time legacy import filesystem adapter.
-- `apps/cli/src/session-command.ts` — session argv grammar and request/result mapping.
-- `apps/cli/src/main.ts` — concrete application composition root.
-- `packages/application/test/unit/session-application-service.test.ts` — reconcile/branch/resume ordering and prepared-state integrity.
-- `packages/application/test/unit/node-session-legacy-import.test.ts` — filesystem safety coverage.
-- `packages/application/test/unit/architecture.test.ts` — root dependency boundary guard.
-- `apps/cli/test/unit/session-command.test.ts` — CLI grammar, precedence, and envelope compatibility.
-- `bin/mpx.mjs` — tracked deterministic generated CLI bundle; never hand-edit.
-- `docs/history/CONVERGENCE_MANIFEST.json` — protected historical evidence.
-- `fallow-baselines/regression.json` — protected regression baseline; never refresh to conceal findings.
+- `MPX_MIGRATION.md` — authoritative acceptance ledger.
+- `packages/application/src/` — provider-neutral application operations.
+- `packages/application/src/node/` — concrete Node/runtime/provider/Windows composition.
+- `packages/application/test/unit/architecture.test.ts` — application and CLI boundary gates.
+- `scripts/validate-structure.mjs` — public workspace/layout enforcement.
+- `scripts/bundle-cli.mjs` — deterministic explicit bundle generation and non-mutating check mode.
+- `scripts/validate-generated.mjs` — generated/provenance/bundle validation.
+- `docs/PORTABILITY.md` — Linux/macOS evidence requirements without support claims.
+- `docs/history/CONVERGENCE_MANIFEST.json` — protected immutable historical evidence.
+- `fallow-baselines/regression.json` — protected baseline; never refresh to conceal findings.
 
-## Working Memory
+## Safety Notes
 
-- `MPX_MIGRATION.md` is authority; completion of G4c does not declare all of Stage G complete.
-- Preserve optional-config loading behavior: `config show` and `config validate` must not eagerly read malformed optional APPDATA config.
-- Routes are required only for capable hosted providers; local and route-neutral providers must remain route-neutral.
-- Preserve recorded `plan.repositoryId` during resume instead of substituting newly discovered repository identity.
-- Generated path/hash/provenance references must update atomically through supported scripts, never by hand.
-- Do not modify external roots, credentials, native auth/session state, installer state, payload/vendor content, convergence snapshots, or Fallow baselines during structural extraction.
+- Use pnpm exclusively for repository package commands.
+- Do not run explicit convergence until external drift is reviewed.
+- Do not mutate credentials, native account roots, installer state, scheduled tasks, Terminal settings, provider remotes, or legacy activation without explicit human approval.
+- Do not hand-edit generated bundles, convergence evidence, or Fallow baselines.
+- Treat transient Windows `EPERM`/`EBUSY` failures as resource ownership problems; do not mask them with larger timeouts.
