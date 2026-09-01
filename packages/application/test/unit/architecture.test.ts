@@ -15,8 +15,26 @@ describe('@mpx/application architecture', () => {
     expect(source).not.toMatch(/@mpx\/(?:provider-|runtime-|windows)|apps\/cli/u);
   });
 
-  it('exposes only the provider-neutral operation facade from the package root', async () => {
+  it('exposes shared contracts and provider-neutral operation facades from the package root', async () => {
     const index = await readFile(path.resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
-    expect(index).toBe("export * from './provider-application-service.js';\n");
+    expect(index).toBe(
+      "export * from './contracts.js';\n" +
+        "export * from './project-application-service.js';\n" +
+        "export * from './provider-application-service.js';\n" +
+        "export * from './skill-application-service.js';\n",
+    );
+  });
+
+  it('keeps generic application operation contracts out of provider-specific services', async () => {
+    const contracts = await readFile(
+      path.resolve(import.meta.dirname, '../../src/contracts.ts'),
+      'utf8',
+    );
+    const providerService = await readFile(
+      path.resolve(import.meta.dirname, '../../src/provider-application-service.ts'),
+      'utf8',
+    );
+    expect(contracts).toContain('export interface ApplicationOperationResult<T>');
+    expect(providerService).not.toContain('interface ApplicationOperationResult');
   });
 });

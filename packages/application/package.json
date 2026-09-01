@@ -19,7 +19,8 @@
   "dependencies": {
     "@mpx/config": "workspace:*",
     "@mpx/core": "workspace:*",
-    "@mpx/providers": "workspace:*"
+    "@mpx/providers": "workspace:*",
+    "@mpx/skills": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

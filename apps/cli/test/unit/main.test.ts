@@ -720,6 +720,43 @@ describe('cli', () => {
     });
   });
 
+  it.each([
+    ['show', 'malformed'],
+    ['validate', 'malformed'],
+    ['show', 'unreadable'],
+    ['validate', 'unreadable'],
+  ] as const)(
+    'returns exact config %s success when optional APPDATA config is %s',
+    async (action, state) => {
+      const cwd = await fixture(valid),
+        appdata = await directory('mpx-cli-optional-config-'),
+        io = captureIo();
+      await mkdir(path.join(appdata, 'mpx'));
+      await writeFile(path.join(appdata, 'mpx', 'config.json'), '{malformed');
+      const context =
+        state === 'unreadable'
+          ? {
+              env: { APPDATA: appdata },
+              accessFile: async () =>
+                Promise.reject(Object.assign(new Error('denied'), { code: 'EACCES' })),
+            }
+          : { env: { APPDATA: appdata } };
+
+      expect(await run(['--json', '--cwd', cwd, 'config', action], io, context)).toBe(0);
+      expect(io.err).toEqual([]);
+      expect(io.out).toHaveLength(1);
+      expect(JSON.parse(io.out[0]!)).toEqual({
+        apiVersion: 1,
+        ok: true,
+        data:
+          action === 'show'
+            ? { path: path.join(cwd, 'mpxconfig.json'), config: JSON.parse(valid) }
+            : { valid: true, path: path.join(cwd, 'mpxconfig.json') },
+        warnings: [],
+      });
+    },
+  );
+
   it('persists session mark relationship metadata through the real CLI parser', async () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
@@ -1171,6 +1208,19 @@ describe('cli', () => {
     });
   });
 
+  it('preserves unknown identity precedence before later skill syntax validation', async () => {
+    const cwd = await fixture(valid),
+      env = await configuredLaunchEnv(cwd),
+      io = captureIo();
+    expect(
+      await run(['--json', '--cwd', cwd, 'skill', 'list', '--identity', 'missing'], io, { env }),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'IDENTITY_UNKNOWN' },
+    });
+  });
+
   it('requires an explicit runtime for every skill resolution', async () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
@@ -1204,6 +1254,36 @@ describe('cli', () => {
     expect(JSON.parse(io.out[0]!)).toMatchObject({
       ok: false,
       error: { code: 'SKILL_POLICY_REQUIRED' },
+    });
+  });
+
+  it('preserves unknown skill policy precedence before action argument validation', async () => {
+    const cwd = await fixture(valid),
+      env = await configuredLaunchEnv(cwd),
+      io = captureIo();
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          cwd,
+          'skill',
+          'list',
+          'unexpected',
+          '--identity',
+          'work',
+          '--runtime',
+          'pi',
+          '--skill-policy',
+          'missing',
+        ],
+        io,
+        { env },
+      ),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'SKILL_POLICY_UNKNOWN' },
     });
   });
 

@@ -9,11 +9,7 @@ import {
   type ProviderProbeResult,
   type ProviderRole,
 } from '@mpx/providers';
-
-export interface ApplicationOperationResult<T> {
-  readonly data: T;
-  readonly exitCode?: number;
-}
+import type { ApplicationOperationResult } from './contracts.js';
 
 export interface ProviderRegistryOperations {
   list(role?: ProviderRole): readonly ProviderDescriptor[];

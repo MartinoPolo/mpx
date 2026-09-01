@@ -6,19 +6,19 @@ import { fileURLToPath } from 'node:url';
 import {
   ConfigValidationError,
   StrictJsonError,
-  confirmInit,
   discoverProjectConfig,
-  rollbackConfirmedInit,
-  doctor as configDoctor,
-  loadUserConfig,
-  planInit,
-  resolveConfig,
   resolveEffectiveSkillPacks,
   resolveKnownLaunchCwdClassification,
   type DiscoveredConfig,
-  type ProjectConfig,
   type UserConfig,
 } from '@mpx/config';
+import {
+  createProjectApplicationService,
+  createSkillApplicationService,
+  resolveProjectSkillOptions,
+  type ProjectApplicationService,
+  type SkillApplicationService,
+} from '@mpx/application';
 import {
   createSkillArtifactReference,
   errorEnvelope,
@@ -48,18 +48,10 @@ import { parseStatusSnapshotV1, type StatusSnapshotV1 } from '@mpx/status';
 import { expandBranchTemplate } from '@mpx/worktrees';
 import {
   createRuntimeSkillArtifact,
-  explainSkill,
-  humanCompleteSkills,
-  humanListSkills,
-  humanSearchSkills,
-  humanSkillDetail,
   inventoryCanonical,
   inventoryProjectSkills,
   resolveManifest,
-  searchSkills,
   SkillCatalogError,
-  doctor as skillDoctor,
-  type ResolveOptions,
 } from '@mpx/skills';
 import {
   catalogPath,
@@ -280,90 +272,32 @@ function parse(argv: readonly string[]): Parsed {
     options,
   };
 }
-function safeErrnoCode(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? (error as { code?: unknown }).code
-      : undefined;
-  return typeof code === 'string' && code ? code : 'UNKNOWN';
-}
-function userConfigUnreadable(error: unknown): MpxError {
-  return new MpxError({
-    code: 'USER_CONFIG_UNREADABLE',
-    message: 'User configuration could not be read.',
-    details: { errno: safeErrnoCode(error) },
+function projectApplication(context: CliContext): ProjectApplicationService {
+  return createProjectApplicationService({
+    path: { join: path.join, basename: path.basename, isAbsolute: path.isAbsolute },
+    access: context.accessFile ?? access,
+    ensureProject: (request) => ports(context).ensure(request),
   });
 }
-async function present(
-  file: string,
-  accessFile: (file: string) => Promise<void> = access,
-): Promise<boolean> {
-  try {
-    await accessFile(file);
-    return true;
-  } catch (error) {
-    const code = safeErrnoCode(error);
-    if (code === 'ENOENT' || code === 'ENOTDIR') {
-      return false;
-    }
-    throw userConfigUnreadable(error);
-  }
-}
-async function readUserConfig(file: string, context: CliContext): Promise<UserConfig> {
-  try {
-    return await loadUserConfig(file, context.env);
-  } catch (error) {
-    if (
-      error instanceof StrictJsonError ||
-      error instanceof ConfigValidationError ||
-      error instanceof MpxError
-    ) {
-      throw error;
-    }
-    throw userConfigUnreadable(error);
-  }
-}
-function emptyUserConfig(): UserConfig {
-  return {
-    identities: {},
-    domains: {},
-    contentScopes: {},
-    modes: {},
-    skillPolicies: {},
-    presets: {},
-    launchDefaults: { projects: {}, scopes: {} },
-    networkPolicies: {},
-    executors: { host: {} },
-  };
+function skillApplication(): SkillApplicationService {
+  return createSkillApplicationService({
+    inventoryCanonical,
+    inventoryProjectSkills,
+    discoverProjectConfig,
+    classifyCwd: resolveKnownLaunchCwdClassification,
+  });
 }
 async function userConfig(context: CliContext): Promise<UserConfig> {
-  const appdata = context.env.APPDATA;
-  if (!appdata) {
-    return emptyUserConfig();
-  }
-  const file = path.join(appdata, 'mpx', 'config.json');
-  return (await present(file, context.accessFile))
-    ? readUserConfig(file, context)
-    : emptyUserConfig();
+  return projectApplication(context).optionalUserConfig({
+    ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
+    environment: context.env,
+  });
 }
 async function requiredUserConfig(context: CliContext): Promise<UserConfig> {
-  const appdata = context.env.APPDATA;
-  if (!appdata || !path.isAbsolute(appdata)) {
-    throw new MpxError({
-      code: 'USER_CONFIG_REQUIRED',
-      message: 'Launch-bound commands require strict user-local configuration.',
-      remediation: 'Create %APPDATA%/mpx/config.json and set APPDATA to an absolute path.',
-    });
-  }
-  const file = path.join(appdata, 'mpx', 'config.json');
-  if (!(await present(file, context.accessFile))) {
-    throw new MpxError({
-      code: 'USER_CONFIG_REQUIRED',
-      message: 'Launch-bound commands require strict user-local configuration.',
-      remediation: 'Create %APPDATA%/mpx/config.json.',
-    });
-  }
-  return readUserConfig(file, context);
+  return projectApplication(context).requiredUserConfig({
+    ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
+    environment: context.env,
+  });
 }
 function productionAccountServices(user: UserConfig, context: CliContext, cwd: string) {
   const service =
@@ -412,16 +346,11 @@ function productionAccountServices(user: UserConfig, context: CliContext, cwd: s
   };
   return { service, auth, resolver, verifier };
 }
-async function project(parsed: Parsed): Promise<DiscoveredConfig> {
-  const found = await discoverProjectConfig(parsed.cwd);
-  if (!found) {
-    throw new MpxError({
-      code: 'CONFIG_NOT_FOUND',
-      message: 'No mpxconfig.json was found.',
-      remediation: "Run 'mpx init' in the project root.",
-    });
-  }
-  return found;
+async function project(
+  parsed: Parsed,
+  context: CliContext = defaultContext,
+): Promise<DiscoveredConfig> {
+  return projectApplication(context).discover(parsed.cwd);
 }
 
 function stringOption(parsed: Parsed, name: string): string | undefined {
@@ -435,56 +364,7 @@ function requiredOption(parsed: Parsed, name: string): string {
   }
   return value;
 }
-async function knownCwdClassification(
-  cwd: string,
-  user: UserConfig,
-): Promise<{ domain: string; contentScope: string }> {
-  return resolveKnownLaunchCwdClassification(cwd, user);
-}
-
-function resolveOptions(
-  user: UserConfig,
-  binding: {
-    identity: string;
-    skillPolicy: string;
-    contentScope: string;
-    repositoryId: string;
-    projectId?: string;
-  },
-): ResolveOptions {
-  const configuredScope = user.contentScopes[binding.contentScope];
-  if (!configuredScope) {
-    throw new MpxError({
-      code: 'CONTENT_SCOPE_UNKNOWN',
-      message: `Unknown content scope '${binding.contentScope}'.`,
-    });
-  }
-  const skillPolicyConfig = user.skillPolicies[binding.skillPolicy];
-  if (!skillPolicyConfig) {
-    throw new MpxError({
-      code: 'SKILL_POLICY_UNKNOWN',
-      message: `Unknown skill policy '${binding.skillPolicy}'.`,
-    });
-  }
-  const projectOverride = binding.projectId ? user.projects?.[binding.projectId] : undefined;
-  const contentScopeExposure = configuredScope.skillExposure ?? {};
-  const projectExposure = projectOverride?.skillExposure;
-  return {
-    repositoryId: binding.repositoryId,
-    contentScope: binding.contentScope,
-    ...(binding.projectId ? { projectId: binding.projectId } : {}),
-    enabledPacks: resolveEffectiveSkillPacks({
-      contentScopeSkillPacks: configuredScope.skillPacks,
-      projectSkillPacks: projectOverride?.skillPacks,
-      skillPolicySkillPacks: skillPolicyConfig.skillPacks,
-    }),
-    identity: binding.identity,
-    skillPolicy: binding.skillPolicy,
-    skillPolicyConfig,
-    contentScopeExposure,
-    ...(projectExposure ? { projectExposure } : {}),
-  };
-}
+const resolveOptions = resolveProjectSkillOptions;
 
 function unexpectedCommandError(error: unknown, context: CliContext): MpxError {
   try {
@@ -1461,61 +1341,19 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     ['list', 'show'].includes(action ?? '')
   ) {
     const user = await requiredUserConfig(context);
-    const source =
-      group === 'identity'
-        ? user.identities
-        : group === 'mode'
-          ? user.modes
-          : group === 'skill-policy'
-            ? user.skillPolicies
-            : user.presets;
-    const projectPublic = (name: string, value: unknown): unknown => {
-      if (group !== 'identity') {
-        return { name, ...(value as Record<string, unknown>) };
-      }
-      const identity = value as UserConfig['identities'][string];
-      return {
-        name,
-        domain: identity.domain,
-        gitAuthorRoute: identity.gitAuthorRoute,
-        providerRoutes: Object.fromEntries(
-          Object.entries(identity.providerRoutes ?? {}).sort(([left], [right]) =>
-            left.localeCompare(right),
-          ),
-        ),
-        sshRoute: identity.sshRoute ?? null,
-        mcpSharing: {
-          allow: [...(identity.mcpSharing?.allow ?? [])].sort(),
-          shareNativeAuth: false,
-        },
-      };
-    };
-    if (action === 'list') {
-      if (args.length) {
-        throw new UsageError(`${group} list accepts no arguments`);
-      }
-      data = {
-        schemaVersion: 1,
-        kind: group,
-        items: Object.entries(source)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([name, value]) => projectPublic(name, value)),
-      };
-    } else {
-      if (args.length !== 1) {
-        throw new UsageError(`${group} show requires exactly one name`);
-      }
-      const name = args[0]!,
-        value = source[name];
-      if (!value) {
-        throw new MpxError({
-          code: `${group.replace('-', '_').toUpperCase()}_UNKNOWN`,
-          message: `Unknown ${group} '${name}'.`,
-        });
-      }
-      data = { schemaVersion: 1, kind: group, item: projectPublic(name, value) };
+    if (action === 'list' && args.length) {
+      throw new UsageError(`${group} list accepts no arguments`);
     }
-    return { data, warnings };
+    if (action === 'show' && args.length !== 1) {
+      throw new UsageError(`${group} show requires exactly one name`);
+    }
+    const result = projectApplication(context).configurationItem({
+      kind: group as 'identity' | 'mode' | 'skill-policy' | 'preset',
+      action: action as 'list' | 'show',
+      user,
+      ...(args[0] ? { name: args[0] } : {}),
+    });
+    return { ...result, warnings };
   }
   if (group === 'dev') {
     if (
@@ -1525,7 +1363,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     ) {
       throw new UsageError('dev requires one of: start, status, logs, restart, stop');
     }
-    const found = await project(parsed),
+    const found = await project(parsed, context),
       id = stringOption(parsed, 'id'),
       rawLines = stringOption(parsed, 'lines');
     if (action !== 'status' && id === undefined) {
@@ -1583,7 +1421,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     if (action !== 'rebuild' || args.length) {
       throw new UsageError('view requires rebuild');
     }
-    const found = await project(parsed),
+    const found = await project(parsed, context),
       issues = found.config.issues;
     if (issues?.provider !== 'local' || !issues.store || !issues.view) {
       throw new MpxError({
@@ -1654,7 +1492,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         ? `issue.dependency.${dependencyAction}`
         : `${group}.${normalizedAction}`;
     const role = group === 'issue' ? 'issues' : 'repository';
-    const found = await project(parsed);
+    const found = await project(parsed, context);
     const identityName = stringOption(parsed, 'identity');
     const identity =
       identityName === undefined
@@ -2482,7 +2320,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         throw new UsageError('ports reconcile accepts no arguments');
       }
       if (parsed.options.get('rebuild') === true) {
-        const [user, found] = await Promise.all([userConfig(context), project(parsed)]);
+        const [user, found] = await Promise.all([userConfig(context), project(parsed, context)]);
         const roots = [
           ...new Set(
             [...Object.values(user.domains).flat(), found.root].map((root) => path.resolve(root)),
@@ -2496,7 +2334,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       if (args.length) {
         throw new UsageError(`ports ${action} accepts no arguments`);
       }
-      const found = await project(parsed);
+      const found = await project(parsed, context);
       const request = {
         cwd: parsed.cwd,
         projectRoot: found.root,
@@ -2519,7 +2357,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     return { data, warnings };
   }
   if (group === 'status' && !action) {
-    const found = await project(parsed);
+    const found = await project(parsed, context);
     data = await status(context, context.portService).snapshot({
       cwd: parsed.cwd,
       projectRoot: found.root,
@@ -2529,117 +2367,28 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     return { data, warnings };
   }
   if (group === 'init' && !action) {
-    const existing = await discoverProjectConfig(parsed.cwd);
-    const suggestedManifest: ProjectConfig = {
-      schemaVersion: 1,
-      project: { id: `REPLACE_ME/${path.basename(parsed.cwd)}` },
-      repository: { provider: 'generic', remote: 'REPLACE_ME' },
-    };
-    const plan = planInit(parsed.cwd, Boolean(existing));
-    if (parsed.options.get('confirm') !== true) {
-      return { data: { plan, suggestedManifest }, warnings };
-    }
-    const service = ports(context);
-    const confirmation = await confirmInit(parsed.cwd, Boolean(existing), suggestedManifest);
-    const found = existing ?? (await project(parsed));
-    const request = {
+    const result = await projectApplication(context).init({
       cwd: parsed.cwd,
-      projectRoot: found.root,
-      config: found.config,
-      configHash: sha256Canonical(found.config as unknown as JsonValue),
-    };
-    let result: Awaited<ReturnType<typeof service.ensure>>;
-    try {
-      result = await service.ensure(request);
-    } catch (error) {
-      let rollbackError: unknown;
-      try {
-        await rollbackConfirmedInit(confirmation);
-      } catch (caught) {
-        rollbackError = caught;
-      }
-      const code = (value: unknown): string =>
-        value instanceof MpxError ? value.code : 'COMMAND_FAILED';
-      const portCompensation =
-        error instanceof MpxError && error.code === 'PORT_ENSURE_COMPENSATION_FAILED';
-      if (portCompensation || rollbackError) {
-        const details =
-          error instanceof MpxError &&
-          error.details &&
-          typeof error.details === 'object' &&
-          !Array.isArray(error.details)
-            ? (error.details as Record<string, unknown>)
-            : {};
-        throw new MpxError({
-          code: portCompensation ? 'INIT_COMPENSATION_FAILED' : 'INIT_ROLLBACK_FAILED',
-          message: portCompensation
-            ? 'Init port publication failed and exact lease compensation could not be completed.'
-            : 'Init failed and its owned manifest could not be rolled back safely.',
-          remediation: 'Inspect the project init artifacts and port registry, then retry init.',
-          details: {
-            originalCode:
-              typeof details.originalCode === 'string' ? details.originalCode : code(error),
-            ...(typeof details.compensationCode === 'string'
-              ? { compensationCode: details.compensationCode }
-              : {}),
-            ...(rollbackError ? { rollbackCode: code(rollbackError) } : {}),
-          },
-        });
-      }
-      throw error;
-    }
-    warnings = [
-      ...(confirmation.pendingTemporaryPath
-        ? [
-            {
-              code: 'INIT_TEMP_CLEANUP_PENDING',
-              message: 'Init completed, but owned temporary-file cleanup is pending.',
-              severity: 'warning' as const,
-            },
-          ]
-        : []),
-      ...result.warnings.map((warning) => ({
-        code: warning.code,
-        message: warning.message,
-        severity: 'warning' as const,
-        ...(warning.port === undefined ? {} : { details: { port: warning.port } }),
-      })),
-    ];
-    data = { plan, suggestedManifest, confirmed: true, lease: result.lease };
-    return { data, warnings };
+      confirm: parsed.options.get('confirm') === true,
+    });
+    return { data: result.data, warnings: [...(result.warnings ?? [])] };
   }
   if (group === 'config' && ['show', 'resolve', 'explain', 'validate'].includes(action ?? '')) {
-    const found = await project(parsed);
-    if (action === 'show') {
-      data = { path: found.path, config: found.config };
-    } else if (action === 'validate') {
-      data = { valid: true, path: found.path };
-    } else {
-      const resolved = await resolveConfig(found.config, await userConfig(context), parsed.cwd);
-      data = action === 'explain' ? { provenance: resolved.provenance } : resolved;
-    }
-    return { data, warnings };
+    const service = projectApplication(context);
+    const result =
+      action === 'resolve' || action === 'explain'
+        ? await service.config({ cwd: parsed.cwd, action, user: await userConfig(context) })
+        : action === 'show'
+          ? await service.config({ cwd: parsed.cwd, action })
+          : await service.config({ cwd: parsed.cwd, action: 'validate' });
+    return { ...result, warnings };
   }
   if (group === 'doctor' && !action) {
-    const found = await project(parsed),
-      user = await userConfig(context),
-      resolved = await resolveConfig(found.config, user, parsed.cwd);
+    const found = await project(parsed, context),
+      user = await userConfig(context);
     const catalog = await inventoryCanonical(await catalogPath(context, parsed.cwd));
     const local = await inventoryProjectSkills(found.root, catalog);
-    const diagnostics: Diagnostic[] = [
-      ...configDoctor(found.config, user).map(({ code, message, severity, pointer }) => ({
-        code,
-        message,
-        severity,
-        ...(pointer ? { details: { pointer } } : {}),
-      })),
-      ...skillDoctor(catalog, local).map(({ code, message, path: diagnosticPath }) => ({
-        code,
-        message,
-        severity: 'error' as const,
-        ...(diagnosticPath ? { details: { path: diagnosticPath } } : {}),
-      })),
-    ];
+    const diagnostics: Diagnostic[] = [];
     const sbxProbe =
       context.sbxDiagnostics ??
       (context === defaultContext
@@ -2730,16 +2479,14 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         })),
       );
     }
-    data = {
-      diagnostics,
-      cwdClassification: resolved.cwdClassification,
-      resolvedContentScope: resolved.contentScope.name,
-    };
-    return {
-      data,
-      warnings,
-      exitCode: diagnostics.some(({ severity }) => severity === 'error') ? 1 : 0,
-    };
+    const result = await projectApplication(context).doctor({
+      cwd: parsed.cwd,
+      user,
+      canonical: catalog,
+      projectInventory: local,
+      additionalDiagnostics: diagnostics,
+    });
+    return { ...result, warnings };
   }
   if (group === 'provider' && ['list', 'explain', 'doctor'].includes(action ?? '')) {
     if (action === 'list') {
@@ -2757,7 +2504,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         throw new UsageError('provider doctor accepts no arguments');
       }
       const identityName = stringOption(parsed, 'identity');
-      const found = await project(parsed);
+      const found = await project(parsed, context);
       const identity =
         identityName === undefined
           ? undefined
@@ -2774,7 +2521,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     if (role !== 'repository' && role !== 'issues') {
       throw new UsageError('provider explain requires repository or issues');
     }
-    const found = await project(parsed);
+    const found = await project(parsed, context);
     const result = configuredProviderApplicationService(context).explain({
       project: found.config,
       role,
@@ -2793,12 +2540,8 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       });
     }
     const user = await requiredUserConfig(context);
-    if (!user.identities[identityOption]) {
-      throw new MpxError({
-        code: 'IDENTITY_UNKNOWN',
-        message: `Unknown identity '${identityOption}'.`,
-      });
-    }
+    const service = skillApplication();
+    service.assertConfiguredBindings({ user, identity: identityOption });
     const runtimeOption = parsed.options.get('runtime');
     if (runtimeOption === undefined) {
       throw new MpxError({
@@ -2819,124 +2562,35 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         message: 'Skill resolution requires an explicit skill policy.',
       });
     }
-    if (!user.skillPolicies[skillPolicyOption]) {
-      throw new MpxError({
-        code: 'SKILL_POLICY_UNKNOWN',
-        message: `Unknown skill policy '${skillPolicyOption}'.`,
-      });
+    service.assertConfiguredBindings({ user, skillPolicy: skillPolicyOption });
+    if (action === 'list' && args.length) {
+      throw new UsageError('skill list accepts no arguments');
     }
-    const canonicalCatalog = await inventoryCanonical(await catalogPath(context, parsed.cwd));
-    const found = await discoverProjectConfig(parsed.cwd);
-    const projectInventory = found
-      ? await inventoryProjectSkills(found.root, canonicalCatalog)
-      : { skills: [], diagnostics: [] };
-    if (projectInventory.diagnostics.length) {
-      throw new SkillCatalogError(projectInventory.diagnostics);
-    }
-    const catalog = [...canonicalCatalog, ...projectInventory.skills].sort((left, right) =>
-      left.identity.localeCompare(right.identity),
-    );
-    const cwdClassification = await knownCwdClassification(parsed.cwd, user);
-    const contentScopeOption = parsed.options.get('content-scope');
-    const projectId = found?.config.project.id,
-      contentScope =
-        typeof contentScopeOption === 'string'
-          ? contentScopeOption
-          : cwdClassification.contentScope;
-    const opts = resolveOptions(user, {
-      identity: identityOption,
-      skillPolicy: skillPolicyOption,
-      contentScope,
-      repositoryId: projectId ?? 'unbound/runtime',
-      ...(projectId ? { projectId } : {}),
-    });
-    const manifest = resolveManifest(catalog, opts),
-      runtimeArtifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: runtimeOption });
-    const artifact = {
-      ...runtimeArtifact.reference,
-      identity: identityOption,
-      skillPolicy: skillPolicyOption,
-      contentScope,
-      projectId: projectId ?? null,
-    };
-    if (action === 'list') {
-      if (args.length) {
-        throw new UsageError('skill list accepts no arguments');
-      }
-      const exposure = new Map(
-        runtimeArtifact.entries.map((entry) => [entry.identity, entry.exposure]),
-      );
-      data = {
-        artifact,
-        manifest: {
-          schemaVersion: manifest.schemaVersion,
-          manifestKey: manifest.manifestKey,
-          binding: manifest.binding,
-        },
-        skills: humanListSkills(runtimeArtifact).map((skill) => ({
-          ...skill,
-          exposure: exposure.get(skill.identity),
-        })),
-      };
-      return { data, warnings };
-    }
-    const identity = args[0];
-    if (!identity) {
+    if (action !== 'list' && !args[0]) {
       throw new UsageError(
         `skill ${action} requires ${action === 'search' ? 'a query' : action === 'complete' ? 'a prefix' : 'an id'}`,
       );
     }
-    if (action === 'complete') {
-      return {
-        data: { artifact, completions: humanCompleteSkills(runtimeArtifact, args.join(' ')) },
-        warnings,
-      };
-    }
-    const skill = catalog.find((item: { identity: string }) => item.identity === identity);
-    const entry = runtimeArtifact.entries.find((item) => item.identity === identity);
-    if (action === 'show') {
-      const detail = humanSkillDetail(runtimeArtifact, catalog, identity);
-      if (!detail || !skill || !entry) {
-        throw new MpxError({
-          code: 'SKILL_NOT_FOUND',
-          message: `Skill '${identity}' was not found in the launch-bound artifact.`,
-        });
-      }
-      return {
-        data: {
-          artifact,
-          skill: {
-            ...detail,
-            skillPacks: 'skillPacks' in skill ? skill.skillPacks : [],
-            exposure: entry.exposure,
-          },
-        },
-        warnings,
-      };
-    }
-    if (action === 'explain') {
-      if (!skill) {
-        throw new MpxError({
-          code: 'SKILL_NOT_FOUND',
-          message: `Skill '${identity}' was not found.`,
-        });
-      }
-      return { data: { artifact, skill: explainSkill(skill, opts) }, warnings };
-    }
     const limit = Number(parsed.options.get('limit') ?? 20);
-    if (!Number.isInteger(limit)) {
+    if (action === 'search' && !Number.isInteger(limit)) {
       throw new UsageError('--limit must be an integer');
     }
-    const requestedArtifact = parsed.options.get('artifact-key');
-    data =
-      typeof requestedArtifact === 'string'
-        ? searchSkills(runtimeArtifact, catalog, args.join(' '), {
-            limit,
-            runtime: true,
-            artifactKey: requestedArtifact,
-          })
-        : humanSearchSkills(runtimeArtifact, catalog, args.join(' '), { limit });
-    return { data: { artifact, results: data }, warnings };
+    const contentScope = parsed.options.get('content-scope');
+    const artifactKey = parsed.options.get('artifact-key');
+    const result = await service.execute({
+      action: action as 'list' | 'search' | 'show' | 'explain' | 'complete',
+      cwd: parsed.cwd,
+      catalogRoot: await catalogPath(context, parsed.cwd),
+      user,
+      identity: identityOption,
+      runtime: runtimeOption,
+      skillPolicy: skillPolicyOption,
+      ...(typeof contentScope === 'string' ? { contentScope } : {}),
+      ...(args.length ? { value: args.join(' ') } : {}),
+      ...(action === 'search' ? { limit } : {}),
+      ...(typeof artifactKey === 'string' ? { artifactKey } : {}),
+    });
+    return { ...result, warnings };
   }
   throw new UsageError(usage);
 }

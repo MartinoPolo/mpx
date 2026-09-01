@@ -150,6 +150,9 @@ importers:
       '@mpx/providers':
         specifier: workspace:*
         version: link:../providers
+      '@mpx/skills':
+        specifier: workspace:*
+        version: link:../skills
     devDependencies:
       typescript:
         specifier: ^5.8.3

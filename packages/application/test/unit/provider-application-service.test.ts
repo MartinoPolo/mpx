@@ -164,6 +164,17 @@ describe('ProviderApplicationService', () => {
     );
   });
 
+  it('rejects an unknown named identity during invocation preparation', () => {
+    const { service, createProviderService } = setup();
+    expect(() => prepare(service, 'issue.list', { identityName: 'missing' })).toThrow(
+      expect.objectContaining({
+        code: 'IDENTITY_UNKNOWN',
+        message: "Unknown identity 'missing'.",
+      }),
+    );
+    expect(createProviderService).not.toHaveBeenCalled();
+  });
+
   it('allows a policy-selected route-neutral provider without an identity', async () => {
     const { service, invoke } = setup(false);
     const prepared = prepare(service, 'issue.list');
@@ -259,6 +270,17 @@ describe('ProviderApplicationService', () => {
       expect.objectContaining({
         code: 'IDENTITY_REQUIRED',
         message: 'Provider doctor requires an explicit identity.',
+      }),
+    );
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown named identity before provider doctor probes', async () => {
+    const { service, probe } = setup();
+    await expect(service.doctor({ project: project(), identityName: 'missing' })).rejects.toEqual(
+      expect.objectContaining({
+        code: 'IDENTITY_UNKNOWN',
+        message: "Unknown identity 'missing'.",
       }),
     );
     expect(probe).not.toHaveBeenCalled();

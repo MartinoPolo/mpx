@@ -59,6 +59,57 @@ const config = (repository = 'github', issues = 'kanbanflow') => ({
 });
 
 describe('provider CLI', () => {
+  it('delegates provider list role filtering into one success envelope', async () => {
+    const io = captureIo();
+    expect(await run(['--json', 'provider', 'list', '--role', 'issues'], io, { env: {} })).toBe(0);
+    expect(io.out).toHaveLength(1);
+    const envelope = JSON.parse(io.out[0]!);
+    expect(envelope).toMatchObject({ apiVersion: 1, ok: true, warnings: [] });
+    expect(envelope.data.map((item: { id: string }) => item.id)).toEqual([
+      'github',
+      'gitlab',
+      'kanbanflow',
+      'local',
+      'none',
+    ]);
+    expect(envelope.data.every((item: { roles: string[] }) => item.roles.includes('issues'))).toBe(
+      true,
+    );
+  });
+
+  it('delegates provider explain project selection into one success envelope', async () => {
+    const cwd = await project(config('github', 'kanbanflow')),
+      io = captureIo();
+    expect(
+      await run(['--json', '--cwd', cwd, 'provider', 'explain', 'repository'], io, { env: {} }),
+    ).toBe(0);
+    expect(io.out).toHaveLength(1);
+    expect(JSON.parse(io.out[0]!)).toEqual({
+      apiVersion: 1,
+      ok: true,
+      data: {
+        role: 'repository',
+        provider: 'github',
+        adapter: 'gh',
+        capabilities: [
+          'review.view',
+          'review.create',
+          'review.update',
+          'review.comment',
+          'review.ready',
+          'review.merge',
+          'ci.status',
+          'ci.watch',
+          'ci.logs',
+          'ci.retry',
+        ],
+        route: null,
+        routeSelection: 'identity-required',
+      },
+      warnings: [],
+    });
+  });
+
   it('selects the strict issues role and delegates with the explicit identity route', async () => {
     const cwd = await project(config()),
       env = await identityEnv(cwd, { kanbanflow: 'work-kf' }),
@@ -116,6 +167,56 @@ describe('provider CLI', () => {
       error: { code: 'IDENTITY_REQUIRED' },
     });
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['issue command', ['issue', 'list']],
+    ['provider doctor', ['provider', 'doctor']],
+  ] as const)(
+    'returns IDENTITY_UNKNOWN for an unknown named identity through %s',
+    async (_label, argv) => {
+      const cwd = await project(config('github', 'github')),
+        env = await identityEnv(cwd, { github: 'work-gh' }),
+        io = captureIo();
+      expect(
+        await run(['--json', '--cwd', cwd, ...argv, '--identity', 'missing'], io, { env }),
+      ).toBe(1);
+      expect(io.out).toHaveLength(1);
+      expect(JSON.parse(io.out[0]!)).toMatchObject({
+        ok: false,
+        error: { code: 'IDENTITY_UNKNOWN', message: "Unknown identity 'missing'." },
+      });
+    },
+  );
+
+  it('retains provider doctor JSON when one probe fails and exits one', async () => {
+    const cwd = await project(config('github', 'github')),
+      env = await identityEnv(cwd, { github: 'work-gh' }),
+      io = captureIo();
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'auth', failure: 'auth' })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+    expect(
+      await run(['--json', '--cwd', cwd, 'provider', 'doctor', '--identity', 'work'], io, {
+        env,
+        providerProcessExecutor: { execute },
+      }),
+    ).toBe(1);
+    expect(io.out).toHaveLength(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      apiVersion: 1,
+      ok: true,
+      data: {
+        schemaVersion: 1,
+        identity: 'work',
+        providers: [
+          { role: 'issues', provider: 'github', status: 'error' },
+          { role: 'repository', provider: 'github', status: 'ready' },
+        ],
+      },
+      warnings: [],
+    });
   });
 
   it('rejects an identity without a route for the selected provider', async () => {
