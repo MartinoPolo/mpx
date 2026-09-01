@@ -1191,6 +1191,52 @@ async function optionalJson<T>(file: string, fallback: T): Promise<T> {
     throw failure;
   }
 }
+type OwnedActivation = { path: string; startMarker: string; endMarker: string };
+
+export function parseOwnedActivations(value: unknown, env: NodeJS.ProcessEnv): OwnedActivation[] {
+  const invalid = (detail: string): never => {
+    throw new Error(`phase-j-owned-activations.json ${detail}`);
+  };
+  if (!Array.isArray(value) || value.length === 0) {
+    return invalid('must contain a non-empty array');
+  }
+  const records = value.map((item) => {
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      Array.isArray(item) ||
+      Object.keys(item).sort().join(',') !== 'endMarker,path,startMarker'
+    ) {
+      return invalid('contains an invalid activation record');
+    }
+    const { path: activationPath, startMarker, endMarker } = item as Record<string, unknown>;
+    if (
+      typeof activationPath !== 'string' ||
+      activationPath.trim().length === 0 ||
+      typeof startMarker !== 'string' ||
+      startMarker.trim().length === 0 ||
+      typeof endMarker !== 'string' ||
+      endMarker.trim().length === 0
+    ) {
+      return invalid('contains a blank activation field');
+    }
+    const resolved = resolveSymbolic(activationPath, env);
+    if (resolved.includes('${') || !path.isAbsolute(resolved)) {
+      return invalid(`contains an unresolved path: ${activationPath}`);
+    }
+    return { path: activationPath, startMarker, endMarker };
+  });
+  const identities = records.map((record) => {
+    const resolvedPath = path.resolve(resolveSymbolic(record.path, env));
+    const canonicalPath = process.platform === 'win32' ? resolvedPath.toLowerCase() : resolvedPath;
+    return JSON.stringify([canonicalPath, record.startMarker, record.endMarker]);
+  });
+  if (new Set(identities).size !== identities.length) {
+    return invalid('contains duplicate activation records');
+  }
+  return records;
+}
+
 function parseExceptions(value: unknown): { id: string; reason: string }[] {
   if (!Array.isArray(value)) {
     throw new Error('phase-j-exceptions.json must contain an array');
@@ -1247,6 +1293,20 @@ export async function executeMigrationCommand(input: {
       startMarker: '# >>> old-mpx owned >>>',
       endMarker: '# <<< old-mpx owned <<<',
     });
+  }
+  let ownedActivations: OwnedActivation[] | undefined;
+  if (input.action === 'cutover-plan') {
+    const manifest = path.join(input.repoRoot, 'docs', 'phase-j-owned-activations.json');
+    let value: unknown;
+    try {
+      value = await loadJson<unknown>(manifest);
+    } catch (failure) {
+      if ((failure as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error('phase-j-owned-activations.json is required', { cause: failure });
+      }
+      throw new Error('phase-j-owned-activations.json is malformed', { cause: failure });
+    }
+    ownedActivations = parseOwnedActivations(value, input.env);
   }
   const drift = await captureSourceDrift({ baseline, sources: sourceSpecs });
   const exceptions = parseExceptions(
@@ -1318,12 +1378,8 @@ export async function executeMigrationCommand(input: {
     };
   }
   if (input.action === 'cutover-plan') {
-    const specs = await optionalJson<{ path: string; startMarker: string; endMarker: string }[]>(
-        path.join(input.repoRoot, 'docs', 'phase-j-owned-activations.json'),
-        [],
-      ),
-      markerInspections: MarkerInspection[] = [];
-    for (const [index, spec] of specs.entries()) {
+    const markerInspections: MarkerInspection[] = [];
+    for (const [index, spec] of ownedActivations!.entries()) {
       const file = resolveSymbolic(spec.path, input.env);
       if (file.includes('${')) {
         markerInspections.push({ label: `activation-${index}`, status: 'inaccessible' });

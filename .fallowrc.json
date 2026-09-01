@@ -4,8 +4,8 @@
     "scripts/**/*.{js,mjs,ts}",
     "apps/cli/src/main.ts",
     "evidence/**/*.ts",
-    "tests/contract/**/*.test.ts",
-    "tests/integration/**/*.test.{js,mjs,ts}"
+    "tests/contract/**/*.{test,spec}.ts",
+    "tests/integration/**/*.{test,spec}.{js,mjs,ts}"
   ],
   "ignorePatterns": [
     "**/dist/**",
@@ -19,7 +19,7 @@
   "includeEntryExports": true,
   "duplicates": {
     "minOccurrences": 3,
-    "ignore": ["**/*.test.ts"]
+    "ignore": ["**/*.test.ts", "**/*.spec.ts"]
   },
   "rules": {
     "unused-files": "error",

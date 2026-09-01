@@ -20,7 +20,7 @@ export const EXCLUDED_TEST_PATHS = [
 ] as const;
 
 export const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
-  unit: ['**/*.integration.test.*', '**/*.e2e.test.*'],
+  unit: ['**/*.integration.{test,spec}.*', '**/*.e2e.{test,spec}.*'],
   payload: [],
   contract: [],
   integration: [],
@@ -29,18 +29,17 @@ export const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>
 
 export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
   unit: [
-    'tests/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'apps/*/test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'packages/*/test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'runtimes/*/*/test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'apps/*/test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'packages/*/test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'runtimes/*/*/test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
   ],
   payload: [
-    'tests/payload/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-    'content/skills/**/{test,tests,__tests__}/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'tests/payload/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+    'content/skills/**/{test,tests,__tests__}/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
   ],
-  contract: ['tests/contract/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
-  integration: ['tests/integration/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
-  e2e: ['tests/e2e/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
+  contract: ['tests/contract/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
+  integration: ['tests/integration/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
+  e2e: ['tests/e2e/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
 };
 
 type CategoryIncludes = Readonly<Record<TestCategory, readonly string[]>>;
@@ -96,11 +95,11 @@ export function createWorkspaceUnitConfig(
     test: {
       environment: 'node',
       passWithNoTests: true,
-      include: ['test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
+      include: ['test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
       exclude: [
         ...EXCLUDED_TEST_PATHS,
-        '**/*.integration.test.*',
-        '**/*.e2e.test.*',
+        '**/*.integration.{test,spec}.*',
+        '**/*.e2e.{test,spec}.*',
         ...(options.exclude ?? []),
       ],
       ...(options.testTimeout === undefined ? {} : { testTimeout: options.testTimeout }),

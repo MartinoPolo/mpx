@@ -1303,12 +1303,16 @@ Introduce `SkillProjectionPlan`, then migrate thin Claude and Pi adapters in tha
 
 #### G. Extract application orchestration (`refactor(cli): extract application operations`)
 
+**Status: complete.** Provider-neutral orchestration is exposed through the application workspace, and the CLI is limited to command parsing, IO, registration, and composition.
+
 Move provider-neutral application orchestration behind public workspace APIs so the CLI retains only argv parsing, IO, command registration, and composition.
 
 - **Accept:** application-layer tests are provider-neutral, CLI contracts remain stable, and no domain orchestration remains in command adapters.
 - **Rollback:** revert one operation family at a time without changing public CLI envelopes.
 
 #### H. Enforce the final structure (`chore(test): enforce final layout`)
+
+**Status: implementation complete; acceptance pending.** Final test discovery, source-to-bundle validation, and repository-wide workspace-boundary validation are fail closed and integrated into repository checks. Explicit convergence remains externally blocked, so Stage H acceptance is not yet complete.
 
 Remove transitional discovery/configuration and add fail-closed structural gates.
 
@@ -1326,5 +1330,6 @@ This migration does not rewrite skill payloads; redesign schemas or the hash alg
 - [x] Package builds emit no tests.
 - [x] `packages/skills` no longer depends on config or runtime adapters.
 - [x] Runtimes own no canonical parsing, policy, or provider logic.
-- [ ] The CLI application layer is provider-neutral.
-- [ ] Full quality, generated, convergence, and test gates pass.
+- [x] The CLI application layer is provider-neutral.
+- [x] Stage H final repository structure, quality, generated, type, and focused test gates pass.
+- [ ] Stage H acceptance: explicit convergence and the full combined gate remain externally blocked and were not executed.

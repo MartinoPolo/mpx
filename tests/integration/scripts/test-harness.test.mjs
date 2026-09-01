@@ -59,11 +59,7 @@ describe('repository-derived test taxonomy', () => {
         'packages/example/test/unit/foo.spec.ts',
         'packages/example/dist/foo.spec.js',
       ]),
-    ).toEqual([
-      'packages/example/dist/foo.spec.js',
-      'packages/example/src/foo.spec.ts',
-      'packages/example/test/unit/foo.spec.ts',
-    ]);
+    ).toEqual(['packages/example/dist/foo.spec.js', 'packages/example/src/foo.spec.ts']);
   });
 
   test('lists files deterministically and prunes non-owned trees before recursion', async () => {
@@ -261,20 +257,20 @@ describe('final workspace and root command contracts', () => {
     for (const workspace of workspaceRoots) {
       const vitest = await import(path.join(root, workspace, 'vitest.config.ts'));
       expect(vitest.default.test.include, workspace).toEqual([
-        'test/unit/**/*.test.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
+        'test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
       ]);
       const production = await json(`${workspace}/tsconfig.json`);
       expect(production.include, workspace).toEqual(['src/**/*.ts']);
-      expect(production.exclude, workspace).toContain('src/**/*.test.ts');
+      expect(production.exclude, workspace).toEqual(
+        expect.arrayContaining(['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/fixtures/**']),
+      );
       const tests = await json(`${workspace}/tsconfig.test.json`);
       expect(tests.compilerOptions.noEmit, workspace).toBe(true);
       expect(tests.include, workspace).toEqual(['src/**/*.ts', 'test/**/*.ts']);
       expect(tests.exclude, workspace).toEqual([]);
       const manifest = await json(`${workspace}/package.json`);
       expect(manifest.scripts.build, workspace).toBe(
-        workspace === 'apps/cli'
-          ? 'tsc -p tsconfig.json && node ../../scripts/bundle-cli.mjs'
-          : 'tsc -p tsconfig.json',
+        workspace === 'apps/cli' ? 'tsc -p tsconfig.json' : 'tsc -p tsconfig.json',
       );
       expect(manifest.scripts['test:unit'], workspace).toBe(
         `pnpm --filter ${manifest.name}... build && vitest run`,
@@ -351,6 +347,6 @@ describe('final workspace and root command contracts', () => {
 
   test('retains only the final test exception in Fallow duplicate analysis', async () => {
     const config = await json('.fallowrc.json');
-    expect(config.duplicates.ignore).toEqual(['**/*.test.ts']);
+    expect(config.duplicates.ignore).toEqual(['**/*.test.ts', '**/*.spec.ts']);
   });
 });

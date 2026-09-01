@@ -696,6 +696,22 @@ async function run() {
     .filter((name) => Boolean(name) && !deleted.has(name));
   const files = await repositoryFiles(root, names, { trackedFiles: tracked });
 
+  const bundles = spawnSync(
+    process.execPath,
+    [path.join(root, 'scripts/bundle-cli.mjs'), '--check'],
+    {
+      cwd: root,
+      encoding: 'utf8',
+    },
+  );
+  const bundleDiagnostics =
+    bundles.status === 0
+      ? []
+      : (bundles.stderr || bundles.stdout || 'BUNDLE_CHECK_FAILED: bundle check failed')
+          .trim()
+          .split(/\r?\n/u)
+          .filter(Boolean)
+          .map((message) => diagnostic('GENERATED_BUNDLE_INVALID', 'bin', message));
   const generated = spawnSync(
     process.execPath,
     [path.join(root, 'runtimes/pi/runtime-pi/scripts/generate-agents.mjs'), '--check'],
@@ -762,6 +778,7 @@ async function run() {
 
   const diagnostics = [
     ...files.diagnostics,
+    ...bundleDiagnostics,
     ...toolInventoryDiagnostics,
     ...convergenceDiagnostics,
     ...validateCanonicalScriptSyntax(root, names),

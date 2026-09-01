@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { executeMigrationCommand } from '../../../packages/application/src/node/index.js';
+import { executeMigrationCommand, parseOwnedActivations } from '@mpx/application/node';
 
 const exec = promisify(execFile);
 const roots: string[] = [];
@@ -123,6 +123,30 @@ async function bundled(f: Awaited<ReturnType<typeof fixture>>, action: string, l
 }
 
 describe('Phase J CLI acceptance fixtures', () => {
+  it('accepts the current repository owned-activation manifest with distinct blocks per profile', async () => {
+    const repositoryRoot = path.resolve(import.meta.dirname, '../../..');
+    const manifest = JSON.parse(
+      await readFile(path.join(repositoryRoot, 'docs', 'phase-j-owned-activations.json'), 'utf8'),
+    );
+    expect(
+      parseOwnedActivations(manifest, {
+        USERPROFILE: path.join(repositoryRoot, 'fixture-user'),
+        MPX_ONEDRIVE: path.join(repositoryRoot, 'fixture-onedrive'),
+      }),
+    ).toHaveLength(4);
+  });
+
+  it('rejects an exact duplicate owned-activation identity', () => {
+    const record = {
+      path: '${MPX_PROJECTS}/same',
+      startMarker: 'start',
+      endMarker: 'end',
+    };
+    expect(() =>
+      parseOwnedActivations([record, { ...record }], { MPX_PROJECTS: path.resolve('projects') }),
+    ).toThrow(/duplicate activation records/u);
+  });
+
   it('reconciles real source, baseline, log, and projection fixtures and requires explicit legacy-disabled acceptance', async () => {
     const f = await fixture();
     const observation = await executeMigrationCommand({
@@ -194,6 +218,52 @@ describe('Phase J CLI acceptance fixtures', () => {
           legacyDisabled: true,
         }),
       ).rejects.toThrow();
+    },
+    30_000,
+  );
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', '{'],
+    ['blank', JSON.stringify([{ path: ' ', startMarker: 'start', endMarker: 'end' }])],
+    [
+      'duplicate',
+      JSON.stringify([
+        { path: '${MPX_PROJECTS}/same', startMarker: 'start', endMarker: 'end' },
+        { path: '${MPX_PROJECTS}/same', startMarker: 'start', endMarker: 'end' },
+      ]),
+    ],
+    [
+      'unresolved',
+      JSON.stringify([{ path: '${UNKNOWN}/file', startMarker: 'start', endMarker: 'end' }]),
+    ],
+  ])(
+    'fails closed before parity and observation for a %s owned-activation manifest',
+    async (_label, body) => {
+      const f = await fixture();
+      const manifest = path.join(f.repoRoot, 'docs', 'phase-j-owned-activations.json');
+      if (body === undefined) {
+        await rm(manifest);
+      } else {
+        await writeFile(manifest, body);
+      }
+      let parityCalled = false;
+      await expect(
+        executeMigrationCommand({
+          action: 'cutover-plan',
+          repoRoot: f.repoRoot,
+          env: f.env,
+          legacyDisabled: true,
+          parityChecks: async () => {
+            parityCalled = true;
+            return passedParity();
+          },
+        }),
+      ).rejects.toThrow(/phase-j-owned-activations/u);
+      expect(parityCalled).toBe(false);
+      await expect(
+        readFile(path.join(f.env.LOCALAPPDATA!, 'mpx', 'migration-observations', 'index.json')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
     },
     30_000,
   );

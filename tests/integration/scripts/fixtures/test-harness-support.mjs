@@ -8,7 +8,7 @@ const MAX_PNPM_OUTPUT_BYTES = 1024 * 1024;
 
 const SUPPORTED_SCRIPT_EXTENSION = String.raw`[cm]?[jt]sx?`;
 const selectedCategoryTestPattern = new RegExp(
-  String.raw`\.test\.${SUPPORTED_SCRIPT_EXTENSION}$`,
+  String.raw`\.(?:test|spec)\.${SUPPORTED_SCRIPT_EXTENSION}$`,
   'u',
 );
 const testLikePattern = new RegExp(
@@ -30,7 +30,9 @@ export function workspaceTestLayoutViolations(workspace, files) {
       (file) =>
         file.startsWith(`${workspace}/`) &&
         testLikeFile(file) &&
-        (!selectedCategoryTestFile(file) || !file.startsWith(`${workspace}/test/unit/`)),
+        (!file.startsWith(`${workspace}/test/unit/`) ||
+          file.startsWith(`${workspace}/src/`) ||
+          /(?:^|\/)(?:fixture|fixtures|__fixtures__|test-fixtures)(?:\/|$)/u.test(file)),
     )
     .sort();
 }

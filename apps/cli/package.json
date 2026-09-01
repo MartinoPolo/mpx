@@ -8,7 +8,7 @@
   },
   "scripts": {
     "prebuild": "node ../../scripts/prepare-cli-build.mjs",
-    "build": "tsc -p tsconfig.json && node ../../scripts/bundle-cli.mjs",
+    "build": "tsc -p tsconfig.json",
     "test:unit": "pnpm --filter mpx... build && vitest run",
     "test": "pnpm run test:unit",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",

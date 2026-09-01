@@ -28,14 +28,16 @@ describe('CLI build preparation', () => {
     expect(cli.scripts.prebuild).toBe('node ../../scripts/prepare-cli-build.mjs');
   });
 
-  it('uses exact pinned workspace tooling to emit a release-contained CLI bundle', async () => {
+  it('keeps compilation, deterministic bundle generation, and drift validation explicit', async () => {
     const [workspace, cli] = await Promise.all([
       readPackage('package.json'),
       readPackage('apps/cli/package.json'),
     ]);
 
     expect(workspace.devDependencies.esbuild).toMatch(/^\d+\.\d+\.\d+$/u);
-    expect(cli.scripts.build).toContain('bundle-cli.mjs');
+    expect(cli.scripts.build).toBe('tsc -p tsconfig.json');
+    expect(workspace.scripts['bundle:generate']).toBe('node scripts/bundle-cli.mjs');
+    expect(workspace.scripts['validate:generated']).toBe('node scripts/validate-generated.mjs');
   });
 
   it('enforces repository-local LF text and CRLF command attributes regardless of global conversion', async () => {
