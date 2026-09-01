@@ -9,6 +9,7 @@ import {
 
 export * from './preparation-worker-polling.js';
 export * from './preparation-lifecycle.js';
+export * from './preparation-status.js';
 export * from './worktree-lifecycle.js';
 
 /** Concrete Node process/state adapter; kept out of the provider-neutral package root. */
@@ -36,3 +37,4 @@ export function createNodeLifecycleApplicationService(
 ): LifecycleApplicationService {
   return new LifecycleApplicationService({ ...dependencies, path: { resolve: path.resolve } });
 }
+export * from './launch-execution-adapters.js';

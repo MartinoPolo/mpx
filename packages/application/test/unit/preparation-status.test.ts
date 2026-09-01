@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { projectPreparationStatus } from '../../src/node/preparation-status.js';
+import { projectPreparationStatus } from '@mpx/application/node';
 
 describe('projectPreparationStatus', () => {
   it('preserves every valid preparation status with an explicit lifecycle projection', () => {

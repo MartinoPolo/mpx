@@ -43,7 +43,7 @@ export interface SessionLifecycleBridge {
     nativeSessionRef?: NativeSessionRefV1;
     nativeBinding?: NativeBindingRecordV1;
   }): Promise<LaunchLifecyclePreparation>;
-  consume(bindingId: string): Promise<number>;
+  consume(bindingId: string): Promise<void>;
   /** Consumes durable events and returns the observation bound to this launch only. */
   observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
 }
@@ -206,7 +206,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
     }
     return { binding, eventDirectory };
   }
-  async consume(bindingId: string): Promise<number> {
+  async consume(bindingId: string): Promise<void> {
     const consumed = await new LifecycleEventDirectoryConsumer(
       this.store,
       new SessionService(this.store),
@@ -214,7 +214,6 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
     if (consumed > 0) {
       await this.onSessionsChanged?.();
     }
-    return consumed;
   }
   async observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined> {
     const binding = await this.store.readLifecycleBinding(bindingId);

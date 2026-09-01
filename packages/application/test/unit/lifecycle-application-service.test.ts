@@ -103,7 +103,16 @@ describe('LifecycleApplicationService', () => {
     });
 
     expect(result).toEqual(devSnapshot);
-    expect(start).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledExactlyOnceWith({
+      id: 'api',
+      executable: 'pnpm',
+      args: ['run', 'dev'],
+      cwd: '/repo/wt',
+      ports: [4310],
+      assignment: { worktreeRoot: '/repo/wt', ports: [4310] },
+      executor: 'host',
+      environment: { API_URL: 'http://localhost:4310' },
+    });
   });
 
   it('constructs stable port release and sorted list results', async () => {

@@ -153,12 +153,24 @@ importers:
       '@mpx/dev-services':
         specifier: workspace:*
         version: link:../dev-services
+      '@mpx/executors':
+        specifier: workspace:*
+        version: link:../executors
+      '@mpx/launch':
+        specifier: workspace:*
+        version: link:../launch
       '@mpx/ports':
         specifier: workspace:*
         version: link:../ports
       '@mpx/providers':
         specifier: workspace:*
         version: link:../providers
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
+      '@mpx/sessions':
+        specifier: workspace:*
+        version: link:../sessions
       '@mpx/skills':
         specifier: workspace:*
         version: link:../skills

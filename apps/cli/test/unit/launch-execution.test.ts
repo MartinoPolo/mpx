@@ -12,12 +12,20 @@ import {
 } from '@mpx/executors';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
-import { createF2ProofReportV1, revalidateRuntimeArtifact } from '@mpx/runtime-contracts';
+import {
+  createF2ProofReportV1,
+  createRuntimeCapabilityManifestV1,
+  createRuntimeContextV1,
+  revalidateRuntimeArtifact,
+} from '@mpx/runtime-contracts';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
 import {
   NodeLaunchStatusSnapshotMaterializer,
   resolveLaunchStatusSnapshotPath,
+} from '@mpx/application/node';
+import {
+  productionRuntimeAdapters,
   type LaunchExecutionContext,
   type LaunchProjectionBuildInput,
 } from '../../src/launch-execution.js';
@@ -238,6 +246,116 @@ describe('production private launch services', () => {
   it('provides production route and audit services on the default context', () => {
     expect(defaultContext.launchRoutes).toBeDefined();
     expect(defaultContext.launchAudit).toBeDefined();
+  });
+
+  it('passes a Claude native resume target into the concrete invocation argv', async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-claude-resume-'));
+    const launchKey = 'a'.repeat(64);
+    const artifactReference = {
+      schemaVersion: 4 as const,
+      runtime: 'claude' as const,
+      manifestKey: 'b'.repeat(64),
+      artifactKey: 'c'.repeat(64),
+      fileMapHash: 'd'.repeat(64),
+    };
+    const runtimeContext = createRuntimeContextV1({
+      launchKey,
+      launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
+      manifestKey: artifactReference.manifestKey,
+      runtimeArtifact: artifactReference,
+      binding: {
+        projectId: 'sample/app',
+        repositoryId: 'sample/repo',
+        contentScope: 'work',
+      },
+    });
+    const capability = createRuntimeCapabilityManifestV1({
+      runtime: 'claude',
+      launchKey,
+      identity: {
+        name: 'work',
+        domain: 'work',
+        nativeRuntimeRootDigest: 'f'.repeat(64),
+      },
+      binding: {
+        projectId: 'sample/app',
+        repositoryId: 'sample/repo',
+        contentScope: 'work',
+      },
+      executor: 'host',
+      tools: [],
+      routes: [],
+      resources: [],
+      mounts: [],
+      destinations: [],
+      skills: [],
+      models: [],
+      nesting: { depth: 0, maxDepth: 0 },
+    });
+    const descriptor = { runtime: 'claude', launchKey } as LaunchDescriptor;
+    const launchBinding = {
+      launchKey,
+      runtime: 'claude' as const,
+      identity: { name: 'work', domain: 'work' },
+      worktreeRoot: 'C:/project',
+      executor: 'host' as const,
+      assignedPorts: [],
+    };
+    const resumeTarget = { kind: 'native-id' as const, value: 'session-1' };
+    try {
+      const [adapter] = productionRuntimeAdapters({
+        descriptor,
+        cwd: 'C:/project',
+        environment: {},
+        nativeRuntimeRoot: 'C:/native/claude',
+        stateRoot,
+        projectionInput: {
+          descriptor,
+          skillPlan: {
+            runtime: 'claude',
+            manifestKey: artifactReference.manifestKey,
+            artifactReference,
+            binding: {
+              projectId: 'sample/app',
+              repositoryId: 'sample/repo',
+              contentScope: 'work',
+            },
+          } as never,
+          agentsRoot: 'C:/agents',
+          artifactsRoot: 'C:/artifacts',
+          runtimeContext,
+          runtimeStatusEnvelope: {} as never,
+          runtimeCapabilityManifest: capability,
+          runtimeLaunchBinding: launchBinding,
+        },
+        launchBanner: 'launch',
+        initialSnapshot: {
+          schemaVersion: 1,
+          project: { id: 'sample/app', cwd: 'C:/project' },
+          worktree: { id: null, path: null, role: null, branch: null },
+          portResolution: 'valid',
+          services: [],
+          diagnostics: [],
+        },
+        statusSnapshot: async () => ({}) as never,
+        bindStatusPath: () => undefined,
+        bindRuntimeStatusPath: () => undefined,
+        resumeTarget,
+        statusMaterializer: { materialize: async () => undefined },
+        runtimeStatusMaterializer: { materialize: async () => 'C:/state/runtime.json' },
+        trustedExecutable: { executable: process.execPath, argvPrefix: [] },
+        builder: async (input) => ({
+          directory: stateRoot,
+          pluginDirectory: stateRoot,
+          reference: publishedReference(input),
+        }),
+        validator: async () => undefined,
+      });
+      const invocation = await adapter!.prepare({ routes: {} } as never);
+      expect(invocation.argv).toEqual(expect.arrayContaining(['--resume', resumeTarget.value]));
+    } finally {
+      await rm(stateRoot, { recursive: true, force: true });
+    }
   });
 
   it.each(['../work', 'a/b', 'a\\b', '.', '..', 'route%2fescape', 'route\u0000hidden'])(
@@ -1689,7 +1807,7 @@ describe('Phase F launch execution', () => {
     ['relative', 'tools/pi.exe'],
     ['nonexistent', 'C:/trusted/missing-pi.exe'],
   ] as const)(
-    'fails trusted runtime preflight for a %s Pi executable before status, routes, projection, or process side effects',
+    'fails trusted runtime preflight for a %s Pi executable before projection or process side effects',
     async (_label, executable) => {
       const fixture = await launchFixture(),
         io = captureIo();
@@ -1764,7 +1882,7 @@ describe('Phase F launch execution', () => {
     },
   );
 
-  it('fails trusted runtime preflight for a project-local Pi executable before status, routes, projection, or process side effects', async () => {
+  it('fails trusted runtime preflight for a project-local Pi executable before projection or process side effects', async () => {
     const fixture = await launchFixture(),
       io = captureIo();
     const localExecutable = path.join(fixture.cwd, 'tools', 'pi.exe');

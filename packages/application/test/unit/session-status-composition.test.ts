@@ -3,10 +3,8 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRuntimeSessionObservationV1 } from '@mpx/runtime-contracts';
-import {
-  NodeRuntimeStatusEnvelopeMaterializer,
-  composeRuntimeSessionObservation,
-} from '../../src/launch-execution.js';
+import { composeRuntimeSessionObservation } from '@mpx/application';
+import { NodeRuntimeStatusEnvelopeMaterializer } from '@mpx/application/node';
 import { composeRuntimeStatusEnvelopeV1 } from '@mpx/status';
 
 it('composes a fresh session observation into the runtime status envelope', () => {

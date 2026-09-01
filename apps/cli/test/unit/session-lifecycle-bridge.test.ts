@@ -94,7 +94,7 @@ describe('ProductionSessionLifecycleBridge', () => {
         lifecycleState: 'active',
         source: 'sessions:lifecycle',
       });
-      await expect(bridge.consume(prepared.binding.bindingId)).resolves.toBe(0);
+      await expect(bridge.consume(prepared.binding.bindingId)).resolves.toBeUndefined();
       const partitions = await store.partitions();
       expect(partitions).toHaveLength(1);
       expect(partitions[0]!.records[0]).toMatchObject({
