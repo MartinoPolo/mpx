@@ -1,4 +1,5 @@
 export * from './contracts.js';
+export * from './account-application-service.js';
 export * from './project-application-service.js';
 export * from './provider-application-service.js';
 export * from './skill-application-service.js';

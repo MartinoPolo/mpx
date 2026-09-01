@@ -7,6 +7,8 @@ import {
   type LifecycleDevService,
 } from '../lifecycle-application-service.js';
 
+export * from './account-application-service.js';
+export * from './pi-auth-availability.js';
 export * from './preparation-worker-polling.js';
 export * from './preparation-lifecycle.js';
 export * from './preparation-status.js';

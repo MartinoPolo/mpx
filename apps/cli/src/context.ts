@@ -15,6 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createProviderApplicationService,
+  type AccountAuthVerifier,
   type LifecycleDevService,
   type LifecycleWorktreeService,
 } from '@mpx/application';
@@ -92,7 +93,6 @@ import {
   type SessionProcessInspector,
   type SessionRecordV1,
 } from '@mpx/sessions';
-import type { AccountAuthVerifier } from './account-command.js';
 import {
   activateRelease,
   GitRemotePlanningAdapter,

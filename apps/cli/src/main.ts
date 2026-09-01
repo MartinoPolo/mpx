@@ -16,9 +16,14 @@ import {
   createSkillApplicationService,
   LaunchApplicationService,
   resolveLaunchSkills,
+  type AccountApplicationService,
   type ProjectApplicationService,
   type SkillApplicationService,
 } from '@mpx/application';
+import {
+  createNodeAccountApplicationService,
+  createPiAuthAvailabilityProbe,
+} from '@mpx/application/node';
 import {
   errorEnvelope,
   MpxError,
@@ -64,7 +69,7 @@ import {
 } from './context.js';
 import { executeSessionCommand } from './session-command.js';
 import { executeInstallCommand } from './install-command.js';
-import { executeAccountCommand, productionPiAuthProbe } from './account-command.js';
+import { executeAccountCommand } from './account-command.js';
 import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
 import {
   createProductionSessionBranchRuntimeAdapter,
@@ -296,52 +301,49 @@ async function requiredUserConfig(context: CliContext): Promise<UserConfig> {
     environment: context.env,
   });
 }
+function productionPiAuthProbe(context: CliContext, cwd: string) {
+  return createPiAuthAvailabilityProbe({
+    cwd,
+    environment: context.env,
+    resolveTrustedExecutable: () =>
+      resolveTrustedRuntimeExecutable({
+        runtime: 'pi',
+        cwd,
+        environment: context.env,
+        ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
+      }),
+  });
+}
+function productionAccountApplication(
+  user: UserConfig,
+  context: CliContext,
+  cwd: string,
+): AccountApplicationService {
+  return createNodeAccountApplicationService({
+    accounts: user.identities,
+    stateRoot: stateRoot(context),
+    cwd,
+    environment: context.env,
+    ...(context.rootAttestationService
+      ? { rootAttestationService: context.rootAttestationService }
+      : {}),
+    ...(context.accountAuthVerifier ? { accountAuthVerifier: context.accountAuthVerifier } : {}),
+    resolveTrustedExecutable: () =>
+      resolveTrustedRuntimeExecutable({
+        runtime: 'pi',
+        cwd,
+        environment: context.env,
+        ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
+      }),
+  });
+}
 function productionAccountServices(user: UserConfig, context: CliContext, cwd: string) {
-  const service =
-    context.rootAttestationService ??
-    new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-  const auth =
-    context.accountAuthVerifier ??
-    productionPiAuthProbe({
-      cwd,
-      environment: context.env,
-      ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
-    });
-  const resolver = {
-    resolve: async (
-      identity: { domain: string; name: string },
-      runtime: 'claude' | 'pi',
-      root: string,
-    ): Promise<string | null> =>
-      runtime === 'claude' ? null : (await service.verify(identity, root)).ref,
+  const application = productionAccountApplication(user, context, cwd);
+  return {
+    application,
+    resolver: { resolve: application.resolveNativeBinding.bind(application) },
+    verifier: { verify: application.verifyNativeBinding.bind(application) },
   };
-  const verifier = {
-    verify: async (ref: string): Promise<'verified' | 'unavailable' | 'mismatch' | 'duplicate'> => {
-      try {
-        const matches = (await service.store.list()).filter((record) => record.ref === ref);
-        if (matches.length > 1) {
-          return 'duplicate';
-        }
-        const record = matches[0];
-        if (!record) {
-          return 'unavailable';
-        }
-        const configured = user.identities[record.identity.name];
-        if (!configured || configured.domain !== record.identity.domain) {
-          return 'mismatch';
-        }
-        await service.verify(record.identity, configured.runtimeRoots.pi, ref);
-        await auth.verify(configured.runtimeRoots.pi);
-        return 'verified';
-      } catch (error) {
-        return (error as { code?: unknown }).code === 'ACCOUNT_ROOT_CHANGED' ||
-          (error as { code?: unknown }).code === 'ACCOUNT_BINDING_MISMATCH'
-          ? 'mismatch'
-          : 'unavailable';
-      }
-    },
-  };
-  return { service, auth, resolver, verifier };
 }
 async function project(
   parsed: Parsed,
@@ -505,13 +507,7 @@ async function executeProductionSessionResume(
     const accountService =
       context.rootAttestationService ??
       new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-    const auth =
-      context.accountAuthVerifier ??
-      productionPiAuthProbe({
-        cwd: plan.cwd,
-        environment: context.env,
-        ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
-      });
+    const auth = context.accountAuthVerifier ?? productionPiAuthProbe(context, plan.cwd);
     reverifyPiAccount = async () => {
       try {
         const matchingRefs = await accountService.store?.list();
@@ -874,17 +870,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       );
     }
     const user = await requiredUserConfig(context);
-    const accountStateRoot = stateRoot(context);
-    const service =
-      context.rootAttestationService ??
-      new RootAttestationService(new RootAttestationStore(accountStateRoot));
-    const auth =
-      context.accountAuthVerifier ??
-      productionPiAuthProbe({
-        cwd: parsed.cwd,
-        environment: context.env,
-        ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
-      });
+    const { application } = productionAccountServices(user, context, parsed.cwd);
     const identityName = stringOption(parsed, 'identity'),
       confirmationDigest = stringOption(parsed, 'confirm-plan');
     data = await executeAccountCommand(
@@ -893,7 +879,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         ...(identityName ? { identityName } : {}),
         ...(confirmationDigest ? { confirmationDigest } : {}),
       },
-      { user, service, auth },
+      application,
     );
     return { data, warnings };
   }
@@ -1208,14 +1194,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
                 binding.accountBindingRef ?? undefined,
               );
               await (
-                context.accountAuthVerifier ??
-                productionPiAuthProbe({
-                  cwd: parsed.cwd,
-                  environment: context.env,
-                  ...(context.launchExecutableResolver
-                    ? { resolver: context.launchExecutableResolver }
-                    : {}),
-                })
+                context.accountAuthVerifier ?? productionPiAuthProbe(context, parsed.cwd)
               ).verify(root);
             }
             return root;
@@ -1868,15 +1847,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         const accountService =
           context.rootAttestationService ??
           new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-        const auth =
-          context.accountAuthVerifier ??
-          productionPiAuthProbe({
-            cwd: parsed.cwd,
-            environment: context.env,
-            ...(context.launchExecutableResolver
-              ? { resolver: context.launchExecutableResolver }
-              : {}),
-          });
+        const auth = context.accountAuthVerifier ?? productionPiAuthProbe(context, parsed.cwd);
         piAttestation = await accountService.verify(identity, runtimeRoot);
         await auth.verify(runtimeRoot);
         return async () => {

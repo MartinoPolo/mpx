@@ -119,6 +119,7 @@ describe('@mpx/application architecture', () => {
   it('exposes provider-neutral operation facades from the importable package root', async () => {
     const application = await import('../../src/index.js');
     expect(application).toMatchObject({
+      AccountApplicationService: expect.any(Function),
       LifecycleApplicationService: expect.any(Function),
       LaunchApplicationService: expect.any(Function),
       SessionApplicationService: expect.any(Function),
@@ -126,6 +127,17 @@ describe('@mpx/application architecture', () => {
       createProviderApplicationService: expect.any(Function),
       createSkillApplicationService: expect.any(Function),
     });
+  });
+
+  it('exports Node account composition without leaking it from the neutral root', async () => {
+    const node = await import('../../src/node/index.js');
+    const root = await import('../../src/index.js');
+    expect(node).toMatchObject({
+      createNodeAccountApplicationService: expect.any(Function),
+      createPiAuthAvailabilityProbe: expect.any(Function),
+    });
+    expect(root).not.toHaveProperty('createNodeAccountApplicationService');
+    expect(root).not.toHaveProperty('createPiAuthAvailabilityProbe');
   });
 
   it('keeps generic application operation contracts out of provider-specific services', async () => {
