@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { execFile } from 'node:child_process';
-import { access, lstat } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -42,7 +41,7 @@ import {
   type Diagnostic,
   type JsonValue,
 } from '@mpx/core';
-import { canonicalNativeRootDigest, type ShortLaunchAlias } from '@mpx/launch';
+import type { ShortLaunchAlias } from '@mpx/launch';
 import {
   ExecutionError,
   buildF2ProofPolicyMatrix,
@@ -70,10 +69,7 @@ import { executeSessionCommand } from './session-command.js';
 import { executeInstallCommand } from './install-command.js';
 import { executeAccountCommand } from './account-command.js';
 import {
-  createProductionSessionBranchRuntimeAdapter,
-  createWindowsTerminalBranchAdapter,
   diagnoseNodeSessionBranchAdapters,
-  diagnoseSessionBranchAdapters,
   ProductionSessionLifecycleBridge,
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
@@ -101,30 +97,16 @@ import {
   createNodeDevService,
   createNodeLifecycleApplicationService,
   createNodeSessionApplicationService,
+  createNodeSessionBranchProduction,
   createNodeSessionLegacyImport,
   createProductionSbxExecutionAdapter,
-  createProductionSessionDockerResumeAdmission,
   diagnoseConfiguredF2Proof,
   executeInternalPreparationWorker,
   loadProductionSbxProofSources,
   planProductionSbxExecution,
   productionProofCreateArgv,
 } from '@mpx/application/node';
-import {
-  BranchLeaseStore,
-  BranchLineageStore,
-  ConversationBranchService,
-  RootAttestationService,
-  SessionService,
-  RootAttestationStore,
-  SessionError,
-  createClaudeBranchAdapter,
-  createPiBranchAdapter,
-  type BranchRequestV1,
-  type BranchRuntimeAdapter,
-  type ConversationBranchPlanV1,
-  type ResumePlanV1,
-} from '@mpx/sessions';
+import { RootAttestationService, RootAttestationStore, type ResumePlanV1 } from '@mpx/sessions';
 
 interface Parsed {
   command: string[];
@@ -421,44 +403,6 @@ function asJson(value: unknown): JsonValue {
   return value as JsonValue;
 }
 
-function branchAdmissionPlan(input: BranchRequestV1 | ConversationBranchPlanV1): ResumePlanV1 {
-  const confirmationDigest =
-    'confirmationDigest' in input
-      ? input.confirmationDigest
-      : sha256Canonical(input as unknown as JsonValue);
-  return {
-    schemaVersion: 1,
-    newLaunchRequired: true,
-    previousLaunch: {
-      launchKey: input.launchIdentity.launchKey,
-      descriptorDigest: input.launchIdentity.descriptorDigest,
-    },
-    recordId: input.child.runtimeQualifiedId,
-    runtimeQualifiedId: input.child.runtimeQualifiedId,
-    runtime: input.child.runtime,
-    identity: input.launchIdentity.identity,
-    nativeBindingRef: input.launchIdentity.nativeBindingRef,
-    nativeSessionRef: input.parent.nativeSessionRef,
-    cwd: input.workspace.cwd,
-    projectId: input.workspace.projectRef,
-    repositoryId: input.workspace.repositoryRef,
-    launch: {
-      launchKey: input.launchIdentity.launchKey,
-      descriptorDigest: input.launchIdentity.descriptorDigest,
-      mode: input.launchIdentity.mode,
-      skillPolicy: input.launchIdentity.skillPolicy,
-      contentScope: input.launchIdentity.contentScope,
-      executor: { kind: input.launchIdentity.executor },
-      workspace: input.launchIdentity.workspace,
-      networkPolicy: input.launchIdentity.networkPolicy,
-      grants: input.launchIdentity.grants,
-      artifactKey: input.launchIdentity.artifactKey,
-      manifestKey: input.launchIdentity.manifestKey,
-    },
-    confirmationDigest,
-  };
-}
-
 async function executeProductionSessionResume(
   plan: ResumePlanV1,
   user: UserConfig,
@@ -551,336 +495,59 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
   if (group === 'session') {
     const user = await userConfig(context);
     const sessionStore = sessions(context);
-    const trustedTerminalRoots = [
-      context.env.WINDIR,
-      context.env.LOCALAPPDATA
-        ? path.join(context.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps')
-        : undefined,
-    ].filter((value): value is string => Boolean(value && path.isAbsolute(value)));
-    const terminalCandidate =
-      context.env.MPX_WINDOWS_TERMINAL_EXECUTABLE ??
-      (context.env.LOCALAPPDATA
-        ? path.join(context.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'wt.exe')
-        : undefined);
-    const terminalAvailability = await diagnoseSessionBranchAdapters({
-      runtimeAvailable: true,
-      ...(terminalCandidate ? { terminalCandidate } : {}),
-      trustedRoots: trustedTerminalRoots,
-    });
     const account = context.env.LOCALAPPDATA
       ? productionAccountServices(user, context, parsed.cwd)
       : undefined;
-    let branchService = context.sessionBranchService;
-    if (action === 'branch' && !branchService) {
-      const runtimeAdapter = (runtime: 'claude' | 'pi'): BranchRuntimeAdapter => ({
-        plan: async (parent, cwd, selectedRoot) => {
-          const trusted = await resolveTrustedRuntimeExecutable({
-            runtime,
-            cwd,
-            environment: context.env,
-            ...(context.launchExecutableResolver
-              ? { resolver: context.launchExecutableResolver }
-              : {}),
+    const branchProduction = await createNodeSessionBranchProduction({
+      enabled: action === 'branch',
+      cwd: parsed.cwd,
+      user,
+      store: sessionStore,
+      environment: context.env,
+      stateRoot: () => stateRoot(context),
+      worktrees: () => worktrees(context, parsed.cwd),
+      launchContext: context,
+      catalogRoot: (cwd) => catalogPath(context, cwd),
+      status: () => status(context),
+      executionRoots: async () => {
+        const appData = context.env.APPDATA;
+        const localAppData = context.env.LOCALAPPDATA;
+        if (!appData || !localAppData) {
+          throw new MpxError({
+            code: 'STATE_ROOT_UNAVAILABLE',
+            message: 'APPDATA and LOCALAPPDATA are required for resume execution.',
           });
-          if (trusted.argvPrefix.length !== 0) {
-            throw new SessionError(
-              'SESSION_BRANCH_EXECUTABLE_WRAPPER_UNSUPPORTED',
-              'Native branch adapters require a direct trusted runtime executable.',
-            );
-          }
-          return (
-            runtime === 'claude'
-              ? createClaudeBranchAdapter(trusted.executable)
-              : createPiBranchAdapter(trusted.executable)
-          ).plan(parent, cwd, selectedRoot);
-        },
-      });
-      const lifecycle = worktrees(context);
-      const productionBranchRuntime = createProductionSessionBranchRuntimeAdapter({
-        executeNormalLaunch: async ({ invocation, plan }) => {
-          let resolveLifecycle!: (event: {
-            runtimeQualifiedId: string;
-            nativeSessionRef: typeof plan.parent.nativeSessionRef;
-          }) => void;
-          let rejectLifecycle!: (error: unknown) => void;
-          const childLifecycle = new Promise<{
-            runtimeQualifiedId: string;
-            nativeSessionRef: typeof plan.parent.nativeSessionRef;
-          }>((resolve, reject) => {
-            resolveLifecycle = resolve;
-            rejectLifecycle = reject;
-          });
-          const bridge = new ProductionSessionLifecycleBridge({
-            store: sessionStore,
-            ...(context.nativeAccountBindingResolver
-              ? {
-                  accountBindingRef: (name: string, runtime: 'claude' | 'pi') =>
-                    context.nativeAccountBindingResolver!.resolve(
-                      { domain: user.identities[name]!.domain, name },
-                      runtime,
-                      user.identities[name]!.runtimeRoots[runtime],
-                    ),
-                }
-              : {}),
-            onSessionsChanged: async () => {
-              const records = await new SessionService(sessionStore).list({
-                runtime: plan.child.runtime,
-              });
-              const child = records.find(
-                (record) =>
-                  record.runtimeQualifiedId !== plan.parent.runtimeQualifiedId &&
-                  record.location.cwd === invocation.cwd &&
-                  record.nativeBindingRef === plan.launchIdentity.nativeBindingRef,
-              );
-              if (child) {
-                resolveLifecycle({
-                  runtimeQualifiedId: child.runtimeQualifiedId,
-                  nativeSessionRef: child.nativeSessionRef,
-                });
-              }
-            },
-          });
-          const synthetic: ResumePlanV1 = {
-            schemaVersion: 1,
-            newLaunchRequired: true,
-            previousLaunch: {
-              launchKey: plan.launchIdentity.launchKey,
-              descriptorDigest: plan.launchIdentity.descriptorDigest,
-            },
-            recordId: plan.child.runtimeQualifiedId,
-            runtimeQualifiedId: plan.child.runtimeQualifiedId,
-            runtime: plan.child.runtime,
-            identity: plan.launchIdentity.identity,
-            nativeBindingRef: plan.launchIdentity.nativeBindingRef,
-            nativeSessionRef: plan.parent.nativeSessionRef,
-            cwd: invocation.cwd,
-            projectId: plan.workspace.projectRef,
-            repositoryId: plan.workspace.repositoryRef,
-            launch: {
-              launchKey: plan.launchIdentity.launchKey,
-              descriptorDigest: plan.launchIdentity.descriptorDigest,
-              mode: plan.launchIdentity.mode,
-              skillPolicy: plan.launchIdentity.skillPolicy,
-              contentScope: plan.launchIdentity.contentScope,
-              executor: { kind: plan.launchIdentity.executor },
-              workspace: plan.launchIdentity.workspace,
-              networkPolicy: plan.launchIdentity.networkPolicy,
-              grants: plan.launchIdentity.grants,
-              artifactKey: plan.launchIdentity.artifactKey,
-              manifestKey: plan.launchIdentity.manifestKey,
-            },
-            confirmationDigest: plan.confirmationDigest,
-          };
-          const exited = executeProductionSessionResume(
-            synthetic,
-            user,
-            { ...context, launchLifecycleBridge: bridge },
-            invocation,
-          ).catch((error) => {
-            rejectLifecycle(error);
-            throw error;
-          });
-          return { lifecycle: childLifecycle, exited };
-        },
-      });
-      const productionTerminal =
-        !context.sessionBranchTerminalAdapter && terminalAvailability.terminal.available
-          ? await createWindowsTerminalBranchAdapter({
-              candidate: terminalAvailability.terminal.executable,
-              trustedRoots: trustedTerminalRoots,
-              run: async (request) => {
-                const before = new Set(
-                  (await new SessionService(sessionStore).list()).map(
-                    (record) => record.runtimeQualifiedId,
-                  ),
-                );
-                let settleExit!: (value: unknown) => void, rejectExit!: (error: unknown) => void;
-                const exited = new Promise<unknown>((resolve, reject) => {
-                  settleExit = resolve;
-                  rejectExit = reject;
-                });
-                execFile(
-                  request.executable,
-                  [...request.argv],
-                  { cwd: request.cwd, env: context.env, shell: false, windowsHide: true },
-                  (error, stdout, stderr) =>
-                    error ? rejectExit(error) : settleExit({ exitCode: 0, stdout, stderr }),
-                );
-                const lifecycle = (async () => {
-                  const deadline = Date.now() + 120_000;
-                  while (Date.now() < deadline) {
-                    const child = (await new SessionService(sessionStore).list()).find(
-                      (record) =>
-                        !before.has(record.runtimeQualifiedId) &&
-                        record.location.cwd === request.cwd,
-                    );
-                    if (child) {
-                      return {
-                        runtimeQualifiedId: child.runtimeQualifiedId,
-                        nativeSessionRef: child.nativeSessionRef,
-                      };
-                    }
-                    await new Promise((resolve) => setTimeout(resolve, 100));
-                  }
-                  throw new SessionError(
-                    'SESSION_BRANCH_LIFECYCLE_TIMEOUT',
-                    'The terminal child did not publish a lifecycle event.',
-                  );
-                })();
-                return { lifecycle, exited };
-              },
-            })
-          : null;
-      const dockerAdmission =
-        context.sessionDockerResumeAdmission ??
-        createProductionSessionDockerResumeAdmission(context.env);
-      const leaseProcessInspector =
-        context.sessionProcessInspector ?? productionSessionProcessInspector();
-      const controller = await leaseProcessInspector.inspect(process.pid);
-      const branchLeaseStore = new BranchLeaseStore(
-        path.join(stateRoot(context), 'session-branch-leases'),
-        {
-          processId: process.pid,
-          controllerStartFingerprint:
-            controller.status === 'present'
-              ? controller.startFingerprint
-              : `unverified-${process.pid}`,
-          processInspector: leaseProcessInspector,
-          observeSession: async (lease) => {
-            const records = await new SessionService(sessionStore).list();
-            const candidates = records.filter(
-              (record) =>
-                record.runtimeQualifiedId === lease.session.runtimeQualifiedId ||
-                (record.location.cwd === lease.workspace.cwd &&
-                  record.nativeBindingRef === lease.session.nativeBindingRef &&
-                  (!lease.launch.launchKey || record.launch?.launchKey === lease.launch.launchKey)),
-            );
-            if (candidates.length === 0) {
-              return 'absent';
-            }
-            if (candidates.every((record) => record.liveness === 'inactive')) {
-              return 'inactive';
-            }
-            for (const record of candidates.filter((value) => value.liveness === 'active')) {
-              if (!record.process) {
-                return 'unknown';
-              }
-              const observed = await leaseProcessInspector.inspect(record.process.pid);
-              if (observed.status === 'unknown') {
-                return 'unknown';
-              }
-              if (
-                observed.status === 'present' &&
-                observed.startFingerprint === record.process.startFingerprint
-              ) {
-                return 'active';
-              }
-            }
-            return 'inactive';
-          },
-        },
-      );
-      await branchLeaseStore.reconcile();
-      branchService = new ConversationBranchService(
-        {
-          inspectWorkspace: async (workspace) => {
-            try {
-              const info = await lstat(workspace.cwd);
-              return {
-                exists: info.isDirectory() && !info.isSymbolicLink(),
-                collisionDisclosure:
-                  workspace.repositoryRef === null
-                    ? []
-                    : ['repository refs and external fixed services remain shared'],
-              };
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-                return { exists: false, collisionDisclosure: [] };
-              }
-              throw error;
-            }
-          },
-          createIsolatedWorktree: async (workspace) => {
-            if (!workspace.branch) {
-              throw new SessionError(
-                'SESSION_BRANCH_WORKTREE_BRANCH_REQUIRED',
-                'An isolated branch requires a worktree branch ref.',
-              );
-            }
-            const created = (await lifecycle.create({
-              cwd: workspace.cwd,
-              branch: workspace.branch,
-              execution: 'none',
-            })) as { worktreePath?: unknown };
-            if (
-              typeof created.worktreePath !== 'string' ||
-              !path.isAbsolute(created.worktreePath)
-            ) {
-              throw new SessionError(
-                'SESSION_BRANCH_WORKTREE_CREATE_FAILED',
-                'The worktree service did not return a canonical worktree path.',
-              );
-            }
-            return { cwd: created.worktreePath, worktreeRef: workspace.branch };
-          },
-          removeIsolatedWorktree: async (workspace) => {
-            await lifecycle.remove({ cwd: parsed.cwd, worktreePath: workspace.cwd });
-          },
-          validateNativeBinding: async (plan) => {
-            const configured = user.identities[plan.launchIdentity.identity.name];
-            if (!configured || configured.domain !== plan.launchIdentity.identity.domain) {
-              throw new SessionError(
-                'SESSION_BRANCH_IDENTITY_MISMATCH',
-                'The branch identity is no longer configured.',
-              );
-            }
-            const binding = await sessionStore.readNativeBinding(
-              plan.launchIdentity.nativeBindingRef,
-            );
-            const root = configured.runtimeRoots[plan.child.runtime];
-            if (
-              binding.ref !== plan.launchIdentity.nativeBindingRef ||
-              binding.runtime !== plan.child.runtime ||
-              binding.identity.domain !== plan.launchIdentity.identity.domain ||
-              binding.identity.name !== plan.launchIdentity.identity.name ||
-              binding.recordedRootDigest !== plan.launchIdentity.rootDigest ||
-              canonicalNativeRootDigest(root) !== binding.recordedRootDigest
-            ) {
-              throw new SessionError(
-                'SESSION_BRANCH_NATIVE_BINDING_MISMATCH',
-                'The recorded session binding no longer matches the configured identity root.',
-              );
-            }
-            if (plan.child.runtime === 'pi') {
-              const attestation =
-                context.rootAttestationService ??
-                new RootAttestationService(new RootAttestationStore(stateRoot(context)));
-              await attestation.verify(
-                plan.launchIdentity.identity,
-                root,
-                binding.accountBindingRef ?? undefined,
-              );
-              await (
-                context.accountAuthVerifier ?? productionPiAuthProbe(context, parsed.cwd)
-              ).verify(root);
-            }
-            return root;
-          },
-          adapters: { claude: runtimeAdapter('claude'), pi: runtimeAdapter('pi') },
-          runtime: context.sessionBranchRuntimeAdapter ?? productionBranchRuntime,
-          ...((context.sessionBranchTerminalAdapter ?? productionTerminal)
-            ? { terminal: (context.sessionBranchTerminalAdapter ?? productionTerminal)! }
-            : {}),
-          lineage: new BranchLineageStore(
-            path.join(stateRoot(context), 'sessions', 'v1', 'private', 'branch-lineage'),
-          ),
-          admitExecutor: async (branch) =>
-            branch.launchIdentity.executor === 'host' ||
-            (await dockerAdmission(branchAdmissionPlan(branch))).admitted,
-        },
-        branchLeaseStore,
-      );
-    }
+        }
+        return {
+          artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
+          stateRoot: path.join(localAppData, 'mpx'),
+        };
+      },
+      ...(context.sessionBranchService ? { branchService: context.sessionBranchService } : {}),
+      ...(context.sessionBranchRuntimeAdapter
+        ? { runtimeAdapter: context.sessionBranchRuntimeAdapter }
+        : {}),
+      ...(context.sessionBranchTerminalAdapter
+        ? { terminalAdapter: context.sessionBranchTerminalAdapter }
+        : {}),
+      ...(context.sessionDockerResumeAdmission
+        ? { dockerAdmission: context.sessionDockerResumeAdmission }
+        : {}),
+      ...(context.sessionProcessInspector
+        ? { processInspector: context.sessionProcessInspector }
+        : {}),
+      ...(context.rootAttestationService
+        ? { rootAttestationService: context.rootAttestationService }
+        : {}),
+      ...(context.accountAuthVerifier ? { accountAuthVerifier: context.accountAuthVerifier } : {}),
+      ...(context.nativeAccountBindingResolver
+        ? { nativeAccountBindingResolver: context.nativeAccountBindingResolver }
+        : {}),
+      ...(context.launchExecutableResolver
+        ? { launchExecutableResolver: context.launchExecutableResolver }
+        : {}),
+    });
+    const branchService = branchProduction.branchService;
     const scheduledCaptureAuthority = resolveScheduledCaptureAuthority(context);
     const resolveIdentity = async (name: string) => {
       const identity = user.identities[name];
@@ -926,8 +593,8 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       { action, args, options: parsed.options },
       {
         application,
-        ...(terminalAvailability.terminal.available
-          ? { terminalExecutable: terminalAvailability.terminal.executable }
+        ...(branchProduction.terminalExecutable
+          ? { terminalExecutable: branchProduction.terminalExecutable }
           : {}),
       },
     );

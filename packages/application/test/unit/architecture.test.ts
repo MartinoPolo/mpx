@@ -162,6 +162,7 @@ describe('@mpx/application architecture', () => {
       productionSessionResumeDependencies: expect.any(Function),
       createNodeSessionResumeLaunchApplicationService: expect.any(Function),
       executeNodeSessionResumeLaunch: expect.any(Function),
+      createNodeSessionBranchProduction: expect.any(Function),
     });
     for (const name of [
       'createNodeAccountApplicationService',
@@ -190,6 +191,7 @@ describe('@mpx/application architecture', () => {
       'productionSessionResumeDependencies',
       'createNodeSessionResumeLaunchApplicationService',
       'executeNodeSessionResumeLaunch',
+      'createNodeSessionBranchProduction',
     ]) {
       expect(root).not.toHaveProperty(name);
     }
@@ -251,6 +253,24 @@ describe('@mpx/application architecture', () => {
     );
     expect(main).not.toContain('new SessionResumeLaunchApplicationService');
     expect(main).not.toContain('resolveLaunchSkills(');
+  });
+
+  it('keeps branch production composition in the Node-only factory', async () => {
+    const main = await readFile(
+      path.resolve(import.meta.dirname, '../../../../apps/cli/src/main.ts'),
+      'utf8',
+    );
+    for (const marker of [
+      'branchAdmissionPlan',
+      'createProductionSessionBranchRuntimeAdapter',
+      'createWindowsTerminalBranchAdapter',
+      'new BranchLeaseStore',
+      'new ConversationBranchService',
+    ]) {
+      expect(main).not.toContain(marker);
+    }
+    const root = await import('../../src/index.js');
+    expect(root).not.toHaveProperty('createNodeSessionBranchProduction');
   });
 
   it('keeps the Phase-J implementation out of the CLI source tree', async () => {

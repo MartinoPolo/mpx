@@ -17,6 +17,7 @@ export * from './worktree-lifecycle.js';
 export * from './session-legacy-import.js';
 export * from './session-application-service.js';
 export * from './session-branch-adapters.js';
+export * from './session-branch-production.js';
 export * from './sbx-execution.js';
 export * from './session-docker-resume.js';
 export * from './install-application-service.js';

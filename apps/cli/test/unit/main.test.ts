@@ -21,7 +21,12 @@ import {
   type PortPlatformAdapter,
   type WorktreeIdentity,
 } from '@mpx/ports';
-import { SessionService, SessionStore, type SessionRecordV1 } from '@mpx/sessions';
+import {
+  SessionService,
+  SessionStore,
+  type BranchRequestV1,
+  type SessionRecordV1,
+} from '@mpx/sessions';
 import {
   canonicalJson,
   installerDigest,
@@ -819,6 +824,178 @@ describe('cli', () => {
     });
     await expect(new SessionService(store).show('session-mark')).resolves.toMatchObject({
       workflow: { relatedIssue: 'GH-42', relatedReview: 'PR-17' },
+    });
+  });
+
+  it('hands factory branch service and terminal output through run while preserving envelopes and error precedence', async () => {
+    const cwd = await fixture(valid),
+      env = await configuredLaunchEnv(cwd),
+      localAppData = await directory('mpx-cli-branch-local-'),
+      terminal = path.join(localAppData, 'Microsoft', 'WindowsApps', 'wt.exe'),
+      store = new SessionStore(await directory('mpx-cli-session-branch-')),
+      now = '2025-01-01T00:00:00.000Z',
+      identity = { domain: 'work', name: 'work' },
+      rootDigest = 'b'.repeat(64);
+    env.LOCALAPPDATA = localAppData;
+    await mkdir(path.dirname(terminal), { recursive: true });
+    await writeFile(terminal, 'test terminal');
+    await store.saveNativeBinding({
+      schemaVersion: 1,
+      ref: 'binding',
+      identity,
+      runtime: 'claude',
+      recordedRootDigest: rootDigest,
+      accountBindingRef: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new SessionService(store).save({
+      schemaVersion: 1,
+      recordId: 'branch-parent',
+      runtimeQualifiedId: 'claude:branch-parent',
+      runtime: 'claude',
+      identity,
+      nativeBindingRef: 'binding',
+      nativeSessionRef: { kind: 'native-id', value: 'branch-parent' },
+      launch: {
+        launchKey: 'launch',
+        descriptorDigest: 'a'.repeat(64),
+        mode: 'locked',
+        skillPolicy: 'clean',
+        contentScope: 'work',
+        executor: { kind: 'host' },
+        workspace: 'direct',
+        networkPolicy: 'restricted',
+        grants: [],
+        artifactKey: 'artifact',
+        manifestKey: 'manifest',
+      },
+      location: { cwd, project: 'sample/app', repository: 'repository', worktree: null },
+      metadata: { title: null, model: null, effort: null },
+      liveness: 'inactive',
+      process: null,
+      workflow: {
+        status: 'unfinished',
+        inbox: true,
+        nextAction: null,
+        priority: null,
+        note: null,
+        relatedIssue: null,
+        relatedReview: null,
+      },
+      resume: { state: 'unknown', diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null },
+      timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null },
+      lifecycle: { bindingId: null, sequence: 0, timestamp: null },
+    });
+    const plan = vi.fn(async (input: BranchRequestV1) => ({
+      schemaVersion: 1 as const,
+      kind: 'session-branch-plan' as const,
+      parent: input.parent,
+      child: input.child,
+      launchIdentity: input.launchIdentity,
+      workspace: {
+        ...input.workspace,
+        selection: 'shared' as const,
+        sharing: 'shared' as const,
+        provision: 'current-checkout' as const,
+        collisionDisclosure: input.files.collisionDisclosure,
+      },
+      files: input.files,
+      terminal: input.terminal,
+      confirmationDigest: 'factory-confirmation',
+    }));
+    const context = {
+      env,
+      sessionStore: store,
+      sessionBranchService: { plan, apply: vi.fn() } as never,
+    };
+    const io = captureIo();
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          cwd,
+          'session',
+          'branch',
+          'branch-parent',
+          '--workspace',
+          'shared',
+          '--intent',
+          'read',
+          '--branch',
+          'feature/child',
+          '--terminal-tab',
+          '--terminal-title',
+          'Child',
+          '--dry-run',
+        ],
+        io,
+        context,
+      ),
+    ).toBe(0);
+    expect(io.out).toHaveLength(1);
+    expect(JSON.parse(io.out[0]!)).toEqual({
+      apiVersion: 1,
+      ok: true,
+      data: await plan.mock.results[0]!.value,
+      warnings: [],
+    });
+    expect(plan).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      parent: {
+        runtimeQualifiedId: 'claude:branch-parent',
+        nativeSessionRef: { kind: 'native-id', value: 'branch-parent' },
+      },
+      child: {
+        runtimeQualifiedId: `claude:pending-${sha256Canonical({ parent: 'claude:branch-parent', branch: 'feature/child' } as JsonValue).slice(0, 24)}`,
+        runtime: 'claude',
+      },
+      launchIdentity: {
+        identity,
+        rootDigest,
+        nativeBindingRef: 'binding',
+        mode: 'locked',
+        executor: 'host',
+        skillPolicy: 'clean',
+        contentScope: 'work',
+        workspace: 'direct',
+        networkPolicy: 'restricted',
+        grants: [],
+        artifactKey: 'artifact',
+        manifestKey: 'manifest',
+        launchKey: 'launch',
+        descriptorDigest: 'a'.repeat(64),
+      },
+      workspace: {
+        selection: 'shared',
+        intent: 'read',
+        cwd,
+        projectRef: 'sample/app',
+        repositoryRef: 'repository',
+        worktreeRef: null,
+        branch: 'feature/child',
+      },
+      files: {
+        sharing: 'shared',
+        collisionDisclosure: ['concurrent changes share the current checkout'],
+        duplicateWriterRiskAcknowledged: false,
+      },
+      terminal: { enabled: true, executable: terminal, title: 'Child' },
+    });
+
+    const errorIo = captureIo();
+    expect(
+      await run(
+        ['--json', '--cwd', cwd, 'session', 'branch', 'missing-parent', '--workspace', 'invalid'],
+        errorIo,
+        context,
+      ),
+    ).toBe(1);
+    expect(JSON.parse(errorIo.out[0]!)).toMatchObject({
+      apiVersion: 1,
+      ok: false,
+      error: { code: 'SESSION_NOT_FOUND' },
     });
   });
 
