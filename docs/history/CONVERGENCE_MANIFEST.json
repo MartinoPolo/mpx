@@ -11771,8 +11771,8 @@
       "source": "pi",
       "path": "APPEND_SYSTEM.md",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842",
+      "state": "modified",
+      "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e",
       "completion": "completed",
       "disposition": "Pi-specific",
       "destination": "runtimes/pi/runtime-pi/src/profile.ts",
@@ -11784,9 +11784,9 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "APPEND_SYSTEM.md",
-            "sha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842"
+            "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e"
           },
-          "sha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842",
+          "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e",
           "reference": "pi:APPEND_SYSTEM.md@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
         },
@@ -11796,14 +11796,15 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "APPEND_SYSTEM.md",
-            "sha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842"
+            "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e"
           },
           "sha256": "e93e8cf63e46c49031e8af1d50c412757d1c73dacb11a4e0f4891ab9830e9da6",
           "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
+      "headSha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842"
     },
     {
       "source": "pi",

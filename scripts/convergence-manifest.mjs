@@ -562,6 +562,30 @@ export function validateConvergenceManifest(manifest, options = {}) {
   return diagnostics;
 }
 
+const SOURCE_FACT_FIELDS = ['kind', 'state', 'sha256', 'headSha256', 'traversal'];
+const GENERATE_USAGE =
+  'Usage: pnpm convergence:generate [-- --accept-source <source:path>] or pnpm convergence:verify';
+
+export function parseGenerateConvergenceArguments(forwardedArgs) {
+  if (
+    !Array.isArray(forwardedArgs) ||
+    forwardedArgs.some((argument) => typeof argument !== 'string')
+  ) {
+    throw new Error(GENERATE_USAGE);
+  }
+  const args = forwardedArgs[0] === '--' ? forwardedArgs.slice(1) : forwardedArgs;
+  if (args.length === 0) {
+    return { check: false, sourceKey: null };
+  }
+  if (args.length === 1 && args[0] === '--check') {
+    return { check: true, sourceKey: null };
+  }
+  if (args.length === 2 && args[0] === '--accept-source' && /^[^:]+:.+$/u.test(args[1])) {
+    return { check: false, sourceKey: args[1] };
+  }
+  throw new Error(GENERATE_USAGE);
+}
+
 function comparableEntry(entry) {
   return JSON.stringify({
     kind: entry.kind,
@@ -570,6 +594,85 @@ function comparableEntry(entry) {
     headSha256: entry.headSha256 ?? null,
     traversal: entry.traversal ?? null,
   });
+}
+
+function entriesByKey(manifest) {
+  return new Map(manifest.entries.map((entry) => [`${entry.source}:${entry.path}`, entry]));
+}
+
+export function acceptChangedSourceEntry(generated, reviewed, sourceKey) {
+  if (
+    typeof sourceKey !== 'string' ||
+    !/^[^:]+:.+$/u.test(sourceKey) ||
+    validateConvergenceManifest(generated, { gate: false }).length > 0 ||
+    validateConvergenceManifest(reviewed).length > 0
+  ) {
+    throw new Error('Targeted source acceptance requires a valid source key and valid manifests');
+  }
+
+  const currentSources = new Map(generated.sources.map((source) => [source.id, source]));
+  const priorSources = new Map(reviewed.sources.map((source) => [source.id, source]));
+  if (
+    currentSources.size !== priorSources.size ||
+    [...priorSources].some(([id, source]) => {
+      const current = currentSources.get(id);
+      return !current || current.commit !== source.commit || current.dirty !== source.dirty;
+    })
+  ) {
+    throw new Error('Targeted source acceptance cannot update source commit or dirty metadata');
+  }
+
+  const currentEntries = entriesByKey(generated);
+  const priorEntries = entriesByKey(reviewed);
+  if (
+    currentEntries.size !== priorEntries.size ||
+    [...priorEntries.keys()].some((key) => !currentEntries.has(key))
+  ) {
+    throw new Error('Targeted source acceptance cannot accept source additions or removals');
+  }
+
+  const current = currentEntries.get(sourceKey);
+  const previous = priorEntries.get(sourceKey);
+  if (!current || !previous) {
+    throw new Error(`Targeted source entry does not exist: ${sourceKey}`);
+  }
+  if (previous.completion !== 'completed' || previous.disposition === 'excluded') {
+    throw new Error(`Targeted source entry is not a completed reviewed entry: ${sourceKey}`);
+  }
+  if (comparableEntry(previous) === comparableEntry(current)) {
+    throw new Error(`Targeted source entry is unchanged: ${sourceKey}`);
+  }
+
+  const acceptedEntry = structuredClone(previous);
+  for (const field of SOURCE_FACT_FIELDS) {
+    if (Object.hasOwn(current, field)) {
+      acceptedEntry[field] = current[field];
+    } else {
+      delete acceptedEntry[field];
+    }
+  }
+  const snapshotHash = current.sha256 ?? current.headSha256 ?? null;
+  acceptedEntry.evidence = acceptedEntry.evidence.map((item) => ({
+    ...item,
+    sourceSnapshot: { source: current.source, path: current.path, sha256: snapshotHash },
+    ...(item.kind === 'source-snapshot' ? { sha256: snapshotHash } : {}),
+  }));
+
+  const accepted = {
+    ...reviewed,
+    entries: reviewed.entries.map((entry) =>
+      `${entry.source}:${entry.path}` === sourceKey ? acceptedEntry : entry,
+    ),
+  };
+  const invalid = validateConvergenceManifest(accepted);
+  if (invalid.length > 0) {
+    throw new Error(
+      `Targeted source acceptance produced an invalid manifest:\n${invalid
+        .map((item) => `${item.code}: ${item.file}: ${item.message}`)
+        .join('\n')}`,
+    );
+  }
+  return accepted;
 }
 
 export function mergeReviewedDecisions(generated, reviewed) {
