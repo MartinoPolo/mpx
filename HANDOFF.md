@@ -9,10 +9,10 @@ Date: 2026-09-02
 All repository-local migration work that can be completed without live credentials, user-owned external mutations, another operating system, or human observation/approval is complete on `skills-first-finish` at `dff624c`.
 
 - Skills-first Stage G application extraction is complete.
-- Stage H structural implementation is complete.
-- Stage H acceptance remains pending because explicit convergence is blocked by external source drift.
-- Only live, external, other-OS, and human-approved gates remain.
-- Nothing from this branch has been pushed.
+- Stage H structural implementation and acceptance are complete.
+- Explicit convergence passes after human review and targeted acceptance of all three external source changes.
+- Only live, other-OS, and human-approved gates remain.
+- `main` is published to the private origin through the latest committed checkpoint.
 
 ## Completed Application Boundary
 
@@ -66,7 +66,7 @@ Full test categories passed:
 
 Additional evidence throughout the extraction included focused application/CLI suites, quality and Fallow regression checks, generated validation, structure validation, deterministic repeated dual-bundle generation, and architecture/spec/security/error-handling/test-quality reviews.
 
-Explicit convergence was intentionally not run.
+Explicit convergence now passes across both external source roots. Human-reviewed drift was accepted individually for `pi:APPEND_SYSTEM.md`, `claude:plugins/mp/statusline-projects.json`, and `claude:settings.json`; no unrelated entry was accepted implicitly.
 
 ## Integrated Commits on This Branch
 
@@ -85,14 +85,9 @@ Explicit convergence was intentionally not run.
 - `4767c7d refactor(application): extract ports workflow`
 - `b7a9f0f chore(test): enforce final repository structure`
 - `dff624c docs(portability): document verification boundaries`
+- `40e08ca chore(convergence): accept reviewed Pi prompt drift`
 
-## Remaining HITL and External Gates
-
-### External convergence
-
-- Explicit convergence reads user-owned `${MPX_PROJECTS}/mpx-claude-code` and `${MPX_PROJECTS}/mpx-pi` sources.
-- `${MPX_PROJECTS}/mpx-pi/APPEND_SYSTEM.md` currently differs from the immutable recorded evidence.
-- Do not revert the external file or regenerate/rebind `docs/history/CONVERGENCE_MANIFEST.json` without human review.
+## Remaining HITL and Live Gates
 
 ### F2 live proof
 

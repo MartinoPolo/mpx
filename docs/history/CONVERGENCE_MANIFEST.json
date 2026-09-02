@@ -9719,8 +9719,8 @@
       "source": "claude",
       "path": "plugins/mp/statusline-projects.json",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "0d8c9cea3b3a7f88033ecc4bb0a2cee2e6609f8bea8db1ee1686a3ef5505cb3e",
+      "state": "modified",
+      "sha256": "fb2989c0a8b494c2c2e68b9a1322974b3ee904266cbcc3a7b76b40cf7b8b1c7d",
       "completion": "completed",
       "disposition": "Claude-specific",
       "destination": "runtimes/claude/runtime-claude/src/index.ts",
@@ -9732,9 +9732,9 @@
           "sourceSnapshot": {
             "source": "claude",
             "path": "plugins/mp/statusline-projects.json",
-            "sha256": "0d8c9cea3b3a7f88033ecc4bb0a2cee2e6609f8bea8db1ee1686a3ef5505cb3e"
+            "sha256": "fb2989c0a8b494c2c2e68b9a1322974b3ee904266cbcc3a7b76b40cf7b8b1c7d"
           },
-          "sha256": "0d8c9cea3b3a7f88033ecc4bb0a2cee2e6609f8bea8db1ee1686a3ef5505cb3e",
+          "sha256": "fb2989c0a8b494c2c2e68b9a1322974b3ee904266cbcc3a7b76b40cf7b8b1c7d",
           "reference": "claude:plugins/mp/statusline-projects.json@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
         },
@@ -9744,14 +9744,15 @@
           "sourceSnapshot": {
             "source": "claude",
             "path": "plugins/mp/statusline-projects.json",
-            "sha256": "0d8c9cea3b3a7f88033ecc4bb0a2cee2e6609f8bea8db1ee1686a3ef5505cb3e"
+            "sha256": "fb2989c0a8b494c2c2e68b9a1322974b3ee904266cbcc3a7b76b40cf7b8b1c7d"
           },
           "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/claude/runtime-claude/test/unit/index.test.ts"
+      "test": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
+      "headSha256": "0d8c9cea3b3a7f88033ecc4bb0a2cee2e6609f8bea8db1ee1686a3ef5505cb3e"
     },
     {
       "source": "claude",
@@ -10458,7 +10459,7 @@
       "path": "settings.json",
       "kind": "file",
       "state": "modified",
-      "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd",
+      "sha256": "5a1ebaac0282ec492b261a0c55c4ff3ec80e5ca3d9dbd1ca4d98f1e182d852b8",
       "completion": "completed",
       "phase": "Phase I",
       "disposition": "Claude-specific",
@@ -10472,9 +10473,9 @@
           "sourceSnapshot": {
             "source": "claude",
             "path": "settings.json",
-            "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd"
+            "sha256": "5a1ebaac0282ec492b261a0c55c4ff3ec80e5ca3d9dbd1ca4d98f1e182d852b8"
           },
-          "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd",
+          "sha256": "5a1ebaac0282ec492b261a0c55c4ff3ec80e5ca3d9dbd1ca4d98f1e182d852b8",
           "reference": "claude:settings.json@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
         },
@@ -10484,7 +10485,7 @@
           "sourceSnapshot": {
             "source": "claude",
             "path": "settings.json",
-            "sha256": "8feac124033a6227e9971f85b513550c47f0568f4bbff8899c43820aecb64efd"
+            "sha256": "5a1ebaac0282ec492b261a0c55c4ff3ec80e5ca3d9dbd1ca4d98f1e182d852b8"
           },
           "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",

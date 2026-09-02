@@ -1314,7 +1314,7 @@ Move provider-neutral application orchestration behind public workspace APIs so 
 
 #### H. Enforce the final structure (`chore(test): enforce final layout`)
 
-**Status: implementation complete; acceptance pending.** Final test discovery, source-to-bundle validation, and repository-wide workspace-boundary validation are fail closed and integrated into repository checks. Explicit convergence remains externally blocked, so Stage H acceptance is not yet complete.
+**Status: complete.** Final test discovery, source-to-bundle validation, repository-wide workspace-boundary validation, and explicit convergence are fail closed and pass the repository acceptance gates.
 
 Remove transitional discovery/configuration and add fail-closed structural gates.
 
@@ -1334,4 +1334,4 @@ This migration does not rewrite skill payloads; redesign schemas or the hash alg
 - [x] Runtimes own no canonical parsing, policy, or provider logic.
 - [x] The CLI application layer is provider-neutral.
 - [x] Stage H final repository structure, quality, generated, type, and focused test gates pass.
-- [ ] Stage H acceptance: explicit convergence and the full combined gate remain externally blocked and were not executed.
+- [x] Stage H acceptance: explicit convergence and the full combined repository gate pass after human review of external source drift.
