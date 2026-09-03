@@ -7,11 +7,11 @@
 The semantic-convergence gate is complete for the captured snapshot:
 
 - 415 active inputs reviewed and completed
-- 249 `canonicalized`
+- 244 `canonicalized`
 - 18 `Claude-specific`
 - 53 `Pi-specific`
 - 4 `externalized`
-- 91 `retired`
+- 96 `retired`
 - 9 private/generated/dependency inputs explicitly `excluded`
 
 Every non-retired completed input names an existing destination and has source-snapshot-bound behavior-test or generated-artifact evidence whose hash is checked against the repository file. Every retirement records its reason, a null destination, and an explicit null active reader. Reviewed Phase I drift records its rationale and adaptation with a null destination so evidence does not pretend an unimplemented installer route exists. There are no provisional `_convergence`/`convergence` destinations, planned entries, or unclassified active inputs.
@@ -21,7 +21,7 @@ Every non-retired completed input names an existing destination and has source-s
 - `pnpm convergence:generate` traverses both source roots, refreshes source facts, and preserves reviewed decisions for unchanged snapshots.
 - `pnpm convergence:generate -- --accept-source <source:path>` accepts one changed, already-completed source entry. It refreshes only that entry's source facts and evidence snapshot bindings, preserves all reviewed decisions and completion evidence, and fails closed on source metadata or inventory-shape drift.
 - `pnpm convergence:verify` traverses both roots and fails on malformed baseline data or commit, dirty-state, path, state, or content drift. Reviewed disposition metadata is deliberately not treated as source drift.
-- `pnpm validate:generated` validates semantic completion, destination/evidence existence and hashes, retirement facts, legacy-name/import boundaries, provenance hashes, canonical script syntax, and generated Pi-agent drift.
+- `pnpm validate:generated` validates semantic completion, destination/evidence existence and hashes, retirement facts, legacy-name/import boundaries, canonical script syntax, and generated Pi-agent drift.
 - `pnpm validate:generated -- --verify-sources` additionally verifies the live source snapshot and selected-file provenance.
 
 The Pi-agent drift check imports its source generator directly, so `validate:generated` does not depend on a prior package build.

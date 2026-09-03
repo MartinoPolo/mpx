@@ -154,20 +154,22 @@ async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
         'canonical output style must be a regular non-symlink file',
       );
     }
-    if (initial.size > MAX_OUTPUT_STYLE_BYTES)
+    if (initial.size > MAX_OUTPUT_STYLE_BYTES) {
       throw new ClaudeRuntimeError(
         'OUTPUT_STYLE_OVERSIZED',
         'canonical output style exceeds 1 MiB',
       );
+    }
     const bytes = Buffer.alloc(initial.size);
     let offset = 0;
     while (offset < bytes.length) {
       const read = await handle.read(bytes, offset, bytes.length - offset, offset);
-      if (read.bytesRead === 0)
+      if (read.bytesRead === 0) {
         throw new ClaudeRuntimeError(
           'OUTPUT_STYLE_CHANGED',
           'canonical output style changed while reading',
         );
+      }
       offset += read.bytesRead;
     }
     const final = await handle.stat(),
@@ -196,11 +198,12 @@ async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
       );
     }
     const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n[\s\S]+)$/u);
-    if (!match)
+    if (!match) {
       throw new ClaudeRuntimeError(
         'OUTPUT_STYLE_MALFORMED',
         'canonical output style must have frontmatter and a body',
       );
+    }
     const lines = match[1]!.split(/\r?\n/u),
       names = lines.filter((line) => /^name\s*:/u.test(line)),
       descriptions = lines.filter((line) => /^description\s*:/u.test(line));
@@ -221,7 +224,9 @@ async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
       `---${newline}${match[1]}${newline}force-for-plugin: true${newline}---${match[2]}`,
     );
   } catch (error) {
-    if (error instanceof ClaudeRuntimeError) throw error;
+    if (error instanceof ClaudeRuntimeError) {
+      throw error;
+    }
     throw new ClaudeRuntimeError(
       'OUTPUT_STYLE_INVALID',
       'canonical output style cannot be safely read',

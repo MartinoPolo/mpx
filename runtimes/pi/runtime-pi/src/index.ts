@@ -319,7 +319,9 @@ function absolute(value: string, label: string): string {
   }
   return path.normalize(value).replaceAll('\\', '/');
 }
-function loadPublishedPiProfile(directoryInput: string | undefined): PiRuntimeProfileV1 | undefined {
+function loadPublishedPiProfile(
+  directoryInput: string | undefined,
+): PiRuntimeProfileV1 | undefined {
   if (!directoryInput) {
     return undefined;
   }

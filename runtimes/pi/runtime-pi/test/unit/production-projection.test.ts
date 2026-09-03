@@ -711,7 +711,10 @@ describe('production Pi projection', () => {
     );
 
     await expect(
-      revalidateRuntimeArtifact(projection.revalidation.directory, projection.revalidation.reference),
+      revalidateRuntimeArtifact(
+        projection.revalidation.directory,
+        projection.revalidation.reference,
+      ),
     ).resolves.toMatchObject({ valid: false });
   });
 

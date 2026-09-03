@@ -55,6 +55,7 @@ export interface LaunchProjection {
   readonly extension?: string;
   readonly runtimeContextFile?: string;
   readonly theme?: string;
+  readonly profile?: PiRuntimeProfileV1;
 }
 export interface LaunchProjectionBuildInput {
   readonly descriptor: LaunchDescriptor;
@@ -429,6 +430,9 @@ export function productionRuntimeAdapters(input: {
           executable: input.trustedExecutable.executable,
           extension: built.extension,
           theme: built.theme === 'amber' ? 'amber' : 'green',
+          ...((built.profile ?? input.projectionInput.piRuntimeProfile)
+            ? { profile: built.profile ?? input.projectionInput.piRuntimeProfile }
+            : {}),
           accountRoot: input.nativeRuntimeRoot,
           runtimeContextFile: built.runtimeContextFile,
           runtimeContext: input.projectionInput.runtimeContext,

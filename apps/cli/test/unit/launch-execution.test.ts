@@ -1716,6 +1716,11 @@ describe('Phase F launch execution', () => {
       const catalogRoot = path.join(contentRoot, 'content', 'skills');
       await cp(fixture.catalogRoot, catalogRoot, { recursive: true });
       await mkdir(path.join(contentRoot, 'content', 'agents'), { recursive: true });
+      await mkdir(path.join(contentRoot, 'content', 'output-styles'), { recursive: true });
+      await cp(
+        path.resolve('content/output-styles/mpx-terse.md'),
+        path.join(contentRoot, 'content', 'output-styles', 'mpx-terse.md'),
+      );
       await cp(
         path.resolve('runtimes/pi/runtime-pi/projection'),
         path.join(contentRoot, 'runtimes', 'pi', 'runtime-pi', 'projection'),
@@ -2344,8 +2349,16 @@ describe('Phase F launch execution', () => {
         '--extension',
         'C:/immutable/pi/extension.mjs',
         '--no-skills',
+        '--provider',
+        'openai-codex',
+        '--model',
+        'gpt-5.6-sol',
+        '--thinking',
+        'medium',
+        '--tui-mode',
+        'fullscreen',
         '--theme',
-        'green',
+        'dark',
       ],
     });
   });

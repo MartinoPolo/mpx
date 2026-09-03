@@ -47,7 +47,7 @@
             "path": ".claude-plugin/marketplace.json",
             "sha256": "d25870cc9c1bbb77f97de6a975b0ac5a35402a03cad174b4bd7d01136271a87d"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -3862,7 +3862,7 @@
             "path": "plugins/gh/.claude-plugin/plugin.json",
             "sha256": "71ec92b76f1ddb869942374ad2676b34675c79174ca77a608785ec45be71f4f2"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -4877,7 +4877,7 @@
             "path": "plugins/mp/.claude-plugin/plugin.json",
             "sha256": "2bc51780ba09e5451c4de5b9ddc1318cf90c1180452bf2284f4ffc0be2ee89eb"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6652,7 +6652,7 @@
             "path": "plugins/mp/scripts/__tests__/status-line.test.ts",
             "sha256": "2b474c00e694027e224f40519ff0a33e0fa822c4b088b23cd58bea0c4ee7ceae"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6717,7 +6717,7 @@
             "path": "plugins/mp/scripts/__tests__/subagent-status-line.test.ts",
             "sha256": "38179b0c36d9122cdd71ac4e56737f8b375ecac2c6b3ae49ab1a72c409c91e13"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6793,7 +6793,7 @@
             "path": "plugins/mp/scripts/account-color.mts",
             "sha256": "591d2517699d902a3bdfb0e359b1c6452f4b6f62a14f62cb3d3ba50d8838cb7f"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7151,7 +7151,7 @@
             "path": "plugins/mp/scripts/lib/statusline-ansi.mts",
             "sha256": "54772301e6ab87d5498423540bf983fc745d2bc857aa1d5bf68bf6e0382f374f"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7216,7 +7216,7 @@
             "path": "plugins/mp/scripts/lib/terminal-theme.mts",
             "sha256": "b9bdc0211908f0c54dadd4bc9d74f4762df903bbccf3014e683c3733a07f4121"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7395,7 +7395,7 @@
             "path": "plugins/mp/scripts/status-line-mr-refresh.mjs",
             "sha256": "94a741c9e02068aa8cc59d4a144b1c745c2e672f8ff5941c005939ef907e8d48"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7433,7 +7433,7 @@
             "path": "plugins/mp/scripts/status-line.mts",
             "sha256": "54a0a79af645222dde0e486632a3ac4c9eb86fc03a9807ffc9c7720a87240a0a"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7471,7 +7471,7 @@
             "path": "plugins/mp/scripts/subagent-status-line.mts",
             "sha256": "d0d8782f523c93468c5da6f364729d02d57f30dbf14bb4482fff55203969d727"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7509,7 +7509,7 @@
             "path": "plugins/mp/scripts/usage-audit.mjs",
             "sha256": "334aabeb1e1638742b39bca70a47d593ef82044ff7e0b6fff0a84008b969072a"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7547,7 +7547,7 @@
             "path": "plugins/mp/scripts/verify-statusline.mts",
             "sha256": "574c512831dd35af0509c6fa54d6fd366cdb6f90e4ca02d0e1346b87ae7d41dc"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9653,7 +9653,7 @@
             "path": "plugins/mp/statusline-accounts.json",
             "sha256": "a44bf8b339fe5ed980aa112c7edf71bed9060e22bed5fedacab0f60f7279919b"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9691,7 +9691,7 @@
             "path": "plugins/mp/statusline-projects.json",
             "sha256": "fb2989c0a8b494c2c2e68b9a1322974b3ee904266cbcc3a7b76b40cf7b8b1c7d"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9730,7 +9730,7 @@
             "path": "plugins/mp/statusline-schemes.json",
             "sha256": "e55e5ba745ba29159482c4c2da8ebd25607905764bd10691e6bc4617fd50b30e"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9768,7 +9768,7 @@
             "path": "plugins/mp/templates/gitignore.template",
             "sha256": "1fe3a632e6a3018608d6c5532f6aa8ad530a36cab8834c58b6f0dadd4a7ab4ef"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -10432,7 +10432,7 @@
             "path": "settings.json",
             "sha256": "5a1ebaac0282ec492b261a0c55c4ff3ec80e5ca3d9dbd1ca4d98f1e182d852b8"
           },
-          "sha256": "24c8eb19a85049d13411d37e1aa3ab18ee52b33f778ea1fc1f3b3ef93d914ae4",
+          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
