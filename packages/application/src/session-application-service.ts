@@ -8,6 +8,7 @@ import type {
   NativeBindingRecordV1,
   ResumeDependencies,
   ResumePlanV1,
+  SessionResurrectionExportV1,
   RuntimeDiscovery,
   SessionListFilter,
   SessionRecordV1,
@@ -134,6 +135,7 @@ export interface SessionApplication {
   inbox(request?: { runtime?: string; status?: string; limit?: number }): Promise<unknown>;
   mark(id: string, status: WorkflowStatus, options: SessionMarkOptions): Promise<unknown>;
   save(ids?: readonly string[]): Promise<{ readonly captures: unknown }>;
+  resurrectionExport(): Promise<SessionResurrectionExportV1>;
   handoff(
     id: string,
     request: SessionDispositionRequest & { readonly disposition: 'paused' | 'unfinished' },
@@ -149,7 +151,12 @@ export interface SessionApplication {
   }>;
   prepareBranch(parentId: string): Promise<PreparedSessionBranch>;
   branch(prepared: PreparedSessionBranch, request: BranchSessionRequest): Promise<unknown>;
-  resume(request: { id: string; confirmation?: string; dryRun?: boolean }): Promise<unknown>;
+  resume(request: {
+    id: string;
+    confirmation?: string;
+    dryRun?: boolean;
+    approveResurrection?: boolean;
+  }): Promise<unknown>;
   resolveIdentity(name: string): Promise<IdentityV1>;
 }
 
@@ -217,6 +224,38 @@ export class SessionApplicationService implements SessionApplication {
       kind: 'session-capture' as const,
       captures: await this.#sessions.capture(ids),
     };
+  }
+
+  async resurrectionExport(): Promise<SessionResurrectionExportV1> {
+    await this.consumePending();
+    const records = (await this.#sessions.list())
+      .filter(
+        (record): record is SessionRecordV1 & { launch: NonNullable<SessionRecordV1['launch']> } =>
+          record.launch !== null &&
+          record.workflow.status !== 'completed' &&
+          record.workflow.status !== 'abandoned',
+      )
+      .sort((left, right) =>
+        left.recordId < right.recordId ? -1 : left.recordId > right.recordId ? 1 : 0,
+      )
+      .map((record) => ({
+        recordId: record.recordId,
+        runtime: record.runtime,
+        identity: record.identity,
+        title: record.metadata.title,
+        hostCwd: record.location.cwd,
+        executorKind: record.launch.executor.kind,
+        workspaceStrategy: record.launch.workspace,
+        sandboxCwd: null,
+        nativePathTranslation: null,
+        liveness: record.liveness,
+        route: {
+          kind: 'mpx-session-resume' as const,
+          executable: 'mpx' as const,
+          argv: ['session', 'resume', record.recordId, '--approve-resurrection'] as const,
+        },
+      }));
+    return { schemaVersion: 1, kind: 'session-resurrection-export', records };
   }
 
   async handoff(
@@ -420,7 +459,12 @@ export class SessionApplicationService implements SessionApplication {
     };
   }
 
-  async resume(request: { id: string; confirmation?: string; dryRun?: boolean }) {
+  async resume(request: {
+    id: string;
+    confirmation?: string;
+    dryRun?: boolean;
+    approveResurrection?: boolean;
+  }) {
     if (!this.#dependencies.resumeDependencies) {
       throw applicationError(
         'SESSION_RESUME_NOT_CONFIGURED',
@@ -433,10 +477,13 @@ export class SessionApplicationService implements SessionApplication {
     await this.consumePending();
     const current = await this.#sessions.show(request.id);
     const replanned = await planner(current, await this.#dependencies.resumeDependencies(current));
-    if (request.confirmation === undefined || request.dryRun) {
+    const confirmation = request.approveResurrection
+      ? replanned.confirmationDigest
+      : request.confirmation;
+    if (confirmation === undefined || request.dryRun) {
       return replanned;
     }
-    this.#dependencies.verifyResumeConfirmation(replanned, request.confirmation);
+    this.#dependencies.verifyResumeConfirmation(replanned, confirmation);
     if (!this.#dependencies.executeConfirmedResume) {
       throw applicationError(
         'SESSION_RESUME_EXECUTION_UNAVAILABLE',

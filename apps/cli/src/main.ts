@@ -118,6 +118,7 @@ function parse(argv: readonly string[]): Parsed {
         'terminal-tab',
         'legacy-disabled',
         'approve-host',
+        'approve-resurrection',
       ].includes(name!)
     ) {
       options.set(name!, true);

@@ -386,6 +386,74 @@ describe('session command', () => {
     expect(result).toEqual({ data: { kind: 'branch-result' }, warnings: [] });
   });
 
+  it('returns the resurrection export and rejects positional arguments or options', async () => {
+    const resurrectionExport = vi.fn(async () => ({
+      schemaVersion: 1,
+      kind: 'session-resurrection-export',
+      records: [],
+    }));
+    const application = { resurrectionExport } as never;
+
+    await expect(
+      executeSessionCommand(
+        { action: 'resurrect-export', args: [], options: new Map() },
+        { application },
+      ),
+    ).resolves.toEqual({
+      data: { schemaVersion: 1, kind: 'session-resurrection-export', records: [] },
+      warnings: [],
+    });
+    for (const input of [
+      { action: 'resurrect-export', args: ['unexpected'], options: new Map() },
+      { action: 'resurrect-export', args: [], options: new Map([['limit', '1']]) },
+    ]) {
+      await expect(executeSessionCommand(input, { application })).rejects.toMatchObject({
+        code: 'SESSION_USAGE_ERROR',
+      });
+    }
+    expect(resurrectionExport).toHaveBeenCalledOnce();
+  });
+
+  it('forwards explicit resurrection approval to resume', async () => {
+    const resume = vi.fn(async () => ({ kind: 'resume-result' }));
+
+    await executeSessionCommand(
+      {
+        action: 'resume',
+        args: ['session-one'],
+        options: new Map([['approve-resurrection', true]]),
+      },
+      { application: { resume } as never },
+    );
+
+    expect(resume).toHaveBeenCalledWith({
+      id: 'session-one',
+      approveResurrection: true,
+      dryRun: false,
+    });
+  });
+
+  it.each(['confirm-plan', 'dry-run'])(
+    'rejects --approve-resurrection with --%s',
+    async (option) => {
+      const resume = vi.fn();
+      await expect(
+        executeSessionCommand(
+          {
+            action: 'resume',
+            args: ['session-one'],
+            options: new Map<string, string | boolean>([
+              ['approve-resurrection', true],
+              [option, option === 'dry-run' ? true : 'digest'],
+            ]),
+          },
+          { application: { resume } as never },
+        ),
+      ).rejects.toMatchObject({ code: 'SESSION_USAGE_ERROR' });
+      expect(resume).not.toHaveBeenCalled();
+    },
+  );
+
   it('forwards parsed resume arguments and returns application data', async () => {
     const resume = vi.fn(async () => ({ kind: 'resume-result' }));
 

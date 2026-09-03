@@ -142,6 +142,7 @@ export async function executeSessionCommand(
     'show',
     'save',
     'resume',
+    'resurrect-export',
     'branch',
     'mark',
     'handoff',
@@ -154,6 +155,15 @@ export async function executeSessionCommand(
     usage(`session requires ${actions.join(', ')}`);
   }
   const action = input.action as (typeof actions)[number];
+  if (action === 'resurrect-export') {
+    const commandOptions = [...input.options.keys()].filter(
+      (name) => name !== 'json' && name !== 'cwd',
+    );
+    if (input.args.length || commandOptions.length) {
+      usage('session resurrect-export accepts no positional arguments or options');
+    }
+    return { data: await application.resurrectionExport(), warnings: [] };
+  }
   if (action === 'list') {
     if (input.args.length) {
       usage('session list accepts no positional arguments');
@@ -335,10 +345,18 @@ export async function executeSessionCommand(
   if (input.args.length !== 1) {
     usage('session resume requires one id');
   }
+  const approveResurrection = input.options.get('approve-resurrection') === true;
+  if (
+    approveResurrection &&
+    (input.options.has('confirm-plan') || input.options.get('dry-run') === true)
+  ) {
+    usage('--approve-resurrection cannot be combined with --confirm-plan or --dry-run');
+  }
   return {
     data: await application.resume({
       id: input.args[0]!,
       ...(confirmationOption(input) ? { confirmation: confirmationOption(input)! } : {}),
+      ...(approveResurrection ? { approveResurrection: true } : {}),
       dryRun: input.options.get('dry-run') === true,
     }),
     warnings: [],

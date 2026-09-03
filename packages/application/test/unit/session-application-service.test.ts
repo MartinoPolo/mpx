@@ -142,6 +142,60 @@ describe('SessionApplicationService reconcile orchestration', () => {
   });
 });
 
+describe('SessionApplicationService resurrection export', () => {
+  it('consumes pending events and deterministically exports active and inactive eligible MPX records', async () => {
+    const store = await branchFixture();
+    const sessions = new SessionService(store);
+    const parent = await sessions.show('parent');
+    const launched = parent.launch!;
+    await sessions.save({
+      ...parent,
+      recordId: 'z-active',
+      runtimeQualifiedId: 'claude:z-active',
+      liveness: 'active',
+    });
+    await sessions.save({
+      ...parent,
+      recordId: 'a-inactive',
+      runtimeQualifiedId: 'claude:a-inactive',
+    });
+    await sessions.save({
+      ...parent,
+      recordId: 'native',
+      runtimeQualifiedId: 'claude:native',
+      launch: null,
+    });
+    await sessions.save({
+      ...parent,
+      recordId: 'completed',
+      runtimeQualifiedId: 'claude:completed',
+      workflow: { ...parent.workflow, status: 'completed', inbox: false },
+    });
+    await sessions.save({
+      ...parent,
+      recordId: 'abandoned',
+      runtimeQualifiedId: 'claude:abandoned',
+      workflow: { ...parent.workflow, status: 'abandoned', inbox: false },
+    });
+    const consumePending = vi.fn(async () => 1);
+    const application = directApplication(store, { consumePending });
+
+    const result = await application.resurrectionExport();
+
+    expect(consumePending).toHaveBeenCalledOnce();
+    expect(result).toEqual({
+      schemaVersion: 1,
+      kind: 'session-resurrection-export',
+      records: [
+        expect.objectContaining({ recordId: 'a-inactive', liveness: 'inactive' }),
+        expect.objectContaining({ recordId: 'parent', liveness: 'inactive' }),
+        expect.objectContaining({ recordId: 'z-active', liveness: 'active' }),
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain(launched.launchKey);
+  });
+});
+
 describe('SessionApplicationService resume orchestration', () => {
   it('verifies, consumes, reloads, replans, confirms, and executes in order', async () => {
     const store = await branchFixture();
@@ -177,6 +231,29 @@ describe('SessionApplicationService resume orchestration', () => {
       application.resume({ id: 'parent', confirmation: planned.confirmationDigest }),
     ).resolves.toEqual({ schemaVersion: 1, kind: 'session-resume', result: 'launched' });
     expect(order).toEqual(['verify', 'consume', 'verify', 'execute']);
+  });
+
+  it('approves a resurrection only with the final replanned digest', async () => {
+    const store = await branchFixture();
+    const initialPlan = { confirmationDigest: 'initial' } as never;
+    const finalPlan = { confirmationDigest: 'final' } as never;
+    const planResume = vi.fn().mockResolvedValueOnce(initialPlan).mockResolvedValueOnce(finalPlan);
+    const verifyResumeConfirmation = vi.fn();
+    const executeConfirmedResume = vi.fn(async () => 'launched');
+    const application = directApplication(store, {
+      planResume,
+      verifyResumeConfirmation,
+      resumeDependencies: async () => ({}) as never,
+      executeConfirmedResume,
+    });
+
+    await expect(application.resume({ id: 'parent', approveResurrection: true })).resolves.toEqual({
+      schemaVersion: 1,
+      kind: 'session-resume',
+      result: 'launched',
+    });
+    expect(verifyResumeConfirmation).toHaveBeenCalledWith(finalPlan, 'final');
+    expect(executeConfirmedResume).toHaveBeenCalledWith(finalPlan);
   });
 
   it('consumes no lifecycle events when initial verification fails', async () => {
