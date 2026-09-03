@@ -1004,6 +1004,10 @@ const ENV_ALLOW = new Set([
   'COLORTERM',
   'WT_SESSION',
 ]);
+const TRUSTED_LAUNCH_ENV_ALLOW = new Set([
+  'MPX_SESSION_LIFECYCLE_BINDING_ID',
+  'MPX_SESSION_LIFECYCLE_EVENT_DIR',
+]);
 export function sanitizedEnvironment(
   source: Readonly<Record<string, string | undefined>>,
   launch: Readonly<Record<string, string>>,
@@ -1019,7 +1023,10 @@ export function sanitizedEnvironment(
     }
   }
   for (const [key, value] of Object.entries(launch)) {
-    if (/^MPX_(?:LAUNCH|CONTEXT|PROJECT|REPOSITORY|WORKSPACE|RUNTIME)_/u.test(key)) {
+    if (
+      TRUSTED_LAUNCH_ENV_ALLOW.has(key) ||
+      /^MPX_(?:LAUNCH|CONTEXT|PROJECT|REPOSITORY|WORKSPACE|RUNTIME)_/u.test(key)
+    ) {
       result[key] = value;
     }
   }
