@@ -468,6 +468,57 @@ export interface ImmutableInstallerServiceOptions {
   readonly now?: () => Date;
   readonly failureInjection?: (operationId: string, index: number) => void;
 }
+const RELEASE_UPGRADE_ID = 'ownership-release-upgrade';
+const RELEASE_UPGRADE_VERIFIER = 'installer:ownership-release-upgrade';
+
+function isReleaseKeyedRuntimeProjectionTarget(target: string, releaseKey: string): boolean {
+  const segments = target.toLowerCase().split(/[\\/]+/u),
+    marker = segments.lastIndexOf('runtime-projections');
+  return (
+    marker > 0 &&
+    segments[marker - 1] === 'mpx' &&
+    segments[marker + 1] === releaseKey &&
+    segments.length > marker + 2
+  );
+}
+
+function validateUpgradeOperations(
+  priorReceipt: OwnershipReceiptV1,
+  targetReleaseKey: string,
+  operations: readonly InstallOperationV1[],
+  observations?: readonly MachineObservationV1[],
+): void {
+  const currentById = new Map(operations.map((operation) => [operation.id, operation]));
+  for (const prior of priorReceipt.operations) {
+    const current = currentById.get(prior.id);
+    if (!current) {
+      fail('INSTALL_OWNERSHIP_MISMATCH', `Upgrade drops prior owned operation ${prior.id}.`);
+    }
+    if (prior.adapter !== current.adapter || prior.action !== current.action) {
+      fail('INSTALL_OWNERSHIP_MISMATCH', `Upgrade changes ownership for operation ${prior.id}.`);
+    }
+    if (prior.target !== current.target) {
+      if (
+        prior.action !== 'ensure' ||
+        !isReleaseKeyedRuntimeProjectionTarget(prior.target, priorReceipt.releaseKey) ||
+        !isReleaseKeyedRuntimeProjectionTarget(current.target, targetReleaseKey)
+      ) {
+        fail('INSTALL_OWNERSHIP_MISMATCH', `Upgrade moves prior owned operation ${prior.id}.`);
+      }
+      continue;
+    }
+    const observed = observations?.find((observation) => observation.id === current.id)?.digest;
+    if (
+      observations &&
+      current.action === 'ensure' &&
+      observed !== prior.desiredDigest &&
+      observed !== current.desiredDigest
+    ) {
+      fail('INSTALL_FOREIGN_OR_DRIFTED', `Refusing drifted target ${current.target}.`);
+    }
+  }
+}
+
 export class ImmutableInstallerService {
   private readonly adapters: Map<string, SideEffectAdapter>;
   private readonly now: () => Date;
@@ -487,18 +538,34 @@ export class ImmutableInstallerService {
   async plan(
     intentValue: InstallIntentV1,
     requested: readonly InstallOperationV1[],
+    priorReceipt?: OwnershipReceiptV1,
   ): Promise<InstallPlanV1> {
-    const intent = parseInstallIntentV1(intentValue);
+    const intent = parseInstallIntentV1(intentValue),
+      prior = priorReceipt ? parseOwnershipReceiptV1(priorReceipt) : undefined;
     const operations = [...requested].sort((a, b) => a.id.localeCompare(b.id));
     if (new Set(operations.map((x) => x.id)).size !== operations.length) {
       fail('INSTALL_OPERATION_DUPLICATE', 'Operation IDs must be unique.');
     }
     const observations: MachineObservationV1[] = [];
     for (const operation of operations) {
-      observations.push({
-        id: operation.id,
-        digest: await this.adapter(operation.adapter).observe(operation),
-      });
+      const digest = await this.adapter(operation.adapter).observe(operation);
+      if (prior && digest !== null && digest !== operation.desiredDigest) {
+        const owned = prior.operations.find(
+          (prior) =>
+            prior.id === operation.id &&
+            prior.adapter === operation.adapter &&
+            prior.target === operation.target &&
+            prior.action === 'ensure' &&
+            operation.action === 'ensure',
+        );
+        if (!owned || digest !== owned.desiredDigest) {
+          fail('INSTALL_FOREIGN_OR_DRIFTED', `Refusing drifted target ${operation.target}.`);
+        }
+      }
+      observations.push({ id: operation.id, digest });
+    }
+    if (prior && prior.releaseKey !== intent.releaseKey) {
+      validateUpgradeOperations(prior, intent.releaseKey, operations, observations);
     }
     const base = {
       schemaVersion: 1 as const,
@@ -529,11 +596,40 @@ export class ImmutableInstallerService {
     return this.options.store.exclusive(async () => {
       await this.recover();
       await this.assertCurrent(plan);
-      const priorReceipt = await this.options.store.readReceipt();
-      if (
+      const priorReceipt = await this.options.store.readReceipt(),
+        upgrading = Boolean(priorReceipt && priorReceipt.releaseKey !== plan.intent.releaseKey),
+        confirmationReferences = plan.classifications?.confirmationRequired ?? [],
+        allReferences = [...confirmationReferences, ...(plan.classifications?.manualOnly ?? [])],
+        upgradeReferences = allReferences.filter(
+          (reference) =>
+            reference.id === RELEASE_UPGRADE_ID ||
+            reference.verifierRef === RELEASE_UPGRADE_VERIFIER,
+        );
+      if (upgrading) {
+        const authority = upgradeReferences[0];
+        if (
+          upgradeReferences.length !== 1 ||
+          !authority ||
+          !confirmationReferences.includes(authority) ||
+          authority.id !== RELEASE_UPGRADE_ID ||
+          authority.verifierRef !== RELEASE_UPGRADE_VERIFIER
+        ) {
+          fail('INSTALL_OWNERSHIP_MISMATCH', 'Upgrade authority is missing or malformed.');
+        }
+        if (authority.planDigest !== installerDigest(priorReceipt)) {
+          fail('INSTALL_PLAN_STALE', 'Prior ownership receipt changed after upgrade planning.');
+        }
+        validateUpgradeOperations(
+          priorReceipt!,
+          plan.intent.releaseKey,
+          plan.operations,
+          plan.observations,
+        );
+      } else if (upgradeReferences.length > 0) {
+        fail('INSTALL_OWNERSHIP_MISMATCH', 'Upgrade authority is extraneous.');
+      } else if (
         priorReceipt &&
-        (priorReceipt.releaseKey !== plan.intent.releaseKey ||
-          installerDigest(priorReceipt.operations) !== installerDigest(plan.operations))
+        installerDigest(priorReceipt.operations) !== installerDigest(plan.operations)
       ) {
         fail('INSTALL_OWNERSHIP_MISMATCH', 'Existing ownership differs from the plan.');
       }
@@ -595,7 +691,7 @@ export class ImmutableInstallerService {
         }
         const manifest = this.options.manifest;
         if (
-          !priorReceipt &&
+          (!priorReceipt || upgrading) &&
           (!manifest ||
             manifest.releaseKey !== plan.intent.releaseKey ||
             manifest.convergenceHash !== plan.intent.convergenceHash)
@@ -615,17 +711,20 @@ export class ImmutableInstallerService {
             bindingDigest: installerDigest({ operation, spec }),
           });
         }
-        const receipt: OwnershipReceiptV1 = priorReceipt ?? {
-          schemaVersion: 2,
-          kind: 'ownership-receipt',
-          releaseKey: plan.intent.releaseKey,
-          convergenceHash: plan.intent.convergenceHash,
-          files: manifest!.files,
-          operations: plan.operations,
-          operationLocators,
-          installIntent: plan.intent,
-          installedAt: this.now().toISOString(),
-        };
+        const receipt: OwnershipReceiptV1 =
+          priorReceipt && !upgrading
+            ? priorReceipt
+            : {
+                schemaVersion: 2,
+                kind: 'ownership-receipt',
+                releaseKey: plan.intent.releaseKey,
+                convergenceHash: plan.intent.convergenceHash,
+                files: manifest!.files,
+                operations: plan.operations,
+                operationLocators,
+                installIntent: plan.intent,
+                installedAt: this.now().toISOString(),
+              };
         await this.options.store.writeReceipt(receipt);
         journal = { ...journal, phase: 'committed' };
         await this.options.store.writeTransaction({
@@ -726,6 +825,16 @@ export class ImmutableInstallerService {
         );
       }
       await adapter.hydrateReceiptOperation?.(operation, locator.spec);
+    }
+  }
+  async assertOwnedReceipt(receiptValue: OwnershipReceiptV1): Promise<void> {
+    const receipt = parseOwnershipReceiptV1(receiptValue);
+    await this.hydrateReceiptOperations(receipt);
+    for (const operation of receipt.operations) {
+      const actual = await this.adapter(operation.adapter).observe(operation);
+      if (operation.action === 'ensure' ? actual !== operation.desiredDigest : actual !== null) {
+        fail('INSTALL_FOREIGN_OR_DRIFTED', `Owned target ${operation.target} is drifted.`);
+      }
     }
   }
   async verify(): Promise<InstallVerificationV1> {

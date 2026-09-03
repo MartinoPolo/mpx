@@ -1,4 +1,5 @@
-import { mkdtemp, open, readFile, readdir, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
@@ -7,11 +8,13 @@ import {
   canonicalJson,
   installerDigest,
   type InstallIntentV1,
+  type OwnershipReceiptV1,
   type ReleaseManifestV1,
 } from '../../src/immutable-core.js';
 import {
   NodeBinaryFileSystem,
   ProductionInstallerOperationAdapter,
+  ReadOnlyRuntimeRegistrationInspector,
 } from '../../src/production-operation.js';
 import { ImmutableInstallerService, MemoryTransactionStore } from '../../src/transaction.js';
 
@@ -706,4 +709,163 @@ it('never inspects, plans, or writes Windows Terminal while retaining managed in
   );
   expect(readResource).not.toHaveBeenCalledWith(terminal);
   expect(writeResource).not.toHaveBeenCalledWith(terminal, expect.anything());
+});
+
+it('preserves a concurrently changed ordinary file during rollback', async () => {
+  const releaseKey = 'a'.repeat(64),
+    files = new FakeBinaryFileSystem(),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      { files, resources: new FakeJsonResourceStore() },
+    ),
+    operations = await adapter.operations(
+      {
+        schemaVersion: 1,
+        kind: 'install-intent',
+        releaseKey,
+        convergenceHash: releaseKey,
+        components: ['cli'],
+      },
+      releaseManifest(releaseKey),
+    ),
+    selector = required(
+      operations.automatic.find((operation) => operation.id === '05-cli-selector'),
+      'selector operation',
+    ),
+    prior = Buffer.from('prior-selector'),
+    concurrent = Buffer.from('concurrent-selector');
+  await files.write(selector.target, prior);
+  const snapshot = await adapter.capture(selector);
+  await adapter.apply(selector);
+  await files.write(selector.target, concurrent);
+
+  await expect(adapter.restore(selector, snapshot)).rejects.toMatchObject({
+    code: 'INSTALL_FOREIGN_OR_DRIFTED',
+  });
+  expect(await files.read(selector.target)).toEqual(concurrent);
+});
+
+it('preserves a concurrently changed managed launcher during rollback', async () => {
+  const releaseKey = 'a'.repeat(64),
+    files = new FakeBinaryFileSystem(),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      { files, resources: new FakeJsonResourceStore() },
+    ),
+    operations = await adapter.operations(
+      {
+        schemaVersion: 1,
+        kind: 'install-intent',
+        releaseKey,
+        convergenceHash: releaseKey,
+        components: ['cli'],
+      },
+      releaseManifest(releaseKey),
+    ),
+    launcher = required(
+      operations.automatic.find((operation) => operation.id === '10-profile-0'),
+      'launcher operation',
+    ),
+    prior = Buffer.from('# prior launcher'),
+    concurrent = Buffer.from('# concurrent launcher');
+  await files.write(launcher.target, prior);
+  const snapshot = await adapter.capture(launcher);
+  await adapter.apply(launcher);
+  await files.write(launcher.target, concurrent);
+
+  await expect(adapter.restore(launcher, snapshot)).rejects.toMatchObject({
+    code: 'INSTALL_FOREIGN_OR_DRIFTED',
+  });
+  expect(await files.read(launcher.target)).toEqual(concurrent);
+});
+
+it('accepts only desired or exact prior runtime registration receipts during an upgrade', async () => {
+  const local = await mkdtemp(path.join(tmpdir(), 'mpx-registration-upgrade-')),
+    executable = path.join(local, 'runtime.exe'),
+    executableBody = Buffer.from('runtime'),
+    identity = 'claude-personal' as const;
+  await writeFile(executable, executableBody);
+  const registration = {
+    schemaVersion: 1 as const,
+    kind: 'runtime-registration' as const,
+    identity,
+    runtime: 'claude' as const,
+    domain: 'personal' as const,
+    nativeRootDigest: installerDigest('native'),
+    executable: {
+      path: executable,
+      sha256: createHash('sha256').update(executableBody).digest('hex'),
+      version: '1',
+    },
+    projection: {
+      rootDigest: installerDigest('projection'),
+      files: [
+        {
+          path: 'missing.json',
+          sha256: installerDigest('missing'),
+          bytes: 1,
+          role: 'plugin' as const,
+          owner: 'convergence' as const,
+        },
+      ],
+      reader: 'canonical' as const,
+      activation: 'argv-only' as const,
+    },
+    routes: {
+      git: 'personal:git',
+      provider: 'personal:provider',
+      ssh: 'personal:ssh',
+      mcpSharing: 'shared' as const,
+    },
+  };
+  const matrix = {
+    schemaVersion: 1 as const,
+    kind: 'runtime-registration-matrix' as const,
+    registrations: [registration],
+    matrixDigest: installerDigest('matrix'),
+  };
+  const intentA = {
+      schemaVersion: 1 as const,
+      kind: 'install-intent' as const,
+      releaseKey: 'a'.repeat(64),
+      convergenceHash: 'a'.repeat(64),
+      components: ['runtime-registration'],
+      runtimeRegistrations: matrix,
+    } as InstallIntentV1,
+    intentB = { ...intentA, releaseKey: 'b'.repeat(64), convergenceHash: 'b'.repeat(64) },
+    prior = { releaseKey: intentA.releaseKey, installIntent: intentA } as OwnershipReceiptV1,
+    receiptTarget = path.join(local, 'mpx', 'installer', 'registrations', `${identity}.json`),
+    inspector = new ReadOnlyRuntimeRegistrationInspector({ LOCALAPPDATA: local });
+  await mkdir(path.dirname(receiptTarget), { recursive: true });
+  const writeRegistrationReceipt = (releaseKey: string) =>
+    writeFile(
+      receiptTarget,
+      `${canonicalJson({ schemaVersion: 1, kind: 'runtime-registration-receipt', releaseKey, registration })}\n`,
+    );
+
+  await writeRegistrationReceipt(intentA.releaseKey);
+  await expect(inspector.inspect(intentB, prior)).resolves.toMatchObject({ runtimeIssues: [] });
+  await expect(inspector.inspect(intentB)).resolves.toMatchObject({
+    runtimeIssues: [`registration-drift:${identity}`],
+  });
+  await writeRegistrationReceipt(intentB.releaseKey);
+  await expect(inspector.inspect(intentB, prior)).resolves.toMatchObject({ runtimeIssues: [] });
+  await writeRegistrationReceipt('c'.repeat(64));
+  await expect(inspector.inspect(intentB, prior)).resolves.toMatchObject({
+    runtimeIssues: [`registration-drift:${identity}`],
+  });
 });

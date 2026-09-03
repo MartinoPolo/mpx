@@ -27,6 +27,7 @@ import {
   installerDigest,
   type InstallIntentV1,
   type InstallOperationV1,
+  type OwnershipReceiptV1,
   type ReleaseManifestV1,
 } from './immutable-core.js';
 import { buildStableSelectorBody, buildWindowsIntegrationSpecs } from './windows-integration.js';
@@ -161,7 +162,10 @@ export class NodeJsonResourceStore implements JsonResourceStore {
 }
 
 export interface RuntimeRegistrationInspectionPort {
-  inspect(intent: InstallIntentV1): Promise<{
+  inspect(
+    intent: InstallIntentV1,
+    priorReceipt?: OwnershipReceiptV1,
+  ): Promise<{
     readonly observations: readonly RuntimeRegistrationObservationV1[];
     readonly accountProbes: readonly AccountProbeV1[];
     readonly mcpSharing: Readonly<Record<RuntimeIdentity, 'shared' | 'isolated'>>;
@@ -172,7 +176,7 @@ export interface RuntimeRegistrationInspectionPort {
 }
 export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistrationInspectionPort {
   constructor(private readonly environment: NodeJS.ProcessEnv = process.env) {}
-  async inspect(intent: InstallIntentV1) {
+  async inspect(intent: InstallIntentV1, priorReceipt?: OwnershipReceiptV1) {
     const matrix =
       intent.runtimeRegistrations ??
       fail('INSTALL_SCHEMA_INVALID', 'Runtime registration intent is required.');
@@ -263,14 +267,27 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
         } catch {
           parsed = null;
         }
-        if (
-          canonicalJson(parsed) !==
-          canonicalJson({
+        const desiredReceipt = {
             schemaVersion: 1,
             kind: 'runtime-registration-receipt',
             releaseKey: intent.releaseKey,
             registration,
-          })
+          },
+          priorRegistration = priorReceipt?.installIntent?.runtimeRegistrations?.registrations.find(
+            (candidate) => candidate.identity === registration.identity,
+          ),
+          priorRegistrationReceipt = priorRegistration
+            ? {
+                schemaVersion: 1,
+                kind: 'runtime-registration-receipt',
+                releaseKey: priorReceipt!.releaseKey,
+                registration: priorRegistration,
+              }
+            : undefined;
+        if (
+          canonicalJson(parsed) !== canonicalJson(desiredReceipt) &&
+          (!priorRegistrationReceipt ||
+            canonicalJson(parsed) !== canonicalJson(priorRegistrationReceipt))
         ) {
           runtimeIssues.push(`registration-drift:${registration.identity}`);
         }
@@ -439,6 +456,7 @@ interface Entry {
   fileBody?: Buffer;
   fileSource?: string;
   expectedBytes?: number;
+  appliedFileState?: Buffer | null;
   createOnly?: boolean;
   retainOnUninstall?: boolean;
 }
@@ -470,6 +488,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     intent: InstallIntentV1,
     manifest: ReleaseManifestV1,
     requireActual = false,
+    priorReceipt?: OwnershipReceiptV1,
   ): Promise<InstallerOperationSet> {
     let userConfigEntry: Entry | undefined;
     if (intent.userConfigArtifact) {
@@ -513,7 +532,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           'Runtime registration actual-state inspection is required.',
         );
       }
-      const inspection = await this.runtimeRegistrations.inspect(intent),
+      const inspection = await this.runtimeRegistrations.inspect(
+          intent,
+          requireActual ? undefined : priorReceipt,
+        ),
         registration = verifyRuntimeRegistrationMatrix(
           intent.runtimeRegistrations,
           inspection.observations,
@@ -882,6 +904,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const entry = await this.entry(operation);
     if (entry.fileBody || entry.fileSource) {
       if (operation.action === 'remove') {
+        entry.appliedFileState = null;
         await this.files.remove(operation.target);
       } else {
         const body = entry.fileBody ?? (await this.files.read(entry.fileSource!));
@@ -895,6 +918,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
             `Immutable projection source changed for ${operation.id}.`,
           );
         }
+        entry.appliedFileState = Buffer.from(body);
         if (entry.createOnly) {
           if (await this.files.create(operation.target, body)) {
             return;
@@ -915,6 +939,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     if (operation.action === 'remove') {
       if (entry.launcher) {
         const plan = await this.launchers.plan(entry.launcher);
+        entry.appliedFileState = null;
         if (plan.previousManagedBase64 === null) {
           return;
         }
@@ -941,7 +966,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       return;
     }
     if (entry.launcher) {
-      await this.launchers.apply(await this.launchers.plan(entry.launcher));
+      const launcherPlan = await this.launchers.plan(entry.launcher);
+      entry.appliedFileState = Buffer.from(launcherPlan.outputBase64, 'base64');
+      await this.launchers.apply(launcherPlan);
     } else {
       await this.owned.apply(await this.owned.plan(entry.resource!));
     }
@@ -950,25 +977,32 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const entry = await this.entry(operation),
       target = operation.target;
     if (entry.fileBody || entry.fileSource || entry.launcher) {
-      if (entry.createOnly) {
-        const current = await this.files.read(target),
-          prior = snapshot === null ? undefined : Buffer.from(snapshot, 'base64');
-        const currentDigest = current ? sha(current) : null,
-          priorDigest = prior ? sha(prior) : null;
-        if (currentDigest === priorDigest) {
-          return;
-        }
-        if (currentDigest !== operation.desiredDigest) {
-          fail(
-            'INSTALL_FOREIGN_OR_DRIFTED',
-            'Refusing to restore over a foreign or drifted user config.',
-          );
-        }
+      const current = await this.files.read(target),
+        prior = snapshot === null ? undefined : Buffer.from(snapshot, 'base64');
+      if (
+        (!current && !prior) ||
+        (current !== undefined && prior !== undefined && current.equals(prior))
+      ) {
+        return;
       }
-      if (snapshot === null) {
+      const appliedStateIsCurrent =
+        entry.appliedFileState === null
+          ? current === undefined
+          : entry.appliedFileState !== undefined
+            ? current !== undefined && current.equals(entry.appliedFileState)
+            : operation.action === 'remove'
+              ? current === undefined
+              : current !== undefined && sha(current) === operation.desiredDigest;
+      if (!appliedStateIsCurrent) {
+        fail(
+          'INSTALL_FOREIGN_OR_DRIFTED',
+          `Refusing to restore over foreign or drifted bytes for ${operation.id}.`,
+        );
+      }
+      if (prior === undefined) {
         await this.files.remove(target);
       } else {
-        await this.files.write(target, Buffer.from(snapshot, 'base64'));
+        await this.files.write(target, prior);
       }
       return;
     }

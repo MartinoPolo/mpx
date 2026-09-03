@@ -426,6 +426,57 @@ describe('installer transactions', () => {
     ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_FORGED' });
   });
 
+  it('does not let a direct caller authorize an upgrade with a receipt hash argument', async () => {
+    const store = new MemoryTransactionStore(),
+      adapter = new RetainingAdapter(),
+      operationA: InstallOperationV1 = {
+        id: 'shared',
+        adapter: adapter.name,
+        action: 'ensure',
+        target: 'C:\\shared',
+        desiredDigest: '1'.repeat(64),
+      },
+      releaseKeyA = installerDigest([]),
+      intentA = { ...intent, releaseKey: releaseKeyA, convergenceHash: releaseKeyA },
+      manifestA = {
+        schemaVersion: 1 as const,
+        kind: 'release-manifest' as const,
+        releaseKey: releaseKeyA,
+        convergenceHash: releaseKeyA,
+        files: [],
+      },
+      serviceA = new ImmutableInstallerService({ adapters: [adapter], store, manifest: manifestA });
+    const planA = await serviceA.plan(intentA, [operationA]);
+    const receiptA = await serviceA.apply(planA, planA.confirmationDigest);
+    await serviceA.finalize();
+    const filesB = [{ path: 'next', bytes: 1, sha256: 'b'.repeat(64) }],
+      releaseKeyB = installerDigest(filesB),
+      intentB = { ...intent, releaseKey: releaseKeyB, convergenceHash: releaseKeyB },
+      operationB = { ...operationA, desiredDigest: '2'.repeat(64) },
+      serviceB = new ImmutableInstallerService({
+        adapters: [adapter],
+        store,
+        manifest: {
+          ...manifestA,
+          releaseKey: releaseKeyB,
+          convergenceHash: releaseKeyB,
+          files: filesB,
+        },
+      }),
+      planB = await serviceB.plan(intentB, [operationB], receiptA);
+
+    await expect(
+      (
+        serviceB.apply as unknown as (
+          planValue: typeof planB,
+          confirmation: string,
+          authority: string,
+        ) => Promise<unknown>
+      )(planB, planB.confirmationDigest, installerDigest(receiptA)),
+    ).rejects.toMatchObject({ code: 'INSTALL_OWNERSHIP_MISMATCH' });
+    expect(adapter.values.get(operationA.target)).toBe(operationA.desiredDigest);
+  });
+
   it('revalidates observations and exact confirmation before side effects', async () => {
     const values = new Map([['config', Buffer.from('native')]]),
       adapter = new BytesAdapter(values),

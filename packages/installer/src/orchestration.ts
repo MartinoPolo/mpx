@@ -45,6 +45,7 @@ export interface InstallerOperationAdapter extends SideEffectAdapter {
     intent: InstallIntentV1,
     manifest: ReleaseManifestV1,
     requireActual?: boolean,
+    priorReceipt?: OwnershipReceiptV1,
   ): Promise<InstallerOperationSet>;
 }
 export interface CurrentReleaseBuilder {
@@ -186,6 +187,7 @@ export interface UninstallResultV1 {
 }
 
 const RECEIPT_MIGRATION_ID = 'ownership-receipt-v1-migration';
+const RELEASE_UPGRADE_ID = 'ownership-release-upgrade';
 export class InstallOrchestrator {
   private readonly now: () => Date;
   constructor(private readonly options: InstallOrchestratorOptions) {
@@ -199,7 +201,10 @@ export class InstallOrchestrator {
       now: this.now,
     });
   }
-  private async current(intentValue: InstallIntentV1): Promise<{
+  private async current(
+    intentValue: InstallIntentV1,
+    priorReceipt?: OwnershipReceiptV1,
+  ): Promise<{
     intent: InstallIntentV1;
     manifest: ReleaseManifestV1;
     operations: readonly InstallOperationV1[];
@@ -213,7 +218,7 @@ export class InstallOrchestrator {
     ) {
       fail('INSTALL_INTENT_STALE', 'Intent does not describe the current deterministic release.');
     }
-    const grouped = await this.options.adapter.operations(intent, manifest);
+    const grouped = await this.options.adapter.operations(intent, manifest, false, priorReceipt);
     const automatic = [...grouped.automatic].sort((a, b) => a.id.localeCompare(b.id));
     const operations = automatic;
     if (new Set(operations.map((operation) => operation.id)).size !== operations.length) {
@@ -290,12 +295,35 @@ export class InstallOrchestrator {
     }
     return receipt;
   }
+  private async validatedReceipt(): Promise<OwnershipReceiptV1 | undefined> {
+    const receipt = await this.options.store.readReceipt();
+    if (!receipt) return undefined;
+    const releaseIssues = await this.options.releases.verify(receipt, false);
+    if (releaseIssues.length) {
+      fail('INSTALL_FOREIGN_OR_DRIFTED', `Owned release is drifted (${releaseIssues.join(', ')}).`);
+    }
+    await this.service().assertOwnedReceipt(receipt);
+    return receipt;
+  }
   async plan(intent: InstallIntentV1): Promise<InstallPlanV1> {
-    const current = await this.current(intent),
-      legacy = await this.options.store.readLegacyReceiptForMigration();
+    const legacy = await this.options.store.readLegacyReceiptForMigration();
+    const priorReceipt = legacy ? undefined : await this.validatedReceipt();
+    const current = await this.current(intent, priorReceipt);
     const migration = legacy ? await this.migratedReceipt(current, legacy) : undefined;
-    const base = await this.service(current.manifest).plan(current.intent, current.operations);
-    if (!current.classifications && !migration) {
+    const base = await this.service(current.manifest).plan(
+      current.intent,
+      current.operations,
+      priorReceipt,
+    );
+    const upgrade =
+      priorReceipt && priorReceipt.releaseKey !== current.intent.releaseKey
+        ? {
+            id: RELEASE_UPGRADE_ID,
+            planDigest: installerDigest(priorReceipt),
+            verifierRef: 'installer:ownership-release-upgrade',
+          }
+        : undefined;
+    if (!current.classifications && !migration && !upgrade) {
       return base;
     }
     const classifications: InstallOperationClassificationsV1 = current.classifications ?? {
@@ -316,13 +344,16 @@ export class InstallOrchestrator {
           ],
         }
       : classifications;
+    const upgradeBound = upgrade
+      ? { ...merged, confirmationRequired: [...merged.confirmationRequired, upgrade] }
+      : merged;
     const classified = {
       schemaVersion: base.schemaVersion,
       kind: base.kind,
       intent: base.intent,
       observations: base.observations,
       operations: base.operations,
-      classifications: merged,
+      classifications: upgradeBound,
     };
     return parseInstallPlanV1({ ...classified, confirmationDigest: installerDigest(classified) });
   }
@@ -331,11 +362,16 @@ export class InstallOrchestrator {
     if (confirmation !== plan.confirmationDigest) {
       fail('INSTALL_CONFIRMATION_MISMATCH', 'Exact plan confirmation is required.');
     }
-    const current = await this.current(plan.intent);
-    const migrationReference = plan.classifications?.confirmationRequired.find(
+    const legacyBeforeApply = await this.options.store.readLegacyReceiptForMigration();
+    const priorReceipt = legacyBeforeApply ? undefined : await this.validatedReceipt();
+    const current = await this.current(plan.intent, priorReceipt);
+    const upgradeReference = plan.classifications?.confirmationRequired.find(
+        (reference) => reference.id === RELEASE_UPGRADE_ID,
+      ),
+      migrationReference = plan.classifications?.confirmationRequired.find(
         (reference) => reference.id === RECEIPT_MIGRATION_ID,
       ),
-      legacy = await this.options.store.readLegacyReceiptForMigration();
+      legacy = legacyBeforeApply;
     let effectiveClassifications = current.classifications;
     if (migrationReference) {
       if (!legacy) {
@@ -370,6 +406,29 @@ export class InstallOrchestrator {
         'Ownership receipt schema v1 requires its confirmation-bound migration plan.',
       );
     }
+    if (upgradeReference) {
+      if (
+        !priorReceipt ||
+        priorReceipt.releaseKey === plan.intent.releaseKey ||
+        upgradeReference.planDigest !== installerDigest(priorReceipt)
+      ) {
+        fail('INSTALL_PLAN_STALE', 'Prior ownership receipt changed after upgrade planning.');
+      }
+      const baseClassifications = current.classifications ?? {
+        automatic: current.operations.map((operation) => operation.id),
+        confirmationRequired: [],
+        manualOnly: [],
+      };
+      effectiveClassifications = {
+        ...baseClassifications,
+        confirmationRequired: [...baseClassifications.confirmationRequired, upgradeReference],
+      };
+    } else if (priorReceipt && priorReceipt.releaseKey !== plan.intent.releaseKey) {
+      fail(
+        'INSTALL_PLAN_STALE',
+        'Release upgrade requires its confirmation-bound ownership receipt.',
+      );
+    }
     if (
       installerDigest(current.operations) !== installerDigest(plan.operations) ||
       installerDigest(effectiveClassifications ?? null) !==
@@ -380,23 +439,13 @@ export class InstallOrchestrator {
     const revalidated = await this.service(current.manifest).plan(
       current.intent,
       current.operations,
+      priorReceipt,
     );
     if (installerDigest(revalidated.observations) !== installerDigest(plan.observations)) {
       fail('INSTALL_OBSERVATION_CHANGED', 'Machine observations changed after planning.');
     }
-    if (
-      plan.operations.some(
-        (operation, index) =>
-          operation.action === 'ensure' &&
-          plan.observations[index]?.digest !== null &&
-          plan.observations[index]?.digest !== operation.desiredDigest,
-      )
-    ) {
-      fail('INSTALL_FOREIGN_OR_DRIFTED', 'Refusing to overwrite a foreign or drifted target.');
-    }
     const manifest = await this.options.releases.publish(plan.intent.releaseKey);
     const service = this.service(manifest);
-    const priorReceipt = await this.options.store.readReceipt();
     const receipt = await service.apply(plan, confirmation);
     let rollbackActivation: (() => Promise<void>) | undefined;
     try {
