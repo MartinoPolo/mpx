@@ -2,7 +2,7 @@
 
 **Status:** Cleanup-first execution is active. Recovery, authority, cleanup, and sandbox-feasibility Gates 0–3 are complete. No later gate is accepted unless its checkbox and evidence are updated here.
 
-**Authority:** This file is the sole active migration plan. Git history is the archive. User instructions override this file; this file overrides superseded phase documents and generated reports.
+**Authority:** This file is the sole active migration status and evidence authority. User instructions override it; it overrides superseded phase documents and generated reports. The temporary [migration execution guide](MPX_MIGRATION_EXECUTION.md) preserves the recovered gate rationale, detailed acceptance instructions, and autonomous handoff until Gate 8 deletes it.
 
 ## Execution rules
 
