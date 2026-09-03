@@ -4,7 +4,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { LaunchDescriptor } from '@mpx/launch';
 import { createRuntimeCapabilityManifestV1, createRuntimeContextV1 } from '@mpx/runtime-contracts';
-import { productionRuntimeAdapters, type LaunchExecutionContext } from '../../src/node/index.js';
+import {
+  productionRuntimeAdapters,
+  resolveClaudeCanonicalOutputStyle,
+  type LaunchExecutionContext,
+} from '../../src/node/index.js';
 
 function publishedReference(
   input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
@@ -23,6 +27,11 @@ function publishedReference(
 }
 
 describe('Node launch execution runtime adapters', () => {
+  it('derives the Claude canonical output style from the composed agents root', () => {
+    expect(resolveClaudeCanonicalOutputStyle('C:/repo/content/agents')).toBe(
+      path.join('C:/repo/content/agents', '..', 'output-styles', 'mpx-terse.md'),
+    );
+  });
   it('appends Pi runtime arguments as separate argv values after MPX-owned arguments', async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-pi-runtime-args-'));
     const launchKey = 'a'.repeat(64);

@@ -17,7 +17,13 @@ These guards detect changes at supported boundaries; they cannot interpose
 atomically in Claude's native skill read/expansion. In particular, Pi's exact
 open-handle/body-hash checks must not be attributed to Claude.
 
-The status-line command reads, parses, and validates the live `StatusSnapshotV1`; it does
+Native Claude account settings remain authoritative for the main status line; MPX never
+writes or mutates `$CLAUDE_CONFIG_DIR/settings.json`. The generated plugin owns its forced
+`mpx-terse` output style, hooks, skills, and agents. Plugin `settings.json` contains only
+supported plugin defaults and is currently the exact empty object because MPX has no
+renderer for Claude's distinct `subagentStatusLine` input schema.
+
+The artifact-local status renderer reads, parses, and validates the live `StatusSnapshotV1`; it does
 not revalidate the full published projection. Its artifact-local reader also has a 1 MiB
 (1,048,576-byte) allocation limit and renders `ports invalid` for larger or invalid
 snapshots. The launcher binds the validated,

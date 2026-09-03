@@ -193,6 +193,9 @@ const PI_MODEL_TOOLS = Object.freeze([
 export interface RuntimeLaunchWiring extends LaunchRuntimeWiring {
   readonly runtimeProfile?: PiRuntimeProfileV1;
 }
+export function resolveClaudeCanonicalOutputStyle(agentsRoot: string): string {
+  return path.join(agentsRoot, '..', 'output-styles', 'mpx-terse.md');
+}
 async function buildProductionProjection(
   input: LaunchProjectionBuildInput,
 ): Promise<LaunchProjection> {
@@ -240,6 +243,7 @@ async function buildProductionProjection(
     skillPlan: input.skillPlan,
     modelMappings: defaultRuntimeAgentModelMappingsV1('claude'),
     agents: input.agentsRoot,
+    outputStyle: resolveClaudeCanonicalOutputStyle(input.agentsRoot),
     artifactsRoot: input.artifactsRoot,
     statusSnapshot: input.statusSnapshot,
     runtimeStatusEnvelope: input.runtimeStatusEnvelope,

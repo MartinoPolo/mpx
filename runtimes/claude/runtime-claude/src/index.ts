@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   verifySkillProjectionPlan,
@@ -67,6 +67,7 @@ export class ClaudeRuntimeError extends Error {
 export interface ClaudeBuildInput {
   readonly skillPlan: SkillProjectionPlan;
   readonly agents: string;
+  readonly outputStyle: string;
   readonly modelMappings: {
     readonly schemaVersion: 1;
     readonly runtime: 'claude';
@@ -122,6 +123,112 @@ async function write(
 }
 function pluginJson() {
   return `${JSON.stringify({ name: 'mpx', version: '0.0.0', description: 'MPX Claude runtime projection' }, null, 2)}\n`;
+}
+const MAX_OUTPUT_STYLE_BYTES = 1024 * 1024;
+async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
+  const absolute = path.resolve(file);
+  if (
+    absolute !== file ||
+    path.basename(absolute) !== 'mpx-terse.md' ||
+    path.basename(path.dirname(absolute)) !== 'output-styles'
+  ) {
+    throw new ClaudeRuntimeError(
+      'OUTPUT_STYLE_ESCAPE',
+      'canonical output style path must be an absolute direct child of output-styles',
+    );
+  }
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(absolute, 'r');
+    const initial = await handle.stat(),
+      named = await lstat(absolute);
+    if (
+      !initial.isFile() ||
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      initial.dev !== named.dev ||
+      initial.ino !== named.ino
+    ) {
+      throw new ClaudeRuntimeError(
+        'OUTPUT_STYLE_INVALID',
+        'canonical output style must be a regular non-symlink file',
+      );
+    }
+    if (initial.size > MAX_OUTPUT_STYLE_BYTES)
+      throw new ClaudeRuntimeError(
+        'OUTPUT_STYLE_OVERSIZED',
+        'canonical output style exceeds 1 MiB',
+      );
+    const bytes = Buffer.alloc(initial.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (read.bytesRead === 0)
+        throw new ClaudeRuntimeError(
+          'OUTPUT_STYLE_CHANGED',
+          'canonical output style changed while reading',
+        );
+      offset += read.bytesRead;
+    }
+    const final = await handle.stat(),
+      finalNamed = await lstat(absolute),
+      resolved = await realpath(absolute);
+    if (
+      resolved !== absolute ||
+      final.dev !== initial.dev ||
+      final.ino !== initial.ino ||
+      final.size !== initial.size ||
+      final.mtimeMs !== initial.mtimeMs ||
+      finalNamed.isSymbolicLink()
+    ) {
+      throw new ClaudeRuntimeError(
+        'OUTPUT_STYLE_CHANGED',
+        'canonical output style changed or escaped while reading',
+      );
+    }
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+      throw new ClaudeRuntimeError(
+        'OUTPUT_STYLE_MALFORMED',
+        'canonical output style must be UTF-8',
+      );
+    }
+    const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n[\s\S]+)$/u);
+    if (!match)
+      throw new ClaudeRuntimeError(
+        'OUTPUT_STYLE_MALFORMED',
+        'canonical output style must have frontmatter and a body',
+      );
+    const lines = match[1]!.split(/\r?\n/u),
+      names = lines.filter((line) => /^name\s*:/u.test(line)),
+      descriptions = lines.filter((line) => /^description\s*:/u.test(line));
+    if (
+      names.length !== 1 ||
+      names[0]!.trim() !== 'name: mpx-terse' ||
+      descriptions.length !== 1 ||
+      !/^description:\s*\S/u.test(descriptions[0]!) ||
+      lines.some((line) => /^force-for-plugin\s*:/u.test(line))
+    ) {
+      throw new ClaudeRuntimeError(
+        'OUTPUT_STYLE_MALFORMED',
+        'canonical output style frontmatter is invalid',
+      );
+    }
+    const newline = text.startsWith('---\r\n') ? '\r\n' : '\n';
+    return Buffer.from(
+      `---${newline}${match[1]}${newline}force-for-plugin: true${newline}---${match[2]}`,
+    );
+  } catch (error) {
+    if (error instanceof ClaudeRuntimeError) throw error;
+    throw new ClaudeRuntimeError(
+      'OUTPUT_STYLE_INVALID',
+      'canonical output style cannot be safely read',
+    );
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 function statusSnapshotFile(snapshot: unknown): string {
   return `${JSON.stringify(parseStatusSnapshotV1(snapshot), null, 2)}\n`;
@@ -368,6 +475,7 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     }
   }
   const agents = await canonicalAgents(input.agents, input.modelMappings);
+  const outputStyle = await canonicalOutputStyle(input.outputStyle);
   const runtimeContext = parseRuntimeContextV1(input.runtimeContext),
     runtimeStatus = input.runtimeStatusEnvelope
       ? parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope)
@@ -393,6 +501,7 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     for (const [name, text] of agents) {
       await write(input.outputRoot, `agents/${name}`, text, files);
     }
+    await write(input.outputRoot, 'output-styles/mpx-terse.md', outputStyle, files);
     await write(input.outputRoot, 'hooks/hooks.json', hooksJson, files);
     await write(
       input.outputRoot,
@@ -428,12 +537,7 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
       `${JSON.stringify(runtimeContext, null, 2)}\n`,
       files,
     );
-    await write(
-      input.outputRoot,
-      'settings.json',
-      `${JSON.stringify({ statusLine: { type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"' }, mpxArtifactKey: skillPlan.artifactReference.artifactKey }, null, 2)}\n`,
-      files,
-    );
+    await write(input.outputRoot, 'settings.json', '{}\n', files);
     return {
       directory: input.outputRoot,
       artifactKey: skillPlan.artifactReference.artifactKey,

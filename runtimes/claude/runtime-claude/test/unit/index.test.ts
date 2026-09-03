@@ -77,9 +77,15 @@ async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'claude-runtime-'));
   roots.push(root);
   const canonical = path.join(root, 'skills'),
-    agents = path.join(root, 'agents');
+    agents = path.join(root, 'agents'),
+    outputStyle = path.join(root, 'output-styles', 'mpx-terse.md');
   await mkdir(canonical);
   await mkdir(agents);
+  await mkdir(path.dirname(outputStyle));
+  await writeFile(
+    outputStyle,
+    '---\nname: mpx-terse\ndescription: Concise, structured, action-first output\n---\n\n# Response style\n\nAnswer first.\n',
+  );
   for (const [name, exposure] of Object.entries({
     full: 'full',
     named: 'name-only',
@@ -146,6 +152,7 @@ async function fixture() {
     root,
     canonical,
     agents,
+    outputStyle,
     catalog,
     manifest,
     artifact,
@@ -366,8 +373,15 @@ describe('Claude projection', () => {
   });
   it('matches the complete Claude projection golden across skill exposures and harness files', async () => {
     const f = await fixture(),
-      out = path.join(f.root, 'golden');
+      out = path.join(f.root, 'golden'),
+      canonicalBefore = await readFile(f.outputStyle),
+      nativeSettings = path.join(f.root, 'native-claude', 'settings.json');
+    await mkdir(path.dirname(nativeSettings));
+    await writeFile(nativeSettings, '{"statusLine":{"type":"command","command":"mine"}}\n');
+    const nativeBefore = await readFile(nativeSettings);
     await buildClaudePlugin({ ...f, outputRoot: out });
+    expect(await readFile(f.outputStyle)).toEqual(canonicalBefore);
+    expect(await readFile(nativeSettings)).toEqual(nativeBefore);
     const projected = await byteTree(out);
     expect(Object.keys(projected)).toEqual([
       '.claude-plugin/plugin.json',
@@ -375,6 +389,7 @@ describe('Claude projection', () => {
       'hooks/dangerous-command-policy.mjs',
       'hooks/hooks.json',
       'hooks/runtime-guard.mjs',
+      'output-styles/mpx-terse.md',
       'runtime-context.json',
       'settings.json',
       'skills/explicit/asset.bin',
@@ -401,9 +416,12 @@ describe('Claude projection', () => {
     expect(Buffer.from(projected['runtime-context.json']!.bytes, 'hex').toString('utf8')).toBe(
       `${JSON.stringify(f.runtimeContext, null, 2)}\n`,
     );
-    expect(Buffer.from(projected['settings.json']!.bytes, 'hex').toString('utf8')).toBe(
-      `${JSON.stringify({ statusLine: { type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"' }, mpxArtifactKey: f.skillPlan.artifactReference.artifactKey }, null, 2)}\n`,
+    expect(
+      Buffer.from(projected['output-styles/mpx-terse.md']!.bytes, 'hex').toString('utf8'),
+    ).toBe(
+      '---\nname: mpx-terse\ndescription: Concise, structured, action-first output\nforce-for-plugin: true\n---\n\n# Response style\n\nAnswer first.\n',
     );
+    expect(Buffer.from(projected['settings.json']!.bytes, 'hex').toString('utf8')).toBe('{}\n');
     expect(
       Object.fromEntries(
         Object.entries(projected)
@@ -411,6 +429,41 @@ describe('Claude projection', () => {
           .map(([name, value]) => [name, value.sha256]),
       ),
     ).toMatchSnapshot();
+  });
+  it('rejects unsafe or malformed canonical output styles before publication', async () => {
+    const cases: Array<[string, (f: Awaited<ReturnType<typeof fixture>>) => Promise<string>]> = [
+      ['missing', async (f) => path.join(f.root, 'missing.md')],
+      [
+        'symlinked',
+        async (f) => {
+          const link = path.join(f.root, 'output-styles', 'linked.md');
+          await symlink(f.outputStyle, link, 'file');
+          return link;
+        },
+      ],
+      [
+        'oversized',
+        async (f) => {
+          await writeFile(f.outputStyle, Buffer.alloc(1024 * 1024 + 1));
+          return f.outputStyle;
+        },
+      ],
+      [
+        'malformed',
+        async (f) => {
+          await writeFile(f.outputStyle, 'not frontmatter\n');
+          return f.outputStyle;
+        },
+      ],
+      ['escaping', async (f) => `${path.join(f.root, 'output-styles')}\\..\\mpx-terse.md`],
+    ];
+    for (const [name, arrange] of cases) {
+      const f = await fixture(),
+        outputStyle = await arrange(f);
+      await expect(
+        buildClaudePlugin({ ...f, outputStyle, outputRoot: path.join(f.root, `bad-${name}`) }),
+      ).rejects.toThrow(/OUTPUT_STYLE_/);
+    }
   });
   it('projects the four exposure states with exact mpx namespace and non-leaking discovery', async () => {
     const f = await fixture(),
@@ -653,9 +706,7 @@ describe('Claude projection', () => {
       'Stop',
     ]);
     expect(hooks.PostToolUse[0].matcher).toBe('Write|Edit|MultiEdit|NotebookEdit|Bash');
-    expect(JSON.parse(files['settings.json']!).statusLine.command).toBe(
-      'node "${CLAUDE_PLUGIN_ROOT}/status/status-line.mjs"',
-    );
+    expect(JSON.parse(files['settings.json']!)).toEqual({});
     expect(files['status/status-snapshot.json']).toBe(
       `${JSON.stringify(statusSnapshot, null, 2)}\n`,
     );
@@ -765,6 +816,18 @@ describe('Claude projection', () => {
     expect(first.artifactKey).toBe(first.reference.projectionKey);
     expect(second.reference.projectionKey).not.toBe(first.reference.projectionKey);
     expect(second.directory).not.toBe(first.directory);
+  });
+  it('detects projected output-style tampering through immutable metadata', async () => {
+    const f = await fixture(),
+      published = await publishClaudeProjection({
+        ...f,
+        artifactsRoot: path.join(f.root, 'style-tamper-artifacts'),
+      });
+    await writeFile(path.join(published.directory, 'output-styles', 'mpx-terse.md'), 'tampered\n');
+    await expectGuardRejected(
+      path.join(published.directory, 'hooks', 'runtime-guard.mjs'),
+      guardEnvironment(f, published.reference),
+    );
   });
   it('bounds hot-hook stats, reads, and hashes below startup validation', async () => {
     const f = await fixture(),
