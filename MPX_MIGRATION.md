@@ -1,6 +1,6 @@
 # MPX migration authority
 
-**Status:** Cleanup-first execution is active. Recovery Gate 0 and authority Gate 1 are complete. No later gate is accepted unless its checkbox and evidence are updated here.
+**Status:** Cleanup-first execution is active. Recovery, authority, and safe-cleanup Gates 0–2 are complete. No later gate is accepted unless its checkbox and evidence are updated here.
 
 **Authority:** This file is the sole active migration plan. Git history is the archive. User instructions override this file; this file overrides superseded phase documents and generated reports.
 
@@ -28,7 +28,7 @@
 - The selected network baseline is `open`/global `allow-all`; it is not an egress-isolation boundary.
 - Local Markdown issues do not depend on Obsidian and remain supported.
 - The installer never inspects or edits Windows Terminal settings. Explicit `project-register` automation may manage a project profile when invoked by the user.
-- Base installation does not activate Task Scheduler.
+- No Task Scheduler runtime machinery remains; any future scheduled capture requires a separately designed and confirmed feature.
 - `agent-resurrect` remains the standalone daily session UI. MPX owns a small compatibility protocol rather than duplicating its tab-management interface.
 - Ports and host worktrees remain first-class MPX capabilities.
 - Keep GitHub, GitLab, KanbanFlow, local Markdown, and a minimal Gerrit adapter. Do not build a generalized Gerrit platform.
@@ -36,21 +36,21 @@
 
 ## Current implementation inventory
 
-| Area                | Repository state                                                                                                                       | Decision                                                    |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Config and launch   | Identity, mode, preset, grants, skill exposure, immutable descriptors, host approval, runtime argv, and fail-closed resolution exist   | Keep and simplify around accepted routes                    |
-| Skills and runtimes | Canonical content, projection plans, generated Claude/Pi artifacts, model mapping, footer/status foundations, and runtime guards exist | Keep; complete curated parity                               |
-| Local issues        | Local Markdown provider and view generation exist                                                                                      | Keep without Obsidian dependency                            |
-| Ports               | Allocation, locking, leases, conflict inspection, release, reconciliation, and `.worktree-ports.json` exist                            | Keep                                                        |
-| Worktrees           | Host create/remove/prepare/trust and CLI behavior exist                                                                                | Keep; defer linked-worktree sandbox integration             |
-| Sessions            | Lifecycle, discovery, registry, resume planning, reconciliation, and legacy import exist                                               | Retain only what resurrection requires                      |
-| Providers           | GitHub, GitLab, KanbanFlow, and local adapters exist                                                                                   | Keep; add minimal Gerrit and live verification              |
-| Installer           | Immutable release, plan/apply/verify/uninstall, rollback, native launcher registration, and Windows resource adapters exist            | Keep base installer; narrow ownership                       |
-| Windows Terminal    | Safe `wt.exe` tab launching and explicit profile scripts exist                                                                         | Keep outside installer ownership                            |
-| Sandbox             | Standalone-sbx contracts, proof machinery, split host-Pi bridge, fake workers, and clone planning exist                                | Replace only after feasibility spike                        |
-| Raycast             | Encrypted export/audit and installer evidence code exist without live acceptance                                                       | Remove/defer                                                |
-| Obsidian installer  | Bounded vault planning exists without live acceptance                                                                                  | Remove from installer; optional manual reference may remain |
-| Task Scheduler      | Adapter and dormant reconcile authority exist; base install does not activate it                                                       | Defer, then remove dedicated machinery if unused            |
+| Area                | Repository state                                                                                                                       | Decision                                                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Config and launch   | Identity, mode, preset, grants, skill exposure, immutable descriptors, host approval, runtime argv, and fail-closed resolution exist   | Keep and simplify around accepted routes                   |
+| Skills and runtimes | Canonical content, projection plans, generated Claude/Pi artifacts, model mapping, footer/status foundations, and runtime guards exist | Keep; complete curated parity                              |
+| Local issues        | Local Markdown provider and view generation exist                                                                                      | Keep without Obsidian dependency                           |
+| Ports               | Allocation, locking, leases, conflict inspection, release, reconciliation, and `.worktree-ports.json` exist                            | Keep                                                       |
+| Worktrees           | Host create/remove/prepare/trust and CLI behavior exist                                                                                | Keep; defer linked-worktree sandbox integration            |
+| Sessions            | Lifecycle, discovery, registry, resume planning, reconciliation, and legacy import exist                                               | Retain only what resurrection requires                     |
+| Providers           | GitHub, GitLab, KanbanFlow, and local adapters exist                                                                                   | Keep; add minimal Gerrit and live verification             |
+| Installer           | Immutable release, plan/apply/verify/uninstall, rollback, native launcher registration, and Windows resource adapters exist            | Keep base installer; narrow ownership                      |
+| Windows Terminal    | Safe `wt.exe` tab launching and explicit profile scripts exist                                                                         | Keep outside installer ownership                           |
+| Sandbox             | Standalone-sbx contracts, proof machinery, split host-Pi bridge, fake workers, and clone planning exist                                | Replace only after feasibility spike                       |
+| Raycast             | Runtime skill, export/audit, and installer integration removed                                                                         | Deferred product integration has no active implementation  |
+| Obsidian installer  | Installer planning removed; optional manual registration reference remains                                                             | Keep outside installer; local Markdown remains independent |
+| Task Scheduler      | Scheduled-capture authority, adapter, receipts, and Windows machinery removed                                                          | Any future feature starts from a new explicit design       |
 
 ## Retained scope
 
@@ -66,9 +66,9 @@
 
 ## Deferred scope
 
-- Raycast deployment and audit integration.
-- Obsidian installer orchestration and broad vault mutation.
-- Background scheduled capture activation.
+- Any future Raycast deployment and audit integration.
+- Broad Obsidian vault automation beyond the retained optional manual registration reference.
+- Any future background scheduled capture feature.
 - Sandbox access to linked host worktrees.
 - Sandbox port forwarding for initial acceptance.
 - Linux and macOS acceptance suites.
@@ -77,19 +77,19 @@
 
 ## Deletion ledger
 
-| Item                                                    | Removal condition                                                            | State                         |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
-| Raycast runtime and installer integration               | Dependency audit identifies all consumers                                    | Gate 2 pending                |
-| Obsidian installer orchestration                        | Local Markdown remains independent; optional registration reference reviewed | Gate 2 pending                |
-| Task Scheduler activation paths and dedicated machinery | Session ownership audit confirms no resurrection dependency                  | Gate 2 pending                |
-| Linux/macOS acceptance suites                           | Windows-only migration checks remain complete                                | Gate 2 pending                |
-| Installer-owned Windows Terminal assumptions            | Generic explicit profile automation remains available                        | Gate 2 pending                |
-| Superseded phase documents and duplicate reports        | Durable contracts are linked from current docs                               | Gate 2 pending                |
-| Abandoned generated/provenance inputs                   | Validators and bundle consumers are migrated or removed                      | Gate 2 pending                |
-| Conflicting project-registration branches               | Current explicit-profile policy is preserved                                 | Gate 2 pending                |
-| Old split Pi bridge/worker and fake-worker tests        | Whole-agent sandbox Pi passes model/tool/resume acceptance                   | Gate 8 blocked on replacement |
-| Superseded F2 proof machinery                           | Whole-agent sandbox evidence replaces it                                     | Gate 8 blocked on replacement |
-| Old repository imports and legacy activation state      | Route acceptance and rollback pass                                           | Gate 8 blocked on acceptance  |
+| Item                                                    | Removal condition                                                            | State                              |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------- |
+| Raycast runtime and installer integration               | Dependency audit identifies all consumers                                    | Removed in `c27d181`               |
+| Obsidian installer orchestration                        | Local Markdown remains independent; optional registration reference reviewed | Removed in `c27d181`               |
+| Task Scheduler activation paths and dedicated machinery | Session ownership audit confirms no resurrection dependency                  | Removed in `c27d181`               |
+| Linux/macOS acceptance plans                            | Windows-only migration target is documented                                  | Removed in `c27d181`               |
+| Installer-owned Windows Terminal assumptions            | Generic explicit profile automation remains available                        | Removed; regression tests retained |
+| Superseded phase documents and duplicate reports        | Durable contracts are linked from current docs                               | Removed in `c27d181`               |
+| Abandoned generated/provenance inputs                   | Validators and bundle consumers are migrated or removed                      | Removed in `c27d181`               |
+| Conflicting project-registration branches               | Current explicit-profile policy is preserved                                 | None found; current path retained  |
+| Old split Pi bridge/worker and fake-worker tests        | Whole-agent sandbox Pi passes model/tool/resume acceptance                   | Gate 8 blocked on replacement      |
+| Superseded F2 proof machinery                           | Whole-agent sandbox evidence replaces it                                     | Gate 8 blocked on replacement      |
+| Old repository imports and legacy activation state      | Route acceptance and rollback pass                                           | Gate 8 blocked on acceptance       |
 
 ## Curated parity inventory
 
@@ -134,7 +134,7 @@ Acceptance requires native Pi and Claude save/resurrect, host MPX Pi and Claude 
 
 - [x] **Gate 0 — recovery baseline:** recovery patch and untracked copies saved; all dirty files inventoried; four disjoint read-only reviews completed; retained baseline committed; full tests, typecheck, repository check, generated validation, and diff check passed; clean `main` remained the sole worktree.
 - [x] **Gate 1 — migration authority:** this concise tracker replaces obsolete migration prose and is the sole active status authority.
-- [ ] **Gate 2 — safe cleanup:** dependency-safe obsolete integrations, suites, documents, and generated inputs removed; regenerated once; all checks pass; clean `main` is the sole worktree.
+- [x] **Gate 2 — safe cleanup:** Raycast and Obsidian installer paths, scheduled-capture machinery, obsolete migration tools/reports/provenance, and deferred portability plans removed; retained bundles regenerated; reviews resolved; full tests, typecheck, check, convergence verification, generated validation, and diff check pass; clean `main` is the sole branch and worktree.
 - [ ] **Gate 3 — sandbox feasibility:** real Linux `sbx shell` runs packaged Pi with interactive TTY, ephemeral personal credential profile, model response, model-triggered file operation, persisted/resumed session, inspected mounts, and verified destruction. Evaluate Docker only if Pi fails.
 - [ ] **Gate 4 — curated parity:** content, Pi, Claude, and session protocol work integrated from disjoint ownership and accepted on host routes.
 - [ ] **Gate 5 — whole-agent sandbox:** selected identity, private workspace, sessions, exact mounts, no opposite identity, no host fallback, export/apply-back, and cleanup are proven.
@@ -147,7 +147,9 @@ Acceptance requires native Pi and Claude save/resurrect, host MPX Pi and Claude 
 - Recovery archive: `${MPX_PROJECTS}/mpx-recovery/2026-09-03-gate0-897918f`; original patch SHA-256 `a7780cc07fa68b39275c75862911a0d29d0ec6d17ef2535704bef55da9a3e528`.
 - Recovery implementation baseline: `1734b08`.
 - Recovery documentation checkpoint: `3f719e0`, pushed to `origin/main`.
-- Gate 0 verification: `pnpm test`, `pnpm run typecheck`, `pnpm run check`, `pnpm run validate:generated`, and `git diff --check` passed on Windows.
+- Concise authority checkpoint: `6e49364`, pushed to `origin/main`.
+- Safe-cleanup implementation: `c27d181`.
+- Gate 2 verification: `pnpm test`, `pnpm run typecheck`, `pnpm run check`, `pnpm run convergence:verify`, `pnpm run validate:generated`, and `git diff --check` passed on Windows. A timing-sensitive worktree lock test failed once under parallel load, then passed narrowly and in the final full run.
 - Immutable MPX installation was previously applied and strictly verified without shadowing native commands.
 - Installed work Claude passed a model response and model-triggered read.
 - Installed personal and work Pi host-compatibility routes passed model responses and model-triggered reads.
@@ -156,10 +158,9 @@ Acceptance requires native Pi and Claude save/resurrect, host MPX Pi and Claude 
 
 ## Active blockers
 
-1. Gate 2 dependency audit and cleanup are not complete.
-2. The real whole-agent `sbx` feasibility spike has not run.
-3. Personal Claude OAuth requires interactive renewal before that route can pass.
-4. `agent-resurrect` does not yet consume the MPX compatibility protocol.
-5. Whole-agent Pi sandbox, session-path translation, and apply-back are not implemented or accepted.
-6. Live provider credentials and Gerrit implementation remain pending.
-7. Real Git author/SSH routing, complete route parity, rollback, and zero-legacy audit remain pending.
+1. The real whole-agent `sbx` feasibility spike has not run.
+2. Personal Claude OAuth requires interactive renewal before that route can pass.
+3. `agent-resurrect` does not yet consume the MPX compatibility protocol.
+4. Whole-agent Pi sandbox, session-path translation, and apply-back are not implemented or accepted.
+5. Live provider credentials and Gerrit implementation remain pending.
+6. Real Git author/SSH routing, complete route parity, rollback, and zero-legacy audit remain pending.
