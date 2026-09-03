@@ -1,5 +1,417 @@
 # MPX Unified System Migration
 
+## Next-session autonomous execution handoff
+
+**Authority:** This handoff is the normative execution plan. Where the legacy migration record below conflicts with this handoff, this handoff wins. The legacy body remains temporarily intact so Recovery Gate 0 can classify its evidence before the cleanup rewrites this file into the concise sole authority.
+
+## Recovery Gate 0 checkpoint
+
+- [x] Recovery patch, status, branch/worktree inventory, and copies of untracked files saved under `${MPX_PROJECTS}/mpx-recovery/2026-09-03-gate0-897918f`.
+- [x] Four disjoint read-only reviews classified launch/runtime, installer/Windows, sandbox/executor, and documentation/generated changes.
+- [x] Retained source, tests, and generated artifacts committed as `1734b08` after repairing missing immutable-Node test fixtures.
+- [x] `pnpm test`, `pnpm run typecheck`, `pnpm run check`, `pnpm run validate:generated`, and `git diff --check` pass.
+- [x] `main` is the only branch and worktree; no auxiliary worktree exists.
+
+The baseline intentionally retains host-compatibility and old sandbox/proof machinery that requires a proven replacement. Gate 1 replaces this file; Gate 2 removes only dependency-safe obsolete scope.
+
+### Autonomous execution authorization
+
+The user authorizes the orchestrator to complete this plan autonomously, including modifying and deleting in-scope MPX files, creating temporary isolated worktrees and branches, integrating their verified work, creating conventional commits directly on local `main`, and pushing verified commits to `origin/main`. This authorization is limited by these rules:
+
+- Preserve unrelated user changes and all native `pi`, `piw`, `cc`, `ccd`, `ccw`, and `ccwd` continuity paths.
+- Never force-push, amend published commits, use destructive Git reset/checkout/clean commands, or bypass repository safety hooks.
+- Use `pnpm` exclusively for package commands.
+- Run `pnpm run typecheck` before every commit. Run the narrow relevant tests before integration and the repository-wide required checks before pushing a gate.
+- Use conventional commit messages.
+- Push only verified, coherent gate checkpoints. Never push a knowingly broken intermediate state.
+- Temporary implementation branches and worktrees are allowed only for disjoint scopes. Remove each after integration. Start actual feature implementation from clean `main` with no auxiliary worktrees, and end the task the same way.
+- Only the orchestrator edits this migration authority or generated artifacts. Implementation agents do not.
+- The orchestrator delegates exploration, implementation, review, and checks heavily to subagents while retaining synthesis, integration, evidence, and acceptance decisions.
+- Parallel work requires an explicit non-overlapping file-ownership map. Do not assign concurrent agents to overlapping code or generated outputs.
+- Every work package removes obsolete code, tests, documentation, and generated references that its replacement makes unnecessary.
+- At each gate boundary, update this file with exact state and evidence, commit and push the checkpoint, and provide a compact handoff marker. If context becomes unsafe, stop only at such a persisted clean checkpoint so the user can compact or start a fresh orchestrator.
+- Continue independent work when a genuine credential/OAuth/manual observation is blocked. Ask the user only when no safe autonomous route remains.
+- Do not add implementation-time estimates to this or any other tracked planning file.
+
+### Verbatim approved recovery plan
+
+**The correct next step is: rewrite `MPX_MIGRATION.md` into the concise tracker, compact this session, then let a fresh orchestrator establish a clean committed baseline and perform dependency-aware cleanup before any feature implementation.**
+
+No implementation estimates will go into tracked files.
+
+## Current implementation state
+
+“Implemented” below means code and tests exist. It does **not** necessarily mean live-machine acceptance passed.
+
+| Area              | Current state                                                                                   | Decision                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Obsidian          | Bounded installer planner/verifier and local Markdown view generation exist; no live acceptance | Remove from core installation; keep local Markdown |
+| Ports             | Substantial working package, CLI, locking, allocation and tests                                 | Keep                                               |
+| MPX sessions      | Large lifecycle/discovery/resume implementation; live acceptance incomplete                     | Retain only what sandbox/resurrection needs        |
+| `agent-resurrect` | Standalone daily tool works for native sessions; MPX Pi sessions are not reliably visible       | Keep standalone and add compatibility              |
+| Raycast           | Real encrypted export/audit skill and installer evidence code; never live accepted              | Remove/defer                                       |
+| Task Scheduler    | Real adapter exists but base installation deliberately does not activate it                     | Defer; likely delete after session audit           |
+| Windows Terminal  | Safe `wt.exe` tab launching plus separate profile-management scripts                            | Keep, but never let the installer own profiles     |
+| Worktrees         | Host implementation and CLI substantially complete                                              | Keep; defer sandbox integration                    |
+| Providers         | GitHub/GitLab/KanbanFlow implemented; Gerrit operational adapter missing                        | Keep; add minimal Gerrit                           |
+| Sandbox           | Extensive contracts/proofs; selected Pi worker architecture incomplete                          | Replace after whole-agent spike succeeds           |
+
+### Obsidian specifically
+
+There are three separate pieces:
+
+1. **Local Markdown issues**
+   - Implemented in [provider-local](vscode://file/C:/_MP_projects/mpx/packages/provider-local/src/index.ts:1452).
+   - Does not require Obsidian.
+   - Keep this.
+
+2. **Bounded Obsidian installer planning**
+   - Implemented in [external-integrations.ts](vscode://file/C:/_MP_projects/mpx/packages/installer/src/external-integrations.ts:300).
+   - Restricted to a vault `MPX` directory.
+   - Tested but not live accepted.
+   - Remove from the installation critical path.
+
+3. **Project-registration instructions**
+   - [OBSIDIAN_REGISTRATION.md](vscode://file/C:/_MP_projects/mpx/content/skills/project-register/OBSIDIAN_REGISTRATION.md:1) describes wider vault edits.
+   - This is manual workstation customization, not core MPX behavior.
+   - Retain only as optional reference if it still provides value.
+
+You do not need Obsidian to read or manage local issue Markdown. Any editor can use those files.
+
+## Session resurrection is a critical requirement
+
+The existing repository is [agent-resurrect](vscode://file/C:/_MP_projects/agent-resurrect/package.json:1).
+
+It currently knows how to:
+
+- discover personal/work native Claude sessions;
+- read Pi’s `agent-resurrect/active-sessions` registry;
+- save named Windows Terminal groups;
+- reopen native Pi with `--session`;
+- reopen native Claude with `--resume`.
+
+### Why MPX sessions are currently problematic
+
+MPX host Pi uses the same native account directory, but it launches with `--no-extensions`. Therefore the existing `agent-resurrect` Pi extension does not write its normal active-session record.
+
+MPX emits its own lifecycle records under `%LOCALAPPDATA%/mpx`, which standalone `agent-resurrect` does not read.
+
+Claude MPX sessions may appear under the same account root, but resurrection currently selects the native launcher rather than the appropriate `*-mpx` launcher.
+
+Whole-agent sandboxing adds another issue: a Linux sandbox session path cannot be passed directly to a Windows native Pi command.
+
+### Recommended ownership
+
+**Keep `agent-resurrect` as the standalone daily UI. Do not rebuild its tab-management interface inside MPX.**
+
+Make MPX conform to a small compatibility protocol:
+
+- expose MPX sessions through stable JSON;
+- identify runtime, account, executor and resume command;
+- mirror compatible active-session metadata where possible;
+- let `agent-resurrect` invoke `pi-mpx`, `piw-mpx`, `cc-mpx`, or `ccw-mpx`;
+- persist sandbox sessions in a dedicated host-owned MPX session directory;
+- translate host session references to sandbox paths during resume.
+
+One narrowly scoped change may be required in the `agent-resurrect` repository. After that, MPX should own protocol compatibility so routine future work stays in the MPX repository.
+
+Acceptance must include:
+
+- native Pi save/resurrect;
+- native Claude save/resurrect;
+- host MPX Pi/Claude save/resurrect;
+- sandbox MPX Pi/Claude save/resurrect;
+- mixed native/MPX Windows Terminal groups.
+
+Until those pass, session migration is not complete.
+
+## Windows Terminal policy
+
+Your latest instruction should supersede the earlier blanket prohibition in this narrow form:
+
+- **MPX installer:** must never inspect or modify Windows Terminal `settings.json`.
+- **Explicit `project-register` skill:** may manage a project profile when you invoke and approve it.
+- **Worktree/session utility:** may open tabs through `wt.exe` without editing Terminal configuration.
+- **Existing user profiles:** must never be removed during install, rollback, or uninstall.
+
+The profile script currently lives at [wt-profile.mjs](vscode://file/C:/_MP_projects/mpx/content/skills/project-register/scripts/wt-profile.mjs:1). It should remain user-invoked workstation automation, not an installer resource.
+
+Windows Terminal can continue being your main launcher. Profiles can invoke the stable native or `*-mpx` commands.
+
+## Worktrees and ports
+
+### Worktrees
+
+The host worktree implementation is already substantial and useful. Keep it.
+
+Sandbox integration is harder because a linked worktree’s `.git` file points to the parent repository’s common Git directory. Mounting that common directory into the sandbox exposes repository-wide Git state.
+
+Initial rule:
+
+- host worktrees remain available;
+- first sandbox milestone uses a private clone;
+- sandbox access to linked worktrees is deferred.
+
+### Ports
+
+Keep the current implementation. It already provides:
+
+- atomic global allocation;
+- worktree slots;
+- interprocess locking;
+- conflict inspection;
+- `.worktree-ports.json`;
+- release and reconciliation.
+
+Do not require sandbox port forwarding for initial sandbox acceptance.
+
+## Provider scope
+
+### KanbanFlow
+
+Already implemented as the thin adapter you expected. Remaining work is mainly live authentication and operation tests.
+
+Keep only:
+
+- create/view/update issue;
+- move lane/state;
+- comment;
+- finish/close.
+
+### Gerrit
+
+Implement only the workflows you named:
+
+- view/query a change by ID;
+- upload a commit to `refs/for/<branch>`;
+- upload another patchset;
+- inspect and review someone else’s change;
+- comment/vote;
+- submit when supported.
+
+Do not attempt a generalized Gerrit platform. Extend it only when a real use case appears.
+
+## Cleanup-first execution plan
+
+There must be two cleanup waves. Some obsolete code cannot safely be deleted until its replacement works.
+
+### Gate 0 — preserve and understand the dirty checkout
+
+Current repository state:
+
+- branch: `main`;
+- HEAD: `897918f`;
+- only one worktree;
+- no extra local branches;
+- many modified files and several untracked source files.
+
+Before deleting anything:
+
+1. Save a recovery patch outside the repository.
+2. Inventory every dirty file.
+3. Run parallel read-only reviews:
+   - launch/runtime changes;
+   - installer/Windows changes;
+   - sandbox/executor changes;
+   - generated/docs changes.
+4. Classify each change as:
+   - retain;
+   - superseded;
+   - delete;
+   - requires replacement first.
+5. Run complete tests, `pnpm run typecheck`, generated validation and `git diff --check`.
+6. Commit the retained baseline in logical conventional commits.
+7. Confirm `main` is clean and still the only worktree.
+
+This is the recovery checkpoint, not new feature development.
+
+### Gate 1 — rewrite the migration authority
+
+Replace the current long `MPX_MIGRATION.md` with:
+
+- fixed decisions;
+- current implementation inventory;
+- retained scope;
+- deferred scope;
+- deletion ledger;
+- parity inventory;
+- session-resurrection contract;
+- milestone checkboxes;
+- installed evidence;
+- blockers.
+
+Delete obsolete migration prose instead of copying it elsewhere. Git history is the archive.
+
+No estimates will appear in it.
+
+### Gate 2 — safe cleanup
+
+Delete or detach immediately after dependency validation:
+
+- Raycast runtime/installer integration;
+- Obsidian installer orchestration;
+- Task Scheduler activation and, if now unused, its dedicated machinery;
+- Linux/macOS acceptance suites;
+- obsolete Windows Terminal installer assumptions;
+- duplicate reports and superseded phase documents;
+- abandoned generated/provenance inputs;
+- stale project-registration branches that conflict with current policy.
+
+Retain:
+
+- local Markdown provider;
+- ports;
+- host worktrees;
+- minimal provider architecture;
+- project registration;
+- safe `wt.exe` launching;
+- session pieces required for `agent-resurrect`;
+- current host Pi bridge until its replacement passes.
+
+After cleanup:
+
+1. Regenerate once.
+2. Run all checks.
+3. Merge the cleanup worktree.
+4. Remove its worktree and branch.
+5. Confirm clean `main`.
+
+### Gate 3 — sandbox feasibility spike
+
+Before rewriting executor architecture:
+
+1. Launch a Linux `sbx shell`.
+2. package/install Pi inside it;
+3. test interactive TTY;
+4. supply an ephemeral personal credential profile;
+5. complete a model response;
+6. perform a model-triggered file operation;
+7. persist and resume a session;
+8. inspect effective mounts;
+9. destroy the sandbox.
+
+If Pi fails this gate, stop and evaluate Docker. Do not build more `sbx` abstractions first.
+
+### Gate 4 — curated parity
+
+Parallel work is safe only across disjoint ownership:
+
+- **Content agent:** skills, agents, prompts and inventory.
+- **Pi agent:** footer, extensions, profile and runtime.
+- **Claude agent:** plugin, hooks, status and profile.
+- **Session agent:** `agent-resurrect` compatibility protocol.
+
+The orchestrator alone handles generated files and migration status.
+
+### Gate 5 — whole-agent sandbox
+
+Only after the spike and host parity:
+
+- ephemeral selected-identity profile;
+- private sandbox workspace;
+- session persistence;
+- exact mount validation;
+- no opposite identity;
+- no host fallback;
+- export/apply-back flow;
+- cleanup verification.
+
+### Gate 6 — route acceptance
+
+Validate in this order:
+
+1. Personal Pi
+2. Work Claude
+3. Work Pi
+4. Personal Claude
+
+Each must prove:
+
+- expected UI/footer;
+- expected settings and shortcuts;
+- common skill invocation;
+- model response;
+- file tool;
+- shell/Git tool;
+- correct account;
+- session resurrection;
+- native fallback;
+- sandbox containment where applicable.
+
+### Gate 7 — providers and retained utilities
+
+- live KanbanFlow tests;
+- minimal Gerrit implementation;
+- GitHub/GitLab verification;
+- host worktree commands;
+- port allocation;
+- Windows Terminal project registration.
+
+### Gate 8 — final cleanup
+
+After replacement succeeds:
+
+- delete the old split Pi bridge/worker implementation;
+- delete fake-worker tests;
+- remove superseded F2 proof machinery;
+- remove old repository imports;
+- prune generated inventories;
+- remove every completed worktree and branch;
+- verify clean `main` is the sole remaining worktree.
+
+## Parallel-agent discipline
+
+- Main agent remains orchestration-only.
+- Read-only exploration may fan out broadly.
+- At most a few implementation agents operate simultaneously.
+- Each implementation worktree has exclusive path ownership.
+- No two agents edit generated files.
+- No two agents edit `MPX_MIGRATION.md`.
+- One integration at a time.
+- Every merged worktree and branch is deleted immediately.
+- Every work package includes cleanup of obsolete code it replaces.
+- Every milestone ends at clean `main` with no auxiliary worktrees.
+
+## Fresh-session instruction
+
+After the tracker is updated and this session is compacted, the next agent should receive:
+
+```text
+Read AGENTS.md and MPX_MIGRATION.md completely.
+
+Act as the sole orchestrator. Execute only Recovery Gate 0 and the
+cleanup gates before feature implementation.
+
+Preserve all current dirty work until read-only subagents classify it.
+Do not reset, clean, overwrite, or delete uncommitted changes.
+
+Reach a verified, committed, clean main branch with no auxiliary
+worktrees. Then run dependency-aware cleanup in isolated worktrees,
+integrating one work package at a time and deleting each merged
+worktree and branch.
+
+Only the orchestrator may edit MPX_MIGRATION.md or generated artifacts.
+Use pnpm exclusively. Run pnpm run typecheck before every commit.
+Do not start parity or sandbox implementation until the cleanup gate
+is checked with evidence.
+```
+
+# HITL
+
+1. **Baseline commit permission**
+
+   Reaching a clean `main` requires reviewing and committing the valuable existing dirty changes before cleanup. Current policy prevents me from committing without explicit permission.
+
+   ➡️ rec: Authorize the next orchestrator to create logical conventional commits directly on local `main` after all checks pass, without pushing.
+
+### HITL resolution
+
+The baseline commit permission above is granted and extended by the autonomous execution authorization at the start of this handoff. The orchestrator may commit and push verified gate checkpoints to `origin/main` without requesting further approval. The historical `# HITL` text is retained only because the approved recovery plan is quoted verbatim.
+
+---
+
+## Legacy migration record pending Gate 1 reduction
+
 **Status:** Sole authoritative active migration plan; Phases B–F1 and G–I are implemented, the F2 contracts, proof foundation, and standalone-sbx v0.39 allowed-policy compatibility are implemented while repository-verifiable live acceptance remains pending, and Phase J tooling is implemented but live observation/cutover/rollback gates remain pending
 **Destination:** `${MPX_PROJECTS}/mpx`
 **Migration mode:** Gradual replacement with the old installations retained until the new system passes all acceptance gates
@@ -90,7 +502,7 @@ This approved amendment is normative where older scope/account wording conflicts
 
 A launch has independent dimensions: **identity** (personal/work native principal), **mode** (capability/resource policy), **skill policy** (packs and exposure), **executor** (`host`/`docker`), **sandbox workspace strategy**, **network policy**, **preset** (user-local composition), **CWD classification**, additive **grants**, and the resolved **skill artifact**. The complete tuple and a separate opaque `launchKey` are immutable for the process/session lifetime. Presets provide inputs, while the tuple records resolved values. Any change or elevation requires relaunch. In-harness UI may browse and select only the next launch; it cannot widen current rights.
 
-Normal interactive use must not require remembering this tuple. A terminal already opened in a project is the primary selector. `cc`, `ccw`, `pi`, and `piw` pass only their explicit harness and personal/work identity choice to MPX; `mpx launch` resolves every other value from the current CWD and user-local launch defaults. A Windows Terminal project profile continues to set its starting directory and invokes the same short launcher, so opening a project tab and typing `ccw` or `pi` remains the fast path.
+Normal interactive use must not require remembering this tuple. A terminal already opened in a project is the primary selector. `cc-mpx`, `ccw-mpx`, `pi-mpx`, and `piw-mpx` pass only their explicit harness and personal/work identity choice to MPX; `mpx launch` resolves every other value from the current CWD and user-local launch defaults. The existing native `cc`, `ccd`, `ccw`, `ccwd`, `pi`, and `piw` launchers remain an unconditional continuity path and are never owned or redefined by MPX. A Windows Terminal project profile continues to set its starting directory and invokes an explicit MPX launcher.
 
 Launch-default precedence is: explicit command argument; user-local project launch default keyed by canonical `project.id`; user-local longest-root scope launch default; built-in safe default. A committed project manifest may declare required development endpoints and services but never chooses identity, grants, executor, credential route, or a permission-widening default. A launcher with an explicit identity must fail closed when the selected project does not belong to that identity domain; it must not silently switch identities. The resolved default must be displayed compactly before the first turn and be inspectable with `mpx launch explain --cwd . --json`.
 
@@ -122,7 +534,7 @@ A preset may align mode and skill policy under the same friendly label, but they
 
 ### CLI and executors
 
-`mpx runtime claude|pi` remains low-level. Add `mpx identity list|show`, `mpx mode list|show`, `mpx skill-policy list|show`, `mpx preset list|show`, `mpx launch explain`, and searchable/autocomplete `mpx launch [claude|pi] --identity ... --mode ... --skill-policy ... --content-scope ... --executor ... --workspace ... --network-policy ... --preset ... --cwd ... --grant ... --reason ...`. Omitted launch dimensions resolve from the current project's user-local defaults. Mode defaults from CWD unless explicit; identity does not. If retained, `--scope` is renamed `--content-scope` and is described only as content composition, never security. `cc`/`ccw` and `pi`/`piw` keep fast personal/work identity selection and delegate directly to `mpx launch`, rather than encoding a copied command tuple. Existing `ccd`/`ccwd` danger variants remain explicit elevated host launches; once managed by MPX they require the same relaunch reason, banner, and audit as any unrestricted launch.
+`mpx runtime claude|pi` remains low-level. Add `mpx identity list|show`, `mpx mode list|show`, `mpx skill-policy list|show`, `mpx preset list|show`, `mpx launch explain`, and searchable/autocomplete `mpx launch [claude|pi] --identity ... --mode ... --skill-policy ... --content-scope ... --executor ... --workspace ... --network-policy ... --preset ... --cwd ... --grant ... --reason ...`. Omitted launch dimensions resolve from the current project's user-local defaults. Mode defaults from CWD unless explicit; identity does not. If retained, `--scope` is renamed `--content-scope` and is described only as content composition, never security. `cc-mpx`/`ccw-mpx` and `pi-mpx`/`piw-mpx` provide fast personal/work MPX identity selection and delegate directly to `mpx launch`, rather than encoding a copied command tuple. `ccd-mpx`/`ccwd-mpx` are explicit elevated MPX host launches and require the same relaunch reason, banner, and audit as any unrestricted launch. Unsuffixed agent commands remain native.
 
 Docker Sandboxes is the required default executor for normal agent launches after its acceptance gate passes; host filesystem execution is an explicitly elevated compatibility/emergency path, never a silent fallback. During implementation, a launcher must fail closed with an actionable diagnostic until its selected sandbox runtime and authentication route pass the gate. Use the standalone `sbx` product and pin a version that supports the required environment, credential, policy, and clone contracts; the legacy Docker Desktop `docker sandbox` plugin is not an upgrade path. Generated sandbox environment files belong under local MPX state outside every mount, with no literal secrets or native-auth paths. Launches do not share Docker's mutable cross-sandbox skill store by default.
 
@@ -644,7 +1056,7 @@ Use JSON Schema with `additionalProperties: false`. Defaults are applied by reso
 
 ## 9. User config, content scopes, skill loading, and provider registry
 
-User-local configuration adds `launchDefaults.scopes` and `launchDefaults.projects`, each mapping an explicitly selected identity to a named preset. A preset contains mode, skill policy, content scope, executor, workspace strategy, and network policy. Identity remains supplied by `cc`/`ccw`/`pi`/`piw` or an explicit launch argument; CWD never silently selects it. Grants, unrestricted host execution, extra writable mounts, and credential expansion require a separate confirmed launch choice; neither a committed project nor an agent can introduce them. The resolver emits each selected value and its source so `mpx launch explain` can explain a one-word launcher without hiding a permission decision.
+User-local configuration adds `launchDefaults.scopes` and `launchDefaults.projects`, each mapping an explicitly selected identity to a named preset. A preset contains mode, skill policy, content scope, executor, workspace strategy, and network policy. Identity remains supplied by `cc-mpx`/`ccw-mpx`/`pi-mpx`/`piw-mpx` or an explicit launch argument; CWD never silently selects it. Grants, unrestricted host execution, extra writable mounts, and credential expansion require a separate confirmed launch choice; neither a committed project nor an agent can introduce them. The resolver emits each selected value and its source so `mpx launch explain` can explain a short launcher without hiding a permission decision.
 
 User config lives under the platform user config root. Section 2A defines its launch/identity shape and is normative. Committed `mpxconfig.json` contains no identity, mode, preset, connection, credential, machine root, or exposure preference. Content scopes may compose packs/exposure only; they neither select identity nor authorize paths. Canonical path classification uses real paths, Windows case-insensitive segment comparison, and longest-root matching; unknown CWD fails closed.
 
@@ -1078,7 +1490,7 @@ Validate both accounts separately and preserve native credential/history directo
 
 ### Windows Terminal
 
-Current profiles include old repositories such as `mpx-claude-code`, `mpx-pi`, `mpx-ports`, and `mpx-worktrees`. Consolidate into an `mpx` profile only after launch validation. Update starting directories, icons, and any callers using profile names.
+Windows Terminal settings and profiles are outside the production installer boundary. Existing profiles, including old repository profiles and profiles named MPX, are foreign and remain untouched: installation, verification, rollback, and uninstall do not inspect, plan, write, adopt, or remove them. Any user-directed Terminal maintenance is separate from MPX installation.
 
 ### Raycast
 
@@ -1118,9 +1530,9 @@ Implementation status describes repository code and focused automated evidence o
 | B–E   | Config, launch, ports, worktrees, providers, issues, review, CI, and development-service domain tooling implemented.           | Real account/provider/project routes pending.                                                                                |
 | F1    | Canonical runtime-neutral content, deterministic projections, runtime manifests, guards, and native inventory implemented.     | Installed Claude/Pi observation pending.                                                                                     |
 | F2    | Standalone-sbx policy/proof contracts, host-Pi remote-executor foundation, and v0.39 allowed-policy compatibility implemented. | Retained launch-bound V2 plan/report, host-Pi tool/OAuth and Claude routes, and mount/port/containment observations pending. |
-| G     | Session lifecycle, discovery, binding, resume planning, and scheduled reconcile authority implemented.                         | Live provider session/resume and scheduled-task run pending.                                                                 |
-| H     | Target rollout adapters and fixture coverage implemented.                                                                      | Named-target runs and Windows Terminal observation pending.                                                                  |
-| I     | Immutable installer plan/apply/verify/rollback and scheduling authority implemented.                                           | User config, installation, native registration, and four account routes pending.                                             |
+| G     | Session lifecycle, discovery, binding, resume planning, and scheduled reconcile authority implemented.                         | Live provider session/resume pending; scheduled capture activation remains deferred and pending.                             |
+| H     | Target rollout adapters and fixture coverage implemented.                                                                      | Named-target runs pending.                                                                                                   |
+| I     | Immutable base installer is applied and strictly verified without Terminal or Task Scheduler composition.                      | Personal Claude OAuth renewal and remaining external integration evidence are pending; scheduled capture is not activated.   |
 | J     | Reconciliation, parity, audit, cutover planning, and rollback-drill tooling implemented.                                       | Observation window, cutover, live rollback, and retirement pending.                                                          |
 
 Verification resumes phase by phase after this documentation consolidation. Detailed durable contracts remain in `docs/CONFIG.md`, `docs/LAUNCH.md`, `docs/RUNTIME_ADAPTERS.md`, `docs/PORTS.md`, `docs/WORKTREES.md`, `docs/PROVIDERS.md`, `docs/ISSUES.md`, `docs/INSTALLATION.md`, `docs/MIGRATION_BASELINE.md`, `docs/PHASE_F1_NATIVE_INVENTORY.md`, the two Phase F2 proof documents, `docs/PHASE_I_INSTALLER.md`, `docs/PHASE_I_ROLLBACK.md`, and `docs/PHASE_J_RECONCILIATION.md`. `docs/history/` is evidence/provenance, not active status authority.
@@ -1129,17 +1541,18 @@ Verification resumes phase by phase after this documentation consolidation. Deta
 
 User prompts override agent summaries, reviews, inferred completion, and historical phase claims. Dates identify the reviewed Pi sessions; session IDs are cited without machine paths.
 
-| Date          | Pi session ID(s)                                               | Binding user decision                                                                                                                                                                                                                                |
-| ------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-08-24    | `01a0326c-eece-78ef-9307-b46334baec15`                         | Integrate substantive work gradually; phases believed complete remain subject to verification.                                                                                                                                                       |
-| 2026-08-25    | `01a0384e-de49-7f97-b0a9-3b9c13bdc567`                         | Support personal/work Pi through existing `pi`/`piw`; require full current Pi/Claude parity; accept root-attested enrollment for local usability.                                                                                                    |
-| 2026-08-25    | `01a03a2c-5108-78b5-9e6c-8a7b6d9cf366`                         | Migrate/neutralize batch-execute; keep canonical skills runtime-neutral and map models per runtime. Pi subagents are Codex-only with no Anthropic defaults; stop legacy `MPX_SKILLS_DIR` export before cutover.                                      |
-| 2026-08-25/26 | `01a0398d-6272-73a6-8624-c880a3c845da`                         | Defer ponytail, NotebookLM mind-map/slides, unslop, pstack, wait-what, and simplify until stable; consolidate migration planning/history.                                                                                                            |
-| 2026-08-27    | `01a03a88-7f8c-7ece-aec2-9039e710259b`                         | Consolidate meaningful worktrees/branches into main, then verify phase by phase with the Pi harness and Prejemesi target; approve Phase A offline verification while deferring native restore.                                                       |
-| 2026-08-27    | `01a04471-c0d7-7b28-9393-4d8bd715a20e`                         | Require project-bound isolation with optional mounts and worktree-friendly Git; final sandbox choice remains open.                                                                                                                                   |
-| 2026-08-27/28 | `01a04505-24a9-70dd-8f2b-518a3278a08a`; Claude review sessions | Phase I offline work did not approve live installer, account, task, or external mutations; Claude review was blocked by expired OAuth.                                                                                                               |
-| 2026-08-28    | `01a0479b-ba89-798f-82b4-b6e249543687` (current)               | Consolidate worktrees into main; delete redundant tests and stale migration docs; keep a checkbox acceptance ledger; prioritize agent-implementable blockers before manual gates; gather explicit human actions needed to migrate the user's agent.  |
-| 2026-08-28    | `01a0479b-ba89-798f-82b4-b6e249543687` (current)               | Reject global deny-all/allowlist enforcement and select the standalone-sbx `open` network baseline mapped to global `allow-all`, accepting that destination policy is not an isolation boundary. Keep the live F2 gate unchecked until proof passes. |
+| Date          | Pi session ID(s)                                               | Binding user decision                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-08-24    | `01a0326c-eece-78ef-9307-b46334baec15`                         | Integrate substantive work gradually; phases believed complete remain subject to verification.                                                                                                                                                                                                                                                                                                               |
+| 2026-08-25    | `01a0384e-de49-7f97-b0a9-3b9c13bdc567`                         | Support personal/work Pi through existing `pi`/`piw`; require full current Pi/Claude parity; accept root-attested enrollment for local usability.                                                                                                                                                                                                                                                            |
+| 2026-08-25    | `01a03a2c-5108-78b5-9e6c-8a7b6d9cf366`                         | Migrate/neutralize batch-execute; keep canonical skills runtime-neutral and map models per runtime. Pi subagents are Codex-only with no Anthropic defaults; stop legacy `MPX_SKILLS_DIR` export before cutover.                                                                                                                                                                                              |
+| 2026-08-25/26 | `01a0398d-6272-73a6-8624-c880a3c845da`                         | Defer ponytail, NotebookLM mind-map/slides, unslop, pstack, wait-what, and simplify until stable; consolidate migration planning/history.                                                                                                                                                                                                                                                                    |
+| 2026-08-27    | `01a03a88-7f8c-7ece-aec2-9039e710259b`                         | Consolidate meaningful worktrees/branches into main, then verify phase by phase with the Pi harness and Prejemesi target; approve Phase A offline verification while deferring native restore.                                                                                                                                                                                                               |
+| 2026-08-27    | `01a04471-c0d7-7b28-9393-4d8bd715a20e`                         | Require project-bound isolation with optional mounts and worktree-friendly Git; final sandbox choice remains open.                                                                                                                                                                                                                                                                                           |
+| 2026-08-27/28 | `01a04505-24a9-70dd-8f2b-518a3278a08a`; Claude review sessions | Phase I offline work did not approve live installer, account, task, or external mutations; Claude review was blocked by expired OAuth.                                                                                                                                                                                                                                                                       |
+| 2026-08-28    | `01a0479b-ba89-798f-82b4-b6e249543687` (current)               | Consolidate worktrees into main; delete redundant tests and stale migration docs; keep a checkbox acceptance ledger; prioritize agent-implementable blockers before manual gates; gather explicit human actions needed to migrate the user's agent.                                                                                                                                                          |
+| 2026-09-03    | Current Codex and Pi tasks                                     | Preserve `cc`/`ccd`/`ccw`/`ccwd` and `pi`/`piw` as unconditional native launchers. MPX launchers use explicit `-mpx` suffixes and may replace native names only after a separately accepted, error-free cutover. Standard host-compatibility launchers use explicit one-use argv approval rather than interactive confirmation so automated end-to-end checks cannot be blocked behind an unobserved prompt. |
+| 2026-08-28    | `01a0479b-ba89-798f-82b4-b6e249543687` (current)               | Reject global deny-all/allowlist enforcement and select the standalone-sbx `open` network baseline mapped to global `allow-all`, accepting that destination policy is not an isolation boundary. Keep the live F2 gate unchecked until proof passes.                                                                                                                                                         |
 
 ## 20. Acceptance criteria
 
@@ -1182,8 +1595,9 @@ Checkboxes are the sole migration acceptance ledger. `[x]` means reproducibly ev
 
 - [x] Immutable release manifests, receipts, plan/apply/verify/uninstall, and rollback contracts exist.
 - [x] Installer operations are confirmation-bound, transactional, and covered by clean/existing-machine simulations.
-- [x] Shell aliases, native runtime registration, Terminal, environment, shortcut, and scheduled-task operations are represented in installer plans.
-- [x] Scheduled reconcile resolves immutable installed-runner authority and fails closed when unavailable or unhealthy.
+- [x] Shell aliases, native runtime registration/projection, HKCU environment/PATH, and shortcut operations are represented in production base installer plans; Windows Terminal and Task Scheduler are intentionally excluded and remain untouched.
+- [x] Scheduled reconcile authority resolves the immutable installed runner and fails closed when unavailable or unhealthy; this is dormant infrastructure, not base-install activation.
+- [ ] Activate background scheduled capture through a future separately confirmed feature; base installation must not create, inspect, verify, or remove a scheduled task.
 - [x] Generated convergence and documentation compatibility validation no longer depend on deleted transient phase reviews.
 
 ### Live and manual gates
@@ -1194,19 +1608,19 @@ Checkboxes are the sole migration acceptance ledger. `[x]` means reproducibly ev
 - [ ] Live Claude sandbox and host-Pi OAuth routes pass without credentials entering the sandbox.
 - [x] Standalone sbx is the approved sandbox product, with the user-selected global `allow-all`/MPX `open` network baseline explicitly treated as non-isolating.
 - [ ] Phase H named-target runs pass against every required real project/template.
-- [ ] Windows Terminal profile/start-directory/alias behavior is observed interactively.
 - [x] Linux portability requirements and evidence gates are documented in README and `docs/PORTABILITY.md`.
 - [ ] Linux portability is verified on Linux.
 - [x] macOS portability requirements and evidence gates are documented in README and `docs/PORTABILITY.md`.
 - [ ] macOS portability is verified on macOS.
 - [ ] User-local config is reviewed and installed.
-- [ ] Immutable MPX installation is applied and verified on the live machine.
-- [ ] Claude and Pi native runtime/plugin/extension registration is verified.
-- [ ] Personal Claude account route works end to end.
-- [ ] Work Claude account route works end to end.
-- [ ] Personal Pi (`pi`) account route works end to end.
-- [ ] Work Pi (`piw`) account route works end to end.
-- [ ] Scheduled task executes the installed immutable session reconcile runner successfully.
+- [x] Immutable MPX installation is applied and strictly verified on the live machine without shadowing native agent commands.
+- [x] Claude and Pi native runtime/plugin/extension registration is verified through installed host-route process launches.
+- [ ] Personal Claude account route works end to end. Both native `cc` and `cc-mpx` currently report that the personal OAuth session expired and could not be refreshed; this requires interactive account login.
+- [x] Work Claude (`ccw-mpx`) account route passes an installed model response and model-triggered `Read` call.
+- [x] Personal Pi (`pi-mpx`) account route passes an installed model response and model-triggered `read` call. Immediate MPX continuity uses an explicitly non-sandboxed host-compatibility route with one-use argv approval. Native `pi` remains independent. The production Docker route remains unavailable because it has no real sandbox worker transport and must fail before native process execution.
+- [ ] Return the installed MPX Pi aliases to Docker only after the production route passes a real TUI turn and model-triggered tool call.
+- [x] Work Pi (`piw-mpx`) account route passes an installed model response and model-triggered `read` call from the registered work project. Native `piw` remains independent.
+- [ ] Deferred/pending: a separately confirmed scheduled-capture feature activates and executes the installed immutable session reconcile runner successfully; this is not part of base install.
 - [ ] Real Git author/SSH routing is evidenced for personal and work identities.
 - [ ] Obsidian integration is evidenced without widening unrelated vault access.
 - [ ] Raycast integration is evidenced on the live machine.

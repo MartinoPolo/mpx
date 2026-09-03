@@ -71,7 +71,9 @@ The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `
 
 All collections are bounded, unique, and sorted by ID/path (nested proposals and changes use canonical JSON order). Projection entries must cover every required Claude/Pi role and each path must exactly match a file in the current release manifest. External plan records have exact fields `id`, `adapter`, `classification`, `planDigest`, `verifierRef`, and `plan`; their digest and verifier binding are revalidated before `install plan` accepts the envelope.
 
-Native side effects remain behind an application-injected `InstallerOperationAdapter`; this package does not implement Windows provisioning internals. `%APPDATA%`, `%LOCALAPPDATA%`, and `MPX_APPS` must be explicit absolute production roots. Verification hashes actual release files and observes actual operation targets; `--strict` additionally reports foreign entries without removing them. Uninstall refuses absent ownership and foreign or drifted owned targets. The legacy public `--component`/`--runner` reader has been removed.
+Native side effects remain behind an application-injected `InstallerOperationAdapter`; this package does not implement Windows provisioning internals. `%APPDATA%`, `%LOCALAPPDATA%`, and `MPX_APPS` must be explicit absolute production roots. Production base composition manages `.bashrc` and PowerShell startup-profile launcher blocks, HKCU environment/PATH values, shortcuts, and runtime registrations/projections. It emits neither Windows Terminal nor scheduled-task operations: planning, apply, receipt creation, verification, rollback, and uninstall do not inspect, write, adopt, or remove either resource. Existing Terminal profiles and scheduled tasks remain foreign to current production ownership. Verification hashes actual release files and observes actual operation targets; `--strict` additionally reports foreign entries without removing them. Uninstall refuses absent ownership and foreign or drifted owned targets. The legacy public `--component`/`--runner` reader has been removed.
+
+Background session capture activation is explicitly deferred and pending, not implied by a healthy base installation. It requires a future, separately confirmed feature before Task Scheduler can enter production composition; generic scheduled-task contracts remain available only as dormant infrastructure.
 
 A healthy strict Phase I verification supplies the release-key authority digest used to admit Phase G scheduled capture. The immutable intent may bind exactly four validated runtime registrations (`claude-personal`, `claude-work`, `pi-personal`, and `pi-work`) plus bounded static MCP registrations. The production adapter writes only secret-free registration receipts and synthetic projection inventories beneath local application state. Their automatic operations verify exact receipt/projection bytes, executable and projection evidence, route-domain and MCP-sharing declarations, non-overlapping root digests, and the complete projection roles; credentials, auth, sessions, caches, trust, and native runtime directories are never copied. Without an injected production adapter and durable transaction store, live install/apply remains fail-closed with `INSTALL_ADAPTER_UNAVAILABLE`.
 
@@ -124,14 +126,14 @@ Static MCP registrations contain only a domain-qualified label, executable path/
 
 ## Simulation matrix
 
-| Machine   | Scenario                                                  | Expected result                                                 |
-| --------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| clean     | publish/apply twice                                       | one immutable release; side effects converge                    |
-| existing  | unrelated native config, credentials, roots, and sessions | byte-identical and untouched                                    |
-| existing  | same-name foreign or receipt-owned drift                  | refuse before mutation                                          |
-| either    | observation changes after plan                            | `INSTALL_OBSERVATION_CHANGED`; no side effect                   |
-| either    | wrong confirmation digest                                 | `INSTALL_CONFIRMATION_MISMATCH`; no side effect                 |
-| either    | injected failure before/after each operation              | reverse restoration from snapshots; native state byte-identical |
-| either    | interrupted applying journal                              | recovery restores snapshots before retry                        |
-| installed | runner link, special file, wrong path/size/hash/receipt   | authority fails closed                                          |
-| installed | uninstall with foreign/drifted owned target               | refuse and preserve target                                      |
+| Machine   | Scenario                                                                             | Expected result                                                 |
+| --------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| clean     | publish/apply twice                                                                  | one immutable release; side effects converge                    |
+| existing  | unrelated native config, credentials, roots, sessions, and Windows Terminal profiles | byte-identical and untouched                                    |
+| existing  | same-name foreign or receipt-owned drift                                             | refuse before mutation                                          |
+| either    | observation changes after plan                                                       | `INSTALL_OBSERVATION_CHANGED`; no side effect                   |
+| either    | wrong confirmation digest                                                            | `INSTALL_CONFIRMATION_MISMATCH`; no side effect                 |
+| either    | injected failure before/after each operation                                         | reverse restoration from snapshots; native state byte-identical |
+| either    | interrupted applying journal                                                         | recovery restores snapshots before retry                        |
+| installed | runner link, special file, wrong path/size/hash/receipt                              | authority fails closed                                          |
+| installed | uninstall with foreign/drifted owned target                                          | refuse and preserve target                                      |
