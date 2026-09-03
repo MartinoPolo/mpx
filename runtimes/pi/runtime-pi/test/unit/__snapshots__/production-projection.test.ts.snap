@@ -148,7 +148,7 @@ exports[`production Pi projection > characterizes the exact complete sorted Pi p
     "sha256": "<esbuild-bound>",
   },
   {
-    "bytes": 1958,
+    "bytes": 1995,
     "path": "projection.json",
     "sha256": "<launch-bound>",
   },
@@ -156,6 +156,11 @@ exports[`production Pi projection > characterizes the exact complete sorted Pi p
     "bytes": 650,
     "path": "runtime-context.json",
     "sha256": "<launch-bound>",
+  },
+  {
+    "bytes": 656,
+    "path": "runtime-profile.json",
+    "sha256": "037df2d5d08578abcb503cabbd6794bc1bd61b4cba83045328c8306811039cbd",
   },
   {
     "bytes": 684,

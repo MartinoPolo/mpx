@@ -7,7 +7,22 @@ import {
   createSessionLifecycleBindingV1,
   type PublishedRuntimeArtifactReference,
 } from '@mpx/runtime-contracts';
-import { planPiInvocation, verifyPiResumeTarget } from '../../src/index.js';
+import {
+  createPiRuntimeProfileV1,
+  planPiInvocation,
+  verifyPiResumeTarget,
+} from '../../src/index.js';
+
+const invocationProfile = createPiRuntimeProfileV1(
+  {
+    schemaVersion: 1,
+    runtime: 'pi',
+    provider: 'openai-codex',
+    defaultModel: 'openai-codex/gpt-5.6-sol',
+    enabledModels: ['openai-codex/gpt-5.6-sol'],
+  },
+  [],
+);
 
 const runtimeContext = createRuntimeContextV1({
   launchKey: 'a'.repeat(64),
@@ -27,7 +42,7 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
     extension: 'C:/artifacts/pi-extension.js',
-    theme: 'green',
+    profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     immutableProjectionDirectory: 'C:/artifacts/pi',
     runtimeContextFile: 'C:/launch/context.json',
@@ -42,8 +57,16 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
       '--extension',
       'C:/artifacts/pi-extension.js',
       '--no-skills',
+      '--provider',
+      'openai-codex',
+      '--model',
+      'gpt-5.6-sol',
+      '--thinking',
+      'medium',
+      '--tui-mode',
+      'fullscreen',
       '--theme',
-      'green',
+      'dark',
     ],
     env: {
       PI_CODING_AGENT_DIR: 'C:/native/pi/account-a',
@@ -66,6 +89,49 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
   );
 });
 
+it.each([
+  ['personal', 'openai-codex', 'gpt-5.6-sol'],
+  ['work', 'anthropic', 'claude-sonnet-4-6'],
+] as const)(
+  'pins the %s profile instead of consulting ambient native settings',
+  (_identity, provider, model) => {
+    const profile = createPiRuntimeProfileV1(
+      {
+        schemaVersion: 1,
+        runtime: 'pi',
+        provider,
+        defaultModel: `${provider}/${model}`,
+        enabledModels: [`${provider}/${model}`],
+      },
+      [],
+    );
+    const plan = planPiInvocation({
+      executable: 'C:/trusted/pi.cmd',
+      extension: 'C:/artifacts/pi-extension.js',
+      profile,
+      accountRoot: 'C:/native/pi/selected-account',
+      runtimeContextFile: 'C:/launch/context.json',
+      runtimeContext,
+      cwd: 'C:/repo',
+    });
+
+    expect(plan.args.slice(3)).toEqual([
+      '--no-skills',
+      '--provider',
+      provider,
+      '--model',
+      model,
+      '--thinking',
+      'medium',
+      '--tui-mode',
+      'fullscreen',
+      '--theme',
+      'dark',
+    ]);
+    expect(plan.env.PI_CODING_AGENT_DIR).toBe('C:/native/pi/selected-account');
+  },
+);
+
 it('accepts only a module-verified regular Pi session beneath the exact account root', async () => {
   const account = await mkdtemp(path.join(tmpdir(), 'pi-resume-'));
   try {
@@ -78,7 +144,7 @@ it('accepts only a module-verified regular Pi session beneath the exact account 
     const base = {
       executable: path.join(account, 'pi.cmd'),
       extension: path.join(account, 'extension.js'),
-      theme: 'green' as const,
+      profile: invocationProfile,
       accountRoot: account,
       runtimeContextFile: path.join(account, 'context.json'),
       runtimeContext,
@@ -144,7 +210,7 @@ it('injects only a full validated Pi lifecycle binding id and directory', () => 
     base = {
       executable: 'C:/trusted/pi.cmd',
       extension: 'C:/artifacts/pi-extension.js',
-      theme: 'green' as const,
+      profile: invocationProfile,
       accountRoot: 'C:/native/pi/account-a',
       runtimeContextFile: 'C:/launch/context.json',
       runtimeContext,
@@ -177,7 +243,7 @@ it('passes only the launch-private bridge attestation to the generated Pi extens
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
     extension: 'C:/artifacts/pi-extension.js',
-    theme: 'green',
+    profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
     runtimeContext,
@@ -197,7 +263,7 @@ it('binds the live status snapshot path only in the Pi child environment', () =>
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
     extension: 'C:/artifacts/pi-extension.js',
-    theme: 'green',
+    profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
     runtimeContext,
@@ -229,12 +295,17 @@ it('propagates the exact published projection reference as JSON', () => {
       directory: 'C:/artifacts/pi',
       extension: 'C:/artifacts/pi/extension.mjs',
       runtimeContextFile: 'C:/artifacts/pi/runtime-context.json',
+      profile: invocationProfile,
       theme: 'dark',
       artifactKey: 'd'.repeat(64),
       reference: projectionReference,
       files: Object.freeze([]),
       reused: false,
-      revalidation: { directory: 'C:/artifacts/pi', reference: projectionReference },
+      revalidation: {
+        directory: 'C:/artifacts/pi',
+        reference: projectionReference,
+        profile: invocationProfile,
+      },
     },
   });
   expect(plan.env.MPX_RUNTIME_PROJECTION_REFERENCE).toBe(JSON.stringify(projectionReference));

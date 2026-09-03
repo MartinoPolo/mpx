@@ -26,6 +26,7 @@ import {
 } from '@mpx/skills';
 import {
   buildPiProjection,
+  createPiRuntimeProfileV1,
   createPiRuntimeProjection,
   planPiInvocation,
   renderPiRuntimeStatus,
@@ -477,6 +478,7 @@ describe('production Pi projection', () => {
       expect.arrayContaining([
         'extension.mjs',
         'runtime-context.json',
+        'runtime-profile.json',
         'projection.json',
         'settings.json',
         'keybindings.json',
@@ -507,7 +509,11 @@ describe('production Pi projection', () => {
       runtime: 'pi',
       commandAllowlist: ['mpx:explicit', 'mpx:full', 'mpx:named'],
       modelSearchAllowlist: ['full', 'named'],
+      profile: 'runtime-profile.json',
     });
+    expect(
+      JSON.parse(await readFile(path.join(first.directory, 'runtime-profile.json'), 'utf8')),
+    ).toEqual(f.piRuntimeProfile);
     const serialized = JSON.stringify(descriptor);
     expect(serialized).not.toContain(f.canonicalRoot);
     expect(serialized).not.toMatch(/credential|session|nativeSkillAliases/iu);
@@ -525,6 +531,34 @@ describe('production Pi projection', () => {
     expect(
       await readFile(path.join(first.directory, 'status', 'status-snapshot.json'), 'utf8'),
     ).toBe(`${JSON.stringify(f.statusSnapshot, null, 2)}\n`);
+  });
+
+  it('changes publication identity and reuse when the validated runtime profile changes', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-profile-binding-'));
+    const first = await buildPiProjection({ ...f, artifactsRoot });
+    const reused = await buildPiProjection({ ...f, artifactsRoot });
+    const workProfile = createPiRuntimeProfileV1(
+      {
+        schemaVersion: 1,
+        runtime: 'pi',
+        provider: 'anthropic',
+        defaultModel: 'anthropic/claude-sonnet-4-6',
+        enabledModels: ['anthropic/claude-sonnet-4-6'],
+      },
+      [],
+    );
+    const changed = await buildPiProjection({
+      ...f,
+      artifactsRoot,
+      piRuntimeProfile: workProfile,
+    });
+
+    expect(reused).toEqual({ ...first, reused: true });
+    expect(changed.reused).toBe(false);
+    expect(changed.reference.projectionKey).not.toBe(first.reference.projectionKey);
+    expect(changed.reference.fileMapHash).not.toBe(first.reference.fileMapHash);
+    expect(changed.revalidation.profile).toEqual(workProfile);
   });
 
   it('characterizes the exact complete sorted Pi projection file map by bytes and hash', async () => {
@@ -660,8 +694,25 @@ describe('production Pi projection', () => {
       expect(normalizedTree.get(bundlePath), bundlePath).toEqual(completeTree.get(bundlePath));
     }
     expect(projectionContentDigest(completeTree, boundValues)).toBe(
-      '0214d04d1119531b14d64b50fbe5988a686b71d4463164f717a22d613eec9169',
+      '4478b85202d5710a6657dadf1d2d1515ea4eb4c18a89f0d791e01a153b4074d7',
     );
+  });
+
+  it('binds the invocation profile bytes into projection revalidation', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-profile-revalidation-')),
+    });
+    const profileFile = path.join(projection.directory, 'runtime-profile.json');
+    await writeFile(
+      profileFile,
+      (await readFile(profileFile, 'utf8')).replace('gpt-5.6-sol', 'gpt-5.6-luna'),
+    );
+
+    await expect(
+      revalidateRuntimeArtifact(projection.revalidation.directory, projection.revalidation.reference),
+    ).resolves.toMatchObject({ valid: false });
   });
 
   it('binds a one-byte support-file change into projected file metadata and its aggregate digest', async () => {
@@ -787,11 +838,20 @@ describe('production Pi projection', () => {
       runtimeContext: f.context,
       cwd: 'C:/repo',
     });
+    expect(projection.profile).toEqual(f.piRuntimeProfile);
     expect(plan.args).toEqual([
       '--no-extensions',
       '--extension',
       projection.extension.replaceAll('\\', '/'),
       '--no-skills',
+      '--provider',
+      'openai-codex',
+      '--model',
+      'gpt-5.6-sol',
+      '--thinking',
+      'medium',
+      '--tui-mode',
+      'fullscreen',
       '--theme',
       'dark',
     ]);
@@ -805,7 +865,41 @@ describe('production Pi projection', () => {
     expect(projection.revalidation).toEqual({
       directory: projection.directory,
       reference: projection.reference,
+      profile: f.piRuntimeProfile,
     });
+  });
+
+  it('loads the bound profile when the published projection is passed as flattened launch data', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-flattened-profile-')),
+    });
+    const plan = planPiInvocation({
+      executable: 'C:/trusted/pi.cmd',
+      extension: projection.extension,
+      theme: 'green',
+      accountRoot: 'C:/private/pi/account-a',
+      runtimeContextFile: projection.runtimeContextFile,
+      runtimeContext: f.context,
+      projectionReference: projection.reference,
+      immutableProjectionDirectory: projection.directory,
+      cwd: 'C:/repo',
+    });
+
+    expect(plan.args.slice(3)).toEqual([
+      '--no-skills',
+      '--provider',
+      'openai-codex',
+      '--model',
+      'gpt-5.6-sol',
+      '--thinking',
+      'medium',
+      '--tui-mode',
+      'fullscreen',
+      '--theme',
+      'dark',
+    ]);
   });
 
   it('renders the runtime status envelope rather than the legacy port-only footer', async () => {

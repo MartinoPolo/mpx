@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { lstatSync, readFileSync } from 'node:fs';
 import {
   lstat,
   mkdir,
@@ -172,11 +173,13 @@ export async function createPiRuntimeAdapter(input: PiAdapterInput): Promise<PiR
 export interface PiProjectionRevalidation {
   readonly directory: string;
   readonly reference: PublishedRuntimeArtifactReference;
+  readonly profile: PiRuntimeProfileV1;
 }
 export interface PiPublishedProjection {
   readonly directory: string;
   readonly extension: string;
   readonly runtimeContextFile: string;
+  readonly profile: PiRuntimeProfileV1;
   readonly theme: 'dark';
   readonly artifactKey: string;
   readonly reference: PublishedRuntimeArtifactReference;
@@ -204,6 +207,7 @@ export interface PiInvocationInput {
   runtimeStatusEnvelopePath?: string;
   bridge?: PiLaunchPrivateBridgeConfig;
   extension?: string;
+  profile?: PiRuntimeProfileV1;
   theme?: 'dark' | 'green' | 'amber';
   runtimeContextFile?: string;
   projection?: PiPublishedProjection;
@@ -315,10 +319,34 @@ function absolute(value: string, label: string): string {
   }
   return path.normalize(value).replaceAll('\\', '/');
 }
+function loadPublishedPiProfile(directoryInput: string | undefined): PiRuntimeProfileV1 | undefined {
+  if (!directoryInput) {
+    return undefined;
+  }
+  const directory = absolute(directoryInput, 'immutable projection directory');
+  const file = path.join(directory, 'runtime-profile.json');
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) {
+      return parsePiRuntimeProfileV1(undefined);
+    }
+    return parsePiRuntimeProfileV1(JSON.parse(readFileSync(file, 'utf8')));
+  } catch (failure) {
+    if ((failure as { code?: unknown }).code === 'PI_RUNTIME_PROFILE_INVALID') {
+      throw failure;
+    }
+    return parsePiRuntimeProfileV1(undefined);
+  }
+}
+
 export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
   const extension = input.projection?.extension ?? input.extension;
   const runtimeContextFile = input.projection?.runtimeContextFile ?? input.runtimeContextFile;
-  const theme = input.projection?.theme ?? input.theme;
+  const profileInput = input.projection?.profile ?? input.profile;
+  const profile = profileInput
+    ? parsePiRuntimeProfileV1(profileInput)
+    : loadPublishedPiProfile(input.immutableProjectionDirectory);
+  const theme = profile?.theme ?? input.projection?.theme ?? input.theme;
   if (!extension || !runtimeContextFile || !theme) {
     throw new Error('validated Pi projection is required');
   }
@@ -326,7 +354,8 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
     input.projection &&
     (input.projection.revalidation.directory !== input.projection.directory ||
       input.projection.revalidation.reference.projectionKey !==
-        input.projection.reference.projectionKey)
+        input.projection.reference.projectionKey ||
+      JSON.stringify(input.projection.revalidation.profile) !== JSON.stringify(profile))
   ) {
     throw new Error('Pi projection revalidation binding is invalid');
   }
@@ -392,6 +421,18 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
       '--extension',
       absolute(extension, 'immutable extension'),
       '--no-skills',
+      ...(profile
+        ? [
+            '--provider',
+            profile.provider,
+            '--model',
+            profile.model,
+            '--thinking',
+            profile.thinking,
+            '--tui-mode',
+            profile.tuiMode,
+          ]
+        : []),
       '--theme',
       theme,
       ...(resumeFile ? ['--session', resumeFile] : []),
@@ -673,19 +714,24 @@ async function copyGeneratedAssets(
   }
   await copyVendor(vendorRoot);
 }
-function freezeProjection(published: PublishedRuntimeArtifact): PiPublishedProjection {
+function freezeProjection(
+  published: PublishedRuntimeArtifact,
+  profileInput: PiRuntimeProfileV1,
+): PiPublishedProjection {
   const reference = Object.freeze({ ...published.reference });
+  const profile = parsePiRuntimeProfileV1(profileInput);
   const directory = path.resolve(published.directory);
   return Object.freeze({
     directory,
     extension: path.join(directory, 'extension.mjs'),
     runtimeContextFile: path.join(directory, 'runtime-context.json'),
-    theme: 'dark' as const,
+    profile,
+    theme: profile.theme,
     artifactKey: reference.launchBinding.runtimeArtifactKey,
     reference,
     files: Object.freeze(published.fileMap.map((file) => file.path)),
     reused: published.reused,
-    revalidation: Object.freeze({ directory, reference }),
+    revalidation: Object.freeze({ directory, reference, profile }),
   });
 }
 
@@ -859,6 +905,7 @@ export async function buildPiProjection(
     manifestKey: skillPlan.manifestKey,
     runtimeArtifact: skillPlan.artifactReference,
     runtimeContext: 'runtime-context.json',
+    profile: 'runtime-profile.json',
     extension: 'extension.mjs',
     commandAllowlist,
     modelSearchAllowlist,
@@ -876,6 +923,7 @@ export async function buildPiProjection(
   try {
     await emit(staging, 'projection.json', jsonFile(descriptor));
     await emit(staging, 'runtime-context.json', jsonFile(context));
+    await emit(staging, 'runtime-profile.json', jsonFile(piRuntimeProfile));
     const runtimeStatusLine = renderPiRuntimeStatus(runtimeStatusEnvelope, 'wide');
     await emit(
       staging,
@@ -927,7 +975,7 @@ export async function buildPiProjection(
       launchBinding,
       ...(input.artifactRevalidator ? { revalidate: input.artifactRevalidator } : {}),
     });
-    return freezeProjection(published);
+    return freezeProjection(published, piRuntimeProfile);
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
