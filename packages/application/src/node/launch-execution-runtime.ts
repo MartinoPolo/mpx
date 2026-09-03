@@ -73,6 +73,8 @@ export interface LaunchProjectionBuildInput {
 
 export interface LaunchExecutionContext {
   launchExecutorAdapters?: readonly ExecutorAdapter[];
+  /** Trusted provenance for adapters admitted by production composition; unmarked arrays are injected. */
+  launchExecutorAdapterSource?: 'production-admission' | 'injected';
   launchRuntimeAdapters?: readonly RuntimeAdapter[];
   launchRoutes?: {
     materialize(
@@ -205,6 +207,26 @@ async function buildProductionProjection(
       },
       currentBinding: input.skillPlan.binding,
       artifactsRoot: input.artifactsRoot,
+      assetsRoot: path.join(
+        input.agentsRoot,
+        '..',
+        '..',
+        'runtimes',
+        'pi',
+        'runtime-pi',
+        'projection',
+      ),
+      vendorProvenanceFile: path.join(
+        input.agentsRoot,
+        '..',
+        '..',
+        'runtimes',
+        'pi',
+        'runtime-pi',
+        'vendor',
+        'subagents',
+        'VENDORED.md',
+      ),
       statusSnapshot: input.statusSnapshot,
       runtimeStatusEnvelope: input.runtimeStatusEnvelope,
       runtimeCapabilityManifest: input.runtimeCapabilityManifest,
@@ -361,6 +383,7 @@ export function productionRuntimeAdapters(input: {
               ...input.trustedExecutable.argvPrefix,
               ...plan.args,
               ...(input.forkInvocation?.argv ?? []),
+              ...(input.descriptor.runtimeArgs ?? []),
             ],
             environment: plan.env,
           };
@@ -430,6 +453,7 @@ export function productionRuntimeAdapters(input: {
             ...input.trustedExecutable.argvPrefix,
             ...plan.args,
             ...(input.forkInvocation?.argv ?? []),
+            ...(input.descriptor.runtimeArgs ?? []),
           ],
           environment: plan.env,
         };

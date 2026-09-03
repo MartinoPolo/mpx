@@ -714,12 +714,27 @@ export class ImmutableInstallerService {
       }
     });
   }
+  private async hydrateReceiptOperations(receipt: OwnershipReceiptV1): Promise<void> {
+    for (let index = 0; index < receipt.operations.length; index++) {
+      const operation = receipt.operations[index]!,
+        locator = receipt.operationLocators[index]!,
+        adapter = this.adapter(operation.adapter);
+      if (locator.spec !== null && !adapter.hydrateReceiptOperation) {
+        fail(
+          'INSTALL_RECEIPT_AMBIGUOUS',
+          `Adapter ${operation.adapter} cannot hydrate its durable receipt operation.`,
+        );
+      }
+      await adapter.hydrateReceiptOperation?.(operation, locator.spec);
+    }
+  }
   async verify(): Promise<InstallVerificationV1> {
     const receipt = await this.options.store.readReceipt();
     const issues: string[] = [];
     if (!receipt) {
       issues.push('receipt-missing');
     } else {
+      await this.hydrateReceiptOperations(receipt);
       for (const operation of receipt.operations) {
         const actual = await this.adapter(operation.adapter).observe(operation);
         if (operation.action === 'ensure' ? actual !== operation.desiredDigest : actual !== null) {
@@ -739,18 +754,10 @@ export class ImmutableInstallerService {
   private async hydrateUninstallReceipt(
     receipt: OwnershipReceiptV1,
   ): Promise<readonly InstallOperationV1[]> {
+    await this.hydrateReceiptOperations(receipt);
     const removable: InstallOperationV1[] = [];
-    for (let index = 0; index < receipt.operations.length; index++) {
-      const operation = receipt.operations[index]!,
-        locator = receipt.operationLocators[index]!,
-        adapter = this.adapter(operation.adapter);
-      if (locator.spec !== null && !adapter.hydrateReceiptOperation) {
-        fail(
-          'INSTALL_RECEIPT_AMBIGUOUS',
-          `Adapter ${operation.adapter} cannot hydrate its durable receipt operation.`,
-        );
-      }
-      await adapter.hydrateReceiptOperation?.(operation, locator.spec);
+    for (const operation of receipt.operations) {
+      const adapter = this.adapter(operation.adapter);
       const retained = adapter.retainOnUninstall
         ? await adapter.retainOnUninstall(operation)
         : false;

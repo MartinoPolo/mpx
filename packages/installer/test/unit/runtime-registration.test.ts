@@ -93,6 +93,21 @@ describe('immutable runtime registration', () => {
         input('pi', 'work', 'C:\\native\\pi-work'),
       ]),
     ).toThrowError(/REGISTRATION_ROOT_OVERLAP/u);
+    expect(() =>
+      createRuntimeRegistrationMatrix([
+        input('claude', 'personal', 'C:\\native\\claude-personal'),
+        {
+          ...input('claude', 'work', 'C:\\native\\claude-work'),
+          executable: {
+            path: 'C:\\_MP_apps\\different-claude.exe',
+            sha256: sha('different-claude'),
+            version: '1.0.0',
+          },
+        },
+        input('pi', 'personal', 'C:\\native\\pi-personal'),
+        input('pi', 'work', 'C:\\native\\pi-work'),
+      ]),
+    ).toThrowError(/REGISTRATION_EXECUTABLE_AMBIGUOUS/u);
   });
 
   it('strictly parses installed registration contracts and refuses native state fields', () => {

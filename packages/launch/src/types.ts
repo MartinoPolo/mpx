@@ -82,6 +82,7 @@ export interface ResolveLaunchSelectionInput {
   readonly projectId?: string;
 }
 export interface ResolveLaunchInput extends ResolveLaunchSelectionInput {
+  readonly runtimeArgs?: readonly string[];
   readonly grants?: readonly string[];
   readonly grantApprovals?: readonly Readonly<GrantApproval>[];
   readonly elevationApproval?: Readonly<ElevationApproval>;
@@ -134,6 +135,7 @@ export interface LaunchDescriptor {
   readonly launchKey: string;
   readonly nativeRuntimeRootDigest: string;
   readonly runtime: Runtime;
+  readonly runtimeArgs?: readonly string[];
   readonly binding: { readonly projectId: string | null; readonly repositoryId: string };
   readonly identity: { readonly name: string; readonly domain: string };
   readonly mode: string;

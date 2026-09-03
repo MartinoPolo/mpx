@@ -115,17 +115,19 @@ it('composes four runtime registrations and external references into automatic, 
     ],
   });
   const files = new FakeBinaryFileSystem();
+  const resources = new FakeJsonResourceStore();
   const adapter = new ProductionInstallerOperationAdapter(
     {
       MPX_APPS: 'C:\\Apps',
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     {
       files,
-      resources: new FakeJsonResourceStore(),
+      resources,
       runtimeRegistrations: {
         inspect: async () => ({
           observations: [],
@@ -177,6 +179,17 @@ it('composes four runtime registrations and external references into automatic, 
     }),
   ).rejects.toMatchObject({ code: 'INSTALL_PROJECTION_MISMATCH' });
   const operations = await adapter.operations(intent, manifest);
+  const environmentOperation = operations.automatic.find(
+    (operation) => operation.id === '20-user-environment',
+  );
+  if (!environmentOperation) {
+    throw new Error('Expected user environment operation');
+  }
+  await adapter.apply(environmentOperation);
+  await expect(resources.read('HKCU\\Environment')).resolves.toMatchObject({
+    MPX_CLAUDE_EXECUTABLE: 'C:\\tools\\claude.exe',
+    MPX_PI_EXECUTABLE: 'C:\\tools\\pi.exe',
+  });
   expect(
     operations.automatic
       .map((operation) => operation.id)

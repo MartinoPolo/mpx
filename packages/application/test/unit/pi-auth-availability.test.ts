@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MpxError } from '@mpx/core';
 import { PiAuthAvailabilityProbe } from '../../src/node/pi-auth-availability.js';
 
 describe('PiAuthAvailabilityProbe', () => {
@@ -51,6 +52,23 @@ describe('PiAuthAvailabilityProbe', () => {
     await expect(probe.verify('C:/accounts/work')).rejects.toMatchObject({
       code: 'ACCOUNT_AUTH_UNAVAILABLE',
     });
+  });
+
+  it('preserves trusted-executable resolution failures instead of reporting an OAuth failure', async () => {
+    const failure = new MpxError({
+      code: 'RUNTIME_PROJECTION_REQUIRED',
+      message: 'Trusted runtime input MPX_PI_EXECUTABLE is required.',
+    });
+    const probe = new PiAuthAvailabilityProbe({
+      resolveTrustedExecutable: async () => {
+        throw failure;
+      },
+      run: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+      cwd: 'C:/outside',
+      environment: {},
+    });
+
+    await expect(probe.verify('C:/accounts/work')).rejects.toBe(failure);
   });
 
   it('rejects exact-shaped auth output that is not ready', async () => {

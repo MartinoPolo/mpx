@@ -58,7 +58,10 @@ export class PiAuthAvailabilityProbe implements AccountAuthVerifier {
         maxOutputBytes: 16_384,
         shell: false,
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof MpxError) {
+        throw error;
+      }
       throw unavailable('Pi OAuth availability could not be verified.');
     }
     if (result.exitCode !== 0 || Buffer.byteLength(result.stdout) > 16_384) {

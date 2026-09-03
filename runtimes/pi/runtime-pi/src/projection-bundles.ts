@@ -1,4 +1,4 @@
-const productionBundleFiles = [
+export const productionBundleFiles = [
   {
     entry: 'production-subagents.ts',
     label: 'production subagent',

@@ -449,22 +449,30 @@ function requiredEnvironment(environment: NodeJS.ProcessEnv, name: string): stri
   }
   return value;
 }
-function absoluteRoots(environment: NodeJS.ProcessEnv): readonly string[] {
+async function absoluteRoots(environment: NodeJS.ProcessEnv): Promise<readonly string[]> {
   const roots = new Set<string>();
-  const include = (value: string | undefined): void => {
+  const include = async (value: string | undefined): Promise<void> => {
     if (!value) {
       return;
     }
     const trimmed = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-    if (path.win32.isAbsolute(trimmed) || path.posix.isAbsolute(trimmed)) {
-      roots.add(trimmed);
+    if (!path.win32.isAbsolute(trimmed) && !path.posix.isAbsolute(trimmed)) {
+      return;
+    }
+    roots.add(trimmed);
+    const resolved = await realpath(trimmed).catch(() => undefined);
+    if (resolved) {
+      roots.add(resolved);
     }
   };
-  for (const directory of (environment.PATH ?? environment.Path ?? '').split(path.delimiter)) {
-    include(directory);
+  const pathValues = new Set([environment.PATH, environment.Path]);
+  for (const value of pathValues) {
+    for (const directory of (value ?? '').split(path.delimiter)) {
+      await include(directory);
+    }
   }
-  include(environment.MPX_APPS);
-  include(path.dirname(process.execPath));
+  await include(environment.MPX_APPS);
+  await include(path.dirname(process.execPath));
   return [...roots];
 }
 async function inspectExecutable(file: string): Promise<FileInspection> {
@@ -517,8 +525,9 @@ export async function resolveTrustedRuntimeExecutable(input: {
   return locateTrustedExecutable({
     candidates: [candidate],
     projectRoot: input.cwd,
-    trustedRoots: absoluteRoots(input.environment),
+    trustedRoots: await absoluteRoots(input.environment),
     nodeExecutable: process.execPath,
+    platform: process.platform,
     ...(input.runtime === 'pi' ? { knownWrapper: 'pi-fnm' as const } : {}),
     inspect: inspectExecutable,
   });

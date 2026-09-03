@@ -388,6 +388,101 @@ describe('production private launch services', () => {
 });
 
 describe('Phase F launch execution', () => {
+  it('accepts repeated launch runtime arguments as separate launch-bound values', async () => {
+    const fixture = await launchFixture(),
+      io = captureIo(),
+      execution = verifiedExecution();
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          fixture.cwd,
+          'launch',
+          'pi',
+          '--identity',
+          'work',
+          '--executor',
+          'host',
+          '--workspace',
+          'direct',
+          '--reason',
+          'Runtime argument test',
+          '--approve-host',
+          '--runtime-arg',
+          '--no-session',
+          '--runtime-arg',
+          '--print',
+          '--runtime-arg',
+          'Reply with only: verified',
+        ],
+        io,
+        {
+          env: fixture.env,
+          catalogRoot: fixture.catalogRoot,
+          ...execution.context,
+          launchExecutorAdapters: execution.context.launchExecutorAdapters!.map((adapter) => ({
+            ...adapter,
+            name: 'host' as const,
+          })),
+        },
+      ),
+    ).toBe(0);
+    expect(execution.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        descriptor: expect.objectContaining({
+          runtimeArgs: ['--no-session', '--print', 'Reply with only: verified'],
+        }),
+      }),
+    );
+  });
+
+  it('rejects --runtime-arg outside the launch command', async () => {
+    const fixture = await launchFixture(),
+      io = captureIo();
+    expect(
+      await run(['--json', '--cwd', fixture.cwd, 'config', '--runtime-arg', '--print'], io, {
+        env: fixture.env,
+        catalogRoot: fixture.catalogRoot,
+      }),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'RUNTIME_ARGS_SCOPE_INVALID' },
+    });
+  });
+
+  it.each(['explain', 'sbx-plan-export'] as const)(
+    'rejects --runtime-arg for launch %s',
+    async (operation) => {
+      const fixture = await launchFixture(),
+        io = captureIo();
+      expect(
+        await run(
+          [
+            '--json',
+            '--cwd',
+            fixture.cwd,
+            'launch',
+            operation,
+            '--runtime',
+            'pi',
+            '--identity',
+            'work',
+            '--runtime-arg',
+            '--print',
+          ],
+          io,
+          { env: fixture.env, catalogRoot: fixture.catalogRoot },
+        ),
+      ).toBe(1);
+      expect(JSON.parse(io.out[0]!)).toMatchObject({
+        ok: false,
+        error: { code: 'RUNTIME_ARGS_SCOPE_INVALID' },
+      });
+    },
+  );
+
   it.each([
     ['pi', 'MPX_PI_EXECUTABLE'],
     ['claude', 'MPX_CLAUDE_EXECUTABLE'],
@@ -809,7 +904,7 @@ describe('Phase F launch execution', () => {
   );
 
   it.each(['pi', 'claude'] as const)(
-    'runs actual CLI %s launch through the proof-bound production standalone-sbx lifecycle',
+    'handles actual CLI %s launch at proof-bound production standalone-sbx admission',
     async (runtime) => {
       const fixture = await launchFixture(),
         io = captureIo(),
@@ -881,7 +976,11 @@ describe('Phase F launch execution', () => {
       });
       await writeFile(proofFile, JSON.stringify(proof));
       const calls: string[][] = [],
-        projectionDirectory = path.join(fixture.env.APPDATA!, 'immutable', runtime);
+        projectionDirectory = path.join(fixture.env.APPDATA!, 'immutable', runtime),
+        runtimeEntry = path.join(fixture.env.APPDATA!, 'fake-pi-runtime.mjs');
+      if (runtime === 'pi') {
+        await writeFile(runtimeEntry, 'process.exitCode = 0;\n');
+      }
       const builder = async (
         input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
       ) => {
@@ -902,6 +1001,10 @@ describe('Phase F launch execution', () => {
             : { pluginDirectory: projectionDirectory }),
         };
       };
+      const launchExecutableResolver = vi.fn(async () => ({
+        executable: process.execPath,
+        argvPrefix: runtime === 'pi' ? [runtimeEntry] : [],
+      }));
       const context = {
         env: {
           ...fixture.env,
@@ -956,7 +1059,7 @@ describe('Phase F launch execution', () => {
             return { exitCode: 0, stdout: '', stderr: '', truncated: false };
           },
         },
-        launchExecutableResolver: async () => ({ executable: process.execPath, argvPrefix: [] }),
+        launchExecutableResolver,
         launchProjectionBuilder: builder,
         launchProjectionValidator: async () => undefined,
         launchRoutes: {
@@ -974,44 +1077,43 @@ describe('Phase F launch execution', () => {
             }
           : {}),
       } as never;
-      expect(
-        await run(['--cwd', fixture.cwd, 'launch', runtime, '--identity', 'work'], io, context),
-      ).toBe(0);
-      expect(calls.map((call) => call[0])).toEqual(
-        runtime === 'claude'
-          ? Array(13).fill('--app-name')
-          : [
-              'policy',
-              'create',
-              'policy',
-              'policy',
-              'policy',
-              'policy',
-              'policy',
-              'policy',
-              'policy',
-              'exec',
-              'run',
-              'rm',
-            ],
+      const exitCode = await run(
+        ['--json', '--cwd', fixture.cwd, 'launch', runtime, '--identity', 'work'],
+        io,
+        context,
       );
-      if (runtime === 'claude') {
-        expect(calls.map((call) => call[2])).toEqual([
-          'policy',
-          'create',
-          'policy',
-          'policy',
-          'policy',
-          'policy',
-          'policy',
-          'policy',
-          'policy',
-          'exec',
-          'exec',
-          'exec',
-          'rm',
-        ]);
+      if (runtime === 'pi') {
+        expect(exitCode).toBe(1);
+        expect(JSON.parse(io.out[0]!)).toMatchObject({
+          ok: false,
+          error: {
+            code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
+            details: { executor: 'docker', runtime: 'pi' },
+          },
+        });
+        expect(launchExecutableResolver).not.toHaveBeenCalled();
+        expect(calls).toEqual([]);
+        expect(calls.flat()).not.toContain('host');
+        return;
       }
+      expect(exitCode).toBe(0);
+      expect(launchExecutableResolver).toHaveBeenCalledOnce();
+      expect(calls.map((call) => call[0])).toEqual(Array(13).fill('--app-name'));
+      expect(calls.map((call) => call[2])).toEqual([
+        'policy',
+        'create',
+        'policy',
+        'policy',
+        'policy',
+        'policy',
+        'policy',
+        'policy',
+        'policy',
+        'exec',
+        'exec',
+        'exec',
+        'rm',
+      ]);
       expect(calls.flat()).not.toContain('host');
     },
   );
@@ -1365,6 +1467,110 @@ describe('Phase F launch execution', () => {
     });
   });
 
+  it('executes an explicitly approved host launch noninteractively without either TTY prompt', async () => {
+    const fixture = await launchFixture(),
+      io = captureIo(),
+      confirm = vi.fn(async () => {
+        throw new Error('TTY confirmation must not run');
+      }),
+      execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }));
+    const host: ExecutorAdapter = {
+      name: 'host',
+      verify: async () => ({
+        status: 'verified',
+        verifier: 'fake-host',
+        evidenceDigest: 'c'.repeat(64),
+      }),
+      execute,
+    };
+
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          fixture.cwd,
+          'launch',
+          'pi',
+          '--identity',
+          'work',
+          '--executor',
+          'host',
+          '--workspace',
+          'direct',
+          '--reason',
+          'Suffixed Pi launcher approval',
+          '--approve-host',
+        ],
+        io,
+        {
+          env: fixture.env,
+          catalogRoot: fixture.catalogRoot,
+          launchExecutorAdapters: [host],
+          launchRuntimeAdapters: [
+            {
+              runtime: 'pi',
+              prepare: async () => ({ executable: 'C:/trusted/pi.exe', argv: [], environment: {} }),
+            },
+          ],
+          launchRoutes: { materialize: async (descriptor) => materializeRoutes(descriptor) },
+          launchTty: { direct: false, confirm },
+        },
+      ),
+    ).toBe(0);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('rejects noninteractive host approval outside an explicit host launch', async () => {
+    const fixture = await launchFixture(),
+      io = captureIo();
+
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          fixture.cwd,
+          'launch',
+          'pi',
+          '--identity',
+          'work',
+          '--executor',
+          'docker',
+          '--reason',
+          'Not a host launch',
+          '--approve-host',
+        ],
+        io,
+        { env: fixture.env, catalogRoot: fixture.catalogRoot },
+      ),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'HOST_APPROVAL_SCOPE_INVALID' },
+    });
+  });
+
+  it.each([
+    ['config', 'validate'],
+    ['launch', 'current'],
+  ])('rejects --approve-host for %s %s', async (group, action) => {
+    const fixture = await launchFixture(),
+      io = captureIo();
+
+    expect(
+      await run(['--json', '--cwd', fixture.cwd, group, action, '--approve-host'], io, {
+        env: fixture.env,
+        catalogRoot: fixture.catalogRoot,
+      }),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'HOST_APPROVAL_SCOPE_INVALID' },
+    });
+  });
+
   it('executes explicit host mode only through two sanitized direct-TTY approvals and a trusted runtime plan', async () => {
     const fixture = await launchFixture(),
       io = captureIo(),
@@ -1507,9 +1713,27 @@ describe('Phase F launch execution', () => {
       const validator = vi.fn(async () => undefined);
       const artifactRevalidator = vi.fn(revalidateRuntimeArtifact);
       const contentRoot = await mkdtemp(path.join(tmpdir(), 'mpx-publisher-content-'));
-      const catalogRoot = path.join(contentRoot, 'catalog');
+      const catalogRoot = path.join(contentRoot, 'content', 'skills');
       await cp(fixture.catalogRoot, catalogRoot, { recursive: true });
-      await mkdir(path.join(contentRoot, 'agents'));
+      await mkdir(path.join(contentRoot, 'content', 'agents'), { recursive: true });
+      await cp(
+        path.resolve('runtimes/pi/runtime-pi/projection'),
+        path.join(contentRoot, 'runtimes', 'pi', 'runtime-pi', 'projection'),
+        { recursive: true },
+      );
+      const vendorDirectory = path.join(
+        contentRoot,
+        'runtimes',
+        'pi',
+        'runtime-pi',
+        'vendor',
+        'subagents',
+      );
+      await mkdir(vendorDirectory, { recursive: true });
+      await cp(
+        path.resolve('runtimes/pi/runtime-pi/vendor/subagents/VENDORED.md'),
+        path.join(vendorDirectory, 'VENDORED.md'),
+      );
 
       expect(
         await run(['--cwd', fixture.cwd, 'launch', runtime, '--identity', 'work'], io, {
@@ -2022,7 +2246,7 @@ describe('Phase F launch execution', () => {
     });
   });
 
-  it('uses a trusted absolute Pi executable with status before projection and process work', async () => {
+  it('uses a trusted absolute Pi executable with built-in route consumption and status before projection and process work', async () => {
     const fixture = await launchFixture(),
       io = captureIo();
     const effects: string[] = [];
@@ -2105,12 +2329,11 @@ describe('Phase F launch execution', () => {
       }),
     ).toBe(0);
 
-    expect(effects[0]).toBe('routes');
-    expect(effects[1]).toBe('status');
-    expect(effects[2]).toMatch(/^build:/u);
-    expect(effects.slice(3)).toEqual(['validate', 'process']);
+    expect(effects[0]).toBe('status');
+    expect(effects[1]).toMatch(/^build:/u);
+    expect(effects.slice(2)).toEqual(['validate', 'process']);
     expect(statusProvider.snapshot).toHaveBeenCalledOnce();
-    expect(launchRoutes.materialize).toHaveBeenCalledOnce();
+    expect(launchRoutes.materialize).not.toHaveBeenCalled();
     expect(builder).toHaveBeenCalledOnce();
     expect(validator).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledOnce();
@@ -2132,6 +2355,7 @@ describe('Phase F launch execution', () => {
       io = captureIo();
     const builder = vi.fn();
     const execute = vi.fn();
+    const prepare = vi.fn<RuntimeAdapter['prepare']>();
     const executor: ExecutorAdapter = {
       name: 'docker',
       verify: async () => ({
@@ -2147,6 +2371,7 @@ describe('Phase F launch execution', () => {
         env: { ...fixture.env, MPX_PI_EXECUTABLE: 'C:/tools/pi.exe' },
         catalogRoot: fixture.catalogRoot,
         launchExecutorAdapters: [executor],
+        launchRuntimeAdapters: [{ runtime: 'pi', prepare }],
         launchProjectionBuilder: builder,
       }),
     ).toBe(1);

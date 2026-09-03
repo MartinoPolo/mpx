@@ -20,14 +20,14 @@ const authority = (name: string): ToolAuthorityV1 => ({
   timeout: { maxMs: 1000 },
   cache: { mode: 'disabled', maxBytes: 4096 },
 });
-function capability(identity: 'personal' | 'work') {
+function capability(identity: 'personal' | 'work', executor: 'docker' | 'host' = 'docker') {
   return createRuntimeCapabilityManifestV1({
     runtime: 'pi',
     launchKey: sha(identity === 'personal' ? 'a' : 'c'),
     identity: { name: identity, domain: identity, nativeRuntimeRootDigest: sha('b') },
     binding: { projectId: 'app', repositoryId: 'repo', contentScope: identity },
-    executor: 'docker',
-    tools: PHASE_F2_PI_ACTIVE_TOOLS.map(authority),
+    executor,
+    tools: PHASE_F2_PI_ACTIVE_TOOLS.map((name) => ({ ...authority(name), executors: [executor] })),
     routes: [],
     resources: [],
     mounts: [],
@@ -83,6 +83,25 @@ it.each(['personal', 'work'] as const)(
     expect(pi.registerTool).not.toHaveBeenCalled();
   },
 );
+
+it('preserves native Pi tools only for an explicitly approved host launch', () => {
+  const manifest = capability('personal', 'host'),
+    pi = piControl();
+  expect(
+    activatePiProductionRuntime({
+      pi,
+      capability: manifest,
+      launch: {
+        launchKey: manifest.launchKey,
+        worktreeRoot: 'C:/repo',
+        assignedPorts: [],
+        executor: 'host',
+      },
+      adapters: { mcpRoutes: {}, providers: [], hostApproved: true },
+    }),
+  ).toMatchObject({ mode: 'approved-host-compatibility', hostFallback: true });
+  expect(pi.activeModelTools()).toEqual(['read', 'bash', 'native-host']);
+});
 
 it('fails closed when launch authority or the remote replacement adapter is absent', () => {
   const manifest = capability('personal'),

@@ -1,12 +1,19 @@
 import path from 'node:path';
 import { MpxError } from '@mpx/core';
-import {
-  deterministicTerminalProfileGuid,
-  type ManagedLauncherSpec,
-  type OwnedResourceSpec,
-} from '@mpx/windows';
+import { type ManagedLauncherSpec, type OwnedResourceSpec } from '@mpx/windows';
 
 const SHA = /^[a-f0-9]{64}$/u;
+const PUBLISHED_MPX_PATHS = [
+  'MPX_APPS',
+  'MPX_PROJECTS',
+  'MPX_WORK',
+  'MPX_CLONED',
+  'MPX_ONEDRIVE',
+  'MPX_AI_GENERATED',
+  'MPX_OBSIDIAN_VAULT',
+  'MPX_CLAUDE_EXECUTABLE',
+  'MPX_PI_EXECUTABLE',
+] as const;
 function fail(code: string, message: string): never {
   throw new MpxError({ code, message });
 }
@@ -20,41 +27,40 @@ function required(environment: NodeJS.ProcessEnv, name: string): string {
 
 export function buildManagedLauncherBody(shell: 'bash' | 'powershell'): string {
   if (shell === 'bash') {
-    return String.raw`cc() { mpx launch claude --identity personal "$@"; }
-ccw() { mpx launch claude --identity work "$@"; }
-pi() { mpx launch pi --identity personal "$@"; }
-piw() { mpx launch pi --identity work "$@"; }
+    return String.raw`mpx() { command mpx.cmd "$@"; }
+cc-mpx() { mpx launch claude --identity personal --executor host --workspace direct --reason 'User-approved native Claude compatibility' --approve-host "$@"; }
+ccw-mpx() { mpx launch claude --identity work --executor host --workspace direct --reason 'User-approved native Claude compatibility' --approve-host "$@"; }
+pi-mpx() { mpx launch pi --identity personal --executor host --workspace direct --reason 'User-approved native Pi compatibility' --approve-host "$@"; }
+piw-mpx() { mpx launch pi --identity work --executor host --workspace direct --reason 'User-approved native Pi compatibility' --approve-host "$@"; }
 _mpx_direct_tty_reason() {
   if [[ ! -t 0 || ! -t 1 ]]; then printf '%s\n' 'MPX direct launch requires a TTY.' >&2; return 2; fi
   if [[ -z "\${MPX_DIRECT_REASON:-}" ]]; then printf '%s\n' 'Set MPX_DIRECT_REASON for direct host launch.' >&2; return 2; fi
 }
-ccd() { _mpx_direct_tty_reason || return; mpx launch claude --identity personal --executor host --reason "$MPX_DIRECT_REASON" "$@"; }
-ccwd() { _mpx_direct_tty_reason || return; mpx launch claude --identity work --executor host --reason "$MPX_DIRECT_REASON" "$@"; }
+ccd-mpx() { _mpx_direct_tty_reason || return; mpx launch claude --identity personal --executor host --reason "$MPX_DIRECT_REASON" --approve-host "$@"; }
+ccwd-mpx() { _mpx_direct_tty_reason || return; mpx launch claude --identity work --executor host --reason "$MPX_DIRECT_REASON" --approve-host "$@"; }
 `;
   }
-  return String.raw`function cc { & mpx launch claude --identity personal @args }
-function ccw { & mpx launch claude --identity work @args }
-function pi { & mpx launch pi --identity personal @args }
-function piw { & mpx launch pi --identity work @args }
+  return String.raw`function cc-mpx { & mpx launch claude --identity personal --executor host --workspace direct --reason 'User-approved native Claude compatibility' --approve-host @args }
+function ccw-mpx { & mpx launch claude --identity work --executor host --workspace direct --reason 'User-approved native Claude compatibility' --approve-host @args }
+function pi-mpx { & mpx launch pi --identity personal --executor host --workspace direct --reason 'User-approved native Pi compatibility' --approve-host @args }
+function piw-mpx { & mpx launch pi --identity work --executor host --workspace direct --reason 'User-approved native Pi compatibility' --approve-host @args }
 function Test-MpxDirectTtyReason {
   if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { throw 'MPX direct launch requires a TTY.' }
   if ([String]::IsNullOrWhiteSpace($env:MPX_DIRECT_REASON)) { throw 'Set MPX_DIRECT_REASON for direct host launch.' }
 }
-function ccd { Test-MpxDirectTtyReason; & mpx launch claude --identity personal --executor host --reason $env:MPX_DIRECT_REASON @args }
-function ccwd { Test-MpxDirectTtyReason; & mpx launch claude --identity work --executor host --reason $env:MPX_DIRECT_REASON @args }
+function ccd-mpx { Test-MpxDirectTtyReason; & mpx launch claude --identity personal --executor host --reason $env:MPX_DIRECT_REASON --approve-host @args }
+function ccwd-mpx { Test-MpxDirectTtyReason; & mpx launch claude --identity work --executor host --reason $env:MPX_DIRECT_REASON --approve-host @args }
 `;
 }
 
 export function buildStableSelectorBody(): string {
-  return '@echo off\r\nsetlocal\r\nif not defined LOCALAPPDATA exit /b 2\r\nif not defined MPX_APPS exit /b 2\r\nif not defined MPX_NODE_EXECUTABLE exit /b 2\r\nset /p "MPX_RELEASE_KEY="<"%LOCALAPPDATA%\\mpx\\active-release"\r\nif not defined MPX_RELEASE_KEY exit /b 2\r\n"%MPX_NODE_EXECUTABLE%" "%MPX_APPS%\\mpx\\releases\\%MPX_RELEASE_KEY%\\bin\\mpx.mjs" %*\r\nexit /b %ERRORLEVEL%\r\n';
+  return '@echo off\r\nsetlocal\r\nif not defined LOCALAPPDATA exit /b 2\r\nfor %%V in (MPX_APPS MPX_PROJECTS MPX_WORK MPX_CLONED MPX_ONEDRIVE MPX_AI_GENERATED MPX_OBSIDIAN_VAULT MPX_NODE_EXECUTABLE MPX_PI_EXECUTABLE MPX_CLAUDE_EXECUTABLE) do (\r\n  if not defined %%V for /f "tokens=2,*" %%A in (\'reg query "HKCU\\Environment" /v "%%V" 2^>nul\') do set "%%V=%%B"\r\n)\r\nif not defined MPX_APPS exit /b 2\r\nif not defined MPX_NODE_EXECUTABLE exit /b 2\r\nset /p "MPX_RELEASE_KEY="<"%LOCALAPPDATA%\\mpx\\active-release"\r\nif not defined MPX_RELEASE_KEY exit /b 2\r\n"%MPX_NODE_EXECUTABLE%" "%MPX_APPS%\\mpx\\releases\\%MPX_RELEASE_KEY%\\bin\\mpx.mjs" %*\r\nexit /b %ERRORLEVEL%\r\n';
 }
 
 export interface WindowsIntegrationSpecs {
   readonly launchers: readonly ManagedLauncherSpec[];
-  readonly terminal: OwnedResourceSpec;
   readonly environment: OwnedResourceSpec;
   readonly shortcuts: readonly OwnedResourceSpec[];
-  readonly task: OwnedResourceSpec;
 }
 export function buildWindowsIntegrationSpecs(
   environment: NodeJS.ProcessEnv,
@@ -66,21 +72,22 @@ export function buildWindowsIntegrationSpecs(
   }
   const apps = required(environment, 'MPX_APPS'),
     appData = required(environment, 'APPDATA'),
-    localAppData = required(environment, 'LOCALAPPDATA'),
     userProfile = required(environment, 'USERPROFILE');
-  const release = path.win32.join(apps, 'mpx', 'releases', releaseKey);
+  required(environment, 'LOCALAPPDATA');
   const selector = path.win32.join(apps, 'mpx', 'bin', 'mpx.cmd');
-  const cli = path.win32.join(release, 'bin', 'mpx.mjs');
-  const node = environment.MPX_NODE_EXECUTABLE ?? process.execPath;
-  if (!path.win32.isAbsolute(node)) {
-    fail('INSTALL_NODE_UNAVAILABLE', 'Scheduled capture requires an absolute Node executable.');
-  }
+  const node = required(environment, 'MPX_NODE_EXECUTABLE');
   const roots = Object.fromEntries(
-    Object.entries(environment).filter(
-      ([key, value]) => key.startsWith('MPX_') && typeof value === 'string',
-    ),
+    PUBLISHED_MPX_PATHS.flatMap((key) => {
+      const value = environment[key];
+      if (value === undefined) {
+        return [];
+      }
+      if (!path.win32.isAbsolute(value)) {
+        fail('INSTALL_ROOT_UNAVAILABLE', `${key} must be an absolute machine root.`);
+      }
+      return [[key, path.win32.normalize(value)]];
+    }),
   );
-  const guid = deterministicTerminalProfileGuid('MPX');
   const shortcut = (target: string): OwnedResourceSpec => ({
     kind: 'shortcut',
     target,
@@ -105,23 +112,6 @@ export function buildWindowsIntegrationSpecs(
         body: buildManagedLauncherBody('powershell'),
       },
     ],
-    terminal: {
-      kind: 'terminal-profile',
-      target: path.win32.join(
-        localAppData,
-        'Packages',
-        'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
-        'LocalState',
-        'settings.json',
-      ),
-      ownershipKey: guid,
-      desired: {
-        guid,
-        name: 'MPX',
-        commandline: { executable: selector, argv: ['shell'] },
-        startingDirectory: userProfile,
-      },
-    },
     environment: {
       kind: 'user-environment',
       target: 'HKCU\\Environment',
@@ -140,26 +130,5 @@ export function buildWindowsIntegrationSpecs(
         path.win32.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'MPX.lnk'),
       ),
     ],
-    task: {
-      kind: 'scheduled-task',
-      target: '\\MPX\\Session Capture',
-      ownershipKey: 'mpx',
-      desired: {
-        owner: 'mpx',
-        executable: node,
-        argv: [cli, 'session', 'reconcile', '--capture', 'scheduled', '--json'],
-        principal: currentUser,
-        logonType: 'InteractiveToken',
-        runLevel: 'LeastPrivilege',
-        trigger: { cadenceMinutes: 10 },
-        settings: {
-          startWhenAvailable: true,
-          multipleInstances: 'IgnoreNew',
-          executionTimeLimitSeconds: 300,
-          hidden: false,
-          enabled: true,
-        },
-      },
-    },
   };
 }

@@ -139,6 +139,103 @@ function sourceOverridePlugin(sourceOverrides) {
   };
 }
 
+async function piProjectionBundleFiles(sourceOverrides) {
+  const definitionFile = path.join(
+    root,
+    'runtimes',
+    'pi',
+    'runtime-pi',
+    'src',
+    'projection-bundles.ts',
+  );
+  const result = await build({
+    entryPoints: [definitionFile],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+    write: false,
+    legalComments: 'none',
+    sourcemap: false,
+    plugins: [sourceOverridePlugin(sourceOverrides)],
+  });
+  const output = result.outputFiles[0];
+  if (!output) {
+    throw new Error('Pi projection bundle definitions were not emitted');
+  }
+  const loaded = await import(
+    `data:text/javascript;base64,${Buffer.from(output.contents).toString('base64')}`
+  );
+  if (!Array.isArray(loaded.productionBundleFiles) || loaded.productionBundleFiles.length === 0) {
+    throw new Error('Pi projection bundle definitions are invalid');
+  }
+  return loaded.productionBundleFiles;
+}
+
+async function embeddedPiProjectionBundleModule(sourceOverrides, workspacePlugin) {
+  const packageRoot = path.join(root, 'runtimes', 'pi', 'runtime-pi');
+  const definitions = await piProjectionBundleFiles(sourceOverrides);
+  const sources = await Promise.all(
+    definitions.map(async ({ entry, label }) => {
+      if (typeof entry !== 'string' || !entry.endsWith('.ts') || typeof label !== 'string') {
+        throw new Error('Pi projection bundle definition is invalid');
+      }
+      const result = await build({
+        absWorkingDir: packageRoot,
+        entryPoints: [path.join(packageRoot, 'src', entry)],
+        bundle: true,
+        platform: 'node',
+        format: 'esm',
+        target: 'node22',
+        write: false,
+        legalComments: 'none',
+        sourcemap: false,
+        plugins: [sourceOverridePlugin(sourceOverrides), workspacePlugin],
+      });
+      const output = result.outputFiles[0];
+      if (!output) {
+        throw new Error(`Pi ${label} bundle was not emitted`);
+      }
+      return [entry, output.text];
+    }),
+  );
+  return [
+    `const productionBundles = new Map(${JSON.stringify(sources)});`,
+    'export async function bundledSource(entry, label) {',
+    '  const source = productionBundles.get(entry);',
+    '  if (source === undefined) throw new Error(`Pi ${label} bundle is not embedded`);',
+    '  return source;',
+    '}',
+  ].join('\n');
+}
+
+function embeddedPiProjectionBundlePlugin(sourceOverrides, workspacePlugin) {
+  const sourceFile = path.join(
+    root,
+    'runtimes',
+    'pi',
+    'runtime-pi',
+    'src',
+    'projection-bundle-source.ts',
+  );
+  let generated;
+  return {
+    name: 'embedded-pi-projection-bundles',
+    setup(buildApi) {
+      buildApi.onResolve({ filter: /^\.\/projection-bundle-source\.js$/ }, (args) => {
+        const resolved = path.resolve(args.resolveDir, args.path).replace(/\.js$/u, '.ts');
+        return resolved === sourceFile
+          ? { path: 'pi-projection-bundle-source', namespace: 'mpx-embedded' }
+          : undefined;
+      });
+      buildApi.onLoad({ filter: /.*/, namespace: 'mpx-embedded' }, async () => {
+        generated ??= embeddedPiProjectionBundleModule(sourceOverrides, workspacePlugin);
+        return { contents: await generated, loader: 'js' };
+      });
+    },
+  };
+}
+
 async function canonicalSourceDigest(sourceOverrides) {
   const hash = createHash('sha256');
   const names = [];
@@ -186,7 +283,12 @@ export async function buildBundleBytes(options = {}) {
           banner: {
             js: `${bundleOptions.banner.js} /* canonical-source-sha256:${sourceDigest} */`,
           },
-          plugins: [sourceOverridePlugin(sourceOverrides), workspacePlugin, inlineConfigSchemas],
+          plugins: [
+            sourceOverridePlugin(sourceOverrides),
+            embeddedPiProjectionBundlePlugin(sourceOverrides, workspacePlugin),
+            workspacePlugin,
+            inlineConfigSchemas,
+          ],
           entryPoints: [entryPoint],
           write: false,
         });

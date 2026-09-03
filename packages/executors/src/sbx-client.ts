@@ -123,17 +123,22 @@ export interface SbxDaemonStatus {
   socket: string;
   clientVersion?: string;
   daemonVersion?: string;
+  logs?: string;
 }
 export function parseSbxDaemonStatus(text: string): SbxDaemonStatus {
   const item = json(text, 'sbx daemon status');
-  exact(item, ['status', 'socket', 'clientVersion', 'daemonVersion'], 'sbx daemon status');
+  exact(item, ['status', 'socket', 'clientVersion', 'daemonVersion', 'logs'], 'sbx daemon status');
   if (
     !['running', 'stopped', 'unreachable'].includes(String(item.status)) ||
     typeof item.socket !== 'string' ||
     item.socket.length > 512 ||
     /\r|\n|\0/u.test(item.socket) ||
     (item.clientVersion !== undefined && typeof item.clientVersion !== 'string') ||
-    (item.daemonVersion !== undefined && typeof item.daemonVersion !== 'string')
+    (item.daemonVersion !== undefined && typeof item.daemonVersion !== 'string') ||
+    (item.logs !== undefined &&
+      (typeof item.logs !== 'string' ||
+        item.logs.length > 512 ||
+        /[\u0000-\u001f\u007f]/u.test(item.logs)))
   ) {
     throw new ExecutionError('SBX_JSON_INVALID', 'sbx daemon status JSON is malformed.');
   }

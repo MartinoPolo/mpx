@@ -12,6 +12,7 @@ import {
 } from '@mpx/core';
 import type { JsonValue } from '@mpx/core';
 import path from 'node:path';
+import { canonicalRuntimeArgs } from './runtime-args.js';
 import type {
   EffectiveExecutor,
   LaunchDescriptor,
@@ -562,6 +563,9 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
     schemaVersion: 2 as const,
     nativeRuntimeRootDigest,
     runtime: selection.runtime,
+    ...(input.runtimeArgs && input.runtimeArgs.length > 0
+      ? { runtimeArgs: canonicalRuntimeArgs(input.runtimeArgs) }
+      : {}),
     binding: {
       projectId: input.projectId ?? null,
       repositoryId: input.repositoryId ?? input.projectId ?? 'unbound',

@@ -80,7 +80,10 @@ function factory(overrides: Record<string, unknown> = {}) {
   });
 }
 
-async function resolvedLaunch(service: ReturnType<typeof factory>) {
+async function resolvedLaunch(
+  service: ReturnType<typeof factory>,
+  overrides: Record<string, unknown> = {},
+) {
   const prepared = await service.prepare({
     operation: 'launch',
     cwd: process.cwd(),
@@ -88,11 +91,107 @@ async function resolvedLaunch(service: ReturnType<typeof factory>) {
     userConfig: user,
     runtime: 'pi',
     identity: 'work',
+    ...overrides,
   });
-  return service.resolve(prepared);
+  return service.resolve(
+    prepared,
+    typeof overrides.reason === 'string' ? { reason: overrides.reason } : {},
+  );
 }
 
 describe('Node launch production factory', () => {
+  it('uses explicit noninteractive host approval without consulting a TTY', async () => {
+    executionSpy.mockClear();
+    const confirm = vi.fn(async () => {
+      throw new Error('TTY confirmation must not run');
+    });
+    const host = {
+      name: 'host' as const,
+      verify: async () => ({
+        status: 'verified' as const,
+        verifier: 'test-host',
+        evidenceDigest: 'a'.repeat(64),
+      }),
+      execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
+    };
+    const service = factory({
+      context: { launchExecutorAdapters: [host] },
+      interaction: {
+        json: true,
+        reason: 'Suffixed Pi launcher approval',
+        approveHost: true,
+        tty: { direct: false, confirm },
+      },
+    });
+
+    const resolved = await resolvedLaunch(service, {
+      executor: 'host',
+      workspace: 'direct',
+      reason: 'Suffixed Pi launcher approval',
+    });
+    await service.execute(resolved);
+
+    expect(confirm).not.toHaveBeenCalled();
+    const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
+    expect(execution.descriptor.elevationAudit).toMatchObject({
+      elevated: true,
+      reason: 'Suffixed Pi launcher approval',
+    });
+    expect(execution.descriptor.elevationAudit.approvalsDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(execution).toMatchObject({ approveHost: true });
+  });
+
+  it('marks Claude Docker adapters created by production admission with trusted provenance', async () => {
+    executionSpy.mockClear();
+    sbxAdapterFactory.mockReset();
+    sbxAdapterFactory.mockResolvedValue(verifiedDocker);
+    const service = factory({
+      context: {},
+      status: () => ({
+        snapshot: async () => ({
+          schemaVersion: 1,
+          project: { id: 'sample/app', cwd: process.cwd() },
+          worktree: { id: null, path: null, role: null, branch: null },
+          portResolution: 'missing',
+          services: [],
+          diagnostics: [],
+        }),
+      }),
+    });
+
+    await service.execute(await resolvedLaunch(service, { runtime: 'claude' }));
+
+    const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
+    expect(execution.context.launchExecutorAdapterSource).toBe('production-admission');
+  });
+
+  it('denies production Pi Docker admission when its sandbox adapter has no remote worker client', async () => {
+    executionSpy.mockClear();
+    sbxAdapterFactory.mockReset();
+    const verify = vi.fn(verifiedDocker.verify);
+    sbxAdapterFactory.mockResolvedValue({ ...verifiedDocker, verify });
+    const service = factory({
+      context: {},
+      status: () => ({
+        snapshot: async () => ({
+          schemaVersion: 1,
+          project: { id: 'sample/app', cwd: process.cwd() },
+          worktree: { id: null, path: null, role: null, branch: null },
+          portResolution: 'missing',
+          services: [],
+          diagnostics: [],
+        }),
+      }),
+    });
+
+    await expect(resolvedLaunch(service)).rejects.toMatchObject({
+      code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
+      details: { executor: 'docker', runtime: 'pi' },
+    });
+    expect(verify).not.toHaveBeenCalled();
+    expect(executionSpy).not.toHaveBeenCalled();
+  });
+
   it('performs initial Pi verification and binds exact pre-child reverification', async () => {
     executionSpy.mockClear();
     const verifyAttestation = vi.fn().mockResolvedValue({
@@ -135,6 +234,7 @@ describe('Node launch production factory', () => {
       const launch = ++adapterNumber;
       return {
         name: 'docker',
+        remoteToolClient: {},
         verify: async () => ({
           status: 'verified',
           verifier: `adapter-${launch}`,

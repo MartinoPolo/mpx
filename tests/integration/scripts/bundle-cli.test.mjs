@@ -17,6 +17,9 @@ describe('generated CLI bundle validation', () => {
     for (const [name, bytes] of first) {
       expect(bytes.equals(second.get(name))).toBe(true);
     }
+    const cli = first.get('bin/mpx.mjs').toString('utf8');
+    expect(cli).not.toContain('The package "esbuild" cannot be bundled');
+    expect(cli).not.toContain('var ESBUILD_VERSION');
     const after = await Promise.all(tracked.map((name) => readFile(path.join(root, name))));
     expect(after.map(sha)).toEqual(before.map(sha));
   }, 30_000);

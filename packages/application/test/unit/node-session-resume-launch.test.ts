@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     return { exitCode: 0 };
   }),
   setResumeAction: vi.fn(),
+  workerClientAvailable: true,
   status: vi.fn(),
   resolveLaunch: vi.fn(
     async (input: { runtime: 'claude' | 'pi'; executor: 'docker' | 'host' }) => ({
@@ -36,6 +37,7 @@ vi.mock('../../src/node/sbx-execution.js', () => ({
       evidenceDigest: 'a'.repeat(64),
     }),
     execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
+    ...(mocks.workerClientAvailable ? { remoteToolClient: {} } : {}),
     setResumeAction: mocks.setResumeAction,
   })),
 }));
@@ -228,6 +230,42 @@ describe('Node session resume launch composition', () => {
     });
     await expect(service.prepare(plan('pi'), user)).rejects.toMatchObject({ code: expectedCode });
     expect(events).toEqual(['verify']);
+  });
+
+  it('fails closed before Pi Docker resume when no sandbox worker client exists', async () => {
+    const base = input();
+    mocks.execute.mockClear();
+    mocks.workerClientAvailable = false;
+    try {
+      await expect(
+        executeNodeSessionResumeLaunch(
+          {
+            ...base,
+            store: {
+              readNativeBinding: async () => ({
+                ref: 'binding',
+                runtime: 'pi',
+                identity: { name: 'work', domain: 'work' },
+                accountBindingRef: 'account',
+              }),
+            } as never,
+            context: {
+              sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
+              rootAttestationService: {
+                store: { list: async () => [] },
+                verify: async () => ({}),
+              } as never,
+              accountAuthVerifier: { verify: async () => undefined },
+            },
+          },
+          plan('pi'),
+          user,
+        ),
+      ).rejects.toMatchObject({ code: 'PI_SANDBOX_WORKER_UNAVAILABLE' });
+      expect(mocks.execute).not.toHaveBeenCalled();
+    } finally {
+      mocks.workerClientAvailable = true;
+    }
   });
 
   it('reverifies Pi once before discovery and once at the child boundary', async () => {

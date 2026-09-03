@@ -280,19 +280,65 @@ export class FakeRegistryStore extends FakeJsonResourceStore {}
 export class FakeTerminalStore extends FakeJsonResourceStore {}
 export class FakeShortcutStore extends FakeJsonResourceStore {}
 export class FakeScheduledTaskStore extends FakeJsonResourceStore {}
-function terminalProfiles(value: unknown): unknown[] | undefined {
+interface TerminalProfiles {
+  readonly root: Record<string, unknown>;
+  readonly list: unknown[];
+  withList(list: unknown[]): Record<string, unknown>;
+}
+function terminalProfileListIsSafe(list: unknown[]): boolean {
+  const guids = new Set<string>();
+  for (const profile of list) {
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+      return false;
+    }
+    const guid = (profile as { guid?: unknown }).guid;
+    if (guid !== undefined) {
+      if (typeof guid !== 'string' || !guid || guids.has(guid)) {
+        return false;
+      }
+      guids.add(guid);
+    }
+  }
+  return true;
+}
+function terminalProfiles(value: unknown): TerminalProfiles | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
-  const profiles = (value as { profiles?: unknown }).profiles;
-  return Array.isArray(profiles) ? profiles : undefined;
+  const root = value as Record<string, unknown>,
+    profiles = root.profiles;
+  if (Array.isArray(profiles) && terminalProfileListIsSafe(profiles)) {
+    return { root, list: profiles, withList: (list) => ({ ...root, profiles: list }) };
+  }
+  if (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) {
+    const modern = profiles as Record<string, unknown>;
+    if (
+      Array.isArray(modern.list) &&
+      terminalProfileListIsSafe(modern.list) &&
+      (modern.defaults === undefined ||
+        (modern.defaults !== null &&
+          typeof modern.defaults === 'object' &&
+          !Array.isArray(modern.defaults)))
+    ) {
+      return {
+        root,
+        list: modern.list,
+        withList: (list) => ({ ...root, profiles: { ...modern, list } }),
+      };
+    }
+  }
+  return undefined;
 }
 function terminalOwned(spec: OwnedResourceSpec, current: unknown): unknown | undefined {
-  return terminalProfiles(current)?.find(
-    (profile) =>
-      profile &&
-      typeof profile === 'object' &&
-      (profile as { guid?: unknown }).guid === spec.ownershipKey,
+  if (current === undefined) {
+    return undefined;
+  }
+  const profiles = terminalProfiles(current);
+  if (!profiles) {
+    fail('WINDOWS_FOREIGN_RESOURCE', 'Terminal settings have an unsupported shape.');
+  }
+  return profiles.list.find(
+    (profile) => (profile as { guid?: unknown }).guid === spec.ownershipKey,
   );
 }
 function environmentOwned(spec: OwnedResourceSpec, current: unknown): unknown | undefined {
@@ -309,7 +355,14 @@ function environmentOwned(spec: OwnedResourceSpec, current: unknown): unknown | 
   return Object.fromEntries(Object.keys(spec.desired).map((key) => [key, record[key]]));
 }
 function validateResource(spec: OwnedResourceSpec): void {
-  if (!spec.target || !spec.ownershipKey || !spec.desired || typeof spec.desired !== 'object') {
+  if (
+    !spec.target ||
+    !spec.ownershipKey ||
+    !spec.desired ||
+    typeof spec.desired !== 'object' ||
+    Array.isArray(spec.desired) ||
+    (spec.kind === 'terminal-profile' && spec.desired.guid !== spec.ownershipKey)
+  ) {
     fail('WINDOWS_RESOURCE_INVALID', 'System resource specification is invalid.');
   }
 }
@@ -393,10 +446,10 @@ export class OwnedJsonResourceAdapter {
         if (!profiles) {
           fail('WINDOWS_FOREIGN_RESOURCE', 'Terminal settings have an unsupported shape.');
         }
-        await this.store.write(plan.spec.target, {
-          ...(root as Record<string, unknown>),
-          profiles: [...profiles, clone(plan.spec.desired)],
-        });
+        await this.store.write(
+          plan.spec.target,
+          profiles.withList([...profiles.list, clone(plan.spec.desired)]),
+        );
       } else if (plan.spec.kind === 'user-environment') {
         const root = (await this.store.read(plan.spec.target)) ?? {};
         if (!root || typeof root !== 'object' || Array.isArray(root)) {
@@ -426,17 +479,18 @@ export class OwnedJsonResourceAdapter {
       );
     }
     if (receipt.spec.kind === 'terminal-profile') {
-      const root = (await this.store.read(receipt.spec.target)) as Record<string, unknown>,
-        profiles = terminalProfiles(root)!;
-      await this.store.write(receipt.spec.target, {
-        ...root,
-        profiles: profiles.filter(
-          (x) =>
-            x &&
-            typeof x === 'object' &&
-            (x as { guid?: unknown }).guid !== receipt.spec.ownershipKey,
+      const profiles = terminalProfiles(await this.store.read(receipt.spec.target))!;
+      await this.store.write(
+        receipt.spec.target,
+        profiles.withList(
+          profiles.list.filter(
+            (x) =>
+              x &&
+              typeof x === 'object' &&
+              (x as { guid?: unknown }).guid !== receipt.spec.ownershipKey,
+          ),
         ),
-      });
+      );
     } else if (receipt.spec.kind === 'user-environment') {
       const root = { ...((await this.store.read(receipt.spec.target)) as Record<string, unknown>) };
       for (const key of Object.keys(receipt.spec.desired)) {

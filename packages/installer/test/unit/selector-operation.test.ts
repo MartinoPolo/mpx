@@ -12,6 +12,7 @@ it('excludes the active-release selector from the reversible operation set', asy
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },

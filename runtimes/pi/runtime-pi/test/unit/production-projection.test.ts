@@ -660,7 +660,7 @@ describe('production Pi projection', () => {
       expect(normalizedTree.get(bundlePath), bundlePath).toEqual(completeTree.get(bundlePath));
     }
     expect(projectionContentDigest(completeTree, boundValues)).toBe(
-      '07954466ff4662ea8ef125793bb01c31cc0595d8ca5113bbae9c3e1482fa2c87',
+      '1229eff5b7414f7b3b68472293c654918f35ad189cf0fa0a963a341759a6d92a',
     );
   });
 

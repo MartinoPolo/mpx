@@ -146,9 +146,9 @@ export interface LaunchExecutionRequest {
 export interface LaunchExecutionDependencies {
   readonly composer: LaunchRuntimeComposer;
   readonly executorAdapters: readonly ExecutorAdapter[];
-  readonly runtimeAdapterMode?: 'composed' | 'injected';
+  readonly runtimeAdapterMode?: 'production' | 'injected';
   readonly runtimePreflight?: () => Promise<void>;
-  readonly routes: {
+  readonly routes?: {
     materialize(
       descriptor: LaunchDescriptor,
       projectRoot?: string,
@@ -156,6 +156,7 @@ export interface LaunchExecutionDependencies {
   };
   readonly audit?: LaunchAuditStore;
   readonly tty?: DirectTty;
+  readonly approveHost?: boolean;
   readonly expectedLaunchKey?: string;
   readonly lifecycle?: LaunchLifecyclePort;
   readonly sessionObservation?: RuntimeSessionObservationV1;
@@ -203,6 +204,7 @@ function deepFreeze<T>(value: T): T {
   }
   return value;
 }
+const EMPTY_MATERIALIZED_ROUTES: Readonly<Record<string, string>> = Object.freeze({});
 const CLAUDE_TOOLS = Object.freeze([
   'Agent',
   'Bash',
@@ -666,6 +668,12 @@ export class LaunchExecutionService {
       manifest = deepFreeze({ ...request.manifest }) as ResolvedManifest,
       artifact = deepFreeze({ ...request.artifact }) as RuntimeSkillArtifact;
     const runtimeContext = runtimeContextForLaunch(descriptor, manifest, artifact);
+    if (dependencies.approveHost && descriptor.executor.name !== 'host') {
+      throw new ExecutionError(
+        'HOST_APPROVAL_SCOPE_INVALID',
+        'Noninteractive host approval is valid only for an explicit host launch.',
+      );
+    }
     const adapter = dependencies.executorAdapters.find((a) => a.name === descriptor.executor.name);
     if (!adapter) {
       throw new ExecutionError(
@@ -736,7 +744,17 @@ export class LaunchExecutionService {
           : {}),
     });
     const executeWithLifecycle = async () => {
-      const routes = await dependencies.routes.materialize(descriptor, request.cwd);
+      const productionRuntimeAdapters = dependencies.runtimeAdapterMode === 'production';
+      const routes = productionRuntimeAdapters
+        ? EMPTY_MATERIALIZED_ROUTES
+        : dependencies.routes
+          ? await dependencies.routes.materialize(descriptor, request.cwd)
+          : (() => {
+              throw new ExecutionError(
+                'PRIVATE_ROUTE_MATERIALIZER_REQUIRED',
+                'Trusted private-route materialization is required before launch.',
+              );
+            })();
       const snapshot = parseStatusSnapshotV1(await request.statusSnapshot());
       const wiring = validateLaunchRuntimeWiring(
         descriptor,
@@ -872,7 +890,6 @@ export class LaunchExecutionService {
         const processAdapter: ExecutorAdapter = {
           name: adapter.name,
           ...(adapter.remoteToolClient ? { remoteToolClient: adapter.remoteToolClient } : {}),
-          ...(adapter.proofLaunchKey ? { proofLaunchKey: adapter.proofLaunchKey } : {}),
           verify: () => adapter.verify(),
           execute: async (child) => {
             const defaultSchedule = (callback: () => Promise<void>, milliseconds: number) => {
@@ -935,6 +952,7 @@ export class LaunchExecutionService {
           executors,
           runtimes,
           routes: { materialize: async () => routes },
+          ...(productionRuntimeAdapters ? { privateRouteConsumption: 'none' as const } : {}),
           ...(dependencies.audit ? { audit: dependencies.audit } : {}),
           approvals,
           hostPiProcessExecutor: dependencies.useSelectedExecutorForHostPi
@@ -948,7 +966,7 @@ export class LaunchExecutionService {
         );
         let hostApproval: Awaited<ReturnType<HostApprovalStore['approve']>> | undefined;
         if (descriptor.executor.name === 'host') {
-          if (!dependencies.tty?.direct) {
+          if (!dependencies.approveHost && !dependencies.tty?.direct) {
             throw new ExecutionError('HOST_TTY_REQUIRED', 'Host execution requires a direct TTY.');
           }
           const nonce = sha256Canonical({
@@ -968,6 +986,7 @@ export class LaunchExecutionService {
               nonce,
             ),
             dependencies.tty,
+            dependencies.approveHost,
           );
         }
         const execute = () =>
@@ -989,7 +1008,9 @@ export class LaunchExecutionService {
             ...(dependencies.expectedLaunchKey
               ? { expectedLaunchKey: dependencies.expectedLaunchKey }
               : {}),
-            ...(hostApproval ? { hostApproval, tty: dependencies.tty } : {}),
+            ...(hostApproval ? { hostApproval } : {}),
+            ...(dependencies.tty ? { tty: dependencies.tty } : {}),
+            ...(dependencies.approveHost ? { approveHost: true } : {}),
           });
         return execute();
       };

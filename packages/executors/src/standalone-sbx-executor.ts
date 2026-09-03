@@ -74,16 +74,12 @@ const SHA = /^[a-f0-9]{64}$/u;
 /** Production adapter for the pinned standalone sbx command surface. It never invokes a shell. */
 export class StandaloneSbxLifecycleAdapter implements ExecutorAdapter {
   readonly name = 'docker' as const;
-  readonly proofLaunchKey?: string;
   readonly bridge: { readonly endpoint: string; readonly attestationSha256: string } | undefined;
   readonly remoteToolClient?: ProductionRemoteToolClient;
   #resumeAction: 'attach' | 'recreate' | undefined;
   #projection: ClaudeVmProjection | undefined;
   constructor(readonly input: StandaloneSbxExecutorInput) {
     this.#projection = input.projection;
-    if (input.planExport) {
-      this.proofLaunchKey = input.planExport.launchKey;
-    }
     this.bridge =
       input.worker === undefined
         ? undefined

@@ -186,6 +186,29 @@ function routes(value: RouteLabelsV1, domain: AccountDomain): RouteLabelsV1 {
   return { ...value };
 }
 
+function verifyRuntimeExecutableConsistency(registrations: readonly RuntimeRegistrationV1[]): void {
+  for (const runtime of ['claude', 'pi'] as const) {
+    const executableEvidence = registrations
+      .filter((registration) => registration.runtime === runtime)
+      .map((registration) => registration.executable);
+    const first = executableEvidence[0];
+    if (
+      first &&
+      executableEvidence.some(
+        (candidate) =>
+          normalized(candidate.path) !== normalized(first.path) ||
+          candidate.sha256 !== first.sha256 ||
+          candidate.version !== first.version,
+      )
+    ) {
+      fail(
+        'REGISTRATION_EXECUTABLE_AMBIGUOUS',
+        `All ${runtime} identities must bind the same executable evidence.`,
+      );
+    }
+  }
+}
+
 function exactRegistrationRecord(value: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     fail('REGISTRATION_SCHEMA_INVALID', 'Registration contract must be an object.');
@@ -234,6 +257,7 @@ export function createRuntimeRegistrationMatrix(
   if (registrations.some((entry, index) => entry.identity !== expected[index])) {
     fail('REGISTRATION_MATRIX_DUPLICATE', 'The complete unique four-route matrix is required.');
   }
+  verifyRuntimeExecutableConsistency(registrations);
   const base = {
     schemaVersion: 1 as const,
     kind: 'runtime-registration-matrix' as const,
@@ -326,6 +350,7 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
   ) {
     fail('REGISTRATION_SCHEMA_INVALID', 'Registration matrix is incomplete or unordered.');
   }
+  verifyRuntimeExecutableConsistency(registrations);
   const base = {
     schemaVersion: 1 as const,
     kind: 'runtime-registration-matrix' as const,

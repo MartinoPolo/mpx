@@ -332,6 +332,48 @@ describe('launch execution application service', () => {
     }
   });
 
+  it('passes a frozen empty route map without materializing routes in production mode', async () => {
+    const effects: string[] = [];
+    const { request } = fixture();
+    const deps = dependencies(effects);
+    const materialize = vi.fn(deps.routes!.materialize);
+    let composedRoutes: Readonly<Record<string, string>> | undefined;
+
+    await executeResolvedLaunch(request, {
+      ...deps,
+      runtimeAdapterMode: 'production',
+      routes: { materialize },
+      composer: async (composition) => {
+        composedRoutes = composition.materializedRoutes;
+        return deps.composer(composition);
+      },
+    });
+
+    expect(materialize).not.toHaveBeenCalled();
+    expect(composedRoutes).toEqual({});
+    expect(Object.isFrozen(composedRoutes)).toBe(true);
+  });
+
+  it('fails closed without a route materializer when runtime adapter mode is omitted', async () => {
+    const effects: string[] = [];
+    const { request } = fixture();
+    const { routes: _routes, ...deps } = dependencies(effects);
+
+    await expect(executeResolvedLaunch(request, deps)).rejects.toMatchObject({
+      code: 'PRIVATE_ROUTE_MATERIALIZER_REQUIRED',
+    });
+  });
+
+  it('fails closed without a route materializer in injected runtime adapter mode', async () => {
+    const effects: string[] = [];
+    const { request } = fixture();
+    const { routes: _routes, ...deps } = dependencies(effects);
+
+    await expect(
+      executeResolvedLaunch(request, { ...deps, runtimeAdapterMode: 'injected' }),
+    ).rejects.toMatchObject({ code: 'PRIVATE_ROUTE_MATERIALIZER_REQUIRED' });
+  });
+
   it('stops at an executor gate before composer, routes, status, or lifecycle effects', async () => {
     const effects: string[] = [];
     const { request } = fixture();
@@ -575,6 +617,29 @@ describe('launch execution application service', () => {
     expect(consume).toHaveBeenCalledTimes(1);
   });
 
+  it('uses an explicit noninteractive host approval at the execution boundary without a TTY', async () => {
+    const effects: string[] = [];
+    const { request } = fixture('host');
+    const deps = dependencies(effects);
+    const host: ExecutorAdapter = {
+      name: 'host',
+      verify: async () => request.descriptor.executorVerification,
+      execute: async () => {
+        effects.push('execute');
+        return { exitCode: 0, stdout: '', stderr: '', truncated: false };
+      },
+    };
+
+    await expect(
+      executeResolvedLaunch(request, {
+        ...deps,
+        executorAdapters: [host],
+        approveHost: true,
+      }),
+    ).resolves.toMatchObject({ exitCode: 0 });
+    expect(effects).toContain('execute');
+  });
+
   it('obtains host approval before runtime execution', async () => {
     const effects: string[] = [];
     const { request } = fixture('host');
@@ -600,6 +665,42 @@ describe('launch execution application service', () => {
     });
     expect(effects).toContain('approval');
     expect(effects.indexOf('approval')).toBeLessThan(effects.indexOf('execute'));
+  });
+
+  it('executes production Docker Pi through the host process adapter without invoking the sandbox worker', async () => {
+    const effects: string[] = [];
+    const { request } = fixture();
+    const deps = dependencies(effects);
+    const docker = {
+      ...deps.executorAdapters[0]!,
+      execute: vi.fn(async () => {
+        effects.push('standalone-sbx-worker');
+        return { exitCode: 0, stdout: '', stderr: '', truncated: false };
+      }),
+    };
+    const host: ExecutorAdapter = {
+      name: 'host',
+      verify: async () => ({
+        status: 'verified',
+        verifier: 'host-process',
+        evidenceDigest: hash('c'),
+      }),
+      execute: vi.fn(async () => {
+        effects.push('host-process');
+        return { exitCode: 0, stdout: '', stderr: '', truncated: false };
+      }),
+    };
+
+    await executeResolvedLaunch(request, {
+      ...deps,
+      executorAdapters: [docker, host],
+      runtimeAdapterMode: 'production',
+    });
+
+    expect(host.execute).toHaveBeenCalledOnce();
+    expect(docker.execute).not.toHaveBeenCalled();
+    expect(effects).toContain('host-process');
+    expect(effects).not.toContain('standalone-sbx-worker');
   });
 
   it('contains an in-flight status refresh at shutdown', async () => {

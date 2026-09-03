@@ -8,7 +8,7 @@ import {
   type OwnedResourceSpec,
 } from '../../src/system-integration.js';
 
-const bashBlock = '# MPX aliases\ncc() { mpx launch claude "$@"; }\n';
+const bashBlock = '# MPX aliases\ncc-mpx() { mpx launch claude "$@"; }\n';
 
 it('creates a binary file only when its target is absent', async () => {
   const files = new FakeBinaryFileSystem({ existing: Buffer.from('preserve') });
@@ -56,7 +56,7 @@ describe('managed launcher integration', () => {
       await adapter.plan({
         shell: 'powershell',
         path: 'profile',
-        body: 'function cc { mpx launch claude @args }\n',
+        body: 'function cc-mpx { mpx launch claude @args }\n',
       }),
     );
     await files.write(
@@ -68,7 +68,7 @@ describe('managed launcher integration', () => {
       await adapter.plan({
         shell: 'powershell',
         path: 'profile',
-        body: 'function cc { mpx launch claude @args }\n',
+        body: 'function cc-mpx { mpx launch claude @args }\n',
       }),
     );
     await files.write(
@@ -84,6 +84,84 @@ describe('managed launcher integration', () => {
 });
 
 describe('owned JSON system resources', () => {
+  it('round-trips an MPX profile in modern Terminal settings without changing defaults or foreign data', async () => {
+    const foreignBefore = { guid: 'foreign-before', name: 'Before' };
+    const foreignAfter = { guid: 'foreign-after', name: 'After' };
+    const original = {
+      $help: 'https://aka.ms/terminal-documentation',
+      theme: 'system',
+      profiles: {
+        defaults: { font: { face: 'Cascadia Mono' }, opacity: 91 },
+        list: [foreignBefore, foreignAfter],
+      },
+    };
+    const store = new FakeJsonResourceStore({ terminal: original });
+    const adapter = new OwnedJsonResourceAdapter(store);
+    const guid = deterministicTerminalProfileGuid('MPX modern');
+    const spec: OwnedResourceSpec = {
+      kind: 'terminal-profile',
+      target: 'terminal',
+      ownershipKey: guid,
+      desired: { guid, name: 'MPX', commandline: 'C:\\_MP_apps\\mpx\\bin\\mpx.exe shell' },
+    };
+
+    await expect(adapter.inspect(spec)).resolves.toMatchObject({ status: 'absent', digest: null });
+    const plan = await adapter.plan(spec);
+    const receipt = await adapter.apply(plan);
+    await expect(adapter.inspect(spec)).resolves.toMatchObject({
+      status: 'owned',
+      digest: receipt.desiredDigest,
+      value: spec.desired,
+    });
+    expect(await store.read('terminal')).toEqual({
+      ...original,
+      profiles: {
+        ...original.profiles,
+        list: [foreignBefore, foreignAfter, spec.desired],
+      },
+    });
+
+    await adapter.remove(receipt);
+    expect(await store.read('terminal')).toEqual(original);
+  });
+
+  it.each([
+    { profiles: { defaults: [], list: [] } },
+    { profiles: { defaults: {}, list: 'not-an-array' } },
+    { profiles: { defaults: {}, list: [null] } },
+    { profiles: [{ guid: 'duplicate' }, { guid: 'duplicate' }] },
+  ])(
+    'rejects malformed, unsafe, or duplicate Terminal profiles during planning',
+    async (terminal) => {
+      const store = new FakeJsonResourceStore({ terminal });
+      const adapter = new OwnedJsonResourceAdapter(store);
+      const guid = deterministicTerminalProfileGuid('MPX invalid settings');
+      const spec: OwnedResourceSpec = {
+        kind: 'terminal-profile',
+        target: 'terminal',
+        ownershipKey: guid,
+        desired: { guid, name: 'MPX' },
+      };
+
+      await expect(adapter.plan(spec)).rejects.toMatchObject({ code: 'WINDOWS_FOREIGN_RESOURCE' });
+      expect(await store.read('terminal')).toEqual(terminal);
+    },
+  );
+
+  it('rejects a Terminal profile whose desired GUID is not its ownership key', async () => {
+    const store = new FakeJsonResourceStore({ terminal: { profiles: [] } });
+    const adapter = new OwnedJsonResourceAdapter(store);
+    const spec: OwnedResourceSpec = {
+      kind: 'terminal-profile',
+      target: 'terminal',
+      ownershipKey: deterministicTerminalProfileGuid('MPX owner'),
+      desired: { guid: deterministicTerminalProfileGuid('someone else'), name: 'MPX' },
+    };
+
+    await expect(adapter.plan(spec)).rejects.toMatchObject({ code: 'WINDOWS_RESOURCE_INVALID' });
+    expect(await store.read('terminal')).toEqual({ profiles: [] });
+  });
+
   it('uses a deterministic MPX Terminal GUID and preserves foreign profiles', async () => {
     const store = new FakeJsonResourceStore({
       terminal: { profiles: [{ guid: 'foreign', name: 'Keep' }] },

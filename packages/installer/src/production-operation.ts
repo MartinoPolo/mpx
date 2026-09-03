@@ -35,7 +35,9 @@ import {
   verifyAccountEnrollment,
   verifyRuntimeRegistrationMatrix,
   type AccountProbeV1,
+  type RegisteredRuntime,
   type RuntimeIdentity,
+  type RuntimeRegistrationMatrixV1,
   type RuntimeRegistrationObservationV1,
 } from './runtime-registration.js';
 import type { InstallerOperationAdapter, InstallerOperationSet } from './orchestration.js';
@@ -118,7 +120,7 @@ export class NodeBinaryFileSystem implements BinaryFileSystem {
   }
 }
 
-/** File-backed host used by integration tests and Terminal. Native stores can be injected by the CLI. */
+/** File-backed host used by JSON integration tests. Native stores can be injected by the CLI. */
 export class NodeJsonResourceStore implements JsonResourceStore {
   private assertFile(target: string): void {
     if (!path.isAbsolute(target) || path.extname(target).toLowerCase() !== '.json') {
@@ -368,6 +370,74 @@ export function createProductionInstallerResources(
   };
 }
 
+function expectedEnvironmentAfterApply(
+  prior: unknown | undefined,
+  desired: Readonly<Record<string, unknown>>,
+): unknown {
+  const previous =
+      prior && typeof prior === 'object' && !Array.isArray(prior)
+        ? (prior as Record<string, unknown>)
+        : {},
+    expected = Object.fromEntries(
+      Object.entries(previous).filter(
+        ([key]) => key !== 'owner' && key !== 'PathPrepend' && !key.startsWith('MPX_'),
+      ),
+    );
+  for (const [key, value] of Object.entries(desired)) {
+    if (key !== 'Path') {
+      expected[key] = value;
+    }
+  }
+  if (typeof desired.PathPrepend === 'string') {
+    const entries =
+      typeof previous.Path === 'string'
+        ? previous.Path.split(';').filter(
+            (entry) => entry !== previous.PathPrepend && entry !== desired.PathPrepend,
+          )
+        : [];
+    expected.Path = [desired.PathPrepend, ...entries].join(';');
+  }
+  return expected;
+}
+
+function registeredRuntimeExecutableEnvironment(
+  matrix: RuntimeRegistrationMatrixV1 | undefined,
+): NodeJS.ProcessEnv {
+  if (!matrix) {
+    return {};
+  }
+  const variableByRuntime: Record<RegisteredRuntime, string> = {
+    claude: 'MPX_CLAUDE_EXECUTABLE',
+    pi: 'MPX_PI_EXECUTABLE',
+  };
+  return Object.fromEntries(
+    (['claude', 'pi'] as const).flatMap((runtime) => {
+      const registrations = matrix.registrations.filter(
+        (registration) => registration.runtime === runtime,
+      );
+      const first = registrations[0]?.executable;
+      if (!first) {
+        return [];
+      }
+      if (
+        registrations.some(
+          ({ executable }) =>
+            path.win32.normalize(executable.path).toLowerCase() !==
+              path.win32.normalize(first.path).toLowerCase() ||
+            executable.sha256 !== first.sha256 ||
+            executable.version !== first.version,
+        )
+      ) {
+        fail(
+          'INSTALL_REGISTRATION_EXECUTABLE_AMBIGUOUS',
+          `Runtime registrations disagree on the ${runtime} executable.`,
+        );
+      }
+      return [[variableByRuntime[runtime], first.path]];
+    }),
+  );
+}
+
 interface Entry {
   operation: InstallOperationV1;
   launcher?: ManagedLauncherSpec;
@@ -489,7 +559,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       }
     }
     const specs = buildWindowsIntegrationSpecs(
-      this.environment,
+      {
+        ...this.environment,
+        ...registeredRuntimeExecutableEnvironment(intent.runtimeRegistrations),
+      },
       this.currentUser,
       intent.releaseKey,
     );
@@ -497,19 +570,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     if (!cliEvidence) {
       fail('INSTALL_CLI_BUNDLE_MISSING', 'The immutable release has no bundled bin/mpx.mjs.');
     }
-    const nodePath = String(specs.task.desired.executable);
-    const nodeInfo = await lstat(nodePath);
-    if (!nodeInfo.isFile() || nodeInfo.isSymbolicLink()) {
-      fail('INSTALL_NODE_UNAVAILABLE', 'Scheduled capture Node executable is unsafe.');
-    }
-    const task: OwnedResourceSpec = {
-      ...specs.task,
-      desired: {
-        ...specs.task.desired,
-        executableSha256: sha(await readFile(nodePath)),
-        cliSha256: cliEvidence.sha256,
-      },
-    };
     const selectorBody = Buffer.from(buildStableSelectorBody(), 'utf8');
     const selectorTarget = path.win32.join(this.environment.MPX_APPS!, 'mpx', 'bin', 'mpx.cmd');
     const automatic: Entry[] = [
@@ -539,7 +599,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         },
       });
     }
-    const resources = [specs.terminal, specs.environment, ...specs.shortcuts];
+    const resources = [specs.environment, ...specs.shortcuts];
     for (const [index, resource] of resources.entries()) {
       automatic.push({
         resource,
@@ -656,18 +716,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       });
     }
     automatic.sort((left, right) => left.operation.id.localeCompare(right.operation.id));
-    const scheduled: Entry[] = [
-      {
-        resource: task,
-        operation: {
-          id: '90-scheduled-capture',
-          adapter: this.name,
-          action: 'ensure',
-          target: task.target,
-          desiredDigest: installerDigest(task.desired),
-        },
-      },
-    ];
+    const scheduled: Entry[] = [];
     for (const entry of [...automatic, ...scheduled]) {
       this.entries.set(installerDigest(entry.operation), entry);
     }
@@ -789,6 +838,14 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       !Array.isArray(value.spec)
     ) {
       const resource = value.spec as unknown as OwnedResourceSpec;
+      if (resource.kind === 'terminal-profile' || resource.kind === 'scheduled-task') {
+        const boundary =
+          resource.kind === 'terminal-profile' ? 'Windows Terminal' : 'Scheduled capture';
+        fail(
+          'INSTALL_RECEIPT_AMBIGUOUS',
+          `${boundary} is outside the production installer boundary for ${operation.id}.`,
+        );
+      }
       if (
         resource.target !== operation.target ||
         installerDigest(resource.desired) !== operation.desiredDigest
@@ -939,23 +996,42 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       }
       return;
     }
-    const inspection = await this.owned.inspect(entry.resource!);
     const prior =
-      snapshot === null ? undefined : JSON.parse(Buffer.from(snapshot, 'base64').toString('utf8'));
-    const current = await this.resources.read(target),
+        snapshot === null
+          ? undefined
+          : JSON.parse(Buffer.from(snapshot, 'base64').toString('utf8')),
+      current = await this.resources.read(target),
       priorDigest = prior === undefined ? null : installerDigest(prior),
       currentDigest = current === undefined ? null : installerDigest(current);
     if (currentDigest === priorDigest) {
       return;
     }
-    if (
-      inspection.status !== 'owned' ||
-      inspection.digest !== installerDigest(entry.resource!.desired)
-    ) {
-      fail(
-        'INSTALL_FOREIGN_OR_DRIFTED',
-        'Refusing to restore over a foreign or drifted native resource.',
-      );
+    if (entry.resource!.kind === 'user-environment') {
+      const priorRecord =
+          prior && typeof prior === 'object' && !Array.isArray(prior)
+            ? (prior as Record<string, unknown>)
+            : {},
+        appliedDigests = new Set([
+          installerDigest({ ...priorRecord, ...entry.resource!.desired }),
+          installerDigest(expectedEnvironmentAfterApply(prior, entry.resource!.desired)),
+        ]);
+      if (currentDigest === null || !appliedDigests.has(currentDigest)) {
+        fail(
+          'INSTALL_FOREIGN_OR_DRIFTED',
+          'Refusing to restore over a foreign or drifted native resource.',
+        );
+      }
+    } else {
+      const inspection = await this.owned.inspect(entry.resource!);
+      if (
+        inspection.status !== 'owned' ||
+        inspection.digest !== installerDigest(entry.resource!.desired)
+      ) {
+        fail(
+          'INSTALL_FOREIGN_OR_DRIFTED',
+          'Refusing to restore over a foreign or drifted native resource.',
+        );
+      }
     }
     if (snapshot === null) {
       await this.owned.remove({

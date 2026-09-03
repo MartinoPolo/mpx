@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
 import {
   activateRelease,
@@ -15,12 +15,11 @@ import {
   NodeBinaryFileSystem,
   ProductionInstallerOperationAdapter,
 } from '../../src/production-operation.js';
-import { buildWindowsIntegrationSpecs } from '../../src/windows-integration.js';
 import {
   createRuntimeRegistrationMatrix,
   type ProjectionFileV1,
 } from '../../src/runtime-registration.js';
-import { NodeTransactionStore } from '../../src/transaction.js';
+import { ImmutableInstallerService, NodeTransactionStore } from '../../src/transaction.js';
 import type { InstallExternalVerificationResultV1 } from '../../src/install-intent-builder.js';
 
 function required<T>(value: T | undefined, label: string): T {
@@ -170,21 +169,14 @@ async function simulation(existing: boolean) {
     'LocalState',
     'settings.json',
   );
-  const priorTerminalProfile = buildWindowsIntegrationSpecs(
-    environment,
-    'DOMAIN\\me',
-    'a'.repeat(64),
-  ).terminal.desired;
-  const native = new FakeJsonResourceStore(
-    existing
-      ? {
-          [terminalTarget]: {
-            profiles: [{ guid: 'foreign', name: 'Keep' }, priorTerminalProfile],
-            theme: 'native',
-          },
-        }
-      : {},
-  );
+  const terminalSettings = {
+    profiles: [
+      { guid: 'foreign', name: 'Keep' },
+      { guid: 'prior-mpx', name: 'MPX' },
+    ],
+    theme: 'native',
+  };
+  const native = new FakeJsonResourceStore(existing ? { [terminalTarget]: terminalSettings } : {});
   let runtimeRegistrations!: ReturnType<typeof createRuntimeRegistrationMatrix>;
   const adapter = new ProductionInstallerOperationAdapter(environment, 'DOMAIN\\me', {
     files: new NodeBinaryFileSystem(),
@@ -284,8 +276,12 @@ async function simulation(existing: boolean) {
   };
 }
 
-it('plans, applies, and verifies a fresh scheduled install with active immutable runner authority', async () => {
-  const f = await simulation(false);
+it('plans, applies, and verifies a fresh base install without scheduled capture', async () => {
+  const f = await simulation(false),
+    readNative = vi.spyOn(f.native, 'read'),
+    writeNative = vi.spyOn(f.native, 'write'),
+    removeNative = vi.spyOn(f.native, 'remove'),
+    scheduledTarget = '\\MPX\\Session Capture';
   const orchestrator = new InstallOrchestrator({
     adapter: f.adapter,
     store: f.store,
@@ -294,12 +290,28 @@ it('plans, applies, and verifies a fresh scheduled install with active immutable
     activate: (releaseKey, prior) => activateRelease(f.localAppData, prior, releaseKey),
   });
   const plan = await orchestrator.plan(f.intent);
-  expect(plan.operations.at(-1)?.id).toBe('90-scheduled-capture');
+  const operationIds = plan.operations.map((operation) => operation.id);
+  expect(operationIds).not.toContain('90-scheduled-capture');
+  expect(operationIds).toEqual(
+    expect.arrayContaining([
+      '10-profile-0',
+      '10-profile-1',
+      '20-user-environment',
+      '30-shortcut',
+      '40-shortcut',
+      '60-projection-claude-personal-descriptor',
+      '70-registration-claude-personal',
+    ]),
+  );
   const receipt = await orchestrator.apply(plan, plan.confirmationDigest);
+  expect(receipt.operations.map((operation) => operation.id)).not.toContain('90-scheduled-capture');
   await expect(orchestrator.verify(false, externalVerification(f.intent))).resolves.toMatchObject({
     healthy: true,
     releaseKey: receipt.releaseKey,
   });
+  expect(readNative).not.toHaveBeenCalledWith(scheduledTarget);
+  expect(writeNative).not.toHaveBeenCalledWith(scheduledTarget, expect.anything());
+  expect(removeNative).not.toHaveBeenCalledWith(scheduledTarget);
   const authority = new NodeInstalledRunnerAuthority({
     appsRoot: f.appsRoot,
     localAppData: f.localAppData,
@@ -369,11 +381,18 @@ it('runs clean and existing-machine production-backed simulations without live w
       'DOMAIN\\me',
       { files: new NodeBinaryFileSystem(), resources: f.native },
     );
-    const restarted = new InstallOrchestrator({
-      adapter: restartedAdapter,
-      store: new NodeTransactionStore(path.join(f.localAppData, 'mpx', 'installer')),
-      releases: f.releases,
-    });
+    const restartedStore = new NodeTransactionStore(path.join(f.localAppData, 'mpx', 'installer')),
+      restarted = new InstallOrchestrator({
+        adapter: restartedAdapter,
+        store: restartedStore,
+        releases: f.releases,
+      });
+    await expect(
+      new ImmutableInstallerService({
+        adapters: [restartedAdapter],
+        store: restartedStore,
+      }).verify(),
+    ).resolves.toMatchObject({ healthy: true, issues: [] });
     let uninstallPlan = await restarted.planUninstall();
     if (!existing) {
       const selector = path.join(f.appsRoot, 'mpx', 'bin', 'mpx.cmd'),
@@ -433,9 +452,12 @@ it('runs clean and existing-machine production-backed simulations without live w
     const targetSnapshots = await Promise.all(
       plan.operations.map((operation) => f.adapter.capture(operation)),
     );
-    await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toThrow('injected:');
+    await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toThrow(
+      `injected:${required(mutatingOperations[failedIndex], `mutating operation ${failedIndex}`).id}`,
+    );
     expect(
       await Promise.all(plan.operations.map((operation) => f.adapter.capture(operation))),
+      `rollback after mutating operation ${failedIndex} (${required(mutatingOperations[failedIndex], `mutating operation ${failedIndex}`).id})`,
     ).toEqual(targetSnapshots);
     expect(await f.store.readReceipt()).toBeUndefined();
     expect(
@@ -451,17 +473,7 @@ it('runs clean and existing-machine production-backed simulations without live w
     ).toEqual({
       profiles: [
         { guid: 'foreign', name: 'Keep' },
-        buildWindowsIntegrationSpecs(
-          {
-            MPX_APPS: f.appsRoot,
-            APPDATA: path.join(f.root, 'roaming'),
-            LOCALAPPDATA: f.localAppData,
-            USERPROFILE: f.userProfile,
-            MPX_NODE_EXECUTABLE: process.execPath,
-          },
-          'DOMAIN\\me',
-          'a'.repeat(64),
-        ).terminal.desired,
+        { guid: 'prior-mpx', name: 'MPX' },
       ],
       theme: 'native',
     });

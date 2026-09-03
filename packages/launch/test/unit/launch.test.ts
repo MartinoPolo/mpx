@@ -182,6 +182,40 @@ describe('launch resolution', () => {
     expect(Object.isFrozen(parseLaunchDescriptorV2(structuredClone(descriptor)))).toBe(true);
   });
 
+  it('binds bounded runtime arguments to descriptor parsing and the launch key', async () => {
+    const withoutArgs = await resolveLaunch({ ...base, identity: 'personal' });
+    const runtimeArgs = ['--no-session', '--print', 'Reply with only: verified'];
+    const withArgs = await resolveLaunch({ ...base, identity: 'personal', runtimeArgs });
+
+    expect(withoutArgs).not.toHaveProperty('runtimeArgs');
+    expect(withArgs.runtimeArgs).toEqual(runtimeArgs);
+    expect(withArgs.launchKey).not.toBe(withoutArgs.launchKey);
+    expect(parseLaunchDescriptorV2(structuredClone(withArgs))).toEqual(withArgs);
+    await expect(
+      resolveLaunch({
+        ...base,
+        identity: 'personal',
+        runtimeArgs: Array.from({ length: 65 }, () => 'arg'),
+      }),
+    ).rejects.toMatchObject({ code: 'RUNTIME_ARGS_INVALID' });
+    await expect(
+      resolveLaunch({
+        ...base,
+        identity: 'personal',
+        runtimeArgs: ['é'.repeat(8_193)],
+      }),
+    ).rejects.toMatchObject({ code: 'RUNTIME_ARGS_INVALID' });
+    await expect(
+      resolveLaunch({ ...base, identity: 'personal', runtimeArgs: ['unsafe\u0000arg'] }),
+    ).rejects.toMatchObject({ code: 'RUNTIME_ARGS_INVALID' });
+    expect(() => parseLaunchDescriptorV2({ ...withArgs, runtimeArgs: ['unsafe\narg'] })).toThrow(
+      expect.objectContaining({ code: 'RUNTIME_ARGS_INVALID' }),
+    );
+    expect(() =>
+      parseLaunchDescriptorV2({ ...withArgs, runtimeArgs: ['token=unredacted'] }),
+    ).toThrow(expect.objectContaining({ code: 'LAUNCH_DESCRIPTOR_PRIVATE_DATA' }));
+  });
+
   it('requires a runtime and rejects a skill artifact declared for another runtime', async () => {
     const { runtime: _runtime, ...withoutRuntime } = base;
     await expect(

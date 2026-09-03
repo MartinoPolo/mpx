@@ -1,6 +1,7 @@
 import type { DiscoveredConfig, UserConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
 import {
+  canonicalRuntimeArgs,
   resolveLaunch,
   resolveLaunchSelection,
   serializeLaunchPublic,
@@ -37,6 +38,7 @@ export interface LaunchApplicationRequest {
   readonly workspace?: 'clone' | 'host-worktree' | 'direct';
   readonly networkPolicy?: string;
   readonly preset?: string;
+  readonly runtimeArgs?: readonly string[];
 }
 export interface LaunchCandidateRequest {
   readonly operation: 'explain';
@@ -254,6 +256,18 @@ export class LaunchApplicationService {
   }
 
   async prepare(request: LaunchApplicationRequest): Promise<PreparedLaunch> {
+    if (request.runtimeArgs !== undefined && request.operation !== 'launch') {
+      throw new MpxError({
+        code: 'RUNTIME_ARGS_SCOPE_INVALID',
+        message: 'Runtime arguments are valid only for launch execution.',
+      });
+    }
+    const runtimeArgs =
+      request.runtimeArgs === undefined ? undefined : canonicalRuntimeArgs(request.runtimeArgs);
+    const canonicalRequest: LaunchApplicationRequest = {
+      ...request,
+      ...(runtimeArgs && runtimeArgs.length > 0 ? { runtimeArgs } : {}),
+    };
     const found = await this.dependencies.discoverProjectConfig(request.cwd);
     const projectId = found?.config.project.id;
     const repositoryId = projectId ?? 'unbound/runtime';
@@ -273,6 +287,12 @@ export class LaunchApplicationService {
       ...(projectId ? { projectId } : {}),
     };
     const selection = await resolveLaunchSelection(selectionInput);
+    if (runtimeArgs?.length && selection.executor === 'docker') {
+      throw new MpxError({
+        code: 'RUNTIME_ARGS_EXECUTOR_UNAVAILABLE',
+        message: 'Explicit runtime arguments are unavailable for Docker execution.',
+      });
+    }
     if (request.operation === 'launch' && selection.executor === 'docker') {
       await this.dependencies.dockerDiagnostics?.();
     }
@@ -306,7 +326,7 @@ export class LaunchApplicationService {
           });
     const token = freezeToken<PreparedLaunch>();
     this.#prepared.set(token as object, {
-      request,
+      request: canonicalRequest,
       ...(found ? { found } : {}),
       ...(projectId ? { projectId } : {}),
       repositoryId,
@@ -376,6 +396,7 @@ export class LaunchApplicationService {
       workspace: facts.selection.workspace,
       networkPolicy: facts.selection.networkPolicy.name,
       ...(facts.request.preset ? { preset: facts.request.preset } : {}),
+      ...(facts.request.runtimeArgs ? { runtimeArgs: facts.request.runtimeArgs } : {}),
       ...(input.grants ? { grants: input.grants } : {}),
       ...(input.reason ? { reason: input.reason } : {}),
       ...(hostApproval ? { hostApproval } : {}),

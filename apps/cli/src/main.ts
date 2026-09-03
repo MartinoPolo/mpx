@@ -133,6 +133,7 @@ function parse(argv: readonly string[]): Parsed {
         'acknowledge-shared-risk',
         'terminal-tab',
         'legacy-disabled',
+        'approve-host',
       ].includes(name!)
     ) {
       options.set(name!, true);
@@ -202,17 +203,18 @@ function parse(argv: readonly string[]): Parsed {
         'external-plan',
         'raycast-post-export',
         'terminal-title',
+        'runtime-arg',
       ].includes(name!)
     ) {
       const value = inline ?? argv[++i];
       if (
         value === undefined ||
         (value.length === 0 && name !== 'body') ||
-        value.startsWith('--')
+        (value.startsWith('--') && name !== 'runtime-arg')
       ) {
         throw new UsageError(`--${name} requires a value`);
       }
-      if (['grant', 'import-legacy', 'map-account', 'map-pi-root'].includes(name!)) {
+      if (['grant', 'import-legacy', 'map-account', 'map-pi-root', 'runtime-arg'].includes(name!)) {
         options.set(name!, [...((options.get(name!) as string[] | undefined) ?? []), value]);
       } else {
         options.set(name!, value);
@@ -424,6 +426,24 @@ async function executeProductionSessionResume(
 }
 async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResult> {
   const [group, action, ...args] = parsed.command;
+  const runtimeArgOption = parsed.options.get('runtime-arg');
+  const runtimeArgs = Array.isArray(runtimeArgOption) ? runtimeArgOption : undefined;
+  const runtimeLaunchAction =
+    group === 'launch' &&
+    (action === 'claude' || action === 'pi' || shortLaunchAliases.has(action as ShortLaunchAlias));
+  if (runtimeArgs && !runtimeLaunchAction) {
+    throw new MpxError({
+      code: 'RUNTIME_ARGS_SCOPE_INVALID',
+      message: '--runtime-arg is valid only for launch execution.',
+    });
+  }
+  const approveHostOption = parsed.options.get('approve-host') === true;
+  if (approveHostOption && !runtimeLaunchAction) {
+    throw new MpxError({
+      code: 'HOST_APPROVAL_SCOPE_INVALID',
+      message: '--approve-host is valid only for runtime launch execution.',
+    });
+  }
   if (!group) {
     throw new UsageError(usage);
   }
@@ -889,11 +909,24 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       reasonOption = stringOption('reason');
     const executorOption = stringOption('executor'),
       workspaceOption = stringOption('workspace'),
-      networkPolicyOption = stringOption('network-policy');
+      networkPolicyOption = stringOption('network-policy'),
+      approveHost = approveHostOption;
     if (executorOption !== undefined && executorOption !== 'host' && executorOption !== 'docker') {
       throw new MpxError({
         code: 'EXECUTOR_UNAVAILABLE',
         message: `Executor '${executorOption}' is unavailable.`,
+      });
+    }
+    if (
+      approveHost &&
+      (action === 'explain' ||
+        action === 'sbx-plan-export' ||
+        executorOption !== 'host' ||
+        !reasonOption?.trim())
+    ) {
+      throw new MpxError({
+        code: 'HOST_APPROVAL_SCOPE_INVALID',
+        message: '--approve-host requires an explicit host launch and a nonempty --reason.',
       });
     }
     if (
@@ -1006,6 +1039,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       interaction: {
         json: parsed.json,
         ...(reasonOption ? { reason: reasonOption } : {}),
+        ...(approveHost ? { approveHost: true } : {}),
         ...(context.launchTty ? { tty: context.launchTty } : {}),
       },
       discoverProjectConfig: projectDiscovery,
@@ -1044,6 +1078,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         : {}),
       ...(networkPolicyOption ? { networkPolicy: networkPolicyOption } : {}),
       ...(presetOption ? { preset: presetOption } : {}),
+      ...(runtimeArgs ? { runtimeArgs } : {}),
     });
     const grantOptions = parsed.options.get('grant');
     const resolved = await service.resolve(prepared, {

@@ -86,7 +86,6 @@ export interface ProcessResult {
 export interface ExecutorAdapter {
   readonly name: 'docker' | 'host';
   readonly remoteToolClient?: import('./production-remote.js').ProductionRemoteToolClient;
-  readonly proofLaunchKey?: string;
   verify(): Promise<VerificationEvidence>;
   execute(request: ProcessRequest): Promise<ProcessResult>;
 }
@@ -180,8 +179,12 @@ export function sanitizeHostReason(value: string): string {
 }
 export class HostApprovalStore {
   readonly #approved = new Set<string>();
-  async approve(request: HostApprovalRequest, tty: DirectTty): Promise<HostExecutionApproval> {
-    if (!tty.direct) {
+  async approve(
+    request: HostApprovalRequest,
+    tty: DirectTty | undefined,
+    approveHost = false,
+  ): Promise<HostExecutionApproval> {
+    if (!approveHost && !tty?.direct) {
       fail('HOST_TTY_REQUIRED', 'Host approval requires a direct TTY.');
     }
     const reason = sanitizeHostReason(request.reason);
@@ -189,7 +192,8 @@ export class HostApprovalStore {
       fail('HOST_APPROVAL_INVALID', 'Host approval request is invalid.');
     }
     if (
-      !(await tty.confirm(
+      !approveHost &&
+      !(await tty?.confirm(
         `Approve host execution ${request.requestDigest.slice(0, 12)} — ${reason}`,
       ))
     ) {
@@ -234,6 +238,7 @@ export interface ExecuteInput {
   readonly expectedLaunchKey?: string;
   readonly hostApproval?: HostExecutionApproval;
   readonly tty?: DirectTty;
+  readonly approveHost?: boolean;
   readonly approvalNonce?: string;
 }
 export interface RouteMaterializer {
@@ -370,6 +375,7 @@ export class ExecutionService {
       executors: ExecutorRegistry;
       runtimes: RuntimeAdapterRegistry;
       routes: RouteMaterializer;
+      privateRouteConsumption?: 'required' | 'none';
       audit?: LaunchAuditStore;
       approvals?: HostApprovalStore;
       production?: boolean;
@@ -396,6 +402,12 @@ export class ExecutionService {
   }
   async execute(input: ExecuteInput): Promise<ProcessResult> {
     const descriptor = parseLaunchDescriptorV2(input.descriptor);
+    if (input.approveHost && descriptor.executor.name !== 'host') {
+      fail(
+        'HOST_APPROVAL_SCOPE_INVALID',
+        'Noninteractive host approval is valid only for an explicit host launch.',
+      );
+    }
     if (input.capability !== undefined) {
       try {
         validateRuntimeCapabilityBinding(input.capability, {
@@ -440,17 +452,6 @@ export class ExecutionService {
     }
     const privateEnvironment = validatePrivateLaunch(descriptor, input.privateLaunch);
     const executor = this.dependencies.executors.get(descriptor.executor.name);
-    if (
-      executor.name === 'docker' &&
-      executor.proofLaunchKey !== undefined &&
-      executor.proofLaunchKey !== descriptor.launchKey
-    ) {
-      fail(
-        'LAUNCH_RESTART_REQUIRED',
-        'The reviewed sandbox export is bound to another launch descriptor.',
-        { restartRequired: true },
-      );
-    }
     const verification = await executor.verify();
     if (verification.status === 'unavailable') {
       fail('EXECUTOR_UNAVAILABLE', `Executor '${executor.name}' is unavailable.`, {
@@ -481,7 +482,7 @@ export class ExecutionService {
       );
     }
     if (descriptor.executor.name === 'host') {
-      if (!input.tty?.direct) {
+      if (!input.approveHost && !input.tty?.direct) {
         fail('HOST_TTY_REQUIRED', 'Host execution requires a direct TTY.');
       }
       const nonce = input.hostApproval?.nonce ?? input.approvalNonce ?? '';
@@ -503,11 +504,14 @@ export class ExecutionService {
         );
       }
     }
-    const routes = validateRuntimeRoutes(
-      descriptor,
-      input.cwd,
-      await this.dependencies.routes.materialize(descriptor, input.cwd),
-    );
+    const routes =
+      this.dependencies.privateRouteConsumption === 'none'
+        ? Object.freeze({})
+        : validateRuntimeRoutes(
+            descriptor,
+            input.cwd,
+            await this.dependencies.routes.materialize(descriptor, input.cwd),
+          );
     const audit = this.dependencies.audit;
     let attemptId: string | undefined;
     if (audit) {
@@ -878,6 +882,7 @@ export async function locateTrustedExecutable(input: {
   projectRoot: string;
   trustedRoots: readonly string[];
   nodeExecutable: string;
+  platform: NodeJS.Platform;
   knownWrapper?: 'pi-fnm';
   inspect(file: string): Promise<FileInspection>;
 }): Promise<{ executable: string; argvPrefix: readonly string[] }> {
@@ -930,7 +935,9 @@ export async function locateTrustedExecutable(input: {
         continue;
       }
       const directory = path.win32.dirname(inspected.realpath),
-        nodeFile = path.win32.join(directory, 'node').replaceAll('\\', '/'),
+        nodeFiles = (input.platform === 'win32' ? ['node', 'node.exe'] : ['node']).map((name) =>
+          path.win32.join(directory, name).replaceAll('\\', '/'),
+        ),
         cliFile = path.win32
           .join(
             directory,
@@ -942,25 +949,33 @@ export async function locateTrustedExecutable(input: {
             'cli.js',
           )
           .replaceAll('\\', '/');
-      const [nodeInspection, cliInspection] = await Promise.all([
-        input.inspect(nodeFile).catch(() => undefined),
+      const [nodeInspections, cliInspection] = await Promise.all([
+        Promise.all(
+          nodeFiles.map(async (file) => ({
+            file,
+            inspection: await input.inspect(file).catch(() => undefined),
+          })),
+        ),
         input.inspect(cliFile).catch(() => undefined),
       ]);
+      const trustedNodes = nodeInspections.filter(
+        ({ file, inspection }) =>
+          inspection?.file &&
+          canonicalPath(inspection.realpath) === canonicalPath(file) &&
+          roots.some((root) => within(canonicalPath(file), root)) &&
+          !within(canonicalPath(file), project),
+      );
       if (
-        !nodeInspection?.file ||
+        trustedNodes.length !== 1 ||
         !cliInspection?.file ||
-        canonicalPath(nodeInspection.realpath) !== canonicalPath(nodeFile) ||
         canonicalPath(cliInspection.realpath) !== canonicalPath(cliFile) ||
-        !roots.some(
-          (root) => within(canonicalPath(nodeFile), root) && within(canonicalPath(cliFile), root),
-        ) ||
-        within(canonicalPath(nodeFile), project) ||
+        !roots.some((root) => within(canonicalPath(cliFile), root)) ||
         within(canonicalPath(cliFile), project)
       ) {
         continue;
       }
       return Object.freeze({
-        executable: nodeInspection.realpath,
+        executable: trustedNodes[0]!.inspection!.realpath,
         argvPrefix: [cliInspection.realpath],
       });
     }

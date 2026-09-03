@@ -23,6 +23,115 @@ function publishedReference(
 }
 
 describe('Node launch execution runtime adapters', () => {
+  it('appends Pi runtime arguments as separate argv values after MPX-owned arguments', async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-pi-runtime-args-'));
+    const launchKey = 'a'.repeat(64);
+    const runtimeArgs = ['--no-session', '--print', 'Reply with only: verified'];
+    const artifactReference = {
+      schemaVersion: 4 as const,
+      runtime: 'pi' as const,
+      manifestKey: 'b'.repeat(64),
+      artifactKey: 'c'.repeat(64),
+      fileMapHash: 'd'.repeat(64),
+    };
+    const descriptor = { runtime: 'pi', launchKey, runtimeArgs } as unknown as LaunchDescriptor;
+    const runtimeContext = createRuntimeContextV1({
+      launchKey,
+      launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
+      manifestKey: artifactReference.manifestKey,
+      runtimeArtifact: artifactReference,
+      binding: {
+        projectId: 'sample/app',
+        repositoryId: 'sample/repo',
+        contentScope: 'work',
+      },
+    });
+    const capability = createRuntimeCapabilityManifestV1({
+      runtime: 'pi',
+      launchKey,
+      identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
+      binding: {
+        projectId: 'sample/app',
+        repositoryId: 'sample/repo',
+        contentScope: 'work',
+      },
+      executor: 'host',
+      tools: [],
+      routes: [],
+      resources: [],
+      mounts: [],
+      destinations: [],
+      skills: [],
+      models: [],
+      nesting: { depth: 0, maxDepth: 0 },
+    });
+    try {
+      const [adapter] = productionRuntimeAdapters({
+        descriptor,
+        cwd: 'C:/project',
+        environment: {},
+        nativeRuntimeRoot: 'C:/native/pi',
+        stateRoot,
+        projectionInput: {
+          descriptor,
+          skillPlan: {
+            runtime: 'pi',
+            manifestKey: artifactReference.manifestKey,
+            artifactReference,
+            binding: {
+              projectId: 'sample/app',
+              repositoryId: 'sample/repo',
+              contentScope: 'work',
+            },
+          } as never,
+          agentsRoot: 'C:/agents',
+          artifactsRoot: 'C:/artifacts',
+          runtimeContext,
+          runtimeStatusEnvelope: {} as never,
+          runtimeCapabilityManifest: capability,
+          runtimeLaunchBinding: {
+            launchKey,
+            runtime: 'pi',
+            identity: { name: 'work', domain: 'work' },
+            worktreeRoot: 'C:/project',
+            executor: 'host',
+            assignedPorts: [],
+          },
+        },
+        launchBanner: 'launch',
+        initialSnapshot: {
+          schemaVersion: 1,
+          project: { id: 'sample/app', cwd: 'C:/project' },
+          worktree: { id: null, path: null, role: null, branch: null },
+          portResolution: 'valid',
+          services: [],
+          diagnostics: [],
+        },
+        statusSnapshot: async () => ({}) as never,
+        bindStatusPath: () => undefined,
+        bindRuntimeStatusPath: () => undefined,
+        statusMaterializer: { materialize: async () => undefined },
+        runtimeStatusMaterializer: { materialize: async () => 'C:/state/runtime.json' },
+        trustedExecutable: { executable: process.execPath, argvPrefix: ['wrapper-entry.js'] },
+        builder: async (input) => ({
+          directory: stateRoot,
+          extension: path.join(stateRoot, 'extension.ts'),
+          runtimeContextFile: path.join(stateRoot, 'runtime-context.json'),
+          reference: publishedReference(input),
+        }),
+        validator: async () => undefined,
+      });
+
+      const invocation = await adapter!.prepare({ routes: {} } as never);
+
+      expect(invocation.argv.slice(-runtimeArgs.length)).toEqual(runtimeArgs);
+      expect(invocation.argv[0]).toBe('wrapper-entry.js');
+      expect(invocation.argv.length).toBeGreaterThan(runtimeArgs.length + 1);
+    } finally {
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('passes a Claude native resume target into the concrete invocation argv', async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-claude-resume-'));
     const launchKey = 'a'.repeat(64);

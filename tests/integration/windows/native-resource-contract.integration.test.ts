@@ -72,9 +72,14 @@ describe.runIf(process.platform === 'win32')('Windows native-resource offline co
     const profile = path.join(root, `profile-${randomUUID()}.ps1`),
       terminal = path.join(root, `terminal-${randomUUID()}.json`);
     const originalProfile = Buffer.from('# developer-owned before\r\n# developer-owned after\r\n'),
-      foreign = { guid: `{${randomUUID()}}`, name: 'Foreign' };
+      foreign = { guid: `{${randomUUID()}}`, name: 'Foreign' },
+      originalTerminal = {
+        $help: 'https://aka.ms/terminal-documentation',
+        profiles: { defaults: { opacity: 93 }, list: [foreign] },
+        theme: 'system',
+      };
     await writeFile(profile, originalProfile);
-    await writeFile(terminal, `${JSON.stringify({ profiles: [foreign] })}\n`);
+    await writeFile(terminal, `${JSON.stringify(originalTerminal)}\n`);
     try {
       const launcher = new ManagedLauncherAdapter(new NativeFiles());
       const launcherReceipt = await launcher.apply(
@@ -128,7 +133,7 @@ describe.runIf(process.platform === 'win32')('Windows native-resource offline co
       await terminalAdapter.remove(terminalReceipt);
       await launcher.remove(launcherReceipt);
       expect(await readFile(profile)).toEqual(originalProfile);
-      expect(JSON.parse(await readFile(terminal, 'utf8'))).toEqual({ profiles: [foreign] });
+      expect(JSON.parse(await readFile(terminal, 'utf8'))).toEqual(originalTerminal);
       expect(await tasks.read(taskSpec.target)).toBeUndefined();
       expect(await registry.read('registry')).toEqual({ owner: 'foreign', TEMP: 'C:\\Temp' });
     } finally {

@@ -242,6 +242,45 @@ describe('immutable installer core', () => {
     expect(parseReleaseManifestV1(first)).toEqual(first);
   });
 
+  it('orders full release paths ordinally across prefix siblings and traversal order', async () => {
+    const firstSource = await temporary(),
+      secondSource = await temporary(),
+      apps = await temporary();
+    const populate = async (root: string, directories: readonly string[]): Promise<void> => {
+      for (const directory of directories) {
+        const target = path.join(root, 'content', 'skills', directory);
+        await mkdir(target, { recursive: true });
+        await writeFile(path.join(target, 'SKILL.md'), directory);
+      }
+    };
+    await populate(firstSource, ['commit', 'commit-push']);
+    await populate(secondSource, ['commit-push', 'commit']);
+
+    const first = await buildReleaseManifest(firstSource);
+    const second = await buildReleaseManifest(secondSource);
+
+    expect(first.files.map((entry) => entry.path)).toEqual([
+      'content/skills/commit-push/SKILL.md',
+      'content/skills/commit/SKILL.md',
+    ]);
+    expect(second).toEqual(first);
+    expect(parseReleaseManifestV1(first)).toEqual(first);
+
+    const published = await publishRelease({ sourceDirectory: firstSource, appsRoot: apps });
+    const republished = await publishRelease({ sourceDirectory: secondSource, appsRoot: apps });
+    expect(republished).toEqual(published);
+    expect(
+      parseReleaseManifestV1(
+        JSON.parse(
+          await readFile(
+            path.join(apps, 'mpx', 'releases', published.releaseKey, 'release-manifest.json'),
+            'utf8',
+          ),
+        ),
+      ),
+    ).toEqual(first);
+  });
+
   it('rejects links instead of following them into a release', async () => {
     const source = await temporary();
     await writeFile(path.join(source, 'file'), 'safe');

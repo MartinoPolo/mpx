@@ -202,6 +202,9 @@ function safeRelative(value: unknown): value is string {
   const normalized = path.posix.normalize(value);
   return normalized === value && normalized !== '..' && !normalized.startsWith('../');
 }
+function compareReleasePaths(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
 function parseFile(value: unknown): ReleaseFileV1 {
   const file = exact(value, ['path', 'bytes', 'sha256']);
   if (
@@ -237,7 +240,7 @@ export function parseReleaseManifestV1(value: unknown): ReleaseManifestV1 {
   const files = manifest.files.map(parseFile);
   if (
     new Set(files.map((x) => x.path)).size !== files.length ||
-    files.some((x, i) => i > 0 && files[i - 1]!.path.localeCompare(x.path) >= 0)
+    files.some((x, i) => i > 0 && compareReleasePaths(files[i - 1]!.path, x.path) >= 0)
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Release files must be unique and sorted.');
   }
@@ -809,7 +812,7 @@ async function walk(
   const directory = path.join(root, ...relative.split('/').filter(Boolean));
   const names = (await readdir(directory))
     .filter((name) => !excludeDependencies || name !== 'node_modules')
-    .sort((a, b) => a.localeCompare(b));
+    .sort(compareReleasePaths);
   const result: ReleaseFileV1[] = [];
   for (const name of names) {
     const rel = relative ? `${relative}/${name}` : name;
@@ -841,7 +844,9 @@ export async function buildReleaseManifest(sourceDirectory: string): Promise<Rel
   if (!info.isDirectory() || info.isSymbolicLink()) {
     fail('INSTALL_RELEASE_SOURCE_INVALID', 'Release source must be a regular directory.');
   }
-  const files = await walk(sourceDirectory);
+  const files = (await walk(sourceDirectory)).sort((left, right) =>
+    compareReleasePaths(left.path, right.path),
+  );
   const convergenceHash = installerDigest(files);
   return {
     schemaVersion: 1,
@@ -872,7 +877,9 @@ async function copyManifest(
 }
 async function buildReleaseManifestWithoutMetadata(root: string): Promise<ReleaseManifestV1> {
   const all = await walk(root);
-  const files = all.filter((x) => x.path !== 'release-manifest.json');
+  const files = all
+    .filter((x) => x.path !== 'release-manifest.json')
+    .sort((left, right) => compareReleasePaths(left.path, right.path));
   const convergenceHash = installerDigest(files);
   return {
     schemaVersion: 1,
@@ -1031,7 +1038,7 @@ async function withCurrentReleaseSource<T>(
   const staging = await mkdtemp(path.join(tmpdir(), 'mpx-current-release-'));
   return withInstallerCleanup(
     async () => {
-      for (const asset of [...assets].sort()) {
+      for (const asset of [...assets].sort(compareReleasePaths)) {
         if (!safeRelative(asset)) {
           fail('INSTALL_RELEASE_PATH_ESCAPE', 'Unsafe repository asset path.');
         }

@@ -54,6 +54,7 @@ export interface NodeLaunchApplicationContext extends LaunchExecutionContext {
 export interface NodeLaunchInteractionPort {
   readonly json: boolean;
   readonly reason?: string;
+  readonly approveHost?: boolean;
   readonly tty?: DirectTty;
 }
 
@@ -182,9 +183,17 @@ export function createNodeLaunchApplicationService(
           },
           context.launchSbxExecutionDependencies,
         );
+        if (selection.runtime === 'pi' && !adapter.remoteToolClient) {
+          throw new MpxError({
+            code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
+            message: 'Production Pi Docker execution requires a sandbox worker client.',
+            details: { executor: 'docker', runtime: 'pi' },
+          });
+        }
         const admittedContext: NodeLaunchApplicationContext = {
           ...context,
           launchExecutorAdapters: [adapter],
+          launchExecutorAdapterSource: 'production-admission',
           ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
         };
         return {
@@ -215,14 +224,14 @@ export function createNodeLaunchApplicationService(
     }),
     approveHost: async (selection) => {
       const tty = input.interaction.tty ?? directProcessTty();
-      if (input.interaction.json || !tty.direct) {
+      const reason = input.interaction.reason;
+      if (!input.interaction.approveHost && (input.interaction.json || !tty.direct)) {
         throw new MpxError({
           code: 'HOST_TTY_REQUIRED',
           message: 'Host approval requires a current direct interactive TTY.',
           remediation: 'Run the explicit host launch interactively, or use Docker.',
         });
       }
-      const reason = input.interaction.reason;
       if (!reason?.trim()) {
         throw new MpxError({
           code: 'HOST_REASON_REQUIRED',
@@ -230,6 +239,7 @@ export function createNodeLaunchApplicationService(
         });
       }
       if (
+        !input.interaction.approveHost &&
         !(await tty.confirm(
           `Approve elevated host compatibility execution — ${sanitizeHostReason(reason)}`,
         ))
@@ -387,6 +397,7 @@ export function createNodeLaunchApplicationService(
       environment,
       context: launchContext,
       tty: input.interaction.tty ?? directProcessTty(),
+      ...(input.interaction.approveHost ? { approveHost: true } : {}),
       nativeRuntimeRoot: execution.nativeRuntimeRoot,
       statusSnapshot: execution.statusSnapshot,
       ...(execution.project

@@ -136,6 +136,7 @@ it('rejects secret-bearing user config through the public config parser', async 
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },
@@ -158,6 +159,7 @@ it('creates absent user config exactly and accepts exact existing bytes', async 
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },
@@ -185,6 +187,7 @@ it('refuses different existing user-config bytes during planning and after obser
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },
@@ -219,6 +222,7 @@ it('preserves a different user config created concurrently during apply', async 
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },
@@ -242,6 +246,7 @@ it('hash-verifies user-config drift and rolls back its creation when a later ope
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },
@@ -291,6 +296,7 @@ it('fails closed without overwriting a concurrent post-apply user-config change 
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources: new FakeJsonResourceStore() },
@@ -316,6 +322,7 @@ it('rejects forged user-config retention through the production adapter', async 
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files: new FakeBinaryFileSystem(), resources: new FakeJsonResourceStore() },
@@ -369,6 +376,44 @@ it('rejects forged user-config retention through the production adapter', async 
   }
 });
 
+it('rejects legacy Terminal receipt locators without inspecting their target', async () => {
+  const target =
+      'C:\\Local\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json',
+    resources = new FakeJsonResourceStore({
+      [target]: { profiles: [{ guid: 'legacy-mpx', name: 'MPX' }] },
+    }),
+    readResource = vi.spyOn(resources, 'read'),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      { files: new FakeBinaryFileSystem(), resources },
+    ),
+    spec = {
+      kind: 'terminal-profile' as const,
+      target,
+      ownershipKey: 'legacy-mpx',
+      desired: { guid: 'legacy-mpx', name: 'MPX' },
+    },
+    operation = {
+      id: '20-terminal-profile',
+      adapter: adapter.name,
+      action: 'ensure' as const,
+      target,
+      desiredDigest: installerDigest(spec.desired),
+    };
+
+  await expect(
+    adapter.hydrateReceiptOperation(operation, { kind: 'resource', spec }),
+  ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_AMBIGUOUS' });
+  expect(readResource).not.toHaveBeenCalled();
+});
+
 it('keeps concurrent plans bound to their own roots and resources', async () => {
   const firstKey = 'a'.repeat(64),
     secondKey = 'c'.repeat(64),
@@ -380,6 +425,7 @@ it('keeps concurrent plans bound to their own roots and resources', async () => 
       APPDATA: 'C:\\Roaming-A',
       LOCALAPPDATA: 'C:\\Local-A',
       USERPROFILE: 'C:\\Users\\a',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources },
@@ -404,12 +450,11 @@ it('keeps concurrent plans bound to their own roots and resources', async () => 
     APPDATA: 'C:\\Roaming-B',
     LOCALAPPDATA: 'C:\\Local-B',
     USERPROFILE: 'C:\\Users\\b',
+    MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
   });
   const second = await adapter.operations(intent(secondKey), manifest(secondKey, 'd'.repeat(64)));
   const selected = (set: Awaited<ReturnType<typeof adapter.operations>>) =>
-    set.automatic.filter((operation) =>
-      ['05-cli-selector', '10-profile-0', '20-terminal-profile'].includes(operation.id),
-    );
+    set.automatic.filter((operation) => ['05-cli-selector', '10-profile-0'].includes(operation.id));
   await Promise.all(
     [...selected(first), ...selected(second)].map((operation) => adapter.apply(operation)),
   );
@@ -419,68 +464,204 @@ it('keeps concurrent plans bound to their own roots and resources', async () => 
   expect((await files.read('C:\\Apps-B\\mpx\\bin\\mpx.cmd'))?.toString()).toContain(
     'active-release',
   );
-  expect(
-    await resources.read(
-      'C:\\Local-A\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json',
-    ),
-  ).toMatchObject({ profiles: [{ name: 'MPX' }] });
-  expect(
-    await resources.read(
-      'C:\\Local-B\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json',
-    ),
-  ).toMatchObject({ profiles: [{ name: 'MPX' }] });
 });
 
-it('inspects managed scheduled-task status through the read-only production port', async () => {
+it('captures the complete environment Path and resumes restore when the snapshot already matches', async () => {
   const releaseKey = 'a'.repeat(64),
-    files = new FakeBinaryFileSystem(),
-    resources = new FakeJsonResourceStore();
-  const inspect = vi.fn(async () => ({
-    exists: true,
-    state: 'Ready',
-    lastRunAt: '2025-01-01T00:00:00.000Z',
-    lastResult: 0,
-  }));
-  const adapter = new ProductionInstallerOperationAdapter(
-    {
-      MPX_APPS: 'C:\\Apps',
-      APPDATA: 'C:\\Roaming',
-      LOCALAPPDATA: 'C:\\Local',
-      USERPROFILE: 'C:\\Users\\me',
-    },
-    'me',
-    { files, resources, scheduledTaskStatus: { inspect } },
-  );
-  const intent: InstallIntentV1 = {
-    schemaVersion: 1,
-    kind: 'install-intent',
-    releaseKey,
-    convergenceHash: releaseKey,
-    components: ['cli'],
-  };
-  const manifest = {
-    schemaVersion: 1,
-    kind: 'release-manifest',
-    releaseKey,
-    convergenceHash: releaseKey,
-    files: [{ path: 'bin/mpx.mjs', bytes: 3, sha256: 'b'.repeat(64) }],
-  } as ReleaseManifestV1;
-  const operations = await adapter.operations(intent, manifest),
-    task = required(operations.scheduled[0], 'scheduled capture operation');
-  await expect(adapter.inspectScheduledTaskStatus(task)).resolves.toMatchObject({
-    exists: true,
-    lastResult: 0,
-  });
-  expect(inspect).toHaveBeenCalledExactlyOnceWith(task.target);
-  await expect(
-    adapter.inspectScheduledTaskStatus(
-      required(operations.automatic[0], 'automatic installer operation'),
+    target = 'HKCU\\Environment',
+    snapshot = { TEMP: 'C:\\Temp', Path: 'C:\\Foreign;C:\\Tools' },
+    resources = new FakeJsonResourceStore({ [target]: snapshot }),
+    readResource = vi.spyOn(resources, 'read'),
+    writeResource = vi.spyOn(resources, 'write'),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      { files: new FakeBinaryFileSystem(), resources },
     ),
+    operations = await adapter.operations(
+      {
+        schemaVersion: 1,
+        kind: 'install-intent',
+        releaseKey,
+        convergenceHash: releaseKey,
+        components: ['cli'],
+      },
+      releaseManifest(releaseKey),
+    ),
+    environment = required(
+      operations.automatic.find((operation) => operation.id === '20-user-environment'),
+      'user environment operation',
+    ),
+    captured = await adapter.capture(environment);
+
+  if (captured === null) {
+    throw new Error('Expected environment snapshot');
+  }
+  expect(JSON.parse(Buffer.from(captured, 'base64').toString())).toEqual(snapshot);
+  const store = new MemoryTransactionStore();
+  await store.writeTransaction({
+    journal: {
+      schemaVersion: 1,
+      kind: 'transaction-journal',
+      transactionId: 'interrupted-environment',
+      phase: 'applying',
+      completedOperationIds: [],
+      inFlightOperationId: environment.id,
+      snapshot: {
+        schemaVersion: 1,
+        kind: 'machine-snapshot',
+        transactionId: 'interrupted-environment',
+        observations: [{ id: environment.id, digest: installerDigest(snapshot) }],
+        capturedAt: '2025-01-01T00:00:00.000Z',
+      },
+    },
+    snapshots: { [environment.id]: captured },
+    operations: [environment],
+  });
+  readResource.mockClear();
+  await expect(
+    new ImmutableInstallerService({ adapters: [adapter], store }).recover(),
   ).resolves.toBeUndefined();
-  expect(inspect).toHaveBeenCalledTimes(1);
+  expect(readResource).toHaveBeenCalledTimes(1);
+  expect(writeResource).not.toHaveBeenCalled();
+  expect((await store.readTransaction())?.journal).toMatchObject({ phase: 'rolled-back' });
 });
 
-it('plans from explicit roots without writes and applies managed profile and Terminal state without replacing foreign bytes', async () => {
+it('refuses to replace a concurrently changed foreign Path during environment rollback', async () => {
+  const releaseKey = 'a'.repeat(64),
+    target = 'HKCU\\Environment',
+    snapshot = { TEMP: 'C:\\Temp', Path: 'C:\\Foreign' },
+    resources = new FakeJsonResourceStore({ [target]: snapshot }),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      { files: new FakeBinaryFileSystem(), resources },
+    ),
+    operations = await adapter.operations(
+      {
+        schemaVersion: 1,
+        kind: 'install-intent',
+        releaseKey,
+        convergenceHash: releaseKey,
+        components: ['cli'],
+      },
+      releaseManifest(releaseKey),
+    ),
+    environment = required(
+      operations.automatic.find((operation) => operation.id === '20-user-environment'),
+      'user environment operation',
+    ),
+    captured = await adapter.capture(environment),
+    prepend = 'C:\\Apps\\mpx\\bin';
+  await adapter.apply(environment);
+  const applied = required(await resources.read(target), 'applied environment') as Record<
+    string,
+    unknown
+  >;
+  await resources.write(target, {
+    ...snapshot,
+    ...applied,
+    Path: `${prepend};C:\\Concurrent`,
+  });
+
+  await expect(adapter.restore(environment, captured)).rejects.toMatchObject({
+    code: 'INSTALL_FOREIGN_OR_DRIFTED',
+  });
+  await expect(resources.read(target)).resolves.toMatchObject({
+    Path: `${prepend};C:\\Concurrent`,
+  });
+});
+
+it('excludes scheduled capture from production base operations without Task Scheduler inspection', async () => {
+  const releaseKey = 'a'.repeat(64),
+    inspect = vi.fn(),
+    resources = new FakeJsonResourceStore(),
+    readResource = vi.spyOn(resources, 'read'),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      { files: new FakeBinaryFileSystem(), resources, scheduledTaskStatus: { inspect } },
+    );
+
+  const operations = await adapter.operations(
+    {
+      schemaVersion: 1,
+      kind: 'install-intent',
+      releaseKey,
+      convergenceHash: releaseKey,
+      components: ['cli'],
+    },
+    releaseManifest(releaseKey),
+  );
+
+  expect(operations.scheduled).toEqual([]);
+  expect([...operations.automatic, ...operations.scheduled]).not.toContainEqual(
+    expect.objectContaining({ id: '90-scheduled-capture' }),
+  );
+  expect(readResource).not.toHaveBeenCalledWith('\\MPX\\Session Capture');
+  expect(inspect).not.toHaveBeenCalled();
+});
+
+it('rejects legacy scheduled-task receipt locators without Task Scheduler access', async () => {
+  const target = '\\MPX\\Session Capture',
+    resources = new FakeJsonResourceStore(),
+    readResource = vi.spyOn(resources, 'read'),
+    inspect = vi.fn(),
+    adapter = new ProductionInstallerOperationAdapter(
+      {
+        MPX_APPS: 'C:\\Apps',
+        APPDATA: 'C:\\Roaming',
+        LOCALAPPDATA: 'C:\\Local',
+        USERPROFILE: 'C:\\Users\\me',
+        MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+      },
+      'me',
+      {
+        files: new FakeBinaryFileSystem(),
+        resources,
+        scheduledTaskStatus: { inspect },
+      },
+    ),
+    spec = {
+      kind: 'scheduled-task' as const,
+      target,
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx' },
+    },
+    operation = {
+      id: '90-scheduled-capture',
+      adapter: adapter.name,
+      action: 'ensure' as const,
+      target,
+      desiredDigest: installerDigest(spec.desired),
+    };
+
+  await expect(
+    adapter.hydrateReceiptOperation(operation, { kind: 'resource', spec }),
+  ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_AMBIGUOUS' });
+  expect(readResource).not.toHaveBeenCalled();
+  expect(inspect).not.toHaveBeenCalled();
+});
+
+it('never inspects, plans, or writes Windows Terminal while retaining managed installer operations', async () => {
   const releaseKey = 'a'.repeat(64),
     profile = 'C:\\Users\\me\\.bashrc',
     terminal =
@@ -489,12 +670,15 @@ it('plans from explicit roots without writes and applies managed profile and Ter
   const resources = new FakeJsonResourceStore({
     [terminal]: { profiles: [{ guid: 'foreign', name: 'Keep' }], theme: 'native' },
   });
+  const readResource = vi.spyOn(resources, 'read');
+  const writeResource = vi.spyOn(resources, 'write');
   const adapter = new ProductionInstallerOperationAdapter(
     {
       MPX_APPS: 'C:\\Apps',
       APPDATA: 'C:\\Roaming',
       LOCALAPPDATA: 'C:\\Local',
       USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
     },
     'me',
     { files, resources },
@@ -516,28 +700,17 @@ it('plans from explicit roots without writes and applies managed profile and Ter
   const operations = await adapter.operations(intent, manifest);
   const selector = 'C:\\Apps\\mpx\\bin\\mpx.cmd';
   expect(operations.automatic.map((item) => item.id)).toContain('05-cli-selector');
+  expect(operations.automatic.map((item) => item.id)).not.toContain('20-terminal-profile');
   expect((await files.read(profile))?.toString()).toBe('native\r\n');
-  expect(await resources.read(terminal)).toEqual({
-    profiles: [{ guid: 'foreign', name: 'Keep' }],
-    theme: 'native',
-  });
-  expect(operations.scheduled.map((x) => x.id)).toEqual(['90-scheduled-capture']);
-  const task = required(operations.scheduled[0], 'scheduled capture operation');
-  expect(task.desiredDigest).not.toBeNull();
-  for (const operation of operations.automatic.filter(
-    (x) => x.id === '05-cli-selector' || x.id === '10-profile-0' || x.id === '20-terminal-profile',
-  )) {
+  expect(readResource).not.toHaveBeenCalledWith(terminal);
+  expect(operations.scheduled).toEqual([]);
+  for (const operation of operations.automatic) {
     await adapter.apply(operation);
   }
   expect((await files.read(selector))?.toString()).toContain('active-release');
   expect((await files.read(profile))?.toString()).toContain(
     'native\r\n# >>> MPX MANAGED LAUNCHERS >>>',
   );
-  expect(await resources.read(terminal)).toMatchObject({
-    profiles: [{ guid: 'foreign', name: 'Keep' }, { name: 'MPX' }],
-    theme: 'native',
-  });
-  expect(operations.automatic.find((x) => x.id === '20-terminal-profile')?.desiredDigest).toBe(
-    installerDigest(((await resources.read(terminal)) as any).profiles[1]),
-  );
+  expect(readResource).not.toHaveBeenCalledWith(terminal);
+  expect(writeResource).not.toHaveBeenCalledWith(terminal, expect.anything());
 });

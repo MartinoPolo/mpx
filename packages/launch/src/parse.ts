@@ -1,6 +1,7 @@
 import { isSafeRouteLabel } from '@mpx/config';
 import { MpxError, sha256Canonical } from '@mpx/core';
 import type { JsonValue } from '@mpx/core';
+import { canonicalRuntimeArgs } from './runtime-args.js';
 import type { LaunchDescriptor } from './types.js';
 
 function fail(code: string, message: string): never {
@@ -52,6 +53,7 @@ export function parseLaunchDescriptorV2(value: unknown): LaunchDescriptor {
     'launchKey',
     'nativeRuntimeRootDigest',
     'runtime',
+    'runtimeArgs',
     'binding',
     'identity',
     'mode',
@@ -71,7 +73,7 @@ export function parseLaunchDescriptorV2(value: unknown): LaunchDescriptor {
     'skillArtifact',
     'elevationAudit',
   ] as const;
-  const item = exact(value, keys, 'launch descriptor');
+  const item = exact(value, keys, 'launch descriptor', ['runtimeArgs']);
   if (item.schemaVersion !== 2) {
     fail('LAUNCH_DESCRIPTOR_VERSION_UNSUPPORTED', 'Only launch descriptor schema v2 is supported.');
   }
@@ -79,6 +81,12 @@ export function parseLaunchDescriptorV2(value: unknown): LaunchDescriptor {
   requireDigest(item.nativeRuntimeRootDigest, 'nativeRuntimeRootDigest');
   if (item.runtime !== 'claude' && item.runtime !== 'pi') {
     fail('LAUNCH_DESCRIPTOR_INVALID', 'runtime is invalid.');
+  }
+  if (item.runtimeArgs !== undefined) {
+    if (!Array.isArray(item.runtimeArgs)) {
+      fail('RUNTIME_ARGS_INVALID', 'runtimeArgs must be an array.');
+    }
+    canonicalRuntimeArgs(item.runtimeArgs);
   }
   const binding = exact(item.binding, ['projectId', 'repositoryId'], 'binding');
   if (

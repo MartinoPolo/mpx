@@ -68,14 +68,20 @@ export function activatePiProductionRuntime(input: PiProductionRuntimeInput) {
   if (input.launch.executor !== capability.executor) {
     throw new Error('EXECUTOR_MISMATCH: launch binding differs from capability authority');
   }
-  if (capability.executor === 'host' && !input.adapters?.executor) {
-    throw new Error('ADAPTER_REQUIRED: host compatibility executor was not supplied');
+  if (capability.executor === 'host') {
+    if (input.adapters.hostApproved !== true) {
+      throw new Error(
+        'HOST_EXECUTOR_NOT_APPROVED: host execution requires explicit launch approval',
+      );
+    }
+    return Object.freeze({
+      mode: 'approved-host-compatibility' as const,
+      hostFallback: true,
+      activeTools: Object.freeze([...(input.pi.activeModelTools?.() ?? [])]),
+    });
   }
   if (input.adapters.executor && input.adapters.executor.name !== capability.executor) {
     throw new Error('EXECUTOR_MISMATCH: supplied gateway executor differs from launch authority');
-  }
-  if (capability.executor === 'host' && input.adapters.hostApproved !== true) {
-    throw new Error('HOST_EXECUTOR_NOT_APPROVED: host execution requires explicit launch approval');
   }
   if (capability.executor === 'docker') {
     if (!input.adapters.remoteExecutor) {

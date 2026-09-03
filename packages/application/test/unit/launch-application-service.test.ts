@@ -161,6 +161,47 @@ describe('LaunchApplicationService', () => {
     ).rejects.toMatchObject({ code: 'IDENTITY_DOMAIN_MISMATCH' });
   });
 
+  it('threads invocation-scoped runtime arguments through the descriptor into execution', async () => {
+    const launchExecution = vi.fn(async () => ({ exitCode: 0 }));
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      launchExecution,
+      approveHost: async () => ({ reason: 'test', approvalKey: 'a'.repeat(64) }),
+    });
+    const runtimeArgs = ['--no-session', '--print', 'Reply with only: verified'];
+    const prepared = await service.prepare({
+      ...request,
+      executor: 'host',
+      workspace: 'direct',
+      runtimeArgs,
+    });
+    const resolved = await service.resolve(prepared, { reason: 'test' });
+
+    await service.execute(resolved);
+
+    expect(service.descriptor(resolved).runtimeArgs).toEqual(runtimeArgs);
+    expect(launchExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ descriptor: expect.objectContaining({ runtimeArgs }) }),
+    );
+  });
+
+  it('rejects runtime arguments for Docker execution', async () => {
+    const service = new LaunchApplicationService(dependencies());
+    await expect(service.prepare({ ...request, runtimeArgs: ['--print'] })).rejects.toMatchObject({
+      code: 'RUNTIME_ARGS_EXECUTOR_UNAVAILABLE',
+    });
+  });
+
+  it.each(['explain', 'sbx-plan-export'] as const)(
+    'rejects runtime arguments for the read-only %s operation',
+    async (operation) => {
+      const service = new LaunchApplicationService(dependencies());
+      await expect(
+        service.prepare({ ...request, operation, runtimeArgs: ['--print'] }),
+      ).rejects.toMatchObject({ code: 'RUNTIME_ARGS_SCOPE_INVALID' });
+    },
+  );
+
   it('performs executable preconditions before child execution', async () => {
     const events: string[] = [];
     const service = new LaunchApplicationService(dependencies(events));

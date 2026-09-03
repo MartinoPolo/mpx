@@ -17,14 +17,19 @@ if($o.Contains('MPX_PATH_PREPEND')){$o['PathPrepend']=$o['MPX_PATH_PREPEND'];$o.
 $o|ConvertTo-Json -Compress -Depth 5`;
 const REGISTRY_WRITE = String.raw`$ErrorActionPreference='Stop'
 $d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-New-Item -Path 'HKCU:\Environment' -Force -ErrorAction Stop|Out-Null
-$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment';$oldPrefix=[string]$p.MPX_PATH_PREPEND;$wanted=@($d.value.PSObject.Properties|ForEach-Object{if($_.Name-eq'owner'){'MPX_OWNER'}elseif($_.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$_.Name}});foreach($n in @($p.PSObject.Properties.Name|Where-Object{($_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_')-and $_-notin $wanted})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -ErrorAction Stop}
+if(-not(Test-Path -LiteralPath 'HKCU:\Environment' -PathType Container)){New-Item -Path 'HKCU:\Environment' -ErrorAction Stop|Out-Null}
+$key=Get-Item -LiteralPath 'HKCU:\Environment' -ErrorAction Stop
+$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment' -ErrorAction Stop
+$pathProperty=$p.PSObject.Properties['Path'];$hasPath=$null-ne $pathProperty;$old=if($hasPath){[string]$pathProperty.Value}else{''};$pathType=if($hasPath){$key.GetValueKind('Path')}else{[Microsoft.Win32.RegistryValueKind]::ExpandString};$oldPrefix=[string]$p.MPX_PATH_PREPEND
+$wanted=@($d.value.PSObject.Properties|ForEach-Object{if($_.Name-eq'owner'){'MPX_OWNER'}elseif($_.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$_.Name}});foreach($n in @($p.PSObject.Properties.Name|Where-Object{($_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_')-and $_-notin $wanted})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -ErrorAction Stop}
 foreach($x in $d.value.PSObject.Properties){$n=if($x.Name-eq'owner'){'MPX_OWNER'}elseif($x.Name-eq'PathPrepend'){'MPX_PATH_PREPEND'}else{$x.Name};if($n -eq'MPX_OWNER'-or $n -eq'MPX_PATH_PREPEND'-or $n -match '^MPX_'){Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $n -Value ([string]$x.Value) -Type String -ErrorAction Stop}}
-$old=[string](Get-ItemPropertyValue -LiteralPath 'HKCU:\Environment' -Name Path -ErrorAction SilentlyContinue);$parts=@($old-split';'|Where-Object{$_-and(!$oldPrefix-or $_-cne $oldPrefix)-and(!$d.value.PathPrepend-or $_-cne [string]$d.value.PathPrepend)});$new=if($d.value.PathPrepend){(@([string]$d.value.PathPrepend)+$parts)-join';'}else{$parts-join';'};Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value $new -Type ExpandString
+$prependProperty=$d.value.PSObject.Properties['PathPrepend'];if($null-ne $prependProperty){$prefix=[string]$prependProperty.Value;$parts=if($hasPath){@($old.Split([char]';',[System.StringSplitOptions]::None)|Where-Object{(!$oldPrefix-or $_-cne $oldPrefix)-and $_-cne $prefix})}else{@()};$new=(@($prefix)+$parts)-join';';Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value $new -Type $pathType -ErrorAction Stop}else{$literalPath=$d.value.PSObject.Properties['Path'];if($null-ne $literalPath){Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value ([string]$d.value.Path) -Type $pathType -ErrorAction Stop}elseif($hasPath){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -ErrorAction Stop}}
 @{ok=$true}|ConvertTo-Json -Compress`;
 const REGISTRY_REMOVE = String.raw`$ErrorActionPreference='Stop'
 $d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment' -ErrorAction Stop;if($p){$prefix=[string]$p.MPX_PATH_PREPEND;foreach($x in @($p.PSObject.Properties.Name|Where-Object{$_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_'})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $x -ErrorAction Stop};if($prefix){$old=[string]$p.Path;Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value ((@($old-split';'|Where-Object{$_-and $_-cne $prefix}))-join';') -Type ExpandString -ErrorAction Stop}}
+if(-not(Test-Path -LiteralPath 'HKCU:\Environment' -PathType Container)){@{ok=$true}|ConvertTo-Json -Compress;exit 0}
+$key=Get-Item -LiteralPath 'HKCU:\Environment' -ErrorAction Stop
+$p=Get-ItemProperty -LiteralPath 'HKCU:\Environment' -ErrorAction Stop;if($p){$prefix=[string]$p.MPX_PATH_PREPEND;$pathProperty=$p.PSObject.Properties['Path'];$hasPath=$null-ne $pathProperty;$old=if($hasPath){[string]$pathProperty.Value}else{''};$pathType=if($hasPath){$key.GetValueKind('Path')}else{[Microsoft.Win32.RegistryValueKind]::ExpandString};foreach($x in @($p.PSObject.Properties.Name|Where-Object{$_-eq'MPX_OWNER'-or $_-eq'MPX_PATH_PREPEND'-or $_-match'^MPX_'})){Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name $x -ErrorAction Stop};if($prefix-and $hasPath){$remaining=@($old.Split([char]';',[System.StringSplitOptions]::None)|Where-Object{$_-cne $prefix});if($remaining.Count){Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Value ($remaining-join';') -Type $pathType -ErrorAction Stop}else{Remove-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -ErrorAction Stop}}}
 @{ok=$true}|ConvertTo-Json -Compress`;
 
 const SHORTCUT_READ = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
@@ -89,6 +94,61 @@ function stable(value: unknown): string {
       .join(',')}}`;
   }
   return JSON.stringify(value);
+}
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+function registryWriteMatches(actual: unknown, desired: unknown): boolean {
+  const current = record(actual),
+    wanted = record(desired);
+  if (!current || !wanted) {
+    return false;
+  }
+  if (typeof wanted.PathPrepend !== 'string') {
+    return stable(current) === stable(wanted);
+  }
+  if (
+    Object.entries(wanted).some(
+      ([key, value]) => key !== 'Path' && stable(current[key]) !== stable(value),
+    ) ||
+    Object.keys(current).some(
+      (key) =>
+        (key === 'owner' || key === 'PathPrepend' || key.startsWith('MPX_')) && !(key in wanted),
+    ) ||
+    typeof current.Path !== 'string' ||
+    (wanted.Path !== undefined && typeof wanted.Path !== 'string')
+  ) {
+    return false;
+  }
+  const rawEntries = typeof wanted.Path === 'string' ? wanted.Path.split(';') : [],
+    expectedEntries = [
+      wanted.PathPrepend,
+      ...rawEntries.filter((entry) => entry !== wanted.PathPrepend),
+    ];
+  return current.Path === expectedEntries.join(';');
+}
+function registryRemovalExpected(before: unknown): unknown {
+  const previous = record(before);
+  if (!previous) {
+    return before;
+  }
+  const expected = Object.fromEntries(
+      Object.entries(previous).filter(
+        ([key]) => key !== 'owner' && key !== 'PathPrepend' && !key.startsWith('MPX_'),
+      ),
+    ),
+    prefix = previous.PathPrepend;
+  if (typeof prefix === 'string' && typeof previous.Path === 'string') {
+    const remaining = previous.Path.split(';').filter((entry) => entry !== prefix);
+    if (remaining.length) {
+      expected.Path = remaining.join(';');
+    } else {
+      delete expected.Path;
+    }
+  }
+  return expected;
 }
 function classify(target: string): 'registry' | 'shortcut' | 'task' {
   if (target === REGISTRY_TARGET) {
@@ -168,7 +228,9 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
       { target, value: encoded },
     );
     const actual = await this.read(target);
-    if (stable(actual) !== stable(value)) {
+    if (
+      kind === 'registry' ? !registryWriteMatches(actual, value) : stable(actual) !== stable(value)
+    ) {
       fail(
         'WINDOWS_RESOURCE_VERIFY_FAILED',
         'Native Windows resource did not reach desired state.',
@@ -176,12 +238,18 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
     }
   }
   async remove(target: string): Promise<void> {
-    const kind = classify(target);
+    const kind = classify(target),
+      before = kind === 'registry' ? await this.read(target) : undefined;
     await this.invoke(
       kind === 'registry' ? REGISTRY_REMOVE : kind === 'shortcut' ? SHORTCUT_REMOVE : TASK_REMOVE,
       { target },
     );
-    if ((await this.read(target)) !== undefined) {
+    const actual = await this.read(target),
+      removed =
+        kind === 'registry'
+          ? stable(actual) === stable(registryRemovalExpected(before))
+          : actual === undefined;
+    if (!removed) {
       fail('WINDOWS_RESOURCE_VERIFY_FAILED', 'Native Windows resource removal was not confirmed.');
     }
   }

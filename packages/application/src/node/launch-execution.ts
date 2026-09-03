@@ -37,6 +37,7 @@ export { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js'
 export interface NodeLaunchExecutionInput extends LaunchExecutionRequest {
   readonly context: LaunchExecutionContext;
   readonly tty?: DirectTty;
+  readonly approveHost?: boolean;
   readonly agentsRoot: string;
   readonly artifactsRoot: string;
   readonly stateRoot: string;
@@ -144,14 +145,8 @@ function productionComposer(
 export const executeResolvedNodeLaunch = async (
   input: NodeLaunchExecutionInput,
 ): Promise<ProcessResult> => {
-  if (!input.context.launchRoutes) {
-    throw new ExecutionError(
-      'PRIVATE_ROUTE_MATERIALIZER_REQUIRED',
-      'Trusted private-route materialization is required before launch.',
-    );
-  }
-  let trustedExecutable: TrustedRuntimeExecutable | undefined;
   const injectedRuntimeAdapters = input.context.launchRuntimeAdapters;
+  let trustedExecutable: TrustedRuntimeExecutable | undefined;
   const composer: LaunchRuntimeComposer = injectedRuntimeAdapters
     ? () => ({ adapters: injectedRuntimeAdapters })
     : productionComposer(input, () => trustedExecutable);
@@ -200,11 +195,12 @@ export const executeResolvedNodeLaunch = async (
     {
       composer,
       executorAdapters: adapters,
-      ...(injectedRuntimeAdapters ? { runtimeAdapterMode: 'injected' as const } : {}),
+      runtimeAdapterMode: injectedRuntimeAdapters ? 'injected' : 'production',
       ...(runtimePreflight ? { runtimePreflight } : {}),
-      routes: input.context.launchRoutes!,
+      ...(input.context.launchRoutes ? { routes: input.context.launchRoutes } : {}),
       ...(input.context.launchAudit ? { audit: input.context.launchAudit } : {}),
       ...(input.tty ? { tty: input.tty } : {}),
+      ...(input.approveHost ? { approveHost: true } : {}),
       ...(input.context.launchExpectedKey
         ? { expectedLaunchKey: input.context.launchExpectedKey }
         : {}),
@@ -224,7 +220,10 @@ export const executeResolvedNodeLaunch = async (
         : {}),
       ...(input.descriptor.runtime === 'pi' ? { verifyResumeTarget: verifyPiResumeTarget } : {}),
       ...(input.beforeChildExecution ? { beforeChildExecution: input.beforeChildExecution } : {}),
-      ...(input.context.launchExecutorAdapters ? { useSelectedExecutorForHostPi: true } : {}),
+      ...(input.context.launchExecutorAdapters &&
+      input.context.launchExecutorAdapterSource !== 'production-admission'
+        ? { useSelectedExecutorForHostPi: true }
+        : {}),
       ...(!input.context.launchRuntimeAdapters
         ? {
             liveStatus: {

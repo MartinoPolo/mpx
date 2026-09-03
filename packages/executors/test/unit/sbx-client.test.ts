@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   diagnoseSbx,
+  parseSbxDaemonStatus,
   type BoundedProcessRunner,
   type ProcessResult,
   type SbxFailureCode,
@@ -22,11 +23,54 @@ const ok = (stdout: string): ProcessResult => ({
   stderr: '',
   truncated: false,
 });
+describe('parseSbxDaemonStatus', () => {
+  it('accepts the optional bounded logs field emitted by standalone sbx v0.39', () => {
+    expect(
+      parseSbxDaemonStatus(
+        '{"status":"running","socket":"pipe","logs":"C:/Users/alice/.docker/sbx/daemon.log"}',
+      ),
+    ).toEqual({
+      status: 'running',
+      socket: 'pipe',
+      logs: 'C:/Users/alice/.docker/sbx/daemon.log',
+    });
+  });
+
+  it('continues to reject unknown fields', () => {
+    expect(() =>
+      parseSbxDaemonStatus('{"status":"running","socket":"pipe","surprise":true}'),
+    ).toThrow();
+  });
+
+  it('rejects a malformed logs field', () => {
+    expect(() => parseSbxDaemonStatus('{"status":"running","socket":"pipe","logs":42}')).toThrow();
+  });
+
+  it('rejects an unbounded logs field', () => {
+    expect(() =>
+      parseSbxDaemonStatus(
+        JSON.stringify({ status: 'running', socket: 'pipe', logs: 'x'.repeat(513) }),
+      ),
+    ).toThrow();
+  });
+
+  it.each([
+    'line one\nline two',
+    'line one\rline two',
+    'line one\0line two',
+    'line one\u0001line two',
+  ])('rejects control characters in the logs field', (logs) => {
+    expect(() =>
+      parseSbxDaemonStatus(JSON.stringify({ status: 'running', socket: 'pipe', logs })),
+    ).toThrow();
+  });
+});
+
 const defaults: Readonly<Record<string, ProcessResult>> = {
   version: ok(`sbx version: v${pin.version} ${pin.buildCommit}\n`),
   '--help': ok(help),
   'daemon status --json': ok(
-    '{"status":"running","socket":"pipe","clientVersion":"0.39.0","daemonVersion":"0.39.0"}',
+    '{"status":"running","socket":"pipe","logs":"C:/Users/alice/.docker/sbx/daemon.log"}',
   ),
   'diagnose --output json': ok(auth('pass')),
   'policy ls --json': ok('{"default":"deny","rules":[]}'),

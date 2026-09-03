@@ -72,7 +72,11 @@ class RetainingAdapter implements SideEffectAdapter {
   readonly name = 'retaining';
   readonly values = new Map<string, string>();
   readonly hydrated = new Set<string>();
+  requireHydrationBeforeObserve = false;
   async observe(operation: InstallOperationV1) {
+    if (this.requireHydrationBeforeObserve && !this.hydrated.has(operation.id)) {
+      throw Object.assign(new Error('operation was not hydrated'), { code: 'INSTALL_PLAN_STALE' });
+    }
     return this.values.get(operation.target) ?? null;
   }
   async capture(operation: InstallOperationV1) {
@@ -281,6 +285,72 @@ describe('durable installer transaction state', () => {
 });
 
 describe('installer transactions', () => {
+  it('hydrates durable receipt operations before verification after an adapter restart', async () => {
+    const adapter = new RetainingAdapter(),
+      store = new MemoryTransactionStore(),
+      manifest = {
+        schemaVersion: 1 as const,
+        kind: 'release-manifest' as const,
+        releaseKey: 'a'.repeat(64),
+        convergenceHash: 'a'.repeat(64),
+        files: [],
+      },
+      operation: InstallOperationV1 = {
+        id: 'native',
+        adapter: adapter.name,
+        action: 'ensure',
+        target: 'C:\\native',
+        desiredDigest: 'b'.repeat(64),
+      };
+    const installing = new ImmutableInstallerService({ adapters: [adapter], store, manifest });
+    const plan = await installing.plan(intent, [operation]);
+    await installing.apply(plan, plan.confirmationDigest);
+    await installing.finalize();
+
+    const restarted = new RetainingAdapter();
+    restarted.values.set(operation.target, operation.desiredDigest!);
+    restarted.requireHydrationBeforeObserve = true;
+    await expect(
+      new ImmutableInstallerService({ adapters: [restarted], store }).verify(),
+    ).resolves.toMatchObject({ healthy: true, issues: [] });
+    expect([...restarted.hydrated]).toEqual(['native']);
+  });
+
+  it('fails verification closed when a recomputed receipt locator is forged', async () => {
+    const adapter = new RetainingAdapter(),
+      store = new MemoryTransactionStore(),
+      operation: InstallOperationV1 = {
+        id: 'config',
+        adapter: adapter.name,
+        action: 'ensure',
+        target: 'C:\\Roaming\\arbitrary.json',
+        desiredDigest: 'b'.repeat(64),
+      },
+      spec = { kind: 'user-owned' };
+    adapter.values.set(operation.target, operation.desiredDigest!);
+    await store.writeReceipt({
+      schemaVersion: 2,
+      kind: 'ownership-receipt',
+      releaseKey: 'a'.repeat(64),
+      convergenceHash: 'a'.repeat(64),
+      files: [],
+      operations: [operation],
+      operationLocators: [
+        {
+          operationId: operation.id,
+          adapter: operation.adapter,
+          spec,
+          bindingDigest: installerDigest({ operation, spec }),
+        },
+      ],
+      installedAt: '2025-01-01T00:00:00.000Z',
+    });
+
+    await expect(
+      new ImmutableInstallerService({ adapters: [adapter], store }).verify(),
+    ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_FORGED' });
+  });
+
   it('hydrates signed locators before retaining user-owned state and removes other owned operations', async () => {
     const adapter = new RetainingAdapter(),
       store = new MemoryTransactionStore(),
