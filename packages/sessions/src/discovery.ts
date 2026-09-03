@@ -171,10 +171,11 @@ export class PiV2ActiveRegistryScanner implements RuntimeDiscovery {
           'Pi registry entries must be bounded regular non-symlink JSON files',
         );
       }
-      const entry = parsePiEntry(
-        JSON.parse(await readFile(registryFile, 'utf8')) as unknown,
-        this.clock(),
-      );
+      const raw = JSON.parse(await readFile(registryFile, 'utf8')) as unknown;
+      if (isObject(raw) && raw.version === 1 && raw.agent === 'pi') {
+        continue;
+      }
+      const entry = parsePiEntry(raw, this.clock());
       const prior = newest.get(entry.sessionId);
       if (!prior || entry.registeredAt > prior.registeredAt) {
         newest.set(entry.sessionId, entry);
@@ -218,14 +219,21 @@ function parsePiTimestamp(value: unknown, label: string, now: number): string {
   if (typeof value !== 'string') {
     throw new SessionError('PI_REGISTRY_MALFORMED', `${label} is invalid`);
   }
-  const instant = Date.parse(value);
-  if (!Number.isFinite(instant) || new Date(instant).toISOString() !== value || instant > now) {
+  const windowsRoundTrip = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3})\d{4}Z$/u.exec(value),
+    canonical = windowsRoundTrip?.[1] ? `${windowsRoundTrip[1]}Z` : value,
+    instant = Date.parse(canonical);
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(canonical) ||
+    !Number.isFinite(instant) ||
+    new Date(instant).toISOString() !== canonical ||
+    instant > now
+  ) {
     throw new SessionError(
       'PI_REGISTRY_FUTURE_TIMESTAMP',
       `${label} must be canonical and not in the future`,
     );
   }
-  return value;
+  return canonical;
 }
 function parsePiEntry(value: unknown, now: number): PiEntry {
   if (!isObject(value)) {

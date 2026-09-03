@@ -1583,6 +1583,126 @@ it('reads maintained Pi v2 registry files and keeps the newest registration', as
   ]);
 });
 
+it('normalizes the PowerShell round-trip process timestamp to the Windows fingerprint', async () => {
+  const root = await temporary(),
+    registry = path.join(await temporary(), 'active-sessions'),
+    sessionFile = path.join(root, 'sessions', 'windows.jsonl'),
+    windowsStartedAt = '2025-01-02T03:04:05.1234567Z',
+    normalizedStartedAt = '2025-01-02T03:04:05.123Z';
+  await mkdir(path.dirname(sessionFile));
+  await mkdir(registry);
+  await writeFile(sessionFile, 'x');
+  await writeFile(
+    path.join(registry, 'windows.json'),
+    JSON.stringify({
+      version: 2,
+      agent: 'pi',
+      sessionId: 'windows',
+      sessionFile,
+      cwd: root,
+      pid: 10,
+      processStartedAt: windowsStartedAt,
+      registeredAt: later,
+    }),
+  );
+
+  const result = await new PiV2ActiveRegistryScanner(
+    root,
+    registry,
+    { inspect: async () => ({ startFingerprint: normalizedStartedAt }) },
+    () => Date.parse(later) + 1,
+  ).scan();
+
+  expect(result.sessions).toMatchObject([
+    { nativeSessionId: 'windows', startFingerprint: normalizedStartedAt },
+  ]);
+});
+
+it('ignores known legacy Pi v1 records without weakening v2 validation', async () => {
+  const root = await temporary(),
+    registry = path.join(await temporary(), 'active-sessions'),
+    sessionFile = path.join(root, 'sessions', 'current.jsonl');
+  await mkdir(path.dirname(sessionFile));
+  await mkdir(registry);
+  await writeFile(sessionFile, 'x');
+  await writeFile(
+    path.join(registry, 'legacy.json'),
+    JSON.stringify({
+      version: 1,
+      agent: 'pi',
+      sessionId: 'legacy',
+      sessionFile,
+      cwd: root,
+      pid: 9,
+      registeredAt: instant,
+    }),
+  );
+  await writeFile(
+    path.join(registry, 'current.json'),
+    JSON.stringify({
+      version: 2,
+      agent: 'pi',
+      sessionId: 'current',
+      sessionFile,
+      cwd: root,
+      pid: 10,
+      processStartedAt: instant,
+      registeredAt: later,
+    }),
+  );
+
+  const result = await new PiV2ActiveRegistryScanner(
+    root,
+    registry,
+    { inspect: async (pid) => (pid === 10 ? { startFingerprint: instant } : null) },
+    () => Date.parse(later) + 1,
+  ).scan();
+
+  expect(result.sessions.map((session) => session.nativeSessionId)).toEqual(['current']);
+});
+
+it.each([
+  ['unknown schema', { version: 3, processStartedAt: instant }],
+  ['timestamp offset', { version: 2, processStartedAt: '2025-01-02T03:04:05.000+00:00' }],
+  ['unsupported precision', { version: 2, processStartedAt: '2025-01-02T03:04:05.0000Z' }],
+  ['invalid date', { version: 2, processStartedAt: '2025-02-30T03:04:05.000Z' }],
+  ['future timestamp', { version: 2, processStartedAt: later }],
+])('rejects %s in a Pi v2 registry record', async (_case, changed) => {
+  const root = await temporary(),
+    registry = path.join(await temporary(), 'active-sessions'),
+    sessionFile = path.join(root, 'sessions', 'invalid.jsonl');
+  await mkdir(path.dirname(sessionFile));
+  await mkdir(registry);
+  await writeFile(sessionFile, 'x');
+  await writeFile(
+    path.join(registry, 'invalid.json'),
+    JSON.stringify(
+      Object.assign(
+        {
+          version: 2,
+          agent: 'pi',
+          sessionId: 'invalid',
+          sessionFile,
+          cwd: root,
+          pid: 10,
+          processStartedAt: instant,
+          registeredAt: instant,
+        },
+        changed,
+      ),
+    ),
+  );
+
+  await expect(
+    new PiV2ActiveRegistryScanner(
+      root,
+      registry,
+      { inspect: async () => ({ startFingerprint: instant }) },
+      () => Date.parse(instant) + 1,
+    ).scan(),
+  ).rejects.toBeInstanceOf(SessionError);
+});
+
 it('treats a missing Pi registry directory as available empty by default', async () => {
   const result = await new PiV2ActiveRegistryScanner(
     await temporary(),
