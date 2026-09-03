@@ -297,7 +297,9 @@ export class InstallOrchestrator {
   }
   private async validatedReceipt(): Promise<OwnershipReceiptV1 | undefined> {
     const receipt = await this.options.store.readReceipt();
-    if (!receipt) return undefined;
+    if (!receipt) {
+      return undefined;
+    }
     const releaseIssues = await this.options.releases.verify(receipt, false);
     if (releaseIssues.length) {
       fail('INSTALL_FOREIGN_OR_DRIFTED', `Owned release is drifted (${releaseIssues.join(', ')}).`);

@@ -36,21 +36,21 @@
 
 ## Current implementation inventory
 
-| Area                | Repository state                                                                                                                       | Decision                                                    |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Config and launch   | Identity, mode, preset, grants, skill exposure, immutable descriptors, host approval, runtime argv, and fail-closed resolution exist   | Keep and simplify around accepted routes                    |
-| Skills and runtimes | Canonical content, projection plans, generated Claude/Pi artifacts, model mapping, footer/status foundations, and runtime guards exist | Keep; complete curated parity                               |
-| Local issues        | Local Markdown provider and view generation exist                                                                                      | Keep without Obsidian dependency                            |
-| Ports               | Allocation, locking, leases, conflict inspection, release, reconciliation, and `.worktree-ports.json` exist                            | Keep                                                        |
-| Worktrees           | Host create/remove/prepare/trust and CLI behavior exist                                                                                | Keep; defer linked-worktree sandbox integration             |
-| Sessions            | Lifecycle/discovery/resume plus a strict resurrection export and one-step approved resume route exist; agent-resurrect v3 consumes it  | Live mixed-group acceptance remains                         |
-| Providers           | GitHub, GitLab, KanbanFlow, and local adapters exist                                                                                   | Keep; add minimal Gerrit and live verification              |
-| Installer           | Immutable release, plan/apply/verify/uninstall, rollback, native launcher registration, and Windows resource adapters exist            | Keep base installer; narrow ownership                       |
-| Windows Terminal    | Safe `wt.exe` tab launching and explicit profile scripts exist                                                                         | Keep outside installer ownership                            |
-| Sandbox             | Real standalone-sbx Pi feasibility passed; legacy proof/bridge machinery remains and whole-agent containment is not accepted           | Replace after host parity; block Docker socket and VM OAuth |
-| Raycast             | Runtime skill, export/audit, and installer integration removed                                                                         | Deferred product integration has no active implementation   |
-| Obsidian installer  | Installer planning removed; optional manual registration reference remains                                                             | Keep outside installer; local Markdown remains independent  |
-| Task Scheduler      | Scheduled-capture authority, adapter, receipts, and Windows machinery removed                                                          | Any future feature starts from a new explicit design        |
+| Area                | Repository state                                                                                                                           | Decision                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Config and launch   | Identity, mode, preset, grants, skill exposure, immutable descriptors, host approval, runtime argv, and fail-closed resolution exist       | Keep and simplify around accepted routes                    |
+| Skills and runtimes | Canonical content, projection plans, generated Claude/Pi artifacts, model mapping, footer/status foundations, and runtime guards exist     | Keep; complete curated parity                               |
+| Local issues        | Local Markdown provider and view generation exist                                                                                          | Keep without Obsidian dependency                            |
+| Ports               | Allocation, locking, leases, conflict inspection, release, reconciliation, and `.worktree-ports.json` exist                                | Keep                                                        |
+| Worktrees           | Host create/remove/prepare/trust and CLI behavior exist                                                                                    | Keep; defer linked-worktree sandbox integration             |
+| Sessions            | Lifecycle/discovery/resume plus a strict resurrection export and one-step approved resume route exist; agent-resurrect v3 consumes it      | Live mixed-group acceptance remains                         |
+| Providers           | GitHub, GitLab, KanbanFlow, and local adapters exist                                                                                       | Keep; add minimal Gerrit and live verification              |
+| Installer           | Immutable release, ownership-safe upgrade, plan/apply/verify/uninstall, rollback, native launcher registration, and Windows adapters exist | Keep base installer; narrow ownership                       |
+| Windows Terminal    | Safe `wt.exe` tab launching and explicit profile scripts exist                                                                             | Keep outside installer ownership                            |
+| Sandbox             | Real standalone-sbx Pi feasibility passed; legacy proof/bridge machinery remains and whole-agent containment is not accepted               | Replace after host parity; block Docker socket and VM OAuth |
+| Raycast             | Runtime skill, export/audit, and installer integration removed                                                                             | Deferred product integration has no active implementation   |
+| Obsidian installer  | Installer planning removed; optional manual registration reference remains                                                                 | Keep outside installer; local Markdown remains independent  |
+| Task Scheduler      | Scheduled-capture authority, adapter, receipts, and Windows machinery removed                                                              | Any future feature starts from a new explicit design        |
 
 ## Retained scope
 
@@ -136,7 +136,7 @@ Acceptance requires native Pi and Claude save/resurrect, host MPX Pi and Claude 
 - [x] **Gate 1 — migration authority:** this concise tracker replaces obsolete migration prose and is the sole active status authority.
 - [x] **Gate 2 — safe cleanup:** Raycast and Obsidian installer paths, scheduled-capture machinery, obsolete migration tools/reports/provenance, and deferred portability plans removed; retained bundles regenerated; reviews resolved; full tests, typecheck, check, convergence verification, generated validation, and diff check pass; clean `main` is the sole branch and worktree.
 - [x] **Gate 3 — sandbox feasibility:** pinned standalone `sbx` created a Linux shell; packaged Pi ran under a pseudo-TTY, authenticated from an ephemeral personal profile, returned a model response, performed a model-triggered write, persisted and resumed one session from conversation context, exposed its effective mounts, and was destroyed with zero remaining sandboxes.
-- [ ] **Gate 4 — curated parity:** content audit is complete; Pi invocation now consumes its immutable profile; Claude projects a forced canonical output style with valid plugin settings; MPX produces strict resurrection exports; agent-resurrect consumes them. Integrated repository checks pass, but current installation and mixed native/MPX host-route acceptance remain pending.
+- [ ] **Gate 4 — curated parity:** content audit is complete; Pi invocation now consumes its immutable profile; Claude projects a forced canonical output style with valid plugin settings; MPX produces strict resurrection exports; agent-resurrect consumes them. An ownership-safe immutable upgrade installed and strictly verified the integrated runtime checkpoint, but Pi registry timestamp compatibility now blocks reconciliation and mixed native/MPX host-route acceptance remains pending.
 - [ ] **Gate 5 — whole-agent sandbox:** selected identity, private workspace, sessions, exact mounts, no opposite identity, no host fallback, export/apply-back, and cleanup are proven.
 - [ ] **Gate 6 — route acceptance:** all four routes pass in the fixed order with native fallback and resurrection.
 - [ ] **Gate 7 — providers and utilities:** KanbanFlow live tests, minimal Gerrit, GitHub/GitLab, host worktrees, ports, and Terminal project registration pass.
@@ -160,13 +160,15 @@ Acceptance requires native Pi and Claude save/resurrect, host MPX Pi and Claude 
 - Effective mount observation: only the isolated spike workspace was intentionally mounted read/write and no native `.pi` or `.claude` directory was mounted, but the `shell-docker` template exposed `/var/run/docker.sock`. A Git-Bash path-conversion mistake also redirected one temporary credential copy beneath the isolated spike workspace before cleanup. Future `sbx` commands carrying Linux absolute paths must set `MSYS_NO_PATHCONV=1`, and Gate 5 must reject Docker-socket and credential-visible mounts.
 - Gate 4 implementation checkpoint: MPX commits `e147f12`, `ca7480c`, and `376a0da` add resurrection export/approval, Pi profile-bound argv, and Claude forced output-style projection. Focused tests and typechecks passed in isolated worktrees.
 - agent-resurrect commit `f4ee889`, pushed to its `origin/main`, adds strict MPX export scanning, schema v3 saves, collision-safe mixed groups, and exact argv reopening; its full test suite and typecheck pass.
+- Installer upgrade checkpoint: the prior installation was strictly healthy at release `7af4f49646c46c1c4ee62de643e60a22d818b77d254a7aa167f4c279ee1d75ee`; receipt-bound upgrade plan `10efdcd754596769e053b7c5cd2cfe8795050f259f8fff97ed9c321b17fbc2bc` applied release `5aee3b3e0fd73717b388ce198913905a89bad1d1854164ba0301963a64419b69`; the installed selector changed to that exact key; strict installed verification reports all system and four runtime-registration components healthy. Native and `-mpx` shell functions remain distinct.
+- Installed `session resurrect-export` returns the strict empty v1 DTO, but `session reconcile` fails on maintained native Pi records whose PowerShell round-trip `processStartedAt` uses seven fractional digits while the MPX parser incorrectly permits only JavaScript's three-digit form. The parser must normalize the known producer format without weakening PID/start-fingerprint matching; known legacy v1 files must not poison v2 discovery.
 - No repository evidence yet accepts whole-agent sandbox containment or complete session resurrection.
 
 ## Active blockers
 
 1. The available `shell-docker` sandbox template exposes `/var/run/docker.sock`; whole-agent acceptance requires a template or policy with no Docker socket.
 2. Real Pi OAuth inside the VM proved feasibility but is not acceptable architecture; Gate 5 must keep credentials outside model-visible sandbox authority.
-3. The newly integrated Gate 4 MPX build is not installed; mixed native/MPX save and reopen acceptance has not run.
+3. The integrated Gate 4 runtime checkpoint was installed and strictly verified, but native Pi registry timestamp compatibility blocks `session reconcile`; mixed native/MPX save and reopen acceptance has not run.
 4. Personal Claude OAuth requires interactive renewal before that route can pass.
 5. Whole-agent Pi sandbox, session-path translation, and apply-back are not implemented or accepted.
 6. Live provider credentials and Gerrit implementation remain pending.
@@ -176,8 +178,8 @@ Acceptance requires native Pi and Claude save/resurrect, host MPX Pi and Claude 
 
 Start from clean `main` after reading this file completely. Gate 4 implementation is integrated; do not redesign it or begin Gate 5 yet.
 
-1. Verify the current combined MPX checkpoint and install it through the existing immutable installer flow without changing native launcher names, Windows Terminal, or Task Scheduler.
-2. Confirm `mpx --json session resurrect-export` emits the strict privacy-safe v1 DTO after `session reconcile`, including active host MPX records and no native session paths.
+1. Fix native Pi registry discovery to normalize the known seven-digit PowerShell process-start timestamp to the Windows inspector's millisecond fingerprint and safely ignore known legacy v1 entries; keep malformed/unknown v2 input fail-closed.
+2. Regenerate and upgrade the installed release through the now-proven ownership-safe immutable flow, then confirm `mpx --json session resurrect-export` emits the strict privacy-safe v1 DTO after `session reconcile`, including active host MPX records and no native session paths.
 3. Configure/verify agent-resurrect's MPX executable route, then test native Pi, native Claude, host MPX Pi, host MPX Claude, and one mixed Windows Terminal save/reopen group. Native launch behavior must remain unchanged.
 4. Revalidate Pi footer/profile/keybindings/common skill behavior and Claude hooks/forced `mpx-terse` style/main native status line on personal and work host routes. Personal Claude OAuth may remain the explicit blocker.
 5. Resolve findings, run `pnpm test`, `pnpm run typecheck`, `pnpm run check`, `pnpm run convergence:verify`, `pnpm run validate:generated`, and `git diff --check`, then update and close Gate 4 only if live host acceptance passes.

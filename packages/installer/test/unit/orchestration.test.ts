@@ -326,7 +326,9 @@ describe('Phase I install orchestration', () => {
       store,
       releases: f.builder,
       activate: async () => {
-        if (failActivation) throw new Error('upgrade activation failed');
+        if (failActivation) {
+          throw new Error('upgrade activation failed');
+        }
         return async () => {};
       },
     });
