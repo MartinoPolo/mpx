@@ -1178,6 +1178,8 @@ describe('trust and privacy boundaries', () => {
           TERM: 'xterm',
           HOME: 'C:/home',
           MPX_LAUNCH_KEY: 'key',
+          MPX_SESSION_LIFECYCLE_BINDING_ID: 'ambient-binding',
+          MPX_SESSION_LIFECYCLE_EVENT_DIR: 'C:/ambient/events',
           CLAUDE_CONFIG_DIR: 'C:/ambient/claude',
           PI_CODING_AGENT_DIR: 'C:/ambient/pi',
           TOKEN: 'secret',
@@ -1187,6 +1189,9 @@ describe('trust and privacy boundaries', () => {
         },
         {
           MPX_RUNTIME_ROOT: 'C:/state/runtime',
+          MPX_SESSION_LIFECYCLE_BINDING_ID: 'trusted-binding',
+          MPX_SESSION_LIFECYCLE_EVENT_DIR: 'C:/trusted/events',
+          MPX_SESSION_UNRECOGNIZED: 'drop',
           CLAUDE_CONFIG_DIR: 'C:/adapter/claude',
           PI_CODING_AGENT_DIR: 'C:/adapter/pi',
         },
@@ -1197,6 +1202,8 @@ describe('trust and privacy boundaries', () => {
       HOME: 'C:/home',
       MPX_LAUNCH_KEY: 'key',
       MPX_RUNTIME_ROOT: 'C:/state/runtime',
+      MPX_SESSION_LIFECYCLE_BINDING_ID: 'trusted-binding',
+      MPX_SESSION_LIFECYCLE_EVENT_DIR: 'C:/trusted/events',
     });
   });
 
