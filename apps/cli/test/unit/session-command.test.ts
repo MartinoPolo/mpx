@@ -7,7 +7,7 @@ import {
   createNodeSessionLegacyImport,
   type NodeSessionApplicationDependencies,
 } from '@mpx/application/node';
-import { SessionError, SessionService, SessionStore, type SessionRecordV1 } from '@mpx/sessions';
+import { SessionService, SessionStore, type SessionRecordV1 } from '@mpx/sessions';
 import { executeSessionCommand } from '../../src/session-command.js';
 
 const identity = { domain: 'personal', name: 'me' };
@@ -273,7 +273,7 @@ describe('session command', () => {
       code: 'SESSION_USAGE_ERROR',
       message: '--map-account requires SOURCE=TARGET',
     });
-    expect(prepareReconcile).toHaveBeenCalledWith({ captureScheduled: false });
+    expect(prepareReconcile).toHaveBeenCalledWith();
     expect(reconcile).not.toHaveBeenCalled();
   });
 
@@ -384,47 +384,6 @@ describe('session command', () => {
       dryRun: true,
     });
     expect(result).toEqual({ data: { kind: 'branch-result' }, warnings: [] });
-  });
-
-  it('delegates scheduled capture admission to the application service', async () => {
-    const prepared = {} as never;
-    const prepareReconcile = vi.fn(async () => prepared);
-    const reconcile = vi.fn(async () => ({ data: 'reconciled', warnings: [] }));
-
-    await executeSessionCommand(
-      { action: 'reconcile', args: [], options: new Map([['capture', 'scheduled']]) },
-      { application: { prepareReconcile, reconcile } as never },
-    );
-
-    expect(prepareReconcile).toHaveBeenCalledWith({ captureScheduled: true });
-    expect(reconcile).toHaveBeenCalledWith(prepared, {});
-  });
-
-  it('admits scheduled capture before parsing legacy mappings', async () => {
-    const failure = new SessionError(
-      'SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE',
-      'Installed scheduled capture has no valid immutable runner authority.',
-    );
-    const prepareReconcile = vi.fn(async () => {
-      throw failure;
-    });
-    const reconcile = vi.fn();
-
-    await expect(
-      executeSessionCommand(
-        {
-          action: 'reconcile',
-          args: [],
-          options: new Map<string, string | string[]>([
-            ['capture', 'scheduled'],
-            ['import-legacy', ['legacy.json']],
-            ['map-account', ['missing-target=']],
-          ]),
-        },
-        { application: { prepareReconcile, reconcile } as never },
-      ),
-    ).rejects.toBe(failure);
-    expect(reconcile).not.toHaveBeenCalled();
   });
 
   it('forwards parsed resume arguments and returns application data', async () => {

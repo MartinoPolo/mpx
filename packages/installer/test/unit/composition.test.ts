@@ -98,20 +98,6 @@ it('composes four runtime registrations and external references into automatic, 
         planDigest: sha('git-plan'),
         verifierRef: 'git:repo',
       },
-      {
-        id: 'obsidian',
-        adapter: 'obsidian',
-        classification: 'confirmation-required',
-        planDigest: sha('obsidian-plan'),
-        verifierRef: 'obsidian:MPX',
-      },
-      {
-        id: 'raycast',
-        adapter: 'raycast',
-        classification: 'manual-only',
-        planDigest: sha('raycast-plan'),
-        verifierRef: 'raycast:post-export',
-      },
     ],
   });
   const files = new FakeBinaryFileSystem();
@@ -203,15 +189,8 @@ it('composes four runtime registrations and external references into automatic, 
   ]);
   expect(operations.classifications).toEqual({
     automatic: operations.automatic.map((operation) => operation.id),
-    confirmationRequired: [
-      { id: 'git', planDigest: sha('git-plan'), verifierRef: 'git:repo' },
-      { id: 'obsidian', planDigest: sha('obsidian-plan'), verifierRef: 'obsidian:MPX' },
-    ],
-    manualOnly: [
-      { id: 'raycast', planDigest: sha('raycast-plan'), verifierRef: 'raycast:post-export' },
-    ],
+    confirmationRequired: [{ id: 'git', planDigest: sha('git-plan'), verifierRef: 'git:repo' }],
+    manualOnly: [],
   });
-  expect(
-    operations.automatic.some((operation) => ['git', 'obsidian', 'raycast'].includes(operation.id)),
-  ).toBe(false);
+  expect(operations.automatic.some((operation) => ['git'].includes(operation.id))).toBe(false);
 });

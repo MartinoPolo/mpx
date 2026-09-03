@@ -125,19 +125,7 @@ it('builds deterministic intent and prepare plans in fresh read-only processes',
       claude: claudeRoles.map((role, index) => ({ path: files[index], role })),
       pi: piRoles.map((role, index) => ({ path: files[index + claudeRoles.length], role })),
     },
-    external: {
-      gitRemotes: [],
-      obsidian: [],
-      raycast: [
-        {
-          id: 'raycast-review',
-          derivative: {
-            encrypted: true,
-            items: [{ id: 'command.one', category: 'MPX', command: 'review-only' }],
-          },
-        },
-      ],
-    },
+    external: { gitRemotes: [] },
   };
   await writeFile(requestPath, JSON.stringify(request));
   const entry = fileURLToPath(new URL('../../dist/main.js', import.meta.url));

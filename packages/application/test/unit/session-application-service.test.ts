@@ -93,108 +93,6 @@ function directApplication(
 }
 
 describe('SessionApplicationService reconcile orchestration', () => {
-  it.each([
-    ['missing', undefined],
-    ['malformed', { inspect: async () => ({ installed: true, authorityDigest: 'not-a-digest' }) }],
-    [
-      'throwing',
-      {
-        inspect: async () => {
-          throw new Error('authority inspection failed');
-        },
-      },
-    ],
-  ] as const)(
-    'fails closed before discovery or reconciliation when scheduled authority is %s',
-    async (_case, scheduledCaptureAuthority) => {
-      const store = await branchFixture();
-      const sessions = new SessionService(store);
-      const discoveries = vi.fn(async () => []);
-      const reconcile = vi.spyOn(sessions, 'reconcile');
-      const application = directApplication(store, {
-        sessions,
-        discoveries,
-        ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
-      });
-
-      await expect(application.prepareReconcile({ captureScheduled: true })).rejects.toMatchObject({
-        code: 'SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE',
-      });
-      expect(discoveries).not.toHaveBeenCalled();
-      expect(reconcile).not.toHaveBeenCalled();
-    },
-  );
-
-  it('admits scheduled authority, imports legacy records, then discovers and reconciles them', async () => {
-    const store = await branchFixture();
-    const sessions = new SessionService(store);
-    const order: string[] = [];
-    const imported = {
-      ...(await sessions.show('parent')),
-      recordId: 'imported',
-      runtimeQualifiedId: 'claude:imported',
-    };
-    const application = directApplication(store, {
-      sessions,
-      scheduledCaptureAuthority: {
-        inspect: async () => {
-          order.push('authority');
-          return { installed: true, authorityDigest: 'a'.repeat(64) };
-        },
-      },
-      legacyImport: {
-        plan: async () => {
-          order.push('legacy-plan');
-          return {
-            schemaVersion: 1,
-            sources: [],
-            records: [],
-            quarantine: [],
-            confirmationDigest: 'confirm',
-          };
-        },
-        import: async () => {
-          order.push('legacy-import');
-          await sessions.save(imported);
-          return {
-            schemaVersion: 1,
-            confirmationDigest: 'confirm',
-            imported: 1,
-            skipped: 0,
-            partitionKeys: [],
-            createdAt: new Date().toISOString(),
-          };
-        },
-      },
-      discoveries: async () => [
-        {
-          scanner: {
-            runtime: 'claude',
-            scan: async () => {
-              order.push('discovery');
-              return { status: 'available' as const, sessions: [], diagnostic: null };
-            },
-          },
-        },
-      ],
-    });
-
-    const prepared = await application.prepareReconcile({ captureScheduled: true });
-    const result = (await application.reconcile(prepared, {
-      legacy: {
-        sources: ['legacy.json'],
-        accountMappings: [],
-        piRootMappings: [],
-        confirmation: 'confirm',
-      },
-    })) as { data: { observations: { runtimeQualifiedId: string }[] } };
-
-    expect(order).toEqual(['authority', 'legacy-plan', 'legacy-import', 'discovery']);
-    expect(result.data.observations).toContainEqual(
-      expect.objectContaining({ runtimeQualifiedId: 'claude:imported' }),
-    );
-  });
-
   it('does not discover or reconcile when legacy validation fails', async () => {
     const store = await branchFixture();
     const scan = vi.fn();
@@ -212,7 +110,7 @@ describe('SessionApplicationService reconcile orchestration', () => {
       discoveries,
     });
 
-    const prepared = await application.prepareReconcile({});
+    const prepared = await application.prepareReconcile();
     await expect(
       application.reconcile(prepared, {
         legacy: { sources: ['bad.json'], accountMappings: [], piRootMappings: [] },
@@ -227,7 +125,7 @@ describe('SessionApplicationService reconcile orchestration', () => {
     const store = await branchFixture();
     const first = directApplication(store);
     const second = directApplication(store);
-    const prepared = await first.prepareReconcile({});
+    const prepared = await first.prepareReconcile();
 
     await expect(first.reconcile({} as PreparedSessionReconcile, {})).rejects.toMatchObject({
       code: 'SESSION_RECONCILE_PREPARATION_INVALID',

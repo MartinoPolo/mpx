@@ -42,13 +42,11 @@ function request(input: InstallCommandInput): InstallApplicationRequest {
     };
   }
   if (input.action === 'verify') {
-    const externalPlan = value(input, 'external-plan'),
-      evidence = value(input, 'raycast-post-export');
+    const externalPlan = value(input, 'external-plan');
     return {
       action: 'verify',
       strict: input.options.get('strict') === true,
       ...(externalPlan !== undefined ? { externalPlan } : {}),
-      ...(evidence !== undefined ? { evidence } : {}),
     };
   }
   if (input.action === 'rollback') {

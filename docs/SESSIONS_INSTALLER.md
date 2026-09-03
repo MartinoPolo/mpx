@@ -1,7 +1,7 @@
-# Session lifecycle and scheduled capture
+# Session lifecycle
 
 MPX lifecycle events remain authoritative for sessions they represent. Production reconcile also reads the maintained Pi v2 `agent-resurrect/active-sessions` registry under each exact configured and enrolled Pi account root so an active process missed before lifecycle startup can be reconciled. It never scans a home directory. Registry entries are bounded, root-contained, regular files and are admitted only when the PID start fingerprint is exact; foreign-root and stale/reused processes are denied. Legacy saves outside that exact active registry remain available only through the explicit, confirmation-bound import.
 
 Pi native bindings are account-unenrolled unless the host injects an account-binding enrollment resolver. A verifier does not enroll an account. Both active discovery and resume therefore fail closed when the recorded enrollment is absent; resume additionally requires current verification and fails on unavailable, mismatched, or duplicate verification.
 
-Scheduled session capture is implemented under immutable installed-runner scheduling authority for apply, verification, and each scheduled reconcile; live scheduled-task acceptance remains pending. The production CLI resolves that authority through the ordinary immutable installer even when no test adapter is injected. Installation planning may describe an absent installation, but apply revalidates its confirmed plan and runner authority. Before installation, or when the active release, receipt, or task is unhealthy, scheduled reconcile fails closed with structured unavailable diagnostics rather than running a mutable path.
+Ordinary `session reconcile` performs lifecycle reconciliation and native discovery without installer authority.

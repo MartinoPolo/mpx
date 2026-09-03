@@ -2,10 +2,8 @@ import path from 'node:path';
 import { MpxError, parseStrictJson } from '@mpx/core';
 import type { JsonResourceStore } from './system-integration.js';
 import { NativePowerShellRunner, type PowerShellResult, type PowerShellRunner } from './adapter.js';
-import { decodeWindowsArgv, encodeWindowsArgv } from './scheduled-task.js';
 
 const REGISTRY_TARGET = 'HKCU\\Environment';
-const TASK_TARGET = /^\\MPX\\[^\\]+$/u;
 const SHORTCUT_TARGET = /^[A-Za-z]:\\.+\.lnk$/iu;
 const ENV = 'NativeResourceJson';
 
@@ -45,41 +43,55 @@ const SHORTCUT_REMOVE = String.raw`$ErrorActionPreference='Stop'
 $d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
 if(Test-Path -LiteralPath ([string]$d.target)){Remove-Item -LiteralPath ([string]$d.target) -Force -ErrorAction Stop};@{ok=$true}|ConvertTo-Json -Compress`;
 
-const TASK_PARTS = String.raw`$full=[string]$d.target;$at=$full.LastIndexOf('\');$taskPath=$full.Substring(0,$at+1);$taskName=$full.Substring($at+1)`;
-const TASK_READ = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-${TASK_PARTS}
-try{$t=Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop}catch{if($_.CategoryInfo.Category-eq'ObjectNotFound'){$null|ConvertTo-Json -Compress;exit 0};throw}
-$a=@($t.Actions)[0];$owner=if([string]$t.Description-eq'MPX owner=mpx'){'mpx'}else{'foreign'}
-$argv=[System.Management.Automation.PSParser]::Tokenize([string]$a.Arguments,[ref]$null)|Where-Object{$_.Type-eq'CommandArgument'}|ForEach-Object{$_.Content};$cli=if($argv.Count){[string]$argv[0]}else{''};$g=@($t.Triggers)[0]
-[ordered]@{owner=$owner;executable=[string]$a.Execute;arguments=[string]$a.Arguments;executableSha256=if(Test-Path -LiteralPath $a.Execute -PathType Leaf){(Get-FileHash -Algorithm SHA256 -LiteralPath $a.Execute).Hash.ToLower()}else{''};cliSha256=if($cli-and(Test-Path -LiteralPath $cli -PathType Leaf)){(Get-FileHash -Algorithm SHA256 -LiteralPath $cli).Hash.ToLower()}else{''};principal=[string]$t.Principal.UserId;logonType='InteractiveToken';runLevel=if([string]$t.Principal.RunLevel-eq'Highest'){'Highest'}else{'LeastPrivilege'};trigger=@{cadenceMinutes=[int]$g.Repetition.Interval.TotalMinutes};settings=@{startWhenAvailable=[bool]$t.Settings.StartWhenAvailable;multipleInstances=[string]$t.Settings.MultipleInstances;executionTimeLimitSeconds=[int]$t.Settings.ExecutionTimeLimit.TotalSeconds;hidden=[bool]$t.Settings.Hidden;enabled=[bool]$t.Settings.Enabled}}|ConvertTo-Json -Compress -Depth 6`;
-const TASK_WRITE = String.raw`$ErrorActionPreference='Stop'
-$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-${TASK_PARTS}
-$a=New-ScheduledTaskAction -Execute ([string]$d.value.executable) -Argument ([string]$d.value.arguments)
-$tr=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes ([int]$d.value.trigger.cadenceMinutes))
-$level=if($d.value.runLevel-eq'Highest'){'Highest'}else{'Limited'};$p=New-ScheduledTaskPrincipal -UserId ([string]$d.value.principal) -LogonType Interactive -RunLevel $level
-$s=New-ScheduledTaskSettingsSet -StartWhenAvailable:([bool]$d.value.settings.startWhenAvailable) -MultipleInstances ([string]$d.value.settings.multipleInstances) -ExecutionTimeLimit (New-TimeSpan -Seconds ([int]$d.value.settings.executionTimeLimitSeconds)) -Hidden:([bool]$d.value.settings.hidden)
-Register-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Description 'MPX owner=mpx' -Action $a -Trigger $tr -Principal $p -Settings $s -Force -ErrorAction Stop|Out-Null;if(-not[bool]$d.value.settings.enabled){Disable-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop|Out-Null};@{ok=$true}|ConvertTo-Json -Compress`;
-const TASK_REMOVE = String.raw`$ErrorActionPreference='Stop'
-$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-${TASK_PARTS}
-try{Unregister-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Confirm:$false -ErrorAction Stop}catch{if($_.CategoryInfo.Category-ne'ObjectNotFound'){throw}};@{ok=$true}|ConvertTo-Json -Compress`;
-const TASK_RUN = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-${TASK_PARTS}
-Start-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop;@{started=$true}|ConvertTo-Json -Compress`;
-const TASK_STATUS = String.raw`$d=ConvertFrom-Json $env:MPX_NATIVE_RESOURCE_JSON
-${TASK_PARTS}
-try{$t=Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop;$i=Get-ScheduledTaskInfo -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop}catch{if($_.CategoryInfo.Category-eq'ObjectNotFound'){@{exists=$false}|ConvertTo-Json -Compress;exit 0};throw}
-[ordered]@{exists=$true;state=[string]$t.State;lastResult=[int]$i.LastTaskResult;lastRunAt=if($i.LastRunTime -and $i.LastRunTime.Year -gt 1900){$i.LastRunTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')}else{$null};nextRunAt=if($i.NextRunTime -and $i.NextRunTime.Year -gt 1900){$i.NextRunTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')}else{$null}}|ConvertTo-Json -Compress`;
-
-export interface ScheduledTaskStatusEvidence {
-  readonly exists: boolean;
-  readonly state?: string;
-  readonly lastResult?: number;
-  readonly lastRunAt?: string;
-  readonly nextRunAt?: string;
+function encodeWindowsArgv(argv: readonly string[]): string {
+  return argv
+    .map((argument) =>
+      !argument || /[\s"]/u.test(argument)
+        ? `"${argument.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1')}"`
+        : argument,
+    )
+    .join(' ');
 }
-
+function decodeWindowsArgv(command: string): string[] {
+  const output: string[] = [];
+  let value = '',
+    quoted = false,
+    slashes = 0;
+  const pushSlashes = () => {
+    value += '\\'.repeat(slashes);
+    slashes = 0;
+  };
+  for (let index = 0; index <= command.length; index++) {
+    const character = command[index];
+    if (character === '\\') {
+      slashes++;
+      continue;
+    }
+    if (character === '"') {
+      value += '\\'.repeat(Math.floor(slashes / 2));
+      if (slashes % 2) {
+        value += '"';
+      } else {
+        quoted = !quoted;
+      }
+      slashes = 0;
+      continue;
+    }
+    pushSlashes();
+    if (character === undefined || (!quoted && /\s/u.test(character))) {
+      if (value || character === undefined) {
+        output.push(value);
+        value = '';
+      }
+      while (command[index + 1] && /\s/u.test(command[index + 1]!)) {
+        index++;
+      }
+      continue;
+    }
+    value += character;
+  }
+  return output.filter((item, index) => item.length > 0 || index < output.length - 1);
+}
 function fail(code: string, message: string): never {
   throw new MpxError({ code, message });
 }
@@ -150,15 +162,12 @@ function registryRemovalExpected(before: unknown): unknown {
   }
   return expected;
 }
-function classify(target: string): 'registry' | 'shortcut' | 'task' {
+function classify(target: string): 'registry' | 'shortcut' {
   if (target === REGISTRY_TARGET) {
     return 'registry';
   }
   if (SHORTCUT_TARGET.test(target) && path.win32.isAbsolute(target)) {
     return 'shortcut';
-  }
-  if (TASK_TARGET.test(target)) {
-    return 'task';
   }
   return fail('WINDOWS_RESOURCE_INVALID', 'Unsupported native Windows resource target.');
 }
@@ -197,10 +206,9 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
   }
   async read(target: string): Promise<unknown | undefined> {
     const kind = classify(target);
-    const value = await this.invoke(
-      kind === 'registry' ? REGISTRY_READ : kind === 'shortcut' ? SHORTCUT_READ : TASK_READ,
-      { target },
-    );
+    const value = await this.invoke(kind === 'registry' ? REGISTRY_READ : SHORTCUT_READ, {
+      target,
+    });
     if (value === null) {
       return undefined;
     }
@@ -223,10 +231,10 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
       }
       encoded = { ...rest, arguments: encodeWindowsArgv(argv as string[]) };
     }
-    await this.invoke(
-      kind === 'registry' ? REGISTRY_WRITE : kind === 'shortcut' ? SHORTCUT_WRITE : TASK_WRITE,
-      { target, value: encoded },
-    );
+    await this.invoke(kind === 'registry' ? REGISTRY_WRITE : SHORTCUT_WRITE, {
+      target,
+      value: encoded,
+    });
     const actual = await this.read(target);
     if (
       kind === 'registry' ? !registryWriteMatches(actual, value) : stable(actual) !== stable(value)
@@ -240,10 +248,7 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
   async remove(target: string): Promise<void> {
     const kind = classify(target),
       before = kind === 'registry' ? await this.read(target) : undefined;
-    await this.invoke(
-      kind === 'registry' ? REGISTRY_REMOVE : kind === 'shortcut' ? SHORTCUT_REMOVE : TASK_REMOVE,
-      { target },
-    );
+    await this.invoke(kind === 'registry' ? REGISTRY_REMOVE : SHORTCUT_REMOVE, { target });
     const actual = await this.read(target),
       removed =
         kind === 'registry'
@@ -252,52 +257,5 @@ export class ProductionWindowsResourceStore implements JsonResourceStore {
     if (!removed) {
       fail('WINDOWS_RESOURCE_VERIFY_FAILED', 'Native Windows resource removal was not confirmed.');
     }
-  }
-  async runScheduledTask(target: string): Promise<void> {
-    if (classify(target) !== 'task') {
-      fail('WINDOWS_RESOURCE_INVALID', 'A scheduled task target is required.');
-    }
-    await this.invoke(TASK_RUN, { target });
-  }
-  async inspectScheduledTaskStatus(target: string): Promise<ScheduledTaskStatusEvidence> {
-    if (classify(target) !== 'task') {
-      fail('WINDOWS_RESOURCE_INVALID', 'A scheduled task target is required.');
-    }
-    const value = await this.invoke(TASK_STATUS, { target });
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      fail('WINDOWS_RESOURCE_MALFORMED', 'Scheduled task status is malformed.');
-    }
-    const record = value as Record<string, unknown>,
-      keys = Object.keys(record);
-    if (record.exists === false && keys.length === 1) {
-      return { exists: false };
-    }
-    if (
-      record.exists !== true ||
-      typeof record.state !== 'string' ||
-      !Number.isSafeInteger(record.lastResult) ||
-      keys.some((key) => !['exists', 'state', 'lastResult', 'lastRunAt', 'nextRunAt'].includes(key))
-    ) {
-      fail('WINDOWS_RESOURCE_MALFORMED', 'Scheduled task status is malformed.');
-    }
-    const timestamp = (name: 'lastRunAt' | 'nextRunAt'): string | undefined => {
-      const item = record[name];
-      if (item === null || item === undefined) {
-        return undefined;
-      }
-      if (typeof item !== 'string' || new Date(item).toISOString() !== item) {
-        fail('WINDOWS_RESOURCE_MALFORMED', 'Scheduled task status timestamp is malformed.');
-      }
-      return item;
-    };
-    const lastRunAt = timestamp('lastRunAt'),
-      nextRunAt = timestamp('nextRunAt');
-    return {
-      exists: true,
-      state: record.state,
-      lastResult: record.lastResult as number,
-      ...(lastRunAt ? { lastRunAt } : {}),
-      ...(nextRunAt ? { nextRunAt } : {}),
-    };
   }
 }

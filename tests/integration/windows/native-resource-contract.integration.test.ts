@@ -5,7 +5,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   FakeRegistryStore,
-  FakeScheduledTaskStore,
   ManagedLauncherAdapter,
   OwnedJsonResourceAdapter,
   deterministicTerminalProfileGuid,
@@ -67,7 +66,7 @@ class NativeJsonFile implements JsonResourceStore {
 }
 
 describe.runIf(process.platform === 'win32')('Windows native-resource offline contract', () => {
-  it('round-trips uniquely named real profile and Terminal fixtures while registry and task mutation stay mocked', async () => {
+  it('round-trips uniquely named real profile and Terminal fixtures while registry mutation stays mocked', async () => {
     const root = await mkdtemp(path.join(tmpdir(), `mpx-native-contract-${randomUUID()}-`));
     const profile = path.join(root, `profile-${randomUUID()}.ps1`),
       terminal = path.join(root, `terminal-${randomUUID()}.json`);
@@ -99,27 +98,7 @@ describe.runIf(process.platform === 'win32')('Windows native-resource offline co
       };
       const terminalReceipt = await terminalAdapter.apply(await terminalAdapter.plan(terminalSpec));
 
-      const registry = new FakeRegistryStore({ registry: { owner: 'foreign', TEMP: 'C:\\Temp' } }),
-        tasks = new FakeScheduledTaskStore();
-      const taskAdapter = new OwnedJsonResourceAdapter(tasks),
-        taskSpec: OwnedResourceSpec = {
-          kind: 'scheduled-task',
-          target: `\\MPX\\Acceptance-${randomUUID()}`,
-          ownershipKey: 'mpx',
-          desired: {
-            owner: 'mpx',
-            executable: 'C:\\Program Files\\nodejs\\node.exe',
-            executableSha256: 'b'.repeat(64),
-            cliSha256: 'c'.repeat(64),
-            argv: [
-              `C:\\fixture\\mpx\\releases\\${'a'.repeat(64)}\\bin\\mpx.mjs`,
-              'session',
-              'reconcile',
-              '--json',
-            ],
-          },
-        };
-      const taskReceipt = await taskAdapter.apply(await taskAdapter.plan(taskSpec));
+      const registry = new FakeRegistryStore({ registry: { owner: 'foreign', TEMP: 'C:\\Temp' } });
       await expect(
         new OwnedJsonResourceAdapter(registry).inspect({
           kind: 'user-environment',
@@ -129,12 +108,10 @@ describe.runIf(process.platform === 'win32')('Windows native-resource offline co
         }),
       ).resolves.toMatchObject({ status: 'foreign' });
 
-      await taskAdapter.remove(taskReceipt);
       await terminalAdapter.remove(terminalReceipt);
       await launcher.remove(launcherReceipt);
       expect(await readFile(profile)).toEqual(originalProfile);
       expect(JSON.parse(await readFile(terminal, 'utf8'))).toEqual(originalTerminal);
-      expect(await tasks.read(taskSpec.target)).toBeUndefined();
       expect(await registry.read('registry')).toEqual({ owner: 'foreign', TEMP: 'C:\\Temp' });
     } finally {
       await rm(root, { recursive: true, force: true });

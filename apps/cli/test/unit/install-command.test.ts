@@ -43,9 +43,8 @@ it.each([
     [
       ['strict', true],
       ['external-plan', 'external.json'],
-      ['raycast-post-export', 'evidence.json'],
     ],
-    { action: 'verify', strict: true, externalPlan: 'external.json', evidence: 'evidence.json' },
+    { action: 'verify', strict: true, externalPlan: 'external.json' },
   ],
   [
     'rollback',

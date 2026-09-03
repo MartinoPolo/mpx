@@ -10,7 +10,7 @@ MPX is a skills-first local control plane for launching Claude and Pi with expli
 - **Develop:** use `mpx dev` and the managed-port model documented in [Runtime adapters](docs/RUNTIME_ADAPTERS.md), [Ports](docs/PORTS.md), and [Worktrees](docs/WORKTREES.md).
 - **Sessions and accounts:** see [Sessions installer](docs/SESSIONS_INSTALLER.md) and [Pi accounts](docs/PI_ACCOUNTS.md).
 - **Issues:** see [Issues](docs/ISSUES.md) and [local Markdown issues](docs/local-markdown-issues.md).
-- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md). Supporting evidence includes the [migration baseline](docs/MIGRATION_BASELINE.md) and [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
+- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md). Supporting evidence includes [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
 
 ## Private-state boundary
 
@@ -18,4 +18,4 @@ Tracked files contain source, schemas, generated projections, and public evidenc
 
 ## Platform support status
 
-Windows is the current implementation and acceptance target. Portable Node/TypeScript domain packages are designed to run on Linux and macOS, but installation, native integration, launcher behavior, sandbox execution, and end-to-end runtime routes have not been verified or accepted on either platform. See [Linux and macOS portability](docs/PORTABILITY.md) for repository checks, unsupported surfaces, and the required manual evidence. Linux/macOS support must not be treated as complete until those gates pass.
+Windows is the current implementation and acceptance target. Linux and macOS support is deferred; installation, native integration, launcher behavior, sandbox execution, and end-to-end runtime routes have not been verified or accepted on either platform. See [deferred scope](MPX_MIGRATION.md#deferred-scope).

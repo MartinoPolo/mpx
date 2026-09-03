@@ -53,21 +53,14 @@ import {
   GitRemotePlanningAdapter,
   InstallIntentBuilder,
   InstallOrchestrator,
-  InstallerService,
   NodeCurrentReleaseBuilder,
   NodeGitCommandPort,
-  NodeInstalledRunnerAuthority,
-  NodeReceiptStore,
-  NodeRunnerFileVerifier,
   NodeTransactionStore,
-  ObsidianPlanningAdapter,
   ProductionInstallerOperationAdapter,
-  RaycastPlanningAdapter,
   removeActiveRelease,
   type InstallerOperationAdapter,
   type TransactionStore,
 } from '@mpx/installer';
-import { WindowsScheduledTaskAdapter } from '@mpx/windows';
 
 export type CliPortService = Pick<
   PortService,
@@ -163,11 +156,6 @@ export interface CliContext extends LaunchExecutionContext {
   sessionBranchTerminalAdapter?: BranchArgvExecutionAdapter;
   /** Application-owned F2 proof/state adapter. It plans admission before any resume side effect. */
   sessionDockerResumeAdmission?: (plan: ResumePlanV1) => Promise<F2SandboxSessionResumeAdmission>;
-  scheduledCaptureAuthority?: {
-    inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>>;
-  };
-  installerService?: InstallerService;
-  installerServiceFactory?: (stateRoot: string) => InstallerService;
   installOrchestrator?: InstallOrchestrator;
   installIntentBuilder?: InstallIntentBuilder;
   installerOperationAdapter?: InstallerOperationAdapter;
@@ -244,44 +232,6 @@ export function sessions(context: CliContext): SessionStore {
   return context.sessionStoreFactory?.(root) ?? new SessionStore(root);
 }
 
-export function installer(context: CliContext, cwd: string): InstallerService {
-  if (context.installerService) {
-    return context.installerService;
-  }
-  const root = stateRoot(context);
-  if (context.installerServiceFactory) {
-    return context.installerServiceFactory(root);
-  }
-  const tasks = new WindowsScheduledTaskAdapter();
-  const prohibited = [
-    context.env.MPX_PROJECTS,
-    context.env.MPX_WORK,
-    context.env.MPX_CLONED,
-  ].filter((value): value is string => Boolean(value));
-  const appsRoot = context.env.MPX_APPS;
-  if (!appsRoot || !path.isAbsolute(appsRoot)) {
-    throw new MpxError({
-      code: 'INSTALL_ROOT_UNAVAILABLE',
-      message: 'MPX_APPS must be an absolute path for installed runner authority.',
-    });
-  }
-  const authorityStore =
-    context.installerTransactionStore ?? new NodeTransactionStore(path.join(root, 'installer'));
-  return new InstallerService({
-    tasks,
-    store: new NodeReceiptStore(path.join(root, 'installer', 'receipts')),
-    files: new NodeRunnerFileVerifier([cwd, ...prohibited]),
-    authority: new NodeInstalledRunnerAuthority({
-      appsRoot,
-      localAppData: context.env.LOCALAPPDATA!,
-      store: authorityStore,
-    }),
-    currentUser: context.env.USERNAME ?? context.env.USER ?? '',
-    cwd,
-    prohibitedRoots: prohibited,
-  });
-}
-
 export function installerSourceRoot(moduleFile = fileURLToPath(import.meta.url)): string {
   const moduleDirectory = path.dirname(moduleFile);
   return path.basename(moduleDirectory).toLowerCase() === 'bin'
@@ -300,21 +250,18 @@ export function installIntentBuilder(context: CliContext): InstallIntentBuilder 
       message: 'MPX_APPS must be an absolute path.',
     });
   }
-  const repositoryRoot = installerSourceRoot();
   const approvedRoots = [
     context.env.MPX_PROJECTS,
     context.env.MPX_WORK,
     context.env.MPX_CLONED,
   ].filter((root): root is string => Boolean(root && path.isAbsolute(root)));
   return new InstallIntentBuilder({
-    releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot }),
+    releases: new NodeCurrentReleaseBuilder({ repositoryRoot: installerSourceRoot(), appsRoot }),
     environment: context.env,
     gitRemotes: new GitRemotePlanningAdapter({
       allowedRoots: approvedRoots,
       git: new NodeGitCommandPort(context.env),
     }),
-    obsidian: new ObsidianPlanningAdapter(context.env),
-    raycast: new RaycastPlanningAdapter(),
   });
 }
 

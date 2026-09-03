@@ -9,7 +9,6 @@ import {
   installerDigest,
   type InstallIntentV1,
 } from '../../src/immutable-core.js';
-import { NodeInstalledRunnerAuthority } from '../../src/installed-runner-authority.js';
 import { InstallOrchestrator, NodeCurrentReleaseBuilder } from '../../src/orchestration.js';
 import {
   NodeBinaryFileSystem,
@@ -199,14 +198,6 @@ async function simulation(existing: boolean) {
         ) as never,
       }),
     },
-    scheduledTaskStatus: {
-      inspect: async () => ({
-        exists: true,
-        state: 'Ready',
-        lastRunAt: '2025-01-01T00:00:00.000Z',
-        lastResult: 0,
-      }),
-    },
   });
   const store = new NodeTransactionStore(path.join(localAppData, 'mpx', 'installer')),
     releases = new NodeCurrentReleaseBuilder({
@@ -240,20 +231,6 @@ async function simulation(existing: boolean) {
         classification: 'confirmation-required',
         planDigest: sha('git'),
         verifierRef: 'git:repo',
-      },
-      {
-        id: 'obsidian',
-        adapter: 'obsidian',
-        classification: 'confirmation-required',
-        planDigest: sha('obsidian'),
-        verifierRef: 'obsidian:MPX',
-      },
-      {
-        id: 'raycast',
-        adapter: 'raycast',
-        classification: 'manual-only',
-        planDigest: sha('raycast'),
-        verifierRef: 'raycast:post-export',
       },
     ],
   };
@@ -312,15 +289,6 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
   expect(readNative).not.toHaveBeenCalledWith(scheduledTarget);
   expect(writeNative).not.toHaveBeenCalledWith(scheduledTarget, expect.anything());
   expect(removeNative).not.toHaveBeenCalledWith(scheduledTarget);
-  const authority = new NodeInstalledRunnerAuthority({
-    appsRoot: f.appsRoot,
-    localAppData: f.localAppData,
-    store: f.store,
-  });
-  await expect(authority.resolveInstalled()).resolves.toMatchObject({
-    path: path.join(f.appsRoot, 'mpx', 'releases', receipt.releaseKey, 'bin', 'mpx.mjs'),
-    version: receipt.releaseKey,
-  });
 }, 30_000);
 
 it('runs clean and existing-machine production-backed simulations without live writes', async () => {
@@ -336,11 +304,8 @@ it('runs clean and existing-machine production-backed simulations without live w
       now: () => new Date('2024-12-31T23:59:59.000Z'),
     });
     const plan = await orchestrator.plan(f.intent);
-    expect(plan.classifications?.confirmationRequired.map((item) => item.id)).toEqual([
-      'git',
-      'obsidian',
-    ]);
-    expect(plan.classifications?.manualOnly.map((item) => item.id)).toEqual(['raycast']);
+    expect(plan.classifications?.confirmationRequired.map((item) => item.id)).toEqual(['git']);
+    expect(plan.classifications?.manualOnly).toEqual([]);
     await orchestrator.apply(plan, plan.confirmationDigest);
     const second = await orchestrator.plan(f.intent);
     await orchestrator.apply(second, second.confirmationDigest);
@@ -351,7 +316,7 @@ it('runs clean and existing-machine production-backed simulations without live w
     await rm(f.repositoryRoot, { recursive: true });
     expect(await orchestrator.verify(false, externalVerification(f.intent))).toMatchObject({
       healthy: true,
-      manualOnly: ['raycast'],
+      manualOnly: [],
       components: [
         { id: 'system', status: 'actual-state-verified' },
         { id: 'claude-personal', status: 'actual-state-verified' },

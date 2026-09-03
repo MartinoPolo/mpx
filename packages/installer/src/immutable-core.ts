@@ -41,7 +41,7 @@ export interface ReleaseManifestV1 {
 }
 export interface InstallExternalIntegrationV1 {
   readonly id: string;
-  readonly adapter: 'git-remotes' | 'obsidian' | 'raycast';
+  readonly adapter: 'git-remotes';
   readonly classification: 'confirmation-required' | 'manual-only';
   readonly planDigest: string;
   readonly verifierRef: string;
@@ -120,23 +120,6 @@ export interface InstallVerificationExternalV1 {
   readonly status: 'verification-required' | 'unhealthy' | 'verified';
   readonly verifierRef: string;
 }
-export interface ScheduledTaskStatusEvidenceV1 {
-  readonly exists: boolean;
-  readonly state?: string;
-  readonly lastResult?: number;
-  readonly lastRunAt?: string;
-  readonly nextRunAt?: string;
-}
-export interface InstallVerificationScheduledTaskV1 {
-  readonly id: string;
-  readonly target: string;
-  readonly status: 'healthy' | 'missing' | 'not-run' | 'failed';
-  readonly exists: boolean;
-  readonly state: string | null;
-  readonly lastResult: number | null;
-  readonly lastRunAt: string | null;
-  readonly nextRunAt: string | null;
-}
 export interface InstallVerificationV1 {
   readonly schemaVersion: 1;
   readonly kind: 'install-verification';
@@ -144,7 +127,6 @@ export interface InstallVerificationV1 {
   readonly healthy: boolean;
   readonly issues: readonly string[];
   readonly checkedAt: string;
-  readonly scheduledTask?: InstallVerificationScheduledTaskV1;
   readonly components?: readonly InstallVerificationComponentV1[];
   readonly externalIntegrations?: readonly InstallVerificationExternalV1[];
   readonly manualOnly?: readonly string[];
@@ -289,10 +271,8 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
             ['adapter', 'classification', 'id', 'planDigest', 'verifierRef'].sort().join('\0') &&
           typeof item.id === 'string' &&
           /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(item.id) &&
-          ['git-remotes', 'obsidian', 'raycast'].includes(item.adapter as string) &&
-          (item.adapter === 'raycast'
-            ? item.classification === 'manual-only'
-            : item.classification === 'confirmation-required') &&
+          item.adapter === 'git-remotes' &&
+          item.classification === 'confirmation-required' &&
           typeof item.planDigest === 'string' &&
           SHA.test(item.planDigest) &&
           typeof item.verifierRef === 'string' &&
@@ -604,8 +584,8 @@ export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
 }
 export function parseInstallVerificationV1(value: unknown): InstallVerificationV1 {
   const source = value as Record<string, unknown> | null;
-  const optional = ['scheduledTask', 'components', 'externalIntegrations', 'manualOnly'].filter(
-    (key) => Boolean(source && Object.prototype.hasOwnProperty.call(source, key)),
+  const optional = ['components', 'externalIntegrations', 'manualOnly'].filter((key) =>
+    Boolean(source && Object.prototype.hasOwnProperty.call(source, key)),
   );
   const verification = exact(value, [
     'schemaVersion',
@@ -634,53 +614,6 @@ export function parseInstallVerificationV1(value: unknown): InstallVerificationV
     verification.healthy !== (verification.issues.length === 0)
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid install verification.');
-  }
-  if (optional.includes('scheduledTask')) {
-    const task = exact(verification.scheduledTask, [
-      'id',
-      'target',
-      'status',
-      'exists',
-      'state',
-      'lastResult',
-      'lastRunAt',
-      'nextRunAt',
-    ]);
-    const timestamp = (item: unknown): boolean =>
-      item === null ||
-      (typeof item === 'string' &&
-        Number.isFinite(Date.parse(item)) &&
-        new Date(item).toISOString() === item);
-    const predatesInstallIssue = `scheduled-task-run-predates-install:${String(task.id)}`;
-    const coherent =
-      task.status === 'missing'
-        ? task.exists === false && task.lastRunAt === null && task.lastResult === null
-        : task.status === 'not-run'
-          ? task.exists === true &&
-            (task.lastRunAt === null ||
-              task.lastResult === null ||
-              (verification.issues as string[]).includes(predatesInstallIssue))
-          : task.status === 'healthy'
-            ? task.exists === true && task.lastRunAt !== null && task.lastResult === 0
-            : task.status === 'failed' &&
-              task.exists === true &&
-              task.lastRunAt !== null &&
-              Number.isSafeInteger(task.lastResult) &&
-              task.lastResult !== 0;
-    if (
-      typeof task.id !== 'string' ||
-      !task.id ||
-      typeof task.target !== 'string' ||
-      !task.target ||
-      typeof task.exists !== 'boolean' ||
-      !(task.state === null || typeof task.state === 'string') ||
-      !(task.lastResult === null || Number.isSafeInteger(task.lastResult)) ||
-      !timestamp(task.lastRunAt) ||
-      !timestamp(task.nextRunAt) ||
-      !coherent
-    ) {
-      fail('INSTALL_SCHEMA_INVALID', 'Invalid scheduled task verification evidence.');
-    }
   }
   if (
     optional.includes('components') &&

@@ -16,8 +16,6 @@ import {
   type InstallVerificationV1,
   type OwnershipReceiptV1,
   type ReleaseManifestV1,
-  type ScheduledTaskStatusEvidenceV1,
-  type InstallVerificationScheduledTaskV1,
 } from './immutable-core.js';
 import {
   ImmutableInstallerService,
@@ -39,7 +37,6 @@ const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException
 
 export interface InstallerOperationSet {
   readonly automatic: readonly InstallOperationV1[];
-  readonly scheduled: readonly InstallOperationV1[];
   readonly classifications?: InstallOperationClassificationsV1;
 }
 /** The host owns native details; orchestration only consumes ordered, reversible operations. */
@@ -49,10 +46,6 @@ export interface InstallerOperationAdapter extends SideEffectAdapter {
     manifest: ReleaseManifestV1,
     requireActual?: boolean,
   ): Promise<InstallerOperationSet>;
-  /** Returns run evidence only for a managed scheduled-task operation. */
-  inspectScheduledTaskStatus?(
-    operation: InstallOperationV1,
-  ): Promise<ScheduledTaskStatusEvidenceV1 | undefined>;
 }
 export interface CurrentReleaseBuilder {
   readonly appsRoot: string;
@@ -222,8 +215,7 @@ export class InstallOrchestrator {
     }
     const grouped = await this.options.adapter.operations(intent, manifest);
     const automatic = [...grouped.automatic].sort((a, b) => a.id.localeCompare(b.id));
-    const scheduled = [...grouped.scheduled].sort((a, b) => a.id.localeCompare(b.id));
-    const operations = [...automatic, ...scheduled];
+    const operations = automatic;
     if (new Set(operations.map((operation) => operation.id)).size !== operations.length) {
       fail('INSTALL_OPERATION_DUPLICATE', 'Operation IDs must be unique.');
     }
@@ -233,10 +225,7 @@ export class InstallOrchestrator {
           index > 0 && operations[index - 1]!.id.localeCompare(operation.id) >= 0,
       )
     ) {
-      fail(
-        'INSTALL_OPERATION_ORDER_INVALID',
-        'Automatic operations must sort before scheduled operations.',
-      );
+      fail('INSTALL_OPERATION_ORDER_INVALID', 'Automatic operations must be sorted by ID.');
     }
     return {
       intent,
@@ -464,93 +453,14 @@ export class InstallOrchestrator {
       InstallExternalVerificationResultV1 | (() => Promise<InstallExternalVerificationResultV1>),
   ): Promise<InstallVerificationV1> {
     const receipt = await this.options.store.readReceipt();
-    let scheduledOperations: readonly InstallOperationV1[] = [];
-    if (receipt) {
-      const manifest: ReleaseManifestV1 = {
-        schemaVersion: 1,
-        kind: 'release-manifest',
-        releaseKey: receipt.releaseKey,
-        convergenceHash: receipt.convergenceHash,
-        files: receipt.files,
-      };
-      const expected = await this.options.adapter.operations(
-        receipt.installIntent ?? {
-          schemaVersion: 1,
-          kind: 'install-intent',
-          releaseKey: receipt.releaseKey,
-          convergenceHash: receipt.convergenceHash,
-          components: ['verify'],
-        },
-        manifest,
-        true,
-      );
-      scheduledOperations = expected.scheduled;
-    }
     const base = await this.service().verify();
-    const scheduledIssues = scheduledOperations.flatMap((expected) => {
-      const actual = receipt?.operations.find((operation) => operation.id === expected.id);
-      return actual && canonicalJson(actual) === canonicalJson(expected)
-        ? []
-        : [`scheduled-operation-drift:${expected.id}`];
-    });
     const issues = [
       ...base.issues,
-      ...scheduledIssues,
       ...(receipt ? await this.options.releases.verify(receipt, strict) : []),
     ];
-    let scheduledTask: InstallVerificationScheduledTaskV1 | undefined;
-    const scheduledOperation = receipt?.operations.find(
-      (operation) => operation.id === '90-scheduled-capture',
-    );
-    if (scheduledOperation) {
-      const taskInspector = this.options.adapter.inspectScheduledTaskStatus;
-      const taskEvidence = taskInspector
-        ? await taskInspector.call(this.options.adapter, scheduledOperation)
-        : undefined;
-      if (!taskEvidence) {
-        issues.push(`scheduled-task-status-unavailable:${scheduledOperation.id}`);
-      } else {
-        const lastRunTime =
-          taskEvidence.lastRunAt === undefined ? Number.NaN : Date.parse(taskEvidence.lastRunAt);
-        const installedTime = receipt ? Date.parse(receipt.installedAt) : Number.NaN;
-        const predatesInstall =
-          Number.isFinite(lastRunTime) &&
-          Number.isFinite(installedTime) &&
-          lastRunTime < installedTime;
-        const status = !taskEvidence.exists
-          ? 'missing'
-          : taskEvidence.lastRunAt === undefined ||
-              taskEvidence.lastResult === undefined ||
-              predatesInstall
-            ? 'not-run'
-            : taskEvidence.lastResult === 0
-              ? 'healthy'
-              : 'failed';
-        scheduledTask = {
-          id: scheduledOperation.id,
-          target: scheduledOperation.target,
-          status,
-          exists: taskEvidence.exists,
-          state: taskEvidence.state ?? null,
-          lastResult: taskEvidence.lastResult ?? null,
-          lastRunAt: taskEvidence.lastRunAt ?? null,
-          nextRunAt: taskEvidence.nextRunAt ?? null,
-        };
-        if (status === 'missing') {
-          issues.push(`scheduled-task-missing:${scheduledOperation.id}`);
-        } else if (predatesInstall) {
-          issues.push(`scheduled-task-run-predates-install:${scheduledOperation.id}`);
-        } else if (status === 'not-run') {
-          issues.push(`scheduled-task-not-run:${scheduledOperation.id}`);
-        } else if (status === 'failed') {
-          issues.push(`scheduled-task-failed:${scheduledOperation.id}:${taskEvidence.lastResult}`);
-        }
-      }
-    }
-    const evidence = scheduledTask ? { scheduledTask } : {};
     if (!receipt?.installIntent) {
       issues.sort((a, b) => a.localeCompare(b));
-      return { ...base, healthy: issues.length === 0, issues, ...evidence };
+      return { ...base, healthy: issues.length === 0, issues };
     }
     const automaticIssues = [...issues];
     const expectedExternal = receipt.installIntent.externalIntegrations ?? [];
@@ -615,7 +525,6 @@ export class InstallOrchestrator {
       ...base,
       healthy: issues.length === 0,
       issues,
-      ...evidence,
       components,
       externalIntegrations,
       manualOnly: externalIntegrations

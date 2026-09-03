@@ -64,7 +64,6 @@ const classifiedSkills = {
     'clean-pc',
     'podcast',
     'project-register',
-    'raycast-config',
     'tutorial-create',
     'video-to-image',
   ],

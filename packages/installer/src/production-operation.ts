@@ -28,7 +28,6 @@ import {
   type InstallIntentV1,
   type InstallOperationV1,
   type ReleaseManifestV1,
-  type ScheduledTaskStatusEvidenceV1,
 } from './immutable-core.js';
 import { buildStableSelectorBody, buildWindowsIntegrationSpecs } from './windows-integration.js';
 import {
@@ -321,14 +320,10 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
     };
   }
 }
-export interface ScheduledTaskStatusInspectionPort {
-  inspect(target: string): Promise<ScheduledTaskStatusEvidenceV1>;
-}
 export interface ProductionInstallerResources {
   readonly files: BinaryFileSystem;
   readonly resources: JsonResourceStore;
   readonly runtimeRegistrations?: RuntimeRegistrationInspectionPort;
-  readonly scheduledTaskStatus?: ScheduledTaskStatusInspectionPort;
 }
 class RoutedProductionResourceStore implements JsonResourceStore {
   constructor(
@@ -366,7 +361,6 @@ export function createProductionInstallerResources(
     files,
     resources: new RoutedProductionResourceStore(json, native),
     runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment),
-    scheduledTaskStatus: { inspect: (target) => native.inspectScheduledTaskStatus(target) },
   };
 }
 
@@ -454,7 +448,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   private readonly owned: OwnedJsonResourceAdapter;
   private readonly files: BinaryFileSystem;
   private readonly runtimeRegistrations: RuntimeRegistrationInspectionPort | undefined;
-  private readonly scheduledTaskStatus: ScheduledTaskStatusInspectionPort | undefined;
   private readonly resources: JsonResourceStore;
   private readonly environment: Readonly<NodeJS.ProcessEnv>;
   private readonly entries = new Map<string, Entry>();
@@ -472,7 +465,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     this.launchers = new ManagedLauncherAdapter(resources.files);
     this.owned = new OwnedJsonResourceAdapter(resources.resources);
     this.runtimeRegistrations = resources.runtimeRegistrations;
-    this.scheduledTaskStatus = resources.scheduledTaskStatus;
   }
   async operations(
     intent: InstallIntentV1,
@@ -716,8 +708,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       });
     }
     automatic.sort((left, right) => left.operation.id.localeCompare(right.operation.id));
-    const scheduled: Entry[] = [];
-    for (const entry of [...automatic, ...scheduled]) {
+    for (const entry of automatic) {
       this.entries.set(installerDigest(entry.operation), entry);
     }
     while (this.entries.size > 2_048) {
@@ -730,7 +721,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }));
     return {
       automatic: automatic.map((x) => x.operation),
-      scheduled: scheduled.map((x) => x.operation),
       classifications: {
         automatic: automatic.map((x) => x.operation.id),
         confirmationRequired: references.filter(
@@ -743,21 +733,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         ),
       },
     };
-  }
-  async inspectScheduledTaskStatus(
-    operation: InstallOperationV1,
-  ): Promise<ScheduledTaskStatusEvidenceV1 | undefined> {
-    const entry = await this.entry(operation);
-    if (entry.resource?.kind !== 'scheduled-task') {
-      return undefined;
-    }
-    if (!this.scheduledTaskStatus) {
-      fail(
-        'INSTALL_TASK_STATUS_UNAVAILABLE',
-        'Scheduled-task status inspection is required for install verification.',
-      );
-    }
-    return this.scheduledTaskStatus.inspect(operation.target);
   }
   async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
     const entry = await this.entry(operation);
@@ -838,9 +813,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       !Array.isArray(value.spec)
     ) {
       const resource = value.spec as unknown as OwnedResourceSpec;
-      if (resource.kind === 'terminal-profile' || resource.kind === 'scheduled-task') {
+      const resourceKind = (resource as { kind?: unknown }).kind;
+      if (resourceKind === 'terminal-profile' || resourceKind === 'scheduled-task') {
         const boundary =
-          resource.kind === 'terminal-profile' ? 'Windows Terminal' : 'Scheduled capture';
+          resourceKind === 'terminal-profile' ? 'Windows Terminal' : 'Scheduled capture';
         fail(
           'INSTALL_RECEIPT_AMBIGUOUS',
           `${boundary} is outside the production installer boundary for ${operation.id}.`,

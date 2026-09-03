@@ -23,7 +23,6 @@ export type InstallApplicationRequest =
       readonly action: 'verify';
       readonly strict: boolean;
       readonly externalPlan?: string;
-      readonly evidence?: string;
     }
   | { readonly action: 'rollback'; readonly transaction?: string; readonly confirmation?: string }
   | { readonly action: 'uninstall'; readonly confirmation?: string };
@@ -76,18 +75,10 @@ export class InstallApplicationService {
       return { schemaVersion: 1, kind: 'install-apply', receipt };
     }
     if (request.action === 'verify') {
-      if (!request.externalPlan && request.evidence) {
-        fail('--raycast-post-export requires --external-plan');
-      }
       const externalPlan = request.externalPlan
         ? await this.dependencies.input.buildResult(request.externalPlan)
         : undefined;
-      const evidence = request.evidence
-        ? await this.dependencies.input.evidence(request.evidence)
-        : undefined;
-      const externalSource = externalPlan
-        ? () => this.builder().verify(externalPlan, evidence)
-        : undefined;
+      const externalSource = externalPlan ? () => this.builder().verify(externalPlan) : undefined;
       return this.dependencies.orchestrator.verify(request.strict, externalSource);
     }
     if (request.action === 'rollback') {

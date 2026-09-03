@@ -38,7 +38,7 @@ function inputs(overrides: Partial<InstallProtocolInputPort> = {}): InstallProto
     intent: vi.fn(async () => intent),
     plan: vi.fn(async () => plan),
     buildResult: vi.fn(async () => built),
-    evidence: vi.fn(async () => ({ kind: 'evidence' })),
+    evidence: vi.fn(async () => ({})),
     ...overrides,
   };
 }
@@ -99,12 +99,9 @@ it('loads and parses apply plan before requiring confirmation and preserves the 
   ).resolves.toEqual({ schemaVersion: 1, kind: 'install-apply', receipt: { kind: 'receipt' } });
 });
 
-it('validates verify evidence order and resolves the builder only inside the callback', async () => {
+it('resolves retained external verification only inside the orchestrator callback', async () => {
   const events: string[] = [];
-  const input = inputs({
-    buildResult: vi.fn(async () => (events.push('plan-read'), built)),
-    evidence: vi.fn(async () => (events.push('evidence-read'), {})),
-  });
+  const input = inputs({ buildResult: vi.fn(async () => (events.push('plan-read'), built)) });
   const verifyBuilder = vi.fn(async () => ({ kind: 'external' }));
   const getBuilder = vi.fn(() => {
     events.push('builder');
@@ -120,20 +117,9 @@ it('validates verify evidence order and resolves the builder only inside the cal
     orchestrator: { verify } as unknown as InstallOrchestrator,
     builder: getBuilder,
   });
-  await expect(
-    service.execute({ action: 'verify', evidence: 'evidence.json', strict: false }),
-  ).rejects.toMatchObject({
-    message: '--raycast-post-export requires --external-plan',
-  });
-  expect(input.evidence).not.toHaveBeenCalled();
-  await service.execute({
-    action: 'verify',
-    externalPlan: 'plan.json',
-    evidence: 'evidence.json',
-    strict: true,
-  });
-  expect(events).toEqual(['plan-read', 'evidence-read', 'orchestrator', 'builder']);
-  expect(verifyBuilder).toHaveBeenCalledWith(built, {});
+  await service.execute({ action: 'verify', externalPlan: 'plan.json', strict: true });
+  expect(events).toEqual(['plan-read', 'orchestrator', 'builder']);
+  expect(verifyBuilder).toHaveBeenCalledWith(built);
 });
 
 it('forwards strict verification without an external source', async () => {

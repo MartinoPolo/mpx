@@ -17,7 +17,6 @@ import {
   catalogPath,
   defaultContext,
   immutableInstaller,
-  installer,
   installerSourceRoot,
   preparationRuntime,
   worktrees,
@@ -49,28 +48,6 @@ it('constructs the production installer without injected test adapters', () => {
     },
   });
   expect(orchestrator).toBeDefined();
-});
-
-it('wires production session capture to structured installed-runner authority before install', async () => {
-  const root = path.resolve('C:/temp/mpx-runner-authority-context'),
-    apps = path.join(root, 'apps');
-  const service = installer(
-    { env: { MPX_APPS: apps, LOCALAPPDATA: path.join(root, 'local'), USERNAME: 'tester' } },
-    path.join(root, 'source'),
-  );
-  await expect(
-    service.plan({
-      componentId: 'session-capture',
-      runner: {
-        path: path.join(apps, 'mpx', 'releases', 'a'.repeat(64), 'bin', 'mpx.mjs'),
-        sha256: 'b'.repeat(64),
-        version: 'a'.repeat(64),
-      },
-    }),
-  ).rejects.toMatchObject({
-    code: 'INSTALL_RUNNER_UNAVAILABLE',
-    details: { status: 'uninstalled' },
-  });
 });
 
 it('provides fail-closed Docker resume admission in the production CLI context', async () => {

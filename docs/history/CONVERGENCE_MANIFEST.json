@@ -3117,9 +3117,9 @@
       "state": "tracked",
       "sha256": "5ffeff5a2a1aff1d58b18b73c37b04376e533e183bd5ba861fe482dc2d557338",
       "completion": "completed",
-      "disposition": "canonicalized",
-      "destination": "content/skills/raycast-config/REFERENCE.md",
-      "adaptation": "intentionally adapted into provider-neutral canonical content",
+      "disposition": "retired",
+      "destination": null,
+      "adaptation": "retained only as attributed source history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -3132,21 +3132,10 @@
           "sha256": "5ffeff5a2a1aff1d58b18b73c37b04376e533e183bd5ba861fe482dc2d557338",
           "reference": "claude:local/skills/mp-raycast-config/REFERENCE.md@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "local/skills/mp-raycast-config/REFERENCE.md",
-            "sha256": "5ffeff5a2a1aff1d58b18b73c37b04376e533e183bd5ba861fe482dc2d557338"
-          },
-          "sha256": "469c8d12bf7cfef668b8ee5ed88a4a1854dc7091b3a40d01acbf15bfff64ad41",
-          "reference": "packages/skills/test/unit/directory-inventory.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/unit/directory-inventory.test.ts"
+      "reason": "removed from active MPX scope during cleanup Gate 2",
+      "activeReader": null
     },
     {
       "source": "claude",
@@ -3155,9 +3144,9 @@
       "state": "tracked",
       "sha256": "f20999bfb3d67d93ed2134413bce247cc0db45d7db53db707087fc9271741666",
       "completion": "completed",
-      "disposition": "canonicalized",
-      "destination": "content/skills/raycast-config/scripts/audit.mjs",
-      "adaptation": "intentionally adapted into provider-neutral canonical content",
+      "disposition": "retired",
+      "destination": null,
+      "adaptation": "retained only as attributed source history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -3170,21 +3159,10 @@
           "sha256": "f20999bfb3d67d93ed2134413bce247cc0db45d7db53db707087fc9271741666",
           "reference": "claude:local/skills/mp-raycast-config/scripts/audit.mjs@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "local/skills/mp-raycast-config/scripts/audit.mjs",
-            "sha256": "f20999bfb3d67d93ed2134413bce247cc0db45d7db53db707087fc9271741666"
-          },
-          "sha256": "469c8d12bf7cfef668b8ee5ed88a4a1854dc7091b3a40d01acbf15bfff64ad41",
-          "reference": "packages/skills/test/unit/directory-inventory.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/unit/directory-inventory.test.ts"
+      "reason": "removed from active MPX scope during cleanup Gate 2",
+      "activeReader": null
     },
     {
       "source": "claude",
@@ -3193,9 +3171,9 @@
       "state": "tracked",
       "sha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
       "completion": "completed",
-      "disposition": "canonicalized",
-      "destination": "content/skills/raycast-config/scripts/passphrase.ps1",
-      "adaptation": "intentionally adapted into provider-neutral canonical content",
+      "disposition": "retired",
+      "destination": null,
+      "adaptation": "retained only as attributed source history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -3208,21 +3186,10 @@
           "sha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644",
           "reference": "claude:local/skills/mp-raycast-config/scripts/passphrase.ps1@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "local/skills/mp-raycast-config/scripts/passphrase.ps1",
-            "sha256": "b4b6233b3c170058b075819174c90a0c034de7ae83c5ec3ba682027f73c0c644"
-          },
-          "sha256": "469c8d12bf7cfef668b8ee5ed88a4a1854dc7091b3a40d01acbf15bfff64ad41",
-          "reference": "packages/skills/test/unit/directory-inventory.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/unit/directory-inventory.test.ts"
+      "reason": "removed from active MPX scope during cleanup Gate 2",
+      "activeReader": null
     },
     {
       "source": "claude",
@@ -3231,9 +3198,9 @@
       "state": "tracked",
       "sha256": "a901ec1845d79773dd68cc6845abc70b1f6e4800234f53c67a7779d72b695d50",
       "completion": "completed",
-      "disposition": "canonicalized",
-      "destination": "content/skills/raycast-config/scripts/rayconfig.mjs",
-      "adaptation": "intentionally adapted into provider-neutral canonical content",
+      "disposition": "retired",
+      "destination": null,
+      "adaptation": "retained only as attributed source history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -3246,21 +3213,10 @@
           "sha256": "a901ec1845d79773dd68cc6845abc70b1f6e4800234f53c67a7779d72b695d50",
           "reference": "claude:local/skills/mp-raycast-config/scripts/rayconfig.mjs@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "local/skills/mp-raycast-config/scripts/rayconfig.mjs",
-            "sha256": "a901ec1845d79773dd68cc6845abc70b1f6e4800234f53c67a7779d72b695d50"
-          },
-          "sha256": "469c8d12bf7cfef668b8ee5ed88a4a1854dc7091b3a40d01acbf15bfff64ad41",
-          "reference": "packages/skills/test/unit/directory-inventory.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/unit/directory-inventory.test.ts"
+      "reason": "removed from active MPX scope during cleanup Gate 2",
+      "activeReader": null
     },
     {
       "source": "claude",
@@ -3269,9 +3225,9 @@
       "state": "tracked",
       "sha256": "e4cab73c95e5c6286a380c349cf7732cb0339df5ff4053c644509800717cc671",
       "completion": "completed",
-      "disposition": "canonicalized",
-      "destination": "content/skills/raycast-config/SKILL.md",
-      "adaptation": "intentionally adapted into provider-neutral canonical content",
+      "disposition": "retired",
+      "destination": null,
+      "adaptation": "retained only as attributed source history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -3284,21 +3240,10 @@
           "sha256": "e4cab73c95e5c6286a380c349cf7732cb0339df5ff4053c644509800717cc671",
           "reference": "claude:local/skills/mp-raycast-config/SKILL.md@92aad1213db053dc5095e6a1e37b3ba79077fbc3",
           "verification": "captured"
-        },
-        {
-          "schemaVersion": 1,
-          "kind": "behavior-test",
-          "sourceSnapshot": {
-            "source": "claude",
-            "path": "local/skills/mp-raycast-config/SKILL.md",
-            "sha256": "e4cab73c95e5c6286a380c349cf7732cb0339df5ff4053c644509800717cc671"
-          },
-          "sha256": "469c8d12bf7cfef668b8ee5ed88a4a1854dc7091b3a40d01acbf15bfff64ad41",
-          "reference": "packages/skills/test/unit/directory-inventory.test.ts",
-          "verification": "passed"
         }
       ],
-      "test": "packages/skills/test/unit/directory-inventory.test.ts"
+      "reason": "removed from active MPX scope during cleanup Gate 2",
+      "activeReader": null
     },
     {
       "source": "claude",
@@ -6604,7 +6549,7 @@
             "path": "plugins/mp/scripts/__tests__/detect-base-branch.test.ts",
             "sha256": "28bfd0ac1b06ffbdfc09d52235c93f116f3980cd12d318d9955dfc0a4c63d4d5"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6669,7 +6614,7 @@
             "path": "plugins/mp/scripts/__tests__/init-repo.test.ts",
             "sha256": "3b37b20c5d4ec726953d8de2198610eda3f32ff0a3620a1988bdc137dab0eac3"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6989,7 +6934,7 @@
             "path": "plugins/mp/scripts/detect-base-branch.js",
             "sha256": "2b0eee575cee7cb0f1e1b2c413278a03f55e66e443ad11d11fda503ad28e51b6"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7027,7 +6972,7 @@
             "path": "plugins/mp/scripts/detect-check-scripts.mjs",
             "sha256": "5a057334e270aa0c881583721ef4777b3cb66894fd8700f6b11f188d0ea3243c"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7065,7 +7010,7 @@
             "path": "plugins/mp/scripts/detect-project-scripts.mjs",
             "sha256": "e3a86583424f0d8fd9470a839d5ae8232c8afa6fb5f160675685e7de7def712f"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7130,7 +7075,7 @@
             "path": "plugins/mp/scripts/init-repo.mjs",
             "sha256": "b19f013ab571c1b80f9398715b6b68f862b703eb5321265191932a08beea7b65"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -9915,7 +9860,7 @@
             "path": "README.md",
             "sha256": "aa479d9f2d95adb7a460ae101c4483e7f71fe944d2286d4d31715d4884931878"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -10795,7 +10740,7 @@
             "path": "WINDOWS-SETUP.md",
             "sha256": "f910bee9d6858592d8c8ff1590c5ff44e9d112e41c27dbab23a6928cd2cf18c9"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -14601,7 +14546,7 @@
             "path": "README.md",
             "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -15037,7 +14982,7 @@
             "path": "WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
             "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48"
           },
-          "sha256": "389185294b68fda7644f32dc4b0ec9c17c33c38411eef4984ff04dd4fc352324",
+          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }

@@ -27,12 +27,6 @@ import {
   type BranchRequestV1,
   type SessionRecordV1,
 } from '@mpx/sessions';
-import {
-  canonicalJson,
-  installerDigest,
-  NodeTransactionStore,
-  type InstallerOperationAdapter,
-} from '@mpx/installer';
 import { createDefaultSbxDiagnostics } from '@mpx/application/node';
 import { parseSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
 import { run } from '../../src/main.js';
@@ -230,84 +224,6 @@ async function configuredLaunchEnv(
 }
 
 describe('cli', () => {
-  it('runs scheduled reconcile through healthy default installer state without injected authority', async () => {
-    const cwd = await fixture(valid),
-      root = await directory('mpx-cli-scheduled-authority-'),
-      releaseKey = installerDigest([]);
-    const env = {
-      ...(await configuredLaunchEnv(cwd)),
-      MPX_APPS: path.join(root, 'apps'),
-      LOCALAPPDATA: path.join(root, 'local'),
-      USERPROFILE: path.join(root, 'profile'),
-      USERNAME: 'tester',
-    };
-    const manifest = {
-      schemaVersion: 1 as const,
-      kind: 'release-manifest' as const,
-      releaseKey,
-      convergenceHash: releaseKey,
-      files: [],
-    };
-    const scheduledOperation = {
-      id: '90-scheduled-capture',
-      adapter: 'test-production-boundary',
-      action: 'ensure' as const,
-      target: '\\MPX\\Session Capture',
-      desiredDigest: installerDigest('scheduled-task'),
-    };
-    const releaseRoot = path.join(env.MPX_APPS, 'mpx', 'releases', releaseKey);
-    await mkdir(releaseRoot, { recursive: true });
-    await writeFile(path.join(releaseRoot, 'release-manifest.json'), canonicalJson(manifest));
-    await new NodeTransactionStore(path.join(env.LOCALAPPDATA, 'mpx', 'installer')).writeReceipt({
-      schemaVersion: 2,
-      kind: 'ownership-receipt',
-      releaseKey,
-      convergenceHash: releaseKey,
-      files: [],
-      operations: [scheduledOperation],
-      operationLocators: [
-        {
-          operationId: scheduledOperation.id,
-          adapter: scheduledOperation.adapter,
-          spec: null,
-          bindingDigest: installerDigest({ operation: scheduledOperation, spec: null }),
-        },
-      ],
-      installIntent: {
-        schemaVersion: 1,
-        kind: 'install-intent',
-        releaseKey,
-        convergenceHash: releaseKey,
-        components: ['cli'],
-      },
-      installedAt: '2025-01-01T00:00:00.000Z',
-    });
-    const installerOperationAdapter: InstallerOperationAdapter = {
-      name: 'test-production-boundary',
-      operations: async () => ({ automatic: [], scheduled: [scheduledOperation] }),
-      observe: async (operation) => operation.desiredDigest,
-      inspectScheduledTaskStatus: async () => ({
-        exists: true,
-        state: 'Ready',
-        lastRunAt: '2025-01-02T00:00:00.000Z',
-        lastResult: 0,
-      }),
-      capture: async () => null,
-      apply: async () => undefined,
-      restore: async () => undefined,
-    };
-    const io = captureIo();
-    expect(
-      await run(['--json', '--cwd', cwd, 'session', 'reconcile', '--capture', 'scheduled'], io, {
-        env,
-        sessionStore: new SessionStore(await directory('mpx-cli-scheduled-sessions-')),
-        sessionDiscoveries: async () => [],
-        installerOperationAdapter,
-      }),
-    ).toBe(0);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({ ok: true, data: { kind: 'session-reconcile' } });
-  });
-
   it('wires mpx dev lifecycle actions through the provider-neutral service', async () => {
     const cwd = await fixture(managed('sample/app', 4100)),
       io = captureIo();
@@ -3643,5 +3559,5 @@ it('exposes external verification only through mpx install verify', async () => 
   expect(
     await run(['--json', 'install', 'verify', '--external-plan', file], captureIo(), context),
   ).toBe(0);
-  expect(builderVerify).toHaveBeenCalledExactlyOnceWith(built, undefined);
+  expect(builderVerify).toHaveBeenCalledExactlyOnceWith(built);
 });

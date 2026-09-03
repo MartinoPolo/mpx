@@ -586,7 +586,6 @@ it('refuses to replace a concurrently changed foreign Path during environment ro
 
 it('excludes scheduled capture from production base operations without Task Scheduler inspection', async () => {
   const releaseKey = 'a'.repeat(64),
-    inspect = vi.fn(),
     resources = new FakeJsonResourceStore(),
     readResource = vi.spyOn(resources, 'read'),
     adapter = new ProductionInstallerOperationAdapter(
@@ -598,7 +597,7 @@ it('excludes scheduled capture from production base operations without Task Sche
         MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
       },
       'me',
-      { files: new FakeBinaryFileSystem(), resources, scheduledTaskStatus: { inspect } },
+      { files: new FakeBinaryFileSystem(), resources },
     );
 
   const operations = await adapter.operations(
@@ -612,19 +611,16 @@ it('excludes scheduled capture from production base operations without Task Sche
     releaseManifest(releaseKey),
   );
 
-  expect(operations.scheduled).toEqual([]);
-  expect([...operations.automatic, ...operations.scheduled]).not.toContainEqual(
+  expect(operations.automatic).not.toContainEqual(
     expect.objectContaining({ id: '90-scheduled-capture' }),
   );
   expect(readResource).not.toHaveBeenCalledWith('\\MPX\\Session Capture');
-  expect(inspect).not.toHaveBeenCalled();
 });
 
 it('rejects legacy scheduled-task receipt locators without Task Scheduler access', async () => {
   const target = '\\MPX\\Session Capture',
     resources = new FakeJsonResourceStore(),
     readResource = vi.spyOn(resources, 'read'),
-    inspect = vi.fn(),
     adapter = new ProductionInstallerOperationAdapter(
       {
         MPX_APPS: 'C:\\Apps',
@@ -637,7 +633,6 @@ it('rejects legacy scheduled-task receipt locators without Task Scheduler access
       {
         files: new FakeBinaryFileSystem(),
         resources,
-        scheduledTaskStatus: { inspect },
       },
     ),
     spec = {
@@ -658,7 +653,6 @@ it('rejects legacy scheduled-task receipt locators without Task Scheduler access
     adapter.hydrateReceiptOperation(operation, { kind: 'resource', spec }),
   ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_AMBIGUOUS' });
   expect(readResource).not.toHaveBeenCalled();
-  expect(inspect).not.toHaveBeenCalled();
 });
 
 it('never inspects, plans, or writes Windows Terminal while retaining managed installer operations', async () => {
@@ -703,7 +697,6 @@ it('never inspects, plans, or writes Windows Terminal while retaining managed in
   expect(operations.automatic.map((item) => item.id)).not.toContain('20-terminal-profile');
   expect((await files.read(profile))?.toString()).toBe('native\r\n');
   expect(readResource).not.toHaveBeenCalledWith(terminal);
-  expect(operations.scheduled).toEqual([]);
   for (const operation of operations.automatic) {
     await adapter.apply(operation);
   }

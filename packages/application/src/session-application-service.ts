@@ -98,9 +98,6 @@ export interface SessionApplicationDependencies {
   readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
   readonly executeConfirmedResume?: (plan: ResumePlanV1) => Promise<unknown>;
   readonly branchService?: SessionBranchOperations;
-  readonly scheduledCaptureAuthority?: {
-    inspect(): Promise<Readonly<{ installed: boolean; authorityDigest: string | null }>>;
-  };
   readonly discoveries?: () => Promise<readonly SessionDiscoveryInput[]>;
   readonly legacyImport?: SessionLegacyImport;
   readonly resolveIdentity?: (name: string) => Promise<IdentityV1>;
@@ -142,7 +139,7 @@ export interface SessionApplication {
     request: SessionDispositionRequest & { readonly disposition: 'paused' | 'unfinished' },
   ): Promise<unknown>;
   complete(id: string, request: SessionDispositionRequest): Promise<unknown>;
-  prepareReconcile(request: { captureScheduled?: boolean }): Promise<PreparedSessionReconcile>;
+  prepareReconcile(): Promise<PreparedSessionReconcile>;
   reconcile(
     prepared: PreparedSessionReconcile,
     request: { legacy?: SessionLegacyImportRequest },
@@ -235,24 +232,7 @@ export class SessionApplicationService implements SessionApplication {
     return this.#sessions.complete(id, request);
   }
 
-  async prepareReconcile(request: {
-    captureScheduled?: boolean;
-  }): Promise<PreparedSessionReconcile> {
-    if (request.captureScheduled) {
-      const authority = await this.#dependencies.scheduledCaptureAuthority
-        ?.inspect()
-        .catch(() => undefined);
-      if (
-        !authority?.installed ||
-        !authority.authorityDigest ||
-        !/^[a-f0-9]{64}$/u.test(authority.authorityDigest)
-      ) {
-        throw applicationError(
-          'SESSION_SCHEDULED_CAPTURE_AUTHORITY_UNAVAILABLE',
-          'Installed scheduled capture has no valid immutable runner authority.',
-        );
-      }
-    }
+  async prepareReconcile(): Promise<PreparedSessionReconcile> {
     const token = Object.freeze({}) as PreparedSessionReconcile;
     this.#preparedReconciles.add(token);
     return token;

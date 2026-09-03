@@ -8,13 +8,11 @@ Release payloads are content-addressed at `${MPX_APPS}/mpx/releases/<releaseKey>
 
 The stable selector is `%LOCALAPPDATA%/mpx/active-release`. Receipts, journals, and snapshots are mutable installer state and belong only below `%APPDATA%` or `%LOCALAPPDATA%`. Native runtime roots, credentials, configuration, sessions, caches, project roots, work roots, and clone roots are not release payloads and are not implicitly operated on.
 
-Immediately before scheduled plan/apply/verify use, `NodeInstalledRunnerAuthority` opens the selected runner and proves that it is a regular file below the receipt's exact release, with the receipt's path, size, and hash. Project, work, and cloned roots can be supplied as prohibited roots. The existing `ImmutableRunnerAuthority` session-capture seam remains structurally compatible.
-
 ## CLI orchestration
 
 The read-only builder surfaces are `mpx install intent --request <json-or-file>` and `mpx install prepare --request <json-or-file>`. Automation may pass the strict JSON object inline; guided use may pass a path to a bounded regular JSON file. `intent` returns an `install-intent-build-result` containing the exact `InstallIntentV1` plus reviewable external plans. `prepare` builds the same result and immediately passes its intent to the existing read-only orchestrator planner. `mpx install plan --intent <file>` remains supported and accepts either a raw `InstallIntentV1` or the strict build-result envelope.
 
-The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `verify [--strict] [--external-plan <intent-result.json>] [--raycast-post-export <evidence.json>]`, `rollback --transaction <id> --confirm-plan <digest>`, and `uninstall --confirm-plan <digest>`. Request, build-result, intent, evidence, verification-result, and plan files use strict version-1 parsers. Intent building, planning, and external verification are read-only: they do not publish, authenticate, launch, apply a reviewed external plan, or change external systems. Apply rebuilds and revalidates release content, operation composition, and machine observations before publication, then applies automatic operations with the scheduled operation group last. Failures restore captured state in reverse order.
+The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `verify [--strict] [--external-plan <intent-result.json>]`, `rollback --transaction <id> --confirm-plan <digest>`, and `uninstall --confirm-plan <digest>`. Request, build-result, intent, verification-result, and plan files use strict version-1 parsers. Intent building, planning, and external verification are read-only: they do not publish, authenticate, launch, apply a reviewed external plan, or change external systems. Apply rebuilds and revalidates release content, operation composition, and machine observations before publication, then applies automatic operations in deterministic plan order. Failures restore captured state in reverse order.
 
 `InstallIntentRequestV1` has these exact JSON fields (unknown fields fail closed):
 
@@ -44,26 +42,6 @@ The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `
           ]
         }
       }
-    ],
-    "obsidian": [
-      {
-        "id": "notes",
-        "request": {
-          "reviewedFiles": ["Index.md"],
-          "changes": [
-            { "action": "write", "path": "Index.md", "content": "# Index", "purpose": "backlinks" }
-          ]
-        }
-      }
-    ],
-    "raycast": [
-      {
-        "id": "raycast-review",
-        "derivative": {
-          "encrypted": true,
-          "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }]
-        }
-      }
     ]
   }
 }
@@ -71,50 +49,19 @@ The remaining public surface is `apply --plan <file> --confirm-plan <digest>`, `
 
 All collections are bounded, unique, and sorted by ID/path (nested proposals and changes use canonical JSON order). Projection entries must cover every required Claude/Pi role and each path must exactly match a file in the current release manifest. External plan records have exact fields `id`, `adapter`, `classification`, `planDigest`, `verifierRef`, and `plan`; their digest and verifier binding are revalidated before `install plan` accepts the envelope.
 
-Native side effects remain behind an application-injected `InstallerOperationAdapter`; this package does not implement Windows provisioning internals. `%APPDATA%`, `%LOCALAPPDATA%`, and `MPX_APPS` must be explicit absolute production roots. Production base composition manages `.bashrc` and PowerShell startup-profile launcher blocks, HKCU environment/PATH values, shortcuts, and runtime registrations/projections. It emits neither Windows Terminal nor scheduled-task operations: planning, apply, receipt creation, verification, rollback, and uninstall do not inspect, write, adopt, or remove either resource. Existing Terminal profiles and scheduled tasks remain foreign to current production ownership. Verification hashes actual release files and observes actual operation targets; `--strict` additionally reports foreign entries without removing them. Uninstall refuses absent ownership and foreign or drifted owned targets. The legacy public `--component`/`--runner` reader has been removed.
+## Confirmation and external integrations
 
-Background session capture activation is explicitly deferred and pending, not implied by a healthy base installation. It requires a future, separately confirmed feature before Task Scheduler can enter production composition; generic scheduled-task contracts remain available only as dormant infrastructure.
+External integration requests are typed, sorted plan-digest and verifier references in the immutable install intent. Git remotes are the only retained installer external adapter. They are confirmation-required and never emitted as automatic operations; the installer does not execute remote changes.
 
-A healthy strict Phase I verification supplies the release-key authority digest used to admit Phase G scheduled capture. The immutable intent may bind exactly four validated runtime registrations (`claude-personal`, `claude-work`, `pi-personal`, and `pi-work`) plus bounded static MCP registrations. The production adapter writes only secret-free registration receipts and synthetic projection inventories beneath local application state. Their automatic operations verify exact receipt/projection bytes, executable and projection evidence, route-domain and MCP-sharing declarations, non-overlapping root digests, and the complete projection roles; credentials, auth, sessions, caches, trust, and native runtime directories are never copied. Without an injected production adapter and durable transaction store, live install/apply remains fail-closed with `INSTALL_ADAPTER_UNAVAILABLE`.
+A receipt reference is never evidence of success. Without exact live evidence every receipt-bound Git integration reports `verification-required`. `--external-plan` re-parses the prior build result and invokes the read-only Git verifier against its digest-bound plan. Stale bindings are refused and drift reports `unhealthy`.
 
-## Confirmation and manual external integrations
+| Integration | Inspection boundary                                                                                           | Plan and confirmation                                                        | Post-change verification                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Git remotes | One requested repository under an approved project root; argv-only `git remote -v`; exact `.git/config` bytes | Exact reviewed argv and repository-scoped digest; unrelated remotes retained | Run argv-only `git remote -v` in the same repository |
 
-External integration requests are typed, sorted plan-digest and verifier references in the immutable install intent. Git and Obsidian are confirmation-required; Raycast is manual-only. No external integration is emitted as an automatic operation, and the installer never executes Git remote changes, writes Obsidian notes, imports Raycast settings, logs in to an account, or renames a hosted repository.
+Optional Obsidian project registration remains a separate manual skill workflow when `MPX_OBSIDIAN_VAULT` identifies a vault the user uses. The installer does not inspect, plan, mutate, verify, or claim ownership over Obsidian or Raycast data.
 
-A receipt reference is never evidence of success. Without exact live evidence every receipt-bound external integration reports `verification-required` and adds `external-verification-required:<id>`. `--external-plan` re-parses the prior `install-intent-build-result`, invokes the existing Git/Obsidian/Raycast read-only verifiers against its exact digest-bound plans, and passes a result binding `id`, `adapter`, `planDigest`, `verifierRef`, `healthy`, and sorted issues into standard install verification. Stale digest/ref bindings are refused. Drift reports `unhealthy` with namespaced stable issues; only an exact healthy binding reports `verified`. If no ownership receipt exists, no external verifier is invoked.
-
-Raycast plans require a separate strict post-export evidence file:
-
-```json
-{
-  "schemaVersion": 1,
-  "kind": "raycast-post-export-evidence",
-  "integrations": [
-    {
-      "id": "raycast-review",
-      "derivative": {
-        "encrypted": true,
-        "items": [{ "id": "command.one", "category": "MPX", "command": "review-only" }]
-      }
-    }
-  ]
-}
-```
-
-Integration IDs are globally unique and sorted. Every entry must name a Raycast integration in the external plan; unknown and non-Raycast IDs are rejected, and every Raycast plan requires evidence. Git and Obsidian use no supplemental evidence because their exact plans already bind the inspected repository/files and expected post-change state.
-
-| Integration/action       | Inspection boundary                                                                                                                                          | Plan and confirmation                                                                                                 | Apply classification                       | Post-change verification                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Git remotes              | One explicitly requested repository under an approved `MPX_PROJECTS`, `MPX_WORK`, or `MPX_CLONED` root; argv-only `git remote -v`; exact `.git/config` bytes | Exact `git remote add`, `set-url`, or `rename` argv; one digest per repository; unrelated remotes retained            | Confirmation required; manual execution    | Run argv-only `git remote -v` in that same repository and compare with the reviewed proposal |
-| Obsidian MPX content     | Only the exact reviewed relative file list below `${MPX_OBSIDIAN_VAULT}/MPX`; no vault scan or unrelated note reads                                          | Byte/absence snapshots for every backlink, query, CSS, write, source, and rename destination; one atomic batch digest | Confirmation required; manual execution    | Re-open only reviewed paths; restore the complete snapshot set if any batch member fails     |
-| Raycast                  | A user-supplied, encrypted, strict derivative containing only IDs, categories, and reviewed commands; unknown/private/credential fields rejected             | ID/category-preserving encrypted plan with manual instructions                                                        | Manual-only; automatic import is forbidden | User creates a fresh encrypted post-export derivative; compare exact IDs/categories          |
-| Authentication login     | No credential inspection                                                                                                                                     | Provider-native instructions only                                                                                     | Manual-only                                | User/provider confirms account route                                                         |
-| Hosted repository rename | No automatic mutation                                                                                                                                        | Exact provider review checklist                                                                                       | Manual-only                                | User verifies old/new repository routes and redirects                                        |
-| Export import            | Sanitized derivative only                                                                                                                                    | Exact reviewed export identity                                                                                        | Manual-only                                | Fresh post-export derivative comparison                                                      |
-
-Paths are canonicalized beneath approved roots, and regular files/directories are required. Traversal, symlink, special-entry, duplicate/unsorted intent, unknown-field, and shell/control-character inputs fail closed. Shell command strings are never constructed. Existing or foreign files outside the exact reviewed scope are neither read nor changed.
-
-Rollback is deliberately structured but not automatically executed for these external systems: identify the confirmation digest and scope, restore `.git/config` or every reviewed Obsidian path from byte/absence snapshots, or use Raycast's native manual restore/export workflow, then run the bounded verifier. This prevents installer ownership from being inferred over native user data.
+Paths are canonicalized beneath approved roots, and regular files/directories are required. Traversal, symlink, special-entry, duplicate/unsorted intent, unknown-field, and shell/control-character inputs fail closed. Rollback restores the reviewed `.git/config` snapshot after ownership and scope are confirmed.
 
 ## Immutable runtime registration
 

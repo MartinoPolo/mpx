@@ -14,15 +14,9 @@ import {
 } from './immutable-core.js';
 import {
   GitRemotePlanningAdapter,
-  ObsidianPlanningAdapter,
-  RaycastPlanningAdapter,
   type GitCommandPort,
   type GitRemotePlan,
   type GitRemoteRequest,
-  type ObsidianPlan,
-  type ObsidianRequest,
-  type RaycastDerivative,
-  type RaycastPlan,
 } from './external-integrations.js';
 import {
   createRuntimeRegistrationMatrix,
@@ -122,14 +116,6 @@ export interface InstallGitRemoteRequestV1 {
   readonly id: string;
   readonly request: GitRemoteRequest;
 }
-export interface InstallObsidianRequestV1 {
-  readonly id: string;
-  readonly request: ObsidianRequest;
-}
-export interface InstallRaycastRequestV1 {
-  readonly id: string;
-  readonly derivative: RaycastDerivative;
-}
 export interface InstallIntentRequestV1 {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent-request';
@@ -146,8 +132,6 @@ export interface InstallIntentRequestV1 {
   };
   readonly external: {
     readonly gitRemotes: readonly InstallGitRemoteRequestV1[];
-    readonly obsidian: readonly InstallObsidianRequestV1[];
-    readonly raycast: readonly InstallRaycastRequestV1[];
   };
 }
 
@@ -217,72 +201,6 @@ function parseGitRequest(value: unknown): GitRemoteRequest {
   sortedUnique(proposals, canonicalJson, 'Git proposals');
   return { repository: absolute(request.repository, 'Git repository'), proposals };
 }
-function safeRelative(value: unknown, label: string): string {
-  const result = text(value, label);
-  if (
-    result.includes('\\') ||
-    path.posix.isAbsolute(result) ||
-    path.posix.normalize(result) !== result ||
-    result === '..' ||
-    result.startsWith('../')
-  ) {
-    fail(`${label} is unsafe.`);
-  }
-  return result;
-}
-function parseObsidianRequest(value: unknown): ObsidianRequest {
-  const request = exact(value, ['reviewedFiles', 'changes'], 'Obsidian request');
-  const reviewedFiles = array(request.reviewedFiles, 'Reviewed files').map((item) =>
-    safeRelative(item, 'Reviewed file'),
-  );
-  sortedUnique(reviewedFiles, (item) => item, 'Reviewed files');
-  const changes = array(request.changes, 'Obsidian changes').map((value) => {
-    const source = value as Record<string, unknown> | null,
-      rename = source?.action === 'rename';
-    const change = exact(
-      value,
-      rename ? ['action', 'path', 'destination'] : ['action', 'path', 'content', 'purpose'],
-      'Obsidian change',
-    );
-    if (change.action === 'rename') {
-      return {
-        action: 'rename' as const,
-        path: safeRelative(change.path, 'Obsidian path'),
-        destination: safeRelative(change.destination, 'Obsidian destination'),
-      };
-    }
-    if (
-      change.action !== 'write' ||
-      !['backlinks', 'query', 'css'].includes(change.purpose as string)
-    ) {
-      fail('Obsidian change is invalid.');
-    }
-    return {
-      action: 'write' as const,
-      path: safeRelative(change.path, 'Obsidian path'),
-      content: text(change.content, 'Obsidian content', true),
-      purpose: change.purpose as 'backlinks' | 'query' | 'css',
-    };
-  });
-  sortedUnique(changes, canonicalJson, 'Obsidian changes');
-  return { reviewedFiles, changes };
-}
-function parseRaycastDerivative(value: unknown): RaycastDerivative {
-  const derivative = exact(value, ['encrypted', 'items'], 'Raycast derivative');
-  if (derivative.encrypted !== true) {
-    fail('Raycast derivative must be encrypted.');
-  }
-  const items = array(derivative.items, 'Raycast items').map((value) => {
-    const item = exact(value, ['id', 'category', 'command'], 'Raycast item');
-    return {
-      id: id(item.id, 'Raycast item ID'),
-      category: text(item.category, 'Raycast category'),
-      command: text(item.command, 'Raycast command'),
-    };
-  });
-  sortedUnique(items, (item) => item.id, 'Raycast items');
-  return { encrypted: true, items };
-}
 function parseExternal<T>(
   value: unknown,
   child: string,
@@ -318,7 +236,7 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
   }
   const executables = exact(request.executables, ['claude', 'pi'], 'Executables'),
     projections = exact(request.projections, ['claude', 'pi'], 'Projections'),
-    external = exact(request.external, ['gitRemotes', 'obsidian', 'raycast'], 'External requests');
+    external = exact(request.external, ['gitRemotes'], 'External requests');
   const parsed: InstallIntentRequestV1 = {
     schemaVersion: 1,
     kind: 'install-intent-request',
@@ -340,25 +258,9 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
         parseGitRequest,
         'Git remote requests',
       ) as unknown as InstallGitRemoteRequestV1[],
-      obsidian: parseExternal(
-        external.obsidian,
-        'request',
-        parseObsidianRequest,
-        'Obsidian requests',
-      ) as unknown as InstallObsidianRequestV1[],
-      raycast: parseExternal(
-        external.raycast,
-        'derivative',
-        parseRaycastDerivative,
-        'Raycast requests',
-      ) as unknown as InstallRaycastRequestV1[],
     },
   };
-  const allIds = [
-    ...parsed.external.gitRemotes,
-    ...parsed.external.obsidian,
-    ...parsed.external.raycast,
-  ].map((item) => item.id);
+  const allIds = parsed.external.gitRemotes.map((item) => item.id);
   if (new Set(allIds).size !== allIds.length) {
     fail('External request IDs must be globally unique.');
   }
@@ -371,18 +273,13 @@ export type InstallExternalPlanV1 = {
   readonly classification: InstallExternalIntegrationV1['classification'];
   readonly planDigest: string;
   readonly verifierRef: string;
-  readonly plan: GitRemotePlan | ObsidianPlan | RaycastPlan;
+  readonly plan: GitRemotePlan;
 };
 export interface InstallIntentBuildResultV1 {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent-build-result';
   readonly intent: InstallIntentV1;
   readonly externalPlans: readonly InstallExternalPlanV1[];
-}
-export interface RaycastPostExportEvidenceV1 {
-  readonly schemaVersion: 1;
-  readonly kind: 'raycast-post-export-evidence';
-  readonly integrations: readonly { readonly id: string; readonly derivative: RaycastDerivative }[];
 }
 export interface InstallExternalVerificationIntegrationV1 {
   readonly id: string;
@@ -398,27 +295,6 @@ export interface InstallExternalVerificationResultV1 {
   readonly integrations: readonly InstallExternalVerificationIntegrationV1[];
 }
 
-export function parseRaycastPostExportEvidenceV1(value: unknown): RaycastPostExportEvidenceV1 {
-  const evidence = exact(
-    value,
-    ['schemaVersion', 'kind', 'integrations'],
-    'Raycast post-export evidence',
-  );
-  if (evidence.schemaVersion !== 1 || evidence.kind !== 'raycast-post-export-evidence') {
-    fail('Raycast post-export evidence header is invalid.');
-  }
-  const integrations = array(evidence.integrations, 'Raycast post-export integrations').map(
-    (value) => {
-      const item = exact(value, ['id', 'derivative'], 'Raycast post-export integration');
-      return {
-        id: id(item.id, 'Raycast integration ID'),
-        derivative: parseRaycastDerivative(item.derivative),
-      };
-    },
-  );
-  sortedUnique(integrations, (item) => item.id, 'Raycast post-export integrations');
-  return { schemaVersion: 1, kind: 'raycast-post-export-evidence', integrations };
-}
 export function parseInstallExternalVerificationResultV1(
   value: unknown,
 ): InstallExternalVerificationResultV1 {
@@ -443,7 +319,7 @@ export function parseInstallExternalVerificationResultV1(
       sortedUnique(issues, (issue) => issue, 'External verification issues');
       if (
         typeof item.adapter !== 'string' ||
-        !['git-remotes', 'obsidian', 'raycast'].includes(item.adapter) ||
+        item.adapter !== 'git-remotes' ||
         typeof item.planDigest !== 'string' ||
         !SHA.test(item.planDigest) ||
         typeof item.verifierRef !== 'string' ||
@@ -593,165 +469,6 @@ function parseGitPlan(value: unknown): GitRemotePlan {
 function safeRelativeOrUrl(value: string): boolean {
   return value.length > 0 && value.length <= MAX_TEXT && !/[\0\r\n]/u.test(value);
 }
-function parseObsidianPlan(value: unknown): ObsidianPlan {
-  const item = exact(
-    value,
-    [
-      'kind',
-      'classification',
-      'subtree',
-      'reviewedFiles',
-      'expectedFiles',
-      'operations',
-      'confirmation',
-      'rollback',
-    ],
-    'Obsidian plan',
-  );
-  if (item.kind !== 'obsidian' || item.classification !== 'confirmation-required') {
-    fail('Obsidian plan header is invalid.');
-  }
-  const subtree = absolute(item.subtree, 'Obsidian subtree'),
-    reviewedFiles = array(item.reviewedFiles, 'Reviewed files').map((value) =>
-      safeRelative(value, 'Reviewed file'),
-    );
-  sortedUnique(reviewedFiles, (value) => value, 'Reviewed files');
-  const expectedFiles = array(item.expectedFiles, 'Expected files').map((value) => {
-    const expected = exact(value, ['path', 'sha256'], 'Expected file'),
-      relative = safeRelative(expected.path, 'Expected path');
-    if (
-      expected.sha256 !== null &&
-      (typeof expected.sha256 !== 'string' || !SHA.test(expected.sha256))
-    ) {
-      fail('Expected file digest is invalid.');
-    }
-    return { path: relative, sha256: expected.sha256 };
-  });
-  if (expectedFiles.map((x) => x.path).join('\0') !== reviewedFiles.join('\0')) {
-    fail('Expected files must bind the reviewed files.');
-  }
-  const operations = array(item.operations, 'Obsidian operations').map((value) => {
-    const source = value as Record<string, unknown> | null,
-      rename = source?.action === 'rename',
-      operation = exact(
-        value,
-        rename ? ['action', 'path', 'destination'] : ['action', 'path', 'content', 'purpose'],
-        'Obsidian operation',
-      );
-    if (rename) {
-      return {
-        action: 'rename' as const,
-        path: safeRelative(operation.path, 'Obsidian path'),
-        destination: safeRelative(operation.destination, 'Obsidian destination'),
-      };
-    }
-    if (
-      operation.action !== 'write' ||
-      !['backlinks', 'query', 'css'].includes(operation.purpose as string)
-    ) {
-      fail('Obsidian operation is invalid.');
-    }
-    return {
-      action: 'write' as const,
-      path: safeRelative(operation.path, 'Obsidian path'),
-      content: text(operation.content, 'Obsidian content', true),
-      purpose: operation.purpose as 'backlinks' | 'query' | 'css',
-    };
-  });
-  if (
-    operations.some(
-      (operation, index) =>
-        index > 0 && operations[index - 1]!.path.localeCompare(operation.path) > 0,
-    )
-  ) {
-    fail('Obsidian operations must be sorted.');
-  }
-  const touched = operations.flatMap((operation) =>
-    operation.action === 'rename' ? [operation.path, operation.destination] : [operation.path],
-  );
-  if (touched.some((relative) => !reviewedFiles.includes(relative))) {
-    fail('Obsidian operation touches an unreviewed path.');
-  }
-  const rollbackValue = exact(
-      item.rollback,
-      ['automatic', 'snapshots', 'steps'],
-      'Obsidian rollback',
-    ),
-    snapshots = array(rollbackValue.snapshots, 'Obsidian snapshots').map((value) => {
-      const raw = value as Record<string, unknown>;
-      const relative = safeRelative(raw?.path, 'Snapshot path');
-      const parsed = snapshot({ ...raw, path: path.join(subtree, ...relative.split('/')) });
-      return { ...parsed, path: relative };
-    }),
-    steps = strings(rollbackValue.steps, 'Obsidian rollback steps');
-  if (
-    rollbackValue.automatic !== false ||
-    steps.length === 0 ||
-    snapshots.map((x) => x.path).join('\0') !== reviewedFiles.join('\0')
-  ) {
-    fail('Obsidian rollback is invalid.');
-  }
-  return {
-    kind: 'obsidian',
-    classification: 'confirmation-required',
-    subtree,
-    reviewedFiles,
-    expectedFiles,
-    operations,
-    confirmation: confirmation(
-      item.confirmation,
-      subtree,
-      installerDigest({ snapshots, operations }),
-    ),
-    rollback: { automatic: false, snapshots, steps },
-  };
-}
-function parseRaycastPlan(value: unknown): RaycastPlan {
-  const item = exact(
-    value,
-    [
-      'kind',
-      'classification',
-      'automaticImport',
-      'encrypted',
-      'items',
-      'instructions',
-      'confirmation',
-      'rollback',
-    ],
-    'Raycast plan',
-  );
-  if (
-    item.kind !== 'raycast' ||
-    item.classification !== 'manual-only' ||
-    item.automaticImport !== false ||
-    item.encrypted !== true
-  ) {
-    fail('Raycast plan header is invalid.');
-  }
-  const derivative = parseRaycastDerivative({ encrypted: true, items: item.items }),
-    instructions = strings(item.instructions, 'Raycast instructions'),
-    rollbackValue = exact(item.rollback, ['automatic', 'steps'], 'Raycast rollback'),
-    steps = strings(rollbackValue.steps, 'Raycast rollback steps');
-  if (instructions.length === 0 || rollbackValue.automatic !== false || steps.length === 0) {
-    fail('Raycast plan guidance is invalid.');
-  }
-  return {
-    kind: 'raycast',
-    classification: 'manual-only',
-    automaticImport: false,
-    encrypted: true,
-    items: derivative.items,
-    instructions,
-    confirmation: confirmation(
-      item.confirmation,
-      'user-supplied-raycast-derivative',
-      installerDigest(derivative),
-    ),
-    rollback: { automatic: false, steps },
-  };
-}
-
 export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBuildResultV1 {
   const result = exact(
     value,
@@ -772,11 +489,7 @@ export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBu
     const plan =
       item.adapter === 'git-remotes'
         ? parseGitPlan(item.plan)
-        : item.adapter === 'obsidian'
-          ? parseObsidianPlan(item.plan)
-          : item.adapter === 'raycast'
-            ? parseRaycastPlan(item.plan)
-            : fail('External plan adapter is invalid.');
+        : fail('External plan adapter is invalid.');
     if (
       typeof item.planDigest !== 'string' ||
       !SHA.test(item.planDigest) ||
@@ -788,7 +501,7 @@ export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBu
     }
     if (
       !SAFE_ID.test(item.id as string) ||
-      !['git-remotes', 'obsidian', 'raycast'].includes(item.adapter as string) ||
+      item.adapter !== 'git-remotes' ||
       !['confirmation-required', 'manual-only'].includes(item.classification as string)
     ) {
       fail('External plan binding is invalid.');
@@ -863,45 +576,18 @@ export interface InstallIntentBuilderOptions {
   readonly releases: CurrentReleaseBuilder;
   readonly environment?: NodeJS.ProcessEnv;
   readonly gitRemotes: Pick<GitRemotePlanningAdapter, 'inspect' | 'plan' | 'verify'>;
-  readonly obsidian: Pick<ObsidianPlanningAdapter, 'inspect' | 'plan' | 'verify'>;
-  readonly raycast: Pick<RaycastPlanningAdapter, 'inspect' | 'plan' | 'verify'>;
 }
 export class InstallIntentBuilder {
   constructor(private readonly options: InstallIntentBuilderOptions) {}
   async verify(
     buildValue: InstallIntentBuildResultV1 | unknown,
-    evidenceValue?: RaycastPostExportEvidenceV1 | unknown,
   ): Promise<InstallExternalVerificationResultV1> {
     const build = parseInstallIntentBuildResultV1(buildValue);
-    const evidence =
-      evidenceValue === undefined ? undefined : parseRaycastPostExportEvidenceV1(evidenceValue);
-    const raycastPlans = new Map(
-      build.externalPlans
-        .filter((plan) => plan.adapter === 'raycast')
-        .map((plan) => [plan.id, plan]),
-    );
-    if (evidence?.integrations.some((item) => !raycastPlans.has(item.id))) {
-      fail('Raycast evidence must reference only known Raycast integration IDs.');
-    }
-    const derivatives = new Map(
-      evidence?.integrations.map((item) => [item.id, item.derivative]) ?? [],
-    );
-    if ([...raycastPlans.keys()].some((id) => !derivatives.has(id))) {
-      fail(
-        'Every Raycast integration requires post-export evidence.',
-        'RAYCAST_POST_EXPORT_REQUIRED',
-      );
-    }
     const integrations: InstallExternalVerificationIntegrationV1[] = [];
     for (const external of build.externalPlans) {
       let verification: { readonly healthy: boolean; readonly issues: readonly string[] };
       try {
-        verification =
-          external.plan.kind === 'git-remotes'
-            ? await this.options.gitRemotes.verify(external.plan)
-            : external.plan.kind === 'obsidian'
-              ? await this.options.obsidian.verify(external.plan)
-              : await this.options.raycast.verify(external.plan, derivatives.get(external.id));
+        verification = await this.options.gitRemotes.verify(external.plan);
       } catch {
         verification = { healthy: false, issues: ['external-verifier-failed'] };
       }
@@ -1003,7 +689,7 @@ export class InstallIntentBuilder {
     const add = (
       idValue: string,
       adapter: InstallExternalIntegrationV1['adapter'],
-      plan: GitRemotePlan | ObsidianPlan | RaycastPlan,
+      plan: GitRemotePlan,
     ): void => {
       const planDigest = installerDigest(plan),
         verifierRef = `${adapter}:${idValue}:${planDigest}`;
@@ -1021,20 +707,6 @@ export class InstallIntentBuilder {
         item.id,
         'git-remotes',
         await this.options.gitRemotes.plan(await this.options.gitRemotes.inspect(item.request)),
-      );
-    }
-    for (const item of request.external.obsidian) {
-      add(
-        item.id,
-        'obsidian',
-        await this.options.obsidian.plan(await this.options.obsidian.inspect(item.request)),
-      );
-    }
-    for (const item of request.external.raycast) {
-      add(
-        item.id,
-        'raycast',
-        await this.options.raycast.plan(await this.options.raycast.inspect(item.derivative)),
       );
     }
     plans.sort((a, b) => a.id.localeCompare(b.id));

@@ -99,7 +99,7 @@ Explicit convergence now passes across both external source roots. Human-reviewe
 
 - Run every named real project/template target.
 - Observe Windows Terminal profile, start-directory, and alias behavior interactively.
-- Verify Linux on Linux and macOS on macOS using `docs/PORTABILITY.md`.
+- Linux and macOS verification is deferred; see [deferred scope](MPX_MIGRATION.md#deferred-scope).
 
 ### Installation and account routes
 
@@ -107,7 +107,7 @@ Explicit convergence now passes across both external source roots. Human-reviewe
 - Apply and verify the immutable live installation.
 - Verify Claude/Pi registration and personal/work Claude/Pi routes.
 - Verify the installed scheduled reconcile task.
-- Evidence real Git author/SSH, Obsidian, Raycast, provider, and native session-resume routes.
+- Evidence real Git author/SSH, optional manual Obsidian registration, provider, and native session-resume routes.
 
 ### Observation, cutover, and rollback
 
@@ -125,8 +125,8 @@ Explicit convergence now passes across both external source roots. Human-reviewe
 - `packages/application/test/unit/architecture.test.ts` — application and CLI boundary gates.
 - `scripts/validate-structure.mjs` — public workspace/layout enforcement.
 - `scripts/bundle-cli.mjs` — deterministic explicit bundle generation and non-mutating check mode.
-- `scripts/validate-generated.mjs` — generated/provenance/bundle validation.
-- `docs/PORTABILITY.md` — Linux/macOS evidence requirements without support claims.
+- `scripts/validate-generated.mjs` — generated bundle and convergence-manifest validation.
+- `MPX_MIGRATION.md#deferred-scope` — deferred Linux/macOS scope and acceptance status.
 - `docs/history/CONVERGENCE_MANIFEST.json` — protected immutable historical evidence.
 - `fallow-baselines/regression.json` — protected baseline; never refresh to conceal findings.
 

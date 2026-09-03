@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { lstat, open, readFile } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -16,8 +16,6 @@ const LOCKFILE =
 const PRIVATE_STATE =
   /(?:^|\/)(?:\.env(?:\..+)?|(?:credentials?|sessions?|runtime-state|runtime-status)(?:\.(?:json|ya?ml|toml))?)$/iu;
 const ACTIVE_ROOT = /^(?:apps|content|packages|runtimes|scripts)\//u;
-const IMPORTED = new Set(['imported-rewritten', 'imported-non-normative-history']);
-const DISPOSITIONS = new Set([...IMPORTED, 'deferred-inventory-only', 'excluded']);
 const CONFIGURED_PATH_MARKER = ['<configured', 'path>'].join('-');
 const ACTIVE_COMPATIBILITY_DOCS = new Set([
   'docs/LAUNCH.md',
@@ -260,177 +258,6 @@ export function validateSharedInstructionLinks(files) {
   return diagnostics;
 }
 
-function expandSource(source, roots) {
-  return source.replace(/^\$\{([A-Z0-9_]+)\}/u, (_, name) => roots[name] ?? `\${${name}}`);
-}
-
-export async function validateProvenance({
-  rootFiles,
-  manifest,
-  roots,
-  readSource,
-  verifySources = false,
-  destinationAttributes,
-}) {
-  const diagnostics = [];
-  for (const [index, entry] of (manifest.entries ?? []).entries()) {
-    const label = entry.destination ?? entry.source ?? `entry ${index}`;
-    if (!DISPOSITIONS.has(entry.disposition)) {
-      diagnostics.push(
-        diagnostic(
-          'PROVENANCE_DISPOSITION_INVALID',
-          label,
-          `unknown disposition '${entry.disposition}'`,
-        ),
-      );
-    }
-    if (IMPORTED.has(entry.disposition)) {
-      if (
-        !/^[a-f0-9]{64}$/u.test(entry.originalSha256 ?? '') ||
-        !/^[a-f0-9]{64}$/u.test(entry.destinationSha256 ?? '')
-      ) {
-        diagnostics.push(
-          diagnostic(
-            'PROVENANCE_HASH_MISSING',
-            label,
-            'imported entries require source and destination SHA-256 values',
-          ),
-        );
-      }
-      const destinationName = entry.destination ? normalized(entry.destination) : undefined;
-      const destination = destinationName ? rootFiles.get(destinationName) : undefined;
-      if (destination === undefined) {
-        diagnostics.push(
-          diagnostic('PROVENANCE_DESTINATION_MISSING', label, 'provenance destination is absent'),
-        );
-      } else {
-        if (destinationAttributes && TEXT.test(destinationName)) {
-          const attributes = destinationAttributes.get(destinationName);
-          if (
-            !attributes ||
-            !['auto', 'set'].includes(attributes.text) ||
-            attributes.eol !== 'lf'
-          ) {
-            diagnostics.push(
-              diagnostic(
-                'PROVENANCE_DESTINATION_ATTRIBUTE_MISSING',
-                label,
-                'provenance-managed text requires repository Git attributes enforcing LF',
-              ),
-            );
-          }
-          if (Buffer.from(destination).includes(Buffer.from('\r\n'))) {
-            diagnostics.push(
-              diagnostic(
-                'PROVENANCE_DESTINATION_NOT_LF',
-                label,
-                'provenance-managed text contains CRLF bytes',
-              ),
-            );
-          }
-        }
-        if (digest(destination) !== entry.destinationSha256) {
-          diagnostics.push(
-            diagnostic(
-              'PROVENANCE_DESTINATION_HASH_MISMATCH',
-              label,
-              'destination no longer matches its recorded SHA-256',
-            ),
-          );
-        }
-      }
-      if (verifySources) {
-        const sourcePath = expandSource(entry.source ?? '', roots);
-        const source = await readSource(sourcePath);
-        if (source === undefined) {
-          diagnostics.push(
-            diagnostic('PROVENANCE_SOURCE_MISSING', label, 'provenance source is absent'),
-          );
-        } else if (digest(source) !== entry.originalSha256) {
-          diagnostics.push(
-            diagnostic(
-              'PROVENANCE_SOURCE_HASH_MISMATCH',
-              label,
-              'source no longer matches its recorded SHA-256',
-            ),
-          );
-        }
-      }
-    } else if (
-      (entry.disposition === 'excluded' || entry.disposition === 'deferred-inventory-only') &&
-      (entry.destination !== null || entry.destinationSha256 !== null)
-    ) {
-      diagnostics.push(
-        diagnostic(
-          'PROVENANCE_DISPOSITION_INVALID',
-          label,
-          'non-imported dispositions cannot claim a destination',
-        ),
-      );
-    }
-  }
-  return diagnostics;
-}
-
-function parseProvenanceManifest(value, file = 'docs/history/SOURCE_PROVENANCE.json') {
-  if (value === undefined) {
-    return {
-      manifest: null,
-      diagnostics: [
-        diagnostic('PROVENANCE_MANIFEST_MISSING', file, 'source provenance manifest is required'),
-      ],
-    };
-  }
-  let manifest;
-  try {
-    manifest = JSON.parse(Buffer.isBuffer(value) ? value.toString('utf8') : String(value));
-  } catch {
-    return {
-      manifest: null,
-      diagnostics: [
-        diagnostic(
-          'PROVENANCE_MANIFEST_INVALID',
-          file,
-          'source provenance manifest is not valid JSON',
-        ),
-      ],
-    };
-  }
-  const validEntry = (entry) =>
-    entry !== null &&
-    typeof entry === 'object' &&
-    !Array.isArray(entry) &&
-    typeof entry.source === 'string' &&
-    (entry.destination === null || typeof entry.destination === 'string') &&
-    typeof entry.disposition === 'string' &&
-    (entry.originalSha256 === null || typeof entry.originalSha256 === 'string') &&
-    (entry.destinationSha256 === null || typeof entry.destinationSha256 === 'string');
-  if (
-    manifest === null ||
-    typeof manifest !== 'object' ||
-    Array.isArray(manifest) ||
-    manifest.schemaVersion !== 1 ||
-    !Array.isArray(manifest.entries) ||
-    !manifest.entries.every(validEntry) ||
-    (manifest.symbolicRoots !== undefined &&
-      (manifest.symbolicRoots === null ||
-        typeof manifest.symbolicRoots !== 'object' ||
-        Array.isArray(manifest.symbolicRoots)))
-  ) {
-    return {
-      manifest: null,
-      diagnostics: [
-        diagnostic(
-          'PROVENANCE_MANIFEST_INVALID',
-          file,
-          'source provenance manifest must use schemaVersion 1 with structurally valid entries[] and optional symbolicRoots{}',
-        ),
-      ],
-    };
-  }
-  return { manifest, diagnostics: [] };
-}
-
 export function validateCanonicalScriptSyntax(root, names) {
   const diagnostics = [];
   for (const rawName of names) {
@@ -504,60 +331,11 @@ export function validateConvergenceArtifacts(manifest, files) {
   return diagnostics;
 }
 
-export async function validateGeneratedRepository({
-  root: _root,
-  names: _names,
-  tracked,
-  files,
-  generatedPiDiagnostics = [],
-  readSource,
-  verifySources = false,
-  destinationAttributes,
-}) {
-  const diagnostics = [
+export async function validateGeneratedRepository({ tracked, files, generatedPiDiagnostics = [] }) {
+  return [
     ...validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics }),
     ...validateSharedInstructionLinks(files),
   ];
-  const provenanceFile = 'docs/history/SOURCE_PROVENANCE.json';
-  const parsed = parseProvenanceManifest(files.get(provenanceFile), provenanceFile);
-  diagnostics.push(...parsed.diagnostics);
-  if (parsed.manifest) {
-    diagnostics.push(
-      ...(await validateProvenance({
-        rootFiles: files,
-        manifest: parsed.manifest,
-        roots: Object.fromEntries(
-          Object.keys(parsed.manifest.symbolicRoots ?? {}).map((name) => [name, process.env[name]]),
-        ),
-        readSource,
-        verifySources,
-        destinationAttributes,
-      })),
-    );
-  }
-  return diagnostics;
-}
-
-function repositoryAttributes(root, names) {
-  const output = execFileSync(
-    'git',
-    ['-c', 'core.attributesFile=', 'check-attr', '-z', '--stdin', 'text', 'eol'],
-    {
-      cwd: root,
-      env: { ...process.env, GIT_ATTR_NOSYSTEM: '1' },
-      input: `${names.join('\0')}\0`,
-    },
-  )
-    .toString('utf8')
-    .split('\0');
-  const result = new Map();
-  for (let index = 0; index + 2 < output.length; index += 3) {
-    const [file, attribute, value] = output.slice(index, index + 3);
-    const attributes = result.get(file) ?? {};
-    attributes[attribute] = value;
-    result.set(file, attributes);
-  }
-  return result;
 }
 
 export async function repositoryFiles(root, names, options = {}) {
@@ -788,19 +566,9 @@ async function run() {
       tracked,
       files,
       generatedPiDiagnostics: drift,
-      readSource: async (source) => {
-        try {
-          return await readFile(source);
-        } catch {
-          return undefined;
-        }
-      },
-      verifySources,
-      destinationAttributes: repositoryAttributes(root, names),
     })),
   ];
 
-  const parsed = parseProvenanceManifest(files.get('docs/history/SOURCE_PROVENANCE.json'));
   if (diagnostics.length) {
     for (const item of diagnostics) {
       console.error(`${item.code}: ${item.file}: ${item.message}`);
@@ -808,7 +576,7 @@ async function run() {
     process.exitCode = 1;
   } else {
     console.log(
-      `Validated ${files.size} active/generated files, ${parsed.manifest.entries.length} provenance entries, and ${convergence.entries.length} convergence entries.`,
+      `Validated ${files.size} active/generated files and ${convergence.entries.length} convergence entries.`,
     );
   }
 }

@@ -12,7 +12,6 @@ const identities = [
   'clean-pc',
   'podcast',
   'project-register',
-  'raycast-config',
   'tutorial-create',
   'video-to-image',
 ] as const;
@@ -140,12 +139,8 @@ describe('Batch C6 personal skills', () => {
     expect(await text('clean-pc/SKILL.md')).toContain(
       'remove only what the user approves group by group',
     );
-    expect((await text('raycast-config/SKILL.md')).toLowerCase()).toContain(
-      'wait for explicit confirmation before importing',
-    );
-    expect(await text('project-register/SKILL.md')).toContain(
-      'Stop here and ask before touching anything',
-    );
+    expect(await text('project-register/SKILL.md')).toContain('wt-profile.mjs');
+    expect(await text('project-register/SKILL.md')).toContain('variable is unavailable');
     expect(await text('tutorial-create/SKILL.md')).toContain(
       'wait for approval before writing any source',
     );
@@ -194,6 +189,17 @@ describe('Batch C6 personal skills', () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('Output must stay under MPX_AI_GENERATED');
+  });
+
+  it('documents explicit optional Obsidian registration without inferring a vault', async () => {
+    const registration = await text('project-register/SKILL.md');
+    expect(registration).toContain('Resolve `MPX_OBSIDIAN_VAULT` from the environment');
+    expect(registration).toContain('variable is unavailable');
+    expect(registration).toContain('skip this surface and record why');
+    expect(registration).toContain('Do not infer or reconstruct the vault root');
+    expect(registration).toContain('step 2 already ran it');
+    expect(registration).toContain('Check it against both lists from step 1');
+    expect(registration).not.toMatch(/step 3\s+(?:initializes|already ran)/iu);
   });
 
   it('delegates new repositories to canonical repository-setup', async () => {

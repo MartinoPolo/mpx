@@ -9,7 +9,6 @@ import {
   parseInstallIntentBuildResultV1,
   parseInstallIntentRequestV1,
   type CurrentReleaseBuilder,
-  type InstallIntentBuildResultV1,
   type InstallIntentRequestV1,
   type ReleaseManifestV1,
 } from '../../src/index.js';
@@ -29,7 +28,7 @@ const baseRequest = (): InstallIntentRequestV1 => ({
     claude: [{ path: 'content/claude', role: 'plugin' }],
     pi: [{ path: 'content/pi', role: 'extension' }],
   },
-  external: { gitRemotes: [], obsidian: [], raycast: [] },
+  external: { gitRemotes: [] },
 });
 
 describe('InstallIntentRequestV1', () => {
@@ -53,9 +52,21 @@ describe('InstallIntentRequestV1', () => {
       ...baseRequest(),
       external: {
         ...baseRequest().external,
-        raycast: [
-          { id: 'z', derivative: { encrypted: true as const, items: [] } },
-          { id: 'a', derivative: { encrypted: true as const, items: [] } },
+        gitRemotes: [
+          {
+            id: 'z',
+            request: {
+              repository: 'C:\\z',
+              proposals: [{ action: 'add' as const, remote: 'origin', url: 'x' }],
+            },
+          },
+          {
+            id: 'a',
+            request: {
+              repository: 'C:\\a',
+              proposals: [{ action: 'add' as const, remote: 'origin', url: 'x' }],
+            },
+          },
         ],
       },
     };
@@ -63,82 +74,41 @@ describe('InstallIntentRequestV1', () => {
   });
 });
 
-const completePlan = (
-  adapter: 'git-remotes' | 'obsidian' | 'raycast',
-  overrides: Record<string, unknown> = {},
-): Record<string, unknown> => {
-  if (adapter === 'git-remotes') {
-    const repository = path.resolve('fixture-repository'),
-      commands: unknown[] = [],
-      config = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    return {
-      kind: 'git-remotes',
-      classification: 'confirmation-required',
-      repository,
-      commands,
-      preservedRemotes: [],
-      expectedRemotes: [],
-      confirmation: {
-        required: true,
-        scope: repository,
-        digest: installerDigest({ repository, config, commands }),
-      },
-      rollback: {
-        automatic: false,
-        snapshot: {
-          path: path.join(repository, '.git', 'config'),
-          encoding: 'base64',
-          bytes: '',
-          sha256: config,
-        },
-        steps: ['restore'],
-      },
-      ...overrides,
-    };
-  }
-  if (adapter === 'obsidian') {
-    const subtree = path.resolve('fixture-vault', 'MPX'),
-      snapshots: unknown[] = [],
-      operations: unknown[] = [];
-    return {
-      kind: 'obsidian',
-      classification: 'confirmation-required',
-      subtree,
-      reviewedFiles: [],
-      expectedFiles: [],
-      operations,
-      confirmation: {
-        required: true,
-        scope: subtree,
-        digest: installerDigest({ snapshots, operations }),
-      },
-      rollback: { automatic: false, snapshots, steps: ['restore'] },
-      ...overrides,
-    };
-  }
-  const items = (overrides.items ?? []) as unknown[];
+const completePlan = (overrides: Record<string, unknown> = {}): Record<string, unknown> => {
+  const repository = path.resolve('fixture-repository'),
+    commands: unknown[] = [],
+    config = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
   return {
-    kind: 'raycast',
-    classification: 'manual-only',
-    automaticImport: false,
-    encrypted: true,
-    items,
-    instructions: ['review'],
+    kind: 'git-remotes',
+    classification: 'confirmation-required',
+    repository,
+    commands,
+    preservedRemotes: [],
+    expectedRemotes: [],
     confirmation: {
       required: true,
-      scope: 'user-supplied-raycast-derivative',
-      digest: installerDigest({ encrypted: true, items }),
+      scope: repository,
+      digest: installerDigest({ repository, config, commands }),
     },
-    rollback: { automatic: false, steps: ['restore'] },
+    rollback: {
+      automatic: false,
+      snapshot: {
+        path: path.join(repository, '.git', 'config'),
+        encoding: 'base64',
+        bytes: '',
+        sha256: config,
+      },
+      steps: ['restore'],
+    },
     ...overrides,
   };
 };
 
 describe('InstallIntentBuildResultV1', () => {
   it('binds every strict external plan record to its intent entry', () => {
-    const plan = completePlan('raycast');
+    const plan = completePlan();
     const planDigest = installerDigest(plan);
-    const verifierRef = `raycast:settings:${planDigest}`;
+    const verifierRef = `git-remotes:settings:${planDigest}`;
     const intent = {
       schemaVersion: 1,
       kind: 'install-intent',
@@ -148,8 +118,8 @@ describe('InstallIntentBuildResultV1', () => {
       externalIntegrations: [
         {
           id: 'settings',
-          adapter: 'raycast',
-          classification: 'manual-only',
+          adapter: 'git-remotes',
+          classification: 'confirmation-required',
           planDigest,
           verifierRef,
         },
@@ -162,8 +132,8 @@ describe('InstallIntentBuildResultV1', () => {
       externalPlans: [
         {
           id: 'settings',
-          adapter: 'raycast',
-          classification: 'manual-only',
+          adapter: 'git-remotes',
+          classification: 'confirmation-required',
           planDigest,
           verifierRef,
           plan,
@@ -276,8 +246,6 @@ async function createBuildFixture() {
     releases,
     environment: { MPX_PROJECTS: path.join(root, 'projects'), MPX_WORK: path.join(root, 'work') },
     gitRemotes: never as never,
-    obsidian: never as never,
-    raycast: never as never,
   });
   return { builder, configSource, never, releases, request };
 }
@@ -344,25 +312,12 @@ it('rejects an executable above the bounded security limit', async () => {
   });
 });
 
-function externalBuildResult(
-  entries: readonly {
-    id: string;
-    adapter: 'git-remotes' | 'obsidian' | 'raycast';
-    classification: 'confirmation-required' | 'manual-only';
-    plan: Record<string, unknown>;
-  }[],
-): InstallIntentBuildResultV1 {
-  const externalPlans = entries.map((entry) => {
-    const plan = completePlan(entry.adapter, entry.plan),
-      planDigest = installerDigest(plan);
-    return {
-      ...entry,
-      plan,
-      planDigest,
-      verifierRef: `${entry.adapter}:${entry.id}:${planDigest}`,
-    };
-  });
-  return parseInstallIntentBuildResultV1({
+it('verifies a retained Git plan through its digest-bound adapter', async () => {
+  const verify = vi.fn(async () => ({ healthy: true, issues: [] }));
+  const plan = completePlan(),
+    planDigest = installerDigest(plan),
+    verifierRef = `git-remotes:git:${planDigest}`;
+  const built = parseInstallIntentBuildResultV1({
     schemaVersion: 1,
     kind: 'install-intent-build-result',
     intent: {
@@ -371,225 +326,33 @@ function externalBuildResult(
       releaseKey: sha('a'),
       convergenceHash: sha('a'),
       components: ['cli'],
-      externalIntegrations: externalPlans.map(({ plan: _plan, ...entry }) => entry),
-    },
-    externalPlans,
-  });
-}
-
-function verificationBuilder(adapters: {
-  git?: ReturnType<typeof vi.fn>;
-  obsidian?: ReturnType<typeof vi.fn>;
-  raycast?: ReturnType<typeof vi.fn>;
-}): InstallIntentBuilder {
-  return new InstallIntentBuilder({
-    releases: {} as CurrentReleaseBuilder,
-    gitRemotes: { inspect: vi.fn(), plan: vi.fn(), verify: adapters.git ?? vi.fn() },
-    obsidian: { inspect: vi.fn(), plan: vi.fn(), verify: adapters.obsidian ?? vi.fn() },
-    raycast: { inspect: vi.fn(), plan: vi.fn(), verify: adapters.raycast ?? vi.fn() },
-  });
-}
-
-it('verifies Git and Obsidian from the exact digest-bound plans', async () => {
-  const git = vi.fn(async () => ({ healthy: true, issues: [] })),
-    obsidian = vi.fn(async () => ({ healthy: true, issues: [] }));
-  const built = externalBuildResult([
-    {
-      id: 'git',
-      adapter: 'git-remotes',
-      classification: 'confirmation-required',
-      plan: { kind: 'git-remotes', classification: 'confirmation-required', expectedRemotes: [] },
-    },
-    {
-      id: 'notes',
-      adapter: 'obsidian',
-      classification: 'confirmation-required',
-      plan: { kind: 'obsidian', classification: 'confirmation-required', expectedFiles: [] },
-    },
-  ]);
-  const result = await verificationBuilder({ git, obsidian }).verify(built);
-  expect(git).toHaveBeenCalledExactlyOnceWith(built.externalPlans[0]!.plan);
-  expect(obsidian).toHaveBeenCalledExactlyOnceWith(built.externalPlans[1]!.plan);
-  expect(result.integrations.map((item) => item.healthy)).toEqual([true, true]);
-});
-
-it('records bounded unhealthy evidence for each verifier exception and continues verification', async () => {
-  const git = vi.fn(async () => {
-    throw Object.assign(new Error('secret timeout details'), { code: 'ETIMEDOUT' });
-  });
-  const obsidian = vi.fn(async () => {
-    throw Object.assign(new Error('private path read failure'), { code: 'EACCES' });
-  });
-  const built = externalBuildResult([
-    {
-      id: 'git',
-      adapter: 'git-remotes',
-      classification: 'confirmation-required',
-      plan: { kind: 'git-remotes', classification: 'confirmation-required' },
-    },
-    {
-      id: 'notes',
-      adapter: 'obsidian',
-      classification: 'confirmation-required',
-      plan: { kind: 'obsidian', classification: 'confirmation-required' },
-    },
-  ]);
-  await expect(verificationBuilder({ git, obsidian }).verify(built)).resolves.toMatchObject({
-    integrations: [
-      { id: 'git', healthy: false, issues: ['external-verifier-failed'] },
-      { id: 'notes', healthy: false, issues: ['external-verifier-failed'] },
-    ],
-  });
-  expect(git).toHaveBeenCalledOnce();
-  expect(obsidian).toHaveBeenCalledOnce();
-});
-
-it('rejects an incomplete forged plan before invoking a verifier', async () => {
-  const git = vi.fn(),
-    plan = { kind: 'git-remotes', classification: 'confirmation-required' },
-    planDigest = installerDigest(plan),
-    built = {
-      schemaVersion: 1,
-      kind: 'install-intent-build-result',
-      intent: {
-        schemaVersion: 1,
-        kind: 'install-intent',
-        releaseKey: sha('a'),
-        convergenceHash: sha('a'),
-        components: ['cli'],
-        externalIntegrations: [
-          {
-            id: 'git',
-            adapter: 'git-remotes',
-            classification: 'confirmation-required',
-            planDigest,
-            verifierRef: `git-remotes:git:${planDigest}`,
-          },
-        ],
-      },
-      externalPlans: [
+      externalIntegrations: [
         {
           id: 'git',
           adapter: 'git-remotes',
           classification: 'confirmation-required',
           planDigest,
-          verifierRef: `git-remotes:git:${planDigest}`,
-          plan,
+          verifierRef,
         },
       ],
-    };
-  await expect(verificationBuilder({ git }).verify(built)).rejects.toMatchObject({
-    code: 'INSTALL_SCHEMA_INVALID',
-  });
-  expect(git).not.toHaveBeenCalled();
-});
-
-it('requires a strict Raycast post-export derivative', async () => {
-  const raycast = vi.fn(),
-    built = externalBuildResult([
+    },
+    externalPlans: [
       {
-        id: 'ray',
-        adapter: 'raycast',
-        classification: 'manual-only',
-        plan: { kind: 'raycast', classification: 'manual-only', items: [] },
-      },
-    ]);
-  await expect(verificationBuilder({ raycast }).verify(built)).rejects.toMatchObject({
-    code: 'RAYCAST_POST_EXPORT_REQUIRED',
-  });
-  expect(raycast).not.toHaveBeenCalled();
-});
-
-it('rejects Raycast evidence for unknown and non-Raycast integration IDs', async () => {
-  const built = externalBuildResult([
-    {
-      id: 'git',
-      adapter: 'git-remotes',
-      classification: 'confirmation-required',
-      plan: { kind: 'git-remotes', classification: 'confirmation-required' },
-    },
-  ]);
-  const evidence = {
-    schemaVersion: 1,
-    kind: 'raycast-post-export-evidence',
-    integrations: [{ id: 'git', derivative: { encrypted: true, items: [] } }],
-  };
-  await expect(verificationBuilder({}).verify(built, evidence)).rejects.toMatchObject({
-    code: 'INSTALL_SCHEMA_INVALID',
-  });
-});
-
-it('reports Raycast post-export drift through a bound verification result', async () => {
-  const raycast = vi.fn(async () => ({ healthy: false, issues: ['raycast-id-category-drift'] }));
-  const built = externalBuildResult([
-    {
-      id: 'ray',
-      adapter: 'raycast',
-      classification: 'manual-only',
-      plan: {
-        kind: 'raycast',
-        classification: 'manual-only',
-        items: [{ id: 'a', category: 'dev', command: 'x' }],
-      },
-    },
-  ]);
-  const evidence = {
-    schemaVersion: 1,
-    kind: 'raycast-post-export-evidence',
-    integrations: [
-      {
-        id: 'ray',
-        derivative: {
-          encrypted: true,
-          items: [{ id: 'a', category: 'changed', command: 'redacted' }],
-        },
+        id: 'git',
+        adapter: 'git-remotes',
+        classification: 'confirmation-required',
+        planDigest,
+        verifierRef,
+        plan,
       },
     ],
-  };
-  await expect(verificationBuilder({ raycast }).verify(built, evidence)).resolves.toMatchObject({
-    integrations: [
-      { id: 'ray', adapter: 'raycast', healthy: false, issues: ['raycast-id-category-drift'] },
-    ],
   });
-});
-
-it('accepts a healthy encrypted Raycast post-export derivative', async () => {
-  const raycast = vi.fn(async () => ({ healthy: true, issues: [] }));
-  const built = externalBuildResult([
-    {
-      id: 'ray',
-      adapter: 'raycast',
-      classification: 'manual-only',
-      plan: { kind: 'raycast', classification: 'manual-only', items: [] },
-    },
-  ]);
-  const derivative = { encrypted: true as const, items: [] };
-  const result = await verificationBuilder({ raycast }).verify(built, {
-    schemaVersion: 1,
-    kind: 'raycast-post-export-evidence',
-    integrations: [{ id: 'ray', derivative }],
+  const builder = new InstallIntentBuilder({
+    releases: {} as CurrentReleaseBuilder,
+    gitRemotes: { inspect: vi.fn(), plan: vi.fn(), verify },
   });
-  expect(raycast).toHaveBeenCalledExactlyOnceWith(built.externalPlans[0]!.plan, derivative);
-  expect(result.integrations[0]).toMatchObject({ healthy: true, issues: [] });
-});
-
-it('rejects malformed or unencrypted Raycast post-export evidence', async () => {
-  const built = externalBuildResult([
-    {
-      id: 'ray',
-      adapter: 'raycast',
-      classification: 'manual-only',
-      plan: { kind: 'raycast', classification: 'manual-only', items: [] },
-    },
-  ]);
-  const evidence = {
-    schemaVersion: 1,
-    kind: 'raycast-post-export-evidence',
-    integrations: [
-      { id: 'ray', derivative: { encrypted: false, items: [], privateSettings: true } },
-    ],
-  };
-  await expect(verificationBuilder({}).verify(built, evidence)).rejects.toMatchObject({
-    code: 'INSTALL_SCHEMA_INVALID',
+  await expect(builder.verify(built)).resolves.toMatchObject({
+    integrations: [{ id: 'git', healthy: true }],
   });
+  expect(verify).toHaveBeenCalledExactlyOnceWith(built.externalPlans[0]!.plan);
 });

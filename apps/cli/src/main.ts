@@ -64,22 +64,6 @@ import {
 } from '@mpx/application/node';
 import { processIo, type CliIo } from './io.js';
 
-function resolveScheduledCaptureAuthority(
-  context: CliContext,
-): NonNullable<CliContext['scheduledCaptureAuthority']> {
-  return (
-    context.scheduledCaptureAuthority ?? {
-      inspect: async () => {
-        const verification = await immutableInstaller(context).verify(true);
-        return {
-          installed: verification.healthy,
-          authorityDigest:
-            verification.healthy && verification.releaseKey ? verification.releaseKey : null,
-        };
-      },
-    }
-  );
-}
 import {
   createDefaultSbxDiagnostics,
   createNodeDevService,
@@ -201,7 +185,6 @@ function parse(argv: readonly string[]): Parsed {
         'plan',
         'transaction',
         'external-plan',
-        'raycast-post-export',
         'terminal-title',
         'runtime-arg',
       ].includes(name!)
@@ -553,7 +536,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         : {}),
     });
     const branchService = branchProduction.branchService;
-    const scheduledCaptureAuthority = resolveScheduledCaptureAuthority(context);
     const resolveIdentity = async (name: string) => {
       const identity = user.identities[name];
       if (!identity) {
@@ -592,7 +574,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
           })),
       legacyImport: createNodeSessionLegacyImport({ store: sessionStore, resolveIdentity }),
       ...(branchService ? { branchService } : {}),
-      ...(scheduledCaptureAuthority ? { scheduledCaptureAuthority } : {}),
     });
     const result = await executeSessionCommand(
       { action, args, options: parsed.options },

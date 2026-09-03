@@ -10,7 +10,6 @@ import {
   canonicalJson,
   installerDigest,
   parseInstallIntentV1,
-  parseInstallVerificationV1,
   parseOwnershipReceiptV1,
   parseReleaseManifestV1,
   publishRelease,
@@ -112,97 +111,6 @@ describe('immutable installer core', () => {
           sha256: 'b'.repeat(64),
         },
       }),
-    ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
-  });
-
-  it('strictly parses both legacy and extended install verification v1 messages', () => {
-    const base = {
-      schemaVersion: 1,
-      kind: 'install-verification',
-      releaseKey: 'a'.repeat(64),
-      healthy: true,
-      issues: [],
-      checkedAt: '2025-01-01T00:00:00.000Z',
-    } as const;
-    expect(parseInstallVerificationV1(base)).toEqual(base);
-    const extended = {
-      ...base,
-      healthy: false,
-      issues: ['external-verification-required:ray'],
-      scheduledTask: {
-        id: '90-scheduled-capture',
-        target: '\\MPX\\Session Capture',
-        status: 'healthy',
-        exists: true,
-        state: 'Ready',
-        lastRunAt: '2025-01-01T00:00:00.000Z',
-        lastResult: 0,
-        nextRunAt: null,
-      },
-      components: [{ id: 'system', automatic: true, status: 'actual-state-verified' }],
-      externalIntegrations: [
-        {
-          id: 'git',
-          classification: 'confirmation-required',
-          status: 'verified',
-          verifierRef: `git-remotes:git:${'b'.repeat(64)}`,
-        },
-        {
-          id: 'ray',
-          classification: 'manual-only',
-          status: 'verification-required',
-          verifierRef: `raycast:ray:${'c'.repeat(64)}`,
-        },
-      ],
-      manualOnly: ['ray'],
-    } as const;
-    expect(parseInstallVerificationV1(extended)).toEqual(extended);
-    expect(() =>
-      parseInstallVerificationV1({ ...extended, healthy: true, issues: [] }),
-    ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
-    expect(() =>
-      parseInstallVerificationV1({
-        ...extended,
-        externalIntegrations: extended.externalIntegrations.map((item) => ({
-          ...item,
-          status: 'verified',
-        })),
-      }),
-    ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
-    expect(() =>
-      parseInstallVerificationV1({
-        ...extended,
-        externalIntegrations: [{ ...extended.externalIntegrations[0], status: 'confirmed' }],
-      }),
-    ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
-    expect(() => parseInstallVerificationV1({ ...extended, unexpected: true })).toThrowError(
-      expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }),
-    );
-  });
-
-  it('accepts completed not-run task evidence only when bound to a pre-install run issue', () => {
-    const taskId = '90-scheduled-capture';
-    const verification = {
-      schemaVersion: 1,
-      kind: 'install-verification',
-      releaseKey: 'a'.repeat(64),
-      healthy: false,
-      issues: [`scheduled-task-run-predates-install:${taskId}`],
-      checkedAt: '2025-01-02T00:00:00.000Z',
-      scheduledTask: {
-        id: taskId,
-        target: '\\MPX\\Session Capture',
-        status: 'not-run',
-        exists: true,
-        state: 'Ready',
-        lastRunAt: '2025-01-01T00:00:00.000Z',
-        lastResult: 0,
-        nextRunAt: null,
-      },
-    } as const;
-    expect(parseInstallVerificationV1(verification)).toEqual(verification);
-    expect(() =>
-      parseInstallVerificationV1({ ...verification, healthy: true, issues: [] }),
     ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
   });
 

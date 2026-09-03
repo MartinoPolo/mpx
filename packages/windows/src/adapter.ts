@@ -52,7 +52,6 @@ export class NativePowerShellRunner implements PowerShellRunner {
       PortsJson: 'MPX_PORTS_JSON',
       PidValue: 'MPX_PID_VALUE',
       StartedAt: 'MPX_STARTED_AT',
-      ScheduledTaskJson: 'MPX_SCHEDULED_TASK_JSON',
       NativeResourceJson: 'MPX_NATIVE_RESOURCE_JSON',
     };
     const environment = { ...process.env };

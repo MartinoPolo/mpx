@@ -272,13 +272,10 @@ export async function executeSessionCommand(
     if (input.args.length) {
       usage('session reconcile accepts no positional arguments');
     }
-    const captureMode = text(input, 'capture');
-    if (captureMode !== undefined && captureMode !== 'scheduled') {
-      usage('--capture must be scheduled');
+    if (text(input, 'capture') !== undefined) {
+      usage('session reconcile does not accept --capture');
     }
-    const prepared = await application.prepareReconcile({
-      captureScheduled: captureMode === 'scheduled',
-    });
+    const prepared = await application.prepareReconcile();
     const sources = repeated(input, 'import-legacy');
     let legacy: SessionLegacyImportRequest | undefined;
     if (sources.length) {
