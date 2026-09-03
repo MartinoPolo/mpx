@@ -187,9 +187,9 @@ describe('SessionApplicationService resurrection export', () => {
       schemaVersion: 1,
       kind: 'session-resurrection-export',
       records: [
-        expect.objectContaining({ recordId: 'a-inactive', liveness: 'inactive' }),
-        expect.objectContaining({ recordId: 'parent', liveness: 'inactive' }),
-        expect.objectContaining({ recordId: 'z-active', liveness: 'active' }),
+        expect.objectContaining({ id: 'a-inactive', liveness: 'inactive' }),
+        expect.objectContaining({ id: 'parent', liveness: 'inactive' }),
+        expect.objectContaining({ id: 'z-active', liveness: 'active' }),
       ],
     });
     expect(JSON.stringify(result)).not.toContain(launched.launchKey);

@@ -6,13 +6,13 @@ import {
 } from '../../src/index.js';
 
 const exportedRecord = {
-  recordId: 'opaque-record',
+  id: 'opaque-record',
   runtime: 'claude',
   identity: { name: 'me', domain: 'personal' },
   title: null,
   hostCwd: 'C:/repo',
-  executorKind: 'host',
-  workspaceStrategy: 'direct',
+  executor: 'host',
+  workspace: 'direct',
   sandboxCwd: null,
   nativePathTranslation: null,
   liveness: 'active',
@@ -90,6 +90,12 @@ describe('session resurrection export protocol', () => {
       { ...envelope, schemaVersion: 2 },
       { ...envelope, records: [{ ...exportedRecord, title: 'bad\u0000title' }] },
       { ...envelope, records: [{ ...exportedRecord, nativeSessionId: 'secret' }] },
+      {
+        ...envelope,
+        records: [{ ...exportedRecord, identity: { name: 'me', domain: 'other' } }],
+      },
+      { ...envelope, records: [{ ...exportedRecord, workspace: 'unbounded' }] },
+      { ...envelope, records: [{ ...exportedRecord, nativePathTranslation: 'private-path' }] },
       {
         ...envelope,
         records: [

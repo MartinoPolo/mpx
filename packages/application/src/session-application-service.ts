@@ -1,4 +1,5 @@
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
+import { projectSessionResurrectionRecordV1 } from '@mpx/sessions';
 import type {
   BranchRequestV1,
   ConversationBranchPlanV1,
@@ -238,23 +239,7 @@ export class SessionApplicationService implements SessionApplication {
       .sort((left, right) =>
         left.recordId < right.recordId ? -1 : left.recordId > right.recordId ? 1 : 0,
       )
-      .map((record) => ({
-        recordId: record.recordId,
-        runtime: record.runtime,
-        identity: record.identity,
-        title: record.metadata.title,
-        hostCwd: record.location.cwd,
-        executorKind: record.launch.executor.kind,
-        workspaceStrategy: record.launch.workspace,
-        sandboxCwd: null,
-        nativePathTranslation: null,
-        liveness: record.liveness,
-        route: {
-          kind: 'mpx-session-resume' as const,
-          executable: 'mpx' as const,
-          argv: ['session', 'resume', record.recordId, '--approve-resurrection'] as const,
-        },
-      }));
+      .map(projectSessionResurrectionRecordV1);
     return { schemaVersion: 1, kind: 'session-resurrection-export', records };
   }
 

@@ -13,15 +13,15 @@ export interface SessionResurrectionRouteV1 {
 }
 
 export interface SessionResurrectionRecordV1 {
-  readonly recordId: string;
+  readonly id: string;
   readonly runtime: RuntimeName;
   readonly identity: IdentityV1;
   readonly title: string | null;
   readonly hostCwd: string;
-  readonly executorKind: 'host' | 'docker';
-  readonly workspaceStrategy: string;
+  readonly executor: 'host' | 'docker';
+  readonly workspace: 'clone' | 'host-worktree' | 'direct';
   readonly sandboxCwd: string | null;
-  readonly nativePathTranslation: string | null;
+  readonly nativePathTranslation: null;
   readonly liveness: SessionLiveness;
   readonly route: SessionResurrectionRouteV1;
 }
@@ -80,13 +80,13 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecordV1
   const item = exactObject(
     value,
     [
-      'recordId',
+      'id',
       'runtime',
       'identity',
       'title',
       'hostCwd',
-      'executorKind',
-      'workspaceStrategy',
+      'executor',
+      'workspace',
       'sandboxCwd',
       'nativePathTranslation',
       'liveness',
@@ -94,13 +94,26 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecordV1
     ],
     label,
   );
-  const recordId = safeText(item.recordId, `${label}.recordId`, 512);
+  const id = safeText(item.id, `${label}.id`, 512);
   if (item.runtime !== 'claude' && item.runtime !== 'pi') {
     fail('SESSION_INVALID_RUNTIME', `${label}.runtime is invalid`);
   }
   const identity = exactObject(item.identity, ['name', 'domain'], `${label}.identity`);
-  if (item.executorKind !== 'host' && item.executorKind !== 'docker') {
-    fail('SESSION_INVALID_SCHEMA', `${label}.executorKind is invalid`);
+  if (identity.domain !== 'personal' && identity.domain !== 'work') {
+    fail('SESSION_INVALID_SCHEMA', `${label}.identity.domain is invalid`);
+  }
+  if (item.executor !== 'host' && item.executor !== 'docker') {
+    fail('SESSION_INVALID_SCHEMA', `${label}.executor is invalid`);
+  }
+  if (
+    item.workspace !== 'clone' &&
+    item.workspace !== 'host-worktree' &&
+    item.workspace !== 'direct'
+  ) {
+    fail('SESSION_INVALID_SCHEMA', `${label}.workspace is invalid`);
+  }
+  if (item.nativePathTranslation !== null) {
+    fail('SESSION_INVALID_SCHEMA', `${label}.nativePathTranslation is unsupported in version 1`);
   }
   if (item.liveness !== 'active' && item.liveness !== 'inactive' && item.liveness !== 'unknown') {
     fail('SESSION_INVALID_SCHEMA', `${label}.liveness is invalid`);
@@ -113,32 +126,29 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecordV1
     route.argv.length !== 4 ||
     route.argv[0] !== 'session' ||
     route.argv[1] !== 'resume' ||
-    route.argv[2] !== recordId ||
+    route.argv[2] !== id ||
     route.argv[3] !== '--approve-resurrection'
   ) {
     fail('SESSION_INVALID_SCHEMA', `${label}.route is invalid`);
   }
   return {
-    recordId,
+    id,
     runtime: item.runtime,
     identity: {
       name: safeText(identity.name, `${label}.identity.name`, 128),
-      domain: safeText(identity.domain, `${label}.identity.domain`, 128),
+      domain: identity.domain,
     },
     title: nullableText(item.title, `${label}.title`),
     hostCwd: safeText(item.hostCwd, `${label}.hostCwd`),
-    executorKind: item.executorKind,
-    workspaceStrategy: safeText(item.workspaceStrategy, `${label}.workspaceStrategy`, 1024),
+    executor: item.executor,
+    workspace: item.workspace,
     sandboxCwd: nullableText(item.sandboxCwd, `${label}.sandboxCwd`),
-    nativePathTranslation: nullableText(
-      item.nativePathTranslation,
-      `${label}.nativePathTranslation`,
-    ),
+    nativePathTranslation: null,
     liveness: item.liveness,
     route: {
       kind: 'mpx-session-resume',
       executable: 'mpx',
-      argv: ['session', 'resume', recordId, '--approve-resurrection'],
+      argv: ['session', 'resume', id, '--approve-resurrection'],
     },
   };
 }
@@ -156,7 +166,7 @@ export function parseSessionResurrectionExportV1(value: unknown): SessionResurre
     fail('SESSION_INVALID_SCHEMA', 'session resurrection export is invalid');
   }
   const records = item.records.map(parseRecord);
-  if (new Set(records.map((record) => record.recordId)).size !== records.length) {
+  if (new Set(records.map((record) => record.id)).size !== records.length) {
     fail('SESSION_INVALID_SCHEMA', 'session resurrection record IDs must be unique');
   }
   return { schemaVersion: 1, kind: 'session-resurrection-export', records };
@@ -166,13 +176,13 @@ export function projectSessionResurrectionRecordV1(
   record: SessionRecordV1 & { readonly launch: NonNullable<SessionRecordV1['launch']> },
 ): SessionResurrectionRecordV1 {
   const projected = {
-    recordId: record.recordId,
+    id: record.recordId,
     runtime: record.runtime,
     identity: record.identity,
     title: record.metadata.title,
     hostCwd: record.location.cwd,
-    executorKind: record.launch.executor.kind,
-    workspaceStrategy: record.launch.workspace,
+    executor: record.launch.executor.kind,
+    workspace: record.launch.workspace,
     sandboxCwd: null,
     nativePathTranslation: null,
     liveness: record.liveness,
