@@ -37,6 +37,9 @@ const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;
 const originalStatusSnapshotFile = process.env.MPX_STATUS_SNAPSHOT_FILE;
 const originalRuntimeStatusEnvelopeFile = process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE;
+const originalLifecycleBindingId = process.env.MPX_SESSION_LIFECYCLE_BINDING_ID;
+const originalLifecycleEventDirectory = process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR;
+const originalPiCodingAgentDirectory = process.env.PI_CODING_AGENT_DIR;
 
 function required<T>(value: T | undefined, label: string): T {
   expect(value, label).toBeDefined();
@@ -155,11 +158,564 @@ afterEach(() => {
   } else {
     process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE = originalRuntimeStatusEnvelopeFile;
   }
+  for (const [name, value] of [
+    ['MPX_SESSION_LIFECYCLE_BINDING_ID', originalLifecycleBindingId],
+    ['MPX_SESSION_LIFECYCLE_EVENT_DIR', originalLifecycleEventDirectory],
+    ['PI_CODING_AGENT_DIR', originalPiCodingAgentDirectory],
+  ] as const) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
   vi.restoreAllMocks();
   syncBuiltinESMExports();
 });
 
 describe('production Pi projection', () => {
+  it('defers lifecycle start until native session metadata and its file exist', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-start-'));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-1';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?start=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+
+    const sessionStart = required(
+      required(events.get('session_start'), 'session start handlers').at(-1),
+      'lifecycle session start handler',
+    );
+    await expect(
+      sessionStart(
+        {},
+        {
+          cwd: path.join(accountRoot, 'workspace'),
+          sessionManager: {
+            getSessionId: () => undefined,
+            getSessionFile: () => undefined,
+          },
+          ui: { setStatus() {} },
+        },
+      ),
+    ).resolves.toBeUndefined();
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
+  it('defers lifecycle start when Pi reports metadata before creating the native file', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-file-race-')),
+    });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const nativeSessionFile = path.join(accountRoot, 'sessions', 'pending.jsonl');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-file-race';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?race=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+
+    await expect(
+      required(
+        required(events.get('session_start'), 'session start handlers').at(-1),
+        'lifecycle session start handler',
+      )(
+        {},
+        {
+          cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+          sessionManager: {
+            getSessionId: () => 'pending',
+            getSessionFile: () => nativeSessionFile,
+          },
+          ui: { setStatus() {} },
+        },
+      ),
+    ).resolves.toBeUndefined();
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
+  it('retries lifecycle capture on agent settled after native metadata becomes available', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-info-'));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-private-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const cwd = await mkdtemp(path.join(tmpdir(), 'pi-workspace-'));
+    const nativeSessionId = 'session-exact-1';
+    const nativeSessionFile = path.join(accountRoot, 'sessions', `${nativeSessionId}.jsonl`);
+    await mkdir(path.dirname(nativeSessionFile));
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-1';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?info=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    let metadataReady = false;
+    const context = {
+      cwd,
+      model: { id: 'gpt-test' },
+      sessionManager: {
+        getSessionId: () => (metadataReady ? nativeSessionId : undefined),
+        getSessionFile: () => (metadataReady ? nativeSessionFile : undefined),
+        getSessionName: () => (metadataReady ? 'Lifecycle title' : undefined),
+      },
+      ui: { setStatus() {} },
+    };
+    await required(
+      required(events.get('session_start'), 'session start handlers').at(-1),
+      'lifecycle session start handler',
+    )({}, context);
+    await writeFile(nativeSessionFile, '{"type":"session"}\n');
+    metadataReady = true;
+
+    await required(
+      required(events.get('agent_settled'), 'agent settled handlers').at(-1),
+      'lifecycle agent settled handler',
+    )({}, context);
+
+    const eventFiles = await readdir(eventDirectory);
+    expect(eventFiles).toHaveLength(1);
+    const raw = await readFile(path.join(eventDirectory, required(eventFiles[0], 'event')), 'utf8');
+    const event = JSON.parse(raw) as Record<string, unknown>;
+    expect(event).toStrictEqual({
+      schemaVersion: 1,
+      eventId: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      bindingId: 'binding-1',
+      type: 'info',
+      sequence: 1,
+      timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u),
+      nativeSessionId,
+      nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/session-exact-1.jsonl' },
+      cwd,
+      title: 'Lifecycle title',
+      model: 'gpt-test',
+      effort: null,
+      pid: process.pid,
+      startFingerprint: expect.stringMatching(
+        /^(?:unavailable:windows-process-start|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}Z)$/u,
+      ),
+    });
+    expect(raw).not.toContain(accountRoot);
+    expect(raw).not.toContain(accountRoot.replaceAll('\\', '/'));
+  });
+
+  it('emits lifecycle capture only once across repeated agent settled events', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-settled-once-')),
+    });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const nativeSessionFile = path.join(accountRoot, 'session.jsonl');
+    await writeFile(nativeSessionFile, '{}\n');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-settled-once';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?once=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    let metadataReady = false;
+    const context = {
+      cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+      sessionManager: {
+        getSessionId: () => (metadataReady ? 'settled-once' : undefined),
+        getSessionFile: () => (metadataReady ? nativeSessionFile : undefined),
+      },
+      ui: { setStatus() {} },
+    };
+    await required(
+      required(events.get('session_start'), 'session start handlers').at(-1),
+      'lifecycle session start handler',
+    )({}, context);
+    metadataReady = true;
+    const settled = required(
+      required(events.get('agent_settled'), 'agent settled handlers').at(-1),
+      'lifecycle agent settled handler',
+    );
+
+    await settled({}, context);
+    await settled({}, context);
+    await settled({}, context);
+
+    const emitted = await Promise.all(
+      (await readdir(eventDirectory)).map(async (file) =>
+        JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
+          string,
+          unknown
+        >,
+      ),
+    );
+    expect(emitted.map(({ type, sequence }) => ({ type, sequence }))).toStrictEqual([
+      { type: 'info', sequence: 1 },
+    ]);
+  });
+
+  it('does not let a queued settled retry revive lifecycle info after shutdown begins', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-race-')),
+    });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const nativeSessionFile = path.join(accountRoot, 'session.jsonl');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-race';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?race-stop=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    let metadataReady = false;
+    const context = {
+      cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+      sessionManager: {
+        getSessionId: () => (metadataReady ? 'session-race' : undefined),
+        getSessionFile: () => (metadataReady ? nativeSessionFile : undefined),
+      },
+      ui: { setStatus() {} },
+    };
+    await required(
+      required(events.get('session_start'), 'session start handlers').at(-1),
+      'lifecycle session start handler',
+    )({}, context);
+    await writeFile(nativeSessionFile, '{}\n');
+    metadataReady = true;
+    const settled = required(
+      required(events.get('agent_settled'), 'agent settled handlers').at(-1),
+      'lifecycle agent settled handler',
+    )({}, context);
+    const shutdown = required(
+      required(events.get('session_shutdown'), 'session shutdown handlers').at(-1),
+      'lifecycle session shutdown handler',
+    )({}, context);
+
+    await Promise.all([settled, shutdown]);
+
+    const emitted = await Promise.all(
+      (await readdir(eventDirectory)).map(async (file) =>
+        JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
+          string,
+          unknown
+        >,
+      ),
+    );
+    expect(emitted.map(({ type, sequence }) => ({ type, sequence }))).toStrictEqual([
+      { type: 'shutdown', sequence: 1 },
+    ]);
+  });
+
+  it('serializes shutdown after an available native session and waits for lifecycle writes', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-shutdown-'));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const nativeSessionFile = path.join(accountRoot, 'sessions', 'session-shutdown.jsonl');
+    await mkdir(path.dirname(nativeSessionFile));
+    await writeFile(nativeSessionFile, '{}\n');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-shutdown';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?shutdown=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    const context = {
+      cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+      sessionManager: {
+        getSessionId: () => 'session-shutdown',
+        getSessionFile: () => nativeSessionFile,
+      },
+      ui: { setStatus() {} },
+    };
+    const start = required(
+      required(events.get('session_start'), 'session start handlers').at(-1),
+      'lifecycle session start handler',
+    )({}, context);
+    const shutdown = required(
+      required(events.get('session_shutdown'), 'session shutdown handlers').at(-1),
+      'lifecycle session shutdown handler',
+    )({}, context);
+    await shutdown;
+    await start;
+
+    const emitted = await Promise.all(
+      (await readdir(eventDirectory)).toSorted().map(async (file) =>
+        JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
+          string,
+          unknown
+        >,
+      ),
+    );
+    expect(emitted).toHaveLength(2);
+    expect(emitted.map(({ type, sequence }) => ({ type, sequence }))).toStrictEqual([
+      { type: 'start', sequence: 1 },
+      { type: 'shutdown', sequence: 2 },
+    ]);
+    expect(emitted[1]).toMatchObject({
+      bindingId: 'binding-shutdown',
+      nativeSessionId: 'session-shutdown',
+      nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/session-shutdown.jsonl' },
+    });
+  });
+
+  it('fails closed at shutdown when known native session metadata names a missing file', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-missing-shutdown-')),
+    });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const nativeSessionFile = path.join(accountRoot, 'missing-session.jsonl');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-missing-shutdown';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?missing=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    const context = {
+      cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+      sessionManager: {
+        getSessionId: () => 'missing-session',
+        getSessionFile: () => nativeSessionFile,
+      },
+      ui: { setStatus() {} },
+    };
+    await required(
+      required(events.get('session_start'), 'session start handlers').at(-1),
+      'lifecycle session start handler',
+    )({}, context);
+
+    await expect(
+      required(
+        required(events.get('session_shutdown'), 'session shutdown handlers').at(-1),
+        'lifecycle session shutdown handler',
+      )({}, context),
+    ).rejects.toThrow(/RESTART_REQUIRED: LIFECYCLE_METADATA_INVALID/u);
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
+  it('treats a deliberate no-session context as lifecycle-silent through shutdown', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-no-session-'));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-no-session';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?none=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    const context = {
+      cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+      sessionManager: {
+        getSessionId: () => undefined,
+        getSessionFile: () => undefined,
+      },
+      ui: { setStatus() {} },
+    };
+
+    for (const eventName of ['session_start', 'agent_settled', 'session_shutdown']) {
+      await expect(
+        required(
+          required(events.get(eventName), `${eventName} handlers`).at(-1),
+          `lifecycle ${eventName} handler`,
+        )({}, context),
+      ).resolves.toBeUndefined();
+    }
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
+  it('validates projection binding integrity before the settled lifecycle retry', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-integrity-'));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const nativeSessionFile = path.join(accountRoot, 'session.jsonl');
+    await writeFile(nativeSessionFile, '{}\n');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-integrity';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?integrity=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify({ ...f.context, launchKey: 'tampered' });
+
+    await expect(
+      required(
+        required(events.get('agent_settled'), 'agent settled handlers').at(-1),
+        'lifecycle agent settled handler',
+      )(
+        {},
+        {
+          cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+          sessionManager: {
+            getSessionId: () => 'session-integrity',
+            getSessionFile: () => nativeSessionFile,
+          },
+        },
+      ),
+    ).rejects.toThrow(/RESTART_REQUIRED: LAUNCH_CONTEXT_CHANGED/u);
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
+  it('fails closed for escaped and symlinked native session files after metadata appears', async () => {
+    const f = await fixture();
+    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-paths-'));
+    const projection = await buildPiProjection({ ...f, artifactsRoot });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
+    const outsideFile = path.join(await mkdtemp(path.join(tmpdir(), 'pi-outside-')), 'session.jsonl');
+    const linkedFile = path.join(accountRoot, 'linked-session.jsonl');
+    await writeFile(outsideFile, '{}\n');
+    await symlink(outsideFile, linkedFile, 'file');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-paths';
+    process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?paths=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+    const settled = required(
+      required(events.get('agent_settled'), 'agent settled handlers').at(-1),
+      'lifecycle agent settled handler',
+    );
+    const cwd = await mkdtemp(path.join(tmpdir(), 'pi-workspace-'));
+
+    for (const nativeFile of ['relative-session.jsonl', outsideFile, linkedFile]) {
+      await expect(
+        settled(
+          {},
+          {
+            cwd,
+            sessionManager: {
+              getSessionId: () => 'session-paths',
+              getSessionFile: () => nativeFile,
+            },
+          },
+        ),
+      ).rejects.toThrow(/RESTART_REQUIRED: LIFECYCLE_(?:SESSION_ESCAPE|METADATA_INVALID)/u);
+    }
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
+  it('fails closed when lifecycle event authority is missing after metadata appears', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-lifecycle-authority-')),
+    });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
+    const nativeSessionFile = path.join(accountRoot, 'session.jsonl');
+    await writeFile(nativeSessionFile, '{}\n');
+    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
+    process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-authority';
+    delete process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = accountRoot;
+    const module = await import(`${pathToFileURL(projection.extension).href}?authority=${Date.now()}`);
+    const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
+    await module.activate({
+      registerCommand() {},
+      on(name: string, handler: (...args: unknown[]) => unknown) {
+        events.set(name, [...(events.get(name) ?? []), handler]);
+      },
+    });
+
+    await expect(
+      required(
+        required(events.get('agent_settled'), 'agent settled handlers').at(-1),
+        'lifecycle agent settled handler',
+      )(
+        {},
+        {
+          cwd: await mkdtemp(path.join(tmpdir(), 'pi-workspace-')),
+          sessionManager: {
+            getSessionId: () => 'session-authority',
+            getSessionFile: () => nativeSessionFile,
+          },
+        },
+      ),
+    ).rejects.toThrow(/RESTART_REQUIRED: LIFECYCLE_BINDING_INVALID/u);
+  });
+
   it('rejects an unverified plan before creating the artifacts root', async () => {
     const f = await fixture();
     const parent = await mkdtemp(path.join(tmpdir(), 'pi-unverified-plan-'));
@@ -694,7 +1250,7 @@ describe('production Pi projection', () => {
       expect(normalizedTree.get(bundlePath), bundlePath).toEqual(completeTree.get(bundlePath));
     }
     expect(projectionContentDigest(completeTree, boundValues)).toBe(
-      '4478b85202d5710a6657dadf1d2d1515ea4eb4c18a89f0d791e01a153b4074d7',
+      'a33ad4394340f3ffa8469ece341663aa50eebeaee70e071107df5f90f66788e5',
     );
   });
 
