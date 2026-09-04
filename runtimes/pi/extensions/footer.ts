@@ -18,7 +18,6 @@
 import { execFile } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { connect } from 'node:net';
-import { homedir } from 'node:os';
 import path from 'node:path';
 import { connect as connectTls } from 'node:tls';
 import { promisify } from 'node:util';
@@ -39,6 +38,7 @@ import {
 } from './dev-server/footer-format.js';
 
 import { COMPACTION_ROWS, formatClock, formatTokensK } from './lib/compaction.js';
+import { resolvePiCodingAgentDir } from './lib/agent-directory.js';
 import { RESET, isNonNegativeInt } from './lib/statusline-ansi.js';
 import {
   AGENT_DETAIL_ROWS,
@@ -1827,11 +1827,7 @@ const QUOTA_REFRESH_INTERVAL_MS = 60_000;
 const QUOTA_FETCH_TIMEOUT_MS = 5_000;
 
 function agentDirectory(cwd: string): string {
-  const configured = process.env.PI_CODING_AGENT_DIR?.trim();
-  if (!configured) {
-    return path.join(homedir(), '.pi', 'agent');
-  }
-  return path.isAbsolute(configured) ? configured : path.resolve(cwd, configured);
+  return resolvePiCodingAgentDir(cwd);
 }
 
 function nowSeconds(): number {

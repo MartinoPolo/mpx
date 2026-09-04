@@ -19,7 +19,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { defineTool, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, getAgentDir, getSettingsListTheme } from "@earendil-works/pi-coding-agent";
 import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "@sinclair/typebox";
@@ -35,6 +35,7 @@ import { getResolvedModelName, resolveAgentInvocationConfig, resolveJoinMode } f
 import { type ModelRegistry, resolveModel } from "./model-resolver.js";
 import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./model-scope.js";
 import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
+import { isUnsafeName } from "./memory.js";
 // VENDOR EDIT (mpx-pi): keep completion notifications retractable for the full parent run.
 import { registerParentRunNotificationGate } from "./notification-gate.js";
 import { createOutputFilePath, getOutputTranscriptDefault, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./output-file.js";
@@ -65,6 +66,19 @@ import { showSchedulesMenu } from "./ui/schedule-menu.js";
 import { addUsage, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage } from "./usage.js";
 
 // ---- Shared helpers ----
+
+const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+
+/** Resolve a new agent file while guaranteeing it is a direct child of targetDir. */
+export function resolveSafeAgentFile(targetDir: string, name: string): string {
+  if (isUnsafeName(name) || WINDOWS_DEVICE_NAME.test(name) || /[\x00-\x1f\x7f]/.test(name)) {
+    throw new Error(`Unsafe agent name: "${name}"`);
+  }
+  const base = resolve(targetDir);
+  const target = resolve(base, `${name}.md`);
+  if (dirname(target) !== base) throw new Error(`Unsafe agent name: "${name}"`);
+  return target;
+}
 
 /** Tool execute return value for a text response. */
 function textResult(msg: string, details?: AgentDetails) {
@@ -1850,7 +1864,7 @@ Terse command-style prompts produce shallow, generic work.
     const targetDir = location.startsWith("Project") ? projectAgentsDir() : personalAgentsDir();
     mkdirSync(targetDir, { recursive: true });
 
-    const targetPath = join(targetDir, `${name}.md`);
+    const targetPath = resolveSafeAgentFile(targetDir, name);
     if (existsSync(targetPath)) {
       const overwrite = await ctx.ui.confirm("Overwrite", `${targetPath} already exists. Overwrite?`);
       if (!overwrite) return;
@@ -1917,7 +1931,7 @@ Terse command-style prompts produce shallow, generic work.
     const targetDir = location.startsWith("Project") ? projectAgentsDir() : personalAgentsDir();
     mkdirSync(targetDir, { recursive: true });
 
-    const targetPath = join(targetDir, `${name}.md`);
+    const targetPath = resolveSafeAgentFile(targetDir, name);
     const { writeFileSync } = await import("node:fs");
     writeFileSync(targetPath, "---\nenabled: false\n---\n", "utf-8");
     reloadCustomAgents();
@@ -1976,7 +1990,7 @@ Terse command-style prompts produce shallow, generic work.
 
     mkdirSync(targetDir, { recursive: true });
 
-    const targetPath = join(targetDir, `${name}.md`);
+    const targetPath = resolveSafeAgentFile(targetDir, name);
     if (existsSync(targetPath)) {
       const overwrite = await ctx.ui.confirm("Overwrite", `${targetPath} already exists. Overwrite?`);
       if (!overwrite) return;
@@ -2111,7 +2125,7 @@ ${systemPrompt}
 `;
 
     mkdirSync(targetDir, { recursive: true });
-    const targetPath = join(targetDir, `${name}.md`);
+    const targetPath = resolveSafeAgentFile(targetDir, name);
 
     if (existsSync(targetPath)) {
       const overwrite = await ctx.ui.confirm("Overwrite", `${targetPath} already exists. Overwrite?`);

@@ -599,6 +599,17 @@ export async function runAgent(
   // It's only needed when we're neither loading everything without excludes
   // (`extensions: true` or a `"*"` wildcard) nor nothing (`noExtensions`).
   const loadAll = extensions === true || extensionsSpec?.wildcard === true;
+
+  // Project agent files are data until the host explicitly trusts the project.
+  // In particular, never pass their path-valued frontmatter to the loader: reload()
+  // executes extension factories, so filtering afterward would be too late. Bare
+  // names remain safe here because they only select extensions Pi already discovered
+  // through its own trust-aware resource loading.
+  if (agentConfig?.source === "project" && extensionsSpec?.paths.length && !ctx.isProjectTrusted()) {
+    const message = `Blocked ${extensionsSpec.paths.length} custom extension path(s) from untrusted project agent "${type}".`;
+    options.onToolActivity?.({ type: "end", toolName: `extensions-error:${message}` });
+    throw new Error(message);
+  }
   const additionalExtensionPaths = extensionsSpec?.paths.length ? extensionsSpec.paths : undefined;
   // Pre-filter discovered set, captured by the override — the exclude-typo warning
   // must compare against this, not the surviving set (absence from survivors is

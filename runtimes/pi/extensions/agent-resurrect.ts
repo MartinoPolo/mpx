@@ -1,10 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { resolvePiCodingAgentDir } from './lib/agent-directory.js';
 
 type Registration = { file: string; sessionId: string };
 
@@ -50,9 +50,7 @@ function processStartedAt(): Promise<string | undefined> {
 }
 
 export function registryRoot(cwd: string): string {
-  const configured = process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent');
-  const agentDir = isAbsolute(configured) ? configured : resolve(cwd, configured);
-  return join(agentDir, 'agent-resurrect', 'active-sessions');
+  return join(resolvePiCodingAgentDir(cwd), 'agent-resurrect', 'active-sessions');
 }
 
 // The pid suffix keeps two live Pi processes on the same session from
