@@ -8,16 +8,16 @@ import {
 } from '../../../subagents/agent-runner.js';
 
 test('forces noExtensions before discovery for default-true untrusted project config', async () => {
-  const override = vi.fn((extensions) => extensions);
-  const reload = vi.fn(async (policy) => policy);
+  const projectDiscoveryOverride = vi.fn((extensions) => extensions);
+  const loader = vi.fn(async (policy) => policy);
 
   const policy = await loadAgentExtensionResources(
     'project',
-    ['/project/.pi/extensions/untrusted.ts'],
+    undefined,
     false,
-    override,
+    projectDiscoveryOverride,
     () => false,
-    reload,
+    loader,
   );
 
   assert.deepEqual(policy, {
@@ -25,8 +25,26 @@ test('forces noExtensions before discovery for default-true untrusted project co
     additionalExtensionPaths: undefined,
     extensionsOverride: undefined,
   });
-  assert.deepEqual(reload.mock.calls, [[policy]]);
-  assert.equal(override.mock.calls.length, 0);
+  assert.deepEqual(loader.mock.calls, [[policy]]);
+  assert.equal(projectDiscoveryOverride.mock.calls.length, 0);
+});
+
+test('strips untrusted project extension paths and overrides', async () => {
+  const override = vi.fn((extensions) => extensions);
+  const loader = vi.fn(async (policy) => policy);
+
+  const policy = await loadAgentExtensionResources(
+    'project',
+    ['/project/.pi/extensions/untrusted.ts'],
+    false,
+    override,
+    () => false,
+    loader,
+  );
+
+  assert.equal(policy.noExtensions, true);
+  assert.equal(policy.additionalExtensionPaths, undefined);
+  assert.equal(policy.extensionsOverride, undefined);
 });
 
 test('disables native persistence paths from untrusted project agents', () => {
