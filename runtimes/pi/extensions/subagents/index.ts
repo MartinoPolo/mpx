@@ -18,8 +18,8 @@
  *   /agents                 — Interactive agent management menu
  */
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   defineTool,
   type ExtensionAPI,
@@ -39,6 +39,17 @@ import {
 } from '@earendil-works/pi-tui';
 import { Type } from '@sinclair/typebox';
 import { abortable } from './abortable.js';
+import {
+  deleteExistingAgentFile,
+  ensureAgentDirectory,
+  type ExistingAgentFile,
+  inspectAgentFileDestination,
+  readExistingAgentFile,
+  resolveExistingAgentFile,
+  resolveSafeAgentFile,
+  writeAgentFile,
+  writeExistingAgentFile,
+} from './agent-file-policy.js';
 import { AgentManager } from './agent-manager.js';
 import {
   getAgentConversation,
@@ -72,7 +83,6 @@ import {
 import { type ModelRegistry, resolveModel } from './model-resolver.js';
 import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from './model-scope.js';
 import { getMaxSubagentDepth, setMaxSubagentDepth } from './nested-tools.js';
-import { isUnsafeName } from './memory.js';
 // VENDOR EDIT (mpx-pi): keep completion notifications retractable for the full parent run.
 import { registerParentRunNotificationGate } from './notification-gate.js';
 import {
@@ -128,18 +138,7 @@ import {
 
 // ---- Shared helpers ----
 
-const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
-
-/** Resolve a new agent file while guaranteeing it is a direct child of targetDir. */
-export function resolveSafeAgentFile(targetDir: string, name: string): string {
-  if (isUnsafeName(name) || WINDOWS_DEVICE_NAME.test(name) || /[\x00-\x1f\x7f]/.test(name)) {
-    throw new Error(`Unsafe agent name: "${name}"`);
-  }
-  const base = resolve(targetDir);
-  const target = resolve(base, `${name}.md`);
-  if (dirname(target) !== base) throw new Error(`Unsafe agent name: "${name}"`);
-  return target;
-}
+export { resolveSafeAgentFile };
 
 /** Tool execute return value for a text response. */
 function textResult(msg: string, details?: AgentDetails) {
@@ -1806,16 +1805,25 @@ Terse command-style prompts produce shallow, generic work.
   const workspaceAgentsDir = () => join(process.cwd(), '.agents', 'agents');
   const personalAgentsDir = () => join(getAgentDir(), 'agents');
 
-  /** Find the file path of a custom agent by name, in discovery-precedence order (project, workspace, then global). */
-  function findAgentFile(
-    name: string,
-  ): { path: string; location: 'project' | 'workspace' | 'personal' } | undefined {
-    const projectPath = join(projectAgentsDir(), `${name}.md`);
-    if (existsSync(projectPath)) return { path: projectPath, location: 'project' };
-    const workspacePath = join(workspaceAgentsDir(), `${name}.md`);
-    if (existsSync(workspacePath)) return { path: workspacePath, location: 'workspace' };
-    const personalPath = join(personalAgentsDir(), `${name}.md`);
-    if (existsSync(personalPath)) return { path: personalPath, location: 'personal' };
+  type LocatedAgentFile = ExistingAgentFile & {
+    location: 'project' | 'workspace' | 'personal';
+  };
+
+  /** Find a verified custom agent file in discovery-precedence order. */
+  function findAgentFile(name: string): LocatedAgentFile | undefined {
+    const locations = [
+      [projectAgentsDir(), 'project'],
+      [workspaceAgentsDir(), 'workspace'],
+      [personalAgentsDir(), 'personal'],
+    ] as const;
+
+    for (const [directory, location] of locations) {
+      try {
+        return { ...resolveExistingAgentFile(directory, name), location };
+      } catch {
+        continue;
+      }
+    }
     return undefined;
   }
 
@@ -2070,11 +2078,10 @@ Terse command-style prompts produce shallow, generic work.
     if (!choice || choice === 'Back') return;
 
     if (choice === 'Edit' && file) {
-      const content = readFileSync(file.path, 'utf-8');
+      const content = readExistingAgentFile(file);
       const edited = await ctx.ui.editor(`Edit ${name}`, content);
       if (edited !== undefined && edited !== content) {
-        const { writeFileSync } = await import('node:fs');
-        writeFileSync(file.path, edited, 'utf-8');
+        writeExistingAgentFile(file, edited);
         reloadCustomAgents();
         ctx.ui.notify(`Updated ${file.path}`, 'info');
       }
@@ -2085,7 +2092,7 @@ Terse command-style prompts produce shallow, generic work.
           `Delete ${name} from ${file.location} (${file.path})?`,
         );
         if (confirmed) {
-          unlinkSync(file.path);
+          deleteExistingAgentFile(file);
           reloadCustomAgents();
           ctx.ui.notify(`Deleted ${file.path}`, 'info');
         }
@@ -2096,7 +2103,7 @@ Terse command-style prompts produce shallow, generic work.
         `Delete override ${file.path} and restore embedded default?`,
       );
       if (confirmed) {
-        unlinkSync(file.path);
+        deleteExistingAgentFile(file);
         reloadCustomAgents();
         ctx.ui.notify(`Restored default ${name}`, 'info');
       }
@@ -2118,15 +2125,14 @@ Terse command-style prompts produce shallow, generic work.
     if (!location) return;
 
     const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
-    mkdirSync(targetDir, { recursive: true });
+    ensureAgentDirectory(targetDir);
 
-    const targetPath = resolveSafeAgentFile(targetDir, name);
-    if (existsSync(targetPath)) {
-      const overwrite = await ctx.ui.confirm(
-        'Overwrite',
-        `${targetPath} already exists. Overwrite?`,
-      );
-      if (!overwrite) return;
+    const destination = inspectAgentFileDestination(targetDir, name);
+    const targetPath = destination.path;
+    let allowExisting = false;
+    if (destination.existing) {
+      allowExisting = await ctx.ui.confirm('Overwrite', `${targetPath} already exists. Overwrite?`);
+      if (!allowExisting) return;
     }
 
     // Build the .md file content
@@ -2161,8 +2167,7 @@ Terse command-style prompts produce shallow, generic work.
 
     const content = `---\n${fmFields.join('\n')}\n---\n\n${cfg.systemPrompt}\n`;
 
-    const { writeFileSync } = await import('node:fs');
-    writeFileSync(targetPath, content, 'utf-8');
+    writeAgentFile(targetDir, name, content, allowExisting);
     reloadCustomAgents();
     ctx.ui.notify(`Ejected ${name} to ${targetPath}`, 'info');
   }
@@ -2171,15 +2176,13 @@ Terse command-style prompts produce shallow, generic work.
   async function disableAgent(ctx: ExtensionCommandContext, name: string) {
     const file = findAgentFile(name);
     if (file) {
-      // Existing file — set enabled: false in frontmatter (idempotent)
-      const content = readFileSync(file.path, 'utf-8');
+      const content = readExistingAgentFile(file);
       if (content.includes('\nenabled: false\n')) {
         ctx.ui.notify(`${name} is already disabled.`, 'info');
         return;
       }
       const updated = content.replace(/^---\n/, '---\nenabled: false\n');
-      const { writeFileSync } = await import('node:fs');
-      writeFileSync(file.path, updated, 'utf-8');
+      writeExistingAgentFile(file, updated);
       reloadCustomAgents();
       ctx.ui.notify(`Disabled ${name} (${file.path})`, 'info');
       return;
@@ -2193,11 +2196,9 @@ Terse command-style prompts produce shallow, generic work.
     if (!location) return;
 
     const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
-    mkdirSync(targetDir, { recursive: true });
+    ensureAgentDirectory(targetDir);
 
-    const targetPath = resolveSafeAgentFile(targetDir, name);
-    const { writeFileSync } = await import('node:fs');
-    writeFileSync(targetPath, '---\nenabled: false\n---\n', 'utf-8');
+    const targetPath = writeAgentFile(targetDir, name, '---\nenabled: false\n---\n', false);
     reloadCustomAgents();
     ctx.ui.notify(`Disabled ${name} (${targetPath})`, 'info');
   }
@@ -2207,17 +2208,16 @@ Terse command-style prompts produce shallow, generic work.
     const file = findAgentFile(name);
     if (!file) return;
 
-    const content = readFileSync(file.path, 'utf-8');
+    const content = readExistingAgentFile(file);
     const updated = content.replace(/^(---\n)enabled: false\n/, '$1');
-    const { writeFileSync } = await import('node:fs');
 
     // If the file was just a stub ("---\n---\n"), delete it to restore the built-in default
     if (updated.trim() === '---\n---' || updated.trim() === '---\n---\n') {
-      unlinkSync(file.path);
+      deleteExistingAgentFile(file);
       reloadCustomAgents();
       ctx.ui.notify(`Enabled ${name} (removed ${file.path})`, 'info');
     } else {
-      writeFileSync(file.path, updated, 'utf-8');
+      writeExistingAgentFile(file, updated);
       reloadCustomAgents();
       ctx.ui.notify(`Enabled ${name} (${file.path})`, 'info');
     }
@@ -2252,24 +2252,23 @@ Terse command-style prompts produce shallow, generic work.
     const name = await ctx.ui.input('Agent name (filename, no spaces)');
     if (!name) return;
 
-    mkdirSync(targetDir, { recursive: true });
+    ensureAgentDirectory(targetDir);
 
-    const targetPath = resolveSafeAgentFile(targetDir, name);
-    if (existsSync(targetPath)) {
-      const overwrite = await ctx.ui.confirm(
-        'Overwrite',
-        `${targetPath} already exists. Overwrite?`,
-      );
-      if (!overwrite) return;
+    const destination = inspectAgentFileDestination(targetDir, name);
+    const targetPath = destination.path;
+    let allowExisting = false;
+    if (destination.existing) {
+      allowExisting = await ctx.ui.confirm('Overwrite', `${targetPath} already exists. Overwrite?`);
+      if (!allowExisting) return;
     }
 
     ctx.ui.notify('Generating agent definition...', 'info');
 
-    const generatePrompt = `Create a custom pi sub-agent definition file based on this description: "${description}"
+    const generatePrompt = `Create a custom pi sub-agent definition based on this description: "${description}"
 
-Write a markdown file to: ${targetPath}
+Return the complete markdown content only, without a code fence or any explanation.
 
-The file format is a markdown file with YAML frontmatter and a system prompt body:
+The file format is YAML frontmatter followed by a system prompt body:
 
 \`\`\`markdown
 ---
@@ -2303,28 +2302,24 @@ Guidelines for choosing settings:
 - Set output_transcript: false to skip writing this agent's transcript; this alone doesn't keep the run off disk (persist_session, isolation: worktree commits, and memory still write) — set those too if that's the goal
 - Only include frontmatter fields that differ from defaults — omit fields where the default is fine
 
-Write the file using the write tool. Only write the file, nothing else.`;
+Return only the agent definition markdown.`;
 
     const { record } = await manager.spawnAndWait(pi, ctx, 'general-purpose', generatePrompt, {
       description: `Generate ${name} agent`,
       maxTurns: 5,
     });
 
-    if (record.status === 'error') {
-      ctx.ui.notify(`Generation failed: ${record.error}`, 'warning');
+    if (record.status === 'error' || !record.result?.trim()) {
+      ctx.ui.notify(
+        `Generation failed: ${record.error ?? 'no agent definition returned'}`,
+        'warning',
+      );
       return;
     }
 
+    writeAgentFile(targetDir, name, record.result, allowExisting);
     reloadCustomAgents();
-
-    if (existsSync(targetPath)) {
-      ctx.ui.notify(`Created ${targetPath}`, 'info');
-    } else {
-      ctx.ui.notify(
-        'Agent generation completed but file was not created. Check the agent output.',
-        'warning',
-      );
-    }
+    ctx.ui.notify(`Created ${targetPath}`, 'info');
   }
 
   async function showManualWizard(ctx: ExtensionCommandContext, targetDir: string) {
@@ -2402,19 +2397,17 @@ prompt_mode: replace
 ${systemPrompt}
 `;
 
-    mkdirSync(targetDir, { recursive: true });
-    const targetPath = resolveSafeAgentFile(targetDir, name);
+    ensureAgentDirectory(targetDir);
+    const destination = inspectAgentFileDestination(targetDir, name);
+    const targetPath = destination.path;
+    let allowExisting = false;
 
-    if (existsSync(targetPath)) {
-      const overwrite = await ctx.ui.confirm(
-        'Overwrite',
-        `${targetPath} already exists. Overwrite?`,
-      );
-      if (!overwrite) return;
+    if (destination.existing) {
+      allowExisting = await ctx.ui.confirm('Overwrite', `${targetPath} already exists. Overwrite?`);
+      if (!allowExisting) return;
     }
 
-    const { writeFileSync } = await import('node:fs');
-    writeFileSync(targetPath, content, 'utf-8');
+    writeAgentFile(targetDir, name, content, allowExisting);
     reloadCustomAgents();
     ctx.ui.notify(`Created ${targetPath}`, 'info');
   }

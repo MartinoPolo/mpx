@@ -2,9 +2,14 @@
  * custom-agents.ts — Load user-defined agents from project (.pi/agents/, plus the shared .agents/agents/ workspace) and global ($PI_CODING_AGENT_DIR/agents/, default ~/.pi/agent/agents/) locations.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
+import {
+  readExistingAgentFile,
+  resolveAgentDirectory,
+  resolveExistingAgentFile,
+} from './agent-file-policy.js';
 import { BUILTIN_TOOL_NAMES } from './agent-types.js';
 import type { AgentConfig, MemoryScope, ThinkingLevel } from './types.js';
 
@@ -38,11 +43,11 @@ function loadFromDir(
   agents: Map<string, AgentConfig>,
   source: 'project' | 'global',
 ): void {
-  if (!existsSync(dir)) return;
-
+  let safeDirectory: string;
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    safeDirectory = resolveAgentDirectory(dir);
+    files = readdirSync(safeDirectory).filter((f) => f.endsWith('.md'));
   } catch {
     return;
   }
@@ -52,7 +57,7 @@ function loadFromDir(
 
     let content: string;
     try {
-      content = readFileSync(join(dir, file), 'utf-8');
+      content = readExistingAgentFile(resolveExistingAgentFile(safeDirectory, name));
     } catch {
       continue;
     }
