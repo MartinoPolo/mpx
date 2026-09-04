@@ -13,6 +13,7 @@ import {
   SessionService,
   SessionStore,
   planResume,
+  projectSessionResurrectionRecordV1,
   verifyResumeConfirmation,
   type SessionRecordV1,
 } from '@mpx/sessions';
@@ -86,6 +87,7 @@ function directApplication(
       await store.listLifecycleBindingIds();
       return 0;
     },
+    projectResurrectionRecord: projectSessionResurrectionRecordV1,
     planResume: (record, resumeDependencies) => planResume(store, record, resumeDependencies),
     verifyResumeConfirmation,
     ...dependencies,

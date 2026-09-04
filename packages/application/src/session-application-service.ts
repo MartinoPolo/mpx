@@ -1,5 +1,4 @@
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
-import { projectSessionResurrectionRecordV1 } from '@mpx/sessions';
 import type {
   BranchRequestV1,
   ConversationBranchPlanV1,
@@ -92,6 +91,9 @@ export interface SessionApplicationDependencies {
   readonly sessions: SessionOperations;
   readonly nativeBindings: SessionNativeBindingOperations;
   readonly consumePending: () => Promise<number>;
+  readonly projectResurrectionRecord: (
+    record: SessionRecordV1 & { readonly launch: NonNullable<SessionRecordV1['launch']> },
+  ) => SessionResurrectionExportV1['records'][number];
   readonly planResume: (
     record: SessionRecordV1,
     dependencies: ResumeDependencies,
@@ -242,7 +244,7 @@ export class SessionApplicationService implements SessionApplication {
       .sort((left, right) =>
         left.recordId < right.recordId ? -1 : left.recordId > right.recordId ? 1 : 0,
       )
-      .map(projectSessionResurrectionRecordV1);
+      .map(this.#dependencies.projectResurrectionRecord);
     return { schemaVersion: 1, kind: 'session-resurrection-export', records };
   }
 

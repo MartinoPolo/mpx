@@ -2,6 +2,7 @@ import {
   LifecycleEventDirectoryConsumer,
   SessionService,
   planResume,
+  projectSessionResurrectionRecordV1,
   verifyResumeConfirmation,
   type SessionProcessInspector,
   type SessionStore,
@@ -13,7 +14,12 @@ import {
 
 export interface NodeSessionApplicationDependencies extends Omit<
   SessionApplicationDependencies,
-  'sessions' | 'nativeBindings' | 'consumePending' | 'planResume' | 'verifyResumeConfirmation'
+  | 'sessions'
+  | 'nativeBindings'
+  | 'consumePending'
+  | 'projectResurrectionRecord'
+  | 'planResume'
+  | 'verifyResumeConfirmation'
 > {
   readonly store: SessionStore;
   readonly processInspector?: SessionProcessInspector;
@@ -38,6 +44,7 @@ export function createNodeSessionApplicationService(
       }
       return consumed;
     },
+    projectResurrectionRecord: projectSessionResurrectionRecordV1,
     planResume: (record, resumeDependencies) => planResume(store, record, resumeDependencies),
     verifyResumeConfirmation,
   });
