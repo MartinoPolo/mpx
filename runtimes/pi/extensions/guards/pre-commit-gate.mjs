@@ -10,7 +10,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readStdin, findProjectRoot, detectPackageManager, detectToolchain } from './shared.mjs';
 
@@ -53,6 +53,32 @@ function hasScript(packageJsonPath, scriptName) {
   }
 }
 
+function packageManagerInvocation(packageManager) {
+  if (process.platform === 'win32' && packageManager === 'npm') {
+    const npmCli = path.join(
+      path.dirname(process.execPath),
+      'node_modules',
+      'npm',
+      'bin',
+      'npm-cli.js',
+    );
+    if (fs.existsSync(npmCli)) return { executable: process.execPath, prefixArguments: [npmCli] };
+  }
+  if (process.platform === 'win32' && (packageManager === 'pnpm' || packageManager === 'yarn')) {
+    const corepackCli = path.join(
+      path.dirname(process.execPath),
+      'node_modules',
+      'corepack',
+      'dist',
+      'corepack.js',
+    );
+    if (fs.existsSync(corepackCli)) {
+      return { executable: process.execPath, prefixArguments: [corepackCli, packageManager] };
+    }
+  }
+  return { executable: packageManager, prefixArguments: [] };
+}
+
 function findCheckScript(projectRoot, toolchain) {
   const packageJsonPath = path.join(projectRoot, 'package.json');
 
@@ -80,6 +106,26 @@ function findCheckScript(projectRoot, toolchain) {
  * Only checks added lines (lines starting with +).
  * Returns array of { name, file } for each detected secret.
  */
+export function readStagedFiles(projectRoot, execute = execFileSync) {
+  return execute('git', ['diff', '--cached', '--name-only', '-z'], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    shell: false,
+    timeout: 10000,
+  })
+    .split('\0')
+    .filter(Boolean);
+}
+
+export function readStagedFileDiff(projectRoot, file, execute = execFileSync) {
+  return execute('git', ['diff', '--cached', '--', file], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    shell: false,
+    timeout: 10000,
+  });
+}
+
 export function scanForSecrets(diffContent, filename) {
   const findings = [];
   const addedLines = diffContent
@@ -165,15 +211,7 @@ async function main() {
 
   // --- Secret scanning (hard block) ---
   try {
-    const stagedFiles = execSync('git diff --cached --name-only', {
-      cwd: projectRoot,
-      encoding: 'utf8',
-      timeout: 10000,
-    })
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-
+    const stagedFiles = readStagedFiles(projectRoot);
     const filesToScan = stagedFiles.filter(
       (f) => !SKIP_SECRET_SCAN_PATTERNS.some((p) => p.test(f)),
     );
@@ -181,11 +219,7 @@ async function main() {
     const allFindings = [];
     for (const file of filesToScan) {
       try {
-        const diff = execSync(`git diff --cached -- "${file}"`, {
-          cwd: projectRoot,
-          encoding: 'utf8',
-          timeout: 10000,
-        });
+        const diff = readStagedFileDiff(projectRoot, file);
         const findings = scanForSecrets(diff, file);
         allFindings.push(...findings);
       } catch {
@@ -217,8 +251,10 @@ async function main() {
   process.stderr.write(`Running ${label} (${pm} run ${checkScript}) before commit...\n`);
 
   try {
-    execSync(`${pm} run ${checkScript}`, {
+    const invocation = packageManagerInvocation(pm);
+    execFileSync(invocation.executable, [...invocation.prefixArguments, 'run', checkScript], {
       cwd: projectRoot,
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 120000,
     });

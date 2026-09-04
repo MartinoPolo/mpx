@@ -528,22 +528,33 @@ export function resolveSessionPersistencePolicy(
   return { persistSession: persistSession === true, sessionDir };
 }
 
-/** Reject project-controlled paths before a resource loader can execute extension factories. */
+interface AgentExtensionLoadPolicy {
+  noExtensions: boolean;
+  additionalExtensionPaths: string[] | undefined;
+  extensionsOverride: ((base: LoadExtensionsResult) => LoadExtensionsResult) | undefined;
+}
+
 export async function loadAgentExtensionResources<T>(
   source: string | undefined,
   paths: string[] | undefined,
-  agentType: string,
+  noExtensions: boolean,
+  extensionsOverride: ((base: LoadExtensionsResult) => LoadExtensionsResult) | undefined,
   isProjectTrusted: () => boolean,
-  onToolActivity: ((activity: ToolActivity) => void) | undefined,
-  reload: (additionalExtensionPaths: string[] | undefined) => Promise<T>,
+  reload: (policy: AgentExtensionLoadPolicy) => Promise<T>,
 ): Promise<T> {
-  const additionalExtensionPaths = paths?.length ? paths : undefined;
-  if (source === 'project' && additionalExtensionPaths && !isProjectTrusted()) {
-    const message = `Blocked ${additionalExtensionPaths.length} custom extension path(s) from untrusted project agent "${agentType}".`;
-    onToolActivity?.({ type: 'end', toolName: `extensions-error:${message}` });
-    throw new Error(message);
+  if (source === 'project' && !isProjectTrusted()) {
+    return reload({
+      noExtensions: true,
+      additionalExtensionPaths: undefined,
+      extensionsOverride: undefined,
+    });
   }
-  return reload(additionalExtensionPaths);
+
+  return reload({
+    noExtensions,
+    additionalExtensionPaths: paths?.length ? paths : undefined,
+    extensionsOverride,
+  });
 }
 
 export async function runAgent(
@@ -655,7 +666,9 @@ export async function runAgent(
   const { extNames, narrowing } = parseExtSelectors(
     options.isolated ? [] : (agentConfig?.extSelectors ?? []),
   );
-  const noExtensions = extensions === false;
+  const configuredNoExtensions = extensions === false;
+  const untrustedProjectAgent = agentConfig?.source === 'project' && !ctx.isProjectTrusted();
+  const noExtensions = configuredNoExtensions || untrustedProjectAgent;
 
   const extensionsSpec = Array.isArray(extensions)
     ? parseExtensionsSpec(extensions, configCwd)
@@ -696,16 +709,16 @@ export async function runAgent(
   const loader = await loadAgentExtensionResources(
     agentConfig?.source,
     extensionsSpec?.paths,
-    type,
-    () => ctx.isProjectTrusted(),
-    options.onToolActivity,
-    async (additionalExtensionPaths) => {
+    noExtensions,
+    extensionsOverride,
+    () => !untrustedProjectAgent,
+    async (extensionPolicy) => {
       const resourceLoader = new DefaultResourceLoader({
         cwd: configCwd,
         agentDir,
-        noExtensions,
-        additionalExtensionPaths,
-        extensionsOverride,
+        noExtensions: extensionPolicy.noExtensions,
+        additionalExtensionPaths: extensionPolicy.additionalExtensionPaths,
+        extensionsOverride: extensionPolicy.extensionsOverride,
         noSkills,
         noPromptTemplates: true,
         noThemes: true,

@@ -7,25 +7,26 @@ import {
   resolveSessionPersistencePolicy,
 } from '../../../subagents/agent-runner.js';
 
-test('rejects untrusted project extension paths before loader reload', async () => {
-  const reload = vi.fn(async () => undefined);
-  const activity = vi.fn();
+test('forces noExtensions before discovery for default-true untrusted project config', async () => {
+  const override = vi.fn((extensions) => extensions);
+  const reload = vi.fn(async (policy) => policy);
 
-  await assert.rejects(
-    loadAgentExtensionResources(
-      'project',
-      ['/project/.pi/extensions/untrusted.ts'],
-      'project-agent',
-      () => false,
-      activity,
-      reload,
-    ),
-    /Blocked 1 custom extension path\(s\) from untrusted project agent "project-agent"/,
+  const policy = await loadAgentExtensionResources(
+    'project',
+    ['/project/.pi/extensions/untrusted.ts'],
+    false,
+    override,
+    () => false,
+    reload,
   );
 
-  assert.equal(reload.mock.calls.length, 0);
-  assert.equal(activity.mock.calls.length, 1);
-  assert.match(activity.mock.calls[0]![0].toolName, /^extensions-error:Blocked/);
+  assert.deepEqual(policy, {
+    noExtensions: true,
+    additionalExtensionPaths: undefined,
+    extensionsOverride: undefined,
+  });
+  assert.deepEqual(reload.mock.calls, [[policy]]);
+  assert.equal(override.mock.calls.length, 0);
 });
 
 test('disables native persistence paths from untrusted project agents', () => {
@@ -46,19 +47,31 @@ test('retains persistence for trusted projects and global agents', () => {
   });
 });
 
-test('passes trusted project extension paths to loader reload', async () => {
+test('preserves trusted project and global extension loading', async () => {
   const paths = ['/project/.pi/extensions/trusted.ts'];
-  const reload = vi.fn(async (additionalPaths: string[] | undefined) => additionalPaths);
+  const override = vi.fn((extensions) => extensions);
+  const reload = vi.fn(async (policy) => policy);
 
-  const loaded = await loadAgentExtensionResources(
+  const trustedPolicy = await loadAgentExtensionResources(
     'project',
     paths,
-    'project-agent',
+    false,
+    override,
     () => true,
-    undefined,
+    reload,
+  );
+  const globalPolicy = await loadAgentExtensionResources(
+    'global',
+    paths,
+    false,
+    override,
+    () => false,
     reload,
   );
 
-  assert.deepEqual(loaded, paths);
-  assert.deepEqual(reload.mock.calls, [[paths]]);
+  for (const policy of [trustedPolicy, globalPolicy]) {
+    assert.equal(policy.noExtensions, false);
+    assert.deepEqual(policy.additionalExtensionPaths, paths);
+    assert.equal(policy.extensionsOverride, override);
+  }
 });

@@ -70,6 +70,51 @@ function importedSpecifiers(source: ts.SourceFile): string[] {
   return specifiers;
 }
 
+function childProcessViolations(source: ts.SourceFile): string[] {
+  const violations: string[] = [];
+  const shellCommandFunctions = new Set(['exec', 'execSync']);
+  const childProcessFunctions = new Set([
+    ...shellCommandFunctions,
+    'execFile',
+    'execFileSync',
+    'spawn',
+    'spawnSync',
+  ]);
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const functionName = node.expression.text;
+      if (childProcessFunctions.has(functionName)) {
+        for (const argument of node.arguments) {
+          if (!ts.isObjectLiteralExpression(argument)) continue;
+          for (const property of argument.properties) {
+            if (
+              ts.isPropertyAssignment(property) &&
+              ((ts.isIdentifier(property.name) && property.name.text === 'shell') ||
+                (ts.isStringLiteralLike(property.name) && property.name.text === 'shell')) &&
+              property.initializer.kind === ts.SyntaxKind.TrueKeyword
+            ) {
+              violations.push(`${functionName} enables shell:true`);
+            }
+          }
+        }
+      }
+      if (shellCommandFunctions.has(functionName)) {
+        const command = node.arguments[0];
+        if (
+          command &&
+          !ts.isStringLiteralLike(command) &&
+          !ts.isNoSubstitutionTemplateLiteral(command)
+        ) {
+          violations.push(`${functionName} receives a constructed command`);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return violations;
+}
+
 function activeLiterals(source: ts.SourceFile): string[] {
   const literals: string[] = [];
   const visit = (node: ts.Node): void => {
@@ -108,6 +153,38 @@ test('import audit recognizes static, side-effect, dynamic, and require forms', 
     'required-package',
     'import-equals-package',
   ]);
+});
+
+test('child-process audit rejects shells and constructed shell commands without flagging fixed commands', () => {
+  const unsafe = sourceFile(
+    'unsafe.mjs',
+    ['execSync(`formatter "${filePath}"`);', "spawn('tool', [filePath], { shell: true });"].join(
+      '\n',
+    ),
+  );
+  const safe = sourceFile(
+    'safe.mjs',
+    [
+      "execSync('gh pr view --json url');",
+      "execFileSync('git', ['diff', '--', filePath], { shell: false });",
+      'spawn(binaryPath, [filePath], { shell: false });',
+    ].join('\n'),
+  );
+
+  assert.deepEqual(childProcessViolations(unsafe), [
+    'execSync receives a constructed command',
+    'spawn enables shell:true',
+  ]);
+  assert.deepEqual(childProcessViolations(safe), []);
+});
+
+test('active sources do not enable shells or construct shell commands', () => {
+  for (const file of filesUnder(packageRoot, (candidate) =>
+    sourceExtensions.has(extname(candidate)),
+  )) {
+    const parsed = sourceFile(file, readFileSync(file, 'utf8'));
+    assert.deepEqual(childProcessViolations(parsed), [], relative(packageRoot, file));
+  }
 });
 
 test('active TypeScript and JavaScript sources contain no retired or machine-local literals', () => {
