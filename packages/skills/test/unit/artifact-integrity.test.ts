@@ -41,7 +41,7 @@ async function fixture() {
     await mkdir(path.join(root, name));
     await writeFile(
       path.join(root, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${name} description\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name}\n`,
+      `---\nname: ${name}\ndescription: ${name} description\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name}\n`,
     );
   }
   const catalog = await inventoryCanonical(root);

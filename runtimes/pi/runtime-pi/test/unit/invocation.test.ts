@@ -73,6 +73,8 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
       MPX_RUNTIME: 'pi',
       MPX_RUNTIME_CONTEXT: JSON.stringify(runtimeContext),
       MPX_RUNTIME_CONTEXT_FILE: 'C:/launch/context.json',
+      MPX_ACTIVE_CONTENT_ROOT: 'C:/artifacts/pi',
+      MPX_ACTIVE_CONTENT_MANIFEST: 'C:/artifacts/pi/active-content.json',
     },
   });
   const serializedRuntimeContext = plan.env.MPX_RUNTIME_CONTEXT;
@@ -309,4 +311,6 @@ it('propagates the exact published projection reference as JSON', () => {
     },
   });
   expect(plan.env.MPX_RUNTIME_PROJECTION_REFERENCE).toBe(JSON.stringify(projectionReference));
+  expect(plan.env.MPX_ACTIVE_CONTENT_ROOT).toBe('C:/artifacts/pi');
+  expect(plan.env.MPX_ACTIVE_CONTENT_MANIFEST).toBe('C:/artifacts/pi/active-content.json');
 });

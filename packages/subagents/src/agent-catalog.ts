@@ -11,7 +11,8 @@ const identityPattern = /^mpx-[a-z0-9-]+$/u;
 const MAX_IDENTITY_LENGTH = 128;
 const MAX_SELECTOR_LENGTH = 256;
 const MAX_SELECTOR_WILDCARDS = 16;
-const modelClasses = new Set(['sol', 'terra', 'luna']);
+const MAX_OUTPUT_SCHEMA_LENGTH = 256;
+const modelClasses = new Set(['mechanical', 'standard', 'advanced', 'frontier']);
 const thinkingLevels = new Set(['low', 'medium', 'high']);
 const capabilities = new Set(['read', 'search', 'shell', 'write', 'browser', 'context', 'web']);
 
@@ -24,6 +25,8 @@ function validEntry(value: unknown): value is AgentCatalogEntryV1 {
     return false;
   }
   return (
+    Object.keys(value).sort().join(',') ===
+      ['capabilities', 'modelClass', 'nesting', 'outputSchema', 'thinking'].join(',') &&
     modelClasses.has(value.modelClass as string) &&
     thinkingLevels.has(value.thinking as string) &&
     Array.isArray(value.capabilities) &&
@@ -37,7 +40,9 @@ function validEntry(value: unknown): value is AgentCatalogEntryV1 {
         item.split('*').length - 1 <= MAX_SELECTOR_WILDCARDS,
     ) &&
     typeof value.outputSchema === 'string' &&
-    value.outputSchema.length > 0
+    value.outputSchema.length > 0 &&
+    value.outputSchema.length <= MAX_OUTPUT_SCHEMA_LENGTH &&
+    !/[\u0000-\u001f\u007f]/u.test(value.outputSchema)
   );
 }
 

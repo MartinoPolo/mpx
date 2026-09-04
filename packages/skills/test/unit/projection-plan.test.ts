@@ -45,7 +45,7 @@ async function fixture() {
     await mkdir(path.join(directory, 'nested'), { recursive: true });
     await writeFile(
       path.join(directory, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${name} café description\ntriggers: ${name} trigger\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name} BODY\n`,
+      `---\nname: ${name}\ndescription: ${name} café description\ntriggers: ${name} trigger\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name} BODY\n`,
     );
     if (name === 'full') {
       await writeFile(path.join(directory, 'nested', 'binary.dat'), Buffer.from([0, 255, 1]));

@@ -11,11 +11,11 @@ The exports below describe the current migration implementation and will narrow 
 - `createPiRuntimeProfileV1(modelSelection, capabilityIds)` — translate config-owned model selection into launch profile data.
 - `buildPiProjection(input): Promise<PiPublishedProjection>` / `createPiRuntimeProjection(input)` — validate neutral inputs and publish the current generated extension, shared skills and agents, and launch-bound data.
 - `createPiRuntimeAdapter` — validate a launch binding and install `/mpx:*` commands.
-- `planPiInvocation` — return the current hermetic invocation with `--no-extensions` and one explicit generated extension.
-- `generatePiAgents` — deterministic runtime-neutral agent projection/drift check.
+- `planPiInvocation` — return the current hermetic executable/arguments/environment plan with `--no-extensions` and one explicit generated extension; it can consume `PiPublishedProjection` directly. Launchers must pass `statusSnapshotPath` so the child-only `MPX_STATUS_SNAPSHOT_FILE` binding points at the validated read-only Phase C snapshot. The extension refreshes that file asynchronously; the projected launch snapshot is only an older-launcher compatibility fallback.
+- `createPiFooterPortAdapter` — asynchronous validated shared status segment.
 - `guardPiCommand` — current shared runtime-hook classification.
 
-At Gate 4, `buildPiProjection` and `planPiInvocation` stop generating or explicitly activating Pi feature code. They instead project shared content and launch data while the installer registers the canonical package once in Pi's discovery surface.
+At Gate 4, `buildPiProjection` and `planPiInvocation` stop generating or explicitly activating Pi feature code. They instead project compiler-owned shared content and launch data while the installer registers the canonical package once in Pi's discovery surface.
 
 ## Root-attested account gate
 
@@ -36,4 +36,4 @@ Gate 4 will restore normal native Pi extension discovery, trusted project extens
 
 Whole-agent sandbox Pi may access only its selected identity's account and service state. That state remains absent from releases, logs, and public descriptors; the opposite identity, original checkout, unrelated host paths, and host Docker socket remain unavailable. The original checkout changes only through explicit apply-back from a host-owned private clone.
 
-The published generated `extension.mjs`, duplicate runtime bundles, and host remote-tool replacement are scheduled for removal after canonical host and sandbox parity. See [the migration plan](../../../docs/PI_EXTENSION_MIGRATION.md).
+The currently published `extension.mjs` is a deterministic executable adapter for policy-scoped commands and model search, not a bundled copy of the vendored subagent TypeScript. The shared content compiler emits final Pi agent bytes; this adapter copies those bytes unchanged while retaining the vendored subagent implementation and runtime assets. This generated extension, duplicate runtime bundles, and host remote-tool replacement are transitional and scheduled for removal after canonical host and sandbox parity. See [the migration plan](../../../docs/PI_EXTENSION_MIGRATION.md).

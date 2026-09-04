@@ -3,6 +3,7 @@ name: commit-push
 description: 'Stages, commits, and pushes changes without opening a PR.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

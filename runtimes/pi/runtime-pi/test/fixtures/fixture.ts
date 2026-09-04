@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
 import {
   createRuntimeSkillArtifact,
@@ -10,6 +11,8 @@ import {
 } from '@mpx/skills';
 import type { RuntimeStatusEnvelopeV1, StatusSnapshotV1 } from '@mpx/status';
 import { createPiRuntimeProfileV1 } from '../../src/profile.js';
+import { loadRuntimeProfilesV1 } from '@mpx/config';
+import { compileContent } from '@mpx/content-compiler';
 
 const exposures = [
   ['full', 'full', 'Full skill', 'full trigger'],
@@ -25,7 +28,7 @@ export async function fixture() {
     await mkdir(dir);
     await writeFile(
       path.join(dir, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${description}\n${triggers ? `triggers: ${triggers}\n` : ''}metadata:\n  mpx:\n    skillPacks: [${name === 'excluded' ? 'personal' : 'core'}]\n    defaultExposure: ${exposure}\n---\n# ${name}\n`,
+      `---\nname: ${name}\ndescription: ${description}\n${triggers ? `triggers: ${triggers}\n` : ''}metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [${name === 'excluded' ? 'personal' : 'core'}]\n    defaultExposure: ${exposure}\n---\n# ${name}\n`,
     );
   }
   const catalog = await inventoryCanonical(canonicalRoot);
@@ -50,6 +53,20 @@ export async function fixture() {
     artifact,
     catalog,
     canonicalRoot,
+  });
+  const sharedInstructionRoot = fileURLToPath(
+    new URL('../../../../../content/instructions/shared/', import.meta.url),
+  );
+  const runtimeProfiles = await loadRuntimeProfilesV1(
+    fileURLToPath(new URL('../../../../../content/runtime-profiles.json', import.meta.url)),
+  );
+  const agentRoot = fileURLToPath(new URL('../../../../../content/agents/', import.meta.url));
+  const compiledContent = await compileContent({
+    runtime: 'pi',
+    plan: skillPlan,
+    runtimeProfiles,
+    sharedInstructionRoot,
+    agentRoot,
   });
   const context = createRuntimeContextV1({
     launchKey: 'launch',
@@ -167,19 +184,14 @@ export async function fixture() {
   );
   return {
     context,
-    modelMappings: Object.freeze({
-      schemaVersion: 1 as const,
-      runtime: 'pi' as const,
-      models: Object.freeze({
-        luna: 'openai-codex/gpt-5.6-luna',
-        sol: 'openai-codex/gpt-5.6-sol',
-        terra: 'openai-codex/gpt-5.6-terra',
-      }),
-    }),
     piRuntimeProfile,
     manifest,
     artifact,
     skillPlan,
+    compiledContent,
+    runtimeProfiles,
+    sharedInstructionRoot,
+    agentRoot,
     catalog,
     canonicalRoot,
     currentBinding,

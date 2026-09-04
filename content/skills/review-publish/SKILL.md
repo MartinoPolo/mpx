@@ -4,6 +4,7 @@ description: Create or update a provider-neutral Review from existing commits
 triggers: publishing committed branch changes for review
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

@@ -3,6 +3,7 @@ name: check-fix
 description: "Detects the project's check scripts, runs them, and fixes what fails. Use when asked to run checks, fix lint or type errors, or get the build green."
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

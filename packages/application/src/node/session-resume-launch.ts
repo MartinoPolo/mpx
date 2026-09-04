@@ -315,6 +315,10 @@ export function createNodeSessionResumeLaunchApplicationService(
             catalog: execution.catalog,
             canonicalRoot: execution.canonicalRoot,
             agentsRoot: path.join(path.dirname(execution.canonicalRoot), 'agents'),
+            runtimeProfilesFile: path.join(
+              path.dirname(execution.canonicalRoot),
+              'runtime-profiles.json',
+            ),
             artifactsRoot: execution.roots.artifactsRoot,
             stateRoot: execution.roots.stateRoot,
             cwd: execution.cwd,

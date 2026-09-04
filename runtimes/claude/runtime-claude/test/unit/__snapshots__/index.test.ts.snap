@@ -3,16 +3,17 @@
 exports[`Claude projection > matches the complete Claude projection golden across skill exposures and harness files 1`] = `
 {
   ".claude-plugin/plugin.json": "7cde599358d65b31d293eabdc22033a1b76c4a2d6f8e7a73b33f7e20bb80c91e",
-  "agents/Explore.md": "f23dc8dfbca38129c36875f3c53d4b890b02f977920846160b3e0ce59c3a5014",
+  "active-content.json": "79879fc5b0736c359238d9aa35fcc8b0a53ea92756efafac455c753f2ed811a7",
+  "agents/Explore.md": "f73fa2508deb72c51a7417cd5b53f4843c77afa9ef5565bfac84bb2bff776a91",
   "hooks/dangerous-command-policy.mjs": "f5c85d95188a10784f4f6a30665494cc55a29f3281e3da04a575cc65be9ee8b2",
   "hooks/hooks.json": "b62d1810c8d39c5bccf7c4b0d3d261c9676199d0cc5ec5cb95660aca13195c11",
   "hooks/runtime-guard.mjs": "157f0af1013e9c9fb3affc964a0470270b74122855360cd103dfa38cfb16e385",
   "output-styles/mpx-terse.md": "f47fb096ae16b05836caae941a1262ca3626a8ea1129218a1c97cf2781f5aa2f",
-  "skills/explicit/SKILL.md": "e1aabfb088d8439ccdbe73ae170c6c23f643c0c2a52bf89268c3a7c9b5f4d564",
+  "skills/explicit/SKILL.md": "ccf714a8dc5172149c77db872b782eeb9c812f4ecdec517b471bc132e90bcda1",
   "skills/explicit/asset.bin": "edc81f7e4ee358fb91e94bd9bd74079c3dcba36f40f2c8a36e7ae0567afecc8f",
-  "skills/full/SKILL.md": "16a50b130aea8c05e5d30caeb153d36cf0fa074604e057277fa5b0ef35e8d373",
+  "skills/full/SKILL.md": "d56d08d54aa7cddcb4152cbb898112228f81f38cf3646dbef1452bcca51a2607",
   "skills/full/references/guide.txt": "9346b18a38ef0608b168fd78aae80e438e60926f7c126ad664f4ab0f4fe06ce7",
-  "skills/named/SKILL.md": "d06103f0836d0d599f2e2b46767ffd0d4eeb9015828b237be20e59cb2c7f3073",
+  "skills/named/SKILL.md": "21a7f24699ad40911c0d4e136b3913775514000af5d1f39c495b87e0cfe96473",
   "status/status-line.mjs": "f361ee2583e1211ff18f0612a6a5ec0ec8c4bd00cb7eeddea98f8b0faaee6896",
   "status/status-snapshot.json": "3ea3489efc64ef04b496b294633ea3c8708ac135b8e83e7dd796ca14aa749448",
 }

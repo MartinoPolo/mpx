@@ -48,6 +48,8 @@ describe('generated repository validation', () => {
         'GIT_COMMIT_WORKFLOW.md',
         'interface-design.md',
         'ISSUE_TRACKER.md',
+        'MPX_CLI_BASIC.md',
+        'MPX_CLI_REFERENCE.md',
         'PLAYWRIGHT_TESTING.md',
         'PROJECT_DOC_TEMPLATES.md',
         'REVIEWER_PROTOCOL.md',
@@ -156,16 +158,6 @@ describe('generated repository validation', () => {
       evidence: [],
     };
     expect(validateConvergenceArtifacts({ entries: [entry] }, new Map())).toEqual([]);
-  });
-
-  it('reports generated Pi-agent projection drift', () => {
-    expect(
-      messages(
-        validateFiles(files('runtimes/pi/runtime-pi/projection/agents/mpx-checker.md', 'drift'), {
-          generatedPiDiagnostics: ['mpx-checker.md'],
-        }),
-      ),
-    ).toContain('GENERATED_PI_DRIFT');
   });
 
   it.each(['/mp:ship', '/mp-gh:issue-view', '/kf:board'])(

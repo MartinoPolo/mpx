@@ -25,10 +25,10 @@ const ACTIVE_COMPATIBILITY_DOCS = new Set([
 ]);
 // Ordinary text validation is intentionally bounded to 1 MiB per file. The generated,
 // tracked CLI bundle has its own narrow bound because bundling legitimately exceeds it.
-export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
-export const MAX_GENERATED_CLI_BUNDLE_BYTES = 2 * 1024 * 1024;
+const MAX_TEXT_FILE_BYTES = 1024 * 1024;
+const MAX_GENERATED_CLI_BUNDLE_BYTES = 2 * 1024 * 1024;
 const GENERATED_CLI_BUNDLES = new Set(['bin/mpx.mjs', 'bin/claude-gateway.js']);
-export const FILE_READ_CONCURRENCY = 8;
+const FILE_READ_CONCURRENCY = 8;
 
 const diagnostic = (code, file, message) => ({ code, file, message });
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -44,16 +44,6 @@ function permitsClaudeVariable(file) {
 
 export function validateFiles(files, options = {}) {
   const diagnostics = [];
-  for (const name of options.generatedPiDiagnostics ?? []) {
-    diagnostics.push(
-      diagnostic(
-        'GENERATED_PI_DRIFT',
-        `runtimes/pi/runtime-pi/projection/agents/${name}`,
-        'generated Pi agent does not match canonical content',
-      ),
-    );
-  }
-
   const tracked = new Set(options.trackedFiles ?? files.keys());
   for (const file of tracked) {
     const portable = normalized(file);
@@ -331,9 +321,9 @@ export function validateConvergenceArtifacts(manifest, files) {
   return diagnostics;
 }
 
-export async function validateGeneratedRepository({ tracked, files, generatedPiDiagnostics = [] }) {
+async function validateGeneratedRepository({ tracked, files }) {
   return [
-    ...validateFiles(files, { trackedFiles: tracked, generatedPiDiagnostics }),
+    ...validateFiles(files, { trackedFiles: tracked }),
     ...validateSharedInstructionLinks(files),
   ];
 }
@@ -490,15 +480,21 @@ async function run() {
           .split(/\r?\n/u)
           .filter(Boolean)
           .map((message) => diagnostic('GENERATED_BUNDLE_INVALID', 'bin', message));
-  const generated = spawnSync(
+  const cliDocs = spawnSync(
     process.execPath,
-    [path.join(root, 'runtimes/pi/runtime-pi/scripts/generate-agents.mjs'), '--check'],
+    [path.join(root, 'scripts/generate-cli-docs.mjs'), '--check'],
     { cwd: root, encoding: 'utf8' },
   );
-  const drift =
-    generated.status === 0
+  const cliDocDiagnostics =
+    cliDocs.status === 0
       ? []
-      : [generated.stderr.trim() || generated.stdout.trim() || 'projection'];
+      : [
+          diagnostic(
+            'GENERATED_CLI_DOCS_DRIFT',
+            'content/instructions/shared',
+            cliDocs.stderr.trim() || cliDocs.stdout.trim() || 'generated CLI references are stale',
+          ),
+        ];
   const toolInventory = spawnSync(
     process.execPath,
     [path.join(root, 'scripts/generate-runtime-tool-inventory.mjs'), '--check'],
@@ -557,6 +553,7 @@ async function run() {
   const diagnostics = [
     ...files.diagnostics,
     ...bundleDiagnostics,
+    ...cliDocDiagnostics,
     ...toolInventoryDiagnostics,
     ...convergenceDiagnostics,
     ...validateCanonicalScriptSyntax(root, names),
@@ -565,7 +562,6 @@ async function run() {
       names,
       tracked,
       files,
-      generatedPiDiagnostics: drift,
     })),
   ];
 

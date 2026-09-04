@@ -16,7 +16,7 @@ const metadata = (identities: string[]) =>
       identities.map((identity) => [
         identity,
         {
-          modelClass: 'terra',
+          modelClass: 'standard',
           thinking: 'low',
           capabilities: ['read'],
           nesting: [],

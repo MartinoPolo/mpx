@@ -3,6 +3,7 @@ name: consolidate-context
 description: 'Consolidates CONTEXT.md by removing duplicates and outdated items and tightening the language.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

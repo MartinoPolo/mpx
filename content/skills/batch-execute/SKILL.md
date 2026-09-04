@@ -4,6 +4,7 @@ description: Execute an approved batch of small Issues with isolated progress an
 triggers: implementing a range, list, label selection, or board batch
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

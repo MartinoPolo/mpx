@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as nativeFs from 'node:fs/promises';
 import path from 'node:path';
 import { parseAgentCatalogV1, resolveAgentCatalogV1 } from './agent-catalog.js';
@@ -187,7 +188,13 @@ export async function loadCanonicalAgentProjectionInputsV1(
     fail('AGENT_INVENTORY_LIMIT', 'canonical agent document count exceeds limit');
   }
   let total = 0;
-  const documents: { identity: string; document: CanonicalAgentDocumentV1 }[] = [];
+  const documents: {
+    identity: string;
+    document: CanonicalAgentDocumentV1;
+    sourcePath: string;
+    sourceSha256: string;
+    sourceByteCount: number;
+  }[] = [];
   for (const name of names) {
     const bytes = await exactRead(
       fs,
@@ -198,7 +205,13 @@ export async function loadCanonicalAgentProjectionInputsV1(
     );
     total += bytes.length;
     const identity = name.slice(0, -3);
-    documents.push({ identity, document: parseDocument(identity, bytes) });
+    documents.push({
+      identity,
+      document: parseDocument(identity, bytes),
+      sourcePath: name,
+      sourceSha256: createHash('sha256').update(bytes).digest('hex'),
+      sourceByteCount: bytes.byteLength,
+    });
   }
   let metadataBytes: Uint8Array | undefined;
   try {
@@ -302,8 +315,15 @@ export async function loadCanonicalAgentProjectionInputsV1(
   return Object.freeze({
     schemaVersion: 1,
     entries: Object.freeze(
-      documents.map(({ identity, document }) =>
-        Object.freeze({ identity, document, metadata: catalog.agents[identity]! }),
+      documents.map(({ identity, document, sourcePath, sourceSha256, sourceByteCount }) =>
+        Object.freeze({
+          identity,
+          document,
+          metadata: catalog.agents[identity]!,
+          sourcePath,
+          sourceSha256,
+          sourceByteCount,
+        }),
       ),
     ),
     supportFiles: Object.freeze(supportFiles),

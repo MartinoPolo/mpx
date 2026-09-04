@@ -25,6 +25,33 @@ import {
 } from '@mpx/application/node';
 import { defaultContext } from '../../src/context.js';
 
+const canonicalContentRoot = fileURLToPath(new URL('../../../../content/', import.meta.url));
+const skillCatalogFixture = fileURLToPath(new URL('../fixtures/skill-catalog/', import.meta.url));
+
+async function createLaunchContentFixture(
+  prefix = 'mpx-cli-launch-content-',
+): Promise<{ root: string; catalogRoot: string }> {
+  const root = await mkdtemp(path.join(tmpdir(), prefix));
+  const contentRoot = path.join(root, 'content');
+  const catalogRoot = path.join(contentRoot, 'skills');
+  await Promise.all([
+    cp(skillCatalogFixture, catalogRoot, { recursive: true }),
+    cp(path.join(canonicalContentRoot, 'agents'), path.join(contentRoot, 'agents'), {
+      recursive: true,
+    }),
+    cp(
+      path.join(canonicalContentRoot, 'instructions', 'shared'),
+      path.join(contentRoot, 'instructions', 'shared'),
+      { recursive: true },
+    ),
+    cp(
+      path.join(canonicalContentRoot, 'runtime-profiles.json'),
+      path.join(contentRoot, 'runtime-profiles.json'),
+    ),
+  ]);
+  return { root, catalogRoot };
+}
+
 async function launchFixture(): Promise<{
   cwd: string;
   env: NodeJS.ProcessEnv;
@@ -74,10 +101,11 @@ async function launchFixture(): Promise<{
       executors: { host: {}, docker: {} },
     }),
   );
+  const content = await createLaunchContentFixture();
   return {
     cwd,
     env: { APPDATA: appdata, LOCALAPPDATA: appdata },
-    catalogRoot: fileURLToPath(new URL('../fixtures/skill-catalog', import.meta.url)),
+    catalogRoot: content.catalogRoot,
   };
 }
 
@@ -388,7 +416,7 @@ describe('production private launch services', () => {
 });
 
 describe('Phase F launch execution', () => {
-  it('accepts repeated launch runtime arguments as separate launch-bound values', async () => {
+  it('accepts repeated runtime arguments through the short Pi launch alias', async () => {
     const fixture = await launchFixture(),
       io = captureIo(),
       execution = verifiedExecution();
@@ -398,10 +426,7 @@ describe('Phase F launch execution', () => {
           '--json',
           '--cwd',
           fixture.cwd,
-          'launch',
           'pi',
-          '--identity',
-          'work',
           '--executor',
           'host',
           '--workspace',
@@ -1712,10 +1737,8 @@ describe('Phase F launch execution', () => {
       };
       const validator = vi.fn(async () => undefined);
       const artifactRevalidator = vi.fn(revalidateRuntimeArtifact);
-      const contentRoot = await mkdtemp(path.join(tmpdir(), 'mpx-publisher-content-'));
-      const catalogRoot = path.join(contentRoot, 'content', 'skills');
-      await cp(fixture.catalogRoot, catalogRoot, { recursive: true });
-      await mkdir(path.join(contentRoot, 'content', 'agents'), { recursive: true });
+      const { root: contentRoot, catalogRoot } =
+        await createLaunchContentFixture('mpx-publisher-content-');
       await mkdir(path.join(contentRoot, 'content', 'output-styles'), { recursive: true });
       await cp(
         path.resolve('content/output-styles/mpx-terse.md'),

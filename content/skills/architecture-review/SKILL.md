@@ -3,6 +3,7 @@ name: architecture-review
 description: "Reviews codebase architecture and logs a refactor issue/task in the project's tracker with the findings."
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

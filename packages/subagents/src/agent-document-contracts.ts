@@ -10,6 +10,9 @@ export interface CanonicalAgentProjectionEntryV1 {
   readonly identity: string;
   readonly document: CanonicalAgentDocumentV1;
   readonly metadata: ResolvedAgentCatalogEntryV1;
+  readonly sourcePath: string;
+  readonly sourceSha256: string;
+  readonly sourceByteCount: number;
 }
 export interface CanonicalAgentSupportFileV1 {
   readonly relativePath: string;

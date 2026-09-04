@@ -192,8 +192,12 @@ export async function inventoryCanonical(root: string): Promise<CanonicalSkill[]
       byReal.add(real);
       skills.push({
         identity: value.identity,
+        schemaVersion: value.schemaVersion,
+        ...(value.contentVersion ? { contentVersion: value.contentVersion } : {}),
         description: value.description,
         ...(value.triggers ? { triggers: value.triggers } : {}),
+        ...(value.argumentHint ? { argumentHint: value.argumentHint } : {}),
+        ...(value.capabilities ? { capabilities: value.capabilities } : {}),
         skillPacks: value.packs,
         defaultExposure: value.exposure,
         sourcePath: file,

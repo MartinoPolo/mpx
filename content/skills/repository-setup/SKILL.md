@@ -4,6 +4,7 @@ description: Initialize a local repository and request provider repository polic
 triggers: initializing and publishing a new repository
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

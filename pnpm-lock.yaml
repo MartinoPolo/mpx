@@ -71,6 +71,9 @@ importers:
       '@mpx/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@mpx/content-compiler':
+        specifier: workspace:*
+        version: link:../../packages/content-compiler
       '@mpx/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -126,6 +129,9 @@ importers:
       '@mpx/config':
         specifier: workspace:*
         version: link:../config
+      '@mpx/content-compiler':
+        specifier: workspace:*
+        version: link:../content-compiler
       '@mpx/core':
         specifier: workspace:*
         version: link:../core
@@ -208,6 +214,28 @@ importers:
       ajv:
         specifier: ^8.17.1
         version: 8.20.0
+
+  packages/content-compiler:
+    dependencies:
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../config
+      '@mpx/skills':
+        specifier: workspace:*
+        version: link:../skills
+      '@mpx/subagents':
+        specifier: workspace:*
+        version: link:../subagents
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)
 
   packages/core:
     devDependencies:
@@ -564,6 +592,9 @@ importers:
 
   runtimes/claude/runtime-claude:
     dependencies:
+      '@mpx/content-compiler':
+        specifier: workspace:*
+        version: link:../../../packages/content-compiler
       '@mpx/dev-services':
         specifier: workspace:*
         version: link:../../../packages/dev-services
@@ -582,9 +613,6 @@ importers:
       '@mpx/status':
         specifier: workspace:*
         version: link:../../../packages/status
-      '@mpx/subagents':
-        specifier: workspace:*
-        version: link:../../../packages/subagents
     devDependencies:
       '@mpx/config':
         specifier: workspace:*
@@ -601,6 +629,9 @@ importers:
 
   runtimes/pi/runtime-pi:
     dependencies:
+      '@mpx/content-compiler':
+        specifier: workspace:*
+        version: link:../../../packages/content-compiler
       '@mpx/dev-services':
         specifier: workspace:*
         version: link:../../../packages/dev-services
@@ -626,9 +657,6 @@ importers:
       '@mpx/config':
         specifier: workspace:*
         version: link:../../../packages/config
-      '@mpx/windows':
-        specifier: workspace:*
-        version: link:../../../packages/windows
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1

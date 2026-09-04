@@ -6,6 +6,7 @@ import {
   stable,
   type CatalogSkill,
   type Exposure,
+  type SkillCapability,
   type ResolvedManifest,
   type Runtime,
   type RuntimeSkillArtifact,
@@ -82,6 +83,9 @@ export interface SkillProjectionPlanEntry {
   readonly identity: string;
   readonly publicName: string;
   readonly exposure: Exposure;
+  readonly canonicalDescription: string;
+  readonly argumentHint?: string;
+  readonly capabilities?: readonly SkillCapability[];
   readonly permissions: Readonly<{ humanInvocation: boolean; modelInvocation: boolean }>;
   readonly source: Readonly<{
     kind: 'canonical' | 'project';
@@ -256,6 +260,13 @@ export async function createSkillProjectionPlan(
       identity: artifactEntry.identity,
       publicName: artifactEntry.publicName,
       exposure: artifactEntry.exposure,
+      canonicalDescription: skill.description,
+      ...('argumentHint' in skill && skill.argumentHint
+        ? { argumentHint: skill.argumentHint }
+        : {}),
+      ...('capabilities' in skill && skill.capabilities
+        ? { capabilities: [...skill.capabilities] }
+        : {}),
       permissions: { ...artifactEntry.permissions },
       source: {
         kind: artifactEntry.source.kind,

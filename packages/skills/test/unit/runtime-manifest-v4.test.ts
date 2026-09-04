@@ -24,7 +24,7 @@ async function fixture() {
     await mkdir(path.join(root, name));
     await writeFile(
       path.join(root, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${name} secret description\ntriggers: /mpx:${name} text\nmetadata:\n  mpx:\n    skillPacks: [${pack}]\n    defaultExposure: name-only\n---\n${name.toUpperCase()} BODY\n`,
+      `---\nname: ${name}\ndescription: ${name} secret description\ntriggers: /mpx:${name} text\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [${pack}]\n    defaultExposure: name-only\n---\n${name.toUpperCase()} BODY\n`,
     );
   }
   return { root, catalog: await inventoryCanonical(root) };

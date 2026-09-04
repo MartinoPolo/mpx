@@ -28,6 +28,11 @@
 - Use an isolated worktree for multi-file features, refactors, or sustained work. Preserve the main checkout and follow `docs/WORKTREE_HUB.md`.
 - Before starting a development, preview, Storybook, or end-to-end server, read this worktree's `.worktree-ports.json` and use its assigned port. Never assume a fixed port or reuse another worktree's port.
 
+## MPX operations
+
+- Read [MPX_CLI_BASIC.md](../shared/MPX_CLI_BASIC.md) before using MPX commands.
+- Read [MPX_CLI_REFERENCE.md](../shared/MPX_CLI_REFERENCE.md) only when the basic reference is insufficient.
+
 ## Verification
 
 - Run the narrowest relevant checks first, then widen to the repository-required checks.

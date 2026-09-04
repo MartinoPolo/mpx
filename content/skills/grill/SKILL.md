@@ -3,6 +3,7 @@ name: grill
 description: 'Interviews the user about a plan, design, or requirements until the design is settled, then records the decisions in project docs. Use when asked to be grilled, or to pin down requirements or a design.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

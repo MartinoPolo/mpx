@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { SKILL_CAPABILITIES, type SkillCapability } from '@mpx/skills';
 import type { Runtime } from './types.js';
 
 export interface RuntimeModelSelectionV1 {
@@ -8,7 +10,7 @@ export interface RuntimeModelSelectionV1 {
   readonly enabledModels: readonly string[];
 }
 
-export type RuntimeAgentModelClassV1 = 'luna' | 'sol' | 'terra';
+export type RuntimeAgentModelClassV1 = 'mechanical' | 'standard' | 'advanced' | 'frontier';
 
 export interface RuntimeAgentModelMappingsV1 {
   readonly schemaVersion: 1;
@@ -16,7 +18,77 @@ export interface RuntimeAgentModelMappingsV1 {
   readonly models: Readonly<Record<RuntimeAgentModelClassV1, string>>;
 }
 
+export type RuntimeFeatureSupportV1 = 'supported' | 'unsupported';
+export type RuntimeCapabilityGrantSupportV1 = 'preapproved' | 'unsupported';
+export type SemanticSkillCapabilityV1 = SkillCapability;
+export interface RuntimeContentTranslationV1 {
+  readonly argumentHint: RuntimeFeatureSupportV1;
+  readonly capabilities: Readonly<{
+    readonly support: RuntimeCapabilityGrantSupportV1;
+    readonly mappings: Readonly<Partial<Record<SemanticSkillCapabilityV1, readonly string[]>>>;
+  }>;
+  readonly frontmatter: Readonly<{
+    readonly argumentHint: 'argument-hint' | null;
+    readonly capabilityGrant: 'allowed-tools' | null;
+  }>;
+}
+export type SemanticAgentCapabilityV1 =
+  'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
+export interface RuntimeAgentTranslationV1 {
+  readonly aliases: Readonly<Record<string, string>>;
+  readonly capabilities: Readonly<{
+    readonly mappings: Readonly<Record<SemanticAgentCapabilityV1, readonly string[]>>;
+  }>;
+  readonly frontmatter: Readonly<{
+    readonly model: 'model';
+    readonly thinking: 'effort' | 'thinking';
+    readonly tools: 'tools';
+    readonly outputSchema: 'output-schema' | 'output_schema';
+    readonly nesting: 'allowed-subagents' | 'allowed_subagents';
+  }>;
+  readonly separators: Readonly<{ readonly tools: string; readonly nesting: string }>;
+  readonly nestingRequiredTools: readonly string[];
+}
+export interface RuntimeProfilesV1 {
+  readonly schemaVersion: 1;
+  readonly models: Readonly<{
+    readonly claude: Readonly<Record<RuntimeAgentModelClassV1, string>>;
+    readonly pi: Readonly<Record<RuntimeAgentModelClassV1, string>>;
+  }>;
+  readonly agentTranslation: Readonly<{
+    readonly runtimes: Readonly<Record<Runtime, RuntimeAgentTranslationV1>>;
+  }>;
+  readonly contentTranslation: Readonly<{
+    readonly nameOnlyDescriptionTemplate: string;
+    readonly runtimes: Readonly<Record<Runtime, RuntimeContentTranslationV1>>;
+  }>;
+}
+
+const MODEL_CLASSES = ['advanced', 'frontier', 'mechanical', 'standard'] as const;
+const RUNTIMES = ['claude', 'pi'] as const;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const CLAUDE_ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const NATIVE_TOOL_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_-]{0,127}$/u;
+const AGENT_CAPABILITIES = [
+  'read',
+  'search',
+  'shell',
+  'write',
+  'browser',
+  'context',
+  'web',
+] as const;
+const AGENT_IDENTITY = /^mpx-[a-z0-9-]{1,123}$/u;
+const AGENT_ALIAS = /^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/u;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/u;
+
+function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  return Object.keys(value).sort().join(',') === [...expected].sort().join(',');
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function freeze<T extends RuntimeModelSelectionV1>(value: T): T {
   Object.freeze(value.enabledModels);
@@ -25,13 +97,12 @@ function freeze<T extends RuntimeModelSelectionV1>(value: T): T {
 
 /** Validates the process-local, provider-neutral model selection passed to a runtime adapter. */
 export function parseRuntimeModelSelectionV1(value: unknown): RuntimeModelSelectionV1 {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!record(value)) {
     throw new TypeError('runtime model selection must be an object');
   }
-  const input = value as Record<string, unknown>;
+  const input = value;
   if (
-    Object.keys(input).sort().join(',') !==
-    ['defaultModel', 'enabledModels', 'provider', 'runtime', 'schemaVersion'].sort().join(',')
+    !exactKeys(input, ['defaultModel', 'enabledModels', 'provider', 'runtime', 'schemaVersion'])
   ) {
     throw new TypeError('runtime model selection has invalid fields');
   }
@@ -75,86 +146,256 @@ export function parseRuntimeModelSelectionV1(value: unknown): RuntimeModelSelect
   });
 }
 
-function freezeAgentModelMappings(value: RuntimeAgentModelMappingsV1): RuntimeAgentModelMappingsV1 {
-  Object.freeze(value.models);
-  return Object.freeze(value);
-}
-
-/** Validates provider/harness model identifiers supplied to runtime agent translators. */
-export function parseRuntimeAgentModelMappingsV1(value: unknown): RuntimeAgentModelMappingsV1 {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new TypeError('runtime agent model mappings must be an object');
+/** Parses the single tracked source of semantic-agent mappings for every runtime. */
+export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
+  let input: unknown;
+  try {
+    input = JSON.parse(source);
+  } catch (cause) {
+    throw new TypeError('runtime profiles must be valid JSON', { cause });
   }
-  const input = value as Record<string, unknown>;
   if (
-    Object.keys(input).sort().join(',') !== ['models', 'runtime', 'schemaVersion'].join(',') ||
-    input.schemaVersion !== 1 ||
-    (input.runtime !== 'pi' && input.runtime !== 'claude') ||
-    typeof input.models !== 'object' ||
-    input.models === null ||
-    Array.isArray(input.models)
+    !record(input) ||
+    !exactKeys(input, ['schemaVersion', 'models', 'agentTranslation', 'contentTranslation']) ||
+    input.schemaVersion !== 1
   ) {
-    throw new TypeError('runtime agent model mappings have invalid fields');
+    throw new TypeError('runtime profiles have invalid fields');
   }
-  const models = input.models as Record<string, unknown>;
+  if (!record(input.models) || !exactKeys(input.models, RUNTIMES)) {
+    throw new TypeError('runtime profiles must exactly cover runtimes');
+  }
+  const parsed: Record<string, Readonly<Record<RuntimeAgentModelClassV1, string>>> = {};
+  for (const runtime of RUNTIMES) {
+    const models = input.models[runtime];
+    if (!record(models) || !exactKeys(models, MODEL_CLASSES)) {
+      throw new TypeError('runtime profiles must exactly cover semantic model classes');
+    }
+    const pattern = runtime === 'pi' ? MODEL_ID : CLAUDE_ALIAS;
+    if (
+      Object.values(models).some(
+        (model) => typeof model !== 'string' || model.trim() !== model || !pattern.test(model),
+      )
+    ) {
+      throw new TypeError('runtime profiles contain invalid model mappings');
+    }
+    parsed[runtime] = Object.freeze({
+      mechanical: models.mechanical as string,
+      standard: models.standard as string,
+      advanced: models.advanced as string,
+      frontier: models.frontier as string,
+    });
+  }
+  const agentTranslation = input.agentTranslation;
   if (
-    Object.keys(models).sort().join(',') !== ['luna', 'sol', 'terra'].join(',') ||
-    Object.values(models).some(
-      (model) => typeof model !== 'string' || model.length === 0 || model.trim() !== model,
-    )
+    !record(agentTranslation) ||
+    !exactKeys(agentTranslation, ['runtimes']) ||
+    !record(agentTranslation.runtimes) ||
+    !exactKeys(agentTranslation.runtimes, RUNTIMES)
   ) {
-    throw new TypeError('runtime agent model mappings models are invalid');
+    throw new TypeError('runtime profiles contain invalid agent translation');
   }
-  return freezeAgentModelMappings({
-    schemaVersion: 1,
-    runtime: input.runtime,
-    models: {
-      luna: models.luna as string,
-      sol: models.sol as string,
-      terra: models.terra as string,
+  const agentRuntimeTranslations: Partial<Record<Runtime, RuntimeAgentTranslationV1>> = {};
+  const expectedFields = {
+    claude: {
+      model: 'model',
+      thinking: 'effort',
+      tools: 'tools',
+      outputSchema: 'output-schema',
+      nesting: 'allowed-subagents',
     },
-  });
-}
+    pi: {
+      model: 'model',
+      thinking: 'thinking',
+      tools: 'tools',
+      outputSchema: 'output_schema',
+      nesting: 'allowed_subagents',
+    },
+  } as const;
+  for (const runtime of RUNTIMES) {
+    const value = agentTranslation.runtimes[runtime];
+    if (
+      !record(value) ||
+      !exactKeys(value, [
+        'aliases',
+        'capabilities',
+        'frontmatter',
+        'separators',
+        'nestingRequiredTools',
+      ]) ||
+      !record(value.aliases) ||
+      Object.keys(value.aliases).length === 0 ||
+      Object.entries(value.aliases).some(
+        ([identity, alias]) =>
+          !AGENT_IDENTITY.test(identity) ||
+          typeof alias !== 'string' ||
+          !AGENT_ALIAS.test(alias) ||
+          CONTROL.test(alias),
+      ) ||
+      new Set(Object.values(value.aliases).map((alias) => String(alias).toLowerCase())).size !==
+        Object.keys(value.aliases).length ||
+      !record(value.capabilities) ||
+      !exactKeys(value.capabilities, ['mappings']) ||
+      !record(value.capabilities.mappings) ||
+      !exactKeys(value.capabilities.mappings, AGENT_CAPABILITIES) ||
+      Object.values(value.capabilities.mappings).some(
+        (tools) =>
+          !Array.isArray(tools) ||
+          tools.length === 0 ||
+          new Set(tools).size !== tools.length ||
+          tools.some((tool) => typeof tool !== 'string' || !NATIVE_TOOL_IDENTIFIER.test(tool)),
+      ) ||
+      !record(value.frontmatter) ||
+      !exactKeys(value.frontmatter, ['model', 'thinking', 'tools', 'outputSchema', 'nesting']) ||
+      Object.entries(expectedFields[runtime]).some(
+        ([name, expected]) => (value.frontmatter as Record<string, unknown>)[name] !== expected,
+      ) ||
+      !record(value.separators) ||
+      !exactKeys(value.separators, ['tools', 'nesting']) ||
+      Object.values(value.separators).some(
+        (separator) =>
+          typeof separator !== 'string' || separator.length > 8 || CONTROL.test(separator),
+      ) ||
+      !Array.isArray(value.nestingRequiredTools) ||
+      new Set(value.nestingRequiredTools).size !== value.nestingRequiredTools.length ||
+      value.nestingRequiredTools.some(
+        (tool) => typeof tool !== 'string' || !NATIVE_TOOL_IDENTIFIER.test(tool),
+      )
+    ) {
+      throw new TypeError('runtime profiles contain invalid agent translation');
+    }
+    agentRuntimeTranslations[runtime] = Object.freeze({
+      aliases: Object.freeze({ ...(value.aliases as Record<string, string>) }),
+      capabilities: Object.freeze({
+        mappings: Object.freeze(
+          Object.fromEntries(
+            Object.entries(value.capabilities.mappings).map(([capability, tools]) => [
+              capability,
+              Object.freeze([...(tools as string[])]),
+            ]),
+          ) as Record<SemanticAgentCapabilityV1, readonly string[]>,
+        ),
+      }),
+      frontmatter: Object.freeze({ ...expectedFields[runtime] }),
+      separators: Object.freeze({
+        tools: value.separators.tools as string,
+        nesting: value.separators.nesting as string,
+      }),
+      nestingRequiredTools: Object.freeze([...(value.nestingRequiredTools as string[])]),
+    });
+  }
 
-/** Current built-in mappings. They are code-owned and are not user-config schema inputs. */
-export function defaultRuntimeAgentModelMappingsV1(
-  runtime: 'pi',
-): RuntimeAgentModelMappingsV1 & { readonly runtime: 'pi' };
-export function defaultRuntimeAgentModelMappingsV1(
-  runtime: 'claude',
-): RuntimeAgentModelMappingsV1 & { readonly runtime: 'claude' };
-export function defaultRuntimeAgentModelMappingsV1(runtime: Runtime): RuntimeAgentModelMappingsV1;
-export function defaultRuntimeAgentModelMappingsV1(runtime: Runtime): RuntimeAgentModelMappingsV1 {
-  return parseRuntimeAgentModelMappingsV1({
+  const translation = input.contentTranslation;
+  if (
+    !record(translation) ||
+    !exactKeys(translation, ['nameOnlyDescriptionTemplate', 'runtimes']) ||
+    typeof translation.nameOnlyDescriptionTemplate !== 'string' ||
+    !translation.nameOnlyDescriptionTemplate.includes('{{identity}}') ||
+    translation.nameOnlyDescriptionTemplate.replaceAll('{{identity}}', '').includes('{{') ||
+    translation.nameOnlyDescriptionTemplate.replaceAll('{{identity}}', '').includes('}}') ||
+    !record(translation.runtimes) ||
+    !exactKeys(translation.runtimes, RUNTIMES)
+  ) {
+    throw new TypeError('runtime profiles contain invalid content translation');
+  }
+  const runtimeTranslations: Partial<Record<Runtime, RuntimeContentTranslationV1>> = {};
+  for (const runtime of RUNTIMES) {
+    const value = translation.runtimes[runtime];
+    if (
+      !record(value) ||
+      !exactKeys(value, ['argumentHint', 'capabilities', 'frontmatter']) ||
+      !['supported', 'unsupported'].includes(value.argumentHint as string) ||
+      !record(value.capabilities) ||
+      !exactKeys(value.capabilities, ['support', 'mappings']) ||
+      !['preapproved', 'unsupported'].includes(value.capabilities.support as string) ||
+      !record(value.capabilities.mappings) ||
+      Object.values(value.capabilities.mappings).some(
+        (tools) =>
+          !Array.isArray(tools) ||
+          tools.length === 0 ||
+          tools.some((tool) => typeof tool !== 'string' || !NATIVE_TOOL_IDENTIFIER.test(tool)),
+      ) ||
+      !record(value.frontmatter) ||
+      !exactKeys(value.frontmatter, ['argumentHint', 'capabilityGrant']) ||
+      (value.frontmatter.argumentHint !== null &&
+        value.frontmatter.argumentHint !== 'argument-hint') ||
+      (value.frontmatter.capabilityGrant !== null &&
+        value.frontmatter.capabilityGrant !== 'allowed-tools') ||
+      (value.argumentHint === 'supported') !==
+        (value.frontmatter.argumentHint === 'argument-hint') ||
+      (value.capabilities.support === 'preapproved') !==
+        (value.frontmatter.capabilityGrant === 'allowed-tools') ||
+      (value.capabilities.support === 'preapproved' &&
+        !exactKeys(value.capabilities.mappings, SKILL_CAPABILITIES)) ||
+      (value.capabilities.support === 'unsupported' &&
+        Object.keys(value.capabilities.mappings).length !== 0)
+    ) {
+      throw new TypeError('runtime profiles contain invalid content translation');
+    }
+    runtimeTranslations[runtime] = Object.freeze({
+      argumentHint: value.argumentHint as RuntimeFeatureSupportV1,
+      capabilities: Object.freeze({
+        support: value.capabilities.support as RuntimeCapabilityGrantSupportV1,
+        mappings: Object.freeze(
+          Object.fromEntries(
+            Object.entries(value.capabilities.mappings).map(([key, tools]) => [
+              key,
+              Object.freeze([...(tools as string[])]),
+            ]),
+          ),
+        ),
+      }),
+      frontmatter: Object.freeze({
+        argumentHint: value.frontmatter.argumentHint as 'argument-hint' | null,
+        capabilityGrant: value.frontmatter.capabilityGrant as 'allowed-tools' | null,
+      }),
+    });
+  }
+  return Object.freeze({
     schemaVersion: 1,
-    runtime,
-    models:
-      runtime === 'pi'
-        ? {
-            luna: 'openai-codex/gpt-5.6-luna',
-            sol: 'openai-codex/gpt-5.6-sol',
-            terra: 'openai-codex/gpt-5.6-terra',
-          }
-        : { luna: 'haiku', sol: 'opus', terra: 'sonnet' },
+    models: Object.freeze({ claude: parsed.claude!, pi: parsed.pi! }),
+    agentTranslation: Object.freeze({
+      runtimes: Object.freeze({
+        claude: agentRuntimeTranslations.claude!,
+        pi: agentRuntimeTranslations.pi!,
+      }),
+    }),
+    contentTranslation: Object.freeze({
+      nameOnlyDescriptionTemplate: translation.nameOnlyDescriptionTemplate,
+      runtimes: Object.freeze({ claude: runtimeTranslations.claude!, pi: runtimeTranslations.pi! }),
+    }),
   });
 }
 
-/** Current built-in selection. It is code-owned and is not a user-config schema input. */
+export async function loadRuntimeProfilesV1(file: string): Promise<RuntimeProfilesV1> {
+  return parseRuntimeProfilesV1(await readFile(file, 'utf8'));
+}
+
+/** Selects one immutable runtime mapping for adapter consumption. */
+export function runtimeAgentModelMappingsV1<R extends Runtime>(
+  profiles: RuntimeProfilesV1,
+  runtime: R,
+): RuntimeAgentModelMappingsV1 & { readonly runtime: R } {
+  return Object.freeze({ schemaVersion: 1, runtime, models: profiles.models[runtime] });
+}
+
+/** Current built-in session selection, independent of semantic agent classes. */
 export function defaultRuntimeModelSelectionV1(
   runtime: 'pi',
 ): RuntimeModelSelectionV1 & { readonly runtime: 'pi' };
 export function defaultRuntimeModelSelectionV1(
   runtime: 'claude',
 ): RuntimeModelSelectionV1 & { readonly runtime: 'claude' };
+export function defaultRuntimeModelSelectionV1(runtime: Runtime): RuntimeModelSelectionV1;
 export function defaultRuntimeModelSelectionV1(runtime: Runtime): RuntimeModelSelectionV1 {
-  const mappings = defaultRuntimeAgentModelMappingsV1(runtime);
+  const enabledModels =
+    runtime === 'pi'
+      ? ['openai-codex/gpt-5.6-luna', 'openai-codex/gpt-5.6-sol', 'openai-codex/gpt-5.6-terra']
+      : ['anthropic/haiku', 'anthropic/opus', 'anthropic/sonnet'];
   return parseRuntimeModelSelectionV1({
     schemaVersion: 1,
     runtime,
     provider: runtime === 'pi' ? 'openai-codex' : 'anthropic',
-    defaultModel: runtime === 'pi' ? mappings.models.sol : `anthropic/${mappings.models.sol}`,
-    enabledModels: (['luna', 'sol', 'terra'] as const).map((modelClass) =>
-      runtime === 'pi' ? mappings.models[modelClass] : `anthropic/${mappings.models[modelClass]}`,
-    ),
+    defaultModel: runtime === 'pi' ? 'openai-codex/gpt-5.6-sol' : 'anthropic/opus',
+    enabledModels,
   });
 }

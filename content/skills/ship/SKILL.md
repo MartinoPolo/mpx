@@ -4,6 +4,7 @@ description: Deliver verified work through commit, provider-neutral Review, CI, 
 triggers: shipping or merging completed work end to end
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [core]
     defaultExposure: name-only
 ---

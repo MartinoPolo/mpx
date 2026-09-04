@@ -39,6 +39,7 @@ export interface NodeLaunchExecutionInput extends LaunchExecutionRequest {
   readonly tty?: DirectTty;
   readonly approveHost?: boolean;
   readonly agentsRoot: string;
+  readonly runtimeProfilesFile: string;
   readonly artifactsRoot: string;
   readonly stateRoot: string;
   readonly beforeChildExecution?: () => Promise<void>;
@@ -85,10 +86,14 @@ function productionComposer(
       input.descriptor.runtime === 'pi'
         ? createPiRuntimeProfileV1(defaultRuntimeModelSelectionV1('pi'), PI_CAPABILITY_IDS)
         : undefined;
-    const projectionInput: Omit<LaunchProjectionBuildInput, 'statusSnapshot' | 'launchBanner'> = {
+    const projectionInput: Omit<
+      LaunchProjectionBuildInput,
+      'statusSnapshot' | 'launchBanner' | 'compiledContent'
+    > = {
       descriptor: input.descriptor,
       skillPlan: composition.skillPlan,
       agentsRoot: input.agentsRoot,
+      runtimeProfilesFile: input.runtimeProfilesFile,
       artifactsRoot: input.artifactsRoot,
       runtimeContext: composition.runtimeContext,
       runtimeStatusEnvelope: composition.wiring.status,

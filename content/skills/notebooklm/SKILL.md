@@ -4,6 +4,7 @@ description: 'Full programmatic API for Google NotebookLM: create notebooks, add
 triggers: NotebookLM research, source ingestion, chat, artifact generation, downloads, and profile-isolated automation
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

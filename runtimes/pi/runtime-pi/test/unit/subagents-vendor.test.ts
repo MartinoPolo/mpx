@@ -73,18 +73,7 @@ describe('subagent vendor provenance', () => {
         .sort(),
     ).toEqual(['mpx-check-fixer', 'mpx-ci-fixer']);
   });
-  it('projects every approved check-fixer reviewer as an exact runtime identity', async () => {
-    const projection = path.resolve(import.meta.dirname, '../../projection/agents'),
-      names = await readdir(projection);
-    const identities = new Set(names.map((name) => name.slice(0, -3)));
-    const fixer = await readFile(path.join(projection, 'mpx-check-fixer.md'), 'utf8');
-    const allowed = fixer.match(/^allowed_subagents: (.+)$/mu)?.[1]?.split(',') ?? [];
-    expect(allowed).toEqual(
-      expect.arrayContaining(['mpx-reviewer-security', 'mpx-reviewer-test-quality']),
-    );
-    expect(allowed.every((identity) => !identity.includes('*') && identities.has(identity))).toBe(
-      true,
-    );
+  it('retains the vendored nested-agent resolver after compiler ownership moves agent files', async () => {
     expect(await readFile(path.join(root, 'nested-tools.ts'), 'utf8')).toContain(
       'resolveTypeIn(registry, name)',
     );

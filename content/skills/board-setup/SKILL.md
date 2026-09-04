@@ -3,6 +3,7 @@ name: board-setup
 description: 'Sets up an Obsidian board for the project and links it into the repo through a BOARD.md symlink.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---

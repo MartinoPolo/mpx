@@ -217,7 +217,6 @@ export class ProjectApplicationService {
       throw unreadable(error);
     }
   }
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   async optionalUserConfig(request: {
     appdata?: string;
     environment: Record<string, string | undefined>;
@@ -228,7 +227,6 @@ export class ProjectApplicationService {
     const file = this.dependencies.path.join(request.appdata, 'mpx', 'config.json');
     return (await this.present(file)) ? this.read(file, request.environment) : emptyUserConfig();
   }
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   async requiredUserConfig(request: {
     appdata?: string;
     environment: Record<string, string | undefined>;

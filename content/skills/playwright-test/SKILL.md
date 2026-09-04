@@ -3,6 +3,7 @@ name: playwright-test
 description: 'Verifies UI changes with raw Playwright over a defined scope and reports a per-surface PASS/FAIL table with screenshots. Use when asked to visually verify UI changes or run a Playwright test.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

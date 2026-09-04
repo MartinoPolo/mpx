@@ -3,6 +3,7 @@ name: harvest-decisions
 description: 'Explicitly harvests authorized recent session decisions into project context and decision documents after user confirmation.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

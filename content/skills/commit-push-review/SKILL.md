@@ -4,6 +4,7 @@ description: Commit and push verified changes, then create or update a provider-
 triggers: committing, pushing, and publishing a Review together
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

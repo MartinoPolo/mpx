@@ -3,6 +3,7 @@ name: handoff
 description: 'Writes or updates HANDOFF.md with session progress and open threads. Use for a handoff or to save progress at the end of a session.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

@@ -4,6 +4,7 @@ description: Draft and create an approved Epic Issue from project requirements
 triggers: turning requirements into an Epic specification
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

@@ -3,6 +3,7 @@ name: suppression-audit
 description: 'Repo-wide audit of code-quality suppressions (eslint-disable, ts-ignore, fallow-ignore) that fixes unjustified ones and opens a PR.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

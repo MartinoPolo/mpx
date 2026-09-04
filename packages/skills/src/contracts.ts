@@ -6,9 +6,11 @@ import type {
 
 export const SKILL_PACKS = ['core', 'work', 'personal'] as const;
 export const EXPOSURES = ['full', 'name-only', 'explicit-only', 'off'] as const;
+export const SKILL_CAPABILITIES = ['read', 'search', 'shell', 'write', 'delegate'] as const;
 
 export type SkillPack = (typeof SKILL_PACKS)[number];
 export type Exposure = (typeof EXPOSURES)[number];
+export type SkillCapability = (typeof SKILL_CAPABILITIES)[number];
 
 export interface ExposureConfig {
   default?: Exposure;
@@ -51,8 +53,12 @@ export class SkillCatalogError extends Error {
 }
 export interface CanonicalSkill {
   identity: string;
+  schemaVersion: 1;
+  contentVersion?: 1;
   description: string;
   triggers?: string;
+  argumentHint?: string;
+  capabilities?: SkillCapability[];
   skillPacks: SkillPack[];
   defaultExposure: Exposure;
   sourcePath: string;

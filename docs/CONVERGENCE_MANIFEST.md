@@ -23,10 +23,8 @@ Every non-retired completed input names an existing destination and has source-s
 - `pnpm convergence:generate` traverses both source roots, refreshes source facts, and preserves reviewed decisions for unchanged snapshots.
 - `pnpm convergence:generate -- --accept-source <source:path>` accepts one changed, already-completed source entry. It refreshes only that entry's source facts and evidence snapshot bindings, preserves all reviewed decisions and completion evidence, and fails closed on source metadata or inventory-shape drift.
 - `pnpm convergence:verify` traverses both roots and fails on malformed baseline data or commit, dirty-state, path, state, or content drift. Reviewed disposition metadata is deliberately not treated as source drift.
-- `pnpm validate:generated` validates semantic completion, destination/evidence existence and hashes, retirement facts, legacy-name/import boundaries, canonical script syntax, and generated Pi-agent drift.
+- `pnpm validate:generated` validates semantic completion, destination/evidence existence and hashes, retirement facts, legacy-name/import boundaries, canonical script syntax, generated runtime bundles, CLI documentation, and the runtime tool inventory.
 - `pnpm validate:generated -- --verify-sources` additionally verifies the live source snapshot and selected-file provenance.
-
-The Pi-agent drift check imports its source generator directly, so `validate:generated` does not depend on a prior package build.
 
 ## Classification boundary
 

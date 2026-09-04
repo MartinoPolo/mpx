@@ -3,6 +3,7 @@ name: continue
 description: 'Recovers interrupted child work and managed development services, then continues the active task.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

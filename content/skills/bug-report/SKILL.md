@@ -3,6 +3,7 @@ name: bug-report
 description: "Investigates a bug's root cause, designs a TDD fix plan, and opens an issue/task labelled bug in the project's tracker."
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

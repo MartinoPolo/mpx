@@ -391,6 +391,10 @@ export function createNodeLaunchApplicationService(
       catalog: execution.catalog,
       canonicalRoot: execution.canonicalRoot,
       agentsRoot: path.join(path.dirname(execution.canonicalRoot), 'agents'),
+      runtimeProfilesFile: path.join(
+        path.dirname(execution.canonicalRoot),
+        'runtime-profiles.json',
+      ),
       artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
       stateRoot: environment.LOCALAPPDATA ? path.join(environment.LOCALAPPDATA, 'mpx') : '',
       cwd: execution.cwd,

@@ -14,10 +14,10 @@
     "test:unit": "pnpm --filter @mpx/runtime-pi... build && vitest run",
     "test": "pnpm run test:unit",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
-    "check": "pnpm run build && pnpm run typecheck && node scripts/generate-agents.mjs --check",
-    "generate": "node scripts/generate-agents.mjs"
+    "check": "pnpm run build && pnpm run typecheck"
   },
   "dependencies": {
+    "@mpx/content-compiler": "workspace:*",
     "@mpx/dev-services": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/runtime-hooks": "workspace:*",
@@ -28,7 +28,6 @@
   },
   "devDependencies": {
     "@mpx/config": "workspace:*",
-    "@mpx/windows": "workspace:*",
     "@types/node": "^22.15.0",
     "esbuild": "0.28.2",
     "typescript": "^5.8.3",

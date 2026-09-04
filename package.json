@@ -28,6 +28,8 @@
     "convergence:generate": "node scripts/generate-convergence-manifest.mjs",
     "convergence:verify": "node scripts/generate-convergence-manifest.mjs --check",
     "bundle:generate": "node scripts/bundle-cli.mjs",
+    "cli-docs:generate": "node scripts/generate-cli-docs.mjs",
+    "cli-docs:check": "node scripts/generate-cli-docs.mjs --check",
     "validate:generated": "node scripts/validate-generated.mjs",
     "validate:structure": "node scripts/validate-structure.mjs"
   },

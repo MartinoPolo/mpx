@@ -3,6 +3,7 @@ import type { SkillProjectionPlan } from '@mpx/skills';
 import {
   createPiRuntimeAdapter,
   type PiAdapterInput,
+  type PiInvocationInput,
   type PiProjectionBuildInput,
 } from '../../src/index.js';
 import { fixture } from '../fixtures/fixture.js';
@@ -19,10 +20,8 @@ describe('Pi skill adapter', () => {
       | 'validatedSkillBytes';
     expectTypeOf<PiAdapterInput['skillPlan']>().toEqualTypeOf<SkillProjectionPlan>();
     expectTypeOf<PiProjectionBuildInput['skillPlan']>().toEqualTypeOf<SkillProjectionPlan>();
-    expectTypeOf<PiProjectionBuildInput>().toHaveProperty('modelMappings');
-    expectTypeOf<
-      {} extends Pick<PiProjectionBuildInput, 'modelMappings'> ? true : false
-    >().toEqualTypeOf<false>();
+    expectTypeOf<Extract<keyof PiProjectionBuildInput, 'modelMappings'>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<keyof PiInvocationInput, 'skillDirectories'>>().toEqualTypeOf<never>();
     expectTypeOf<Extract<keyof PiAdapterInput, RawProjectionInput>>().toEqualTypeOf<never>();
     expectTypeOf<
       Extract<keyof PiProjectionBuildInput, RawProjectionInput>
@@ -36,6 +35,7 @@ describe('Pi skill adapter', () => {
     await expect(
       createPiRuntimeAdapter({
         skillPlan: f.skillPlan,
+        compiledContent: f.compiledContent,
         context: f.context,
         currentBinding: f.currentBinding,
         expectedLaunch: f.expectedLaunch,
@@ -86,6 +86,35 @@ describe('Pi skill adapter', () => {
     expect(pi.sendUserMessage).toHaveBeenCalledOnce();
     expect(sent[0]).toContain('identity=explicit');
     expect(sent[0]).toContain('origin=human-explicit');
+    expect(sent[0]).toMatch(/<!-- \/mpx-skill -->\nignore this prose \/mpx:full$/u);
+  });
+
+  it('keeps transitional aliases body-and-argument equivalent to native generated skills', async () => {
+    const f = await fixture();
+    let handler: ((args: string) => Promise<void>) | undefined;
+    let prompt = '';
+    await createPiRuntimeAdapter({
+      ...f,
+      pi: {
+        registerCommand(name, specification) {
+          if (name === 'mpx:full') {
+            handler = specification.handler;
+          }
+        },
+        async sendUserMessage(content) {
+          prompt = content[0]!.text;
+        },
+      },
+    });
+    expect(handler).toBeTypeOf('function');
+    await handler!('one two');
+    const manifest = f.compiledContent.manifest.skills.find((entry) => entry.identity === 'full')!;
+    const generated = f.compiledContent.files.find(
+      (file) => file.relativePath === manifest.generatedPath,
+    )!;
+    const body = Buffer.from(generated.bytes).subarray(manifest.bodyByteOffset).toString('utf8');
+    expect(prompt).toContain(`${body}<!-- /mpx-skill -->\none two`);
+    expect(prompt).not.toContain("description: 'Full skill'");
   });
 
   it('fails startup and later expansion closed when launch binding is stale', async () => {

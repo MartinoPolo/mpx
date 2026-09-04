@@ -25,7 +25,12 @@ import {
   type VerificationEvidence,
   type LaunchPrivateBridgeConfig,
 } from '@mpx/executors';
-import { defaultRuntimeAgentModelMappingsV1 } from '@mpx/config';
+import { loadRuntimeProfilesV1 } from '@mpx/config';
+import {
+  compileContent,
+  verifyCompiledContentTree,
+  type CompiledContentTree,
+} from '@mpx/content-compiler';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
   revalidateRuntimeArtifact,
@@ -42,6 +47,7 @@ import { materializeClaudeGateway } from './claude-gateway.js';
 import {
   buildPiProjection,
   planPiInvocation,
+  type PiPublishedProjection,
   type PiRuntimeProfileV1,
   type VerifiedPiResumeTarget,
 } from '@mpx/runtime-pi';
@@ -60,7 +66,9 @@ export interface LaunchProjection {
 export interface LaunchProjectionBuildInput {
   readonly descriptor: LaunchDescriptor;
   readonly skillPlan: SkillProjectionPlan;
+  readonly compiledContent: CompiledContentTree;
   readonly agentsRoot: string;
+  readonly runtimeProfilesFile: string;
   readonly artifactsRoot: string;
   readonly runtimeContext: RuntimeContextV1;
   readonly statusSnapshot: StatusSnapshotV1;
@@ -200,10 +208,14 @@ export function resolveClaudeCanonicalOutputStyle(agentsRoot: string): string {
 async function buildProductionProjection(
   input: LaunchProjectionBuildInput,
 ): Promise<LaunchProjection> {
+  const compiledContent = verifyCompiledContentTree(input.compiledContent, {
+    runtime: input.descriptor.runtime,
+    plan: input.skillPlan,
+  });
   if (input.descriptor.runtime === 'pi') {
     return buildPiProjection({
       skillPlan: input.skillPlan,
-      modelMappings: defaultRuntimeAgentModelMappingsV1('pi'),
+      compiledContent,
       context: input.runtimeContext,
       expectedLaunch: {
         launchKey: input.descriptor.launchKey,
@@ -242,8 +254,7 @@ async function buildProductionProjection(
   }
   return publishClaudeProjection({
     skillPlan: input.skillPlan,
-    modelMappings: defaultRuntimeAgentModelMappingsV1('claude'),
-    agents: input.agentsRoot,
+    compiledContent,
     outputStyle: resolveClaudeCanonicalOutputStyle(input.agentsRoot),
     artifactsRoot: input.artifactsRoot,
     statusSnapshot: input.statusSnapshot,
@@ -259,7 +270,10 @@ export function productionRuntimeAdapters(input: {
   environment: NodeJS.ProcessEnv;
   nativeRuntimeRoot: string;
   stateRoot: string;
-  projectionInput: Omit<LaunchProjectionBuildInput, 'statusSnapshot' | 'launchBanner'>;
+  projectionInput: Omit<
+    LaunchProjectionBuildInput,
+    'statusSnapshot' | 'launchBanner' | 'compiledContent'
+  >;
   launchBanner: string;
   initialSnapshot: StatusSnapshotV1;
   statusSnapshot: (signal?: AbortSignal) => Promise<StatusSnapshotV1>;
@@ -296,8 +310,22 @@ export function productionRuntimeAdapters(input: {
     });
     input.bindRuntimeStatusPath(runtimeStatusPath);
     const customBuilder = input.builder !== undefined;
+    const runtimeProfiles = await loadRuntimeProfilesV1(input.projectionInput.runtimeProfilesFile);
+    const compiledContent = await compileContent({
+      runtime,
+      plan: input.projectionInput.skillPlan,
+      runtimeProfiles,
+      sharedInstructionRoot: path.join(
+        input.projectionInput.agentsRoot,
+        '..',
+        'instructions',
+        'shared',
+      ),
+      agentRoot: input.projectionInput.agentsRoot,
+    });
     const built = await (input.builder ?? buildProductionProjection)({
       ...input.projectionInput,
+      compiledContent,
       statusSnapshot: snapshot,
       launchBanner: input.launchBanner,
     });
@@ -426,6 +454,7 @@ export function productionRuntimeAdapters(input: {
             'Pi resume requires a verified native session file.',
           );
         }
+        const publishedProjection = built as Partial<PiPublishedProjection>;
         const plan = planPiInvocation({
           executable: input.trustedExecutable.executable,
           extension: built.extension,
@@ -437,6 +466,9 @@ export function productionRuntimeAdapters(input: {
           runtimeContextFile: built.runtimeContextFile,
           runtimeContext: input.projectionInput.runtimeContext,
           projectionReference: built.reference,
+          ...(publishedProjection.files && publishedProjection.revalidation
+            ? { projection: built as PiPublishedProjection }
+            : {}),
           cwd: input.cwd,
           immutableProjectionDirectory: built.directory,
           ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),

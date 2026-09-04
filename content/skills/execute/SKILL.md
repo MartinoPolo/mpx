@@ -4,6 +4,7 @@ description: Implement one approved Issue with test-first verification, review, 
 triggers: implementing an approved Issue
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [core]
     defaultExposure: full
 ---

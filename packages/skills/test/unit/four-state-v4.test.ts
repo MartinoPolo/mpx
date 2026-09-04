@@ -28,7 +28,7 @@ async function fixture(exposures: Record<string, Exposure>) {
     await mkdir(path.join(root, name));
     await writeFile(
       path.join(root, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${name} discoverable description\ntriggers: prose says /mpx:${name}\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name.toUpperCase()} BODY\n`,
+      `---\nname: ${name}\ndescription: ${name} discoverable description\ntriggers: prose says /mpx:${name}\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name.toUpperCase()} BODY\n`,
     );
   }
   const catalog = await inventoryCanonical(root);

@@ -3,6 +3,7 @@ name: commit
 description: 'Stages and commits changes in conventional commit format.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

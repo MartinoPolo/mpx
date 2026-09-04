@@ -47,7 +47,7 @@
             "path": ".claude-plugin/marketplace.json",
             "sha256": "d25870cc9c1bbb77f97de6a975b0ac5a35402a03cad174b4bd7d01136271a87d"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -3862,7 +3862,7 @@
             "path": "plugins/gh/.claude-plugin/plugin.json",
             "sha256": "71ec92b76f1ddb869942374ad2676b34675c79174ca77a608785ec45be71f4f2"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -3900,12 +3900,12 @@
             "path": "plugins/gh/agents/mp-ci-fixer.md",
             "sha256": "da30f2bac86aadb464afbeb9ba1c9a761615cef780dd88cc29f3be69826d114a"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "claude",
@@ -3938,12 +3938,12 @@
             "path": "plugins/gh/agents/mp-issue-finder.md",
             "sha256": "99638eaf7f8e889fda869f8a9f3494c8720b35662c6c5d7ccb78f69805201f8b"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "claude",
@@ -3976,12 +3976,12 @@
             "path": "plugins/gh/agents/mp-pr-manager.md",
             "sha256": "a0cbf7ec88e141292115d18490bb492b2fc6e323c98b723672f7aaf9174af3c0"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "claude",
@@ -4014,12 +4014,12 @@
             "path": "plugins/gh/agents/mp-unresolved-issue-tracker.md",
             "sha256": "78cc330e2474d2d7ad53eb943f2cd617a7e4e4124247bc2fe396c696ca989620"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "claude",
@@ -4877,7 +4877,7 @@
             "path": "plugins/mp/.claude-plugin/plugin.json",
             "sha256": "2bc51780ba09e5451c4de5b9ddc1318cf90c1180452bf2284f4ffc0be2ee89eb"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6549,7 +6549,7 @@
             "path": "plugins/mp/scripts/__tests__/detect-base-branch.test.ts",
             "sha256": "28bfd0ac1b06ffbdfc09d52235c93f116f3980cd12d318d9955dfc0a4c63d4d5"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6614,7 +6614,7 @@
             "path": "plugins/mp/scripts/__tests__/init-repo.test.ts",
             "sha256": "3b37b20c5d4ec726953d8de2198610eda3f32ff0a3620a1988bdc137dab0eac3"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6652,7 +6652,7 @@
             "path": "plugins/mp/scripts/__tests__/status-line.test.ts",
             "sha256": "2b474c00e694027e224f40519ff0a33e0fa822c4b088b23cd58bea0c4ee7ceae"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6717,7 +6717,7 @@
             "path": "plugins/mp/scripts/__tests__/subagent-status-line.test.ts",
             "sha256": "38179b0c36d9122cdd71ac4e56737f8b375ecac2c6b3ae49ab1a72c409c91e13"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6793,7 +6793,7 @@
             "path": "plugins/mp/scripts/account-color.mts",
             "sha256": "591d2517699d902a3bdfb0e359b1c6452f4b6f62a14f62cb3d3ba50d8838cb7f"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -6934,7 +6934,7 @@
             "path": "plugins/mp/scripts/detect-base-branch.js",
             "sha256": "2b0eee575cee7cb0f1e1b2c413278a03f55e66e443ad11d11fda503ad28e51b6"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -6972,7 +6972,7 @@
             "path": "plugins/mp/scripts/detect-check-scripts.mjs",
             "sha256": "5a057334e270aa0c881583721ef4777b3cb66894fd8700f6b11f188d0ea3243c"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7010,7 +7010,7 @@
             "path": "plugins/mp/scripts/detect-project-scripts.mjs",
             "sha256": "e3a86583424f0d8fd9470a839d5ae8232c8afa6fb5f160675685e7de7def712f"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7075,7 +7075,7 @@
             "path": "plugins/mp/scripts/init-repo.mjs",
             "sha256": "b19f013ab571c1b80f9398715b6b68f862b703eb5321265191932a08beea7b65"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -7151,7 +7151,7 @@
             "path": "plugins/mp/scripts/lib/statusline-ansi.mts",
             "sha256": "54772301e6ab87d5498423540bf983fc745d2bc857aa1d5bf68bf6e0382f374f"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7216,7 +7216,7 @@
             "path": "plugins/mp/scripts/lib/terminal-theme.mts",
             "sha256": "b9bdc0211908f0c54dadd4bc9d74f4762df903bbccf3014e683c3733a07f4121"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7395,7 +7395,7 @@
             "path": "plugins/mp/scripts/status-line-mr-refresh.mjs",
             "sha256": "94a741c9e02068aa8cc59d4a144b1c745c2e672f8ff5941c005939ef907e8d48"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7433,7 +7433,7 @@
             "path": "plugins/mp/scripts/status-line.mts",
             "sha256": "54a0a79af645222dde0e486632a3ac4c9eb86fc03a9807ffc9c7720a87240a0a"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7471,7 +7471,7 @@
             "path": "plugins/mp/scripts/subagent-status-line.mts",
             "sha256": "d0d8782f523c93468c5da6f364729d02d57f30dbf14bb4482fff55203969d727"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7509,7 +7509,7 @@
             "path": "plugins/mp/scripts/usage-audit.mjs",
             "sha256": "334aabeb1e1638742b39bca70a47d593ef82044ff7e0b6fff0a84008b969072a"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -7547,7 +7547,7 @@
             "path": "plugins/mp/scripts/verify-statusline.mts",
             "sha256": "574c512831dd35af0509c6fa54d6fd366cdb6f90e4ca02d0e1346b87ae7d41dc"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9653,7 +9653,7 @@
             "path": "plugins/mp/statusline-accounts.json",
             "sha256": "a44bf8b339fe5ed980aa112c7edf71bed9060e22bed5fedacab0f60f7279919b"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9691,7 +9691,7 @@
             "path": "plugins/mp/statusline-projects.json",
             "sha256": "fb2989c0a8b494c2c2e68b9a1322974b3ee904266cbcc3a7b76b40cf7b8b1c7d"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9730,7 +9730,7 @@
             "path": "plugins/mp/statusline-schemes.json",
             "sha256": "e55e5ba745ba29159482c4c2da8ebd25607905764bd10691e6bc4617fd50b30e"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9768,7 +9768,7 @@
             "path": "plugins/mp/templates/gitignore.template",
             "sha256": "1fe3a632e6a3018608d6c5532f6aa8ad530a36cab8834c58b6f0dadd4a7ab4ef"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -9860,7 +9860,7 @@
             "path": "README.md",
             "sha256": "aa479d9f2d95adb7a460ae101c4483e7f71fe944d2286d4d31715d4884931878"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -10432,7 +10432,7 @@
             "path": "settings.json",
             "sha256": "5a1ebaac0282ec492b261a0c55c4ff3ec80e5ca3d9dbd1ca4d98f1e182d852b8"
           },
-          "sha256": "1bcb3ee31bb79dc32f59e94c36afc2ae063dfaa3ca8c14d3c05fc219764cfcbb",
+          "sha256": "fbc3021b94b6332cff09db5436615fb08118df2512b545f87e4b40c6fa54aa02",
           "reference": "runtimes/claude/runtime-claude/test/unit/index.test.ts",
           "verification": "passed"
         }
@@ -10740,7 +10740,7 @@
             "path": "WINDOWS-SETUP.md",
             "sha256": "f910bee9d6858592d8c8ff1590c5ff44e9d112e41c27dbab23a6928cd2cf18c9"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -10908,12 +10908,12 @@
             "path": "agents/Explore.md",
             "sha256": "41c77cab3592b2a106467815408d5d6419c945d056ac092e2bab819cfa5f5641"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -10946,12 +10946,12 @@
             "path": "agents/mp-check-fixer.md",
             "sha256": "9e9af2f3ee86e8c130335799bef23365d2f64adff8ddec20c60515b84a2f0685"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -10984,12 +10984,12 @@
             "path": "agents/mp-checker.md",
             "sha256": "85bc89bceb47a84d3e61d7ddbeb9f9895f3e5fb279da351164050516ea3c9131"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11022,12 +11022,12 @@
             "path": "agents/mp-chrome-devtools-tester.md",
             "sha256": "3f4651841e0054773e3448c6959cb26ad8c88a7de080b7a476aa89694bef813d"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11060,12 +11060,12 @@
             "path": "agents/mp-ci-fixer.md",
             "sha256": "3f70f0a9613cb36cc9d883177ba6b1b0d9d3b0037c0253240dab1864fa3f7f47"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11098,12 +11098,12 @@
             "path": "agents/mp-context7-docs-fetcher.md",
             "sha256": "04a50d1d2990eb3a12662d98c98b33c3a1147ce4300a3d0ebda90f8858addfd6"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11136,12 +11136,12 @@
             "path": "agents/mp-executor.md",
             "sha256": "b78895c802b2cccb172c088c23cf38761220b6647fb1a376c8fbde2cbf152309"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11174,12 +11174,12 @@
             "path": "agents/mp-git-committer.md",
             "sha256": "369ea46ee09b5c61197793a29bb56b63c70e69b564c3ed7fc7f87886e437989c"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11212,12 +11212,12 @@
             "path": "agents/mp-issue-analyzer.md",
             "sha256": "043e49053870f49eb7c889f28f6d7fd5b792a2d7985085c6ca2fe25fe4650fda"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11250,12 +11250,12 @@
             "path": "agents/mp-issue-finder.md",
             "sha256": "28d32ffc41ca800ee74e9286369c42a4fe156164ad5eaf27a73fb88bee436343"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11288,12 +11288,12 @@
             "path": "agents/mp-pr-manager.md",
             "sha256": "b4fc4ba6777253b5c4a2186cb7ae830f0bd1b0a64fc166f5f84ebce7e6b991b3"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11326,12 +11326,12 @@
             "path": "agents/mp-reviewer-best-practices.md",
             "sha256": "b2b092f88d722b6fce24248ee0db105284b6ec454ab02d823a4766d2a506f284"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11364,12 +11364,12 @@
             "path": "agents/mp-reviewer-code-quality.md",
             "sha256": "4598eb021d4cae6a7fea2274a324e3618d8ec634e32d284beb6315425689a375"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11402,12 +11402,12 @@
             "path": "agents/mp-reviewer-error-handling.md",
             "sha256": "8abe2675acbc0e2d6824461161842f0d0a9ea3a37724c67f4bb6a3153b263b2a"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11440,12 +11440,12 @@
             "path": "agents/mp-reviewer-performance.md",
             "sha256": "b37dd26fb88d08aa611f52a1f7cf0c67dc48a153d9c3d368be2e3a9c3f5d5238"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11478,12 +11478,12 @@
             "path": "agents/mp-reviewer-security.md",
             "sha256": "83dcf87377392a9fe30065c58376b39e6d450f067b7f4c7a9f3133608d1fd9a4"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11516,12 +11516,12 @@
             "path": "agents/mp-reviewer-spec-alignment.md",
             "sha256": "bc655b6486f7f5be6a7e2f744d0f22ab0fc2e3c168390cb4ecf00e27a4d17bd2"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11554,12 +11554,12 @@
             "path": "agents/mp-reviewer-test-quality.md",
             "sha256": "0e0484b9651bff9876fb94e2478c6a55cbf4dabac9bd92f903b484499091e3b1"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11592,12 +11592,12 @@
             "path": "agents/mp-scanner-architecture.md",
             "sha256": "0f41feae097f6c2fde1f93e290d3e3b5885895db7459cf9c5e1c5e3d01c7b56f"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11630,12 +11630,12 @@
             "path": "agents/mp-tdd-executor.md",
             "sha256": "55d1d5fdccb704e83694dc6612d991dc1de96aa128344b1e3a93cc66b3e1da92"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11668,12 +11668,12 @@
             "path": "agents/mp-ui-variant-generator.md",
             "sha256": "e9b447c60cc75a356e6bd1ad9633a480b6e70faa25bfae316c302868ac276014"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -11706,12 +11706,12 @@
             "path": "agents/mp-unresolved-issue-tracker.md",
             "sha256": "a2a61ca5deadd824270c59fbbe96e5918e692bc098c90397c6e42bf827b19773"
           },
-          "sha256": "c9fed4e539dae8d96d36a95546a695220dc8393801a46754867f6fbc1bd262db",
-          "reference": "runtimes/pi/runtime-pi/test/unit/generator.test.ts",
+          "sha256": "77e18203ff26ac2b3d482cdf3879519c3ad548934afba94e89b903fe002d2f1d",
+          "reference": "packages/content-compiler/test/unit/compiler.test.ts",
           "verification": "passed"
         }
       ],
-      "test": "runtimes/pi/runtime-pi/test/unit/generator.test.ts"
+      "test": "packages/content-compiler/test/unit/compiler.test.ts"
     },
     {
       "source": "pi",
@@ -12654,7 +12654,7 @@
             "path": "extensions/subagents/abortable.ts",
             "sha256": "3bdbbdd2a6faee9f4b908184bc66d0fb4fc1419e820c7fcdba45a073540035a0"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12692,7 +12692,7 @@
             "path": "extensions/subagents/agent-manager.ts",
             "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12731,7 +12731,7 @@
             "path": "extensions/subagents/agent-runner.ts",
             "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12770,7 +12770,7 @@
             "path": "extensions/subagents/agent-types.ts",
             "sha256": "8dfe097db687140d8dc732c7f170f267864674b2c062e9459f31be4d059fab9b"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12808,7 +12808,7 @@
             "path": "extensions/subagents/child-context.ts",
             "sha256": "72eaa951726bd406c829e0415f0f7beba8d5845cc594f2d3aaef15b4408f5d82"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12846,7 +12846,7 @@
             "path": "extensions/subagents/context.ts",
             "sha256": "3d0728d9cb8f308e289e0caa7afb64037d887288104ee25542f49e103281a11e"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12884,7 +12884,7 @@
             "path": "extensions/subagents/cross-extension-rpc.ts",
             "sha256": "f1d186b6c22a459df5ac211cbe6e0ac010ad787101bb4074b3c96372c2c14f88"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12922,7 +12922,7 @@
             "path": "extensions/subagents/custom-agents.ts",
             "sha256": "004d71a5a9012822a9270471f9c2b9e577ad7bf4d29443875f66bc6f39714f06"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12960,7 +12960,7 @@
             "path": "extensions/subagents/default-agents.ts",
             "sha256": "3ac0953f884d9906dd5be005b2e59b2a5c6808f9fd83b553b0921f8f38509d02"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -12998,7 +12998,7 @@
             "path": "extensions/subagents/enabled-models.ts",
             "sha256": "ce3af5df01159c089d83986a1dfc84a2e4f8ff3c0054fc753f6d0df7af3a88f6"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13036,7 +13036,7 @@
             "path": "extensions/subagents/env.ts",
             "sha256": "8bc1ce780715660da3143bba30b966fd9e34bad501836376b07825cb42bf5c3b"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13074,7 +13074,7 @@
             "path": "extensions/subagents/group-join.test.ts",
             "sha256": "773b1d2717725253faef4bdc2188e76afb79c0cdb53813a65e562fa764d1481a"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13112,7 +13112,7 @@
             "path": "extensions/subagents/group-join.ts",
             "sha256": "38c424e4775b5bf2190f6926ff91192ff6ca7e9c7a235fa70c21c143efe5c3af"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13150,7 +13150,7 @@
             "path": "extensions/subagents/index.ts",
             "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13189,7 +13189,7 @@
             "path": "extensions/subagents/invocation-config.test.ts",
             "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13227,7 +13227,7 @@
             "path": "extensions/subagents/invocation-config.ts",
             "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13266,7 +13266,7 @@
             "path": "extensions/subagents/LICENSE",
             "sha256": "e7d9d11c28cce34f09dc7d2b0a3a6609ccba5fbc8e926e6d1bfdf060930e9f05"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13304,7 +13304,7 @@
             "path": "extensions/subagents/memory.ts",
             "sha256": "d2a7684fa950a186705061d8e2903e464746b88d049a05d7e5a2c12523f378c3"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13342,7 +13342,7 @@
             "path": "extensions/subagents/model-resolver.ts",
             "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13381,7 +13381,7 @@
             "path": "extensions/subagents/model-scope.ts",
             "sha256": "012dca4854bd59958a47fdf50e40d06fb86945c03f785d95dfec6c5479f8ddc8"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13419,7 +13419,7 @@
             "path": "extensions/subagents/nested-tools.ts",
             "sha256": "4f5e742c351bf1edb9d0b0edfb69b125f3ee37e47f27465de8855aea8202c0c7"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13484,7 +13484,7 @@
             "path": "extensions/subagents/notification-gate.test.ts",
             "sha256": "f3a6073e74fcf3c6b5f9c35e76a617c7fb25d014275eb8a4219fd8448138f1e0"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13522,7 +13522,7 @@
             "path": "extensions/subagents/notification-gate.ts",
             "sha256": "81b6a05b8eab30dd79b78b5407db3abb0fa846a7fe540763a0ce79cc038e3aea"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13560,7 +13560,7 @@
             "path": "extensions/subagents/output-file.ts",
             "sha256": "ca71b7e1262701db2293eac21cf880c83fadfdda6d85d2c31ca78b7989a24e95"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13652,7 +13652,7 @@
             "path": "extensions/subagents/prompts.ts",
             "sha256": "67d58e1aae6dd8b4337037955eaae74ef1075f722d5170a4a2818be7bfecc116"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13690,7 +13690,7 @@
             "path": "extensions/subagents/schedule-store.ts",
             "sha256": "565166b50098550a3574d583b6fc4c30756d0b1e4a32245a9f2577d27edf0357"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13728,7 +13728,7 @@
             "path": "extensions/subagents/schedule.ts",
             "sha256": "1911e6f6c7d8266b2ef2dff5dfd48e1880d620b3ec4407618280da104788f7e6"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13766,7 +13766,7 @@
             "path": "extensions/subagents/settings.ts",
             "sha256": "83a44bc37e41d6077aa053015828ef97885740318a816b8dddbebf1eec5bc478"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13804,7 +13804,7 @@
             "path": "extensions/subagents/skill-loader.ts",
             "sha256": "64d0a915ba6cdef899894d330caf8539e222c67646d60da81fcb6a2ac0d90043"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13842,7 +13842,7 @@
             "path": "extensions/subagents/status-note.ts",
             "sha256": "48c318ee289af5b5694c7f07daeda630d54a8b14f708b00024b2dec5e14488a9"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13880,7 +13880,7 @@
             "path": "extensions/subagents/types.ts",
             "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13919,7 +13919,7 @@
             "path": "extensions/subagents/ui/agent-widget.ts",
             "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13958,7 +13958,7 @@
             "path": "extensions/subagents/ui/conversation-viewer.ts",
             "sha256": "91fa419a674ad5e8db95d73b3091c470dc6b78225f3737a44b70b2453432237e"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -13996,7 +13996,7 @@
             "path": "extensions/subagents/ui/fleet-list.ts",
             "sha256": "e5984b04501e33d8dacd51b3861b5f9df26e8095aee75f182486651cb2fca7af"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14034,7 +14034,7 @@
             "path": "extensions/subagents/ui/schedule-menu.ts",
             "sha256": "e2f1971e6e7d63a6a8ea711134c00b0fa3584aa15ad8247b1910ca85ab13557a"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14072,7 +14072,7 @@
             "path": "extensions/subagents/ui/viewer-keys.ts",
             "sha256": "b89cf023e89855a3d8351366963855b401507aff1452216da83f6577db6d7204"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14110,7 +14110,7 @@
             "path": "extensions/subagents/usage.ts",
             "sha256": "faf27d43429c90fcf52d84ab2ea5a2ee5c9e59f372d953da7aaf72fab82bca44"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14148,7 +14148,7 @@
             "path": "extensions/subagents/VENDORED.md",
             "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14187,7 +14187,7 @@
             "path": "extensions/subagents/worktree.ts",
             "sha256": "b0b4c596fddd1859a095a0d845005dfa62da6d02114c938ee1ef88ab445e3452"
           },
-          "sha256": "8bc2d954fe2e656124e7d3905210ba77a306f41684a9675a52180931e2d72b5d",
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
           "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
           "verification": "passed"
         }
@@ -14546,7 +14546,7 @@
             "path": "README.md",
             "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }
@@ -14982,7 +14982,7 @@
             "path": "WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
             "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48"
           },
-          "sha256": "de59b061c33f3c0d3a13a968cdb8f90dff6c8855adeddc550ce5a748c7df970a",
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
           "reference": "tests/integration/scripts/validate-generated.test.mjs",
           "verification": "passed"
         }

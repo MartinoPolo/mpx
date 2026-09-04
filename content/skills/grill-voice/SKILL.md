@@ -3,6 +3,7 @@ name: grill-voice
 description: 'Voice-enabled variant of mp-grill: publishes each interview round as a JSON file for the companion mobile voice app, waits for the spoken answers, and continues until the design is settled and recorded in project docs.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

@@ -17,6 +17,7 @@
   "dependencies": {
     "@mpx/application": "workspace:*",
     "@mpx/config": "workspace:*",
+    "@mpx/content-compiler": "workspace:*",
     "@mpx/core": "workspace:*",
     "@mpx/dev-services": "workspace:*",
     "@mpx/executors": "workspace:*",

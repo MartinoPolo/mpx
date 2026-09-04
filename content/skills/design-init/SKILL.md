@@ -3,6 +3,7 @@ name: design-init
 description: "Bootstraps a project's visual identity — derives a palette, font pairing, density, and motion language from the project's domain, then writes designs/tokens.css and designs/DESIGN_SYSTEM.md. Use when asked to init or bootstrap a design system, set up design tokens, or establish a project's visual identity. Run once per project."
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

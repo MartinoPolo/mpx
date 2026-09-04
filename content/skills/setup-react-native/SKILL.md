@@ -4,6 +4,7 @@ description: Create a React and React Native monorepo from an authorized templat
 triggers: setting up an Expo React Native monorepo
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

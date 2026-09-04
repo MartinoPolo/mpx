@@ -4,6 +4,7 @@ description: Retrieve and summarize one Issue through the configured MPX provide
 triggers: viewing or understanding an Issue
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [core]
     defaultExposure: full
 ---

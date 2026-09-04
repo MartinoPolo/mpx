@@ -3,6 +3,7 @@ name: mockup
 description: 'Generates self-contained HTML variant mockups from a design brief, one by default or N in parallel, and opens them for comparison. Use when asked to create a mockup, mock up a component, visualize a design, or produce design variants.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

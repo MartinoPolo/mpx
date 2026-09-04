@@ -3,6 +3,7 @@ name: design-refine
 description: 'Applies refinement requirements to a chosen mockup variant, producing refined.html and SUMMARY.md, updating the brief, and unblocking the tracker issues/tasks that were gated on the design. Use when asked to refine a design, accept or select a variant, polish a mockup, or refine all pending designs.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

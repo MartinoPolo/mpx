@@ -23,7 +23,7 @@ async function catalog(exposure: Exposure = 'name-only') {
   await mkdir(path.join(root, 'review'));
   await writeFile(
     path.join(root, 'review', 'SKILL.md'),
-    `---\nname: review\ndescription: Review source safely\ntriggers: code inspection\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nSECRET BODY\n`,
+    `---\nname: review\ndescription: Review source safely\ntriggers: code inspection\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nSECRET BODY\n`,
   );
   return inventoryCanonical(root);
 }
@@ -104,12 +104,12 @@ describe('skill catalog and v4 resolution', () => {
     await mkdir(path.join(root, 'bad'));
     await writeFile(
       path.join(root, 'bad', 'SKILL.md'),
-      '---\nname: bad\ndescription: *secret\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
+      '---\nname: bad\ndescription: *secret\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(SkillCatalogError);
     await writeFile(
       path.join(root, 'bad', 'SKILL.md'),
-      '---\nname: bad\ndescription: Bad\ndisable-model-invocation: true\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
+      '---\nname: bad\ndescription: Bad\ndisable-model-invocation: true\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(/unknown frontmatter key/u);
   });

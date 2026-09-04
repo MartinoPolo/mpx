@@ -3,6 +3,7 @@ name: skill-create
 description: 'Creates or restructures a portable skill for supported runtimes when a user asks to add skill behavior, invocation branches, procedures, or reference material, then audits the result.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

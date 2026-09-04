@@ -3,6 +3,7 @@ name: tutorial-create
 description: 'Compiles an interactive, self-contained HTML tutorial from a topic or code showcase into the MPX_AI_GENERATED assets root.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---

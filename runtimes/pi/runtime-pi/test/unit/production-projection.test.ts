@@ -1,14 +1,15 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  cp,
   mkdir,
   mkdtemp,
   open,
   readFile,
   readdir,
   rename,
+  rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -32,6 +33,7 @@ import {
   renderPiRuntimeStatus,
 } from '../../src/index.js';
 import { fixture } from '../fixtures/fixture.js';
+import { compileContent } from '@mpx/content-compiler';
 
 const originalRuntimeContext = process.env.MPX_RUNTIME_CONTEXT;
 const originalProjectionReference = process.env.MPX_RUNTIME_PROJECTION_REFERENCE;
@@ -49,92 +51,17 @@ function required<T>(value: T | undefined, label: string): T {
   return value;
 }
 
-interface BoundTextValue {
-  readonly property: string;
-  readonly value: string;
-  readonly placeholder: string;
-}
-
-const launchBoundTextFiles = new Set(['extension.mjs', 'projection.json', 'runtime-context.json']);
-const publicationMetadataPath = '.mpx-runtime-artifact.json';
-const sha256 = (bytes: Uint8Array | string): string =>
-  crypto.createHash('sha256').update(bytes).digest('hex');
-const regexEscape = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-
-async function completeFileTree(root: string): Promise<Map<string, Buffer>> {
-  const files = new Map<string, Buffer>();
-  const visit = async (relativeDirectory: string): Promise<void> => {
-    const directory = path.join(root, ...relativeDirectory.split('/').filter(Boolean));
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries.toSorted((a, b) =>
-      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-    )) {
-      const relativePath = [relativeDirectory, entry.name].filter(Boolean).join('/');
-      if (entry.isDirectory()) {
-        await visit(relativePath);
-      } else {
-        expect(entry.isFile(), relativePath).toBe(true);
-        files.set(relativePath, await readFile(path.join(root, ...relativePath.split('/'))));
-      }
-    }
-  };
-  await visit('');
-  return new Map(
-    [...files].toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
-  );
-}
-
-function normalizeBoundText(raw: Buffer, boundValues: readonly BoundTextValue[]): Buffer {
-  let text = raw.toString('utf8');
-  for (const binding of boundValues) {
-    const pattern = new RegExp(
-      `("${regexEscape(binding.property)}"\\s*:\\s*)"${regexEscape(binding.value)}"`,
-      'gu',
-    );
-    text = text.replace(pattern, `$1"${binding.placeholder}"`);
-  }
-  return Buffer.from(text);
-}
-
-function normalizeProjectionFiles(
-  rawFiles: ReadonlyMap<string, Buffer>,
-  boundValues: readonly BoundTextValue[],
-): Map<string, Buffer> {
-  const normalized = new Map(rawFiles);
-  for (const relativePath of launchBoundTextFiles) {
-    const raw = rawFiles.get(relativePath);
-    if (raw) {
-      normalized.set(relativePath, normalizeBoundText(raw, boundValues));
-    }
-  }
-
-  const metadata = rawFiles.get(publicationMetadataPath);
-  if (metadata) {
-    const fileMap = JSON.parse(metadata.toString('utf8')) as {
-      fileMap: Array<{ path: string; sha256: string }>;
-    };
-    let text = normalizeBoundText(metadata, boundValues).toString('utf8');
-    for (const entry of fileMap.fileMap) {
-      const normalizedFile = required(normalized.get(entry.path), entry.path);
-      text = text.replace(
-        new RegExp(`("sha256"\\s*:\\s*)"${entry.sha256}"`, 'u'),
-        `$1"${sha256(normalizedFile)}"`,
-      );
-    }
-    normalized.set(publicationMetadataPath, Buffer.from(text));
-  }
-  return normalized;
-}
-
-function projectionContentDigest(
-  rawFiles: ReadonlyMap<string, Buffer>,
-  boundValues: readonly BoundTextValue[],
-): string {
-  const aggregate = crypto.createHash('sha256');
-  for (const [relativePath, bytes] of normalizeProjectionFiles(rawFiles, boundValues)) {
-    aggregate.update(relativePath).update('\0').update(sha256(bytes)).update('\n');
-  }
-  return aggregate.digest('hex');
+async function compileFor(
+  f: Awaited<ReturnType<typeof fixture>>,
+  skillPlan: Awaited<ReturnType<typeof createSkillProjectionPlan>>,
+) {
+  return compileContent({
+    runtime: 'pi',
+    plan: skillPlan,
+    runtimeProfiles: f.runtimeProfiles,
+    sharedInstructionRoot: f.sharedInstructionRoot,
+    agentRoot: f.agentRoot,
+  });
 }
 
 afterEach(() => {
@@ -163,8 +90,11 @@ afterEach(() => {
     ['MPX_SESSION_LIFECYCLE_EVENT_DIR', originalLifecycleEventDirectory],
     ['PI_CODING_AGENT_DIR', originalPiCodingAgentDirectory],
   ] as const) {
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = value;
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
   }
   vi.restoreAllMocks();
   syncBuiltinESMExports();
@@ -372,11 +302,12 @@ describe('production Pi projection', () => {
     await settled({}, context);
 
     const emitted = await Promise.all(
-      (await readdir(eventDirectory)).map(async (file) =>
-        JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
-          string,
-          unknown
-        >,
+      (await readdir(eventDirectory)).map(
+        async (file) =>
+          JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
+            string,
+            unknown
+          >,
       ),
     );
     expect(emitted.map(({ type, sequence }) => ({ type, sequence }))).toStrictEqual([
@@ -398,7 +329,9 @@ describe('production Pi projection', () => {
     process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-race';
     process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
     process.env.PI_CODING_AGENT_DIR = accountRoot;
-    const module = await import(`${pathToFileURL(projection.extension).href}?race-stop=${Date.now()}`);
+    const module = await import(
+      `${pathToFileURL(projection.extension).href}?race-stop=${Date.now()}`
+    );
     const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
     await module.activate({
       registerCommand() {},
@@ -433,11 +366,12 @@ describe('production Pi projection', () => {
     await Promise.all([settled, shutdown]);
 
     const emitted = await Promise.all(
-      (await readdir(eventDirectory)).map(async (file) =>
-        JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
-          string,
-          unknown
-        >,
+      (await readdir(eventDirectory)).map(
+        async (file) =>
+          JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
+            string,
+            unknown
+          >,
       ),
     );
     expect(emitted.map(({ type, sequence }) => ({ type, sequence }))).toStrictEqual([
@@ -459,7 +393,9 @@ describe('production Pi projection', () => {
     process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-shutdown';
     process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
     process.env.PI_CODING_AGENT_DIR = accountRoot;
-    const module = await import(`${pathToFileURL(projection.extension).href}?shutdown=${Date.now()}`);
+    const module = await import(
+      `${pathToFileURL(projection.extension).href}?shutdown=${Date.now()}`
+    );
     const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
     await module.activate({
       registerCommand() {},
@@ -487,12 +423,15 @@ describe('production Pi projection', () => {
     await start;
 
     const emitted = await Promise.all(
-      (await readdir(eventDirectory)).toSorted().map(async (file) =>
-        JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
-          string,
-          unknown
-        >,
-      ),
+      (await readdir(eventDirectory))
+        .toSorted()
+        .map(
+          async (file) =>
+            JSON.parse(await readFile(path.join(eventDirectory, file), 'utf8')) as Record<
+              string,
+              unknown
+            >,
+        ),
     );
     expect(emitted).toHaveLength(2);
     expect(emitted.map(({ type, sequence }) => ({ type, sequence }))).toStrictEqual([
@@ -520,7 +459,9 @@ describe('production Pi projection', () => {
     process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-missing-shutdown';
     process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
     process.env.PI_CODING_AGENT_DIR = accountRoot;
-    const module = await import(`${pathToFileURL(projection.extension).href}?missing=${Date.now()}`);
+    const module = await import(
+      `${pathToFileURL(projection.extension).href}?missing=${Date.now()}`
+    );
     const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
     await module.activate({
       registerCommand() {},
@@ -602,7 +543,9 @@ describe('production Pi projection', () => {
     process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-integrity';
     process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR = eventDirectory;
     process.env.PI_CODING_AGENT_DIR = accountRoot;
-    const module = await import(`${pathToFileURL(projection.extension).href}?integrity=${Date.now()}`);
+    const module = await import(
+      `${pathToFileURL(projection.extension).href}?integrity=${Date.now()}`
+    );
     const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
     await module.activate({
       registerCommand() {},
@@ -636,7 +579,10 @@ describe('production Pi projection', () => {
     const projection = await buildPiProjection({ ...f, artifactsRoot });
     const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-account-'));
     const eventDirectory = await mkdtemp(path.join(tmpdir(), 'pi-events-'));
-    const outsideFile = path.join(await mkdtemp(path.join(tmpdir(), 'pi-outside-')), 'session.jsonl');
+    const outsideFile = path.join(
+      await mkdtemp(path.join(tmpdir(), 'pi-outside-')),
+      'session.jsonl',
+    );
     const linkedFile = path.join(accountRoot, 'linked-session.jsonl');
     await writeFile(outsideFile, '{}\n');
     await symlink(outsideFile, linkedFile, 'file');
@@ -690,7 +636,9 @@ describe('production Pi projection', () => {
     process.env.MPX_SESSION_LIFECYCLE_BINDING_ID = 'binding-authority';
     delete process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR;
     process.env.PI_CODING_AGENT_DIR = accountRoot;
-    const module = await import(`${pathToFileURL(projection.extension).href}?authority=${Date.now()}`);
+    const module = await import(
+      `${pathToFileURL(projection.extension).href}?authority=${Date.now()}`
+    );
     const events = new Map<string, Array<(...args: unknown[]) => unknown>>();
     await module.activate({
       registerCommand() {},
@@ -723,7 +671,7 @@ describe('production Pi projection', () => {
     await expect(
       buildPiProjection({
         skillPlan: structuredClone(f.skillPlan),
-        modelMappings: f.modelMappings,
+        compiledContent: f.compiledContent,
         context: f.context,
         expectedLaunch: f.expectedLaunch,
         currentBinding: f.currentBinding,
@@ -745,7 +693,7 @@ describe('production Pi projection', () => {
     await expect(
       buildPiProjection({
         skillPlan: f.skillPlan,
-        modelMappings: f.modelMappings,
+        compiledContent: f.compiledContent,
         context: f.context,
         expectedLaunch: f.expectedLaunch,
         currentBinding: f.currentBinding,
@@ -826,20 +774,23 @@ describe('production Pi projection', () => {
       identity: 'full',
       invocation: 'model',
     });
-    expect(required(projected.content[0], 'projected content').text).toBe(canonical.wrappedBody);
-    expect(projected.details.provenance).toEqual(canonical.provenance);
-    expect({
-      body: canonical.body,
-      contentHash: canonical.provenance.contentHash,
+    const compiledSkill = f.compiledContent.manifest.skills.find(
+      (entry) => entry.identity === 'full',
+    )!;
+    expect(required(projected.content[0], 'projected content').text).toBe(
+      `<!-- mpx-skill identity=full origin=model runtime=pi artifact=${f.artifact.reference.artifactKey} hash=${compiledSkill.generatedSha256} -->\n${canonical.body}<!-- /mpx-skill -->`,
+    );
+    expect(projected.details.provenance).toMatchObject({
+      contentHash: compiledSkill.generatedSha256,
       sourcePath: canonical.provenance.sourcePath,
-    }).toEqual({
+    });
+    expect({ body: canonical.body, sourcePath: canonical.provenance.sourcePath }).toEqual({
       body: claude.body,
-      contentHash: claude.provenance.contentHash,
       sourcePath: claude.provenance.sourcePath,
     });
   });
 
-  it('loads an exact project body through the generated extension without native Pi skills', async () => {
+  it('loads an exact project body through the generated extension and native Pi skills', async () => {
     const f = await fixture();
     const projectRoot = await mkdtemp(path.join(tmpdir(), 'pi-project-skill-'));
     const directory = path.join(projectRoot, '.agents', 'skills', 'local');
@@ -872,9 +823,11 @@ describe('production Pi projection', () => {
       artifact,
       canonicalRoot: f.canonicalRoot,
     });
+    const compiledContent = await compileFor(f, skillPlan);
     const projection = await buildPiProjection({
       ...f,
       skillPlan,
+      compiledContent,
       context,
       currentBinding: manifest.binding,
       artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-project-projection-')),
@@ -886,7 +839,7 @@ describe('production Pi projection', () => {
       runtimeContext: context,
       projection,
     });
-    expect(plan.args).not.toContain('--skill');
+    expect(plan.args).toContain('--skill');
     process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(context);
     process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
     const module = await import(pathToFileURL(projection.extension).href);
@@ -1045,16 +998,22 @@ describe('production Pi projection', () => {
         'vendor/subagents/LICENSE',
       ]),
     );
-    const projectedAgents = first.files.filter(
-      (file) => file.startsWith('agents/') && file.endsWith('.md'),
+    const projectedAgents = first.files.filter((file) =>
+      /^agents\/(?:mpx-[a-z0-9-]+|Explore)\.md$/u.test(file),
     );
     expect(projectedAgents).toHaveLength(22);
     expect(projectedAgents.filter((file) => file === 'agents/Explore.md')).toHaveLength(1);
     expect(projectedAgents).not.toContain('agents/mpx-explorer.md');
-    expect(first.files).not.toEqual(
+    expect(first.files).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/(?:^|\/)SKILL\.md$|(?:^|\/)pnpm-lock\.yaml$/u),
+        'active-content.json',
+        'skills/explicit/SKILL.md',
+        'skills/full/SKILL.md',
+        'skills/named/SKILL.md',
       ]),
+    );
+    expect(first.files).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/(?:^|\/)body\.md$|pnpm-lock\.yaml$/u)]),
     );
 
     const descriptor = JSON.parse(
@@ -1076,17 +1035,34 @@ describe('production Pi projection', () => {
     const extensionSource = await readFile(first.extension, 'utf8');
     expect(extensionSource).not.toContain(f.canonicalRoot);
     expect(extensionSource).not.toMatch(/regularFile|boundMetadata|\breadFile\b|\breaddir\b/u);
-    expect(await readFile(path.join(first.directory, 'skills', 'full', 'body.md'))).toEqual(
-      await readFile(path.join(f.canonicalRoot, 'full', 'SKILL.md')),
+    expect(await readFile(path.join(first.directory, 'skills', 'full', 'SKILL.md'))).toEqual(
+      Buffer.from(
+        f.compiledContent.files.find((file) => file.relativePath === 'skills/full/SKILL.md')!.bytes,
+      ),
     );
     expect((await readdir(path.join(first.directory, 'skills'))).sort()).toEqual([
       'explicit',
       'full',
       'named',
+      'shared',
     ]);
     expect(
       await readFile(path.join(first.directory, 'status', 'status-snapshot.json'), 'utf8'),
     ).toBe(`${JSON.stringify(f.statusSnapshot, null, 2)}\n`);
+  });
+
+  it('publishes every compiler-owned file byte-for-byte without a body.md representation', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-compiler-pass-through-')),
+    });
+    for (const file of f.compiledContent.files) {
+      expect(
+        await readFile(path.join(projection.directory, ...file.relativePath.split('/'))),
+      ).toEqual(Buffer.from(file.bytes));
+    }
+    expect(projection.files.some((file) => file.endsWith('/body.md'))).toBe(false);
   });
 
   it('changes publication identity and reuse when the validated runtime profile changes', async () => {
@@ -1115,143 +1091,6 @@ describe('production Pi projection', () => {
     expect(changed.reference.projectionKey).not.toBe(first.reference.projectionKey);
     expect(changed.reference.fileMapHash).not.toBe(first.reference.fileMapHash);
     expect(changed.revalidation.profile).toEqual(workProfile);
-  });
-
-  it('characterizes the exact complete sorted Pi projection file map by bytes and hash', async () => {
-    const f = await fixture();
-    await mkdir(path.join(f.canonicalRoot, 'full', 'references', 'nested'), { recursive: true });
-    await writeFile(
-      path.join(f.canonicalRoot, 'full', 'references', 'nested', 'utf8.txt'),
-      'héllo π 🌍\n',
-      'utf8',
-    );
-    await writeFile(
-      path.join(f.canonicalRoot, 'full', 'references', 'nested', 'binary.bin'),
-      Buffer.from([0, 1, 2, 127, 128, 255]),
-    );
-    const skillPlan = await createSkillProjectionPlan({
-      manifest: f.manifest,
-      artifact: f.artifact,
-      catalog: f.catalog,
-      canonicalRoot: f.canonicalRoot,
-    });
-    const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-complete-file-map-'));
-    const projection = await buildPiProjection({
-      ...f,
-      skillPlan,
-      artifactsRoot,
-    });
-    const metadata = JSON.parse(
-      await readFile(path.join(projection.directory, '.mpx-runtime-artifact.json'), 'utf8'),
-    ) as { fileMap: Array<{ path: string; bytes: number; sha256: string }> };
-    expect(metadata.fileMap.map((entry) => entry.path)).toEqual(
-      metadata.fileMap.map((entry) => entry.path).toSorted(),
-    );
-    const completeTree = await completeFileTree(projection.directory);
-    expect([...completeTree.keys()]).toEqual(
-      ['.mpx-runtime-artifact.json', ...metadata.fileMap.map((entry) => entry.path)].toSorted(),
-    );
-    for (const entry of metadata.fileMap) {
-      const bytes = await readFile(path.join(projection.directory, ...entry.path.split('/')));
-      expect({
-        bytes: bytes.byteLength,
-        sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
-      }).toEqual({
-        bytes: entry.bytes,
-        sha256: entry.sha256,
-      });
-    }
-    expect(
-      metadata.fileMap.map((entry) => {
-        if (['extension.mjs', 'projection.json', 'runtime-context.json'].includes(entry.path)) {
-          return { ...entry, sha256: '<launch-bound>' };
-        }
-        if (
-          [
-            'launch-private-client.mjs',
-            'production-runtime.mjs',
-            'production-status.mjs',
-            'production-subagents.mjs',
-          ].includes(entry.path)
-        ) {
-          return { ...entry, bytes: '<esbuild-bound>', sha256: '<esbuild-bound>' };
-        }
-        return entry;
-      }),
-    ).toMatchSnapshot('complete sorted Pi projection file map');
-    expect(
-      await readFile(
-        path.join(projection.directory, 'skills', 'full', 'references', 'nested', 'utf8.txt'),
-      ),
-    ).toEqual(Buffer.from('héllo π 🌍\n'));
-    expect(
-      await readFile(
-        path.join(projection.directory, 'skills', 'full', 'references', 'nested', 'binary.bin'),
-      ),
-    ).toEqual(Buffer.from([0, 1, 2, 127, 128, 255]));
-    const descriptor = JSON.parse(
-      await readFile(path.join(projection.directory, 'projection.json'), 'utf8'),
-    ) as { entries: Array<{ identity: string; exposure: string }> };
-    expect(descriptor.entries.map(({ identity, exposure }) => ({ identity, exposure }))).toEqual([
-      { identity: 'explicit', exposure: 'explicit-only' },
-      { identity: 'full', exposure: 'full' },
-      { identity: 'named', exposure: 'name-only' },
-    ]);
-    const boundValues: readonly BoundTextValue[] = [
-      {
-        property: 'manifestKey',
-        value: f.manifest.manifestKey,
-        placeholder: '<MANIFEST_KEY>',
-      },
-      {
-        property: 'artifactKey',
-        value: f.artifact.reference.artifactKey,
-        placeholder: '<ARTIFACT_KEY>',
-      },
-      {
-        property: 'runtimeArtifactKey',
-        value: f.artifact.reference.artifactKey,
-        placeholder: '<RUNTIME_ARTIFACT_KEY>',
-      },
-      {
-        property: 'fileMapHash',
-        value: f.artifact.reference.fileMapHash,
-        placeholder: '<ARTIFACT_FILE_MAP_HASH>',
-      },
-      { property: 'launchKey', value: f.context.launchKey, placeholder: '<LAUNCH_KEY>' },
-      {
-        property: 'digest',
-        value: f.context.launchDescriptor.digest,
-        placeholder: '<LAUNCH_DESCRIPTOR_DIGEST>',
-      },
-      {
-        property: 'descriptorDigest',
-        value: f.expectedLaunch.descriptorDigest,
-        placeholder: '<LAUNCH_DESCRIPTOR_DIGEST>',
-      },
-      {
-        property: 'projectionKey',
-        value: projection.reference.projectionKey,
-        placeholder: '<PROJECTION_KEY>',
-      },
-      {
-        property: 'fileMapHash',
-        value: projection.reference.fileMapHash,
-        placeholder: '<PROJECTION_FILE_MAP_HASH>',
-      },
-    ];
-    const normalizedTree = normalizeProjectionFiles(completeTree, boundValues);
-    for (const bundlePath of [
-      'launch-private-client.mjs',
-      'production-runtime.mjs',
-      'production-status.mjs',
-      'production-subagents.mjs',
-    ]) {
-      expect(normalizedTree.get(bundlePath), bundlePath).toEqual(completeTree.get(bundlePath));
-    }
-    expect(projectionContentDigest(completeTree, boundValues)).toBe(
-      'a33ad4394340f3ffa8469ece341663aa50eebeaee70e071107df5f90f66788e5',
-    );
   });
 
   it('binds the invocation profile bytes into projection revalidation', async () => {
@@ -1284,9 +1123,11 @@ describe('production Pi projection', () => {
         catalog: f.catalog,
         canonicalRoot: f.canonicalRoot,
       });
+      const compiledContent = await compileFor(f, skillPlan);
       const projection = await buildPiProjection({
         ...f,
         skillPlan,
+        compiledContent,
         artifactsRoot: await mkdtemp(path.join(tmpdir(), `pi-support-byte-${suffix}-`)),
       });
       const metadata = JSON.parse(
@@ -1348,9 +1189,11 @@ describe('production Pi projection', () => {
       catalog: f.catalog,
       canonicalRoot: f.canonicalRoot,
     });
+    const compiledContent = await compileFor(f, skillPlan);
     const projection = await buildPiProjection({
       ...f,
       skillPlan,
+      compiledContent,
       artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-support-')),
     });
     expect(
@@ -1366,11 +1209,10 @@ describe('production Pi projection', () => {
     ).resolves.toMatchObject({ valid: false });
   });
 
-  it('rejects symlinked generated-assets roots before reading agents or themes', async () => {
+  it('rejects symlinked runtime-assets/themes roots before reading themes', async () => {
     const f = await fixture();
     const artifactsRoot = await mkdtemp(path.join(tmpdir(), 'pi-projections-'));
     const assetsTarget = await mkdtemp(path.join(tmpdir(), 'pi-assets-target-'));
-    await mkdir(path.join(assetsTarget, 'agents'));
     await mkdir(path.join(assetsTarget, 'themes'));
     const linkedAssetsRoot = path.join(
       await mkdtemp(path.join(tmpdir(), 'pi-assets-link-')),
@@ -1403,6 +1245,12 @@ describe('production Pi projection', () => {
       '--extension',
       projection.extension.replaceAll('\\', '/'),
       '--no-skills',
+      '--skill',
+      path.join(projection.directory, 'skills', 'explicit').replaceAll('\\', '/'),
+      '--skill',
+      path.join(projection.directory, 'skills', 'full').replaceAll('\\', '/'),
+      '--skill',
+      path.join(projection.directory, 'skills', 'named').replaceAll('\\', '/'),
       '--provider',
       'openai-codex',
       '--model',
@@ -1414,12 +1262,17 @@ describe('production Pi projection', () => {
       '--theme',
       'dark',
     ]);
+    expect(plan.args).not.toContain('--no-skill-commands');
     expect(plan.env).toEqual({
       PI_CODING_AGENT_DIR: 'C:/private/pi/account-a',
       MPX_RUNTIME: 'pi',
       MPX_RUNTIME_CONTEXT: JSON.stringify(f.context),
       MPX_RUNTIME_CONTEXT_FILE: projection.runtimeContextFile.replaceAll('\\', '/'),
       MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projection.reference),
+      MPX_ACTIVE_CONTENT_ROOT: projection.directory.replaceAll('\\', '/'),
+      MPX_ACTIVE_CONTENT_MANIFEST: path
+        .join(projection.directory, 'active-content.json')
+        .replaceAll('\\', '/'),
     });
     expect(projection.revalidation).toEqual({
       directory: projection.directory,
@@ -1497,62 +1350,37 @@ describe('production Pi projection', () => {
     expect(piStatus).not.toMatch(/\bports\b/u);
   });
 
-  it('bounds agent-start stats, reads, and hashes below full session validation', async () => {
+  it('publishes one compiled content tree without rereading canonical agent sources', async () => {
     const f = await fixture();
+    const contentRoot = await mkdtemp(path.join(tmpdir(), 'pi-compiled-content-'));
+    const sharedInstructionRoot = path.join(contentRoot, 'instructions', 'shared');
+    const agentRoot = path.join(contentRoot, 'agents');
+    await Promise.all([
+      cp(f.sharedInstructionRoot, sharedInstructionRoot, { recursive: true }),
+      cp(f.agentRoot, agentRoot, { recursive: true }),
+    ]);
+    const compiledContent = await compileContent({
+      runtime: 'pi',
+      plan: f.skillPlan,
+      runtimeProfiles: f.runtimeProfiles,
+      sharedInstructionRoot,
+      agentRoot,
+    });
+    const expectedAgent = required(
+      compiledContent.files.find((file) => file.relativePath === 'agents/Explore.md'),
+      'compiled Explore agent',
+    );
+    await rm(contentRoot, { recursive: true, force: true });
+
     const projection = await buildPiProjection({
       ...f,
-      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-instrumentation-')),
+      compiledContent,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-precompiled-projection-')),
     });
-    const openSpy = vi.spyOn(fs.promises, 'open');
-    const lstatSpy = vi.spyOn(fs.promises, 'lstat');
-    const hashSpy = vi.spyOn(crypto, 'createHash');
-    syncBuiltinESMExports();
-    const module = await import(
-      `${pathToFileURL(projection.extension).href}?instrumented=${Date.now()}`
+
+    expect(await readFile(path.join(projection.directory, expectedAgent.relativePath))).toEqual(
+      Buffer.from(expectedAgent.bytes),
     );
-    const events = new Map<string, (...args: unknown[]) => unknown>();
-    process.env.MPX_RUNTIME_CONTEXT = JSON.stringify(f.context);
-    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(projection.reference);
-    await module.activate({
-      registerCommand() {},
-      on(name: string, handler: (...args: unknown[]) => unknown) {
-        events.set(name, handler);
-      },
-    });
-    openSpy.mockClear();
-    lstatSpy.mockClear();
-    hashSpy.mockClear();
-    await required(
-      events.get('before_agent_start'),
-      'before agent start handler',
-    )({
-      systemPrompt: 'BASE',
-    });
-    const hot = {
-      opens: openSpy.mock.calls.length,
-      stats: lstatSpy.mock.calls.length,
-      hashes: hashSpy.mock.calls.length,
-    };
-    openSpy.mockClear();
-    lstatSpy.mockClear();
-    hashSpy.mockClear();
-    await required(events.get('session_start'), 'session start handler')(
-      {},
-      { ui: { setStatus() {} } },
-    );
-    const full = {
-      opens: openSpy.mock.calls.length,
-      stats: lstatSpy.mock.calls.length,
-      hashes: hashSpy.mock.calls.length,
-    };
-    expect(hot).toEqual({ opens: 2, stats: 4, hashes: 2 });
-    expect(full.opens).toBeGreaterThan(hot.opens);
-    expect(full.stats).toBeGreaterThan(hot.stats);
-    expect(full.hashes).toBeGreaterThan(hot.hashes);
-    openSpy.mockRestore();
-    lstatSpy.mockRestore();
-    hashSpy.mockRestore();
-    syncBuiltinESMExports();
   });
 
   it('keeps discovery and agent-start cheap while selected skill load catches support tamper', async () => {
@@ -1564,9 +1392,11 @@ describe('production Pi projection', () => {
       catalog: f.catalog,
       canonicalRoot: f.canonicalRoot,
     });
+    const compiledContent = await compileFor(f, skillPlan);
     const projection = await buildPiProjection({
       ...f,
       skillPlan,
+      compiledContent,
       artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-costs-')),
     });
     const module = await import(pathToFileURL(projection.extension).href);
@@ -1628,7 +1458,7 @@ describe('production Pi projection', () => {
         }
       },
     });
-    const body = path.join(projection.directory, 'skills', 'full', 'body.md');
+    const body = path.join(projection.directory, 'skills', 'full', 'SKILL.md');
     const original = await readFile(body);
     await rename(body, `${body}.old`);
     await writeFile(body, Buffer.alloc(original.length, 88));
@@ -1655,7 +1485,7 @@ describe('production Pi projection', () => {
         }
       },
     });
-    const body = path.join(projection.directory, 'skills', 'full', 'body.md');
+    const body = path.join(projection.directory, 'skills', 'full', 'SKILL.md');
     const original = await readFile(body);
     const replacement = `${body}.replacement`;
     await writeFile(replacement, original);
@@ -1704,7 +1534,7 @@ describe('production Pi projection', () => {
         }
       },
     });
-    const body = path.join(projection.directory, 'skills', 'full', 'body.md');
+    const body = path.join(projection.directory, 'skills', 'full', 'SKILL.md');
     const original = await readFile(body);
     await writeFile(body, Buffer.alloc(original.length, 89));
     await expect(
@@ -2232,8 +2062,9 @@ describe('production Pi projection', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toContain('identity=explicit');
     expect(sent[0]).toContain('origin=human-explicit');
+    expect(sent[0]).toMatch(/<!-- \/mpx-skill -->\nignore \/mpx:full prose$/u);
 
-    await writeFile(path.join(projection.directory, 'skills', 'full', 'body.md'), 'changed\n');
+    await writeFile(path.join(projection.directory, 'skills', 'full', 'SKILL.md'), 'changed\n');
     await expect(
       required(tools.get('mpx_model_load'), 'model load tool').execute('tool-4', {
         identity: 'full',

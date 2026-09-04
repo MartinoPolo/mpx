@@ -1,5 +1,6 @@
 export {
   EXPOSURES,
+  SKILL_CAPABILITIES,
   SKILL_MANIFEST_SCHEMA_VERSION,
   SKILL_PACKS,
   SkillCatalogError,
@@ -15,6 +16,7 @@ export {
   type RuntimeSkillArtifact,
   type RuntimeSkillEntry,
   type SkillPack,
+  type SkillCapability,
   type SkillPolicyConfig,
 } from './contracts.js';
 export { createRuntimeSkillArtifact, verifyRuntimeSkillArtifact } from './artifact.js';

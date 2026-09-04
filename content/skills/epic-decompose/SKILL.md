@@ -4,6 +4,7 @@ description: Decompose an Epic into approved vertical-slice Issues with capabili
 triggers: breaking an Epic into implementation Issues
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AgentCatalogError, parseAgentCatalogV1, resolveAgentCatalogV1 } from '../../src/index.js';
 
 const agent = {
-  modelClass: 'terra',
+  modelClass: 'standard',
   thinking: 'medium',
   capabilities: ['read', 'search'],
   nesting: [],
@@ -22,6 +22,22 @@ function expectCode(action: () => unknown, code: string): void {
 }
 
 describe('agent catalog V1', () => {
+  it('accepts exactly the four semantic model classes and rejects legacy classes', () => {
+    for (const modelClass of ['mechanical', 'standard', 'advanced', 'frontier']) {
+      expect(parseAgentCatalogV1(catalog({ 'mpx-alpha': { ...agent, modelClass } }))).toMatchObject(
+        {
+          agents: { 'mpx-alpha': { modelClass } },
+        },
+      );
+    }
+    for (const modelClass of ['luna', 'terra', 'sol']) {
+      expectCode(
+        () => parseAgentCatalogV1(catalog({ 'mpx-alpha': { ...agent, modelClass } })),
+        'AGENT_CATALOG_SCHEMA_INVALID',
+      );
+    }
+  });
+
   it('retains the native SyntaxError cause for malformed JSON', () => {
     try {
       parseAgentCatalogV1('{');

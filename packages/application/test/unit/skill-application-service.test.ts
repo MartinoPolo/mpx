@@ -5,6 +5,7 @@ import { createSkillApplicationService, type ProjectSkillInventory } from '../..
 
 const skill: CanonicalSkill = {
   identity: 'mp-test',
+  schemaVersion: 1,
   description: 'Synthetic skill',
   triggers: 'test',
   skillPacks: ['core'],

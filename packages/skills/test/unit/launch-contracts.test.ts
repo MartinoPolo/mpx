@@ -20,7 +20,7 @@ async function fixture() {
   await mkdir(path.join(root, 'review'));
   await writeFile(
     path.join(root, 'review', 'SKILL.md'),
-    '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: name-only\n---\nBODY\n',
+    '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: name-only\n---\nBODY\n',
   );
   const catalog = await inventoryCanonical(root);
   const manifest = resolveManifest(catalog, {

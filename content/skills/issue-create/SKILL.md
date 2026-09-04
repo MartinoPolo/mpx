@@ -4,13 +4,14 @@ description: Create a clear provider-neutral Issue, optionally linked to an Epic
 triggers: creating or recording an Issue
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [core]
     defaultExposure: name-only
 ---
 
 # Create an Issue
 
-Use [the canonical template](../epic-decompose/ISSUE_TEMPLATE.md) to create one well-scoped Issue.
+Use [the canonical template](references/ISSUE_TEMPLATE.md) to create one well-scoped Issue.
 
 ## Launch identity
 

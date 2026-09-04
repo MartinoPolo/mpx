@@ -17,6 +17,7 @@ import {
 
 const canonical: CanonicalSkill = {
   identity: 'alpha',
+  schemaVersion: 1,
   description: 'Alpha portable description',
   triggers: 'alpha trigger',
   skillPacks: ['work', 'core'],
@@ -98,7 +99,7 @@ it('keeps the loader wrapper bytes stable', async () => {
   const skillRoot = path.join(root, 'alpha');
   const sourcePath = path.join(skillRoot, 'SKILL.md');
   const text =
-    '---\nname: alpha\ndescription: Alpha portable description\ntriggers: alpha trigger\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: full\n---\nPORTABLE BODY\n';
+    '---\nname: alpha\ndescription: Alpha portable description\ntriggers: alpha trigger\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nPORTABLE BODY\n';
   await mkdir(skillRoot);
   await writeFile(sourcePath, text);
   const { createHash } = await import('node:crypto');

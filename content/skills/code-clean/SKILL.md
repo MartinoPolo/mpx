@@ -3,6 +3,7 @@ name: code-clean
 description: 'Deduplicates code, removes repetition, and deletes dead code in a given scope.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

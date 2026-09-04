@@ -32,6 +32,9 @@ const input = (custom = false) =>
       : {},
     cwd: 'C:/project',
     environment: {},
+    agentsRoot: 'C:/content/agents',
+    runtimeProfilesFile: 'C:/content/runtime-profiles.json',
+    artifactsRoot: 'C:/state/runtime-artifacts',
     stateRoot: 'C:/state',
   }) as unknown as NodeLaunchExecutionInput;
 

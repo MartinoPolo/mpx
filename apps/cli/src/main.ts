@@ -57,12 +57,20 @@ import {
 import { executeSessionCommand } from './session-command.js';
 import { executeInstallCommand } from './install-command.js';
 import { executeAccountCommand } from './account-command.js';
+import { executeContentCommand } from './content-command.js';
 import {
   diagnoseNodeSessionBranchAdapters,
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
 } from '@mpx/application/node';
 import { processIo, type CliIo } from './io.js';
+import {
+  commandGroup,
+  renderActionHelp,
+  renderAllHelp,
+  renderGroupHelp,
+  renderRootHelp,
+} from './command-metadata.js';
 
 import {
   createDefaultSbxDiagnostics,
@@ -80,6 +88,7 @@ interface Parsed {
   command: string[];
   cwd: string;
   json: boolean;
+  help: boolean;
   options: Map<string, string | boolean | string[]>;
 }
 interface ExecuteResult {
@@ -87,11 +96,11 @@ interface ExecuteResult {
   warnings: Diagnostic[];
   exitCode?: number;
   machinePath?: string;
+  rawOutput?: string;
   silent?: boolean;
 }
 class UsageError extends Error {}
-const usage =
-  'Usage: mpx [--cwd DIR] [--json] <init [--confirm]|config|doctor|provider|skill|identity|mode|skill-policy|preset|launch|account|session|install|migration reconcile|report|rollback-drill|cutover-plan|view rebuild|issue|review|ci|status|ports|dev start|status|logs|restart|stop|worktree create|remove|list|select|status|prepare|cancel|reconcile>';
+const usage = renderRootHelp().trimEnd();
 
 const shortLaunchAliases = new Set<ShortLaunchAlias>(['cc', 'ccw', 'pi', 'piw']);
 function parse(argv: readonly string[]): Parsed {
@@ -99,6 +108,10 @@ function parse(argv: readonly string[]): Parsed {
     options = new Map<string, string | boolean | string[]>();
   for (let i = 0; i < argv.length; i++) {
     const word = argv[i]!;
+    if (word === '-h') {
+      options.set('help', true);
+      continue;
+    }
     if (!word.startsWith('--')) {
       words.push(word);
       continue;
@@ -107,6 +120,8 @@ function parse(argv: readonly string[]): Parsed {
     if (
       [
         'json',
+        'help',
+        'all',
         'rebuild',
         'confirm',
         'machine',
@@ -215,6 +230,7 @@ function parse(argv: readonly string[]): Parsed {
     command,
     cwd: path.resolve(String(options.get('cwd') ?? process.cwd())),
     json: options.get('json') === true,
+    help: options.get('help') === true,
     options,
   };
 }
@@ -373,6 +389,18 @@ function human(value: unknown): string {
 function asJson(value: unknown): JsonValue {
   return value as JsonValue;
 }
+function usageGuidance(parsed: Parsed | undefined): string {
+  const [groupName, actionName] = parsed?.command ?? [];
+  const group = groupName ? commandGroup(groupName) : undefined;
+  const action = actionName ? group?.actions.find((item) => item.name === actionName) : undefined;
+  if (group && action) {
+    return `Usage: ${action.usage}\n`;
+  }
+  if (group) {
+    return renderGroupHelp(group);
+  }
+  return renderRootHelp();
+}
 
 async function executeProductionSessionResume(
   plan: ResumePlanV1,
@@ -451,6 +479,13 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       }),
       warnings: [],
     };
+  }
+  if (group === 'content') {
+    if (!action || !['current', 'list', 'show', 'check'].includes(action)) {
+      throw new UsageError('content requires current, list, show, or check');
+    }
+    const result = await executeContentCommand({ action, args, env: context.env });
+    return { ...result, warnings: [] };
   }
   if (parsed.options.get('confirm') === true && (group !== 'init' || action !== undefined)) {
     throw new UsageError('--confirm is valid only for init');
@@ -1403,12 +1438,58 @@ export async function run(
   let parsed: Parsed | undefined;
   try {
     parsed = parse(argv);
+    const [groupName, actionName] = parsed.command;
+    if (groupName === 'help') {
+      if (actionName) {
+        throw new UsageError(`Unknown command: help ${actionName}`);
+      }
+      io.stdout(parsed.options.get('all') === true ? renderAllHelp() : renderRootHelp());
+      return 0;
+    }
+    if (parsed.options.get('all') === true) {
+      throw new UsageError('--all is valid only for help');
+    }
+    const group = groupName ? commandGroup(groupName) : undefined;
+    const hasActionSpecificOptions = [...parsed.options.keys()].some(
+      (name) => !['cwd', 'json', 'help'].includes(name),
+    );
+    if (
+      !groupName ||
+      parsed.help ||
+      (group && !actionName && !group.defaultOperation && !hasActionSpecificOptions)
+    ) {
+      if (!groupName) {
+        io.stdout(renderRootHelp());
+        return 0;
+      }
+      if (!group) {
+        throw new UsageError(`Unknown command: ${groupName}`);
+      }
+      if (!actionName) {
+        io.stdout(renderGroupHelp(group));
+        return 0;
+      }
+      const action = group.actions.find((item) => item.name === actionName);
+      if (!action) {
+        throw new UsageError(`Unknown command: ${groupName} ${actionName}`);
+      }
+      io.stdout(renderActionHelp(group, action));
+      return 0;
+    }
+    if (groupName && !group) {
+      throw new UsageError(`Unknown command: ${groupName}`);
+    }
+    if (group && actionName && !group.actions.some((item) => item.name === actionName)) {
+      throw new UsageError(`Unknown command: ${groupName} ${actionName}`);
+    }
     const result = await execute(parsed, context);
     if (result.machinePath !== undefined) {
       io.stdout(`${result.machinePath}\n`);
     } else if (!result.silent) {
       if (parsed.json) {
         io.stdout(JSON.stringify(successEnvelope(asJson(result.data), result.warnings)) + '\n');
+      } else if (result.rawOutput !== undefined) {
+        io.stdout(result.rawOutput);
       } else {
         io.stdout(human(result.data));
         for (const warning of result.warnings) {
@@ -1439,7 +1520,9 @@ export async function run(
     if (parsed?.json || argv.includes('--json')) {
       io.stdout(JSON.stringify(errorEnvelope(normalized)) + '\n');
     } else {
-      io.stderr(`${normalized.code}: ${normalized.message}\n${usageError ? usage + '\n' : ''}`);
+      io.stderr(
+        `${normalized.code}: ${normalized.message}\n${usageError ? usageGuidance(parsed) : ''}`,
+      );
     }
     return usageError ? 2 : 1;
   }

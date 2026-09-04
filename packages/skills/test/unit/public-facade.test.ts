@@ -45,6 +45,7 @@ it('keeps the root runtime facade limited to the established export names', () =
     'MAX_SKILL_DIRECTORY_FILES',
     'MAX_SKILL_SEARCH_QUERY_LENGTH',
     'MAX_SKILL_SEARCH_RESULTS',
+    'SKILL_CAPABILITIES',
     'SKILL_MANIFEST_SCHEMA_VERSION',
     'SKILL_PACKS',
     'SkillCatalogError',

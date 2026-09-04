@@ -3,6 +3,7 @@ name: board-to-issues
 description: 'Converts Obsidian board notes from the To Process lane into labelled GitHub issues, deduping against existing ones.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---

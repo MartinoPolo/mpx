@@ -8,7 +8,6 @@ import {
 } from '@mpx/application';
 import {
   createNodeConfiguredProviderApplicationService,
-  createNodeProviderService,
   NodePrivateRouteMaterializer,
   createNodeWorktreeLifecycleService,
   createProductionSessionDockerResumeAdmission,
@@ -20,7 +19,7 @@ import {
   type LaunchExecutionContext,
 } from '@mpx/application/node';
 import { MpxError } from '@mpx/core';
-import { discoverProjectConfig, type ProjectConfig } from '@mpx/config';
+import { discoverProjectConfig } from '@mpx/config';
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from '@mpx/ports';
 import { createStatusProvider, type StatusProvider } from '@mpx/status';
 import type { ProviderAdapter, ProviderDescriptor, ProviderProcessExecutor } from '@mpx/providers';
@@ -165,15 +164,6 @@ export interface CliContext extends LaunchExecutionContext {
     descriptors: readonly ProviderDescriptor[];
     adapters: readonly ProviderAdapter[];
   }>;
-}
-
-export async function providerService(
-  context: CliContext,
-  config: ProjectConfig,
-  cwd: string,
-  selection?: { providerId: string; capability: string },
-): Promise<CliProviderService> {
-  return createNodeProviderService(context, config, cwd, selection);
 }
 
 export function configuredProviderApplicationService(context: CliContext) {
@@ -322,6 +312,9 @@ export function productionSessionProcessInspector(): SessionProcessInspector {
 export function preparationRuntime(
   root: string,
   environment: NodeJS.ProcessEnv,
+  // The CLI module is intentionally the worker entry; it imports this module to build
+  // the production context, but the worker path is only resolved when this function runs.
+  // fallow-ignore-next-line circular-dependency
   workerEntry = fileURLToPath(new URL('./main.js', import.meta.url)),
 ): PreparationRuntime {
   return nodePreparationRuntime(root, environment, workerEntry);

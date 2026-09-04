@@ -3,6 +3,7 @@ name: project-register
 description: 'Registers an existing project with the workstation — one colour driving its Windows Terminal profile and icon and its VS Code Peacock theme.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---

@@ -3,6 +3,7 @@ name: video-to-image
 description: 'Turns any YouTube video into a printable one-page sheet image, reading the video with the Gemini API and handing the composed prompt to ChatGPT for generation. Workout videos get a dedicated exercise mode; everything else becomes an infographic overview.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---

@@ -4,6 +4,7 @@ description: Resolve human decisions blocking Issues and make confirmed work aut
 triggers: resolving HITL Issues within an Epic or dependency graph
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

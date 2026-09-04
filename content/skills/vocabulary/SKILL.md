@@ -3,6 +3,7 @@ name: vocabulary
 description: 'Creates or updates the domain language section of CONTEXT.md, confirming terms with the user first.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

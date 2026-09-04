@@ -3,6 +3,7 @@ name: design-brief
 description: 'Writes a standalone design brief for a UI component — surrounding context, exhaustive requirements and states, and a component reuse map — then gates dependent tracker issues/tasks with a Design needed label. Use for a design brief, design spec, component spec, or UI spec.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

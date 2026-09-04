@@ -3,6 +3,7 @@ name: clean-pc
 description: 'Full-disk cleanup sweep across caches, Docker/WSL, build output, apps, duplicates and installers, with per-group approval.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [personal]
     defaultExposure: explicit-only
 ---

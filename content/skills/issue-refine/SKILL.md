@@ -4,6 +4,7 @@ description: Refine an Issue into an implementable provider-neutral specificatio
 triggers: clarifying scope or acceptance criteria for an Issue
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [core]
     defaultExposure: name-only
 ---

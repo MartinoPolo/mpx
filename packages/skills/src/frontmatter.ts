@@ -1,9 +1,16 @@
-import { EXPOSURES, SKILL_PACKS, type Exposure, type SkillPack } from './contracts.js';
+import {
+  EXPOSURES,
+  SKILL_CAPABILITIES,
+  SKILL_PACKS,
+  type Exposure,
+  type SkillCapability,
+  type SkillPack,
+} from './contracts.js';
 
 export const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const allowedTop = new Set(['name', 'description', 'triggers', 'metadata']);
+const allowedTop = new Set(['name', 'description', 'triggers', 'argument-hint', 'metadata']);
 
-function scalar(raw: string): string | boolean | string[] {
+function scalar(raw: string): string | boolean | number | string[] {
   const value = raw.trim();
   if (/[*&!]|<<\s*:/.test(value)) {
     throw new Error('YAML tags, anchors, aliases, and merge keys are forbidden');
@@ -21,8 +28,11 @@ function scalar(raw: string): string | boolean | string[] {
       .map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
       .filter(Boolean);
   }
-  if (/^(null|~|[-+]?\d|\{|\})/i.test(value)) {
-    throw new Error('only strings, booleans, and string arrays are supported');
+  if (/^[-+]?\d+$/u.test(value)) {
+    return Number(value);
+  }
+  if (/^(null|~|\{|\})/i.test(value)) {
+    throw new Error('only strings, booleans, version 1, and string arrays are supported');
   }
   return value.replace(/^(['"])(.*)\1$/, '$2');
 }
@@ -31,11 +41,14 @@ export function frontmatter(text: string): { data: Record<string, unknown>; body
   if (!text.startsWith('---\n') && !text.startsWith('---\r\n')) {
     throw new Error('SKILL.md must start with YAML frontmatter');
   }
-  const normalized = text.replace(/\r\n/g, '\n');
-  const end = normalized.indexOf('\n---\n', 4);
-  if (end < 0) {
+  const closing = /\r?\n---(?:\r?\n)/u.exec(text.slice(3));
+  if (!closing) {
     throw new Error('frontmatter closing delimiter is missing');
   }
+  const originalEnd = 3 + closing.index;
+  const bodyOffset = originalEnd + closing[0].length;
+  const normalized = text.slice(0, originalEnd).replace(/\r\n/g, '\n');
+  const end = normalized.length;
   const root: Record<string, unknown> = {};
   const stack: Array<{ indent: number; value: Record<string, unknown> }> = [
     { indent: -1, value: root },
@@ -74,7 +87,7 @@ export function frontmatter(text: string): { data: Record<string, unknown>; body
       parent[key] = scalar(match[3]);
     }
   }
-  return { data: root, body: normalized.slice(end + 5) };
+  return { data: root, body: text.slice(bodyOffset) };
 }
 
 export function parseCanonical(
@@ -82,8 +95,12 @@ export function parseCanonical(
   directory: string,
 ): {
   identity: string;
+  schemaVersion: 1;
+  contentVersion?: 1;
   description: string;
   triggers?: string;
+  argumentHint?: string;
+  capabilities?: SkillCapability[];
   packs: SkillPack[];
   exposure: Exposure;
 } {
@@ -108,9 +125,24 @@ export function parseCanonical(
     !metadata ||
     Object.keys(metadata).join() !== 'mpx' ||
     !mpx ||
-    Object.keys(mpx).some((k) => !['skillPacks', 'defaultExposure'].includes(k))
+    Object.keys(mpx).some(
+      (k) =>
+        ![
+          'schemaVersion',
+          'contentVersion',
+          'skillPacks',
+          'defaultExposure',
+          'capabilities',
+        ].includes(k),
+    )
   ) {
-    throw new Error('metadata.mpx with only skillPacks/defaultExposure is required');
+    throw new Error('metadata.mpx is required and contains an unknown field');
+  }
+  if (mpx.schemaVersion !== 1) {
+    throw new Error('metadata.mpx.schemaVersion must be 1');
+  }
+  if (mpx.contentVersion !== undefined && mpx.contentVersion !== 1) {
+    throw new Error('metadata.mpx.contentVersion must be 1 when present');
   }
   const packs = mpx.skillPacks;
   if (
@@ -124,11 +156,32 @@ export function parseCanonical(
   if (!EXPOSURES.includes(exposure as Exposure)) {
     throw new Error('metadata.mpx.defaultExposure is invalid');
   }
-  const result = {
+  const argumentHint = data['argument-hint'];
+  if (argumentHint !== undefined && (typeof argumentHint !== 'string' || !argumentHint.trim())) {
+    throw new Error('argument-hint must be a non-empty string');
+  }
+  const capabilities = mpx.capabilities;
+  if (
+    capabilities !== undefined &&
+    (!Array.isArray(capabilities) ||
+      capabilities.length === 0 ||
+      capabilities.some(
+        (capability) => !SKILL_CAPABILITIES.includes(capability as SkillCapability),
+      ))
+  ) {
+    throw new Error('metadata.mpx.capabilities contains an unknown capability');
+  }
+  return {
     identity,
+    schemaVersion: 1,
+    ...(mpx.contentVersion === 1 ? { contentVersion: 1 as const } : {}),
     description: data.description,
+    ...(typeof data.triggers === 'string' ? { triggers: data.triggers } : {}),
+    ...(typeof argumentHint === 'string' ? { argumentHint } : {}),
+    ...(Array.isArray(capabilities)
+      ? { capabilities: [...new Set(capabilities as SkillCapability[])].sort() }
+      : {}),
     packs: [...new Set(packs as SkillPack[])].sort(),
     exposure: exposure as Exposure,
   };
-  return typeof data.triggers === 'string' ? { ...result, triggers: data.triggers } : result;
 }

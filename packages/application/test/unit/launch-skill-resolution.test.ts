@@ -68,6 +68,7 @@ describe('launch skill resolution', () => {
     const canonical: CanonicalSkill[] = [
       {
         identity: 'z-skill',
+        schemaVersion: 1,
         description: 'canonical',
         skillPacks: ['core'],
         defaultExposure: 'full' as const,

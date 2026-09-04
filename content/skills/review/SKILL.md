@@ -4,6 +4,7 @@ description: 'Reviews a branch, working diff, or provider Review across speciali
 triggers: reviewing a branch, working changes, or provider Review; full or partial specialist coverage; optional autofix
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [core]
     defaultExposure: full
 ---

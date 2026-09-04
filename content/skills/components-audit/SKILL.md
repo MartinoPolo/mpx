@@ -3,6 +3,7 @@ name: components-audit
 description: 'Audits design-system component usage, flagging native elements, wrong variants, missed componentization opportunities, and hardcoded colors that bypass theme tokens.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -21,11 +21,12 @@ import {
   diagnoseLegacyNamespaceConflicts,
   adaptClaudeNativeStatus,
   createClaudeDevServerCapability,
-  ClaudeRuntimeError,
 } from '../../src/index.js';
 import { renderClaudePortSegment } from '@mpx/status';
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@mpx/runtime-hooks';
 import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
+import { loadRuntimeProfilesV1, parseRuntimeProfilesV1 } from '@mpx/config';
+import { compileContent } from '@mpx/content-compiler';
 
 const execFile = promisify(execFileCallback);
 const roots: string[] = [];
@@ -78,8 +79,10 @@ async function fixture() {
   roots.push(root);
   const canonical = path.join(root, 'skills'),
     agents = path.join(root, 'agents'),
+    shared = path.join(root, 'shared'),
     outputStyle = path.join(root, 'output-styles', 'mpx-terse.md');
   await mkdir(canonical);
+  await mkdir(shared);
   await mkdir(agents);
   await mkdir(path.dirname(outputStyle));
   await writeFile(
@@ -95,7 +98,7 @@ async function fixture() {
     await mkdir(path.join(canonical, name));
     await writeFile(
       path.join(canonical, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: secret ${name} description\ntriggers: trigger ${name}\nmetadata:\n  mpx:\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nBODY ${name}${name === 'full' ? ' café' : ''}\n`,
+      `---\nname: ${name}\ndescription: secret ${name} description\ntriggers: trigger ${name}\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nBODY ${name}${name === 'full' ? ' café' : ''}\n`,
     );
   }
   await mkdir(path.join(canonical, 'full', 'references'));
@@ -111,7 +114,7 @@ async function fixture() {
       schemaVersion: 1,
       agents: {
         'mpx-explorer': {
-          modelClass: 'terra',
+          modelClass: 'standard',
           thinking: 'low',
           capabilities: ['read', 'search', 'shell'],
           nesting: [],
@@ -141,6 +144,21 @@ async function fixture() {
     catalog,
     canonicalRoot: canonical,
   });
+  const trackedProfiles = await loadRuntimeProfilesV1(
+    fileURLToPath(new URL('../../../../../content/runtime-profiles.json', import.meta.url)),
+  );
+  const profileInput = structuredClone(trackedProfiles);
+  (profileInput.agentTranslation.runtimes.claude as { aliases: unknown }).aliases = {
+    'mpx-explorer': 'Explore',
+  };
+  const runtimeProfiles = parseRuntimeProfilesV1(JSON.stringify(profileInput));
+  const compiledContent = await compileContent({
+    runtime: 'claude',
+    plan: skillPlan,
+    runtimeProfiles,
+    sharedInstructionRoot: shared,
+    agentRoot: agents,
+  });
   const runtimeContext = createRuntimeContextV1({
     launchKey: 'a'.repeat(64),
     launchDescriptor: { reference: 'launch.json', digest: 'b'.repeat(64) },
@@ -157,11 +175,9 @@ async function fixture() {
     manifest,
     artifact,
     skillPlan,
-    modelMappings: Object.freeze({
-      schemaVersion: 1 as const,
-      runtime: 'claude' as const,
-      models: Object.freeze({ luna: 'haiku', sol: 'opus', terra: 'sonnet' }),
-    }),
+    compiledContent,
+    runtimeProfiles,
+    shared,
     statusSnapshot,
     launchBanner,
     runtimeContext,
@@ -202,9 +218,6 @@ async function byteTree(root: string) {
   return Object.fromEntries(
     Object.entries(out).sort(([left], [right]) => left.localeCompare(right)),
   );
-}
-async function linkDirectory(target: string, link: string) {
-  await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir');
 }
 async function runNode(
   args: string[],
@@ -385,6 +398,7 @@ describe('Claude projection', () => {
     const projected = await byteTree(out);
     expect(Object.keys(projected)).toEqual([
       '.claude-plugin/plugin.json',
+      'active-content.json',
       'agents/Explore.md',
       'hooks/dangerous-command-policy.mjs',
       'hooks/hooks.json',
@@ -401,13 +415,13 @@ describe('Claude projection', () => {
       'status/status-snapshot.json',
     ]);
     expect(Buffer.from(projected['skills/full/SKILL.md']!.bytes, 'hex').toString('utf8')).toBe(
-      '---\nname: full\ndescription: "secret full description"\ntriggers: "trigger full"\nuser-invocable: true\n---\nBODY full café\n',
+      "---\nname: full\ndescription: 'secret full description'\n---\nBODY full café\n",
     );
     expect(Buffer.from(projected['skills/named/SKILL.md']!.bytes, 'hex').toString('utf8')).toBe(
-      '---\nname: named\ndescription: "mpx skill named"\nuser-invocable: true\n---\nBODY named\n',
+      "---\nname: named\ndescription: 'MPX skill named. Load only when the user explicitly mentions named by name.'\n---\nBODY named\n",
     );
     expect(Buffer.from(projected['skills/explicit/SKILL.md']!.bytes, 'hex').toString('utf8')).toBe(
-      '---\nname: explicit\ndescription: "mpx skill explicit"\nuser-invocable: true\ndisable-model-invocation: true\n---\nBODY explicit\n',
+      "---\nname: explicit\ndescription: 'secret explicit description'\ndisable-model-invocation: true\n---\nBODY explicit\n",
     );
     expect(projected['skills/full/references/guide.txt']!.bytes).toBe(
       Buffer.from('nested café\n').toString('hex'),
@@ -430,6 +444,17 @@ describe('Claude projection', () => {
       ),
     ).toMatchSnapshot();
   });
+  it('copies every compiler-owned file byte-for-byte into the plugin', async () => {
+    const f = await fixture();
+    const outputRoot = path.join(f.root, 'compiler-pass-through');
+    await buildClaudePlugin({ ...f, outputRoot });
+    for (const file of f.compiledContent.files) {
+      expect(await readFile(path.join(outputRoot, ...file.relativePath.split('/')))).toEqual(
+        Buffer.from(file.bytes),
+      );
+    }
+  });
+
   it('rejects unsafe or malformed canonical output styles before publication', async () => {
     const cases: Array<[string, (f: Awaited<ReturnType<typeof fixture>>) => Promise<string>]> = [
       ['missing', async (f) => path.join(f.root, 'missing.md')],
@@ -517,8 +542,15 @@ describe('Claude projection', () => {
       runtimeArtifact: artifact.reference,
       binding: manifest.binding,
     });
+    const compiledContent = await compileContent({
+      runtime: 'claude',
+      plan: skillPlan,
+      runtimeProfiles: f.runtimeProfiles,
+      sharedInstructionRoot: f.shared,
+      agentRoot: f.agents,
+    });
     const outputRoot = path.join(f.root, 'project-out');
-    await buildClaudePlugin({ ...f, skillPlan, runtimeContext, outputRoot });
+    await buildClaudePlugin({ ...f, skillPlan, compiledContent, runtimeContext, outputRoot });
     expect(await readFile(path.join(outputRoot, 'skills', 'local', 'SKILL.md'), 'utf8')).toContain(
       'LOCAL BODY',
     );
@@ -544,152 +576,13 @@ describe('Claude projection', () => {
       }),
     ).rejects.toThrow(/SKILL_PROJECTION_PLAN_UNVERIFIED/);
   });
-  it('translates the supplied agent model mappings', async () => {
-    const f = await fixture();
-    const outputRoot = path.join(f.root, 'mapped-agent-output');
-    await buildClaudePlugin({
-      ...f,
-      modelMappings: {
-        ...f.modelMappings,
-        models: { ...f.modelMappings.models, terra: 'custom-terra' },
-      },
-      outputRoot,
-    });
-    expect(await readFile(path.join(outputRoot, 'agents', 'Explore.md'), 'utf8')).toContain(
-      'model: custom-terra',
-    );
-  });
-  it('preserves canonical CRLF bytes in the Claude agent projection', async () => {
-    const f = await fixture();
-    await writeFile(
-      path.join(f.agents, 'mpx-explorer.md'),
-      '---\r\nname: mpx-explorer\r\ndescription: Exact Explore description\r\n---\r\nAGENT BODY\r\n',
-    );
-    const outputRoot = path.join(f.root, 'crlf-agent-output');
-
-    await buildClaudePlugin({ ...f, outputRoot });
-
-    expect(await readFile(path.join(outputRoot, 'agents', 'Explore.md'))).toEqual(
-      Buffer.from(
-        '---\r\nname: Explore\r\ndescription: Exact Explore description\r\nmodel: sonnet\r\neffort: low\r\ntools: Read, Grep, Glob, Bash\r\noutput-schema: text\r\n\r\n---\r\nAGENT BODY\r\n',
-      ),
-    );
-  });
-
-  it('projects shared literal and wildcard nesting resolution to exact Claude output', async () => {
-    const f = await fixture();
-    const metadata = {
-      modelClass: 'terra',
-      thinking: 'low',
-      capabilities: ['read'],
-      nesting: [],
-      outputSchema: 'text',
-    };
-    for (const identity of ['mpx-parent', 'mpx-reviewer-a', 'mpx-reviewer-b']) {
-      await writeFile(
-        path.join(f.agents, `${identity}.md`),
-        `---\nname: ${identity}\ndescription: ${identity}\n---\nBody\n`,
-      );
-    }
-    await rm(path.join(f.agents, 'mpx-explorer.md'));
-    await writeFile(
-      path.join(f.agents, 'metadata.json'),
-      JSON.stringify({
-        schemaVersion: 1,
-        agents: {
-          'mpx-parent': {
-            ...metadata,
-            nesting: ['mpx-reviewer-b', 'mpx-reviewer-*'],
-          },
-          'mpx-reviewer-a': metadata,
-          'mpx-reviewer-b': metadata,
-        },
-      }),
-    );
-    const outputRoot = path.join(f.root, 'nested-agent-output');
-    await buildClaudePlugin({ ...f, outputRoot });
-    expect(await readFile(path.join(outputRoot, 'agents', 'mpx-parent.md'), 'utf8')).toBe(
-      '---\nname: mpx-parent\ndescription: mpx-parent\nmodel: sonnet\neffort: low\ntools: Read, Agent\noutput-schema: text\nallowed-subagents: mpx-reviewer-b,mpx-reviewer-a\n\n---\nBody\n',
-    );
-  });
-
-  it('accepts an empty canonical agent directory without metadata for Claude', async () => {
-    const f = await fixture();
-    await rm(path.join(f.agents, 'mpx-explorer.md'));
-    await rm(path.join(f.agents, 'metadata.json'));
-    const outputRoot = path.join(f.root, 'empty-agents');
-
-    await buildClaudePlugin({ ...f, outputRoot });
-
-    expect(
-      Object.keys(await tree(outputRoot)).filter((file) => file.startsWith('agents/')),
-    ).toEqual([]);
-  });
-
-  it('maps absent metadata for canonical agents to the exact missing identity diagnostic', async () => {
-    const f = await fixture();
-    await rm(path.join(f.agents, 'metadata.json'));
-
-    await expect(
-      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'absent-agent-metadata') }),
-    ).rejects.toEqual(
-      new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'missing metadata for mpx-explorer'),
-    );
-  });
-
-  it('maps a non-regular metadata path to the prior exact Claude diagnostic', async () => {
-    const f = await fixture();
-    const metadataPath = path.join(f.agents, 'metadata.json');
-    await rm(metadataPath);
-    await mkdir(metadataPath);
-
-    await expect(
-      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'directory-agent-metadata') }),
-    ).rejects.toEqual(
-      new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'agent metadata must be a regular file'),
-    );
-  });
-
-  it('preserves the exact missing agent metadata diagnostic', async () => {
-    const f = await fixture();
-    await writeFile(
-      path.join(f.agents, 'metadata.json'),
-      JSON.stringify({ schemaVersion: 1, agents: {} }),
-    );
-    await expect(
-      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'missing-agent-metadata') }),
-    ).rejects.toEqual(
-      new ClaudeRuntimeError('AGENT_METADATA_INVALID', 'missing metadata for mpx-explorer'),
-    );
-  });
-
-  it('keeps the generic diagnostic for unexpected-only agent metadata', async () => {
-    const f = await fixture();
-    const metadata = JSON.parse(await readFile(path.join(f.agents, 'metadata.json'), 'utf8')) as {
-      agents: Record<string, unknown>;
-    };
-    metadata.agents['mpx-unexpected'] = metadata.agents['mpx-explorer'];
-    await writeFile(
-      path.join(f.agents, 'metadata.json'),
-      JSON.stringify({ schemaVersion: 1, agents: metadata.agents }),
-    );
-    await expect(
-      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'unexpected-agent-metadata') }),
-    ).rejects.toEqual(
-      new ClaudeRuntimeError(
-        'AGENT_METADATA_INVALID',
-        'agent metadata must exactly cover canonical agents',
-      ),
-    );
-  });
-
   it('generates canonical agents, hooks, local status renderer, and settings', async () => {
     const f = await fixture(),
       out = path.join(f.root, 'out');
     await buildClaudePlugin({ ...f, outputRoot: out });
     const files = await tree(out);
     expect(files['agents/Explore.md']).toContain(
-      'name: Explore\ndescription: Exact Explore description\nmodel: sonnet\neffort: low\ntools: Read, Grep, Glob, Bash\noutput-schema: text',
+      "name: Explore\ndescription: Exact Explore description\nmodel: 'sonnet'\neffort: 'low'\ntools: 'Read, Grep, Glob, Bash'\noutput-schema: 'text'",
     );
     expect(files).not.toHaveProperty('agents/mpx-explorer.md');
     expect(files['agents/Explore.md']).not.toContain('model: inherit');
@@ -761,37 +654,6 @@ describe('Claude projection', () => {
         })
       ).code,
     ).toBe(0);
-  });
-  it('projects the exact production agent catalog with one harness-facing Explore', async () => {
-    const f = await fixture(),
-      out = path.join(f.root, 'production-agents'),
-      agents = path.resolve(import.meta.dirname, '../../../../../content/agents');
-    await buildClaudePlugin({ ...f, agents, outputRoot: out });
-    const files = await tree(out),
-      projected = Object.keys(files).filter((name) =>
-        /^agents\/(?:mpx-[a-z0-9-]+|Explore)\.md$/u.test(name),
-      );
-    expect(projected).toHaveLength(22);
-    expect(projected.filter((name) => name === 'agents/Explore.md')).toHaveLength(1);
-    expect(projected).not.toContain('agents/mpx-explorer.md');
-    for (const name of projected) {
-      expect(files[name]).not.toContain('model: inherit');
-    }
-    expect(files['agents/mpx-check-fixer.md']).toContain(
-      'model: opus\neffort: high\ntools: Read, Grep, Glob, Bash, Agent',
-    );
-    expect(files['agents/mpx-check-fixer.md']).toContain(
-      'allowed-subagents: mpx-checker,mpx-reviewer-best-practices,mpx-reviewer-code-quality,mpx-reviewer-error-handling,mpx-reviewer-performance,mpx-reviewer-security,mpx-reviewer-spec-alignment,mpx-reviewer-test-quality,mpx-executor,mpx-chrome-devtools-tester',
-    );
-    expect(
-      files['agents/mpx-check-fixer.md']!.match(/allowed-subagents: ([^\n]+)/u)?.[1],
-    ).not.toContain('*');
-    expect(files['agents/mpx-git-committer.md']).toContain(
-      'model: haiku\neffort: low\ntools: Bash',
-    );
-    expect(files['agents/mpx-reviewer-security.md']).toContain(
-      'model: sonnet\neffort: medium\ntools: Read, Grep, Glob, Bash',
-    );
   });
   it('publishes against the complete launch binding and separates distinct launch contexts', async () => {
     const f = await fixture(),
@@ -970,9 +832,17 @@ describe('Claude projection', () => {
       catalog: f.catalog,
       canonicalRoot: f.canonical,
     });
+    const compiledContent = await compileContent({
+      runtime: 'claude',
+      plan: skillPlan,
+      runtimeProfiles: f.runtimeProfiles,
+      sharedInstructionRoot: f.shared,
+      agentRoot: f.agents,
+    });
     const published = await publishClaudeProjection({
         ...f,
         skillPlan,
+        compiledContent,
         artifactsRoot: path.join(f.root, 'selected-artifacts'),
       }),
       guard = path.join(published.directory, 'hooks', 'runtime-guard.mjs'),
@@ -1198,28 +1068,6 @@ describe('Claude projection', () => {
     );
     expect(result).toEqual({ stdout: `${launchBanner} | ports invalid`, stderr: '', code: 0 });
   });
-  it('rejects symlinked canonical agent and references roots', async () => {
-    const f = await fixture();
-    const linkedAgents = path.join(f.root, 'linked-agents');
-    await linkDirectory(f.agents, linkedAgents);
-    await expect(
-      buildClaudePlugin({
-        ...f,
-        agents: linkedAgents,
-        outputRoot: path.join(f.root, 'out-linked'),
-      }),
-    ).rejects.toThrow(/AGENT_ROOT/u);
-    await rm(linkedAgents, { recursive: true, force: true });
-    await mkdir(path.join(f.agents, 'references'));
-    const safeReference = path.join(f.root, 'safe-references');
-    await mkdir(safeReference);
-    await writeFile(path.join(safeReference, 'guide.md'), 'guide\n');
-    await rm(path.join(f.agents, 'references'), { recursive: true, force: true });
-    await linkDirectory(safeReference, path.join(f.agents, 'references'));
-    await expect(
-      buildClaudePlugin({ ...f, outputRoot: path.join(f.root, 'out-references') }),
-    ).rejects.toThrow(/REFERENCE|AGENT_ROOT/u);
-  });
   it('never writes a private account root into public projection references or generated plugin bytes', async () => {
     const f = await fixture(),
       out = path.join(f.root, 'out'),
@@ -1250,6 +1098,10 @@ it('preserves argv-only launch context and fails closed on legacy namespace conf
     args: ['--plugin-dir', 'C:/artifact'],
   });
   expect(plan.env.MPX_RUNTIME_CONTEXT).toBe('{"launchKey":"k"}');
+  expect(plan.env.MPX_ACTIVE_CONTENT_ROOT).toBe('C:/artifact');
+  expect(plan.env.MPX_ACTIVE_CONTENT_MANIFEST).toBe(
+    path.join('C:/artifact', 'active-content.json'),
+  );
   expect(() => diagnoseLegacyNamespaceConflicts(['mp', 'mp-gh'])).toThrow(
     /LEGACY_NAMESPACE_CONFLICT/,
   );
@@ -1301,6 +1153,8 @@ it('binds the privately selected Claude account root only in the child environme
       CLAUDE_CONFIG_DIR: accountRoot,
       MPX_RUNTIME_CONTEXT: '{"launchKey":"k"}',
       MPX_RUNTIME_PROJECTION_REFERENCE: expect.any(String),
+      MPX_ACTIVE_CONTENT_ROOT: 'C:/artifact',
+      MPX_ACTIVE_CONTENT_MANIFEST: path.join('C:/artifact', 'active-content.json'),
     },
   });
 });

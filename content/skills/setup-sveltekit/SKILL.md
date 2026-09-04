@@ -4,6 +4,7 @@ description: Create a SvelteKit project from an authorized template with Review 
 triggers: setting up a SvelteKit repository
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

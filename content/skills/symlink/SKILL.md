@@ -3,6 +3,7 @@ name: symlink
 description: 'Creates and verifies Windows symlinks and directory junctions through PowerShell New-Item. Any symlink or junction work on Windows. Git Bash ln -s and cmd mklink silently create the wrong thing here.'
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---

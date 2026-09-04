@@ -4,6 +4,7 @@ description: Review a completed Epic across code, architecture, cleanup, documen
 triggers: end-of-Epic review and optional accepted fixes
 metadata:
   mpx:
+    schemaVersion: 1
     skillPacks: [work]
     defaultExposure: explicit-only
 ---

@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "claude": {
+      "mechanical": "haiku",
+      "standard": "sonnet",
+      "advanced": "opus",
+      "frontier": "fable"
+    },
+    "pi": {
+      "mechanical": "openai-codex/gpt-5.6-luna",
+      "standard": "openai-codex/gpt-5.6-terra",
+      "advanced": "openai-codex/gpt-5.6-sol",
+      "frontier": "openai-codex/gpt-5.6-sol"
+    }
+  },
+  "agentTranslation": {
+    "runtimes": {
+      "claude": {
+        "aliases": {
+          "mpx-check-fixer": "mpx-check-fixer",
+          "mpx-checker": "mpx-checker",
+          "mpx-chrome-devtools-tester": "mpx-chrome-devtools-tester",
+          "mpx-ci-fixer": "mpx-ci-fixer",
+          "mpx-context7-docs-fetcher": "mpx-context7-docs-fetcher",
+          "mpx-executor": "mpx-executor",
+          "mpx-explorer": "Explore",
+          "mpx-git-committer": "mpx-git-committer",
+          "mpx-issue-analyzer": "mpx-issue-analyzer",
+          "mpx-issue-finder": "mpx-issue-finder",
+          "mpx-review-manager": "mpx-review-manager",
+          "mpx-reviewer-best-practices": "mpx-reviewer-best-practices",
+          "mpx-reviewer-code-quality": "mpx-reviewer-code-quality",
+          "mpx-reviewer-error-handling": "mpx-reviewer-error-handling",
+          "mpx-reviewer-performance": "mpx-reviewer-performance",
+          "mpx-reviewer-security": "mpx-reviewer-security",
+          "mpx-reviewer-spec-alignment": "mpx-reviewer-spec-alignment",
+          "mpx-reviewer-test-quality": "mpx-reviewer-test-quality",
+          "mpx-scanner-architecture": "mpx-scanner-architecture",
+          "mpx-tdd-executor": "mpx-tdd-executor",
+          "mpx-ui-variant-generator": "mpx-ui-variant-generator",
+          "mpx-unresolved-issue-tracker": "mpx-unresolved-issue-tracker"
+        },
+        "capabilities": {
+          "mappings": {
+            "read": ["Read"],
+            "search": ["Grep", "Glob"],
+            "shell": ["Bash"],
+            "write": ["Edit", "Write"],
+            "browser": ["mcp__mpx_gateway__mcp"],
+            "context": ["mcp__mpx_gateway__mcp"],
+            "web": ["WebSearch", "WebFetch"]
+          }
+        },
+        "frontmatter": {
+          "model": "model",
+          "thinking": "effort",
+          "tools": "tools",
+          "outputSchema": "output-schema",
+          "nesting": "allowed-subagents"
+        },
+        "separators": {
+          "tools": ", ",
+          "nesting": ","
+        },
+        "nestingRequiredTools": ["Agent"]
+      },
+      "pi": {
+        "aliases": {
+          "mpx-check-fixer": "mpx-check-fixer",
+          "mpx-checker": "mpx-checker",
+          "mpx-chrome-devtools-tester": "mpx-chrome-devtools-tester",
+          "mpx-ci-fixer": "mpx-ci-fixer",
+          "mpx-context7-docs-fetcher": "mpx-context7-docs-fetcher",
+          "mpx-executor": "mpx-executor",
+          "mpx-explorer": "Explore",
+          "mpx-git-committer": "mpx-git-committer",
+          "mpx-issue-analyzer": "mpx-issue-analyzer",
+          "mpx-issue-finder": "mpx-issue-finder",
+          "mpx-review-manager": "mpx-review-manager",
+          "mpx-reviewer-best-practices": "mpx-reviewer-best-practices",
+          "mpx-reviewer-code-quality": "mpx-reviewer-code-quality",
+          "mpx-reviewer-error-handling": "mpx-reviewer-error-handling",
+          "mpx-reviewer-performance": "mpx-reviewer-performance",
+          "mpx-reviewer-security": "mpx-reviewer-security",
+          "mpx-reviewer-spec-alignment": "mpx-reviewer-spec-alignment",
+          "mpx-reviewer-test-quality": "mpx-reviewer-test-quality",
+          "mpx-scanner-architecture": "mpx-scanner-architecture",
+          "mpx-tdd-executor": "mpx-tdd-executor",
+          "mpx-ui-variant-generator": "mpx-ui-variant-generator",
+          "mpx-unresolved-issue-tracker": "mpx-unresolved-issue-tracker"
+        },
+        "capabilities": {
+          "mappings": {
+            "read": ["read"],
+            "search": ["grep", "find", "ls"],
+            "shell": ["bash"],
+            "write": ["edit", "write"],
+            "browser": ["mcp"],
+            "context": ["mcp"],
+            "web": ["web_search", "fetch_content", "get_search_content", "source_check"]
+          }
+        },
+        "frontmatter": {
+          "model": "model",
+          "thinking": "thinking",
+          "tools": "tools",
+          "outputSchema": "output_schema",
+          "nesting": "allowed_subagents"
+        },
+        "separators": {
+          "tools": ", ",
+          "nesting": ","
+        },
+        "nestingRequiredTools": []
+      }
+    }
+  },
+  "contentTranslation": {
+    "nameOnlyDescriptionTemplate": "MPX skill {{identity}}. Load only when the user explicitly mentions {{identity}} by name.",
+    "runtimes": {
+      "claude": {
+        "argumentHint": "supported",
+        "capabilities": {
+          "support": "preapproved",
+          "mappings": {
+            "read": ["Read"],
+            "search": ["Glob", "Grep"],
+            "shell": ["Bash"],
+            "write": ["Write", "Edit"],
+            "delegate": ["Agent"]
+          }
+        },
+        "frontmatter": {
+          "argumentHint": "argument-hint",
+          "capabilityGrant": "allowed-tools"
+        }
+      },
+      "pi": {
+        "argumentHint": "unsupported",
+        "capabilities": {
+          "support": "unsupported",
+          "mappings": {}
+        },
+        "frontmatter": {
+          "argumentHint": null,
+          "capabilityGrant": null
+        }
+      }
+    }
+  }
+}

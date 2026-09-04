@@ -1,16 +1,7 @@
 import { lstat, mkdir, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import {
-  verifySkillProjectionPlan,
-  type SkillProjectionPlan,
-  type SkillProjectionPlanEntry,
-} from '@mpx/skills';
-import { AgentCatalogError, type AgentCapabilityV1, type AgentModelClassV1 } from '@mpx/subagents';
-import {
-  AgentDocumentError,
-  loadCanonicalAgentProjectionInputsV1,
-  renderCanonicalAgentDocumentV1,
-} from '@mpx/subagents/documents';
+import { verifySkillProjectionPlan, type SkillProjectionPlan } from '@mpx/skills';
+import { verifyCompiledContentTree, type CompiledContentTree } from '@mpx/content-compiler';
 import {
   parseRuntimeCapabilityManifestV1,
   parseRuntimeContextV1,
@@ -55,6 +46,7 @@ import {
 } from './runtime-tools.js';
 export * from './runtime-tools.js';
 
+// fallow-ignore-next-line unused-export -- stable runtime automation contract.
 export class ClaudeRuntimeError extends Error {
   constructor(
     readonly code: string,
@@ -66,13 +58,8 @@ export class ClaudeRuntimeError extends Error {
 }
 export interface ClaudeBuildInput {
   readonly skillPlan: SkillProjectionPlan;
-  readonly agents: string;
+  readonly compiledContent: CompiledContentTree;
   readonly outputStyle: string;
-  readonly modelMappings: {
-    readonly schemaVersion: 1;
-    readonly runtime: 'claude';
-    readonly models: Readonly<Record<AgentModelClassV1, string>>;
-  };
   readonly outputRoot: string;
   readonly statusSnapshot: StatusSnapshotV1;
   readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
@@ -94,22 +81,6 @@ export interface ClaudePublishInput extends Omit<ClaudeBuildInput, 'outputRoot'>
   readonly artifactRevalidator?: Parameters<typeof publishRuntimeArtifact>[0]['revalidate'];
 }
 const q = (value: string) => JSON.stringify(value);
-function skillText(entry: SkillProjectionPlanEntry): string {
-  const description =
-    entry.exposure === 'full' ? entry.initialContext!.description! : `mpx skill ${entry.identity}`;
-  const lines = ['---', `name: ${entry.identity}`, `description: ${q(description)}`];
-  const triggers = entry.initialContext?.triggers;
-  if (entry.exposure === 'full' && triggers) {
-    lines.push(`triggers: ${q(triggers)}`);
-  }
-  lines.push(
-    'user-invocable: true',
-    ...(entry.exposure === 'explicit-only' ? ['disable-model-invocation: true'] : []),
-    '---',
-    entry.body,
-  );
-  return `${lines.join('\n')}${entry.body.endsWith('\n') ? '' : '\n'}`;
-}
 async function write(
   root: string,
   relative: string,
@@ -372,94 +343,12 @@ function stable(value: unknown): string {
   }
   return JSON.stringify(value);
 }
-const claudeTools: Record<AgentCapabilityV1, string[]> = {
-  read: ['Read'],
-  search: ['Grep', 'Glob'],
-  shell: ['Bash'],
-  write: ['Edit', 'Write'],
-  browser: ['mcp__mpx_gateway__mcp'],
-  context: ['mcp__mpx_gateway__mcp'],
-  web: [
-    'mcp__mpx_gateway__web_search',
-    'mcp__mpx_gateway__fetch_content',
-    'mcp__mpx_gateway__get_search_content',
-    'mcp__mpx_gateway__source_check',
-  ],
-};
-async function canonicalAgents(
-  root: string,
-  modelMappings: ClaudeBuildInput['modelMappings'],
-): Promise<Array<[string, Uint8Array]>> {
-  try {
-    const canonical = await loadCanonicalAgentProjectionInputsV1(root, {
-      allowMissingMetadata: true,
-    });
-    const result: Array<[string, Uint8Array]> = canonical.entries.map((entry) => {
-      const projectedName = entry.identity === 'mpx-explorer' ? 'Explore' : entry.identity,
-        metadata = entry.metadata,
-        tools = [
-          ...new Set(metadata.capabilities.flatMap((capability) => claudeTools[capability] ?? [])),
-          ...(metadata.nesting.length ? ['Agent'] : []),
-        ],
-        fields = [
-          { name: 'model', value: modelMappings.models[metadata.modelClass] },
-          { name: 'effort', value: metadata.thinking },
-          { name: 'tools', value: tools.join(', ') },
-          { name: 'output-schema', value: metadata.outputSchema },
-          ...(metadata.nesting.length
-            ? [{ name: 'allowed-subagents', value: metadata.nesting.join(',') }]
-            : []),
-        ];
-      return [
-        `${projectedName}.md`,
-        renderCanonicalAgentDocumentV1(entry.document, { name: projectedName, fields }),
-      ];
-    });
-    result.push(
-      ...canonical.supportFiles.map((file): [string, Uint8Array] => [
-        file.relativePath,
-        file.bytes,
-      ]),
-    );
-    return result;
-  } catch (error) {
-    if (error instanceof AgentCatalogError) {
-      const message =
-        error.code === 'AGENT_CATALOG_JSON_INVALID'
-          ? 'agent metadata must be valid JSON'
-          : error.code === 'AGENT_CATALOG_SCHEMA_INVALID'
-            ? 'agent metadata schema is invalid'
-            : error.code === 'AGENT_CATALOG_COVERAGE_INVALID'
-              ? error.missingIdentities.length > 0
-                ? `missing metadata for ${error.missingIdentities[0]}`
-                : 'agent metadata must exactly cover canonical agents'
-              : error.message;
-      throw new ClaudeRuntimeError('AGENT_METADATA_INVALID', message);
-    }
-    if (error instanceof AgentDocumentError) {
-      const mappings: Partial<Record<typeof error.code, [string, string]>> = {
-        AGENT_ROOT_INVALID: [
-          'AGENT_ROOT_INVALID',
-          'canonical agents root must be a real non-symlink directory',
-        ],
-        AGENT_SYMLINK: ['AGENT_SYMLINK', 'canonical agent may not be a symlink'],
-        AGENT_ESCAPE: ['AGENT_ESCAPE', 'canonical agent escapes its verified root'],
-        AGENT_DOCUMENT_INVALID: ['AGENT_INVALID', error.message],
-        AGENT_METADATA_INVALID: ['AGENT_METADATA_INVALID', 'agent metadata must be valid JSON'],
-        AGENT_METADATA_FILE_INVALID: [
-          'AGENT_METADATA_INVALID',
-          'agent metadata must be a regular file',
-        ],
-        AGENT_REFERENCE_INVALID: ['AGENT_REFERENCE_INVALID', error.message],
-      };
-      const mapped = mappings[error.code] ?? [error.code, error.message];
-      throw new ClaudeRuntimeError(mapped[0], mapped[1]);
-    }
-    throw error;
-  }
-}
 export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<ClaudeProjection> {
   const skillPlan = verifySkillProjectionPlan(input.skillPlan);
+  const compiledContent = verifyCompiledContentTree(input.compiledContent, {
+    runtime: 'claude',
+    plan: skillPlan,
+  });
   if (skillPlan.runtime !== 'claude') {
     throw new ClaudeRuntimeError(
       'ARTIFACT_BINDING_MISMATCH',
@@ -472,14 +361,10 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
       'immutable projection destination already exists',
     );
   }
-  const projected: Array<[string, string | Uint8Array]> = [];
-  for (const entry of skillPlan.entries) {
-    projected.push([`skills/${entry.identity}/SKILL.md`, skillText(entry)]);
-    for (const support of entry.files) {
-      projected.push([`skills/${entry.identity}/${support.relativePath}`, support.bytes]);
-    }
-  }
-  const agents = await canonicalAgents(input.agents, input.modelMappings);
+  const projected: Array<[string, Uint8Array]> = compiledContent.files.map((file) => [
+    file.relativePath,
+    Uint8Array.from(file.bytes),
+  ]);
   const outputStyle = await canonicalOutputStyle(input.outputStyle);
   const runtimeContext = parseRuntimeContextV1(input.runtimeContext),
     runtimeStatus = input.runtimeStatusEnvelope
@@ -496,15 +381,33 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
       'runtime status must match the Claude launch and repository binding',
     );
   }
+  const runtimeOwned = new Set(
+    [
+      '.claude-plugin/plugin.json',
+      'output-styles/mpx-terse.md',
+      'hooks/hooks.json',
+      'hooks/dangerous-command-policy.mjs',
+      'hooks/runtime-guard.mjs',
+      runtimeStatus ? 'status/runtime-status-envelope.json' : 'status/status-snapshot.json',
+      'status/status-line.mjs',
+      'runtime-context.json',
+      'settings.json',
+    ].map((value) => value.toLowerCase()),
+  );
+  const collision = projected.find(([relative]) => runtimeOwned.has(relative.toLowerCase()));
+  if (collision) {
+    throw new ClaudeRuntimeError(
+      'CONTENT_FILE_COLLISION',
+      `compiled content collides with runtime-owned file ${collision[0]}`,
+    );
+  }
+  verifyCompiledContentTree(compiledContent, { runtime: 'claude', plan: skillPlan });
   const files: string[] = [];
   await mkdir(input.outputRoot, { recursive: false });
   try {
     await write(input.outputRoot, '.claude-plugin/plugin.json', pluginJson(), files);
     for (const [relative, text] of projected) {
       await write(input.outputRoot, relative, text, files);
-    }
-    for (const [name, text] of agents) {
-      await write(input.outputRoot, `agents/${name}`, text, files);
     }
     await write(input.outputRoot, 'output-styles/mpx-terse.md', outputStyle, files);
     await write(input.outputRoot, 'hooks/hooks.json', hooksJson, files);
@@ -608,6 +511,7 @@ export async function publishClaudeProjection(
     await rm(staging, { recursive: true, force: true });
   }
 }
+// fallow-ignore-next-line unused-export -- stable runtime automation contract.
 export function adaptClaudePreBash(command: string, manager: PackageManager | null) {
   const danger = classifyDangerousCommand(command);
   return danger.action === 'block' ? danger : evaluatePackagePolicy(command, manager);
@@ -618,6 +522,7 @@ export interface ClaudeRuntimeStatusProducer {
   readonly current: () => RuntimeStatusEnvelopeV1 | undefined;
   readonly abort: () => void;
 }
+// fallow-ignore-next-line unused-export -- stable runtime automation contract.
 export function createClaudeRuntimeStatusProducer(
   reader: RuntimeStatusEnvelopeReader,
   binding: RuntimeStatusBindingV1,
@@ -1093,6 +998,8 @@ export function createClaudeInvocationPlan(input: ClaudeInvocationInput): Claude
       CLAUDE_CONFIG_DIR: accountRoot,
       MPX_RUNTIME_CONTEXT: stable(input.runtimeContext),
       MPX_RUNTIME_PROJECTION_REFERENCE: stable(projectionReference),
+      MPX_ACTIVE_CONTENT_ROOT: pluginDirectory,
+      MPX_ACTIVE_CONTENT_MANIFEST: path.join(pluginDirectory, 'active-content.json'),
       ...(input.runtimeStatusEnvelopePath
         ? {
             MPX_RUNTIME_STATUS_FILE: absolute(
