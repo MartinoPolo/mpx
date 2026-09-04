@@ -10,11 +10,11 @@ MPX is a skills-first local control plane for launching Claude and Pi with expli
 - **Develop:** use `mpx dev` and the managed-port model documented in [Runtime adapters](docs/RUNTIME_ADAPTERS.md), [Ports](docs/PORTS.md), and [Worktrees](docs/WORKTREES.md).
 - **Sessions and accounts:** see [Sessions installer](docs/SESSIONS_INSTALLER.md) and [Pi accounts](docs/PI_ACCOUNTS.md).
 - **Issues:** see [Issues](docs/ISSUES.md) and [local Markdown issues](docs/local-markdown-issues.md).
-- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md). Supporting evidence includes [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
+- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md) and [ADR 0004: Canonical native Pi extensions](docs/adr/0004-canonical-native-pi-extensions.md). Supporting evidence includes [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
 
 ## Private-state boundary
 
-Tracked files contain source, schemas, generated projections, and public evidence only. User configuration, native runtime roots, credentials, OAuth/account attestations, session registries and transcripts, leases, installer receipts, sandbox state, and preparation logs belong under user-local application/state roots (normally `%APPDATA%/mpx` or `%LOCALAPPDATA%/mpx`) and must not be committed, copied into generated content, or exposed in diagnostics. Docker execution does not widen access to host credentials or native runtime state; proof-bound admission fails closed rather than falling back to host execution.
+Tracked files contain source, schemas, shared-content projections, and public evidence only. User configuration, native runtime roots, credentials, OAuth/account attestations, session registries and transcripts, leases, installer receipts, sandbox state, and preparation logs belong under user-local application/state roots (normally `%APPDATA%/mpx` or `%LOCALAPPDATA%/mpx`) and must not be committed, copied into releases, or exposed in diagnostics. A whole-agent sandbox may deliberately receive its selected identity's runtime state for native Pi and trusted extensions; it must not receive the opposite identity, original checkout, unrelated host state, or host Docker socket. Sandbox failure never falls back silently to host execution.
 
 ## Platform support status
 

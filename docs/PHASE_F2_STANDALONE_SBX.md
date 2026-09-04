@@ -1,5 +1,7 @@
 # Phase F2 standalone sbx runner
 
+> **Superseded architecture:** This document preserves historical standalone-sbx proof evidence. [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and [the active migration plan](../MPX_MIGRATION.md) replace its host-Pi worker/proxy route with whole-agent sandbox Pi and canonical native extensions. Retain the evidence; do not treat the old launch shape as current design guidance.
+
 MPX accepts only the standalone Windows `sbx.exe` v0.39.0 build `def8cb0523a77e757bdd6ef52b459fe374f3783e`, SHA-256 `b064711a10f22363953e90eae926dbd9d96419e601f9308cd9d1102e3d81ccbf`. The legacy Docker CLI sandbox plugin is never discovered or invoked.
 
 ## Read-only discovery

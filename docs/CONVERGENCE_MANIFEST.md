@@ -1,6 +1,8 @@
 # Phase F1 convergence manifest
 
-`docs/history/CONVERGENCE_MANIFEST.json` is the completed, versioned Phase F1 inventory of both maintained source repositories under `${MPX_PROJECTS}`. It records paths, Git state, and hashes without storing absolute machine paths or private account/session content.
+`docs/history/CONVERGENCE_MANIFEST.json` is the completed, versioned Phase F1 inventory of the source repositories maintained when that snapshot was captured. It records paths, Git state, and hashes without storing absolute machine paths or private account/session content.
+
+[ADR 0004](adr/0004-canonical-native-pi-extensions.md) deprecates `mpx-pi` as a maintained source after retained Pi-specific implementations move into MPX. Preserve the historical snapshot. During the migration, current verification may still inspect the former source roots; Gate 8 removes those live dependencies rather than rewriting the evidence.
 
 ## Gate result
 

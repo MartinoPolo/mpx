@@ -4,7 +4,7 @@ MPX resolves canonical content once into a runtime-neutral v4 manifest. The mani
 
 Runtime adapters consume verified runtime-neutral plans. They own only harness translation, projection assembly, and invocation wiring; canonical parsing, policy, provider logic, model-selection defaults, and application orchestration remain in their owning workspace packages.
 
-`@mpx/config` owns the immutable, validated `RuntimeAgentModelMappingsV1` defaults alongside `RuntimeModelSelectionV1`. The mappings translate the neutral `luna`/`sol`/`terra` agent classes to Claude aliases or full Pi provider/model identifiers. Runtime build and generation APIs require the mappings as explicit inputs and contain no built-in provider/model catalog. CLI composition supplies the config defaults for launch builds. The tracked Pi generation script also resolves the Pi default from config and passes it to the generator; the generator itself only translates the supplied mapping. This boundary does not add a user-config schema surface.
+`@mpx/config` owns the immutable, validated `RuntimeAgentModelMappingsV1` defaults alongside `RuntimeModelSelectionV1`. The mappings translate the neutral `luna`/`sol`/`terra` agent classes to Claude aliases or full Pi provider/model identifiers. Runtime build and generation APIs require the mappings as explicit inputs and contain no built-in provider/model catalog. CLI composition supplies the config defaults for launch builds. Agent generation translates only the supplied mapping; it does not generate Pi-specific extension implementation. This boundary does not add a user-config schema surface.
 
 ## Four exposure states
 
@@ -19,7 +19,9 @@ Model search is artifact-key-bound and can inspect canonical metadata only for `
 
 ## Pi
 
-The Pi adapter publishes a self-contained projection containing runtime context, extension, settings, keybindings, themes, generated agents, and policy-selected skills. Command registration, model search, and body loading consume its exact v4 reference. Pi performs exact open-handle and body-hash checks. The selected private account root is passed only as `PI_CODING_AGENT_DIR`.
+[ADR 0004](adr/0004-canonical-native-pi-extensions.md) supersedes the generated-extension ownership model. Gate 4 will move canonical Pi-specific source into `runtimes/pi/extensions`; native host Pi and whole-agent sandbox Pi will use that same checked-in extension package through normal Pi discovery. The adapter will not generate substitute footer, tool, hook, command, editor, widget, or lifecycle implementations.
+
+The target Pi adapter projects runtime-neutral skills and agents plus launch-bound data such as the resolved manifest and runtime context. It registers the canonical package in the selected discovery surface, passes the selected account root as `PI_CODING_AGENT_DIR`, and translates paths for host or sandbox execution. Build output may package canonical source but is not a second implementation. The current generated `extension.mjs`, explicit `--extension`, and `--no-extensions` launch remain temporary migration state until Gate 4 replaces them; the canonical package must never be loaded through both explicit argv and discovery.
 
 ## Claude
 
@@ -27,4 +29,4 @@ The Claude adapter publishes an immutable plugin projection with policy-selected
 
 Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`. Immutable-copy checks at these earliest supported boundaries detect change but cannot atomically interpose between Claude's native `SKILL.md` read and expansion. The status adapter independently parses and validates the live `StatusSnapshotV1`; it does not validate the whole projection.
 
-Both adapters enforce the shared dangerous-command policy. Interactive runtimes have no artificial 120-second lifetime; finite probes remain bounded. Neither adapter copies credentials, sessions, private routes, or MCP descriptors. Phase F only consumes preprovisioned read-only routes/descriptors; Phase I provisions them. KanbanFlow uses OS-keyring authorization rather than a route config path. Docker remains gated pending F2 with no fallback. Session continuation is provided by the delivered Phase G lifecycle/session layer rather than by projection generation.
+Both adapters enforce the shared dangerous-command policy. Interactive runtimes have no artificial 120-second lifetime; finite probes remain bounded. Releases and public launch data never contain credentials or sessions. A whole-agent sandbox may stage only its selected identity's Pi, Git, SSH, GitHub, and GitLab runtime state for trusted extensions; the opposite identity and unrelated host state remain unavailable. KanbanFlow uses OS-keyring authorization rather than a route config path. Sandbox failure has no host fallback. Session continuation is provided by the lifecycle/session layer rather than by projection generation.

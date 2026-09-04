@@ -1,5 +1,7 @@
 # Phase F2 host-Pi / sandbox-executor split
 
+> **Superseded architecture:** This document preserves historical proof for the host-Pi/remote-tool design. [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and [the active migration plan](../MPX_MIGRATION.md) replace it with whole-agent sandbox Pi using the same canonical native extensions as host Pi. Do not extend this proxy architecture.
+
 Phase F2 production routing, proof-runner evidence, and lifecycle support are implemented without performing a real container or authentication operation. This evidence is offline-only and does not claim live F2 runtime acceptance.
 
 ## Host/private boundary

@@ -36,12 +36,17 @@ This authorization is limited by these rules:
 
 - `mpxconfig.json` is the only committed project integration manifest.
 - Credentials, identities, launch defaults, native account roots, and mutable machine state remain user-local.
-- Native account stores remain authoritative. MPX does not copy secrets, auth, sessions, cache, or trust state into a release.
+- Runtime-neutral skills and agents remain generated/projected for Claude and Pi. Gate 4 makes Pi-specific extension implementations canonical checked-in source under `runtimes/pi/extensions`, never generated replacements.
+- The former `mpx-pi` repository is deprecated after all retained Pi-specific source, behavior, and tests move into MPX.
+- Gate 4 restores native Pi extension discovery, trusted project extensions, and `/reload` on host routes; Gate 5 carries the same behavior into the sandbox.
+- Native account stores remain authoritative. MPX does not place secrets, auth, sessions, cache, or trust state in a release, but the selected sandbox identity and trusted extensions may access that identity's runtime state and services.
 - Installed MPX launchers use the `-mpx` suffix and never shadow native launchers.
+- Convenience and native runtime compatibility are explicit design requirements; integrity machinery must protect a retained boundary rather than duplicate native behavior.
 - Host execution is explicit compatibility, never sandbox isolation or a silent fallback.
-- Standalone Docker Sandboxes `sbx` is the target whole-agent executor.
-- Initial sandbox work uses a private clone. Linked host worktrees are not mounted with repository-wide Git administration state.
+- Standalone Docker Sandboxes `sbx` is the target whole-agent executor; Pi and its native extensions execute inside the sandbox rather than through host-Pi tool proxies.
+- Initial sandbox work uses a host-owned standalone private clone mounted as `/workspace`. The original checkout and linked-worktree Git administration state are not mounted.
 - The selected `open` network baseline is global `allow-all`; it is not an egress-isolation boundary.
+- The sandbox protects the opposite identity, original checkout, unrelated host paths/processes, and host Docker socket. Selected-identity extensions share selected-identity authority.
 - The installer never owns Windows Terminal settings, Task Scheduler, Raycast, or Obsidian orchestration.
 - `agent-resurrect` remains the standalone daily UI; MPX owns only a stable compatibility protocol.
 - Local Markdown issues, ports, host worktrees, explicit project registration, and safe `wt.exe` tab launching remain supported.
@@ -80,7 +85,7 @@ There are two cleanup waves. Gate 2 removes dependency-safe obsolete scope befor
 
 **Remove after dependency validation:** Raycast runtime/installer integration, Obsidian installer orchestration, Task Scheduler activation and unused dedicated machinery, Linux/macOS acceptance plans, installer-owned Windows Terminal assumptions, duplicate reports, superseded phase documents, abandoned generated/provenance inputs, and conflicting stale registration branches.
 
-**Retain:** Local Markdown, ports, host worktrees, minimal provider architecture, project registration, safe `wt.exe` launching, resurrection dependencies, and the host Pi bridge until replacement passes.
+**Retain:** Local Markdown, ports, host worktrees, minimal provider architecture, project registration, safe `wt.exe` launching, resurrection dependencies, and the temporary host Pi compatibility route until whole-agent replacement passes.
 
 **Acceptance:** Regenerate once; run every required check; integrate cleanup; remove its worktree and branch; finish on clean `main`.
 
@@ -106,12 +111,13 @@ There are two cleanup waves. Gate 2 removes dependency-safe obsolete scope befor
 
 ### Gate 4 — curated host parity and resurrection
 
-**Purpose:** Make canonical content and host MPX Claude/Pi routes deterministic, then preserve daily session resurrection before changing the executor architecture.
+**Purpose:** Establish one canonical native Pi extension package in MPX, prove normal host discovery and complete host MPX Claude/Pi parity, then preserve daily session resurrection before changing the executor architecture.
 
 **Implementation ownership:**
 
-- Content: canonical skills, agents, prompts, output style, and inventory.
-- Pi: footer, extensions, immutable profile, keybindings, theme, settings, and explicit invocation argv.
+- Shared content: canonical runtime-neutral skills, agents, prompts, output style, and inventory; project only the content used by both harnesses.
+- Pi extensions: checked-in source under `runtimes/pi/extensions`, migrated without behavioral rewrites from `mpx-pi`; native host and sandbox Pi use the same package.
+- Pi runtime adapter: validated launch data, shared-content projection, static extension selection, profile arguments, and host/sandbox path translation only.
 - Claude: plugin, hooks, forced output style, status, and supported settings.
 - Sessions: privacy-safe MPX export, approved resume route, and narrow `agent-resurrect` compatibility.
 
@@ -122,8 +128,9 @@ The orchestrator alone integrates generated files and migration evidence.
 1. Install and strictly verify the current immutable MPX release without changing native launcher names, Windows Terminal, or Task Scheduler.
 2. Reconcile MPX sessions and validate the strict bounded resurrection export contains no native paths, IDs, transcripts, prompts, credentials, model data, or launch evidence.
 3. Prove native Pi, native Claude, host MPX Pi, host MPX Claude, and a mixed native/MPX Windows Terminal save/reopen group.
-4. Revalidate Pi profile/footer/keybindings/common skill and Claude hooks/forced output style/native status line on personal and work routes.
-5. Prove model response, model-triggered file read/write as appropriate, shell/Git identity route, correct account, and unchanged native fallback.
+4. Prove normal Pi extension discovery, trusted project discovery, `/reload`, and the complete canonical footer, subagent, development-service, guard, profile, keybinding, and common-skill behavior on personal and work routes.
+5. Prove the generated MPX extension no longer duplicates native footer/editor/widgets or `Agent`/`dev_server` tools.
+6. Prove Claude hooks/forced output style/native status line, model response, model-triggered file read/write as appropriate, shell/Git identity route, correct account, and unchanged native fallback.
 
 **Acceptance:** The implementation and installed host behavior pass. A credential-blocked final route remains explicitly unchecked rather than being inferred from another account.
 
@@ -133,15 +140,16 @@ The orchestrator alone integrates generated files and migration evidence.
 
 **Required design and proof:**
 
-- Ephemeral selected-identity profile with credentials outside model-visible sandbox authority.
-- Private sandbox clone workspace and durable session persistence.
-- Exact mount allowlist with no opposite identity, native account root, Docker socket, or unintended host path.
+- Pi and the same canonical native extensions used on the host execute inside the sandbox; native tools and extension subprocesses are not replaced by host proxies.
+- Selected-identity Pi, Git, SSH, GitHub, and GitLab state is available to trusted extensions but absent from releases, public state, and opposite-identity reach.
+- A host-owned standalone private clone is mounted as `/workspace`; the original checkout remains outside the sandbox and changes return only through explicit export/apply-back.
+- Exact mount allowlist with no opposite identity, original checkout, broad home root, Docker socket, or unintended host path.
+- Open network, assigned-port publication, and a narrow nonce-bound host path/editor bridge.
 - Model-visible file, shell, process, browser, Git, and development tools execute only inside the sandbox.
 - No host fallback under any failure.
-- Explicit export/apply-back flow for changes.
-- Host-to-sandbox session-path translation and verified cleanup.
+- Host-to-sandbox workspace/session-path translation, durable session persistence, and verified cleanup.
 
-**Acceptance:** Real Claude and Pi whole-agent launches prove selected identity, model response, tools, Git, session resume, exact mounts, apply-back, denial/failure behavior, and zero residual sandboxes. Host compatibility cannot be labeled sandbox isolation.
+**Acceptance:** Real Claude and Pi whole-agent launches prove the canonical native extension set, complete footer and services, selected identity, model response, tools, Git, published development ports, host file/folder/editor flows, session resume, exact mounts, apply-back, denial/failure behavior, and zero residual sandboxes. Host compatibility cannot be labeled sandbox isolation.
 
 ### Gate 6 — all-route acceptance
 
@@ -180,7 +188,7 @@ The orchestrator alone integrates generated files and migration evidence.
 
 **Purpose:** Remove the second wave of legacy compatibility only after live replacements and rollback are proven.
 
-**Remove:** Old split Pi bridge/worker implementation, fake-worker tests, superseded F2 proof machinery, old repository imports and activation state, stale generated inventories, and temporary migration-only artifacts—including this guide.
+**Remove:** Old split Pi bridge/worker implementation, host-tool proxy and fake-worker tests, superseded F2 proof machinery, generated Pi footer/tool/UI implementations, duplicate vendored extension trees, live `mpx-pi`/`mpx-claude-code` imports, legacy activation state, stale generated inventories, and temporary migration-only artifacts—including this guide.
 
 **Final acceptance:**
 
@@ -202,13 +210,13 @@ MPX exports bounded metadata and an argv route, never a shell command string. It
 - skip active sessions and reopen closed MPX sessions through the exact validated exported argv;
 - support mixed native/MPX Windows Terminal groups without ID collisions.
 
-Sandbox acceptance later adds dedicated host-owned MPX session storage and host-to-sandbox path translation; Gate 4 proves host MPX resurrection only.
+Sandbox acceptance later adds dedicated host-owned MPX session storage plus host-to-sandbox workspace/session path translation; Gate 4 proves host MPX resurrection and normal native Pi extension discovery first.
 
 ## Worktrees, ports, and parallel agents
 
 - Host worktrees remain available and use sibling `<repo>.worktrees` directories.
-- Initial sandbox acceptance uses a private clone because linked worktree `.git` files reference repository-wide host Git administration state.
-- Port allocation remains independent; sandbox port forwarding is not required for initial sandbox acceptance.
+- Initial sandbox acceptance uses a host-owned standalone private clone because linked worktree `.git` files reference repository-wide host Git administration state. The original checkout is never mounted.
+- Port allocation remains independent; Gate 5 publishes only the launch's assigned sandbox development ports so native footer links remain usable from the host.
 - Read-only exploration may fan out broadly.
 - At most a few implementation agents operate simultaneously with exclusive path ownership.
 - No two agents edit generated files or migration authority files.
@@ -217,7 +225,7 @@ Sandbox acceptance later adds dedicated host-owned MPX session storage and host-
 
 ## Blocker behavior
 
-- A blocked credential or OAuth route does not authorize bypass, copied secrets, API-token substitution, or weaker acceptance claims.
+- A blocked credential or OAuth route does not authorize opposite-identity access, unrelated host-secret access, unrecorded token substitution, or weaker acceptance claims. Explicit staging of the selected identity for its sandbox route is allowed and must remain out of releases, logs, and public state.
 - Continue independent verification and implementation while blocked.
 - Record the exact blocker and the unaccepted criterion.
 - Request interactive help only when it is the sole remaining safe action for the active gate.

@@ -24,4 +24,4 @@ MPX unifies test taxonomy, configuration, and scripts, not test ownership. It do
 
 Migration is incremental and includes coordinated path, import, configuration, and provenance work. Cross-workspace behavior uses public workspace APIs. Production TypeScript configurations exclude tests. Runtime and CLI adapters stay thin, and all verification and loading paths fail closed rather than using legacy fallbacks.
 
-The tracked Pi projection is a deliberate exception to the general rule that projections are generated and disposable. It remains generated through repository tooling and verified for convergence; it is never hand-edited.
+[ADR 0004](0004-canonical-native-pi-extensions.md) supersedes the tracked generated Pi-extension exception. Its migration target makes Pi-specific implementation canonical checked-in source and limits generation/projection to runtime-neutral shared content and launch-bound data.
