@@ -1,0 +1,33 @@
+{
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "terminal": {
+    "showTerminalProgress": false
+  },
+  "tuiMode": "fullscreen",
+  "fullscreenScrollbar": "always",
+  "enableSkillCommands": true,
+  "theme": "dark",
+  "hideThinkingBlock": false,
+  "packages": [
+    "npm:pi-web-access",
+    "npm:pi-mcp-adapter",
+    "npm:@juicesharp/rpiv-ask-user-question"
+  ],
+  "steeringMode": "all",
+  "followUpMode": "all",
+  "treeFilterMode": "default",
+  "doubleEscapeAction": "tree",
+  "defaultProjectTrust": "ask",
+  "enableInstallTelemetry": false,
+  "showCacheMissNotices": true,
+  "markdown": {
+    "mermaid": "streaming"
+  },
+  "autocompleteMaxVisible": 7,
+  "outputPad": 1,
+  "editorPaddingX": 0
+}

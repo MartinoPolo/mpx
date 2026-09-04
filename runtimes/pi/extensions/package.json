@@ -1,0 +1,33 @@
+{
+  "name": "@mpx/pi-extensions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/run.mjs build",
+    "test:unit": "node scripts/run.mjs test",
+    "test": "pnpm run test:unit",
+    "typecheck": "node scripts/run.mjs typecheck",
+    "check": "pnpm run build && pnpm run typecheck"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "@sinclair/typebox": "*"
+  },
+  "dependencies": {
+    "croner": "10.0.1",
+    "nanoid": "5.1.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
