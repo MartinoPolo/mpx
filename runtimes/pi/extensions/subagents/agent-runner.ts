@@ -484,6 +484,24 @@ function resolveConfiguredSessionDir(sessionDir: string | undefined, cwd: string
   return resolve(cwd, sessionDir);
 }
 
+/** Reject project-controlled paths before a resource loader can execute extension factories. */
+export async function loadAgentExtensionResources<T>(
+  source: string | undefined,
+  paths: string[] | undefined,
+  agentType: string,
+  isProjectTrusted: () => boolean,
+  onToolActivity: ((activity: ToolActivity) => void) | undefined,
+  reload: (additionalExtensionPaths: string[] | undefined) => Promise<T>,
+): Promise<T> {
+  const additionalExtensionPaths = paths?.length ? paths : undefined;
+  if (source === "project" && additionalExtensionPaths && !isProjectTrusted()) {
+    const message = `Blocked ${additionalExtensionPaths.length} custom extension path(s) from untrusted project agent "${agentType}".`;
+    onToolActivity?.({ type: "end", toolName: `extensions-error:${message}` });
+    throw new Error(message);
+  }
+  return reload(additionalExtensionPaths);
+}
+
 export async function runAgent(
   ctx: ExtensionContext,
   type: SubagentType,
@@ -600,17 +618,6 @@ export async function runAgent(
   // (`extensions: true` or a `"*"` wildcard) nor nothing (`noExtensions`).
   const loadAll = extensions === true || extensionsSpec?.wildcard === true;
 
-  // Project agent files are data until the host explicitly trusts the project.
-  // In particular, never pass their path-valued frontmatter to the loader: reload()
-  // executes extension factories, so filtering afterward would be too late. Bare
-  // names remain safe here because they only select extensions Pi already discovered
-  // through its own trust-aware resource loading.
-  if (agentConfig?.source === "project" && extensionsSpec?.paths.length && !ctx.isProjectTrusted()) {
-    const message = `Blocked ${extensionsSpec.paths.length} custom extension path(s) from untrusted project agent "${type}".`;
-    options.onToolActivity?.({ type: "end", toolName: `extensions-error:${message}` });
-    throw new Error(message);
-  }
-  const additionalExtensionPaths = extensionsSpec?.paths.length ? extensionsSpec.paths : undefined;
   // Pre-filter discovered set, captured by the override — the exclude-typo warning
   // must compare against this, not the surviving set (absence from survivors is
   // an exclude *succeeding*).
@@ -630,20 +637,30 @@ export async function runAgent(
           };
         };
 
-  const loader = new DefaultResourceLoader({
-    cwd: configCwd,
-    agentDir,
-    noExtensions,
-    additionalExtensionPaths,
-    extensionsOverride,
-    noSkills,
-    noPromptTemplates: true,
-    noThemes: true,
-    noContextFiles: true,
-    systemPromptOverride: () => systemPrompt,
-    appendSystemPromptOverride: () => [],
-  });
-  await runInChildSessionContext(() => loader.reload());
+  const loader = await loadAgentExtensionResources(
+    agentConfig?.source,
+    extensionsSpec?.paths,
+    type,
+    () => ctx.isProjectTrusted(),
+    options.onToolActivity,
+    async (additionalExtensionPaths) => {
+      const resourceLoader = new DefaultResourceLoader({
+        cwd: configCwd,
+        agentDir,
+        noExtensions,
+        additionalExtensionPaths,
+        extensionsOverride,
+        noSkills,
+        noPromptTemplates: true,
+        noThemes: true,
+        noContextFiles: true,
+        systemPromptOverride: () => systemPrompt,
+        appendSystemPromptOverride: () => [],
+      });
+      await runInChildSessionContext(() => resourceLoader.reload());
+      return resourceLoader;
+    },
+  );
 
   // Plain entries in `tools:` are expected to be built-in names (extension tools
   // go through `ext:`), so an unknown name there is unambiguously a typo. Previously

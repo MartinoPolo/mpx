@@ -8,7 +8,7 @@ import {
   type ManagedChild,
   type RuntimeAdapter,
   type SpawnSpec,
-} from './manager.js';
+} from '../../../dev-server/manager.js';
 
 class FakeChild extends EventEmitter implements ManagedChild {
   readonly stdout = new PassThrough();

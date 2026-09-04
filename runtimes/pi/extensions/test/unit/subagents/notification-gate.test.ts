@@ -4,7 +4,7 @@ import { test } from 'vitest';
 import {
   ParentRunNotificationGate,
   registerParentRunNotificationGate,
-} from './notification-gate.js';
+} from '../../../subagents/notification-gate.js';
 
 test('binds notification gating to the parent run lifecycle', () => {
   const hooks = new Map<string, () => void>();

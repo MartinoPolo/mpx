@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve } from "node:path";
 
 import { afterEach, test } from "vitest";
 
-import { registryRoot } from "../agent-resurrect.js";
+import { registryRoot } from "../../../agent-resurrect.js";
 
 const originalAgentDirectory = process.env.PI_CODING_AGENT_DIR;
 

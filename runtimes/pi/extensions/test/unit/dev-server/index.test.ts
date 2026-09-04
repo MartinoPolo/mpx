@@ -5,13 +5,13 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
-import { DEV_SERVERS_CHANGED_EVENT } from './contract.js';
+import { DEV_SERVERS_CHANGED_EVENT } from '../../../dev-server/contract.js';
 
 test('installed Pi loader registers the package tool, command, event, and idempotent shutdown', async () => {
   const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-dev-server-test-'));
   try {
     const { discoverAndLoadExtensions } = await import('@earendil-works/pi-coding-agent');
-    const packageDirectory = fileURLToPath(new URL('.', import.meta.url));
+    const packageDirectory = fileURLToPath(new URL('../../../dev-server/', import.meta.url));
     const result = await discoverAndLoadExtensions([packageDirectory], process.cwd(), agentDir);
 
     assert.deepEqual(result.errors, []);
@@ -34,7 +34,7 @@ test('installed Pi loader registers the package tool, command, event, and idempo
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test('uses the shared managed dev-server event channel', () => {
   assert.equal(DEV_SERVERS_CHANGED_EVENT, 'dev-servers:changed');

@@ -6,7 +6,7 @@ import {
   ATTENTION_SEQUENCE,
   WORKING_SEQUENCE,
   TerminalProgressController,
-} from './state.js';
+} from '../../../terminal-progress/state.js';
 
 interface FakeTimer {
   callback: () => void;

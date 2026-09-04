@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { RollingLogBuffer } from './log-buffer.js';
+import { RollingLogBuffer } from '../../../dev-server/log-buffer.js';
 
 test('rolling logs decode split UTF-8, normalize CR progress, flush partials, and stay bounded', () => {
   const logs = new RollingLogBuffer({ maxCharacters: 18 });

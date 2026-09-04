@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-import { createSystemRuntime, systemSpawnInvocation } from './system-runtime.js';
+import { createSystemRuntime, systemSpawnInvocation } from '../../../dev-server/system-runtime.js';
 
 test('Windows launches the foreground command through hidden cmd.exe without detaching', () => {
   assert.deepEqual(systemSpawnInvocation('npm run dev', 'win32'), {

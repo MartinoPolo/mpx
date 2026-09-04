@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { registerTerminalProgress } from './index.js';
-import { ATTENTION_SEQUENCE, IDLE_SEQUENCE } from './state.js';
+import { registerTerminalProgress } from '../../../terminal-progress/index.js';
+import { ATTENTION_SEQUENCE, IDLE_SEQUENCE } from '../../../terminal-progress/state.js';
 
 function setup() {
   const handlers = new Map<string, (event: any, ctx: any) => void>();

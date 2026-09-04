@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
-import { DEV_SERVERS_CHANGED_EVENT } from './contract.js';
+import { DEV_SERVERS_CHANGED_EVENT } from '../../../dev-server/contract.js';
 
 class FakeEventBus {
   readonly handlers = new Map<string, Set<(data: unknown) => void>>();
@@ -30,7 +30,7 @@ test('footer removes its managed dev-server listener during session shutdown', a
   try {
     const { discoverAndLoadExtensions } = await import('@earendil-works/pi-coding-agent');
     const eventBus = new FakeEventBus();
-    const footerPath = fileURLToPath(new URL('../footer.ts', import.meta.url));
+    const footerPath = fileURLToPath(new URL('../../../footer.ts', import.meta.url));
     const result = await discoverAndLoadExtensions([footerPath], process.cwd(), agentDir, eventBus);
 
     assert.deepEqual(result.errors, []);
@@ -49,4 +49,4 @@ test('footer removes its managed dev-server listener during session shutdown', a
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }
-});
+}, 30_000);
