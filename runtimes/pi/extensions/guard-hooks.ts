@@ -99,6 +99,13 @@ const POST_BASH_CONTEXT_TIMEOUT_MILLISECONDS = 10000;
 const SESSION_CONTEXT_TIMEOUT_MILLISECONDS = 5000;
 const NOTIFY_TIMEOUT_MILLISECONDS = 10000;
 
+const TRUSTED_PROJECT_GUARD_SCRIPTS = new Set([
+  'fallow-gate.mjs',
+  'format-lint-file.mjs',
+  'post-bash-context.mjs',
+  'pre-commit-gate.mjs',
+]);
+
 /**
  * Spawn a process, optionally feeding it a JSON payload on stdin, and never reject.
  *
@@ -192,6 +199,24 @@ const runHookScript: HookScriptRunner = (
   );
 };
 
+function dispatchGuardScript(
+  fileName: string,
+  trusted: boolean,
+  stdinPayload: unknown,
+  timeoutMilliseconds: number,
+  workingDirectory: string,
+  runScript: HookScriptRunner,
+  hooksDirectory: string,
+): Promise<HookScriptOutcome | null> {
+  if (!trusted && TRUSTED_PROJECT_GUARD_SCRIPTS.has(fileName)) return Promise.resolve(null);
+  return runScript(
+    join(hooksDirectory, fileName),
+    stdinPayload,
+    timeoutMilliseconds,
+    workingDirectory,
+  );
+}
+
 function truncateReason(text: string): string {
   const trimmed = text.trim();
   return trimmed.length <= MAXIMUM_REASON_LENGTH
@@ -225,14 +250,16 @@ export async function evaluateBashGuards(
   const payload = { tool_input: { command }, cwd: workingDirectory };
 
   for (const guard of BASH_GUARD_SCRIPTS) {
-    if (!trusted && guard.fileName === 'pre-commit-gate.mjs') continue;
-
-    const outcome = await runScript(
-      join(hooksDirectory, guard.fileName),
+    const outcome = await dispatchGuardScript(
+      guard.fileName,
+      trusted,
       payload,
       guard.timeoutMilliseconds,
       workingDirectory,
+      runScript,
+      hooksDirectory,
     );
+    if (!outcome) continue;
 
     if (outcome.exitCode === BLOCKING_EXIT_CODE) {
       return {
@@ -298,11 +325,13 @@ export async function collectPostBashContext(
   workingDirectory: string,
   outputText: string,
   exitCode: number,
+  trusted: boolean,
   runScript: HookScriptRunner = runHookScript,
   hooksDirectory: string = GUARDS_DIRECTORY,
 ): Promise<string | null> {
-  const outcome = await runScript(
-    join(hooksDirectory, 'post-bash-context.mjs'),
+  const outcome = await dispatchGuardScript(
+    'post-bash-context.mjs',
+    trusted,
     {
       tool_input: { command },
       tool_response: { stdout: outputText, stderr: outputText, exit_code: exitCode },
@@ -310,8 +339,10 @@ export async function collectPostBashContext(
     },
     POST_BASH_CONTEXT_TIMEOUT_MILLISECONDS,
     workingDirectory,
+    runScript,
+    hooksDirectory,
   );
-  return extractAdditionalContext(outcome.stdout);
+  return outcome ? extractAdditionalContext(outcome.stdout) : null;
 }
 
 function joinTextContent(content: readonly { type: string; text?: string }[]): string {
@@ -332,14 +363,16 @@ export async function runFormatLintHook(
   runScript: HookScriptRunner = runHookScript,
   hooksDirectory: string = GUARDS_DIRECTORY,
 ): Promise<string> {
-  if (!trusted) return UNTRUSTED_FORMAT_LINT_RESULT;
-  await runScript(
-    join(hooksDirectory, 'format-lint-file.mjs'),
+  const outcome = await dispatchGuardScript(
+    'format-lint-file.mjs',
+    trusted,
     { tool_input: { file_path: filePath }, cwd: workingDirectory },
     FORMAT_LINT_TIMEOUT_MILLISECONDS,
     workingDirectory,
+    runScript,
+    hooksDirectory,
   );
-  return 'Formatting and linting completed.';
+  return outcome ? 'Formatting and linting completed.' : UNTRUSTED_FORMAT_LINT_RESULT;
 }
 
 /** Run a context-producing session script and queue its stdout for the next user prompt. */
@@ -402,6 +435,7 @@ export default function (pi: ExtensionAPI) {
       ctx.cwd,
       outputText,
       deriveBashExitCode(outputText, event.isError),
+      ctx.isProjectTrusted(),
     );
     if (!context) return undefined;
     return { content: [...event.content, { type: 'text' as const, text: context }] };
