@@ -51,7 +51,12 @@ function getFallowVersion(runner) {
       encoding: 'utf8',
       stdio: 'pipe',
     });
-    return (result.stdout ?? '').trim().replace(/^fallow\s+/, '').split(/\s+/)[0] ?? '';
+    return (
+      (result.stdout ?? '')
+        .trim()
+        .replace(/^fallow\s+/, '')
+        .split(/\s+/)[0] ?? ''
+    );
   } catch {
     return '';
   }
@@ -90,7 +95,9 @@ async function main() {
   }
 
   if (!runner) {
-    process.stderr.write('fallow-gate: fallow binary not found (tried PATH and npx --no-install), skipping.\n');
+    process.stderr.write(
+      'fallow-gate: fallow binary not found (tried PATH and npx --no-install), skipping.\n',
+    );
     process.exit(0);
   }
 
@@ -100,9 +107,9 @@ async function main() {
     if (version && semverCompare(version, MIN_VERSION) < 0) {
       process.stderr.write(
         `fallow-gate: blocked: ${binDesc} is fallow ${version}, below required ${MIN_VERSION}.\n` +
-        `fallow-gate: older binaries miss the uncommitted-changes fix (v2.46.0) and can\n` +
-        `fallow-gate: silently pass audits that would otherwise fail.\n` +
-        `fallow-gate: upgrade fallow (npm install -g fallow@latest), or set FALLOW_GATE_MIN_VERSION= to disable.\n`
+          `fallow-gate: older binaries miss the uncommitted-changes fix (v2.46.0) and can\n` +
+          `fallow-gate: silently pass audits that would otherwise fail.\n` +
+          `fallow-gate: upgrade fallow (npm install -g fallow@latest), or set FALLOW_GATE_MIN_VERSION= to disable.\n`,
       );
       process.exit(2);
     }
@@ -112,7 +119,11 @@ async function main() {
   const { stdout, stderr, status } = runFallowAudit(runner);
 
   let parsed = null;
-  try { parsed = JSON.parse(stdout); } catch { /* fail open */ }
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    /* fail open */
+  }
 
   const verdict = parsed?.verdict ?? null;
   const isError = parsed?.error === true;
@@ -129,7 +140,7 @@ async function main() {
     process.stderr.write(
       msg
         ? `fallow-gate: fallow audit runtime error (${msg}), skipping.\n`
-        : `fallow-gate: fallow audit runtime error, skipping.\n`
+        : `fallow-gate: fallow audit runtime error, skipping.\n`,
     );
     process.exit(0);
   }
@@ -139,7 +150,7 @@ async function main() {
     process.stderr.write(
       errLine
         ? `fallow-gate: fallow audit exited ${status} (${errLine}), skipping.\n`
-        : `fallow-gate: fallow audit exited ${status}, skipping.\n`
+        : `fallow-gate: fallow audit exited ${status}, skipping.\n`,
     );
     process.exit(0);
   }

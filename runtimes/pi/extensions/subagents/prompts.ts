@@ -2,7 +2,7 @@
  * prompts.ts — System prompt builder for agents.
  */
 
-import type { AgentConfig, EnvInfo } from "./types.js";
+import type { AgentConfig, EnvInfo } from './types.js';
 
 /** Extra sections to inject into the system prompt (memory, skills, etc.). */
 export interface PromptExtras {
@@ -40,7 +40,7 @@ export function buildAgentPrompt(
 
   const envBlock = `# Environment
 Working directory: ${cwd}
-${env.isGitRepo ? `Git repository: yes\nBranch: ${env.branch}` : "Not a git repository"}
+${env.isGitRepo ? `Git repository: yes\nBranch: ${env.branch}` : 'Not a git repository'}
 Platform: ${env.platform}`;
 
   // Build optional extras suffix
@@ -53,9 +53,9 @@ Platform: ${env.platform}`;
       extraSections.push(`\n# Preloaded Skill: ${skill.name}\n${skill.content}`);
     }
   }
-  const extrasSuffix = extraSections.length > 0 ? "\n\n" + extraSections.join("\n") : "";
+  const extrasSuffix = extraSections.length > 0 ? '\n\n' + extraSections.join('\n') : '';
 
-  if (config.promptMode === "append") {
+  if (config.promptMode === 'append') {
     const identity = parentSystemPrompt || genericBase;
 
     const bridge = `<sub_agent_context>
@@ -73,14 +73,16 @@ You are operating as a sub-agent invoked to handle a specific task.
 
     const customSection = config.systemPrompt?.trim()
       ? `\n\n<agent_instructions>\n${config.systemPrompt}\n</agent_instructions>`
-      : "";
+      : '';
 
     // Place shared/stable content first so the LLM's KV cache can reuse the
     // inherited prefix across all subagent invocations. The parent prompt is
     // placed verbatim (no wrapper tag) so it forms an identical byte prefix
     // with the parent session, maximising KV cache hits. The <active_agent>
     // tag and env block vary per call and are placed after the cached prefix.
-    return identity + "\n\n" + bridge + "\n\n" + activeAgentTag + envBlock + customSection + extrasSuffix;
+    return (
+      identity + '\n\n' + bridge + '\n\n' + activeAgentTag + envBlock + customSection + extrasSuffix
+    );
   }
 
   // "replace" mode — env header + the config's full system prompt
@@ -89,7 +91,7 @@ You have been invoked to handle a specific task autonomously.
 
 ${envBlock}`;
 
-  return activeAgentTag + replaceHeader + "\n\n" + config.systemPrompt + extrasSuffix;
+  return activeAgentTag + replaceHeader + '\n\n' + config.systemPrompt + extrasSuffix;
 }
 
 /** Fallback base prompt when parent system prompt is unavailable in append mode. */

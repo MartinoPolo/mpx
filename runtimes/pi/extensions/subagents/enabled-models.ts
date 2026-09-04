@@ -26,10 +26,10 @@
  *   → resolves to { "anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-6" }
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { ModelEntry } from "./model-resolver.js";
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import type { ModelEntry } from './model-resolver.js';
 
 /** Minimal registry shape — only the methods resolveEnabledModels actually calls. */
 export interface ModelRegistryRef {
@@ -39,17 +39,14 @@ export interface ModelRegistryRef {
 
 /** Paths to pi's settings.json files: [project, global] (project takes precedence). */
 function settingsPaths(cwd: string): [project: string, global: string] {
-  return [
-    join(cwd, ".pi", "settings.json"),
-    join(getAgentDir(), "settings.json"),
-  ];
+  return [join(cwd, '.pi', 'settings.json'), join(getAgentDir(), 'settings.json')];
 }
 
 /** Read `enabledModels` from a single settings.json file. Undefined when missing or absent. */
 function readField(path: string): string[] | undefined {
   if (!existsSync(path)) return undefined;
   try {
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const raw = JSON.parse(readFileSync(path, 'utf-8'));
     if (Array.isArray(raw?.enabledModels)) return raw.enabledModels as string[];
   } catch {
     /* corrupt file — silent */
@@ -85,8 +82,8 @@ export function readEnabledModels(cwd: string): string[] | undefined {
 
 // Module-level cache — invalidated when either settings.json changes or patterns differ.
 let cachedAllowed: Set<string> | undefined;
-let cachedHash = "";
-let cachedPatternsKey = "";
+let cachedHash = '';
+let cachedPatternsKey = '';
 
 /** mtime+size hash of one file, or "missing" if absent. */
 function hashOf(path: string): string {
@@ -94,7 +91,7 @@ function hashOf(path: string): string {
     const s = statSync(path);
     return `${s.mtimeMs}-${s.size}`;
   } catch {
-    return "missing";
+    return 'missing';
   }
 }
 
@@ -125,7 +122,7 @@ export function resolveEnabledModels(
 
   for (const pattern of patterns) {
     const trimmed = pattern.trim();
-    if (!trimmed) continue;  // skip empty/whitespace
+    if (!trimmed) continue; // skip empty/whitespace
     resolveExact(trimmed, available, allowed);
   }
 
@@ -135,8 +132,6 @@ export function resolveEnabledModels(
   cachedAllowed = result;
   return result;
 }
-
-
 
 /**
  * True when `model` is in the allowed set. Centralizes the key format
@@ -158,19 +153,15 @@ function modelKey(model: { provider: string; id: string }): string {
 /**
  * Resolve exact model pattern. Example: "google/gemma-4-31b-it".
  */
-function resolveExact(
-  pattern: string,
-  available: ModelEntry[],
-  allowed: Set<string>,
-): void {
+function resolveExact(pattern: string, available: ModelEntry[], allowed: Set<string>): void {
   // "provider/modelId" — exact (colon is part of id, not split)
-  const slashIdx = pattern.indexOf("/");
+  const slashIdx = pattern.indexOf('/');
   if (slashIdx === -1) return; // bare modelId not supported
 
   const provider = pattern.slice(0, slashIdx).toLowerCase();
   const modelId = pattern.slice(slashIdx + 1).toLowerCase();
   const exact = available.find(
-    m => m.provider.toLowerCase() === provider && m.id.toLowerCase() === modelId,
+    (m) => m.provider.toLowerCase() === provider && m.id.toLowerCase() === modelId,
   );
   if (exact) {
     allowed.add(modelKey(exact));

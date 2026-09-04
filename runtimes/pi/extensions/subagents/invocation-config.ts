@@ -1,4 +1,10 @@
-import type { AgentConfig, AgentInvocation, IsolationMode, JoinMode, ThinkingLevel } from "./types.js";
+import type {
+  AgentConfig,
+  AgentInvocation,
+  IsolationMode,
+  JoinMode,
+  ThinkingLevel,
+} from './types.js';
 
 export interface InvocationModel {
   provider: string;
@@ -53,6 +59,9 @@ export function resolveAgentInvocationConfig(
   };
 }
 
-export function resolveJoinMode(defaultJoinMode: JoinMode, runInBackground: boolean): JoinMode | undefined {
+export function resolveJoinMode(
+  defaultJoinMode: JoinMode,
+  runInBackground: boolean,
+): JoinMode | undefined {
   return runInBackground ? defaultJoinMode : undefined;
 }

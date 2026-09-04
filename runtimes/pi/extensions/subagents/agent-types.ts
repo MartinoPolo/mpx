@@ -5,9 +5,9 @@
  * User agents override defaults with the same name. Disabled agents are kept but excluded from spawning.
  */
 
-import { createCodingTools, createReadOnlyTools } from "@earendil-works/pi-coding-agent";
-import { DEFAULT_AGENTS } from "./default-agents.js";
-import type { AgentConfig } from "./types.js";
+import { createCodingTools, createReadOnlyTools } from '@earendil-works/pi-coding-agent';
+import { DEFAULT_AGENTS } from './default-agents.js';
+import type { AgentConfig } from './types.js';
 
 /**
  * All known built-in tool names, derived from pi's own tool factories rather
@@ -18,7 +18,7 @@ import type { AgentConfig } from "./types.js";
  * operations we never invoke here — we read each tool's `.name` and discard it.
  */
 export const BUILTIN_TOOL_NAMES: string[] = [
-  ...new Set([...createCodingTools("."), ...createReadOnlyTools(".")].map((t) => t.name)),
+  ...new Set([...createCodingTools('.'), ...createReadOnlyTools('.')].map((t) => t.name)),
 ];
 
 /** Unified runtime registry of all agents (defaults + user-defined). */
@@ -28,10 +28,14 @@ const agents = new Map<string, AgentConfig>();
 let disableDefaults = false;
 
 /** Check whether default agents are disabled. */
-export function isDefaultsDisabled(): boolean { return disableDefaults; }
+export function isDefaultsDisabled(): boolean {
+  return disableDefaults;
+}
 
 /** Set whether default agents are disabled. */
-export function setDefaultsDisabled(b: boolean): void { disableDefaults = b; }
+export function setDefaultsDisabled(b: boolean): void {
+  disableDefaults = b;
+}
 
 /**
  * Build a registry map: DEFAULT_AGENTS first (unless disabled via settings),
@@ -76,12 +80,18 @@ function resolveKey(name: string): string | undefined {
 }
 
 /** Resolve a type name case-insensitively in a registry. Returns the canonical key or undefined. */
-export function resolveTypeIn(registry: Map<string, AgentConfig>, name: string): string | undefined {
+export function resolveTypeIn(
+  registry: Map<string, AgentConfig>,
+  name: string,
+): string | undefined {
   return resolveKeyIn(registry, name);
 }
 
 /** Get the agent config for a type (case-insensitive) from a registry. */
-export function getAgentConfigIn(registry: Map<string, AgentConfig>, name: string): AgentConfig | undefined {
+export function getAgentConfigIn(
+  registry: Map<string, AgentConfig>,
+  name: string,
+): AgentConfig | undefined {
   const key = resolveKeyIn(registry, name);
   return key ? registry.get(key) : undefined;
 }
@@ -140,23 +150,23 @@ export function isValidType(type: string): boolean {
 }
 
 /** Tool names required for memory management. */
-const MEMORY_TOOL_NAMES = ["read", "write", "edit"];
+const MEMORY_TOOL_NAMES = ['read', 'write', 'edit'];
 
 /**
  * Get memory tool names (read/write/edit) not already in the provided set.
  */
 export function getMemoryToolNames(existingToolNames: Set<string>): string[] {
-  return MEMORY_TOOL_NAMES.filter(n => !existingToolNames.has(n));
+  return MEMORY_TOOL_NAMES.filter((n) => !existingToolNames.has(n));
 }
 
 /** Tool names needed for read-only memory access. */
-const READONLY_MEMORY_TOOL_NAMES = ["read"];
+const READONLY_MEMORY_TOOL_NAMES = ['read'];
 
 /**
  * Get read-only memory tool names not already in the provided set.
  */
 export function getReadOnlyMemoryToolNames(existingToolNames: Set<string>): string[] {
-  return READONLY_MEMORY_TOOL_NAMES.filter(n => !existingToolNames.has(n));
+  return READONLY_MEMORY_TOOL_NAMES.filter((n) => !existingToolNames.has(n));
 }
 
 /** Get built-in tool names for a type (case-insensitive). */
@@ -177,7 +187,7 @@ export function getConfig(type: string): {
   extensions: true | string[] | false;
   excludeExtensions?: string[];
   skills: true | string[] | false;
-  promptMode: "replace" | "append";
+  promptMode: 'replace' | 'append';
 } {
   const key = resolveKey(type);
   const config = key ? agents.get(key) : undefined;
@@ -194,7 +204,7 @@ export function getConfig(type: string): {
   }
 
   // Fallback for unknown/disabled types — general-purpose config
-  const gp = agents.get("general-purpose");
+  const gp = agents.get('general-purpose');
   if (gp && gp.enabled !== false) {
     return {
       displayName: gp.displayName ?? gp.name,
@@ -209,11 +219,11 @@ export function getConfig(type: string): {
 
   // Absolute fallback (should never happen)
   return {
-    displayName: "Agent",
-    description: "General-purpose agent for complex, multi-step tasks",
+    displayName: 'Agent',
+    description: 'General-purpose agent for complex, multi-step tasks',
     builtinToolNames: BUILTIN_TOOL_NAMES,
     extensions: true,
     skills: true,
-    promptMode: "append",
+    promptMode: 'append',
   };
 }

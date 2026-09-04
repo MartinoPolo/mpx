@@ -24,7 +24,7 @@ export function resolveEffectiveModel<TModel extends ModelEntry>(
   if (explicitModel) return explicitModel;
   if (configuredModel) {
     const resolved = resolveModel(configuredModel, registry);
-    if (typeof resolved !== "string") return resolved as TModel;
+    if (typeof resolved !== 'string') return resolved as TModel;
   }
   return parentModel;
 }
@@ -34,16 +34,13 @@ export function resolveEffectiveModel<TModel extends ModelEntry>(
  * Tries exact match first ("provider/modelId"), then fuzzy match against all available models.
  * Returns the Model on success, or an error message string on failure.
  */
-export function resolveModel(
-  input: string,
-  registry: ModelRegistry,
-): any | string {
+export function resolveModel(input: string, registry: ModelRegistry): any | string {
   // Available models (those with auth configured)
   const all = (registry.getAvailable?.() ?? registry.getAll()) as ModelEntry[];
-  const availableSet = new Set(all.map(m => `${m.provider}/${m.id}`.toLowerCase()));
+  const availableSet = new Set(all.map((m) => `${m.provider}/${m.id}`.toLowerCase()));
 
   // 1. Exact match: "provider/modelId" — only if available (has auth)
-  const slashIdx = input.indexOf("/");
+  const slashIdx = input.indexOf('/');
   if (slashIdx !== -1) {
     const provider = input.slice(0, slashIdx);
     const modelId = input.slice(slashIdx + 1);
@@ -56,7 +53,7 @@ export function resolveModel(
   // 2. Fuzzy match against available models. Normalize separators so cosmetic
   // punctuation differences still match — e.g. "claude-haiku-4.5" and
   // "claude-haiku-4-5" (dot vs dash in the version) resolve to the same model.
-  const normalize = (s: string) => s.toLowerCase().replace(/\./g, "-");
+  const normalize = (s: string) => s.toLowerCase().replace(/\./g, '-');
   const query = normalize(input);
 
   // Score each model: prefer exact id match > id contains > name contains > provider+id contains
@@ -81,7 +78,13 @@ export function resolveModel(
       // undated registry id like "claude-haiku-4-5".
       query
         .split(/[\s\-/]+/)
-        .every(part => /^\d{8}$/.test(part) || id.includes(part) || name.includes(part) || m.provider.toLowerCase().includes(part))
+        .every(
+          (part) =>
+            /^\d{8}$/.test(part) ||
+            id.includes(part) ||
+            name.includes(part) ||
+            m.provider.toLowerCase().includes(part),
+        )
     ) {
       score = 20; // all parts present somewhere
     }
@@ -103,13 +106,13 @@ export function resolveModel(
   // so the same model from another provider beats falling back to "inherit".
   if (slashIdx !== -1) {
     const bare = resolveModel(input.slice(slashIdx + 1), registry);
-    if (typeof bare !== "string") return bare;
+    if (typeof bare !== 'string') return bare;
   }
 
   // 4. No match — list available models
   const modelList = all
-    .map(m => `  ${m.provider}/${m.id}`)
+    .map((m) => `  ${m.provider}/${m.id}`)
     .sort()
-    .join("\n");
+    .join('\n');
   return `Model not found: "${input}".\n\nAvailable models:\n${modelList}`;
 }

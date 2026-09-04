@@ -8,43 +8,45 @@
  * Exit 0 = allow, Exit 2 = block (checks failed or secret detected)
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import {
-  readStdin,
-  findProjectRoot,
-  detectPackageManager,
-  detectToolchain,
-} from "./shared.mjs";
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { readStdin, findProjectRoot, detectPackageManager, detectToolchain } from './shared.mjs';
 
-const CHECK_ALL_SCRIPTS = ["check:all", "check-all"];
-const TYPECHECK_SCRIPTS = [
-  "typecheck", "type-check", "check", "check:types", "tsc",
-];
-const SVELTE_TYPECHECK_SCRIPTS = ["check", "typecheck", "type-check"];
+const CHECK_ALL_SCRIPTS = ['check:all', 'check-all'];
+const TYPECHECK_SCRIPTS = ['typecheck', 'type-check', 'check', 'check:types', 'tsc'];
+const SVELTE_TYPECHECK_SCRIPTS = ['check', 'typecheck', 'type-check'];
 
 const SECRET_PATTERNS = [
-  { name: "AWS Access Key", pattern: /AKIA[0-9A-Z]{16}/ },
-  { name: "GitHub PAT", pattern: /ghp_[a-zA-Z0-9]{36}/ },
-  { name: "GitHub OAuth", pattern: /gho_[a-zA-Z0-9]{36}/ },
-  { name: "Private Key", pattern: /-----BEGIN[A-Z ]*PRIVATE KEY-----/ },
-  { name: "Slack Token", pattern: /xox[bpors]-[a-zA-Z0-9-]+/ },
-  { name: "Generic Secret", pattern: /\b(?:password|secret|api_key|apikey|auth_token)\b\s*[:=]\s*["']?[^"'\s]{8,}["']?/i },
+  { name: 'AWS Access Key', pattern: /AKIA[0-9A-Z]{16}/ },
+  { name: 'GitHub PAT', pattern: /ghp_[a-zA-Z0-9]{36}/ },
+  { name: 'GitHub OAuth', pattern: /gho_[a-zA-Z0-9]{36}/ },
+  { name: 'Private Key', pattern: /-----BEGIN[A-Z ]*PRIVATE KEY-----/ },
+  { name: 'Slack Token', pattern: /xox[bpors]-[a-zA-Z0-9-]+/ },
+  {
+    name: 'Generic Secret',
+    pattern: /\b(?:password|secret|api_key|apikey|auth_token)\b\s*[:=]\s*["']?[^"'\s]{8,}["']?/i,
+  },
 ];
 
 const SKIP_SECRET_SCAN_PATTERNS = [
-  /\.lock$/, /lock\.json$/, /lock\.yaml$/, /\.lockb$/,  // lockfiles
-  /\.env\.example$/, /\.env\.sample$/, /\.env\.template$/,  // placeholder files
-  /\.(test|spec)\.[jt]sx?$/,  // test files may contain test tokens
+  /\.lock$/,
+  /lock\.json$/,
+  /lock\.yaml$/,
+  /\.lockb$/, // lockfiles
+  /\.env\.example$/,
+  /\.env\.sample$/,
+  /\.env\.template$/, // placeholder files
+  /\.(test|spec)\.[jt]sx?$/, // test files may contain test tokens
 ];
 
-const CONVENTIONAL_FORMAT = /^(feat|fix|refactor|chore|docs|style|test|perf|ci|build|revert)(\(.+\))?: .+/;
+const CONVENTIONAL_FORMAT =
+  /^(feat|fix|refactor|chore|docs|style|test|perf|ci|build|revert)(\(.+\))?: .+/;
 
 function hasScript(packageJsonPath, scriptName) {
   try {
-    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     return !!(pkg.scripts && pkg.scripts[scriptName]);
   } catch {
     return false;
@@ -52,10 +54,10 @@ function hasScript(packageJsonPath, scriptName) {
 }
 
 function findCheckScript(projectRoot, toolchain) {
-  const packageJsonPath = path.join(projectRoot, "package.json");
+  const packageJsonPath = path.join(projectRoot, 'package.json');
 
   // Vite Plus: prefer check:all which runs vp check + eslint + stylelint + knip
-  if (toolchain === "vite-plus") {
+  if (toolchain === 'vite-plus') {
     for (const name of CHECK_ALL_SCRIPTS) {
       if (hasScript(packageJsonPath, name)) return name;
     }
@@ -63,8 +65,8 @@ function findCheckScript(projectRoot, toolchain) {
 
   // Fallback: detect typecheck script
   const isSvelte =
-    fs.existsSync(path.join(projectRoot, "svelte.config.js")) ||
-    fs.existsSync(path.join(projectRoot, "svelte.config.ts"));
+    fs.existsSync(path.join(projectRoot, 'svelte.config.js')) ||
+    fs.existsSync(path.join(projectRoot, 'svelte.config.ts'));
 
   const candidates = isSvelte ? SVELTE_TYPECHECK_SCRIPTS : TYPECHECK_SCRIPTS;
   for (const name of candidates) {
@@ -81,8 +83,8 @@ function findCheckScript(projectRoot, toolchain) {
 export function scanForSecrets(diffContent, filename) {
   const findings = [];
   const addedLines = diffContent
-    .split("\n")
-    .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
+    .split('\n')
+    .filter((line) => line.startsWith('+') && !line.startsWith('+++'));
 
   for (const line of addedLines) {
     for (const { name, pattern } of SECRET_PATTERNS) {
@@ -104,11 +106,11 @@ export function scanForSecrets(diffContent, filename) {
 export function extractCommitMessage(command) {
   // Try $(cat <<'EOF'...) pattern first (used in skills)
   const catHeredocMatch = command.match(/\$\(cat\s+<<-?['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF/);
-  if (catHeredocMatch) return catHeredocMatch[1].split("\n")[0].trim();
+  if (catHeredocMatch) return catHeredocMatch[1].split('\n')[0].trim();
 
   // Try heredoc format: <<'EOF'\n...\nEOF
   const heredocMatch = command.match(/<<-?['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF/);
-  if (heredocMatch) return heredocMatch[1].split("\n")[0].trim();
+  if (heredocMatch) return heredocMatch[1].split('\n')[0].trim();
 
   // Try -m with double quotes (handles apostrophes inside)
   const doubleQuoteMatch = command.match(/-m\s+"([^"]+)"/);
@@ -131,18 +133,18 @@ export function extractCommitMessage(command) {
  */
 export function validateCommitFormat(message) {
   const warnings = [];
-  const firstLine = message.split("\n")[0];
+  const firstLine = message.split('\n')[0];
 
   const valid = CONVENTIONAL_FORMAT.test(firstLine);
   if (!valid) {
     warnings.push(
-      "Warning: commit message doesn't match conventional format: type(scope): description"
+      "Warning: commit message doesn't match conventional format: type(scope): description",
     );
   }
 
   if (firstLine.length > 72) {
     warnings.push(
-      `Warning: commit message first line is ${firstLine.length} chars (recommended max 72)`
+      `Warning: commit message first line is ${firstLine.length} chars (recommended max 72)`,
     );
   }
 
@@ -151,29 +153,29 @@ export function validateCommitFormat(message) {
 
 async function main() {
   const input = await readStdin();
-  const command = input.tool_input?.command ?? "";
+  const command = input.tool_input?.command ?? '';
   const cwd = input.cwd ?? process.cwd();
   if (!command) process.exit(0);
 
   // Only intercept git commit commands
   if (!/(?:^|\s|&&|\|)git\s+commit(?:\s|$)/.test(command)) process.exit(0);
 
-  const projectRoot = findProjectRoot(cwd, ["package.json"]);
+  const projectRoot = findProjectRoot(cwd, ['package.json']);
   if (!projectRoot) process.exit(0);
 
   // --- Secret scanning (hard block) ---
   try {
-    const stagedFiles = execSync("git diff --cached --name-only", {
+    const stagedFiles = execSync('git diff --cached --name-only', {
       cwd: projectRoot,
-      encoding: "utf8",
+      encoding: 'utf8',
       timeout: 10000,
     })
       .trim()
-      .split("\n")
+      .split('\n')
       .filter(Boolean);
 
     const filesToScan = stagedFiles.filter(
-      (f) => !SKIP_SECRET_SCAN_PATTERNS.some((p) => p.test(f))
+      (f) => !SKIP_SECRET_SCAN_PATTERNS.some((p) => p.test(f)),
     );
 
     const allFindings = [];
@@ -181,7 +183,7 @@ async function main() {
       try {
         const diff = execSync(`git diff --cached -- "${file}"`, {
           cwd: projectRoot,
-          encoding: "utf8",
+          encoding: 'utf8',
           timeout: 10000,
         });
         const findings = scanForSecrets(diff, file);
@@ -193,9 +195,7 @@ async function main() {
 
     if (allFindings.length > 0) {
       for (const { name, file } of allFindings) {
-        process.stderr.write(
-          `Secret detected: ${name} in ${file}. Remove it before committing.\n`
-        );
+        process.stderr.write(`Secret detected: ${name} in ${file}. Remove it before committing.\n`);
       }
       process.exit(2);
     }
@@ -204,7 +204,7 @@ async function main() {
   }
 
   // --- Typecheck / lint checks ---
-  const pm = detectPackageManager(projectRoot) ?? "npm";
+  const pm = detectPackageManager(projectRoot) ?? 'npm';
   const toolchain = detectToolchain(projectRoot);
   const checkScript = findCheckScript(projectRoot, toolchain);
   if (!checkScript) {
@@ -213,28 +213,20 @@ async function main() {
     process.exit(0);
   }
 
-  const label = toolchain === "vite-plus" ? "checks" : "typecheck";
-  process.stderr.write(
-    `Running ${label} (${pm} run ${checkScript}) before commit...\n`
-  );
+  const label = toolchain === 'vite-plus' ? 'checks' : 'typecheck';
+  process.stderr.write(`Running ${label} (${pm} run ${checkScript}) before commit...\n`);
 
   try {
     execSync(`${pm} run ${checkScript}`, {
       cwd: projectRoot,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 120000,
     });
   } catch (err) {
-    process.stderr.write(
-      `Pre-commit ${label} failed. Fix errors before committing:\n\n`
-    );
-    const output = (
-      err.stdout?.toString() ||
-      err.stderr?.toString() ||
-      ""
-    ).trim();
-    const lines = output.split("\n");
-    process.stderr.write(lines.slice(-50).join("\n") + "\n");
+    process.stderr.write(`Pre-commit ${label} failed. Fix errors before committing:\n\n`);
+    const output = (err.stdout?.toString() || err.stderr?.toString() || '').trim();
+    const lines = output.split('\n');
+    process.stderr.write(lines.slice(-50).join('\n') + '\n');
     process.exit(2);
   }
 
@@ -248,7 +240,7 @@ function validateAndWarn(command) {
   if (message) {
     const { warnings } = validateCommitFormat(message);
     for (const warning of warnings) {
-      process.stderr.write(warning + "\n");
+      process.stderr.write(warning + '\n');
     }
   }
 }

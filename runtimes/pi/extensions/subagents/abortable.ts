@@ -16,7 +16,7 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 
   return new Promise<T>((resolve, reject) => {
     let settled = false;
-    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
     const onAbort = () => {
       if (settled) return;
       settled = true;
@@ -24,7 +24,7 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
       reject(signal.reason);
     };
 
-    signal.addEventListener("abort", onAbort, { once: true });
+    signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
       (value) => {
         if (settled) return;

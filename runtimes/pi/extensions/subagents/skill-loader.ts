@@ -18,12 +18,12 @@
  * Symlinks are rejected for security (deviation from Pi, which follows them).
  */
 
-import type { Dirent } from "node:fs";
-import { existsSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { isSymlink, isUnsafeName, safeReadFile } from "./memory.js";
+import type { Dirent } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import { isSymlink, isUnsafeName, safeReadFile } from './memory.js';
 
 export interface PreloadedSkill {
   name: string;
@@ -39,11 +39,11 @@ function loadSkillContent(name: string, cwd: string): string {
     return `(Skill "${name}" skipped: name contains path traversal characters)`;
   }
   const roots = [
-    join(cwd, ".pi", "skills"), // project — Pi standard
-    join(cwd, ".agents", "skills"), // project — Agent Skills spec
-    join(getAgentDir(), "skills"), // user — Pi standard
-    join(homedir(), ".agents", "skills"), // user — Agent Skills spec
-    join(homedir(), ".pi", "skills"), // legacy global, pre-Pi
+    join(cwd, '.pi', 'skills'), // project — Pi standard
+    join(cwd, '.agents', 'skills'), // project — Agent Skills spec
+    join(getAgentDir(), 'skills'), // user — Pi standard
+    join(homedir(), '.agents', 'skills'), // user — Agent Skills spec
+    join(homedir(), '.pi', 'skills'), // legacy global, pre-Pi
   ];
   for (const root of roots) {
     const content = findInRoot(root, name);
@@ -80,11 +80,11 @@ function findSkillDirectory(root: string, name: string): string | undefined {
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
 
       // Symlinked dirs already filtered by entry.isDirectory() — Dirent uses lstat semantics.
       const path = join(current, entry.name);
-      const skillMd = join(path, "SKILL.md");
+      const skillMd = join(path, 'SKILL.md');
       const isSkillDir = existsSync(skillMd);
 
       if (isSkillDir) {

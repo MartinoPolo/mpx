@@ -3,9 +3,9 @@
  * Triggers: git push, package install (npm/yarn/pnpm/bun), gh pr create.
  */
 
-import { readStdin } from "./shared.mjs";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { readStdin } from './shared.mjs';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Determine context message to inject based on the command and its response.
@@ -18,31 +18,29 @@ import { fileURLToPath } from "node:url";
 export function determineContext(command, response, cwd, options = {}) {
   const exec = options.execSync || execSync;
   const exitCode = response.exit_code ?? null;
-  const stdout = response.stdout ?? "";
-  const stderr = response.stderr ?? "";
+  const stdout = response.stdout ?? '';
+  const stderr = response.stderr ?? '';
 
   // 1. After successful git push — check if PR exists
   if (/\bgit\s+push\b/.test(command) && exitCode === 0) {
     try {
-      exec("gh pr view --json url", { cwd, stdio: "pipe", timeout: 10000 });
+      exec('gh pr view --json url', { cwd, stdio: 'pipe', timeout: 10000 });
       // PR exists — no noise
       return null;
     } catch (err) {
-      const msg = String(err?.stderr || err?.message || "");
+      const msg = String(err?.stderr || err?.message || '');
       // Only inject "no PR" when gh explicitly says so; stay silent on auth/network errors
       if (/no pull requests found|no open pull requests/i.test(msg) || err?.status === 1) {
-        return "Pushed to remote. No PR exists for this branch yet.";
+        return 'Pushed to remote. No PR exists for this branch yet.';
       }
       return null;
     }
   }
 
   // 2. After package install — check for vulnerability warnings
-  if (
-    /\b(npm\s+install|yarn\s+add|pnpm\s+add|bun\s+add)\b/.test(command)
-  ) {
+  if (/\b(npm\s+install|yarn\s+add|pnpm\s+add|bun\s+add)\b/.test(command)) {
     if (/vulnerabilit(y|ies)/i.test(stderr)) {
-      return "Package install detected vulnerabilities in stderr. Consider running audit.";
+      return 'Package install detected vulnerabilities in stderr. Consider running audit.';
     }
     return null;
   }
@@ -61,7 +59,7 @@ export function determineContext(command, response, cwd, options = {}) {
 
 async function main() {
   const input = await readStdin();
-  const command = input.tool_input?.command ?? "";
+  const command = input.tool_input?.command ?? '';
   const response = input.tool_response ?? {};
   const cwd = input.cwd ?? process.cwd();
 
@@ -69,7 +67,7 @@ async function main() {
   if (context) {
     const output = JSON.stringify({
       hookSpecificOutput: {
-        hookEventName: "PostToolUse",
+        hookEventName: 'PostToolUse',
         additionalContext: context,
       },
     });

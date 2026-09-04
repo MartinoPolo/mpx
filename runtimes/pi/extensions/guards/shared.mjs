@@ -1,19 +1,19 @@
-import fs from "node:fs";
-import path from "node:path";
+import fs from 'node:fs';
+import path from 'node:path';
 
 export const LOCKFILE_MAP = {
-  "bun.lockb": "bun",
-  "bun.lock": "bun",
-  "pnpm-lock.yaml": "pnpm",
-  "yarn.lock": "yarn",
-  "package-lock.json": "npm",
+  'bun.lockb': 'bun',
+  'bun.lock': 'bun',
+  'pnpm-lock.yaml': 'pnpm',
+  'yarn.lock': 'yarn',
+  'package-lock.json': 'npm',
 };
 
 export const RUNNER_MAP = {
-  bun: "bunx",
-  pnpm: "pnpm exec",
-  yarn: "yarn exec",
-  npm: "npx",
+  bun: 'bunx',
+  pnpm: 'pnpm exec',
+  yarn: 'yarn exec',
+  npm: 'npx',
 };
 
 export function detectPackageManager(dir) {
@@ -33,7 +33,7 @@ export function findPackageManager(startDir) {
   return null;
 }
 
-export function findProjectRoot(startDir, markers = ["package.json"]) {
+export function findProjectRoot(startDir, markers = ['package.json']) {
   let dir = startDir;
   while (dir && dir !== path.dirname(dir)) {
     if (markers.some((m) => fs.existsSync(path.join(dir, m)))) return dir;
@@ -44,7 +44,7 @@ export function findProjectRoot(startDir, markers = ["package.json"]) {
 
 export function getRunner(projectRoot) {
   const pm = detectPackageManager(projectRoot);
-  return pm ? (RUNNER_MAP[pm] ?? "npx") : "npx";
+  return pm ? (RUNNER_MAP[pm] ?? 'npx') : 'npx';
 }
 
 /**
@@ -54,35 +54,31 @@ export function getRunner(projectRoot) {
  * - classic: Prettier + ESLint (or manual setup)
  */
 export function detectToolchain(projectRoot) {
-  if (!projectRoot) return "classic";
-  const vpBin = path.join(projectRoot, "node_modules", ".bin", "vp");
+  if (!projectRoot) return 'classic';
+  const vpBin = path.join(projectRoot, 'node_modules', '.bin', 'vp');
   // Windows: .bin/vp.cmd or .bin/vp.ps1
-  if (
-    fs.existsSync(vpBin) ||
-    fs.existsSync(vpBin + ".cmd") ||
-    fs.existsSync(vpBin + ".ps1")
-  ) {
-    return "vite-plus";
+  if (fs.existsSync(vpBin) || fs.existsSync(vpBin + '.cmd') || fs.existsSync(vpBin + '.ps1')) {
+    return 'vite-plus';
   }
   if (
-    fs.existsSync(path.join(projectRoot, "biome.json")) ||
-    fs.existsSync(path.join(projectRoot, "biome.jsonc"))
+    fs.existsSync(path.join(projectRoot, 'biome.json')) ||
+    fs.existsSync(path.join(projectRoot, 'biome.jsonc'))
   ) {
-    return "biome";
+    return 'biome';
   }
-  return "classic";
+  return 'classic';
 }
 
 export function readStdin() {
   return new Promise((resolve, reject) => {
-    let data = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => (data += chunk));
-    process.stdin.on("end", () => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => (data += chunk));
+    process.stdin.on('end', () => {
       try {
         resolve(JSON.parse(data));
       } catch {
-        reject(new Error("Invalid JSON on stdin"));
+        reject(new Error('Invalid JSON on stdin'));
       }
     });
     process.stdin.resume();

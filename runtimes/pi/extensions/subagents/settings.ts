@@ -2,10 +2,10 @@
 // - Global:  ~/.pi/agent/subagents.json (via getAgentDir()) — manual defaults, never written here
 // - Project: <cwd>/.pi/subagents.json — written by /agents → Settings; overrides global on load
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { JoinMode, WidgetMode } from "./types.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import type { JoinMode, WidgetMode } from './types.js';
 
 export interface SubagentsSettings {
   maxConcurrent?: number;
@@ -103,7 +103,7 @@ export interface SubagentsSettings {
   maxSubagentDepth?: number;
 }
 
-export type ToolDescriptionMode = "full" | "compact" | "custom";
+export type ToolDescriptionMode = 'full' | 'compact' | 'custom';
 
 /** Setter hooks used by applySettings to wire persisted values into in-memory state. */
 export interface SettingsAppliers {
@@ -124,9 +124,13 @@ export interface SettingsAppliers {
 /** Emit callback — a subset of `pi.events.emit` to keep helpers testable. */
 export type SettingsEmit = (event: string, payload: unknown) => void;
 
-const VALID_JOIN_MODES: ReadonlySet<string> = new Set<JoinMode>(["async", "group", "smart"]);
-const VALID_TOOL_DESCRIPTION_MODES: ReadonlySet<string> = new Set<ToolDescriptionMode>(["full", "compact", "custom"]);
-const VALID_WIDGET_MODES: ReadonlySet<string> = new Set<WidgetMode>(["all", "background", "off"]);
+const VALID_JOIN_MODES: ReadonlySet<string> = new Set<JoinMode>(['async', 'group', 'smart']);
+const VALID_TOOL_DESCRIPTION_MODES: ReadonlySet<string> = new Set<ToolDescriptionMode>([
+  'full',
+  'compact',
+  'custom',
+]);
+const VALID_WIDGET_MODES: ReadonlySet<string> = new Set<WidgetMode>(['all', 'background', 'off']);
 
 // Sanity ceilings — prevent hand-edited configs from asking for values that
 // make no operational sense (e.g. 1e6 concurrent subagents). Permissive enough
@@ -138,7 +142,7 @@ const SUBAGENT_DEPTH_CEILING = 16;
 
 /** Drop fields that don't match the expected shape. Silent — garbage becomes absent. */
 function sanitize(raw: unknown): SubagentsSettings {
-  if (!raw || typeof raw !== "object") return {};
+  if (!raw || typeof raw !== 'object') return {};
   const r = raw as Record<string, unknown>;
   const out: SubagentsSettings = {};
   if (
@@ -169,39 +173,42 @@ function sanitize(raw: unknown): SubagentsSettings {
   ) {
     out.maxSubagentDepth = r.maxSubagentDepth as number;
   }
-  if (typeof r.defaultJoinMode === "string" && VALID_JOIN_MODES.has(r.defaultJoinMode)) {
+  if (typeof r.defaultJoinMode === 'string' && VALID_JOIN_MODES.has(r.defaultJoinMode)) {
     out.defaultJoinMode = r.defaultJoinMode as JoinMode;
   }
-  if (typeof r.schedulingEnabled === "boolean") {
+  if (typeof r.schedulingEnabled === 'boolean') {
     out.schedulingEnabled = r.schedulingEnabled;
   }
-  if (typeof r.scopeModels === "boolean") {
+  if (typeof r.scopeModels === 'boolean') {
     out.scopeModels = r.scopeModels;
   }
-  if (typeof r.disableDefaultAgents === "boolean") {
+  if (typeof r.disableDefaultAgents === 'boolean') {
     out.disableDefaultAgents = r.disableDefaultAgents;
   }
-  if (typeof r.toolDescriptionMode === "string" && VALID_TOOL_DESCRIPTION_MODES.has(r.toolDescriptionMode)) {
+  if (
+    typeof r.toolDescriptionMode === 'string' &&
+    VALID_TOOL_DESCRIPTION_MODES.has(r.toolDescriptionMode)
+  ) {
     out.toolDescriptionMode = r.toolDescriptionMode as ToolDescriptionMode;
   }
-  if (typeof r.fleetView === "boolean") {
+  if (typeof r.fleetView === 'boolean') {
     out.fleetView = r.fleetView;
   }
-  if (typeof r.widgetMode === "string" && VALID_WIDGET_MODES.has(r.widgetMode)) {
+  if (typeof r.widgetMode === 'string' && VALID_WIDGET_MODES.has(r.widgetMode)) {
     out.widgetMode = r.widgetMode as WidgetMode;
   }
-  if (typeof r.outputTranscript === "boolean") {
+  if (typeof r.outputTranscript === 'boolean') {
     out.outputTranscript = r.outputTranscript;
   }
   return out;
 }
 
 function globalPath(): string {
-  return join(getAgentDir(), "subagents.json");
+  return join(getAgentDir(), 'subagents.json');
 }
 
 function projectPath(cwd: string): string {
-  return join(cwd, ".pi", "subagents.json");
+  return join(cwd, '.pi', 'subagents.json');
 }
 
 /**
@@ -212,7 +219,7 @@ function projectPath(cwd: string): string {
 function readSettingsFile(path: string): SubagentsSettings {
   if (!existsSync(path)) return {};
   try {
-    return sanitize(JSON.parse(readFileSync(path, "utf-8")));
+    return sanitize(JSON.parse(readFileSync(path, 'utf-8')));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.warn(`[pi-subagents] Ignoring malformed settings at ${path}: ${reason}`);
@@ -234,7 +241,7 @@ export function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()):
   const path = projectPath(cwd);
   try {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(s, null, 2), "utf-8");
+    writeFileSync(path, JSON.stringify(s, null, 2), 'utf-8');
     return true;
   } catch {
     return false;
@@ -243,18 +250,19 @@ export function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()):
 
 /** Apply persisted settings to the in-memory state via caller-supplied setters. */
 export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers): void {
-  if (typeof s.maxConcurrent === "number") appliers.setMaxConcurrent(s.maxConcurrent);
-  if (typeof s.defaultMaxTurns === "number") appliers.setDefaultMaxTurns(s.defaultMaxTurns);
-  if (typeof s.graceTurns === "number") appliers.setGraceTurns(s.graceTurns);
-  if (typeof s.maxSubagentDepth === "number") appliers.setMaxSubagentDepth(s.maxSubagentDepth);
+  if (typeof s.maxConcurrent === 'number') appliers.setMaxConcurrent(s.maxConcurrent);
+  if (typeof s.defaultMaxTurns === 'number') appliers.setDefaultMaxTurns(s.defaultMaxTurns);
+  if (typeof s.graceTurns === 'number') appliers.setGraceTurns(s.graceTurns);
+  if (typeof s.maxSubagentDepth === 'number') appliers.setMaxSubagentDepth(s.maxSubagentDepth);
   if (s.defaultJoinMode) appliers.setDefaultJoinMode(s.defaultJoinMode);
-  if (typeof s.schedulingEnabled === "boolean") appliers.setSchedulingEnabled(s.schedulingEnabled);
-  if (typeof s.scopeModels === "boolean") appliers.setScopeModels(s.scopeModels);
-  if (typeof s.disableDefaultAgents === "boolean") appliers.setDisableDefaultAgents(s.disableDefaultAgents);
+  if (typeof s.schedulingEnabled === 'boolean') appliers.setSchedulingEnabled(s.schedulingEnabled);
+  if (typeof s.scopeModels === 'boolean') appliers.setScopeModels(s.scopeModels);
+  if (typeof s.disableDefaultAgents === 'boolean')
+    appliers.setDisableDefaultAgents(s.disableDefaultAgents);
   if (s.toolDescriptionMode) appliers.setToolDescriptionMode(s.toolDescriptionMode);
-  if (typeof s.fleetView === "boolean") appliers.setFleetView(s.fleetView);
+  if (typeof s.fleetView === 'boolean') appliers.setFleetView(s.fleetView);
   if (s.widgetMode) appliers.setWidgetMode(s.widgetMode);
-  if (typeof s.outputTranscript === "boolean") appliers.setOutputTranscript(s.outputTranscript);
+  if (typeof s.outputTranscript === 'boolean') appliers.setOutputTranscript(s.outputTranscript);
 }
 
 /**
@@ -265,10 +273,10 @@ export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers):
 export function persistToastFor(
   successMsg: string,
   persisted: boolean,
-): { message: string; level: "info" | "warning" } {
+): { message: string; level: 'info' | 'warning' } {
   return persisted
-    ? { message: successMsg, level: "info" }
-    : { message: `${successMsg} (session only; failed to persist)`, level: "warning" };
+    ? { message: successMsg, level: 'info' }
+    : { message: `${successMsg} (session only; failed to persist)`, level: 'warning' };
 }
 
 /**
@@ -283,7 +291,7 @@ export function applyAndEmitLoaded(
 ): SubagentsSettings {
   const settings = loadSettings(cwd);
   applySettings(settings, appliers);
-  emit("subagents:settings_loaded", { settings });
+  emit('subagents:settings_loaded', { settings });
   return settings;
 }
 
@@ -298,8 +306,8 @@ export function saveAndEmitChanged(
   successMsg: string,
   emit: SettingsEmit,
   cwd: string = process.cwd(),
-): { message: string; level: "info" | "warning" } {
+): { message: string; level: 'info' | 'warning' } {
   const persisted = saveSettings(snapshot, cwd);
-  emit("subagents:settings_changed", { settings: snapshot, persisted });
+  emit('subagents:settings_changed', { settings: snapshot, persisted });
   return persistToastFor(successMsg, persisted);
 }

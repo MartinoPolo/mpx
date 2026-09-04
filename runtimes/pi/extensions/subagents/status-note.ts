@@ -8,7 +8,7 @@
  * through agent-runner).
  */
 
-import type { AgentRecord } from "./types.js";
+import type { AgentRecord } from './types.js';
 
 /**
  * Explicit parenthetical note for a non-normal terminal outcome, so the parent
@@ -21,14 +21,14 @@ import type { AgentRecord } from "./types.js";
  */
 export function getStatusNote(status: string): string {
   switch (status) {
-    case "stopped":
-      return " (STOPPED BY THE USER before completion — output is partial; the task was NOT finished)";
-    case "aborted":
-      return " (aborted — hit the turn limit before completion; output may be incomplete)";
-    case "steered":
-      return " (wrapped up at the turn limit — output may be partial)";
+    case 'stopped':
+      return ' (STOPPED BY THE USER before completion — output is partial; the task was NOT finished)';
+    case 'aborted':
+      return ' (aborted — hit the turn limit before completion; output may be incomplete)';
+    case 'steered':
+      return ' (wrapped up at the turn limit — output may be partial)';
     default:
-      return "";
+      return '';
   }
 }
 
@@ -68,14 +68,14 @@ export function getStatusNote(status: string): string {
  */
 export function getForegroundOutcomeNote(status: string): string {
   switch (status) {
-    case "stopped":
-      return " (STOPPED BY THE USER — everything the agent produced is above; the task is unfinished)";
-    case "aborted":
-      return " (aborted at the turn limit — everything the agent produced is above; the task is unfinished)";
-    case "steered":
-      return " (wrapped up at the turn limit — everything the agent produced is above; the task may be unfinished)";
+    case 'stopped':
+      return ' (STOPPED BY THE USER — everything the agent produced is above; the task is unfinished)';
+    case 'aborted':
+      return ' (aborted at the turn limit — everything the agent produced is above; the task is unfinished)';
+    case 'steered':
+      return ' (wrapped up at the turn limit — everything the agent produced is above; the task may be unfinished)';
     default:
-      return "";
+      return '';
   }
 }
 
@@ -86,5 +86,5 @@ export function getForegroundOutcomeNote(status: string): string {
  */
 export function partialOutputSuffix(record: AgentRecord): string {
   const partial = record.result?.trim();
-  return partial ? `\n\nPartial output before the failure:\n${partial}` : "";
+  return partial ? `\n\nPartial output before the failure:\n${partial}` : '';
 }

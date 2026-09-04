@@ -40,13 +40,17 @@ test('delivers a timed-out partial batch and re-batches its stragglers', () => {
   assert.deepEqual(deliveries, [{ ids: ['a'], partial: true }]);
 
   assert.equal(join.onAgentComplete(record('b')), 'held');
-  vi.advanceTimersByTime(14_999);
-  assert.equal(deliveries.length, 1);
+  vi.advanceTimersByTime(15_000);
+  assert.deepEqual(deliveries, [
+    { ids: ['a'], partial: true },
+    { ids: ['b'], partial: true },
+  ]);
   assert.equal(join.onAgentComplete(record('c')), 'delivered');
 
   assert.deepEqual(deliveries, [
     { ids: ['a'], partial: true },
-    { ids: ['b', 'c'], partial: false },
+    { ids: ['b'], partial: true },
+    { ids: ['c'], partial: false },
   ]);
   join.dispose();
 });

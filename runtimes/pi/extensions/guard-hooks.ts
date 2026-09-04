@@ -93,6 +93,8 @@ export const BASH_GUARD_SCRIPTS: readonly BashGuardScript[] = [
 ];
 
 const FORMAT_LINT_TIMEOUT_MILLISECONDS = 50000;
+export const UNTRUSTED_FORMAT_LINT_RESULT =
+  'Formatting and linting skipped: project is not trusted.';
 const POST_BASH_CONTEXT_TIMEOUT_MILLISECONDS = 10000;
 const SESSION_CONTEXT_TIMEOUT_MILLISECONDS = 5000;
 const NOTIFY_TIMEOUT_MILLISECONDS = 10000;
@@ -320,6 +322,23 @@ function warn(ctx: ExtensionContext, message: string): void {
   if (ctx.hasUI) ctx.ui.notify(`guard-hooks: ${message}`, 'warning');
 }
 
+export async function runFormatLintHook(
+  trusted: boolean,
+  filePath: string,
+  workingDirectory: string,
+  runScript: HookScriptRunner = runHookScript,
+  hooksDirectory: string = GUARDS_DIRECTORY,
+): Promise<string> {
+  if (!trusted) return UNTRUSTED_FORMAT_LINT_RESULT;
+  await runScript(
+    join(hooksDirectory, 'format-lint-file.mjs'),
+    { tool_input: { file_path: filePath }, cwd: workingDirectory },
+    FORMAT_LINT_TIMEOUT_MILLISECONDS,
+    workingDirectory,
+  );
+  return 'Formatting and linting completed.';
+}
+
 /** Run a context-producing session script and queue its stdout for the next user prompt. */
 async function injectSessionContext(
   pi: ExtensionAPI,
@@ -365,12 +384,7 @@ export default function (pi: ExtensionAPI) {
       if (!rawPath || event.isError) return undefined;
       const filePath = isAbsolute(rawPath) ? rawPath : resolve(ctx.cwd, rawPath);
       // Fire-and-forget: formatting must not delay the tool result the model is waiting on.
-      void runHookScript(
-        join(GUARDS_DIRECTORY, 'format-lint-file.mjs'),
-        { tool_input: { file_path: filePath }, cwd: ctx.cwd },
-        FORMAT_LINT_TIMEOUT_MILLISECONDS,
-        ctx.cwd,
-      );
+      void runFormatLintHook(ctx.isProjectTrusted(), filePath, ctx.cwd);
       return undefined;
     }
 

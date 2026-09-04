@@ -66,16 +66,6 @@ function safeExtensionApi(): { api: ExtensionAPI; registrations: RegistrationSna
   return { api, registrations };
 }
 
-function registeredHandlerSource(
-  registrations: RegistrationSnapshot,
-  event: string,
-  marker: string,
-): boolean {
-  return (registrations.events.get(event) ?? []).some((handler) =>
-    String(handler).includes(marker),
-  );
-}
-
 test('default composition is static, stable, and unique', () => {
   const names = DEFAULT_EXTENSION_COMPONENTS.map(({ name }) => name);
 
@@ -88,12 +78,27 @@ test('default entry point composes representative registrations from every compo
 
   mpxPiExtensions(api);
 
-  assert.equal(registeredHandlerSource(registrations, 'session_start', 'writeRegistration'), true);
-  assert.equal(registeredHandlerSource(registrations, 'input', 'firstPrompt'), true);
-  assert.equal(registrations.events.has('session_before_compact'), true);
-  assert.equal(registeredHandlerSource(registrations, 'session_start', 'setFooter'), true);
-  assert.equal(registeredHandlerSource(registrations, 'session_start', 'WIDGET_KEY'), true);
-  assert.equal(registrations.events.has('tool_call'), true);
+  assert.deepEqual([...registrations.events.keys()].toSorted(), [
+    'after_provider_response',
+    'agent_settled',
+    'agent_start',
+    'input',
+    'model_select',
+    'session_before_compact',
+    'session_before_switch',
+    'session_compact',
+    'session_info_changed',
+    'session_shutdown',
+    'session_start',
+    'thinking_level_select',
+    'tool_call',
+    'tool_execution_end',
+    'tool_execution_start',
+    'tool_result',
+  ]);
+  assert.equal(registrations.events.get('session_start')?.length, 7);
+  assert.equal(registrations.events.get('input')?.length, 1);
+  assert.equal(registrations.events.get('tool_call')?.length, 1);
   assert.deepEqual(registrations.tools.toSorted(), [
     'Agent',
     'dev_server',
@@ -102,7 +107,7 @@ test('default entry point composes representative registrations from every compo
   ]);
   assert.deepEqual(registrations.commands.toSorted(), ['agents', 'dev-servers']);
   assert.deepEqual(registrations.messageRenderers, ['subagent-notification']);
-  assert.equal(registeredHandlerSource(registrations, 'tool_execution_end', 'onQuestionEnd'), true);
+  assert.equal(registrations.events.get('tool_execution_end')?.length, 1);
 });
 
 test('default composition has unique registration and UI ownership', () => {
@@ -113,22 +118,13 @@ test('default composition has unique registration and UI ownership', () => {
   assert.equal(new Set(registrations.tools).size, registrations.tools.length);
   assert.equal(new Set(registrations.commands).size, registrations.commands.length);
   assert.equal(new Set(registrations.messageRenderers).size, registrations.messageRenderers.length);
-  for (const handlers of [
-    ...registrations.events.values(),
-    ...registrations.busEvents.values(),
-  ]) {
+  for (const handlers of [...registrations.events.values(), ...registrations.busEvents.values()]) {
     assert.equal(new Set(handlers).size, handlers.length);
   }
 
-  const sessionStartHandlers = registrations.events.get('session_start') ?? [];
-  assert.equal(
-    sessionStartHandlers.filter((handler) => String(handler).includes('setFooter')).length,
-    1,
-  );
-  assert.equal(
-    sessionStartHandlers.filter((handler) => String(handler).includes('setEditorComponent')).length,
-    1,
-  );
+  assert.equal(registrations.events.get('session_start')?.length, 7);
+  assert.equal(registrations.events.get('session_before_compact')?.length, 1);
+  assert.equal(registrations.events.get('tool_execution_end')?.length, 1);
 });
 
 test('composition invokes every injected component exactly once in order', () => {

@@ -2,11 +2,11 @@
  * agent-runner.ts — Core execution engine: creates sessions, runs agents, collects results.
  */
 
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import type { Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import type { Model } from '@earendil-works/pi-ai';
+import type { ExtensionContext, LoadExtensionsResult } from '@earendil-works/pi-coding-agent';
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -16,18 +16,29 @@ import {
   getAgentDir,
   SessionManager,
   SettingsManager,
-} from "@earendil-works/pi-coding-agent";
-import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getMemoryToolNames, getReadOnlyMemoryToolNames, getToolNamesForType } from "./agent-types.js";
-import { runInChildSessionContext } from "./child-context.js";
-import { buildParentContext, extractText } from "./context.js";
-import { DEFAULT_AGENTS } from "./default-agents.js";
-import { detectEnv } from "./env.js";
-import { resolveEffectiveModel } from "./model-resolver.js";
-import { buildMemoryBlock, buildReadOnlyMemoryBlock } from "./memory.js";
-import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
-import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
-import { preloadSkills } from "./skill-loader.js";
-import type { SubagentType, ThinkingLevel } from "./types.js";
+} from '@earendil-works/pi-coding-agent';
+import {
+  BUILTIN_TOOL_NAMES,
+  getAgentConfig,
+  getConfig,
+  getMemoryToolNames,
+  getReadOnlyMemoryToolNames,
+  getToolNamesForType,
+} from './agent-types.js';
+import { runInChildSessionContext } from './child-context.js';
+import { buildParentContext, extractText } from './context.js';
+import { DEFAULT_AGENTS } from './default-agents.js';
+import { detectEnv } from './env.js';
+import { resolveEffectiveModel } from './model-resolver.js';
+import { buildMemoryBlock, buildReadOnlyMemoryBlock } from './memory.js';
+import {
+  createNestedSubagentTools,
+  getMaxSubagentDepth,
+  type NestedAgentManager,
+} from './nested-tools.js';
+import { buildAgentPrompt, type PromptExtras } from './prompts.js';
+import { preloadSkills } from './skill-loader.js';
+import type { SubagentType, ThinkingLevel } from './types.js';
 
 /**
  * Tool names registered by THIS extension. Single source of truth so the
@@ -36,9 +47,9 @@ import type { SubagentType, ThinkingLevel } from "./types.js";
  * derived from pi — but they only need defining once.
  */
 export const SUBAGENT_TOOL_NAMES = {
-  AGENT: "Agent",
-  GET_RESULT: "get_subagent_result",
-  STEER: "steer_subagent",
+  AGENT: 'Agent',
+  GET_RESULT: 'get_subagent_result',
+  STEER: 'steer_subagent',
 } as const;
 
 /** Names of tools registered by this extension that subagents must NOT inherit. */
@@ -53,9 +64,10 @@ const EXCLUDED_TOOL_NAMES: string[] = Object.values(SUBAGENT_TOOL_NAMES);
  */
 export function extensionCanonicalName(extPath: string): string {
   const base = basename(extPath);
-  const name = base === "index.ts" || base === "index.js"
-    ? basename(dirname(extPath))
-    : base.replace(/\.(ts|js)$/, "");
+  const name =
+    base === 'index.ts' || base === 'index.js'
+      ? basename(dirname(extPath))
+      : base.replace(/\.(ts|js)$/, '');
   return name.toLowerCase();
 }
 
@@ -83,10 +95,10 @@ function extensionPackageName(extPath: string): string | undefined {
   let dir = dirname(extPath);
   for (;;) {
     // Climbing into node_modules means we've left the owning package's tree.
-    if (basename(dir) === "node_modules") return undefined;
+    if (basename(dir) === 'node_modules') return undefined;
     let pkg: { name?: unknown; pi?: { extensions?: unknown } };
     try {
-      pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf-8"));
+      pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
     } catch {
       const parent = dirname(dir);
       if (parent === dir) return undefined; // walked to the filesystem root
@@ -96,11 +108,11 @@ function extensionPackageName(extPath: string): string | undefined {
     // First package.json wins — it's the package root; decide here.
     const entries = pkg.pi?.extensions;
     if (
-      typeof pkg.name === "string" &&
+      typeof pkg.name === 'string' &&
       Array.isArray(entries) &&
-      entries.some((e) => typeof e === "string" && resolve(dir, e) === entry)
+      entries.some((e) => typeof e === 'string' && resolve(dir, e) === entry)
     ) {
-      const short = pkg.name.startsWith("@") ? pkg.name.slice(pkg.name.indexOf("/") + 1) : pkg.name;
+      const short = pkg.name.startsWith('@') ? pkg.name.slice(pkg.name.indexOf('/') + 1) : pkg.name;
       return short.toLowerCase();
     }
     return undefined;
@@ -141,17 +153,17 @@ export function parseExtensionsSpec(
   let wildcard = false;
   for (const entry of entries) {
     if (!entry) continue;
-    if (entry === "*") {
+    if (entry === '*') {
       wildcard = true;
       continue;
     }
-    const isPathEntry = entry.includes("/") || entry.includes("\\") || entry.startsWith("~");
+    const isPathEntry = entry.includes('/') || entry.includes('\\') || entry.startsWith('~');
     if (!isPathEntry) {
       names.add(entry.toLowerCase());
       continue;
     }
     let p = entry;
-    if (p === "~" || p.startsWith("~/") || p.startsWith("~\\")) {
+    if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) {
       p = homedir() + p.slice(1);
     }
     const abs = isAbsolute(p) ? p : resolve(cwd, p);
@@ -179,8 +191,8 @@ export function parseExtSelectors(entries: string[]): {
   const narrowing = new Map<string, Set<string>>();
   for (const raw of entries) {
     if (!raw) continue;
-    const body = raw.slice("ext:".length);
-    const slash = body.indexOf("/");
+    const body = raw.slice('ext:'.length);
+    const slash = body.indexOf('/');
     // Extension name matches case-insensitively (matches the loader-side canonical
     // name). Tool names are case-preserved — they're matched against pi-mono's
     // registered identifiers, which are case-sensitive.
@@ -270,7 +282,10 @@ export function installExtensionToolScope(
 
   const renarrow = () => {
     const allowed = inScope();
-    const next = session.getAllTools().map((t) => t.name).filter((n) => allowed.has(n));
+    const next = session
+      .getAllTools()
+      .map((t) => t.name)
+      .filter((n) => allowed.has(n));
     const current = session.getActiveToolNames();
     // setActiveToolsByName unconditionally rebuilds the system prompt, so skip
     // the no-op that steady-state turns would otherwise pay for every turn.
@@ -284,7 +299,7 @@ export function installExtensionToolScope(
   renarrow();
 
   session.subscribe((event: AgentSessionEvent) => {
-    if (event.type === "turn_end") renarrow();
+    if (event.type === 'turn_end') renarrow();
   });
 
   const priorBeforeToolCall = session.agent.beforeToolCall;
@@ -309,21 +324,29 @@ export function normalizeMaxTurns(n: number | undefined): number | undefined {
 }
 
 /** Get the default max turns value. undefined = unlimited. */
-export function getDefaultMaxTurns(): number | undefined { return defaultMaxTurns; }
+export function getDefaultMaxTurns(): number | undefined {
+  return defaultMaxTurns;
+}
 /** Set the default max turns value. undefined or 0 = unlimited, otherwise minimum 1. */
-export function setDefaultMaxTurns(n: number | undefined): void { defaultMaxTurns = normalizeMaxTurns(n); }
+export function setDefaultMaxTurns(n: number | undefined): void {
+  defaultMaxTurns = normalizeMaxTurns(n);
+}
 
 /** Additional turns allowed after the soft limit steer message. */
 let graceTurns = 5;
 
 /** Get the grace turns value. */
-export function getGraceTurns(): number { return graceTurns; }
+export function getGraceTurns(): number {
+  return graceTurns;
+}
 /** Set the grace turns value (minimum 1). */
-export function setGraceTurns(n: number): void { graceTurns = Math.max(1, n); }
+export function setGraceTurns(n: number): void {
+  graceTurns = Math.max(1, n);
+}
 
 /** Info about a tool event in the subagent. */
 export interface ToolActivity {
-  type: "start" | "end";
+  type: 'start' | 'end';
   toolName: string;
 }
 
@@ -371,7 +394,10 @@ export interface RunOptions {
    * Called when the session successfully compacts. `tokensBefore` is upstream's
    * pre-compaction context size estimate. Aborted compactions don't fire.
    */
-  onCompaction?: (info: { reason: "manual" | "threshold" | "overflow"; tokensBefore: number }) => void;
+  onCompaction?: (info: {
+    reason: 'manual' | 'threshold' | 'overflow';
+    tokensBefore: number;
+  }) => void;
   /** Runtime bridge for opt-in child-safe nested delegation. */
   nestedRuntime?: {
     manager: NestedAgentManager;
@@ -405,15 +431,15 @@ export interface RunResult {
  * Returns an object with a `getText()` getter and an `unsubscribe` function.
  */
 function collectResponseText(session: AgentSession) {
-  let text = "";
+  let text = '';
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
     // message_start also fires for user and toolResult messages — resetting on
     // those would wipe assistant text already collected. Reset only when a new
     // ASSISTANT message begins, so getText() is the last assistant message's text.
-    if (event.type === "message_start" && event.message.role === "assistant") {
-      text = "";
+    if (event.type === 'message_start' && event.message.role === 'assistant') {
+      text = '';
     }
-    if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
       text += event.assistantMessageEvent.delta;
     }
   });
@@ -430,11 +456,11 @@ function collectResponseText(session: AgentSession) {
 function getLastAssistantText(session: AgentSession, startIndex = 0): string {
   for (let i = session.messages.length - 1; i >= startIndex; i--) {
     const msg = session.messages[i];
-    if (msg.role !== "assistant") continue;
+    if (msg.role !== 'assistant') continue;
     const text = extractText(msg.content).trim();
     if (text) return text;
   }
-  return "";
+  return '';
 }
 
 /**
@@ -454,12 +480,14 @@ function getLastAssistantText(session: AgentSession, startIndex = 0): string {
 function finalTurnError(session: AgentSession, startIndex = 0): string | undefined {
   for (let i = session.messages.length - 1; i >= startIndex; i--) {
     const msg = session.messages[i];
-    if (msg.role !== "assistant") continue;
-    if (msg.stopReason === "error") {
-      return (msg as { errorMessage?: string }).errorMessage?.trim() || "provider error with no output";
+    if (msg.role !== 'assistant') continue;
+    if (msg.stopReason === 'error') {
+      return (
+        (msg as { errorMessage?: string }).errorMessage?.trim() || 'provider error with no output'
+      );
     }
-    if (msg.stopReason === "length" && !extractText(msg.content).trim()) {
-      return "run hit the output token limit before producing any text";
+    if (msg.stopReason === 'length' && !extractText(msg.content).trim()) {
+      return 'run hit the output token limit before producing any text';
     }
     return undefined;
   }
@@ -473,15 +501,31 @@ function finalTurnError(session: AgentSession, startIndex = 0): string | undefin
 function forwardAbortSignal(session: AgentSession, signal?: AbortSignal): () => void {
   if (!signal) return () => {};
   const onAbort = () => session.abort();
-  signal.addEventListener("abort", onAbort, { once: true });
-  return () => signal.removeEventListener("abort", onAbort);
+  signal.addEventListener('abort', onAbort, { once: true });
+  return () => signal.removeEventListener('abort', onAbort);
 }
 
-function resolveConfiguredSessionDir(sessionDir: string | undefined, cwd: string): string | undefined {
+function resolveConfiguredSessionDir(
+  sessionDir: string | undefined,
+  cwd: string,
+): string | undefined {
   if (!sessionDir) return undefined;
-  if (sessionDir === "~" || sessionDir.startsWith("~/")) return resolve(homedir(), sessionDir.slice(2));
+  if (sessionDir === '~' || sessionDir.startsWith('~/'))
+    return resolve(homedir(), sessionDir.slice(2));
   if (isAbsolute(sessionDir)) return sessionDir;
   return resolve(cwd, sessionDir);
+}
+
+export function resolveSessionPersistencePolicy(
+  source: string | undefined,
+  trusted: boolean,
+  persistSession: boolean | undefined,
+  sessionDir: string | undefined,
+): { persistSession: boolean; sessionDir: string | undefined } {
+  if (source === 'project' && !trusted) {
+    return { persistSession: false, sessionDir: undefined };
+  }
+  return { persistSession: persistSession === true, sessionDir };
 }
 
 /** Reject project-controlled paths before a resource loader can execute extension factories. */
@@ -494,9 +538,9 @@ export async function loadAgentExtensionResources<T>(
   reload: (additionalExtensionPaths: string[] | undefined) => Promise<T>,
 ): Promise<T> {
   const additionalExtensionPaths = paths?.length ? paths : undefined;
-  if (source === "project" && additionalExtensionPaths && !isProjectTrusted()) {
+  if (source === 'project' && additionalExtensionPaths && !isProjectTrusted()) {
     const message = `Blocked ${additionalExtensionPaths.length} custom extension path(s) from untrusted project agent "${agentType}".`;
-    onToolActivity?.({ type: "end", toolName: `extensions-error:${message}` });
+    onToolActivity?.({ type: 'end', toolName: `extensions-error:${message}` });
     throw new Error(message);
   }
   return reload(additionalExtensionPaths);
@@ -548,7 +592,7 @@ export async function runAgent(
     const existingNames = new Set(toolNames);
     const denied = agentConfig.disallowedTools ? new Set(agentConfig.disallowedTools) : undefined;
     const effectivelyHas = (name: string) => existingNames.has(name) && !denied?.has(name);
-    const hasWriteTools = effectivelyHas("write") || effectivelyHas("edit");
+    const hasWriteTools = effectivelyHas('write') || effectivelyHas('edit');
 
     if (hasWriteTools) {
       // Read-write memory: add any missing memory tool names (read/write/edit)
@@ -559,7 +603,11 @@ export async function runAgent(
       // Read-only memory: only add read tool name, use read-only prompt
       const extraNames = getReadOnlyMemoryToolNames(existingNames);
       if (extraNames.length > 0) toolNames = [...toolNames, ...extraNames];
-      extras.memoryBlock = buildReadOnlyMemoryBlock(agentConfig.name, agentConfig.memory, configCwd);
+      extras.memoryBlock = buildReadOnlyMemoryBlock(
+        agentConfig.name,
+        agentConfig.memory,
+        configCwd,
+      );
     }
   }
 
@@ -570,9 +618,15 @@ export async function runAgent(
   } else {
     // Unknown type fallback: spread the canonical general-purpose config (defensive —
     // unreachable in practice since index.ts resolves unknown types before calling runAgent).
-    const fallback = DEFAULT_AGENTS.get("general-purpose");
+    const fallback = DEFAULT_AGENTS.get('general-purpose');
     if (!fallback) throw new Error(`No fallback config available for unknown type "${type}"`);
-    systemPrompt = buildAgentPrompt({ ...fallback, name: type }, effectiveCwd, env, parentSystemPrompt, extras);
+    systemPrompt = buildAgentPrompt(
+      { ...fallback, name: type },
+      effectiveCwd,
+      env,
+      parentSystemPrompt,
+      extras,
+    );
   }
 
   // When skills is string[], we've already preloaded them into the prompt.
@@ -626,7 +680,9 @@ export async function runAgent(
     noExtensions || (loadAll && !hasExcludes)
       ? undefined
       : (base) => {
-          discoveredNames = new Set(base.extensions.flatMap((e) => extensionCanonicalNames(e.path)));
+          discoveredNames = new Set(
+            base.extensions.flatMap((e) => extensionCanonicalNames(e.path)),
+          );
           return {
             ...base,
             extensions: base.extensions.filter((e) => {
@@ -671,7 +727,7 @@ export async function runAgent(
     for (const name of agentConfig.builtinToolNames) {
       if (!knownBuiltins.has(name)) {
         options.onToolActivity?.({
-          type: "end",
+          type: 'end',
           toolName: `tools-error:tool "${name}" requested by agent "${type}" is not a known built-in`,
         });
       }
@@ -690,7 +746,7 @@ export async function runAgent(
   // loads, so there is nothing to exclude.
   if (hasExcludes && noExtensions) {
     options.onToolActivity?.({
-      type: "end",
+      type: 'end',
       toolName: `extension-error:exclude_extensions has no effect for agent "${type}" — extensions: false loads nothing`,
     });
   }
@@ -701,7 +757,7 @@ export async function runAgent(
     for (const name of excludeNames) {
       if (!discoveredNames.has(name)) {
         options.onToolActivity?.({
-          type: "end",
+          type: 'end',
           toolName: `extension-error:exclude_extensions: "${name}" for agent "${type}" did not match any discovered extension`,
         });
       }
@@ -714,7 +770,7 @@ export async function runAgent(
     for (const name of keepNames) {
       if (!survivingNames.has(name)) {
         options.onToolActivity?.({
-          type: "end",
+          type: 'end',
           toolName: excludeNames.has(name)
             ? `extension-error:extension "${name}" is in both extensions: and exclude_extensions: for agent "${type}" — exclude wins`
             : `extension-error:extension "${name}" requested by agent "${type}" was not loaded`,
@@ -724,7 +780,7 @@ export async function runAgent(
     for (const name of extNames) {
       if (!survivingNames.has(name)) {
         options.onToolActivity?.({
-          type: "end",
+          type: 'end',
           toolName: `extension-error:ext:${name} referenced by agent "${type}" but extension "${name}" is not loaded (check extensions:/exclude_extensions:)`,
         });
       }
@@ -734,7 +790,10 @@ export async function runAgent(
   // Resolve model: explicit option > config.model > parent model
   // VENDOR EDIT (mpx-pi): Keep every spawn path on the shared effective-model policy.
   const model = resolveEffectiveModel(
-    options.model, ctx.model, ctx.modelRegistry, agentConfig?.model,
+    options.model,
+    ctx.model,
+    ctx.modelRegistry,
+    agentConfig?.model,
   );
 
   // Resolve thinking level: explicit option > agent config > undefined (inherit)
@@ -753,21 +812,23 @@ export async function runAgent(
   // to fetch from or steer either — inject nothing rather than three tools whose
   // every call is an error. This is also what makes `maxSubagentDepth` 0/1 mean
   // "nesting off" instead of "nesting always fails".
-  const nestedRuntime = options.nestedRuntime && options.nestedRuntime.depth < effectiveMaxDepth
-    ? options.nestedRuntime
-    : undefined;
-  const nestedTools = agentConfig?.allowedSubagents && nestedRuntime && !options.isolated
-    ? createNestedSubagentTools({
-        manager: nestedRuntime.manager,
-        pi: options.pi,
-        parentAgentId: nestedRuntime.parentAgentId,
-        depth: nestedRuntime.depth,
-        maxSubagentDepth: effectiveMaxDepth,
-        allowedSubagents: agentConfig.allowedSubagents,
-        configCwd,
-      })
-    : [];
-  const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
+  const nestedRuntime =
+    options.nestedRuntime && options.nestedRuntime.depth < effectiveMaxDepth
+      ? options.nestedRuntime
+      : undefined;
+  const nestedTools =
+    agentConfig?.allowedSubagents && nestedRuntime && !options.isolated
+      ? createNestedSubagentTools({
+          manager: nestedRuntime.manager,
+          pi: options.pi,
+          parentAgentId: nestedRuntime.parentAgentId,
+          depth: nestedRuntime.depth,
+          maxSubagentDepth: effectiveMaxDepth,
+          allowedSubagents: agentConfig.allowedSubagents,
+          configCwd,
+        })
+      : [];
+  const nestedToolNames = new Set(nestedTools.map((tool) => tool.name));
 
   // ─── Tool scoping ───────────────────────────────────────────────────────
   //
@@ -804,17 +865,13 @@ export async function runAgent(
     // Strict allowlist: built-ins the agent asked for, plus any opt-in nested
     // tools (whose names would otherwise be dropped as EXCLUDED_TOOL_NAMES).
     sessionTools = [
-      ...toolNames.filter(
-        (t) => !EXCLUDED_TOOL_NAMES.includes(t) && !disallowedSet?.has(t),
-      ),
+      ...toolNames.filter((t) => !EXCLUDED_TOOL_NAMES.includes(t) && !disallowedSet?.has(t)),
       ...[...nestedToolNames].filter((t) => !disallowedSet?.has(t)),
     ];
   } else {
     // Deny the orchestration tools EXCEPT the nested ones this agent opted into —
     // those are injected as customTools and must survive the registry gate.
-    const denyTools = new Set<string>(
-      EXCLUDED_TOOL_NAMES.filter((t) => !nestedToolNames.has(t)),
-    );
+    const denyTools = new Set<string>(EXCLUDED_TOOL_NAMES.filter((t) => !nestedToolNames.has(t)));
     // Keep only the built-ins the agent asked for — deny the rest.
     for (const name of BUILTIN_TOOL_NAMES) {
       if (!builtinToolNameSet.has(name)) denyTools.add(name);
@@ -827,9 +884,16 @@ export async function runAgent(
   }
 
   const settingsManager = SettingsManager.create(configCwd, agentDir);
-  const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
-  const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
-  const sessionManager = agentConfig?.persistSession
+  const persistence = resolveSessionPersistencePolicy(
+    agentConfig?.source,
+    ctx.isProjectTrusted(),
+    agentConfig?.persistSession,
+    agentConfig?.sessionDir,
+  );
+  const configuredSessionDir = resolveConfiguredSessionDir(persistence.sessionDir, effectiveCwd);
+  const defaultSessionDir =
+    process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
+  const sessionManager = persistence.persistSession
     ? SessionManager.create(effectiveCwd, configuredSessionDir ?? defaultSessionDir)
     : SessionManager.inMemory(effectiveCwd);
 
@@ -849,7 +913,7 @@ export async function runAgent(
     customTools: nestedTools,
     resourceLoader: loader,
   } as unknown as Parameters<typeof createAgentSession>[0] & {
-    modelRegistry: ExtensionContext["modelRegistry"];
+    modelRegistry: ExtensionContext['modelRegistry'];
   };
   if (sessionExcludeTools) {
     sessionOpts.excludeTools = sessionExcludeTools;
@@ -872,7 +936,7 @@ export async function runAgent(
   await session.bindExtensions({
     onError: (err) => {
       options.onToolActivity?.({
-        type: "end",
+        type: 'end',
         toolName: `extension-error:${err.extensionPath}`,
       });
     },
@@ -903,43 +967,46 @@ export async function runAgent(
   let softLimitReached = false;
   let aborted = false;
 
-  let currentMessageText = "";
+  let currentMessageText = '';
   const unsubTurns = session.subscribe((event: AgentSessionEvent) => {
-    if (event.type === "turn_end") {
+    if (event.type === 'turn_end') {
       turnCount++;
       options.onTurnEnd?.(turnCount);
       if (maxTurns != null) {
         if (!softLimitReached && turnCount >= maxTurns) {
           softLimitReached = true;
-          session.steer("You have reached your turn limit. Wrap up immediately — provide your final answer now.");
+          session.steer(
+            'You have reached your turn limit. Wrap up immediately — provide your final answer now.',
+          );
         } else if (softLimitReached && turnCount >= maxTurns + graceTurns) {
           aborted = true;
           session.abort();
         }
       }
     }
-    if (event.type === "message_start") {
-      currentMessageText = "";
+    if (event.type === 'message_start') {
+      currentMessageText = '';
     }
-    if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
       currentMessageText += event.assistantMessageEvent.delta;
       options.onTextDelta?.(event.assistantMessageEvent.delta, currentMessageText);
     }
-    if (event.type === "tool_execution_start") {
-      options.onToolActivity?.({ type: "start", toolName: event.toolName });
+    if (event.type === 'tool_execution_start') {
+      options.onToolActivity?.({ type: 'start', toolName: event.toolName });
     }
-    if (event.type === "tool_execution_end") {
-      options.onToolActivity?.({ type: "end", toolName: event.toolName });
+    if (event.type === 'tool_execution_end') {
+      options.onToolActivity?.({ type: 'end', toolName: event.toolName });
     }
-    if (event.type === "message_end" && event.message.role === "assistant") {
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
       const u = (event.message as any).usage;
-      if (u) options.onAssistantUsage?.({
-        input: u.input ?? 0,
-        output: u.output ?? 0,
-        cacheWrite: u.cacheWrite ?? 0,
-      });
+      if (u)
+        options.onAssistantUsage?.({
+          input: u.input ?? 0,
+          output: u.output ?? 0,
+          cacheWrite: u.cacheWrite ?? 0,
+        });
     }
-    if (event.type === "compaction_end" && !event.aborted && event.result) {
+    if (event.type === 'compaction_end' && !event.aborted && event.result) {
       options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });
     }
   });
@@ -968,7 +1035,13 @@ export async function runAgent(
   }
 
   const responseText = collector.getText().trim() || getLastAssistantText(session, startLen);
-  return { responseText, session, aborted, steered: softLimitReached, failure: finalTurnError(session, startLen) };
+  return {
+    responseText,
+    session,
+    aborted,
+    steered: softLimitReached,
+    failure: finalTurnError(session, startLen),
+  };
 }
 
 /**
@@ -980,7 +1053,10 @@ export async function resumeAgent(
   options: {
     onToolActivity?: (activity: ToolActivity) => void;
     onAssistantUsage?: (usage: { input: number; output: number; cacheWrite: number }) => void;
-    onCompaction?: (info: { reason: "manual" | "threshold" | "overflow"; tokensBefore: number }) => void;
+    onCompaction?: (info: {
+      reason: 'manual' | 'threshold' | 'overflow';
+      tokensBefore: number;
+    }) => void;
     signal?: AbortSignal;
   } = {},
 ): Promise<{ text: string; failure?: string }> {
@@ -991,23 +1067,30 @@ export async function resumeAgent(
   const collector = collectResponseText(session);
   const cleanupAbort = forwardAbortSignal(session, options.signal);
 
-  const unsubEvents = (options.onToolActivity || options.onAssistantUsage || options.onCompaction)
-    ? session.subscribe((event: AgentSessionEvent) => {
-        if (event.type === "tool_execution_start") options.onToolActivity?.({ type: "start", toolName: event.toolName });
-        if (event.type === "tool_execution_end") options.onToolActivity?.({ type: "end", toolName: event.toolName });
-        if (event.type === "message_end" && event.message.role === "assistant") {
-          const u = (event.message as any).usage;
-          if (u) options.onAssistantUsage?.({
-            input: u.input ?? 0,
-            output: u.output ?? 0,
-            cacheWrite: u.cacheWrite ?? 0,
-          });
-        }
-        if (event.type === "compaction_end" && !event.aborted && event.result) {
-          options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });
-        }
-      })
-    : () => {};
+  const unsubEvents =
+    options.onToolActivity || options.onAssistantUsage || options.onCompaction
+      ? session.subscribe((event: AgentSessionEvent) => {
+          if (event.type === 'tool_execution_start')
+            options.onToolActivity?.({ type: 'start', toolName: event.toolName });
+          if (event.type === 'tool_execution_end')
+            options.onToolActivity?.({ type: 'end', toolName: event.toolName });
+          if (event.type === 'message_end' && event.message.role === 'assistant') {
+            const u = (event.message as any).usage;
+            if (u)
+              options.onAssistantUsage?.({
+                input: u.input ?? 0,
+                output: u.output ?? 0,
+                cacheWrite: u.cacheWrite ?? 0,
+              });
+          }
+          if (event.type === 'compaction_end' && !event.aborted && event.result) {
+            options.onCompaction?.({
+              reason: event.reason,
+              tokensBefore: event.result.tokensBefore,
+            });
+          }
+        })
+      : () => {};
 
   try {
     await session.prompt(prompt);
@@ -1027,10 +1110,7 @@ export async function resumeAgent(
  * Send a steering message to a running subagent.
  * The message will interrupt the agent after its current tool execution.
  */
-export async function steerAgent(
-  session: AgentSession,
-  message: string,
-): Promise<void> {
+export async function steerAgent(session: AgentSession, message: string): Promise<void> {
   await session.steer(message);
 }
 
@@ -1041,26 +1121,25 @@ export function getAgentConversation(session: AgentSession): string {
   const parts: string[] = [];
 
   for (const msg of session.messages) {
-    if (msg.role === "user") {
-      const text = typeof msg.content === "string"
-        ? msg.content
-        : extractText(msg.content);
+    if (msg.role === 'user') {
+      const text = typeof msg.content === 'string' ? msg.content : extractText(msg.content);
       if (text.trim()) parts.push(`[User]: ${text.trim()}`);
-    } else if (msg.role === "assistant") {
+    } else if (msg.role === 'assistant') {
       const textParts: string[] = [];
       const toolCalls: string[] = [];
       for (const c of msg.content) {
-        if (c.type === "text" && c.text) textParts.push(c.text);
-        else if (c.type === "toolCall") toolCalls.push(`  Tool: ${(c as any).name ?? (c as any).toolName ?? "unknown"}`);
+        if (c.type === 'text' && c.text) textParts.push(c.text);
+        else if (c.type === 'toolCall')
+          toolCalls.push(`  Tool: ${(c as any).name ?? (c as any).toolName ?? 'unknown'}`);
       }
-      if (textParts.length > 0) parts.push(`[Assistant]: ${textParts.join("\n")}`);
-      if (toolCalls.length > 0) parts.push(`[Tool Calls]:\n${toolCalls.join("\n")}`);
-    } else if (msg.role === "toolResult") {
+      if (textParts.length > 0) parts.push(`[Assistant]: ${textParts.join('\n')}`);
+      if (toolCalls.length > 0) parts.push(`[Tool Calls]:\n${toolCalls.join('\n')}`);
+    } else if (msg.role === 'toolResult') {
       const text = extractText(msg.content);
-      const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
+      const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;
       parts.push(`[Tool Result (${msg.toolName})]: ${truncated}`);
     }
   }
 
-  return parts.join("\n\n");
+  return parts.join('\n\n');
 }

@@ -7,7 +7,12 @@
  * `disableDefaults` lives in agent-types.ts: both entry points need it.
  */
 
-import { isModelInScope, type ModelRegistryRef, readEnabledModels, resolveEnabledModels } from "./enabled-models.js";
+import {
+  isModelInScope,
+  type ModelRegistryRef,
+  readEnabledModels,
+  resolveEnabledModels,
+} from './enabled-models.js';
 
 /**
  * When enabled, subagent model choices are validated against `enabledModels`
@@ -18,16 +23,20 @@ import { isModelInScope, type ModelRegistryRef, readEnabledModels, resolveEnable
  */
 let scopeModelsEnabled = false;
 
-export function isScopeModelsEnabled(): boolean { return scopeModelsEnabled; }
-export function setScopeModelsEnabled(enabled: boolean): void { scopeModelsEnabled = enabled; }
+export function isScopeModelsEnabled(): boolean {
+  return scopeModelsEnabled;
+}
+export function setScopeModelsEnabled(enabled: boolean): void {
+  scopeModelsEnabled = enabled;
+}
 
 export type ModelScopeVerdict =
   /** In scope, or nothing to validate against (feature off / no allowlist). */
-  | { kind: "ok" }
+  | { kind: 'ok' }
   /** Caller-supplied out-of-scope choice — refuse the spawn with this message. */
-  | { kind: "error"; message: string }
+  | { kind: 'error'; message: string }
   /** Frontmatter-pinned or parent-inherited — proceed, but tell the user. */
-  | { kind: "warn"; message: string };
+  | { kind: 'warn'; message: string };
 
 /**
  * Check the effective resolved model against the user's enabledModels list.
@@ -50,21 +59,24 @@ export function checkModelScope(args: {
   modelInput?: string;
 }): ModelScopeVerdict {
   const { model, cwd, modelRegistry, callerSupplied, agentLabel, modelInput } = args;
-  if (!scopeModelsEnabled || !model) return { kind: "ok" };
+  if (!scopeModelsEnabled || !model) return { kind: 'ok' };
 
   const allowed = resolveEnabledModels(readEnabledModels(cwd), modelRegistry, cwd);
-  if (!allowed || isModelInScope(model, allowed)) return { kind: "ok" };
+  if (!allowed || isModelInScope(model, allowed)) return { kind: 'ok' };
 
   if (callerSupplied) {
-    const list = [...allowed].sort().map(m => `  ${m}`).join("\n");
+    const list = [...allowed]
+      .sort()
+      .map((m) => `  ${m}`)
+      .join('\n');
     return {
-      kind: "error",
+      kind: 'error',
       message: `Model not in scope: "${modelInput}".\n\nAllowed models (from enabledModels):\n${list}`,
     };
   }
   const modelLabel = modelInput ?? `${model.provider}/${model.id}`;
   return {
-    kind: "warn",
+    kind: 'warn',
     message: `Agent "${agentLabel}" using out-of-scope model "${modelLabel}"`,
   };
 }

@@ -4,40 +4,38 @@
  * Exit 0 = allow, Exit 2 = block (stderr fed back to Claude)
  */
 
-import { readStdin, findPackageManager } from "./shared.mjs";
+import { readStdin, findPackageManager } from './shared.mjs';
 
 async function main() {
   const input = await readStdin();
-  const command = input.tool_input?.command ?? "";
+  const command = input.tool_input?.command ?? '';
   const cwd = input.cwd ?? process.cwd();
   if (!command) process.exit(0);
 
   const pm = findPackageManager(cwd);
   if (!pm) process.exit(0);
 
-  const firstCmd = command.split("\n")[0].trim().split(/\s+/)[0];
-  const allPackageManagers = ["npm", "pnpm", "yarn", "bun"];
+  const firstCmd = command.split('\n')[0].trim().split(/\s+/)[0];
+  const allPackageManagers = ['npm', 'pnpm', 'yarn', 'bun'];
   const wrongPackageManagers = allPackageManagers.filter((p) => p !== pm);
 
   if (wrongPackageManagers.includes(firstCmd)) {
     process.stderr.write(
-      `This project uses ${pm} (detected from lockfile). Use '${pm}' instead of '${firstCmd}'.\n`
+      `This project uses ${pm} (detected from lockfile). Use '${pm}' instead of '${firstCmd}'.\n`,
     );
     process.exit(2);
   }
 
   // bun uses bunx instead of npx
-  if (pm === "bun" && /(?:^|\s)npx\s/.test(command)) {
-    process.stderr.write(
-      "This project uses bun. Use 'bunx' instead of 'npx'.\n"
-    );
+  if (pm === 'bun' && /(?:^|\s)npx\s/.test(command)) {
+    process.stderr.write("This project uses bun. Use 'bunx' instead of 'npx'.\n");
     process.exit(2);
   }
 
   // Block npx tsc → redirect to PM typecheck
   if (/(?:^|\s)npx\s+tsc(?:\s|$)/.test(command)) {
     process.stderr.write(
-      `Don't use 'npx tsc' directly. Use '${pm} run typecheck' (or the project's check script) instead.\n`
+      `Don't use 'npx tsc' directly. Use '${pm} run typecheck' (or the project's check script) instead.\n`,
     );
     process.exit(2);
   }
@@ -55,7 +53,7 @@ async function main() {
 function warnToolRedirects(command) {
   const checks = getToolRedirectWarnings(command);
   for (const warning of checks) {
-    process.stderr.write(warning + "\n");
+    process.stderr.write(warning + '\n');
   }
 }
 
@@ -68,13 +66,16 @@ export function getToolRedirectWarnings(command) {
 
   // Only warn if the tool-like command is the primary command (not in a pipeline)
   if (/^(grep|rg)\s/.test(firstSegment) || /(?:&&|;)\s*(grep|rg)\s/.test(firstSegment)) {
-    warnings.push("Consider using the Grep tool instead of bash grep/rg for code search.");
+    warnings.push('Consider using the Grep tool instead of bash grep/rg for code search.');
   }
-  if (/^(cat|head|tail)\s/.test(firstSegment) || /(?:&&|;)\s*(cat|head|tail)\s/.test(firstSegment)) {
-    warnings.push("Consider using the Read tool instead of cat/head/tail for reading files.");
+  if (
+    /^(cat|head|tail)\s/.test(firstSegment) ||
+    /(?:&&|;)\s*(cat|head|tail)\s/.test(firstSegment)
+  ) {
+    warnings.push('Consider using the Read tool instead of cat/head/tail for reading files.');
   }
   if (/^find\s/.test(firstSegment) || /(?:&&|;)\s*find\s/.test(firstSegment)) {
-    warnings.push("Consider using the Glob tool instead of bash find for file search.");
+    warnings.push('Consider using the Glob tool instead of bash find for file search.');
   }
   return warnings;
 }

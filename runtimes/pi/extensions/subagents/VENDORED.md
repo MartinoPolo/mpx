@@ -1,11 +1,11 @@
 # Vendored: `@tintinweb/pi-subagents`
 
-| | |
-| --- | --- |
-| Upstream | https://github.com/tintinweb/pi-subagents |
-| Commit | `8976c63f9857fb308926dd1d7369c2b7e059ffdc` (2026-07-31, `feat: add opt-in nested subagent delegation (#164)`) |
-| Version | 0.14.3 |
-| License | MIT © 2026 tintinweb — full text in [`LICENSE`](./LICENSE) |
+|          |                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------- |
+| Upstream | https://github.com/tintinweb/pi-subagents                                                                     |
+| Commit   | `8976c63f9857fb308926dd1d7369c2b7e059ffdc` (2026-07-31, `feat: add opt-in nested subagent delegation (#164)`) |
+| Version  | 0.14.3                                                                                                        |
+| License  | MIT © 2026 tintinweb — full text in [`LICENSE`](./LICENSE)                                                    |
 
 Forked rather than installed (`pi install npm:@tintinweb/pi-subagents`) so that a pi or
 upstream release cannot silently change subagent behaviour, and so Phase 7 can add the

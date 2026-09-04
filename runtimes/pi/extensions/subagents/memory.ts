@@ -11,11 +11,11 @@
  * so existing memories aren't orphaned.
  */
 
-import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { MemoryScope } from "./types.js";
+import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import type { MemoryScope } from './types.js';
 
 /** Maximum lines to read from MEMORY.md */
 const MAX_MEMORY_LINES = 200;
@@ -48,7 +48,7 @@ export function safeReadFile(filePath: string): string | undefined {
   if (!existsSync(filePath)) return undefined;
   if (isSymlink(filePath)) return undefined;
   try {
-    return readFileSync(filePath, "utf-8");
+    return readFileSync(filePath, 'utf-8');
   } catch {
     return undefined;
   }
@@ -63,21 +63,21 @@ export function resolveMemoryDir(agentName: string, scope: MemoryScope, cwd: str
     throw new Error(`Unsafe agent name for memory directory: "${agentName}"`);
   }
   switch (scope) {
-    case "user": {
-      const current = join(getAgentDir(), "agent-memory", agentName);
+    case 'user': {
+      const current = join(getAgentDir(), 'agent-memory', agentName);
       // Legacy location from when this path was hardcoded. Keep using it if it
       // already holds this agent's memory and the new location hasn't been
       // created yet — otherwise existing memories would be silently orphaned.
-      const legacy = join(homedir(), ".pi", "agent-memory", agentName);
+      const legacy = join(homedir(), '.pi', 'agent-memory', agentName);
       if (!existsSync(current) && existsSync(legacy) && !isSymlink(legacy)) {
         return legacy;
       }
       return current;
     }
-    case "project":
-      return join(cwd, ".pi", "agent-memory", agentName);
-    case "local":
-      return join(cwd, ".pi", "agent-memory-local", agentName);
+    case 'project':
+      return join(cwd, '.pi', 'agent-memory', agentName);
+    case 'local':
+      return join(cwd, '.pi', 'agent-memory-local', agentName);
   }
 }
 
@@ -105,13 +105,13 @@ export function readMemoryIndex(memoryDir: string): string | undefined {
   // Reject symlinked memory directories
   if (isSymlink(memoryDir)) return undefined;
 
-  const memoryFile = join(memoryDir, "MEMORY.md");
+  const memoryFile = join(memoryDir, 'MEMORY.md');
   const content = safeReadFile(memoryFile);
   if (content === undefined) return undefined;
 
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   if (lines.length > MAX_MEMORY_LINES) {
-    return lines.slice(0, MAX_MEMORY_LINES).join("\n") + "\n... (truncated at 200 lines)";
+    return lines.slice(0, MAX_MEMORY_LINES).join('\n') + '\n... (truncated at 200 lines)';
   }
   return content;
 }
@@ -136,7 +136,7 @@ This memory persists across sessions. Use it to build up knowledge over time.`;
 
   const memoryContent = existingMemory
     ? `\n\n## Current MEMORY.md\n${existingMemory}`
-    : `\n\nNo MEMORY.md exists yet. Create one at ${join(memoryDir, "MEMORY.md")} to start building persistent memory.`;
+    : `\n\nNo MEMORY.md exists yet. Create one at ${join(memoryDir, 'MEMORY.md')} to start building persistent memory.`;
 
   const instructions = `
 
@@ -162,7 +162,11 @@ This memory persists across sessions. Use it to build up knowledge over time.`;
  * Build a read-only memory block for agents that lack write/edit tools.
  * Does NOT create the memory directory — agents can only consume existing memory.
  */
-export function buildReadOnlyMemoryBlock(agentName: string, scope: MemoryScope, cwd: string): string {
+export function buildReadOnlyMemoryBlock(
+  agentName: string,
+  scope: MemoryScope,
+  cwd: string,
+): string {
   const memoryDir = resolveMemoryDir(agentName, scope, cwd);
   const existingMemory = readMemoryIndex(memoryDir);
 

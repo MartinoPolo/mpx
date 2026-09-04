@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { formatManagedDevServer, subscribeManagedDevServerEvents } from '../../../dev-server/footer-format.js';
+import {
+  formatManagedDevServer,
+  subscribeManagedDevServerEvents,
+} from '../../../dev-server/footer-format.js';
 
 test('managed dev-server subscription validates, normalizes, forwards, and unsubscribes', () => {
   let channel = '';

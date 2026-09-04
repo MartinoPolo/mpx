@@ -11,15 +11,22 @@
  * can `consume` keys — gated on `getEditorText() === ""` so normal typing is untouched.
  */
 
-import { Editor, isKeyRelease, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { AgentManager } from "../agent-manager.js";
-import type { AgentRecord } from "../types.js";
-import { getLifetimeTotal } from "../usage.js";
-import { type AgentActivity, getDisplayName, type Theme } from "./agent-widget.js";
-import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.js";
+import {
+  Editor,
+  isKeyRelease,
+  Key,
+  matchesKey,
+  truncateToWidth,
+  visibleWidth,
+} from '@earendil-works/pi-tui';
+import type { AgentManager } from '../agent-manager.js';
+import type { AgentRecord } from '../types.js';
+import { getLifetimeTotal } from '../usage.js';
+import { type AgentActivity, getDisplayName, type Theme } from './agent-widget.js';
+import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from './conversation-viewer.js';
 
 /** Widget key for the below-editor fleet list. */
-const FLEET_KEY = "fleet";
+const FLEET_KEY = 'fleet';
 /** Max agent rows shown at once; extras collapse into a "↓ N more" indicator. */
 const MAX_AGENT_ROWS = 5;
 /** Re-render cadence so elapsed/token stats tick while agents run. */
@@ -31,20 +38,32 @@ const FINISHED_LINGER_MS = 4000;
 export type FleetUICtx = {
   setWidget(
     key: string,
-    content: undefined | ((tui: any, theme: Theme) => { render(width: number): string[]; invalidate(): void; dispose?(): void }),
-    options?: { placement?: "aboveEditor" | "belowEditor" },
+    content:
+      | undefined
+      | ((
+          tui: any,
+          theme: Theme,
+        ) => { render(width: number): string[]; invalidate(): void; dispose?(): void }),
+    options?: { placement?: 'aboveEditor' | 'belowEditor' },
   ): void;
-  onTerminalInput(handler: (data: string) => { consume?: boolean; data?: string } | undefined): () => void;
+  onTerminalInput(
+    handler: (data: string) => { consume?: boolean; data?: string } | undefined,
+  ): () => void;
   getEditorText(): string;
-  notify(message: string, type?: "info" | "warning" | "error"): void;
+  notify(message: string, type?: 'info' | 'warning' | 'error'): void;
   custom<T>(
-    factory: (tui: any, theme: Theme, keybindings: any, done: (result: T) => void) => { render(width: number): string[]; invalidate(): void; dispose?(): void },
+    factory: (
+      tui: any,
+      theme: Theme,
+      keybindings: any,
+      done: (result: T) => void,
+    ) => { render(width: number): string[]; invalidate(): void; dispose?(): void },
     options?: { overlay?: boolean; overlayOptions?: unknown; onHandle?: (handle: unknown) => void },
   ): Promise<T>;
 };
 
-type MainEntry = { kind: "main" };
-type AgentEntry = { kind: "agent"; record: AgentRecord };
+type MainEntry = { kind: 'main' };
+type AgentEntry = { kind: 'agent'; record: AgentRecord };
 type FleetEntry = MainEntry | AgentEntry;
 
 /** `11s` — integer seconds, no decimal/suffix (matches Claude Code, unlike formatMs). */
@@ -71,7 +90,7 @@ function rightAlign(left: string, right: string, width: number): string {
   const maxLeft = Math.max(0, width - rightW - 1);
   const leftClamped = truncateToWidth(left, maxLeft);
   const gap = Math.max(1, width - visibleWidth(leftClamped) - rightW);
-  return truncateToWidth(leftClamped + " ".repeat(gap) + right, width);
+  return truncateToWidth(leftClamped + ' '.repeat(gap) + right, width);
 }
 
 export class FleetList {
@@ -111,7 +130,7 @@ export class FleetList {
     this.ui = ui;
     this.widgetRegistered = false;
     this.tui = undefined;
-    this.inputUnsub = ui.onTerminalInput(data => this.handleKey(data));
+    this.inputUnsub = ui.onTerminalInput((data) => this.handleKey(data));
   }
 
   /** Ensure the re-render timer is running (called when an agent spawns). */
@@ -128,10 +147,16 @@ export class FleetList {
   }
 
   dispose(): void {
-    if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
     this.inputUnsub?.();
     this.inputUnsub = undefined;
-    if (this.viewerClose) { this.viewerClose(); this.viewerClose = undefined; }
+    if (this.viewerClose) {
+      this.viewerClose();
+      this.viewerClose = undefined;
+    }
     this.viewingAgentId = undefined;
     if (this.ui && this.widgetRegistered) this.ui.setWidget(FLEET_KEY, undefined);
     this.widgetRegistered = false;
@@ -152,7 +177,10 @@ export class FleetList {
         this.widgetRegistered = false;
         this.tui = undefined;
       }
-      if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
+      if (this.timer) {
+        clearInterval(this.timer);
+        this.timer = undefined;
+      }
       this.active = false;
       this.selectedIndex = 0;
       return;
@@ -162,13 +190,20 @@ export class FleetList {
     this.ensureTimer(); // keep stats ticking whenever the list is shown (e.g. after a re-enable)
 
     if (!this.widgetRegistered) {
-      this.ui.setWidget(FLEET_KEY, (tui, theme) => {
-        this.tui = tui;
-        return {
-          render: (w: number) => this.renderBar(w, theme),
-          invalidate: () => { this.widgetRegistered = false; this.tui = undefined; },
-        };
-      }, { placement: "belowEditor" });
+      this.ui.setWidget(
+        FLEET_KEY,
+        (tui, theme) => {
+          this.tui = tui;
+          return {
+            render: (w: number) => this.renderBar(w, theme),
+            invalidate: () => {
+              this.widgetRegistered = false;
+              this.tui = undefined;
+            },
+          };
+        },
+        { placement: 'belowEditor' },
+      );
       this.widgetRegistered = true;
     } else {
       this.tui?.requestRender();
@@ -187,17 +222,25 @@ export class FleetList {
    */
   private agentRecords(): AgentRecord[] {
     const now = Date.now();
-    return this.manager.listAgents()
-      .filter(a => !a.parentAgentId && a.session && (
-        a.status === "running" || a.status === "queued"
-        || a.id === this.viewingAgentId
-        || (a.completedAt != null && now - a.completedAt < FINISHED_LINGER_MS)
-      ))
+    return this.manager
+      .listAgents()
+      .filter(
+        (a) =>
+          !a.parentAgentId &&
+          a.session &&
+          (a.status === 'running' ||
+            a.status === 'queued' ||
+            a.id === this.viewingAgentId ||
+            (a.completedAt != null && now - a.completedAt < FINISHED_LINGER_MS)),
+      )
       .sort((a, b) => a.startedAt - b.startedAt);
   }
 
   private roster(): FleetEntry[] {
-    return [{ kind: "main" }, ...this.agentRecords().map(record => ({ kind: "agent" as const, record }))];
+    return [
+      { kind: 'main' },
+      ...this.agentRecords().map((record) => ({ kind: 'agent' as const, record })),
+    ];
   }
 
   private clampSelection(): void {
@@ -228,8 +271,8 @@ export class FleetList {
 
     if (!this.active) {
       // Activate: ↓ or ← at an empty prompt moves focus into the list.
-      const isActivator = matchesKey(data, "down") || matchesKey(data, "left");
-      if (isActivator && this.agentRecords().length > 0 && this.ui.getEditorText() === "") {
+      const isActivator = matchesKey(data, 'down') || matchesKey(data, 'left');
+      if (isActivator && this.agentRecords().length > 0 && this.ui.getEditorText() === '') {
         this.active = true;
         this.selectedIndex = 0;
         this.update();
@@ -239,20 +282,29 @@ export class FleetList {
     }
 
     // Active — arrows navigate, Enter opens, Esc / Up-past-top exits.
-    if (matchesKey(data, "down")) {
+    if (matchesKey(data, 'down')) {
       const max = this.roster().length - 1;
       this.selectedIndex = Math.min(max, this.selectedIndex + 1);
       this.update();
       return { consume: true };
     }
-    if (matchesKey(data, "up")) {
-      if (this.selectedIndex === 0) { this.deactivate(); return { consume: true }; }
+    if (matchesKey(data, 'up')) {
+      if (this.selectedIndex === 0) {
+        this.deactivate();
+        return { consume: true };
+      }
       this.selectedIndex -= 1;
       this.update();
       return { consume: true };
     }
-    if (matchesKey(data, "escape")) { this.deactivate(); return { consume: true }; }
-    if (matchesKey(data, Key.enter)) { this.openSelected(); return { consume: true }; }
+    if (matchesKey(data, 'escape')) {
+      this.deactivate();
+      return { consume: true };
+    }
+    if (matchesKey(data, Key.enter)) {
+      this.openSelected();
+      return { consume: true };
+    }
 
     // Any other key cancels navigation and flows to the editor.
     this.deactivate();
@@ -280,7 +332,7 @@ export class FleetList {
 
   private openSelected(): void {
     const entry = this.roster()[this.selectedIndex];
-    if (!entry || entry.kind === "main") {
+    if (!entry || entry.kind === 'main') {
       // `main` = return to the prompt; the native transcript is already shown.
       this.deactivate();
       return;
@@ -288,35 +340,41 @@ export class FleetList {
     const record = entry.record;
     if (!this.ui) return;
     if (!record.session) {
-      this.ui.notify(`Agent is ${record.status} — no session available.`, "info");
+      this.ui.notify(`Agent is ${record.status} — no session available.`, 'info');
       return;
     }
     const session = record.session;
     const activity = this.agentActivity.get(record.id);
     this.viewingAgentId = record.id;
 
-    void this.ui.custom<undefined>(
-      (tui, theme, keybindings, done) => {
-        this.viewerClose = () => done(undefined);
-        return new ConversationViewer(
-          tui,
-          session,
-          record,
-          activity,
-          theme,
-          done,
-          () => {
-            if (this.manager.abort(record.id)) this.ui?.notify(`Stopped "${record.description}".`, "info");
-          },
-          keybindings,
-          (message: string) => this.manager.steer(record.id, message),
-        );
-      },
-      {
-        overlay: true,
-        overlayOptions: { anchor: "center", width: "90%", maxHeight: `${VIEWPORT_HEIGHT_PCT}%` },
-      },
-    ).then(() => this.clearViewer(), () => this.clearViewer());
+    void this.ui
+      .custom<undefined>(
+        (tui, theme, keybindings, done) => {
+          this.viewerClose = () => done(undefined);
+          return new ConversationViewer(
+            tui,
+            session,
+            record,
+            activity,
+            theme,
+            done,
+            () => {
+              if (this.manager.abort(record.id))
+                this.ui?.notify(`Stopped "${record.description}".`, 'info');
+            },
+            keybindings,
+            (message: string) => this.manager.steer(record.id, message),
+          );
+        },
+        {
+          overlay: true,
+          overlayOptions: { anchor: 'center', width: '90%', maxHeight: `${VIEWPORT_HEIGHT_PCT}%` },
+        },
+      )
+      .then(
+        () => this.clearViewer(),
+        () => this.clearViewer(),
+      );
   }
 
   /** Reset overlay state and return to the list (on close, auto-close, or error). */
@@ -326,7 +384,9 @@ export class FleetList {
     // while the overlay was open. If that agent is gone, leave the index for
     // update()'s clamp to settle.
     if (this.viewingAgentId) {
-      const idx = this.roster().findIndex(e => e.kind === "agent" && e.record.id === this.viewingAgentId);
+      const idx = this.roster().findIndex(
+        (e) => e.kind === 'agent' && e.record.id === this.viewingAgentId,
+      );
       if (idx >= 0) this.selectedIndex = idx;
     }
     this.viewerClose = undefined;
@@ -344,11 +404,11 @@ export class FleetList {
     const sel = Math.min(this.selectedIndex, agents.length);
 
     const hint = this.active
-      ? "↑↓ select · enter view · esc back"
-      : "esc to interrupt · ← for agents · ↓ to manage";
+      ? '↑↓ select · enter view · esc back'
+      : 'esc to interrupt · ← for agents · ↓ to manage';
     const lines: string[] = [];
-    lines.push(truncateToWidth("  " + theme.fg("dim", hint), width));
-    lines.push("");
+    lines.push(truncateToWidth('  ' + theme.fg('dim', hint), width));
+    lines.push('');
     lines.push(truncateToWidth(`  ${this.bullet(0, sel, theme)} main`, width));
 
     // Window the agent rows so the selected one stays visible.
@@ -357,24 +417,36 @@ export class FleetList {
     const start = selAgent < visible ? 0 : selAgent - visible + 1;
     const hiddenBelow = agents.length - (start + visible);
 
-    if (start > 0) lines.push(rightAlign("", theme.fg("dim", `↑ ${start} more`), width));
+    if (start > 0) lines.push(rightAlign('', theme.fg('dim', `↑ ${start} more`), width));
     for (let a = start; a < start + visible; a++) {
       lines.push(this.renderAgentRow(a + 1, sel, agents[a].record, width, theme));
     }
-    if (hiddenBelow > 0) lines.push(rightAlign("", theme.fg("dim", `↓ ${hiddenBelow} more`), width));
+    if (hiddenBelow > 0)
+      lines.push(rightAlign('', theme.fg('dim', `↓ ${hiddenBelow} more`), width));
 
     return lines;
   }
 
   private bullet(rosterIndex: number, sel: number, theme: Theme): string {
-    return rosterIndex === sel ? theme.fg("accent", "●") : theme.fg("dim", "○");
+    return rosterIndex === sel ? theme.fg('accent', '●') : theme.fg('dim', '○');
   }
 
-  private renderAgentRow(rosterIndex: number, sel: number, record: AgentRecord, width: number, theme: Theme): string {
-    const left = `  ${this.bullet(rosterIndex, sel, theme)} ${theme.fg("muted", getDisplayName(record.type))}  ${record.description}`;
-    const tokens = getLifetimeTotal(this.agentActivity.get(record.id)?.lifetimeUsage ?? record.lifetimeUsage);
+  private renderAgentRow(
+    rosterIndex: number,
+    sel: number,
+    record: AgentRecord,
+    width: number,
+    theme: Theme,
+  ): string {
+    const left = `  ${this.bullet(rosterIndex, sel, theme)} ${theme.fg('muted', getDisplayName(record.type))}  ${record.description}`;
+    const tokens = getLifetimeTotal(
+      this.agentActivity.get(record.id)?.lifetimeUsage ?? record.lifetimeUsage,
+    );
     const elapsedMs = (record.completedAt ?? Date.now()) - record.startedAt; // freezes once finished
-    const right = theme.fg("dim", `${formatFleetElapsed(elapsedMs)} · ${formatFleetTokens(tokens)}`);
+    const right = theme.fg(
+      'dim',
+      `${formatFleetElapsed(elapsedMs)} · ${formatFleetTokens(tokens)}`,
+    );
     return rightAlign(left, right, width);
   }
 }

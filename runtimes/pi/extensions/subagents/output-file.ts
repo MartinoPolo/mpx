@@ -5,10 +5,10 @@
  * matching Claude Code's task output file format.
  */
 
-import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 /**
  * Project/global default for writing a subagent's `.output` transcript; a custom
@@ -21,8 +21,12 @@ import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-
  */
 let outputTranscriptDefault = true;
 
-export function getOutputTranscriptDefault(): boolean { return outputTranscriptDefault; }
-export function setOutputTranscriptDefault(b: boolean): void { outputTranscriptDefault = b; }
+export function getOutputTranscriptDefault(): boolean {
+  return outputTranscriptDefault;
+}
+export function setOutputTranscriptDefault(b: boolean): void {
+  outputTranscriptDefault = b;
+}
 
 /**
  * Encode a cwd path as a filesystem-safe directory name. Handles:
@@ -32,9 +36,9 @@ export function setOutputTranscriptDefault(b: boolean): void { outputTranscriptD
  */
 export function encodeCwd(cwd: string): string {
   return cwd
-    .replace(/[/\\]/g, "-")        // both separators → dash
-    .replace(/^[A-Za-z]:-/, "")    // strip Windows drive prefix ("C:-")
-    .replace(/^-+/, "");           // strip leading dashes (POSIX root, UNC)
+    .replace(/[/\\]/g, '-') // both separators → dash
+    .replace(/^[A-Za-z]:-/, '') // strip Windows drive prefix ("C:-")
+    .replace(/^-+/, ''); // strip leading dashes (POSIX root, UNC)
 }
 
 /** Create the output file path, ensuring the directory exists.
@@ -48,24 +52,29 @@ export function createOutputFilePath(cwd: string, agentId: string, sessionId: st
   try {
     chmodSync(root, 0o700);
   } catch (err) {
-    if (process.platform !== "win32") throw err;
+    if (process.platform !== 'win32') throw err;
   }
-  const dir = join(root, encoded, sessionId, "tasks");
+  const dir = join(root, encoded, sessionId, 'tasks');
   mkdirSync(dir, { recursive: true });
   return join(dir, `${agentId}.output`);
 }
 
 /** Write the initial user prompt entry. */
-export function writeInitialEntry(path: string, agentId: string, prompt: string, cwd: string): void {
+export function writeInitialEntry(
+  path: string,
+  agentId: string,
+  prompt: string,
+  cwd: string,
+): void {
   const entry = {
     isSidechain: true,
     agentId,
-    type: "user",
-    message: { role: "user", content: prompt },
+    type: 'user',
+    message: { role: 'user', content: prompt },
     timestamp: new Date().toISOString(),
     cwd,
   };
-  writeFileSync(path, JSON.stringify(entry) + "\n", "utf-8");
+  writeFileSync(path, JSON.stringify(entry) + '\n', 'utf-8');
 }
 
 /**
@@ -87,20 +96,22 @@ export function streamToOutputFile(
       const entry = {
         isSidechain: true,
         agentId,
-        type: msg.role === "assistant" ? "assistant" : msg.role === "user" ? "user" : "toolResult",
+        type: msg.role === 'assistant' ? 'assistant' : msg.role === 'user' ? 'user' : 'toolResult',
         message: msg,
         timestamp: new Date().toISOString(),
         cwd,
       };
       try {
-        appendFileSync(path, JSON.stringify(entry) + "\n", "utf-8");
-      } catch { /* ignore write errors */ }
+        appendFileSync(path, JSON.stringify(entry) + '\n', 'utf-8');
+      } catch {
+        /* ignore write errors */
+      }
       writtenCount++;
     }
   };
 
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-    if (event.type === "turn_end") flush();
+    if (event.type === 'turn_end') flush();
     // Compaction replaces session.messages with a shorter, summarized array,
     // leaving writtenCount past the new end — without re-anchoring, the flush
     // loop would never match again and streaming would halt for good (#145).
@@ -111,9 +122,11 @@ export function streamToOutputFile(
     // anchoring synchronously would sit one past the trimmed array and skip
     // the first post-compaction message. Aborted/failed compactions leave
     // session.messages untouched, so only successful ones re-anchor.
-    if (event.type === "compaction_start") flush();
-    if (event.type === "compaction_end" && !event.aborted && event.result) {
-      queueMicrotask(() => { writtenCount = session.messages.length; });
+    if (event.type === 'compaction_start') flush();
+    if (event.type === 'compaction_end' && !event.aborted && event.result) {
+      queueMicrotask(() => {
+        writtenCount = session.messages.length;
+      });
     }
   });
 

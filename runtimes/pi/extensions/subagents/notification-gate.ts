@@ -7,7 +7,7 @@ export interface ConsumableNotification {
   resultConsumed?: boolean;
 }
 
-type ParentRunEvent = "agent_start" | "agent_settled";
+type ParentRunEvent = 'agent_start' | 'agent_settled';
 type RegisterParentRunHook = (event: ParentRunEvent, handler: () => void) => void;
 
 interface PendingNotification {
@@ -19,8 +19,8 @@ export function registerParentRunNotificationGate(
   registerHook: RegisterParentRunHook,
 ): ParentRunNotificationGate {
   const gate = new ParentRunNotificationGate();
-  registerHook("agent_start", () => gate.onParentAgentStart());
-  registerHook("agent_settled", () => gate.onParentAgentSettled());
+  registerHook('agent_start', () => gate.onParentAgentStart());
+  registerHook('agent_settled', () => gate.onParentAgentSettled());
   return gate;
 }
 
@@ -91,8 +91,8 @@ export class ParentRunNotificationGate {
   private flushIfReady(): void {
     if (this.parentRunActive || this.backgroundAgentsActive) return;
 
-    const unreadNotifications = [...this.pendingNotifications.values()].filter(
-      (notification) => notification.isUnread(),
+    const unreadNotifications = [...this.pendingNotifications.values()].filter((notification) =>
+      notification.isUnread(),
     );
     this.pendingNotifications.clear();
     for (const [index, notification] of unreadNotifications.entries()) {

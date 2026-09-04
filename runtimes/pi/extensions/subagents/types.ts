@@ -2,9 +2,9 @@
  * types.ts — Type definitions for the subagent system.
  */
 
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
-import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import type { LifetimeUsage } from "./usage.js";
+import type { ThinkingLevel } from '@earendil-works/pi-ai';
+import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import type { LifetimeUsage } from './usage.js';
 
 export type { ThinkingLevel };
 
@@ -12,13 +12,13 @@ export type { ThinkingLevel };
 export type SubagentType = string;
 
 /** Names of the three embedded default agents. */
-export const DEFAULT_AGENT_NAMES = ["general-purpose", "Explore", "Plan"] as const;
+export const DEFAULT_AGENT_NAMES = ['general-purpose', 'Explore', 'Plan'] as const;
 
 /** Memory scope for persistent agent memory. */
-export type MemoryScope = "user" | "project" | "local";
+export type MemoryScope = 'user' | 'project' | 'local';
 
 /** Isolation mode for agent execution. */
-export type IsolationMode = "worktree";
+export type IsolationMode = 'worktree';
 
 /** Unified agent configuration — used for both default and user-defined agents. */
 export interface AgentConfig {
@@ -51,9 +51,9 @@ export interface AgentConfig {
    * Nested delegation, off by default: undefined = no nested tools;
    * "all" = any enabled agent; string[] = only those agent types.
    */
-  allowedSubagents?: "all" | string[];
+  allowedSubagents?: 'all' | string[];
   systemPrompt: string;
-  promptMode: "replace" | "append";
+  promptMode: 'replace' | 'append';
   /** Default for spawn: fork parent conversation. undefined = caller decides. */
   inheritContext?: boolean;
   /** Default for spawn: run in background. undefined = caller decides. */
@@ -69,7 +69,7 @@ export interface AgentConfig {
   /** false = agent is hidden from the registry */
   enabled?: boolean;
   /** Where this agent was loaded from */
-  source?: "default" | "project" | "global";
+  source?: 'default' | 'project' | 'global';
 }
 
 export type JoinMode = 'async' | 'group' | 'smart';
@@ -87,7 +87,7 @@ export interface AgentRecord {
   id: string;
   type: SubagentType;
   description: string;
-  status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error";
+  status: 'queued' | 'running' | 'completed' | 'steered' | 'aborted' | 'stopped' | 'error';
   result?: string;
   error?: string;
   toolUses: number;
@@ -194,7 +194,7 @@ export interface ScheduledSubagent {
   description: string;
   /** Raw user input — cron expr | "+10m" | ISO | "5m". */
   schedule: string;
-  scheduleType: "cron" | "once" | "interval";
+  scheduleType: 'cron' | 'once' | 'interval';
   /** Computed at create time for interval/once. */
   intervalMs?: number;
 
@@ -212,7 +212,7 @@ export interface ScheduledSubagent {
   /** ISO timestamp. */
   createdAt: string;
   lastRun?: string;
-  lastStatus?: "success" | "error" | "running";
+  lastStatus?: 'success' | 'error' | 'running';
   /** Refreshed on every fire and on store load. */
   nextRun?: string;
   runCount: number;

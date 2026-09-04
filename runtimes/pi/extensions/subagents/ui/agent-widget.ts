@@ -5,14 +5,19 @@
  * Uses the callback form of setWidget for themed rendering.
  */
 
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth } from '@earendil-works/pi-tui';
 // VENDOR EDIT (mpx-pi, Phase 7 row 11): the footer owns the gauge vocabulary,
 // so the panel's thinking column and the main bar's stay one definition.
-import { thinkingGauge } from "../../footer.js";
-import type { AgentManager } from "../agent-manager.js";
-import { getConfig } from "../agent-types.js";
-import type { AgentInvocation, SubagentType, WidgetMode } from "../types.js";
-import { getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, type SessionLike } from "../usage.js";
+import { thinkingGauge } from '../../footer.js';
+import type { AgentManager } from '../agent-manager.js';
+import { getConfig } from '../agent-types.js';
+import type { AgentInvocation, SubagentType, WidgetMode } from '../types.js';
+import {
+  getLifetimeTotal,
+  getSessionContextPercent,
+  type LifetimeUsage,
+  type SessionLike,
+} from '../usage.js';
 
 // ---- Constants ----
 
@@ -20,20 +25,20 @@ import { getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, type Se
 const MAX_WIDGET_LINES = 12;
 
 /** Braille spinner frames for animated running indicator. */
-export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+export const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /** Statuses that indicate an error/non-success outcome (used for linger behavior and icon rendering). */
-export const ERROR_STATUSES = new Set(["error", "aborted", "steered", "stopped"]);
+export const ERROR_STATUSES = new Set(['error', 'aborted', 'steered', 'stopped']);
 
 /** Tool name → human-readable action for activity descriptions. */
 const TOOL_DISPLAY: Record<string, string> = {
-  read: "reading",
-  bash: "running command",
-  edit: "editing",
-  write: "writing",
-  grep: "searching",
-  find: "finding files",
-  ls: "listing",
+  read: 'reading',
+  bash: 'running command',
+  edit: 'editing',
+  write: 'writing',
+  grep: 'searching',
+  find: 'finding files',
+  ls: 'listing',
 };
 
 // ---- Types ----
@@ -48,7 +53,7 @@ export type UICtx = {
   setWidget(
     key: string,
     content: undefined | ((tui: any, theme: Theme) => { render(): string[]; invalidate(): void }),
-    options?: { placement?: "aboveEditor" | "belowEditor" },
+    options?: { placement?: 'aboveEditor' | 'belowEditor' },
   ): void;
 };
 
@@ -74,7 +79,8 @@ export interface AgentDetails {
   toolUses: number;
   tokens: string;
   durationMs: number;
-  status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error" | "background";
+  status:
+    'queued' | 'running' | 'completed' | 'steered' | 'aborted' | 'stopped' | 'error' | 'background';
   /** Human-readable description of what the agent is currently doing. */
   activity?: string;
   /** Current spinner frame index (for animated running indicator). */
@@ -95,9 +101,12 @@ export interface AgentDetails {
 
 /** Apply foreground styling while restoring it after nested foreground/full ANSI resets. */
 export function fgPreservingNestedStyles(theme: Theme, color: string, text: string): string {
-  const styledEmpty = theme.fg(color, "");
-  const styleStart = styledEmpty.replace(/\u001b\[(?:0|39)m/g, "");
-  return theme.fg(color, text.replace(/\u001b\[(?:0|39)m/g, reset => `${reset}${styleStart}`));
+  const styledEmpty = theme.fg(color, '');
+  const styleStart = styledEmpty.replace(/\u001b\[(?:0|39)m/g, '');
+  return theme.fg(
+    color,
+    text.replace(/\u001b\[(?:0|39)m/g, (reset) => `${reset}${styleStart}`),
+  );
 }
 
 /** Format a token count compactly: "33.8k token", "1.2M token". */
@@ -126,14 +135,14 @@ export function formatSessionTokens(
   const tokenStr = formatTokens(tokens);
   const annot: string[] = [];
   if (percent !== null) {
-    const color = percent >= 85 ? "error" : percent >= 70 ? "warning" : "dim";
+    const color = percent >= 85 ? 'error' : percent >= 70 ? 'warning' : 'dim';
     annot.push(theme.fg(color, `${Math.round(percent)}%`));
   }
   if (compactions > 0) {
-    annot.push(theme.fg("dim", `⇊${compactions}`));
+    annot.push(theme.fg('dim', `⇊${compactions}`));
   }
   if (annot.length === 0) return tokenStr;
-  return `${tokenStr} (${annot.join(" · ")})`;
+  return `${tokenStr} (${annot.join(' · ')})`;
 }
 
 /** VENDOR EDIT (mpx-pi): Use font-safe turn labels with an optional maximum. */
@@ -160,20 +169,21 @@ export function getDisplayName(type: SubagentType): string {
 /** Short label for prompt mode: "twin" for append, nothing for replace (the default). */
 export function getPromptModeLabel(type: SubagentType): string | undefined {
   const config = getConfig(type);
-  return config.promptMode === "append" ? "twin" : undefined;
+  return config.promptMode === 'append' ? 'twin' : undefined;
 }
 
 /** Mode label is not included — callers add it where they want it. */
-export function buildInvocationTags(
-  invocation: AgentInvocation | undefined,
-): { modelName?: string; tags: string[] } {
+export function buildInvocationTags(invocation: AgentInvocation | undefined): {
+  modelName?: string;
+  tags: string[];
+} {
   const tags: string[] = [];
   if (!invocation) return { tags };
   if (invocation.thinking) tags.push(`thinking: ${invocation.thinking}`);
-  if (invocation.isolated) tags.push("isolated");
-  if (invocation.isolation === "worktree") tags.push("worktree");
-  if (invocation.inheritContext) tags.push("inherit context");
-  if (invocation.runInBackground) tags.push("background");
+  if (invocation.isolated) tags.push('isolated');
+  if (invocation.isolation === 'worktree') tags.push('worktree');
+  if (invocation.inheritContext) tags.push('inherit context');
+  if (invocation.runInBackground) tags.push('background');
   if (invocation.maxTurns != null) tags.push(`max turns: ${invocation.maxTurns}`);
   return { modelName: invocation.modelName, tags };
 }
@@ -193,16 +203,20 @@ export function buildModelThinkingCells(
   theme: Theme,
 ): string[] {
   const cells: string[] = [];
-  if (invocation?.modelName) cells.push(theme.fg("accent", invocation.modelName));
-  if (invocation?.thinking) cells.push(theme.fg("dim", thinkingGauge(invocation.thinking)));
+  if (invocation?.modelName) cells.push(theme.fg('accent', invocation.modelName));
+  if (invocation?.thinking) cells.push(theme.fg('dim', thinkingGauge(invocation.thinking)));
   return cells;
 }
 
 /** Truncate text to a single line, max `len` chars. */
 function truncateLine(text: string, len = 60): string {
-  const line = text.split("\n").find(l => l.trim())?.trim() ?? "";
+  const line =
+    text
+      .split('\n')
+      .find((l) => l.trim())
+      ?.trim() ?? '';
   if (line.length <= len) return line;
-  return line.slice(0, len) + "…";
+  return line.slice(0, len) + '…';
 }
 
 /** Build a human-readable activity string from currently-running tools or response text. */
@@ -217,12 +231,12 @@ export function describeActivity(activeTools: Map<string, string>, responseText?
     const parts: string[] = [];
     for (const [action, count] of groups) {
       if (count > 1) {
-        parts.push(`${action} ${count} ${action === "searching" ? "patterns" : "files"}`);
+        parts.push(`${action} ${count} ${action === 'searching' ? 'patterns' : 'files'}`);
       } else {
         parts.push(action);
       }
     }
-    return parts.join(", ") + "…";
+    return parts.join(', ') + '…';
   }
 
   // No tools active — show truncated response text if available
@@ -230,7 +244,7 @@ export function describeActivity(activeTools: Map<string, string>, responseText?
     return truncateLine(responseText);
   }
 
-  return "thinking…";
+  return 'thinking…';
 }
 
 // ---- Widget manager ----
@@ -259,7 +273,7 @@ export class AgentWidget {
      * `WidgetMode`. Defaults to `"all"` when a caller supplies no policy; the
      * extension supplies one defaulting to `"background"`.
      */
-    private mode: () => WidgetMode = () => "all",
+    private mode: () => WidgetMode = () => 'all',
   ) {}
 
   /**
@@ -274,11 +288,14 @@ export class AgentWidget {
    *   - `all`: every agent.
    */
   private widgetAgents() {
-    const all = this.manager.listAgents().filter(a => !a.parentAgentId);
+    const all = this.manager.listAgents().filter((a) => !a.parentAgentId);
     switch (this.mode()) {
-      case "off": return [];
-      case "background": return all.filter(a => a.isBackground !== false);
-      default: return all;
+      case 'off':
+        return [];
+      case 'background':
+        return all.filter((a) => a.isBackground !== false);
+      default:
+        return all;
     }
   }
 
@@ -329,30 +346,43 @@ export class AgentWidget {
   }
 
   /** Render a finished agent line. */
-  private renderFinishedLine(a: { id: string; type: SubagentType; status: string; description: string; toolUses: number; startedAt: number; completedAt?: number; error?: string; invocation?: AgentInvocation }, theme: Theme): string {
+  private renderFinishedLine(
+    a: {
+      id: string;
+      type: SubagentType;
+      status: string;
+      description: string;
+      toolUses: number;
+      startedAt: number;
+      completedAt?: number;
+      error?: string;
+      invocation?: AgentInvocation;
+    },
+    theme: Theme,
+  ): string {
     const name = getDisplayName(a.type);
     const modeLabel = getPromptModeLabel(a.type);
     const duration = formatMs((a.completedAt ?? Date.now()) - a.startedAt);
 
     let icon: string;
     let statusText: string;
-    if (a.status === "completed") {
-      icon = theme.fg("success", "✓");
-      statusText = "";
-    } else if (a.status === "steered") {
-      icon = theme.fg("warning", "✓");
-      statusText = theme.fg("warning", " (turn limit)");
-    } else if (a.status === "stopped") {
-      icon = theme.fg("dim", "■");
-      statusText = theme.fg("dim", " stopped");
-    } else if (a.status === "error") {
-      icon = theme.fg("error", "✗");
-      const errMsg = a.error ? `: ${a.error.slice(0, 60)}` : "";
-      statusText = theme.fg("error", ` error${errMsg}`);
+    if (a.status === 'completed') {
+      icon = theme.fg('success', '✓');
+      statusText = '';
+    } else if (a.status === 'steered') {
+      icon = theme.fg('warning', '✓');
+      statusText = theme.fg('warning', ' (turn limit)');
+    } else if (a.status === 'stopped') {
+      icon = theme.fg('dim', '■');
+      statusText = theme.fg('dim', ' stopped');
+    } else if (a.status === 'error') {
+      icon = theme.fg('error', '✗');
+      const errMsg = a.error ? `: ${a.error.slice(0, 60)}` : '';
+      statusText = theme.fg('error', ` error${errMsg}`);
     } else {
       // aborted
-      icon = theme.fg("error", "✗");
-      statusText = theme.fg("warning", " aborted");
+      icon = theme.fg('error', '✗');
+      statusText = theme.fg('warning', ' aborted');
     }
 
     // VENDOR EDIT (mpx-pi, Phase 7 row 11): model and thinking lead the stats so
@@ -360,11 +390,11 @@ export class AgentWidget {
     const parts: string[] = buildModelThinkingCells(a.invocation, theme);
     const activity = this.agentActivity.get(a.id);
     if (activity) parts.push(formatTurns(activity.turnCount, activity.maxTurns));
-    if (a.toolUses > 0) parts.push(`${a.toolUses} tool use${a.toolUses === 1 ? "" : "s"}`);
+    if (a.toolUses > 0) parts.push(`${a.toolUses} tool use${a.toolUses === 1 ? '' : 's'}`);
     parts.push(duration);
 
-    const modeTag = modeLabel ? ` ${theme.fg("dim", `(${modeLabel})`)}` : "";
-    return `${icon} ${theme.fg("dim", name)}${modeTag}  ${theme.fg("dim", a.description)} ${theme.fg("dim", "·")} ${fgPreservingNestedStyles(theme, "dim", parts.join(" · "))}${statusText}`;
+    const modeTag = modeLabel ? ` ${theme.fg('dim', `(${modeLabel})`)}` : '';
+    return `${icon} ${theme.fg('dim', name)}${modeTag}  ${theme.fg('dim', a.description)} ${theme.fg('dim', '·')} ${fgPreservingNestedStyles(theme, 'dim', parts.join(' · '))}${statusText}`;
   }
 
   /**
@@ -373,11 +403,14 @@ export class AgentWidget {
    */
   private renderWidget(tui: any, theme: Theme): string[] {
     const allAgents = this.widgetAgents();
-    const running = allAgents.filter(a => a.status === "running");
-    const queued = allAgents.filter(a => a.status === "queued");
-    const finished = allAgents.filter(a =>
-      a.status !== "running" && a.status !== "queued" && a.completedAt
-      && this.shouldShowFinished(a.id, a.status),
+    const running = allAgents.filter((a) => a.status === 'running');
+    const queued = allAgents.filter((a) => a.status === 'queued');
+    const finished = allAgents.filter(
+      (a) =>
+        a.status !== 'running' &&
+        a.status !== 'queued' &&
+        a.completedAt &&
+        this.shouldShowFinished(a.id, a.status),
     );
 
     const hasActive = running.length > 0 || queued.length > 0;
@@ -388,8 +421,8 @@ export class AgentWidget {
 
     const w = tui.terminal.columns;
     const truncate = (line: string) => truncateToWidth(line, w);
-    const headingColor = hasActive ? "accent" : "dim";
-    const headingIcon = hasActive ? "●" : "○";
+    const headingColor = hasActive ? 'accent' : 'dim';
+    const headingIcon = hasActive ? '●' : '○';
     const frame = SPINNER[this.widgetFrame % SPINNER.length];
 
     // Build sections separately for overflow-aware assembly.
@@ -397,47 +430,57 @@ export class AgentWidget {
 
     const finishedLines: string[] = [];
     for (const a of finished) {
-      finishedLines.push(truncate(theme.fg("dim", "├─") + " " + this.renderFinishedLine(a, theme)));
+      finishedLines.push(truncate(theme.fg('dim', '├─') + ' ' + this.renderFinishedLine(a, theme)));
     }
 
     const runningLines: string[][] = []; // each entry is [header, activity]
     for (const a of running) {
       const name = getDisplayName(a.type);
       const modeLabel = getPromptModeLabel(a.type);
-      const modeTag = modeLabel ? ` ${theme.fg("dim", `(${modeLabel})`)}` : "";
+      const modeTag = modeLabel ? ` ${theme.fg('dim', `(${modeLabel})`)}` : '';
       const elapsed = formatMs(Date.now() - a.startedAt);
 
       const bg = this.agentActivity.get(a.id);
       const toolUses = bg?.toolUses ?? a.toolUses;
       const tokens = getLifetimeTotal(bg?.lifetimeUsage);
       const contextPercent = getSessionContextPercent(bg?.session);
-      const tokenText = tokens > 0 ? formatSessionTokens(tokens, contextPercent, theme, a.compactionCount) : "";
+      const tokenText =
+        tokens > 0 ? formatSessionTokens(tokens, contextPercent, theme, a.compactionCount) : '';
 
       // VENDOR EDIT (mpx-pi, Phase 7 row 11): model and thinking columns.
       const parts: string[] = buildModelThinkingCells(a.invocation, theme);
       if (bg) parts.push(formatTurns(bg.turnCount, bg.maxTurns));
-      if (toolUses > 0) parts.push(`${toolUses} tool use${toolUses === 1 ? "" : "s"}`);
+      if (toolUses > 0) parts.push(`${toolUses} tool use${toolUses === 1 ? '' : 's'}`);
       if (tokenText) parts.push(tokenText);
       parts.push(elapsed);
-      const statsText = parts.join(" · ");
+      const statsText = parts.join(' · ');
 
-      const activity = bg ? describeActivity(bg.activeTools, bg.responseText) : "thinking…";
+      const activity = bg ? describeActivity(bg.activeTools, bg.responseText) : 'thinking…';
 
       runningLines.push([
-        truncate(theme.fg("dim", "├─") + ` ${theme.fg("accent", frame)} ${theme.bold(name)}${modeTag}  ${theme.fg("muted", a.description)} ${theme.fg("dim", "·")} ${fgPreservingNestedStyles(theme, "dim", statsText)}`),
-        truncate(theme.fg("dim", "│  ") + theme.fg("dim", `  ⎿  ${activity}`)),
+        truncate(
+          theme.fg('dim', '├─') +
+            ` ${theme.fg('accent', frame)} ${theme.bold(name)}${modeTag}  ${theme.fg('muted', a.description)} ${theme.fg('dim', '·')} ${fgPreservingNestedStyles(theme, 'dim', statsText)}`,
+        ),
+        truncate(theme.fg('dim', '│  ') + theme.fg('dim', `  ⎿  ${activity}`)),
       ]);
     }
 
-    const queuedLine = queued.length > 0
-      ? truncate(theme.fg("dim", "├─") + ` ${theme.fg("muted", "◦")} ${theme.fg("dim", `${queued.length} queued`)}`)
-      : undefined;
+    const queuedLine =
+      queued.length > 0
+        ? truncate(
+            theme.fg('dim', '├─') +
+              ` ${theme.fg('muted', '◦')} ${theme.fg('dim', `${queued.length} queued`)}`,
+          )
+        : undefined;
 
     // Assemble with overflow cap (heading + overflow indicator = 2 reserved lines).
     const maxBody = MAX_WIDGET_LINES - 1; // heading takes 1 line
     const totalBody = finishedLines.length + runningLines.length * 2 + (queuedLine ? 1 : 0);
 
-    const lines: string[] = [truncate(theme.fg(headingColor, headingIcon) + " " + theme.fg(headingColor, "Agents"))];
+    const lines: string[] = [
+      truncate(theme.fg(headingColor, headingIcon) + ' ' + theme.fg(headingColor, 'Agents')),
+    ];
 
     if (totalBody <= maxBody) {
       // Everything fits — add all lines and fix up connectors for the last item.
@@ -448,14 +491,14 @@ export class AgentWidget {
       // Fix last connector: swap ├─ → └─ and │ → space for activity lines.
       if (lines.length > 1) {
         const last = lines.length - 1;
-        lines[last] = lines[last].replace("├─", "└─");
+        lines[last] = lines[last].replace('├─', '└─');
         // If last item is a running agent activity line, fix indent of that line
         // and fix the header line above it.
         if (runningLines.length > 0 && !queuedLine) {
           // The last two lines are the last running agent's header + activity.
           if (last >= 2) {
-            lines[last - 1] = lines[last - 1].replace("├─", "└─");
-            lines[last] = lines[last].replace("│  ", "   ");
+            lines[last - 1] = lines[last - 1].replace('├─', '└─');
+            lines[last] = lines[last].replace('│  ', '   ');
           }
         }
       }
@@ -496,8 +539,12 @@ export class AgentWidget {
       const overflowParts: string[] = [];
       if (hiddenRunning > 0) overflowParts.push(`${hiddenRunning} running`);
       if (hiddenFinished > 0) overflowParts.push(`${hiddenFinished} finished`);
-      const overflowText = overflowParts.join(", ");
-      lines.push(truncate(theme.fg("dim", "└─") + ` ${theme.fg("dim", `+${hiddenRunning + hiddenFinished} more (${overflowText})`)}`)
+      const overflowText = overflowParts.join(', ');
+      lines.push(
+        truncate(
+          theme.fg('dim', '└─') +
+            ` ${theme.fg('dim', `+${hiddenRunning + hiddenFinished} more (${overflowText})`)}`,
+        ),
       );
     }
 
@@ -514,27 +561,34 @@ export class AgentWidget {
     let queuedCount = 0;
     let hasFinished = false;
     for (const a of allAgents) {
-      if (a.status === "running") { runningCount++; }
-      else if (a.status === "queued") { queuedCount++; }
-      else if (a.completedAt && this.shouldShowFinished(a.id, a.status)) { hasFinished = true; }
+      if (a.status === 'running') {
+        runningCount++;
+      } else if (a.status === 'queued') {
+        queuedCount++;
+      } else if (a.completedAt && this.shouldShowFinished(a.id, a.status)) {
+        hasFinished = true;
+      }
     }
     const hasActive = runningCount > 0 || queuedCount > 0;
 
     // Nothing to show — clear widget
     if (!hasActive && !hasFinished) {
       if (this.widgetRegistered) {
-        this.uiCtx.setWidget("agents", undefined);
+        this.uiCtx.setWidget('agents', undefined);
         this.widgetRegistered = false;
         this.tui = undefined;
       }
       if (this.lastStatusText !== undefined) {
-        this.uiCtx.setStatus("subagents", undefined);
+        this.uiCtx.setStatus('subagents', undefined);
         this.lastStatusText = undefined;
       }
-      if (this.widgetInterval) { clearInterval(this.widgetInterval); this.widgetInterval = undefined; }
+      if (this.widgetInterval) {
+        clearInterval(this.widgetInterval);
+        this.widgetInterval = undefined;
+      }
       // Clean up stale entries
       for (const [id] of this.finishedTurnAge) {
-        if (!allAgents.some(a => a.id === id)) this.finishedTurnAge.delete(id);
+        if (!allAgents.some((a) => a.id === id)) this.finishedTurnAge.delete(id);
       }
       return;
     }
@@ -546,10 +600,10 @@ export class AgentWidget {
       if (runningCount > 0) statusParts.push(`${runningCount} running`);
       if (queuedCount > 0) statusParts.push(`${queuedCount} queued`);
       const total = runningCount + queuedCount;
-      newStatusText = `${statusParts.join(", ")} agent${total === 1 ? "" : "s"}`;
+      newStatusText = `${statusParts.join(', ')} agent${total === 1 ? '' : 's'}`;
     }
     if (newStatusText !== this.lastStatusText) {
-      this.uiCtx.setStatus("subagents", newStatusText);
+      this.uiCtx.setStatus('subagents', newStatusText);
       this.lastStatusText = newStatusText;
     }
 
@@ -558,17 +612,21 @@ export class AgentWidget {
     // Register widget callback once; subsequent updates use requestRender()
     // which re-invokes render() without replacing the component (avoids layout thrashing).
     if (!this.widgetRegistered) {
-      this.uiCtx.setWidget("agents", (tui, theme) => {
-        this.tui = tui;
-        return {
-          render: () => this.renderWidget(tui, theme),
-          invalidate: () => {
-            // Theme changed — force re-registration so factory captures fresh theme.
-            this.widgetRegistered = false;
-            this.tui = undefined;
-          },
-        };
-      }, { placement: "aboveEditor" });
+      this.uiCtx.setWidget(
+        'agents',
+        (tui, theme) => {
+          this.tui = tui;
+          return {
+            render: () => this.renderWidget(tui, theme),
+            invalidate: () => {
+              // Theme changed — force re-registration so factory captures fresh theme.
+              this.widgetRegistered = false;
+              this.tui = undefined;
+            },
+          };
+        },
+        { placement: 'aboveEditor' },
+      );
       this.widgetRegistered = true;
     } else {
       // Widget already registered — just request a re-render of existing components.
@@ -582,8 +640,8 @@ export class AgentWidget {
       this.widgetInterval = undefined;
     }
     if (this.uiCtx) {
-      this.uiCtx.setWidget("agents", undefined);
-      this.uiCtx.setStatus("subagents", undefined);
+      this.uiCtx.setWidget('agents', undefined);
+      this.uiCtx.setStatus('subagents', undefined);
     }
     this.widgetRegistered = false;
     this.tui = undefined;

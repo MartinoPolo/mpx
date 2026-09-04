@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 
 import { test, vi } from 'vitest';
 
-import { loadAgentExtensionResources } from '../../../subagents/agent-runner.js';
+import {
+  loadAgentExtensionResources,
+  resolveSessionPersistencePolicy,
+} from '../../../subagents/agent-runner.js';
 
 test('rejects untrusted project extension paths before loader reload', async () => {
   const reload = vi.fn(async () => undefined);
@@ -23,6 +26,24 @@ test('rejects untrusted project extension paths before loader reload', async () 
   assert.equal(reload.mock.calls.length, 0);
   assert.equal(activity.mock.calls.length, 1);
   assert.match(activity.mock.calls[0]![0].toolName, /^extensions-error:Blocked/);
+});
+
+test('disables native persistence paths from untrusted project agents', () => {
+  assert.deepEqual(resolveSessionPersistencePolicy('project', false, true, '.pi/sessions'), {
+    persistSession: false,
+    sessionDir: undefined,
+  });
+});
+
+test('retains persistence for trusted projects and global agents', () => {
+  assert.deepEqual(resolveSessionPersistencePolicy('project', true, true, '.pi/sessions'), {
+    persistSession: true,
+    sessionDir: '.pi/sessions',
+  });
+  assert.deepEqual(resolveSessionPersistencePolicy('global', false, true, '~/sessions'), {
+    persistSession: true,
+    sessionDir: '~/sessions',
+  });
 });
 
 test('passes trusted project extension paths to loader reload', async () => {

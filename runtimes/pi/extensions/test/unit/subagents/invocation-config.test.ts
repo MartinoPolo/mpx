@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { getResolvedModelName, withResolvedModelName } from '../../../subagents/invocation-config.js';
-import { type ModelEntry, type ModelRegistry, resolveEffectiveModel } from '../../../subagents/model-resolver.js';
+import {
+  getResolvedModelName,
+  withResolvedModelName,
+} from '../../../subagents/invocation-config.js';
+import {
+  type ModelEntry,
+  type ModelRegistry,
+  resolveEffectiveModel,
+} from '../../../subagents/model-resolver.js';
 
 const parentModel: ModelEntry = { provider: 'parent', id: 'parent-model', name: 'Parent Model' };
 const configuredModel: ModelEntry = {

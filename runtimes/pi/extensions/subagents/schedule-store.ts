@@ -10,33 +10,49 @@
  * from disk, applies the change, atomic-writes via temp+rename, releases.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import type { ScheduledSubagent, ScheduleStoreData } from "./types.js";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
+import type { ScheduledSubagent, ScheduleStoreData } from './types.js';
 
 const LOCK_RETRY_MS = 50;
 const LOCK_MAX_RETRIES = 100;
 
 function isProcessRunning(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch { return false; }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function acquireLock(lockPath: string): void {
   for (let i = 0; i < LOCK_MAX_RETRIES; i++) {
     try {
-      writeFileSync(lockPath, `${process.pid}`, { flag: "wx" });
+      writeFileSync(lockPath, `${process.pid}`, { flag: 'wx' });
       return;
     } catch (e: any) {
-      if (e.code === "EEXIST") {
+      if (e.code === 'EEXIST') {
         try {
-          const pid = parseInt(readFileSync(lockPath, "utf-8"), 10);
+          const pid = parseInt(readFileSync(lockPath, 'utf-8'), 10);
           if (pid && !isProcessRunning(pid)) {
             unlinkSync(lockPath);
             continue;
           }
-        } catch { /* ignore — try again */ }
+        } catch {
+          /* ignore — try again */
+        }
         const start = Date.now();
-        while (Date.now() - start < LOCK_RETRY_MS) { /* busy wait */ }
+        while (Date.now() - start < LOCK_RETRY_MS) {
+          /* busy wait */
+        }
         continue;
       }
       throw e;
@@ -46,12 +62,16 @@ function acquireLock(lockPath: string): void {
 }
 
 function releaseLock(lockPath: string): void {
-  try { unlinkSync(lockPath); } catch { /* ignore */ }
+  try {
+    unlinkSync(lockPath);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Resolve the storage path for a session-scoped store. */
 export function resolveStorePath(cwd: string, sessionId: string): string {
-  return join(cwd, ".pi", "subagent-schedules", `${sessionId}.json`);
+  return join(cwd, '.pi', 'subagent-schedules', `${sessionId}.json`);
 }
 
 export class ScheduleStore {
@@ -61,7 +81,7 @@ export class ScheduleStore {
 
   constructor(filePath: string) {
     this.filePath = filePath;
-    this.lockPath = filePath + ".lock";
+    this.lockPath = filePath + '.lock';
     this.load();
   }
 
@@ -74,16 +94,18 @@ export class ScheduleStore {
   private load(): void {
     if (!existsSync(this.filePath)) return;
     try {
-      const data: ScheduleStoreData = JSON.parse(readFileSync(this.filePath, "utf-8"));
+      const data: ScheduleStoreData = JSON.parse(readFileSync(this.filePath, 'utf-8'));
       this.jobs.clear();
       for (const j of data.jobs ?? []) this.jobs.set(j.id, j);
-    } catch { /* corrupt — start fresh, next save rewrites */ }
+    } catch {
+      /* corrupt — start fresh, next save rewrites */
+    }
   }
 
   /** Atomic write via temp file + rename (POSIX-atomic). */
   private save(): void {
     const data: ScheduleStoreData = { version: 1, jobs: [...this.jobs.values()] };
-    const tmp = this.filePath + ".tmp";
+    const tmp = this.filePath + '.tmp';
     writeFileSync(tmp, JSON.stringify(data, null, 2));
     renameSync(tmp, this.filePath);
   }
@@ -147,7 +169,11 @@ export class ScheduleStore {
   /** Delete the backing file (used when no jobs remain, optional cleanup). */
   deleteFileIfEmpty(): void {
     if (this.jobs.size === 0 && existsSync(this.filePath)) {
-      try { unlinkSync(this.filePath); } catch { /* ignore */ }
+      try {
+        unlinkSync(this.filePath);
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
