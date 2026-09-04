@@ -98,7 +98,10 @@ export interface SessionApplicationDependencies {
   ) => Promise<ResumePlanV1>;
   readonly verifyResumeConfirmation: (plan: ResumePlanV1, confirmation: string) => void;
   readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
-  readonly executeConfirmedResume?: (plan: ResumePlanV1) => Promise<unknown>;
+  readonly executeConfirmedResume?: (
+    plan: ResumePlanV1,
+    execution: { readonly approveHost?: boolean },
+  ) => Promise<unknown>;
   readonly branchService?: SessionBranchOperations;
   readonly discoveries?: () => Promise<readonly SessionDiscoveryInput[]>;
   readonly legacyImport?: SessionLegacyImport;
@@ -478,7 +481,10 @@ export class SessionApplicationService implements SessionApplication {
     return {
       schemaVersion: 1 as const,
       kind: 'session-resume' as const,
-      result: await this.#dependencies.executeConfirmedResume(replanned),
+      result: await this.#dependencies.executeConfirmedResume(
+        replanned,
+        request.approveResurrection ? { approveHost: true } : {},
+      ),
     };
   }
 }

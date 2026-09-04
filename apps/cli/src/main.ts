@@ -406,6 +406,7 @@ async function executeProductionSessionResume(
   plan: ResumePlanV1,
   user: UserConfig,
   context: CliContext,
+  authority: { readonly approveHost?: boolean },
   branchInvocation?: { readonly executable: string; readonly argv: readonly string[] },
 ): Promise<unknown> {
   return executeNodeSessionResumeLaunch(
@@ -434,6 +435,7 @@ async function executeProductionSessionResume(
     },
     plan,
     user,
+    authority,
   );
 }
 async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResult> {
@@ -595,7 +597,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       resumeDependencies,
       executeConfirmedResume:
         context.sessionResumeExecutor ??
-        ((plan) => executeProductionSessionResume(plan, user, context)),
+        ((plan, authority) => executeProductionSessionResume(plan, user, context, authority)),
       resolveIdentity,
       discoveries:
         context.sessionDiscoveries ??

@@ -94,6 +94,7 @@ function emptyStatus(cwd: string, repositoryId: string): StatusSnapshotV1 {
 /** Node-only production composition for the provider-neutral resume launch workflow. */
 export function createNodeSessionResumeLaunchApplicationService(
   input: NodeSessionResumeLaunchInput,
+  authority: { readonly approveHost?: boolean } = {},
 ): SessionResumeLaunchApplicationService {
   const { store, context, environment } = input;
   return new SessionResumeLaunchApplicationService({
@@ -325,6 +326,7 @@ export function createNodeSessionResumeLaunchApplicationService(
             environment,
             context: launchContext,
             tty: context.launchTty ?? directProcessTty(),
+            ...(authority.approveHost && !input.branchInvocation ? { approveHost: true } : {}),
             nativeRuntimeRoot: execution.nativeRuntimeRoot,
             statusSnapshot,
             ...(execution.beforeChildExecution
@@ -389,7 +391,8 @@ export async function executeNodeSessionResumeLaunch(
   input: NodeSessionResumeLaunchInput,
   plan: ResumePlanV1,
   userConfig: UserConfig,
+  authority: { readonly approveHost?: boolean } = {},
 ): Promise<unknown> {
-  const application = createNodeSessionResumeLaunchApplicationService(input);
+  const application = createNodeSessionResumeLaunchApplicationService(input, authority);
   return application.execute(await application.prepare(plan, userConfig));
 }

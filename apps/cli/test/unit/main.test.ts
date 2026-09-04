@@ -915,7 +915,7 @@ describe('cli', () => {
     });
   });
 
-  it('serializes a confirmed session resume through production CLI composition without invoking a live child', async () => {
+  it('passes resurrection host authority without granting it to normal confirmed resumes', async () => {
     const cwd = await fixture(valid),
       env = await configuredLaunchEnv(cwd),
       store = new SessionStore(await directory('mpx-cli-session-resume-')),
@@ -970,7 +970,7 @@ describe('cli', () => {
       timestamps: { createdAt: now, updatedAt: now, lastActivityAt: null },
       lifecycle: { bindingId: null, sequence: 0, timestamp: null },
     });
-    const executeResume = vi.fn(async (resumePlan) => ({
+    const executeResume = vi.fn(async (resumePlan, _execution) => ({
       exitCode: 0,
       launchKey: resumePlan.launch.launchKey,
     }));
@@ -999,7 +999,6 @@ describe('cli', () => {
       ),
     ).toBe(0);
     const preview = JSON.parse(previewIo.out[0]!).data;
-    const executeIo = captureIo();
     expect(
       await run(
         [
@@ -1011,6 +1010,25 @@ describe('cli', () => {
           'resume-compatible',
           '--confirm-plan',
           preview.confirmationDigest,
+        ],
+        captureIo(),
+        context,
+      ),
+    ).toBe(0);
+    expect(executeResume).toHaveBeenCalledWith(expect.any(Object), {});
+    executeResume.mockClear();
+
+    const executeIo = captureIo();
+    expect(
+      await run(
+        [
+          '--json',
+          '--cwd',
+          cwd,
+          'session',
+          'resume',
+          'resume-compatible',
+          '--approve-resurrection',
         ],
         executeIo,
         context,
@@ -1026,6 +1044,7 @@ describe('cli', () => {
       warnings: [],
     });
     expect(executeResume).toHaveBeenCalledOnce();
+    expect(executeResume).toHaveBeenCalledWith(expect.any(Object), { approveHost: true });
   });
 
   it('hands confirmed resume to Node production composition before lazy status and state factories', async () => {

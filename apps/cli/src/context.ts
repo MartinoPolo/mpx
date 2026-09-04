@@ -148,7 +148,10 @@ export interface CliContext extends LaunchExecutionContext {
   nativeAccountBindingResolver?: NativeAccountBindingResolver;
   rootAttestationService?: RootAttestationService;
   accountAuthVerifier?: AccountAuthVerifier;
-  sessionResumeExecutor?: (plan: ResumePlanV1) => Promise<unknown>;
+  sessionResumeExecutor?: (
+    plan: ResumePlanV1,
+    execution: { readonly approveHost?: boolean },
+  ) => Promise<unknown>;
   sessionBranchService?: ConversationBranchService;
   /** Argv-only process transports. No command strings or shell execution are accepted. */
   sessionBranchRuntimeAdapter?: BranchArgvExecutionAdapter;

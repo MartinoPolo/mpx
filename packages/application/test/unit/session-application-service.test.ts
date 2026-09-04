@@ -238,8 +238,15 @@ describe('SessionApplicationService resume orchestration', () => {
     const initialPlan = { confirmationDigest: 'initial' } as never;
     const finalPlan = { confirmationDigest: 'final' } as never;
     const planResume = vi.fn().mockResolvedValueOnce(initialPlan).mockResolvedValueOnce(finalPlan);
-    const verifyResumeConfirmation = vi.fn();
-    const executeConfirmedResume = vi.fn(async () => 'launched');
+    const order: string[] = [];
+    const verifyResumeConfirmation = vi.fn(() => {
+      order.push('verify');
+    });
+    const executeConfirmedResume = vi.fn(async (_plan, authority) => {
+      order.push('execute');
+      expect(authority).toEqual({ approveHost: true });
+      return 'launched';
+    });
     const application = directApplication(store, {
       planResume,
       verifyResumeConfirmation,
@@ -253,7 +260,30 @@ describe('SessionApplicationService resume orchestration', () => {
       result: 'launched',
     });
     expect(verifyResumeConfirmation).toHaveBeenCalledWith(finalPlan, 'final');
-    expect(executeConfirmedResume).toHaveBeenCalledWith(finalPlan);
+    expect(executeConfirmedResume).toHaveBeenCalledWith(finalPlan, { approveHost: true });
+    expect(order).toEqual(['verify', 'execute']);
+  });
+
+  it('fails closed before execution when final resurrection confirmation verification throws', async () => {
+    const store = await branchFixture();
+    const finalPlan = { confirmationDigest: 'final' } as never;
+    const failure = new Error('confirmation rejected');
+    const verifyResumeConfirmation = vi.fn(() => {
+      throw failure;
+    });
+    const executeConfirmedResume = vi.fn(async () => 'launched');
+    const application = directApplication(store, {
+      planResume: vi.fn(async () => finalPlan),
+      verifyResumeConfirmation,
+      resumeDependencies: async () => ({}) as never,
+      executeConfirmedResume,
+    });
+
+    await expect(application.resume({ id: 'parent', approveResurrection: true })).rejects.toBe(
+      failure,
+    );
+    expect(verifyResumeConfirmation).toHaveBeenCalledWith(finalPlan, 'final');
+    expect(executeConfirmedResume).not.toHaveBeenCalled();
   });
 
   it('consumes no lifecycle events when initial verification fails', async () => {

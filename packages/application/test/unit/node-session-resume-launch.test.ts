@@ -11,7 +11,11 @@ const mocks = vi.hoisted(() => ({
   workerClientAvailable: true,
   status: vi.fn(),
   resolveLaunch: vi.fn(
-    async (input: { runtime: 'claude' | 'pi'; executor: 'docker' | 'host' }) => ({
+    async (input: {
+      runtime: 'claude' | 'pi';
+      executor: 'docker' | 'host';
+      workspace: 'clone' | 'host-worktree' | 'direct';
+    }) => ({
       runtime: input.runtime,
       identity: { name: 'work', domain: 'work' },
       launchKey: 'new',
@@ -19,7 +23,7 @@ const mocks = vi.hoisted(() => ({
       skillPolicy: 'clean',
       contentScope: { name: 'work' },
       executor: { name: input.executor },
-      workspace: 'clone',
+      workspace: input.workspace,
       networkPolicy: { name: 'implementation' },
       grants: [],
     }),
@@ -314,6 +318,23 @@ describe('Node session resume launch composition', () => {
     expect(events).toEqual(['verify', 'oauth', 'project', 'execution', 'verify', 'oauth', 'child']);
   });
 
+  it('maps resurrection approval to host approval only at resume execution', async () => {
+    mocks.execute.mockClear();
+    const resumePlan = plan();
+    const hostPlan = {
+      ...resumePlan,
+      launch: {
+        ...resumePlan.launch,
+        executor: { kind: 'host' as const },
+        workspace: 'direct' as const,
+      },
+    };
+
+    await executeNodeSessionResumeLaunch(input(), hostPlan, user, { approveHost: true });
+
+    expect(mocks.execute).toHaveBeenCalledWith(expect.objectContaining({ approveHost: true }));
+  });
+
   it.each([
     [undefined, 'resume'],
     [{ executable: 'pi', argv: ['--fork', 'native'] }, 'branch'],
@@ -327,6 +348,7 @@ describe('Node session resume launch composition', () => {
       input(branchInvocation ? { branchInvocation } : {}),
       resumePlan,
       user,
+      branchInvocation ? { approveHost: true } : {},
     );
     expect(mocks.status).toHaveBeenCalled();
     expect(mocks.setResumeAction).toHaveBeenCalledWith('attach');
@@ -359,6 +381,9 @@ describe('Node session resume launch composition', () => {
       ),
     );
     expect(execution).not.toHaveProperty(expected === 'resume' ? 'branch' : 'resume');
+    if (branchInvocation) {
+      expect(execution).not.toHaveProperty('approveHost');
+    }
     expect(execution).toMatchObject({ artifactsRoot: '/artifacts', stateRoot: '/state' });
   });
 });
