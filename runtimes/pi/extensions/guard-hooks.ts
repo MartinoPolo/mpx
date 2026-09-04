@@ -217,6 +217,7 @@ export type BashGuardVerdict =
 export async function evaluateBashGuards(
   command: string,
   workingDirectory: string,
+  trusted: boolean,
   runScript: HookScriptRunner = runHookScript,
   hooksDirectory: string = GUARDS_DIRECTORY,
 ): Promise<BashGuardVerdict> {
@@ -224,6 +225,8 @@ export async function evaluateBashGuards(
   const payload = { tool_input: { command }, cwd: workingDirectory };
 
   for (const guard of BASH_GUARD_SCRIPTS) {
+    if (!trusted && guard.fileName === 'pre-commit-gate.mjs') continue;
+
     const outcome = await runScript(
       join(hooksDirectory, guard.fileName),
       payload,
@@ -372,7 +375,7 @@ export default function (pi: ExtensionAPI) {
     const command = typeof event.input.command === 'string' ? event.input.command : '';
     if (!command.trim()) return undefined;
 
-    const verdict = await evaluateBashGuards(command, ctx.cwd);
+    const verdict = await evaluateBashGuards(command, ctx.cwd, ctx.isProjectTrusted());
     if (verdict.blocked) return { block: true, reason: verdict.reason };
     for (const advisory of verdict.advisories) warn(ctx, advisory);
     return undefined;

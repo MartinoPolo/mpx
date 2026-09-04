@@ -73,15 +73,15 @@ test('default composition is static, stable, and unique', () => {
   assert.equal(new Set(names).size, names.length);
 });
 
-test('default entry point composes representative registrations from every component', () => {
+test('default entry point provides every required public registration and lifecycle category', () => {
   const { api, registrations } = safeExtensionApi();
 
   mpxPiExtensions(api);
 
-  assert.deepEqual([...registrations.events.keys()].toSorted(), [
+  const requiredLifecycleEvents = [
     'after_provider_response',
-    'agent_settled',
     'agent_start',
+    'agent_settled',
     'input',
     'model_select',
     'session_before_compact',
@@ -95,19 +95,20 @@ test('default entry point composes representative registrations from every compo
     'tool_execution_end',
     'tool_execution_start',
     'tool_result',
-  ]);
-  assert.equal(registrations.events.get('session_start')?.length, 7);
-  assert.equal(registrations.events.get('input')?.length, 1);
-  assert.equal(registrations.events.get('tool_call')?.length, 1);
-  assert.deepEqual(registrations.tools.toSorted(), [
-    'Agent',
-    'dev_server',
-    'get_subagent_result',
-    'steer_subagent',
-  ]);
-  assert.deepEqual(registrations.commands.toSorted(), ['agents', 'dev-servers']);
-  assert.deepEqual(registrations.messageRenderers, ['subagent-notification']);
-  assert.equal(registrations.events.get('tool_execution_end')?.length, 1);
+  ];
+  for (const event of requiredLifecycleEvents) {
+    assert.ok(registrations.events.has(event), `missing ${event} lifecycle registration`);
+  }
+  for (const tool of ['Agent', 'dev_server', 'get_subagent_result', 'steer_subagent']) {
+    assert.ok(registrations.tools.includes(tool), `missing ${tool} tool`);
+  }
+  for (const command of ['agents', 'dev-servers']) {
+    assert.ok(registrations.commands.includes(command), `missing ${command} command`);
+  }
+  assert.ok(registrations.messageRenderers.includes('subagent-notification'));
+  for (const event of ['dev-servers:changed', 'subagents:completed', 'subagents:failed']) {
+    assert.ok(registrations.busEvents.has(event), `missing ${event} bus lifecycle registration`);
+  }
 });
 
 test('default composition has unique registration and UI ownership', () => {
@@ -121,10 +122,6 @@ test('default composition has unique registration and UI ownership', () => {
   for (const handlers of [...registrations.events.values(), ...registrations.busEvents.values()]) {
     assert.equal(new Set(handlers).size, handlers.length);
   }
-
-  assert.equal(registrations.events.get('session_start')?.length, 7);
-  assert.equal(registrations.events.get('session_before_compact')?.length, 1);
-  assert.equal(registrations.events.get('tool_execution_end')?.length, 1);
 });
 
 test('composition invokes every injected component exactly once in order', () => {

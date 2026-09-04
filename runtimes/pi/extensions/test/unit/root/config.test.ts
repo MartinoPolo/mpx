@@ -139,6 +139,18 @@ test('portable paths resolve from validated environment values or package defaul
   }
 });
 
+test('NUL-containing absolute environment paths use safe package defaults', () => {
+  const cwd = resolve('workspace');
+  const unsafeCompactFile = `${resolve('environment', 'COMPACT.md')}\0ignored`;
+  const unsafePortsFile = `${resolve('environment', 'ports.json')}\0ignored`;
+
+  assert.equal(
+    resolveCompactInstructionsFile(unsafeCompactFile),
+    join(packageRoot, 'config', 'COMPACT.md'),
+  );
+  assert.equal(resolvePortsConfigPath(cwd, unsafePortsFile), join(cwd, '.worktree-ports.json'));
+});
+
 test('environment path overrides are used by default resolver arguments', () => {
   const previousCompactFile = process.env.MPX_COMPACT_INSTRUCTIONS_FILE;
   const previousPortsFile = process.env.MPX_WORKTREE_PORTS_FILE;

@@ -25,7 +25,7 @@ test('preserves footer formatting helpers', () => {
   );
 });
 
-test('keeps broken detail rows ahead of completed rows', () => {
+test('prioritizes broken and running rows, then the highest-token completed rows', () => {
   const agent = (id: string, status: string, tokens: number): FinishedAgent => ({
     id,
     type: id,
@@ -36,10 +36,18 @@ test('keeps broken detail rows ahead of completed rows', () => {
     status,
     drifted: false,
   });
+  const rows = [
+    agent('completed-low', 'completed', 10),
+    agent('running', 'running', 1),
+    agent('completed-highest', 'completed', 900),
+    agent('failed', 'error', 2),
+    agent('completed-high', 'completed', 700),
+    agent('completed-lower', 'completed', 100),
+    agent('completed-third', 'completed', 500),
+  ];
+
   assert.deepEqual(
-    selectDetailRows([agent('done', 'completed', 10), agent('failed', 'error', 1)], 2).map(
-      ({ id }) => id,
-    ),
-    ['failed', 'done'],
+    selectDetailRows(rows, 5).map(({ id }) => id),
+    ['running', 'failed', 'completed-highest', 'completed-high', 'completed-third'],
   );
 });

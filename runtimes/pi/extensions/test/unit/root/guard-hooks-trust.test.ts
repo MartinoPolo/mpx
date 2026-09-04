@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 
 import {
+  evaluateBashGuards,
   runFormatLintHook,
   UNTRUSTED_FORMAT_LINT_RESULT,
   type HookScriptRunner,
@@ -33,4 +34,23 @@ test('runs formatter hook unchanged for a trusted project', async () => {
   assert.equal(result, 'Formatting and linting completed.');
   assert.equal(runner.mock.calls.length, 1);
   assert.match(String(runner.mock.calls[0]![0]), /format-lint-file\.mjs$/);
+});
+
+test('only trusted git commits can invoke the project pre-commit gate', async () => {
+  const runner = vi.fn<HookScriptRunner>(async () => success);
+
+  await evaluateBashGuards('git commit -m test', '/project', false, runner, '/hooks');
+  const untrustedScripts = runner.mock.calls.map(([scriptPath]) => scriptPath);
+  assert.equal(
+    untrustedScripts.some((scriptPath) => /pre-commit-gate\.mjs$/.test(scriptPath)),
+    false,
+  );
+
+  runner.mockClear();
+  await evaluateBashGuards('git commit -m test', '/project', true, runner, '/hooks');
+  const trustedScripts = runner.mock.calls.map(([scriptPath]) => scriptPath);
+  assert.equal(
+    trustedScripts.some((scriptPath) => /pre-commit-gate\.mjs$/.test(scriptPath)),
+    true,
+  );
 });
