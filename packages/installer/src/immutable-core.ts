@@ -177,12 +177,12 @@ function safeRelative(value: unknown): value is string {
     !value ||
     value.includes('\\') ||
     value.includes('\0') ||
-    path.posix.isAbsolute(value)
+    value.startsWith('/')
   ) {
     return false;
   }
-  const normalized = path.posix.normalize(value);
-  return normalized === value && normalized !== '..' && !normalized.startsWith('../');
+  const segments = value.split('/');
+  return segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 function compareReleasePaths(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -238,6 +238,7 @@ export function parseReleaseManifestV1(value: unknown): ReleaseManifestV1 {
     files,
   };
 }
+
 export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
   const record = value as Record<string, unknown> | null;
   const has = (key: string): boolean =>

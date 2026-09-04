@@ -21,6 +21,7 @@ import {
   type JsonResourceStore,
   type ManagedLauncherSpec,
   type OwnedResourceSpec,
+  type PriorOwnedResourceAuthorization,
 } from '@mpx/windows';
 import {
   canonicalJson,
@@ -30,7 +31,11 @@ import {
   type OwnershipReceiptV1,
   type ReleaseManifestV1,
 } from './immutable-core.js';
-import { buildStableSelectorBody, buildWindowsIntegrationSpecs } from './windows-integration.js';
+import {
+  buildStableNodeEntryBody,
+  buildStableSelectorBody,
+  buildWindowsIntegrationSpecs,
+} from './windows-integration.js';
 import {
   verifyAccountEnrollment,
   verifyRuntimeRegistrationMatrix,
@@ -453,6 +458,7 @@ interface Entry {
   operation: InstallOperationV1;
   launcher?: ManagedLauncherSpec;
   resource?: OwnedResourceSpec;
+  priorOwned?: PriorOwnedResourceAuthorization;
   fileBody?: Buffer;
   fileSource?: string;
   expectedBytes?: number;
@@ -584,8 +590,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     if (!cliEvidence) {
       fail('INSTALL_CLI_BUNDLE_MISSING', 'The immutable release has no bundled bin/mpx.mjs.');
     }
-    const selectorBody = Buffer.from(buildStableSelectorBody(), 'utf8');
-    const selectorTarget = path.win32.join(this.environment.MPX_APPS!, 'mpx', 'bin', 'mpx.cmd');
+    const selectorBody = Buffer.from(buildStableSelectorBody(), 'utf8'),
+      selectorTarget = path.win32.join(this.environment.MPX_APPS!, 'mpx', 'bin', 'mpx.cmd'),
+      nodeEntryBody = Buffer.from(buildStableNodeEntryBody(), 'utf8'),
+      nodeEntryTarget = path.win32.join(this.environment.MPX_APPS!, 'mpx', 'bin', 'mpx-node.mjs');
     const automatic: Entry[] = [
       ...(userConfigEntry ? [userConfigEntry] : []),
       {
@@ -596,6 +604,16 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           action: 'ensure',
           target: selectorTarget,
           desiredDigest: sha(selectorBody),
+        },
+      },
+      {
+        fileBody: nodeEntryBody,
+        operation: {
+          id: '06-node-entry',
+          adapter: this.name,
+          action: 'ensure',
+          target: nodeEntryTarget,
+          desiredDigest: sha(nodeEntryBody),
         },
       },
     ];
@@ -615,15 +633,21 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     const resources = [specs.environment, ...specs.shortcuts];
     for (const [index, resource] of resources.entries()) {
+      const operation: InstallOperationV1 = {
+        id: `${20 + index * 10}-${resource.kind}`,
+        adapter: this.name,
+        action: 'ensure',
+        target: resource.target,
+        desiredDigest: installerDigest(resource.desired),
+      };
+      const priorOwned =
+        priorReceipt && priorReceipt.releaseKey !== intent.releaseKey
+          ? this.priorOwnedAuthorization(priorReceipt, operation, resource)
+          : undefined;
       automatic.push({
         resource,
-        operation: {
-          id: `${20 + index * 10}-${resource.kind}`,
-          adapter: this.name,
-          action: 'ensure',
-          target: resource.target,
-          desiredDigest: installerDigest(resource.desired),
-        },
+        operation,
+        ...(priorOwned ? { priorOwned } : {}),
       });
     }
     for (const [index, registration] of (
@@ -754,6 +778,60 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
             intent.externalIntegrations![index]!.classification === 'manual-only',
         ),
       },
+    };
+  }
+  private priorOwnedAuthorization(
+    receipt: OwnershipReceiptV1,
+    operation: InstallOperationV1,
+    resource: OwnedResourceSpec,
+  ): PriorOwnedResourceAuthorization | undefined {
+    const prior = receipt.operations.find((candidate) => candidate.id === operation.id),
+      locator = receipt.operationLocators.find(
+        (candidate) => candidate.operationId === operation.id,
+      );
+    if (
+      !prior ||
+      !locator ||
+      prior.adapter !== operation.adapter ||
+      locator.adapter !== operation.adapter ||
+      prior.action !== 'ensure' ||
+      operation.action !== 'ensure' ||
+      prior.target !== operation.target ||
+      prior.desiredDigest === null ||
+      !locator.spec ||
+      typeof locator.spec !== 'object' ||
+      Array.isArray(locator.spec)
+    ) {
+      return undefined;
+    }
+    const durable = locator.spec as Record<string, unknown>;
+    if (
+      Object.keys(durable).sort().join('\0') !== 'kind\0spec' ||
+      durable.kind !== 'resource' ||
+      !durable.spec ||
+      typeof durable.spec !== 'object' ||
+      Array.isArray(durable.spec)
+    ) {
+      return undefined;
+    }
+    const priorSpec = durable.spec as Record<string, unknown>;
+    if (
+      Object.keys(priorSpec).sort().join('\0') !== 'desired\0kind\0ownershipKey\0target' ||
+      priorSpec.kind !== resource.kind ||
+      priorSpec.target !== resource.target ||
+      priorSpec.ownershipKey !== resource.ownershipKey ||
+      !priorSpec.desired ||
+      typeof priorSpec.desired !== 'object' ||
+      Array.isArray(priorSpec.desired) ||
+      installerDigest(priorSpec.desired) !== prior.desiredDigest
+    ) {
+      return undefined;
+    }
+    return {
+      kind: resource.kind,
+      target: resource.target,
+      ownershipKey: resource.ownershipKey,
+      desiredDigest: prior.desiredDigest,
     };
   }
   async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
@@ -970,7 +1048,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       entry.appliedFileState = Buffer.from(launcherPlan.outputBase64, 'base64');
       await this.launchers.apply(launcherPlan);
     } else {
-      await this.owned.apply(await this.owned.plan(entry.resource!));
+      await this.owned.apply(await this.owned.plan(entry.resource!), entry.priorOwned);
     }
   }
   async restore(operation: InstallOperationV1, snapshot: string | null): Promise<void> {

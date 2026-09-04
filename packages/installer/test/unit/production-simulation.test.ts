@@ -268,9 +268,14 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
   });
   const plan = await orchestrator.plan(f.intent);
   const operationIds = plan.operations.map((operation) => operation.id);
+  await expect(
+    readFile(path.join(f.appsRoot, 'mpx', 'releases', f.intent.releaseKey, 'bin', 'mpx-node.mjs')),
+  ).rejects.toMatchObject({ code: 'ENOENT' });
   expect(operationIds).not.toContain('90-scheduled-capture');
   expect(operationIds).toEqual(
     expect.arrayContaining([
+      '05-cli-selector',
+      '06-node-entry',
       '10-profile-0',
       '10-profile-1',
       '20-user-environment',
@@ -289,6 +294,120 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
   expect(readNative).not.toHaveBeenCalledWith(scheduledTarget);
   expect(writeNative).not.toHaveBeenCalledWith(scheduledTarget, expect.anything());
   expect(removeNative).not.toHaveBeenCalledWith(scheduledTarget);
+}, 30_000);
+
+it('upgrades an exact pre-node-entry v2 receipt and owned environment state', async () => {
+  const f = await simulation(false),
+    orchestrator = new InstallOrchestrator({
+      adapter: f.adapter,
+      store: f.store,
+      releases: f.releases,
+    });
+  const planA = await orchestrator.plan(f.intent),
+    receiptA = await orchestrator.apply(planA, planA.confirmationDigest),
+    environmentOperation = required(
+      receiptA.operations.find((operation) => operation.id === '20-user-environment'),
+      'environment operation',
+    ),
+    environmentLocator = required(
+      receiptA.operationLocators.find((locator) => locator.operationId === environmentOperation.id),
+      'environment locator',
+    ),
+    locatorSpec = environmentLocator.spec as {
+      kind: 'resource';
+      spec: { desired: Record<string, unknown> };
+    },
+    priorDesired = { ...locatorSpec.spec.desired };
+  delete priorDesired.MPX_NODE_ENTRY;
+  const priorOperation = {
+      ...environmentOperation,
+      desiredDigest: installerDigest(priorDesired),
+    },
+    priorLocatorSpec = {
+      kind: 'resource' as const,
+      spec: { ...locatorSpec.spec, desired: priorDesired },
+    },
+    priorReceipt = {
+      ...receiptA,
+      operations: receiptA.operations.map((operation) =>
+        operation.id === priorOperation.id ? priorOperation : operation,
+      ),
+      operationLocators: receiptA.operationLocators.map((locator) =>
+        locator.operationId === priorOperation.id
+          ? {
+              ...locator,
+              spec: priorLocatorSpec,
+              bindingDigest: installerDigest({ operation: priorOperation, spec: priorLocatorSpec }),
+            }
+          : locator,
+      ),
+    };
+  const environment = (await f.native.read(environmentOperation.target)) as Record<string, unknown>;
+  delete environment.MPX_NODE_ENTRY;
+  await f.native.write(environmentOperation.target, environment);
+  await f.store.writeReceipt(priorReceipt);
+
+  await writeFile(path.join(f.repositoryRoot, 'bin', 'mpx.mjs'), 'export const next = true;\n');
+  const manifestB = await f.releases.build(),
+    intentB = {
+      ...f.intent,
+      releaseKey: manifestB.releaseKey,
+      convergenceHash: manifestB.convergenceHash,
+    },
+    planB = await orchestrator.plan(intentB);
+  await expect(orchestrator.apply(planB, planB.confirmationDigest)).resolves.toMatchObject({
+    releaseKey: manifestB.releaseKey,
+  });
+  await expect(f.native.read(environmentOperation.target)).resolves.toMatchObject({
+    owner: 'mpx',
+    MPX_NODE_ENTRY: path.win32.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs'),
+  });
+}, 30_000);
+
+it('keeps the stable Node entry ownership-safe across release upgrades and uninstall', async () => {
+  const f = await simulation(false),
+    orchestrator = new InstallOrchestrator({
+      adapter: f.adapter,
+      store: f.store,
+      releases: f.releases,
+    });
+  const planA = await orchestrator.plan(f.intent);
+  const receiptA = await orchestrator.apply(planA, planA.confirmationDigest);
+  const nodeEntry = path.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs');
+  const ownedEntry = await readFile(nodeEntry);
+  expect(receiptA.operations).toContainEqual(
+    expect.objectContaining({ id: '06-node-entry', target: nodeEntry }),
+  );
+
+  await writeFile(path.join(f.repositoryRoot, 'bin', 'mpx.mjs'), 'export const next = true;\n');
+  const manifestB = await f.releases.build();
+  const intentB = {
+    ...f.intent,
+    releaseKey: manifestB.releaseKey,
+    convergenceHash: manifestB.convergenceHash,
+  };
+  const foreign = Buffer.from('foreign stable entry');
+  await writeFile(nodeEntry, foreign);
+  await expect(orchestrator.plan(intentB)).rejects.toMatchObject({
+    code: 'INSTALL_FOREIGN_OR_DRIFTED',
+  });
+  expect(await readFile(nodeEntry)).toEqual(foreign);
+
+  await writeFile(nodeEntry, ownedEntry);
+  const planB = await orchestrator.plan(intentB);
+  const receiptB = await orchestrator.apply(planB, planB.confirmationDigest);
+  expect(receiptB.releaseKey).toBe(manifestB.releaseKey);
+  expect(receiptB.operations).toContainEqual(
+    expect.objectContaining({ id: '06-node-entry', target: nodeEntry }),
+  );
+  expect(await readFile(nodeEntry)).toEqual(ownedEntry);
+
+  await writeFile(nodeEntry, foreign);
+  const uninstall = await orchestrator.planUninstall();
+  await expect(orchestrator.uninstall(uninstall.confirmationDigest)).rejects.toMatchObject({
+    code: 'INSTALL_FOREIGN_OR_DRIFTED',
+  });
+  expect(await readFile(nodeEntry)).toEqual(foreign);
 }, 30_000);
 
 it('runs clean and existing-machine production-backed simulations without live writes', async () => {
@@ -371,6 +490,9 @@ it('runs clean and existing-machine production-backed simulations without live w
       uninstallPlan = await restarted.planUninstall();
     }
     await restarted.uninstall(uninstallPlan.confirmationDigest);
+    await expect(
+      readFile(path.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(f.userConfigTarget, 'utf8')).toBe(f.userConfigContent);
     if (existing) {
       expect((await stat(f.userConfigTarget)).mtimeMs).toBe(originalConfigMtime);

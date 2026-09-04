@@ -248,6 +248,12 @@ export interface OwnedResourceReceipt {
   readonly spec: OwnedResourceSpec;
   readonly desiredDigest: string;
 }
+export interface PriorOwnedResourceAuthorization {
+  readonly kind: OwnedResourceKind;
+  readonly target: string;
+  readonly ownershipKey: string;
+  readonly desiredDigest: string;
+}
 export interface JsonResourceStore {
   read(target: string): Promise<unknown | undefined>;
   write(target: string, value: unknown): Promise<void>;
@@ -356,40 +362,60 @@ function validateResource(spec: OwnedResourceSpec): void {
     !spec.desired ||
     typeof spec.desired !== 'object' ||
     Array.isArray(spec.desired) ||
-    (spec.kind === 'terminal-profile' && spec.desired.guid !== spec.ownershipKey)
+    (spec.kind === 'terminal-profile'
+      ? spec.desired.guid !== spec.ownershipKey
+      : spec.desired.owner !== spec.ownershipKey)
   ) {
     fail('WINDOWS_RESOURCE_INVALID', 'System resource specification is invalid.');
   }
+}
+function inspectOwnedResource(
+  spec: OwnedResourceSpec,
+  root: unknown | undefined,
+): OwnedResourceInspection {
+  const value =
+    spec.kind === 'terminal-profile'
+      ? terminalOwned(spec, root)
+      : spec.kind === 'user-environment'
+        ? environmentOwned(spec, root)
+        : root;
+  if (value === undefined) {
+    return {
+      schemaVersion: 1,
+      kind: 'owned-resource-inspection',
+      target: spec.target,
+      status: 'absent',
+      digest: null,
+    };
+  }
+  const owned = canonicalJson(value) === canonicalJson(spec.desired);
+  return {
+    schemaVersion: 1,
+    kind: 'owned-resource-inspection',
+    target: spec.target,
+    status: owned ? 'owned' : 'foreign',
+    digest: digest(value),
+    value,
+  };
 }
 export class OwnedJsonResourceAdapter {
   constructor(private readonly store: JsonResourceStore) {}
   async inspect(spec: OwnedResourceSpec): Promise<OwnedResourceInspection> {
     validateResource(spec);
-    const current = await this.store.read(spec.target);
-    const value =
-      spec.kind === 'terminal-profile'
-        ? terminalOwned(spec, current)
-        : spec.kind === 'user-environment'
-          ? environmentOwned(spec, current)
-          : current;
-    if (value === undefined) {
-      return {
-        schemaVersion: 1,
-        kind: 'owned-resource-inspection',
-        target: spec.target,
-        status: 'absent',
-        digest: null,
-      };
+    return inspectOwnedResource(spec, await this.store.read(spec.target));
+  }
+  private async readMergeRoot(
+    spec: OwnedResourceSpec,
+    authorizedObservation: OwnedResourceInspection,
+  ): Promise<unknown> {
+    const root =
+        (await this.store.read(spec.target)) ??
+        (spec.kind === 'terminal-profile' ? { profiles: [] } : {}),
+      freshObservation = inspectOwnedResource(spec, root);
+    if (canonicalJson(freshObservation) !== canonicalJson(authorizedObservation)) {
+      fail('WINDOWS_OBSERVATION_CHANGED', 'System resource changed before merge.');
     }
-    const owned = canonicalJson(value) === canonicalJson(spec.desired);
-    return {
-      schemaVersion: 1,
-      kind: 'owned-resource-inspection',
-      target: spec.target,
-      status: owned ? 'owned' : 'foreign',
-      digest: digest(value),
-      value,
-    };
+    return root;
   }
   async plan(spec: OwnedResourceSpec): Promise<OwnedResourcePlan> {
     return {
@@ -399,27 +425,51 @@ export class OwnedJsonResourceAdapter {
       inspection: await this.inspect(spec),
     };
   }
-  async apply(plan: OwnedResourcePlan): Promise<OwnedResourceReceipt> {
+  async apply(
+    plan: OwnedResourcePlan,
+    priorOwned?: PriorOwnedResourceAuthorization,
+  ): Promise<OwnedResourceReceipt> {
     const current = await this.inspect(plan.spec);
     if (canonicalJson(current) !== canonicalJson(plan.inspection)) {
       fail('WINDOWS_OBSERVATION_CHANGED', 'System resource changed after planning.');
     }
-    if (current.status === 'foreign') {
-      fail('WINDOWS_FOREIGN_RESOURCE', 'Refusing to overwrite a foreign system resource.');
+    const currentLocator =
+        current.value && typeof current.value === 'object' && !Array.isArray(current.value)
+          ? (current.value as Record<string, unknown>)
+          : undefined,
+      authorizedTransition =
+        current.status === 'foreign' &&
+        priorOwned?.kind === plan.spec.kind &&
+        priorOwned.target === plan.spec.target &&
+        priorOwned.ownershipKey === plan.spec.ownershipKey &&
+        priorOwned.desiredDigest === current.digest &&
+        (plan.spec.kind === 'terminal-profile'
+          ? currentLocator?.guid === priorOwned.ownershipKey
+          : currentLocator?.owner === priorOwned.ownershipKey);
+    if (current.status === 'foreign' && !authorizedTransition) {
+      fail(
+        'WINDOWS_FOREIGN_RESOURCE',
+        `Refusing to overwrite a foreign ${plan.spec.kind} resource at ${plan.spec.target}.`,
+      );
     }
-    if (current.status === 'absent') {
+    if (current.status === 'absent' || authorizedTransition) {
       if (plan.spec.kind === 'terminal-profile') {
-        const root = (await this.store.read(plan.spec.target)) ?? { profiles: [] },
+        const root = await this.readMergeRoot(plan.spec, current),
           profiles = terminalProfiles(root);
         if (!profiles) {
           fail('WINDOWS_FOREIGN_RESOURCE', 'Terminal settings have an unsupported shape.');
         }
+        const withoutPrior = authorizedTransition
+          ? profiles.list.filter(
+              (profile) => (profile as { guid?: unknown }).guid !== plan.spec.ownershipKey,
+            )
+          : profiles.list;
         await this.store.write(
           plan.spec.target,
-          profiles.withList([...profiles.list, clone(plan.spec.desired)]),
+          profiles.withList([...withoutPrior, clone(plan.spec.desired)]),
         );
       } else if (plan.spec.kind === 'user-environment') {
-        const root = (await this.store.read(plan.spec.target)) ?? {};
+        const root = await this.readMergeRoot(plan.spec, current);
         if (!root || typeof root !== 'object' || Array.isArray(root)) {
           fail('WINDOWS_FOREIGN_RESOURCE', 'User environment has an unsupported shape.');
         }

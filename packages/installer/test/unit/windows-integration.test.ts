@@ -1,8 +1,10 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildManagedLauncherBody,
   buildStableSelectorBody,
   buildWindowsIntegrationSpecs,
+  WINDOWS_OWNED_PATH_VARIABLES,
 } from '../../src/windows-integration.js';
 
 describe('Phase I Windows integration specification', () => {
@@ -37,7 +39,7 @@ describe('Phase I Windows integration specification', () => {
     }
   });
 
-  it('hydrates missing launch paths from the owned user environment for already-open shells', () => {
+  it('hydrates missing launch paths and routes through the installer-owned stable entry', () => {
     const body = buildStableSelectorBody();
 
     expect(body).toContain('reg query "HKCU\\Environment"');
@@ -45,6 +47,22 @@ describe('Phase I Windows integration specification', () => {
     expect(body).not.toContain('MPX_OWNER');
     expect(body).not.toContain('MPX_PATH_PREPEND');
     expect(body).not.toContain('set MPX_');
+    expect(body).toContain('"%MPX_NODE_EXECUTABLE%" "%~dp0mpx-node.mjs" %*');
+    expect(body).not.toContain('active-release');
+    const commandAllowlist = /for %%V in \(([^)]+)\)/u.exec(body)?.[1]?.split(' ');
+    expect(commandAllowlist).toEqual(WINDOWS_OWNED_PATH_VARIABLES);
+    expect(WINDOWS_OWNED_PATH_VARIABLES).toEqual([
+      'MPX_APPS',
+      'MPX_PROJECTS',
+      'MPX_WORK',
+      'MPX_CLONED',
+      'MPX_ONEDRIVE',
+      'MPX_AI_GENERATED',
+      'MPX_OBSIDIAN_VAULT',
+      'MPX_NODE_EXECUTABLE',
+      'MPX_PI_EXECUTABLE',
+      'MPX_CLAUDE_EXECUTABLE',
+    ]);
   });
 
   it('excludes scheduled capture from the base Windows integration specification', () => {
@@ -81,6 +99,9 @@ describe('Phase I Windows integration specification', () => {
       MPX_APPS: environment.MPX_APPS,
       MPX_PROJECTS: environment.MPX_PROJECTS,
       MPX_PI_EXECUTABLE: environment.MPX_PI_EXECUTABLE,
+      MPX_EXECUTABLE: `${environment.MPX_APPS}\\mpx\\bin\\mpx.cmd`,
+      MPX_NODE_ENTRY: `${environment.MPX_APPS}\\mpx\\bin\\mpx-node.mjs`,
+      MPX_NODE_EXECUTABLE: environment.MPX_NODE_EXECUTABLE,
     });
     expect(specs.environment.desired).not.toHaveProperty('MPX_OWNER');
     expect(specs.environment.desired).not.toHaveProperty('MPX_PATH_PREPEND');

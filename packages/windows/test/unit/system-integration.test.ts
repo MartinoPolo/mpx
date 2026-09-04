@@ -5,10 +5,30 @@ import {
   ManagedLauncherAdapter,
   OwnedJsonResourceAdapter,
   deterministicTerminalProfileGuid,
+  type JsonResourceStore,
   type OwnedResourceSpec,
 } from '../../src/system-integration.js';
 
 const bashBlock = '# MPX aliases\ncc-mpx() { mpx launch claude "$@"; }\n';
+
+class SequencedJsonResourceStore implements JsonResourceStore {
+  readonly writes: unknown[] = [];
+  private readIndex = 0;
+
+  constructor(private readonly reads: readonly unknown[]) {}
+
+  async read(): Promise<unknown> {
+    const value = this.reads[Math.min(this.readIndex, this.reads.length - 1)];
+    this.readIndex += 1;
+    return structuredClone(value);
+  }
+
+  async write(_target: string, value: unknown): Promise<void> {
+    this.writes.push(structuredClone(value));
+  }
+
+  async remove(): Promise<void> {}
+}
 
 it('creates a binary file only when its target is absent', async () => {
   const files = new FakeBinaryFileSystem({ existing: Buffer.from('preserve') });
@@ -200,6 +220,249 @@ describe('owned JSON system resources', () => {
     });
     await adapter.remove(receipt);
     expect(await store.read('environment')).toEqual({ TEMP: 'C:\\Temp', Path: 'native' });
+  });
+
+  it('updates an exact prior-owned resource when its desired shape changes', async () => {
+    const prior: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_EXECUTABLE: 'C:\\Apps\\mpx.exe', PathPrepend: 'C:\\Apps' },
+    };
+    const next: OwnedResourceSpec = {
+      ...prior,
+      desired: { ...prior.desired, MPX_NODE_ENTRY: 'C:\\Apps\\mpx-node.mjs' },
+    };
+    const store = new FakeJsonResourceStore({
+      environment: { TEMP: 'C:\\Temp', Path: 'native', ...prior.desired },
+    });
+    const adapter = new OwnedJsonResourceAdapter(store);
+    const priorDigest = (await adapter.inspect(prior)).digest!;
+
+    await adapter.apply(await adapter.plan(next), {
+      kind: prior.kind,
+      target: prior.target,
+      ownershipKey: prior.ownershipKey,
+      desiredDigest: priorDigest,
+    });
+
+    expect(await store.read('environment')).toEqual({
+      TEMP: 'C:\\Temp',
+      Path: 'native',
+      ...next.desired,
+    });
+  });
+
+  it.each([
+    { field: 'kind', value: 'shortcut' },
+    { field: 'target', value: 'other' },
+    { field: 'ownershipKey', value: 'other' },
+    { field: 'desiredDigest', value: '0'.repeat(64) },
+  ] as const)('requires exact prior-owned $field authorization', async ({ field, value }) => {
+    const prior: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_EXECUTABLE: 'old' },
+    };
+    const next: OwnedResourceSpec = {
+      ...prior,
+      desired: { ...prior.desired, MPX_NODE_ENTRY: 'new' },
+    };
+    const store = new FakeJsonResourceStore({ environment: prior.desired });
+    const adapter = new OwnedJsonResourceAdapter(store);
+    const authorization = {
+      kind: prior.kind,
+      target: prior.target,
+      ownershipKey: prior.ownershipKey,
+      desiredDigest: (await adapter.inspect(prior)).digest!,
+      [field]: value,
+    };
+
+    await expect(adapter.apply(await adapter.plan(next), authorization)).rejects.toMatchObject({
+      code: 'WINDOWS_FOREIGN_RESOURCE',
+    });
+    expect(await store.read('environment')).toEqual(prior.desired);
+  });
+
+  it('rejects prior-owned authority for a different current owner', async () => {
+    const next: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_NODE_ENTRY: 'new' },
+    };
+    const foreign = { owner: 'other', MPX_EXECUTABLE: 'old' };
+    const store = new FakeJsonResourceStore({ environment: foreign });
+    const adapter = new OwnedJsonResourceAdapter(store),
+      inspection = await adapter.inspect(next);
+
+    await expect(
+      adapter.apply(await adapter.plan(next), {
+        kind: next.kind,
+        target: next.target,
+        ownershipKey: next.ownershipKey,
+        desiredDigest: inspection.digest!,
+      }),
+    ).rejects.toMatchObject({ code: 'WINDOWS_FOREIGN_RESOURCE' });
+    expect(await store.read('environment')).toEqual(foreign);
+  });
+
+  it('rejects prior-owned authority when a newly desired value already exists', async () => {
+    const prior: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_EXECUTABLE: 'old' },
+    };
+    const next: OwnedResourceSpec = {
+      ...prior,
+      desired: { ...prior.desired, MPX_NODE_ENTRY: 'owned-next' },
+    };
+    const store = new FakeJsonResourceStore({
+      environment: { ...prior.desired, MPX_NODE_ENTRY: 'foreign-existing' },
+    });
+    const adapter = new OwnedJsonResourceAdapter(store);
+    const priorDigest = (
+      await new OwnedJsonResourceAdapter(
+        new FakeJsonResourceStore({ environment: prior.desired }),
+      ).inspect(prior)
+    ).digest!;
+
+    await expect(
+      adapter.apply(await adapter.plan(next), {
+        kind: prior.kind,
+        target: prior.target,
+        ownershipKey: prior.ownershipKey,
+        desiredDigest: priorDigest,
+      }),
+    ).rejects.toMatchObject({ code: 'WINDOWS_FOREIGN_RESOURCE' });
+    await expect(store.read('environment')).resolves.toMatchObject({
+      MPX_NODE_ENTRY: 'foreign-existing',
+    });
+  });
+
+  it('checks plan/apply observation changes before prior-owned authority', async () => {
+    const prior: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_EXECUTABLE: 'old' },
+    };
+    const next: OwnedResourceSpec = {
+      ...prior,
+      desired: { ...prior.desired, MPX_NODE_ENTRY: 'new' },
+    };
+    const store = new FakeJsonResourceStore({ environment: prior.desired });
+    const adapter = new OwnedJsonResourceAdapter(store),
+      plan = await adapter.plan(next),
+      priorDigest = (await adapter.inspect(prior)).digest!;
+    await store.write('environment', { ...prior.desired, MPX_EXECUTABLE: 'changed' });
+
+    await expect(
+      adapter.apply(plan, {
+        kind: prior.kind,
+        target: prior.target,
+        ownershipKey: prior.ownershipKey,
+        desiredDigest: priorDigest,
+      }),
+    ).rejects.toMatchObject({ code: 'WINDOWS_OBSERVATION_CHANGED' });
+  });
+
+  it.each([
+    {
+      name: 'owner',
+      changed: { owner: 'other', MPX_EXECUTABLE: 'old' },
+    },
+    {
+      name: 'owned value',
+      changed: { owner: 'mpx', MPX_EXECUTABLE: 'changed' },
+    },
+  ])('rejects a changed $name on the merge read without writing', async ({ changed }) => {
+    const prior: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_EXECUTABLE: 'old' },
+    };
+    const next: OwnedResourceSpec = {
+      ...prior,
+      desired: { ...prior.desired, MPX_NODE_ENTRY: 'new' },
+    };
+    const initial = { TEMP: 'preserved', ...prior.desired };
+    const priorDigest = (
+      await new OwnedJsonResourceAdapter(
+        new FakeJsonResourceStore({ environment: initial }),
+      ).inspect(prior)
+    ).digest!;
+    const store = new SequencedJsonResourceStore([initial, initial, changed]);
+    const adapter = new OwnedJsonResourceAdapter(store);
+
+    await expect(
+      adapter.apply(await adapter.plan(next), {
+        kind: prior.kind,
+        target: prior.target,
+        ownershipKey: prior.ownershipKey,
+        desiredDigest: priorDigest,
+      }),
+    ).rejects.toMatchObject({ code: 'WINDOWS_OBSERVATION_CHANGED' });
+    expect(store.writes).toEqual([]);
+  });
+
+  it('rejects a changed Terminal profile on the merge read without writing', async () => {
+    const guid = deterministicTerminalProfileGuid('MPX transition race');
+    const prior: OwnedResourceSpec = {
+      kind: 'terminal-profile',
+      target: 'terminal',
+      ownershipKey: guid,
+      desired: { guid, name: 'MPX', commandline: 'old' },
+    };
+    const next: OwnedResourceSpec = {
+      ...prior,
+      desired: { ...prior.desired, commandline: 'new' },
+    };
+    const initial = { profiles: [{ guid: 'foreign' }, prior.desired] };
+    const changed = {
+      profiles: [{ guid: 'foreign' }, { ...prior.desired, commandline: 'changed' }],
+    };
+    const priorDigest = (
+      await new OwnedJsonResourceAdapter(new FakeJsonResourceStore({ terminal: initial })).inspect(
+        prior,
+      )
+    ).digest!;
+    const store = new SequencedJsonResourceStore([initial, initial, changed]);
+    const adapter = new OwnedJsonResourceAdapter(store);
+
+    await expect(
+      adapter.apply(await adapter.plan(next), {
+        kind: prior.kind,
+        target: prior.target,
+        ownershipKey: prior.ownershipKey,
+        desiredDigest: priorDigest,
+      }),
+    ).rejects.toMatchObject({ code: 'WINDOWS_OBSERVATION_CHANGED' });
+    expect(store.writes).toEqual([]);
+  });
+
+  it('rejects a resource appearing on the merge read after an absent observation', async () => {
+    const spec: OwnedResourceSpec = {
+      kind: 'user-environment',
+      target: 'environment',
+      ownershipKey: 'mpx',
+      desired: { owner: 'mpx', MPX_EXECUTABLE: 'new' },
+    };
+    const absent = { TEMP: 'preserved' };
+    const store = new SequencedJsonResourceStore([
+      absent,
+      absent,
+      { ...absent, owner: 'other', MPX_EXECUTABLE: 'foreign' },
+    ]);
+    const adapter = new OwnedJsonResourceAdapter(store);
+
+    await expect(adapter.apply(await adapter.plan(spec))).rejects.toMatchObject({
+      code: 'WINDOWS_OBSERVATION_CHANGED',
+    });
+    expect(store.writes).toEqual([]);
   });
 
   it.each(['user-environment', 'shortcut'] as const)(

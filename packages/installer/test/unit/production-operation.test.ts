@@ -462,10 +462,10 @@ it('keeps concurrent plans bound to their own roots and resources', async () => 
     [...selected(first), ...selected(second)].map((operation) => adapter.apply(operation)),
   );
   expect((await files.read('C:\\Apps-A\\mpx\\bin\\mpx.cmd'))?.toString()).toContain(
-    'active-release',
+    '%~dp0mpx-node.mjs',
   );
   expect((await files.read('C:\\Apps-B\\mpx\\bin\\mpx.cmd'))?.toString()).toContain(
-    'active-release',
+    '%~dp0mpx-node.mjs',
   );
 });
 
@@ -697,13 +697,19 @@ it('never inspects, plans, or writes Windows Terminal while retaining managed in
   const operations = await adapter.operations(intent, manifest);
   const selector = 'C:\\Apps\\mpx\\bin\\mpx.cmd';
   expect(operations.automatic.map((item) => item.id)).toContain('05-cli-selector');
+  expect(operations.automatic).toContainEqual(
+    expect.objectContaining({
+      id: '06-node-entry',
+      target: 'C:\\Apps\\mpx\\bin\\mpx-node.mjs',
+    }),
+  );
   expect(operations.automatic.map((item) => item.id)).not.toContain('20-terminal-profile');
   expect((await files.read(profile))?.toString()).toBe('native\r\n');
   expect(readResource).not.toHaveBeenCalledWith(terminal);
   for (const operation of operations.automatic) {
     await adapter.apply(operation);
   }
-  expect((await files.read(selector))?.toString()).toContain('active-release');
+  expect((await files.read(selector))?.toString()).toContain('%~dp0mpx-node.mjs');
   expect((await files.read(profile))?.toString()).toContain(
     'native\r\n# >>> MPX MANAGED LAUNCHERS >>>',
   );

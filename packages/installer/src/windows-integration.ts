@@ -1,19 +1,14 @@
 import path from 'node:path';
 import { MpxError } from '@mpx/core';
 import { type ManagedLauncherSpec, type OwnedResourceSpec } from '@mpx/windows';
+import WINDOWS_OWNED_PATHS from './windows-owned-paths.json' with { type: 'json' };
+export { buildStableNodeEntryBody } from './stable-node-entry.js';
 
 const SHA = /^[a-f0-9]{64}$/u;
-const PUBLISHED_MPX_PATHS = [
-  'MPX_APPS',
-  'MPX_PROJECTS',
-  'MPX_WORK',
-  'MPX_CLONED',
-  'MPX_ONEDRIVE',
-  'MPX_AI_GENERATED',
-  'MPX_OBSIDIAN_VAULT',
-  'MPX_CLAUDE_EXECUTABLE',
-  'MPX_PI_EXECUTABLE',
-] as const;
+export const WINDOWS_OWNED_PATH_VARIABLES = Object.freeze(WINDOWS_OWNED_PATHS);
+const PUBLISHED_MPX_PATHS = WINDOWS_OWNED_PATH_VARIABLES.filter(
+  (name) => name !== 'MPX_NODE_EXECUTABLE',
+);
 function fail(code: string, message: string): never {
   throw new MpxError({ code, message });
 }
@@ -54,7 +49,17 @@ function ccwd-mpx { Test-MpxDirectTtyReason; & mpx launch claude --identity work
 }
 
 export function buildStableSelectorBody(): string {
-  return '@echo off\r\nsetlocal\r\nif not defined LOCALAPPDATA exit /b 2\r\nfor %%V in (MPX_APPS MPX_PROJECTS MPX_WORK MPX_CLONED MPX_ONEDRIVE MPX_AI_GENERATED MPX_OBSIDIAN_VAULT MPX_NODE_EXECUTABLE MPX_PI_EXECUTABLE MPX_CLAUDE_EXECUTABLE) do (\r\n  if not defined %%V for /f "tokens=2,*" %%A in (\'reg query "HKCU\\Environment" /v "%%V" 2^>nul\') do set "%%V=%%B"\r\n)\r\nif not defined MPX_APPS exit /b 2\r\nif not defined MPX_NODE_EXECUTABLE exit /b 2\r\nset /p "MPX_RELEASE_KEY="<"%LOCALAPPDATA%\\mpx\\active-release"\r\nif not defined MPX_RELEASE_KEY exit /b 2\r\n"%MPX_NODE_EXECUTABLE%" "%MPX_APPS%\\mpx\\releases\\%MPX_RELEASE_KEY%\\bin\\mpx.mjs" %*\r\nexit /b %ERRORLEVEL%\r\n';
+  const allowlist = WINDOWS_OWNED_PATH_VARIABLES.join(' ');
+  return String.raw`@echo off
+setlocal
+if not defined LOCALAPPDATA exit /b 2
+for %%V in (${allowlist}) do (
+  if not defined %%V for /f "tokens=2,*" %%A in ('reg query "HKCU\Environment" /v "%%V" 2^>nul') do set "%%V=%%B"
+)
+if not defined MPX_NODE_EXECUTABLE exit /b 2
+"%MPX_NODE_EXECUTABLE%" "%~dp0mpx-node.mjs" %*
+exit /b %ERRORLEVEL%
+`.replace(/\r?\n/gu, '\r\n');
 }
 
 export interface WindowsIntegrationSpecs {
@@ -74,7 +79,8 @@ export function buildWindowsIntegrationSpecs(
     appData = required(environment, 'APPDATA'),
     userProfile = required(environment, 'USERPROFILE');
   required(environment, 'LOCALAPPDATA');
-  const selector = path.win32.join(apps, 'mpx', 'bin', 'mpx.cmd');
+  const selector = path.win32.join(apps, 'mpx', 'bin', 'mpx.cmd'),
+    nodeEntry = path.win32.join(apps, 'mpx', 'bin', 'mpx-node.mjs');
   const node = required(environment, 'MPX_NODE_EXECUTABLE');
   const roots = Object.fromEntries(
     PUBLISHED_MPX_PATHS.flatMap((key) => {
@@ -120,6 +126,7 @@ export function buildWindowsIntegrationSpecs(
         owner: 'mpx',
         ...roots,
         MPX_EXECUTABLE: selector,
+        MPX_NODE_ENTRY: nodeEntry,
         MPX_NODE_EXECUTABLE: node,
         PathPrepend: path.win32.join(apps, 'mpx', 'bin'),
       },
