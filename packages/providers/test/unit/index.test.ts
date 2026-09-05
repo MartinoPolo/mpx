@@ -101,9 +101,12 @@ describe('provider contracts', () => {
       'review.update',
       'review.comment',
       'review.ready',
+      'review.vote',
       'review.merge',
     ]);
     expect(providerRegistry.get('gerrit', 'repository').capabilities).not.toContain('ci.status');
+    expect(providerRegistry.get('github', 'repository').capabilities).not.toContain('review.vote');
+    expect(providerRegistry.get('gitlab', 'repository').capabilities).not.toContain('review.vote');
     expect(providerRegistry.get('github', 'issues').capabilities).not.toContain('issue.move');
     expect(providerRegistry.get('gitlab', 'issues').capabilities).not.toContain('issue.move');
     expect(providerRegistry.get('kanbanflow', 'issues').capabilities).toContain('issue.move');

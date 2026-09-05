@@ -38,10 +38,8 @@ export interface ReviewCommentV1 extends ProviderRecordV1 {
   readonly id: string;
   readonly reviewId: string;
   readonly body: string;
-  /** Omitted when a provider mutation acknowledgement cannot truthfully identify the author. */
-  readonly author?: string;
-  /** Omitted when the provider does not return the server timestamp. */
-  readonly createdAt?: string;
+  readonly author: string;
+  readonly createdAt: string;
 }
 
 export interface CiLogV1 extends ProviderRecordV1 {
@@ -96,6 +94,12 @@ export interface ProviderCapabilityInputMap {
   readonly 'review.update': Readonly<{ id: string; title: string; body: string }>;
   readonly 'review.comment': Readonly<{ id: string; body: string }>;
   readonly 'review.ready': Readonly<{ id: string }>;
+  /** Provider-internal capability; intentionally has no public CLI command. */
+  readonly 'review.vote': Readonly<{
+    id: string;
+    label: 'Code-Review';
+    value: -2 | -1 | 0 | 1 | 2;
+  }>;
   readonly 'review.merge': Readonly<{ id: string; method?: 'merge' | 'squash' | 'rebase' }>;
   readonly 'ci.status': Readonly<{ id: string }>;
   readonly 'ci.watch': Readonly<{ id: string }>;
@@ -119,6 +123,7 @@ export interface ProviderCapabilityOutputMap {
   readonly 'review.update': ReviewV1;
   readonly 'review.comment': ReviewCommentV1;
   readonly 'review.ready': ReviewV1;
+  readonly 'review.vote': ReviewV1;
   readonly 'review.merge': ReviewV1;
   readonly 'ci.status': CiStatusV1;
   readonly 'ci.watch': CiStatusV1;

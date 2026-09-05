@@ -686,6 +686,29 @@ describe('provider CLI', () => {
     );
   });
 
+  it('omits merge method by default so Gerrit can use its server submit strategy', async () => {
+    const cwd = await project(config('gerrit', 'none')),
+      env = await identityEnv(cwd, { gerrit: 'work-gerrit' }),
+      io = captureIo();
+    const invoke = vi.fn(async () => ({ schemaVersion: 1 }));
+    expect(
+      await run(
+        ['--json', '--cwd', cwd, 'review', 'merge', '--id', '7', '--identity', 'work'],
+        io,
+        {
+          env,
+          providerService: { invoke },
+        },
+      ),
+    ).toBe(0);
+    expect(invoke).toHaveBeenCalledWith({
+      providerId: 'gerrit',
+      capability: 'review.merge',
+      route: 'work-gerrit',
+      input: { id: '7' },
+    });
+  });
+
   it('rejects unsupported Gerrit CI before repository resolution or process execution', async () => {
     const cwd = await project(config('gerrit', 'none')),
       env = await identityEnv(cwd, { gerrit: 'work-gerrit' }),

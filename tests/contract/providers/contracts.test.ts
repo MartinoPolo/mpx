@@ -56,13 +56,6 @@ describe('versioned provider-neutral DTOs', () => {
       createdAt: '2026-01-02T03:04:05Z',
       providerData,
     };
-    const reviewCommentWithoutUnavailableMetadata: ReviewCommentV1 = {
-      schemaVersion: 1,
-      id: 'rc2',
-      reviewId: review.id,
-      body: 'Accepted by a provider command without response metadata',
-      providerData,
-    };
     const ci: CiStatusV1 = {
       schemaVersion: 1,
       state: 'running',
@@ -73,8 +66,6 @@ describe('versioned provider-neutral DTOs', () => {
     const ciRetry: CiRetryV1 = { schemaVersion: 1, id: 'run-1', providerData };
     expect(commentWithoutUnavailableMetadata).not.toHaveProperty('author');
     expect(commentWithoutUnavailableMetadata).not.toHaveProperty('createdAt');
-    expect(reviewCommentWithoutUnavailableMetadata).not.toHaveProperty('author');
-    expect(reviewCommentWithoutUnavailableMetadata).not.toHaveProperty('createdAt');
     expect({ issue, comment, review, reviewComment, ci, ciLog, ciRetry }).toMatchObject({
       issue: { schemaVersion: 1, state: 'open', providerData: { github: { nodeId: 'I_kwDO' } } },
       comment: { schemaVersion: 1, issueId: '42' },

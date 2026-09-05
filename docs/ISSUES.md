@@ -39,7 +39,7 @@ mpx review ready --identity NAME --id ID
 mpx review merge --identity NAME --id ID [--method merge|squash|rebase]
 ```
 
-`review.create` derives draft behavior from `workflow.codeReview.openAsDraft` (default `false`); there is no public draft flag. The committed workflow is a ceiling: when `markReady` is `human`, `review ready` returns `WORKFLOW_POLICY_DENIED`; when `merge` is `human`, `review merge` does the same. `agent` permits the command but does not bypass provider authorization or review rules. The default merge method is `merge`.
+`review.create` derives draft behavior from `workflow.codeReview.openAsDraft` (default `false`); there is no public draft flag. The committed workflow is a ceiling: when `markReady` is `human`, `review ready` returns `WORKFLOW_POLICY_DENIED`; when `merge` is `human`, `review merge` does the same. `agent` permits the command but does not bypass provider authorization or review rules. When `--method` is omitted, the provider chooses its default; Gerrit always uses its server-configured submit strategy and rejects an explicitly selected method.
 
 ## CI
 

@@ -22,11 +22,13 @@ export const REVIEW_CAPABILITIES = [
   'review.ready',
   'review.merge',
 ] as const;
+export const INTERNAL_REVIEW_CAPABILITIES = ['review.vote'] as const;
 export const CI_CAPABILITIES = ['ci.status', 'ci.watch', 'ci.logs', 'ci.retry'] as const;
 
 export type IssueCapability =
   (typeof ISSUE_CAPABILITIES)[number] | (typeof LOCAL_ISSUE_CAPABILITIES)[number];
-export type ReviewCapability = (typeof REVIEW_CAPABILITIES)[number];
+export type ReviewCapability =
+  (typeof REVIEW_CAPABILITIES)[number] | (typeof INTERNAL_REVIEW_CAPABILITIES)[number];
 export type CiCapability = (typeof CI_CAPABILITIES)[number];
 export type ProviderCapability = IssueCapability | ReviewCapability | CiCapability;
 export type ProviderRole = 'repository' | 'issues';
@@ -91,6 +93,7 @@ const ALL_CAPABILITIES = new Set<string>([
   ...ISSUE_CAPABILITIES,
   ...LOCAL_ISSUE_CAPABILITIES,
   ...REVIEW_CAPABILITIES,
+  ...INTERNAL_REVIEW_CAPABILITIES,
   ...CI_CAPABILITIES,
 ]);
 const EMPTY_SCHEMA: ProviderSchema = Object.freeze({
@@ -153,7 +156,11 @@ export const BUILTIN_PROVIDERS: readonly ProviderDescriptor[] = Object.freeze([
   freezeDescriptor({
     id: 'gerrit',
     roles: ['repository'],
-    capabilities: [...REVIEW_CAPABILITIES],
+    capabilities: [
+      ...REVIEW_CAPABILITIES.filter((capability) => capability !== 'review.merge'),
+      ...INTERNAL_REVIEW_CAPABILITIES,
+      'review.merge',
+    ],
     backend: 'git-ssh',
     schema: REMOTE_SCHEMA,
   }),

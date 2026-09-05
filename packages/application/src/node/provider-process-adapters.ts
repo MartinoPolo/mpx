@@ -111,17 +111,26 @@ export function classifyProviderProcessResult(
   stdout: string,
   stderr: string,
   authExitCodes: readonly number[] = [],
+  executable?: string,
 ): ProviderProcessResult {
   if (error !== null && error !== undefined) {
     const exitCode = (error as { code?: unknown }).code;
     if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < 0) {
       throw error;
     }
+    const sshPublicKeyDenied =
+      executable === 'ssh' &&
+      exitCode === 255 &&
+      /(?:Permission denied \(publickey(?:,[^)]+)?\)|Authentication failed \(publickey\))/iu.test(
+        stderr,
+      );
     return {
       exitCode,
       stdout,
       stderr,
-      ...(authExitCodes.includes(exitCode) ? { failure: 'auth' as const } : {}),
+      ...(authExitCodes.includes(exitCode) || sshPublicKeyDenied
+        ? { failure: 'auth' as const }
+        : {}),
     };
   }
   return { exitCode: 0, stdout, stderr };
@@ -191,6 +200,22 @@ export function providerExecutableArguments(
     throw resolutionError('EINVAL', 'The exact launch-injected SSH route is required.');
   }
   return ['-F', path.join(route, 'config'), ...args];
+}
+
+interface ProviderStdin {
+  once(event: 'error', listener: (error: Error) => void): unknown;
+  end(input?: string): unknown;
+}
+
+export function endProviderProcessStdin(
+  stdin: ProviderStdin | null,
+  input: string | undefined,
+  reject: (error: Error) => void,
+): void {
+  if (stdin !== null) {
+    stdin.once('error', reject);
+    stdin.end(input);
+  }
 }
 
 export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
@@ -264,14 +289,20 @@ export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
         (error, stdout, stderr) => {
           try {
             resolve(
-              classifyProviderProcessResult(error, stdout, stderr, request.authExitCodes ?? []),
+              classifyProviderProcessResult(
+                error,
+                stdout,
+                stderr,
+                request.authExitCodes ?? [],
+                executable,
+              ),
             );
           } catch (failure) {
             reject(failure);
           }
         },
       );
-      child.stdin?.end(request.stdin);
+      endProviderProcessStdin(child.stdin, request.stdin, reject);
     });
   }
 }
@@ -284,6 +315,8 @@ function validRepositorySegment(value: string): boolean {
   return value !== '.' && value !== '..' && safeRepositorySegment.test(value);
 }
 
+const safeSshUsername = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
+
 function parseRepositoryUrl(value: string, allowNestedProject: boolean): string {
   if (value.length === 0 || value !== value.trim() || /[\\\0]/u.test(value)) {
     throw repositorySelectorError(
@@ -293,15 +326,18 @@ function parseRepositoryUrl(value: string, allowNestedProject: boolean): string 
   }
   let host: string;
   let pathValue: string;
+  let sshUsername: string | undefined;
+  let sshPort: string | undefined;
   const scp = /^(?:([^@/:?#]+)@)?([^@/:?#]+):([^?#]+)$/u.exec(value);
   if (scp && !value.includes('://')) {
     const user = scp[1];
-    if (user !== undefined && user !== 'git') {
+    if (user !== undefined && (allowNestedProject ? !safeSshUsername.test(user) : user !== 'git')) {
       throw repositorySelectorError(
         'REPOSITORY_REMOTE_INVALID',
         'The configured repository remote URL has untrusted credentials.',
       );
     }
+    sshUsername = allowNestedProject ? user : undefined;
     host = scp[2]!.toLowerCase();
     pathValue = scp[3]!;
   } else {
@@ -320,18 +356,44 @@ function parseRepositoryUrl(value: string, allowNestedProject: boolean): string 
         'The configured repository remote URL scheme is unsupported.',
       );
     }
-    if ((remote.username !== '' && remote.username !== 'git') || remote.password !== '') {
+    const decodedUsername = remote.username;
+    if (
+      remote.password !== '' ||
+      (allowNestedProject
+        ? decodedUsername !== '' &&
+          (remote.protocol !== 'ssh:' || !safeSshUsername.test(decodedUsername))
+        : decodedUsername !== '' && decodedUsername !== 'git')
+    ) {
       throw repositorySelectorError(
         'REPOSITORY_REMOTE_INVALID',
         'The configured repository remote URL has untrusted credentials.',
       );
     }
-    if (remote.search !== '' || remote.hash !== '' || remote.port !== '') {
+    if (
+      remote.search !== '' ||
+      remote.hash !== '' ||
+      (!allowNestedProject && remote.port !== '') ||
+      (remote.protocol === 'https:' && remote.port !== '')
+    ) {
       throw repositorySelectorError(
         'REPOSITORY_REMOTE_INVALID',
         'The configured repository remote URL contains unsupported components.',
       );
     }
+    if (allowNestedProject && remote.port !== '') {
+      const port = Number(remote.port);
+      if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+        throw repositorySelectorError(
+          'REPOSITORY_REMOTE_INVALID',
+          'The configured Gerrit SSH port is invalid.',
+        );
+      }
+      sshPort = String(port);
+    }
+    sshUsername =
+      allowNestedProject && remote.protocol === 'ssh:' && decodedUsername !== ''
+        ? decodedUsername
+        : undefined;
     host = remote.hostname.toLowerCase();
     pathValue = remote.pathname.startsWith('/') ? remote.pathname.slice(1) : remote.pathname;
   }
@@ -342,7 +404,7 @@ function parseRepositoryUrl(value: string, allowNestedProject: boolean): string 
     );
   }
   const segments = pathValue.split('/');
-  if (segments.length < 2 || (!allowNestedProject && segments.length !== 2)) {
+  if (segments.length < 1 || (!allowNestedProject && segments.length !== 2)) {
     throw repositorySelectorError(
       'REPOSITORY_REMOTE_INVALID',
       allowNestedProject
@@ -358,7 +420,10 @@ function parseRepositoryUrl(value: string, allowNestedProject: boolean): string 
       'The configured repository remote URL contains unsafe path segments.',
     );
   }
-  return `${host}/${segments.join('/')}`;
+  const authority = `${sshUsername === undefined ? '' : `${sshUsername}@`}${host}${
+    sshPort === undefined ? '' : `:${sshPort}`
+  }`;
+  return `${authority}/${segments.join('/')}`;
 }
 
 export const parseForgeRepositoryUrl = (value: string): string => parseRepositoryUrl(value, false);

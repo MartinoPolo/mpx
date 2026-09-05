@@ -43,6 +43,7 @@ const MUTATION_CAPABILITIES = new Set([
   'review.update',
   'review.comment',
   'review.ready',
+  'review.vote',
   'review.merge',
   'ci.retry',
 ]);

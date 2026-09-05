@@ -901,11 +901,14 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       } else if (action === 'comment') {
         input = { id: requiredOption(parsed, 'id'), body: requiredOption(parsed, 'body') };
       } else if (action === 'merge') {
-        const method = stringOption(parsed, 'method') ?? 'merge';
-        if (!['merge', 'squash', 'rebase'].includes(method)) {
+        const method = stringOption(parsed, 'method');
+        if (method !== undefined && !['merge', 'squash', 'rebase'].includes(method)) {
           throw new UsageError('--method must be merge, squash, or rebase');
         }
-        input = { id: requiredOption(parsed, 'id'), method };
+        input = {
+          id: requiredOption(parsed, 'id'),
+          ...(method === undefined ? {} : { method }),
+        };
       }
     } else if (action === 'status' || action === 'watch') {
       input = { id: requiredOption(parsed, 'id') };

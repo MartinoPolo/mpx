@@ -102,6 +102,25 @@ describe('provider process execution', () => {
     });
   });
 
+  it('preserves authentication failure classification for mutating commands', async () => {
+    const executor: ProviderProcessExecutor = {
+      execute: async () => ({
+        exitCode: 255,
+        stdout: '',
+        stderr: 'secret diagnostic',
+        failure: 'auth',
+      }),
+    };
+    let failure: unknown;
+    try {
+      await runProviderCommand({ ...request, providerId: 'gerrit', mutation: true }, executor);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ code: 'AUTH_FAILURE', retryable: false });
+    expect(JSON.stringify(failure)).not.toContain('secret diagnostic');
+  });
+
   it('forwards operation timeout and backend-specific authentication exit metadata', async () => {
     const execute = vi.fn(async () => ({ exitCode: 0, stdout: 'ok', stderr: '' }));
     await runProviderCommand(

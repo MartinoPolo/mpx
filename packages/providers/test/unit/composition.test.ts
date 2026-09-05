@@ -36,6 +36,7 @@ describe('built-in provider composition', () => {
         'review.update',
         'review.comment',
         'review.ready',
+        'review.vote',
         'review.merge',
       ],
     });

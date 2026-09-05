@@ -11,6 +11,7 @@ import {
   NodeRepositorySelectorResolver,
   classifyProviderProcessResult,
   createNodeProviderService as providerService,
+  endProviderProcessStdin,
   parseForgeRepositoryUrl,
   parseGerritRepositoryUrl,
   providerExecutableArguments,
@@ -439,12 +440,38 @@ it('honors provider operation timeouts and rejects signalled execution', async (
   ).rejects.toMatchObject({ killed: true });
 });
 
-it('parses safe nested Gerrit projects without weakening forge selectors', () => {
-  expect(parseGerritRepositoryUrl('ssh://git@review.example/team/platform/service.git')).toBe(
+it('preserves safe Gerrit SSH users and ports while supporting standard remote forms', () => {
+  expect(
+    parseGerritRepositoryUrl('ssh://user@review.example:29418/team/platform/service.git'),
+  ).toBe('user@review.example:29418/team/platform/service');
+  expect(parseGerritRepositoryUrl('ssh://review.example:29418/project')).toBe(
+    'review.example:29418/project',
+  );
+  expect(parseGerritRepositoryUrl('user@review.example:team/platform/service')).toBe(
+    'user@review.example/team/platform/service',
+  );
+  expect(parseGerritRepositoryUrl('https://review.example/team/platform/service.git')).toBe(
     'review.example/team/platform/service',
   );
+});
+
+it('rejects unsafe Gerrit SSH usernames and ports without weakening forge selectors', () => {
+  for (const remote of [
+    'ssh://bad%20user@review.example:29418/project',
+    'ssh://user@review.example:0/project',
+    'ssh://user@review.example:65536/project',
+    'ssh://user@review.example:abc/project',
+    'user name@review.example:project',
+  ]) {
+    expect(() => parseGerritRepositoryUrl(remote)).toThrowError(
+      expect.objectContaining({ code: 'REPOSITORY_REMOTE_INVALID' }),
+    );
+  }
   expect(() =>
     parseForgeRepositoryUrl('https://github.example/team/platform/service.git'),
+  ).toThrowError(expect.objectContaining({ code: 'REPOSITORY_REMOTE_INVALID' }));
+  expect(() =>
+    parseForgeRepositoryUrl('ssh://git@github.example:29418/acme/project.git'),
   ).toThrowError(expect.objectContaining({ code: 'REPOSITORY_REMOTE_INVALID' }));
 });
 
@@ -489,6 +516,62 @@ it('resolves only the configured Git remote into the production repository selec
   );
   await expect(resolver.resolve({ root: repository, remote: 'missing' })).rejects.toMatchObject({
     code: 'REPOSITORY_REMOTE_UNAVAILABLE',
+  });
+});
+
+it('attaches the stdin error handler before end and rejects EPIPE exactly once', async () => {
+  const calls: string[] = [];
+  const epipe = Object.assign(new Error('broken pipe'), { code: 'EPIPE' });
+  let onError: ((error: Error) => void) | undefined;
+  const operation = new Promise<void>((_resolve, reject) => {
+    endProviderProcessStdin(
+      {
+        once(event, listener) {
+          calls.push(event);
+          onError = listener;
+        },
+        end(input) {
+          calls.push(`end:${input}`);
+          onError?.(epipe);
+          onError?.(new Error('late duplicate'));
+        },
+      },
+      'payload',
+      reject,
+    );
+  });
+  await expect(operation).rejects.toBe(epipe);
+  expect(calls).toEqual(['error', 'end:payload']);
+});
+
+it('classifies SSH public-key denial as authentication failure without confusing connectivity errors', () => {
+  const denied = Object.assign(new Error('ssh'), { code: 255 });
+  expect(
+    classifyProviderProcessResult(
+      denied,
+      '',
+      'user@host: Permission denied (publickey).',
+      [],
+      'ssh',
+    ),
+  ).toEqual({
+    exitCode: 255,
+    stdout: '',
+    stderr: 'user@host: Permission denied (publickey).',
+    failure: 'auth',
+  });
+  expect(
+    classifyProviderProcessResult(
+      denied,
+      '',
+      'ssh: connect to host review.example port 22: Connection timed out',
+      [],
+      'ssh',
+    ),
+  ).toEqual({
+    exitCode: 255,
+    stdout: '',
+    stderr: 'ssh: connect to host review.example port 22: Connection timed out',
   });
 });
 
