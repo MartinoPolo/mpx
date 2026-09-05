@@ -41,7 +41,10 @@ type CrashPoint =
   | 'receipted';
 interface InventoryEntry {
   readonly repo: 'mpx-pi' | 'mpx-claude-code';
+  /** Exact historical target required from the legacy symlink. */
   readonly source: string;
+  /** Exact relocated tree whose bytes are materialized, when distinct from the link target. */
+  readonly materializationSource?: string;
   readonly destination: string;
   readonly kind: EntryKind;
 }
@@ -76,12 +79,14 @@ const INVENTORY: readonly InventoryEntry[] = [
   {
     repo: 'mpx-claude-code',
     source: 'skills/mp-fallow-fix',
+    materializationSource: 'plugins/mp/skills/mp-fallow-fix',
     destination: 'skills/mp-fallow-fix',
     kind: 'tree',
   },
   {
     repo: 'mpx-claude-code',
     source: 'skills/mp-vocabulary',
+    materializationSource: 'plugins/mp/skills/mp-vocabulary',
     destination: 'skills/mp-vocabulary',
     kind: 'tree',
   },
@@ -107,6 +112,7 @@ interface Step {
   readonly id: string;
   readonly entry: InventoryEntry;
   readonly source: string;
+  readonly materializationSource: string;
   readonly destination: string;
   readonly stage: string;
   readonly backup: string;
@@ -335,6 +341,9 @@ async function linkMatches(step: Step, target = step.destination): Promise<boole
     if (normalized(path.resolve(path.dirname(target), linkTarget)) !== normalized(step.source)) {
       return false;
     }
+    if (step.entry.materializationSource !== undefined) {
+      return true;
+    }
     const followed = await stat(target);
     return step.entry.kind === 'file' ? followed.isFile() : followed.isDirectory();
   } catch {
@@ -482,6 +491,11 @@ export class PiLegacyDetachService {
           id,
           entry,
           source: path.join(this.options.projectsRoot, entry.repo, entry.source),
+          materializationSource: path.join(
+            this.options.projectsRoot,
+            entry.repo,
+            entry.materializationSource ?? entry.source,
+          ),
           destination,
           stage: path.join(path.dirname(destination), `${marker}.stage`),
           backup: path.join(path.dirname(destination), `${marker}.backup`),
@@ -634,12 +648,12 @@ export class PiLegacyDetachService {
           'The complete legacy Pi inventory is not present.',
         );
       }
-      uniqueSources.add(step.source);
+      uniqueSources.add(step.materializationSource);
     }
     for (const step of steps) {
-      if (uniqueSources.delete(step.source)) {
-        await safeSourceNode(step.source);
-        const info = await lstat(step.source);
+      if (uniqueSources.delete(step.materializationSource)) {
+        await safeSourceNode(step.materializationSource);
+        const info = await lstat(step.materializationSource);
         if ((step.entry.kind === 'file') !== info.isFile()) {
           throw failure('PI_LEGACY_SOURCE_INVALID', 'A migration source is unsafe.');
         }
@@ -651,9 +665,9 @@ export class PiLegacyDetachService {
     if (step.entry.kind === 'empty') {
       await durableMkdir(step.stage);
     } else if (step.entry.kind === 'file') {
-      await durableWrite(step.stage, await readFile(step.source));
+      await durableWrite(step.stage, await readFile(step.materializationSource));
     } else {
-      await copyTree(step.source, step.stage);
+      await copyTree(step.materializationSource, step.stage);
     }
   }
 

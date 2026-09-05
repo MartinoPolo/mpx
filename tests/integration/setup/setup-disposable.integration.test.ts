@@ -41,6 +41,15 @@ const entries = [
   ['mpx-claude-code', 'skills/mp-vocabulary', 'skills/mp-vocabulary', 'tree'],
 ] as const;
 
+const materializationSource = (projects: string, repo: string, source: string): string =>
+  path.join(
+    projects,
+    repo,
+    repo === 'mpx-claude-code' && ['skills/mp-fallow-fix', 'skills/mp-vocabulary'].includes(source)
+      ? `plugins/mp/${source}`
+      : source,
+  );
+
 async function makeLink(target: string, destination: string, directory: boolean): Promise<void> {
   await mkdir(path.dirname(destination), { recursive: true });
   if (process.platform === 'win32') {
@@ -72,7 +81,8 @@ async function fixture() {
   ]);
   const sourceBodies = new Map<string, string>();
   for (const [repo, source, destination, kind] of entries) {
-    const sourcePath = path.join(projects, repo, source);
+    const linkTarget = path.join(projects, repo, source);
+    const sourcePath = materializationSource(projects, repo, source);
     const body = `source:${repo}:${source}`;
     sourceBodies.set(sourcePath, body);
     if (kind === 'tree') {
@@ -82,8 +92,8 @@ async function fixture() {
       await mkdir(path.dirname(sourcePath), { recursive: true });
       await writeFile(sourcePath, body);
     }
-    await makeLink(sourcePath, path.join(personal, destination), kind === 'tree');
-    await makeLink(sourcePath, path.join(work, destination), kind === 'tree');
+    await makeLink(linkTarget, path.join(personal, destination), kind === 'tree');
+    await makeLink(linkTarget, path.join(work, destination), kind === 'tree');
   }
   await writeFile(path.join(personal, 'native-sentinel.txt'), 'personal-native');
   await writeFile(path.join(work, 'native-sentinel.txt'), 'work-native');
@@ -261,6 +271,11 @@ it('detaches both disposable legacy roots through the complete node setup compos
   expect(await readFile(path.join(value.personal, 'settings.json'), 'utf8')).toBe(
     value.sourceBodies.get(path.join(value.projects, 'mpx-pi', 'settings.json')),
   );
+  for (const skill of ['mp-fallow-fix', 'mp-vocabulary']) {
+    expect(await readFile(path.join(value.personal, 'skills', skill, 'payload.txt'), 'utf8')).toBe(
+      `source:mpx-claude-code:skills/${skill}`,
+    );
+  }
 });
 
 it('keeps the committed detachment receipt when setup fails afterward so retry can continue', async () => {

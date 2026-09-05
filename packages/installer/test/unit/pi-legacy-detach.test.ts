@@ -37,6 +37,16 @@ const entries = [
   ['mpx-claude-code', 'skills/mp-vocabulary', 'skills/mp-vocabulary', 'tree'],
 ] as const;
 
+const materializationSource = (projectsRoot: string, repo: string, sourceName: string): string =>
+  path.join(
+    projectsRoot,
+    repo,
+    repo === 'mpx-claude-code' &&
+      ['skills/mp-fallow-fix', 'skills/mp-vocabulary'].includes(sourceName)
+      ? `plugins/mp/${sourceName}`
+      : sourceName,
+  );
+
 async function makeLink(target: string, link: string, directory: boolean) {
   await mkdir(path.dirname(link), { recursive: true });
   if (process.platform === 'win32') {
@@ -106,11 +116,11 @@ async function assertAllOutputsExact(value: Awaited<ReturnType<typeof fixture>>)
         expect(await readdir(destination)).toEqual([]);
       } else if (kind === 'file') {
         expect(await readFile(destination)).toEqual(
-          await readFile(path.join(value.projectsRoot, repo, sourceName)),
+          await readFile(materializationSource(value.projectsRoot, repo, sourceName)),
         );
       } else {
         expect(await snapshotTree(destination)).toEqual(
-          await snapshotTree(path.join(value.projectsRoot, repo, sourceName)),
+          await snapshotTree(materializationSource(value.projectsRoot, repo, sourceName)),
         );
       }
     }
@@ -153,7 +163,7 @@ async function fixture() {
     [projectsRoot, stateRoot, personal, work].map((value) => mkdir(value, { recursive: true })),
   );
   for (const [repo, sourceName, , kind] of entries) {
-    const source = path.join(projectsRoot, repo, sourceName);
+    const source = materializationSource(projectsRoot, repo, sourceName);
     await mkdir(path.dirname(source), { recursive: true });
     if (kind === 'file') {
       await writeFile(
@@ -235,6 +245,43 @@ it.each(['missing', 'wrong', 'regular'] as const)(
     expect((await lstat(path.join(value.personal, 'themes'))).isSymbolicLink()).toBe(true);
   },
 );
+
+it('fails closed for an unknown dangling target in place of a relocated legacy link', async () => {
+  const value = await fixture();
+  const target = path.join(value.personal, 'skills', 'mp-fallow-fix');
+  await rm(target, { force: true });
+  await makeLink(path.join(value.projectsRoot, 'unknown', 'mp-fallow-fix'), target, true);
+
+  await expect(new PiLegacyDetachService(value).run()).rejects.toMatchObject({
+    code: 'PI_LEGACY_INVENTORY_INVALID',
+  });
+  expect((await lstat(path.join(value.work, 'skills', 'mp-fallow-fix'))).isSymbolicLink()).toBe(
+    true,
+  );
+});
+
+it('rejects a missing relocated source before mutating either root', async () => {
+  const value = await fixture();
+  await rm(materializationSource(value.projectsRoot, 'mpx-claude-code', 'skills/mp-fallow-fix'), {
+    recursive: true,
+  });
+
+  await expect(new PiLegacyDetachService(value).run()).rejects.toMatchObject({
+    code: 'PI_LEGACY_SOURCE_INVALID',
+  });
+  await assertAllLinksRestored(value);
+});
+
+it('rejects an unsafe relocated source tree before mutating either root', async () => {
+  const value = await fixture();
+  const tree = materializationSource(value.projectsRoot, 'mpx-claude-code', 'skills/mp-vocabulary');
+  await makeLink(path.join(tree, 'payload.txt'), path.join(tree, 'alias.txt'), false);
+
+  await expect(new PiLegacyDetachService(value).run()).rejects.toMatchObject({
+    code: 'PI_LEGACY_SOURCE_INVALID',
+  });
+  await assertAllLinksRestored(value);
+});
 
 it('rejects a link within a source tree before mutating either root', async () => {
   const value = await fixture();

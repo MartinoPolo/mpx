@@ -84,6 +84,10 @@ corrected pattern):
 | `skills/mp-fallow-fix` | `C:/_MP_projects/mpx-claude-code/skills/mp-fallow-fix` |
 | `skills/mp-vocabulary` | `C:/_MP_projects/mpx-claude-code/skills/mp-vocabulary` |
 
+Historical caveat: the `mp-fallow-fix` and `mp-vocabulary` source trees later moved under
+`plugins/mp/skills/`. One-shot detachment recognizes only each exact old link target above while
+copying only its exact relocated source tree; the dangling old target itself is never removed.
+
 Left real in each account agent directory (never in the repo): `auth.json`, `sessions/`, trust,
 packages, and caches. The personal launcher selects `~/.pi/agent`; the work launcher selects
 `~/.pi/agent-work` through `PI_CODING_AGENT_DIR`. Create additional account roots with

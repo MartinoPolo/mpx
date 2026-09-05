@@ -40,6 +40,15 @@ const legacyEntries = [
   ['mpx-claude-code', 'skills/mp-vocabulary', 'skills/mp-vocabulary', 'tree'],
 ] as const;
 
+const materializationSource = (projects: string, repo: string, source: string): string =>
+  path.join(
+    projects,
+    repo,
+    repo === 'mpx-claude-code' && ['skills/mp-fallow-fix', 'skills/mp-vocabulary'].includes(source)
+      ? `plugins/mp/${source}`
+      : source,
+  );
+
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {
     throw new Error(`Expected ${label}`);
@@ -90,7 +99,8 @@ async function createFixture() {
   const unrelatedPiSettings = { packages: ['unrelated-package'], unrelatedField: 'preserve-me' };
   const sourceSentinels: string[] = [];
   for (const [repo, source, destination, kind] of legacyEntries) {
-    const sourcePath = path.join(projects, repo, source);
+    const linkTarget = path.join(projects, repo, source);
+    const sourcePath = materializationSource(projects, repo, source);
     const body =
       destination === 'settings.json'
         ? Buffer.from(`${JSON.stringify(unrelatedPiSettings, null, 2)}\r\n`)
@@ -106,7 +116,7 @@ async function createFixture() {
       sourceSentinels.push(sourcePath);
     }
     for (const piRoot of piRoots) {
-      await makeLink(sourcePath, path.join(piRoot, destination), kind === 'tree');
+      await makeLink(linkTarget, path.join(piRoot, destination), kind === 'tree');
     }
   }
 
@@ -352,6 +362,11 @@ it('runs setup twice and uninstalls only production-owned state in a fully dispo
     });
     for (const [, , destination] of legacyEntries) {
       expect((await lstat(path.join(piRoot, destination))).isSymbolicLink()).toBe(false);
+    }
+    for (const skill of ['mp-fallow-fix', 'mp-vocabulary']) {
+      expect(
+        await readFile(path.join(piRoot, 'skills', skill, 'source-sentinel.bin'), 'utf8'),
+      ).toBe(`legacy-source:mpx-claude-code:skills/${skill}\r\n`);
     }
   }
   expect(await readFile(fixture.bashProfile, 'utf8')).toContain(
