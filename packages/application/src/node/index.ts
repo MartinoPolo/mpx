@@ -6,6 +6,10 @@ import {
   type LifecycleApplicationDependencies,
   type LifecycleDevService,
 } from '../lifecycle-application-service.js';
+import {
+  WorkspaceApplicationService,
+  type WorkspaceApplicationDependencies,
+} from '../workspace-application-service.js';
 
 export * from './account-application-service.js';
 export * from './local-issue-view-rebuilder.js';
@@ -40,6 +44,24 @@ export function createNodeDevService(
     path.join(local, 'mpx', 'dev-services', scope),
   );
   return Object.assign(manager, { runtimeKind: 'host' as const });
+}
+
+/** Composes Node path semantics with target-scoped workspace adapters. */
+export function createNodeWorkspaceApplicationService(
+  dependencies: Omit<WorkspaceApplicationDependencies, 'path'>,
+): WorkspaceApplicationService {
+  const canonical = (value: string) => path.resolve(value).replaceAll('\\', '/').toLowerCase();
+  return new WorkspaceApplicationService({
+    ...dependencies,
+    path: {
+      resolve: path.resolve,
+      contains(root, candidate) {
+        const base = canonical(root),
+          selected = canonical(candidate);
+        return selected === base || selected.startsWith(`${base}/`);
+      },
+    },
+  });
 }
 
 /** Wires concrete Node path semantics to application-owned lifecycle orchestration. */

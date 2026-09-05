@@ -68,7 +68,7 @@ describe('CLI help', () => {
   it('marks exactly the implemented bare commands as default operations', () => {
     expect(
       commandRegistry.filter((group) => group.defaultOperation).map((group) => group.name),
-    ).toEqual(['init', 'status', 'doctor', 'setup', 'help']);
+    ).toEqual(['init', 'doctor', 'setup', 'help']);
   });
 
   it('prints bare setup usage without suggesting an action', async () => {

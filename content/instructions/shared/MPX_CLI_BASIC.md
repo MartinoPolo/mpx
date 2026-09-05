@@ -8,16 +8,14 @@ For runtime content debugging, use `mpx content current`, `list`, `show`, and `c
 ## Common command groups
 
 - `mpx init` — Initialize an MPX project.
-- `mpx status` — Show current project status.
 - `mpx doctor` — Diagnose project configuration and services.
 - `mpx launch` — Explain or start a runtime launch.
 - `mpx session` — Inspect and manage runtime sessions.
 - `mpx issue` — Work with provider-neutral issues.
 - `mpx review` — Work with provider-neutral code reviews.
 - `mpx ci` — Inspect and control provider-neutral CI.
-- `mpx worktree` — Manage repository worktrees.
-- `mpx dev` — Manage development services.
-- `mpx ports` — Manage project port assignments.
+- `mpx workspace` — Inspect and manage project workspaces.
+- `mpx port` — Manage verified port listeners.
 - `mpx config` — Inspect and validate configuration.
 - `mpx provider` — Inspect configured providers.
 - `mpx content` — Inspect the active generated runtime content.
@@ -29,7 +27,6 @@ For runtime content debugging, use `mpx content current`, `list`, `show`, and `c
 ## Common operations
 
 - `mpx init` — Initialize an MPX project.
-- `mpx status` — Show current project status.
 - `mpx doctor` — Diagnose project configuration and services.
 - `mpx launch explain [options]` — Explain launch selection.
 - `mpx launch claude [options]` — Launch Claude.
@@ -46,15 +43,10 @@ For runtime content debugging, use `mpx content current`, `list`, `show`, and `c
 - `mpx ci status --id <id>` — Show CI status.
 - `mpx ci watch --id <id>` — Watch CI status.
 - `mpx ci logs --run-id <id>` — Show CI run logs.
-- `mpx worktree list` — List worktrees.
-- `mpx worktree status` — Show worktree lifecycle status.
-- `mpx worktree create <branch> [options]` — Create a worktree.
-- `mpx dev start --id <id>` — Start a service.
-- `mpx dev status [--id <id>]` — Show service status.
-- `mpx dev logs --id <id> [--lines <count>]` — Show service logs.
-- `mpx ports list` — List port leases.
-- `mpx ports inspect` — Inspect project ports.
-- `mpx ports ensure` — Ensure project ports.
+- `mpx workspace list` — List workspaces.
+- `mpx workspace show [path] [--machine]` — Show a workspace.
+- `mpx workspace create <branch> [options]` — Create a workspace.
+- `mpx port kill <pid>` — Kill a verified listener by PID.
 - `mpx config show` — Show project configuration.
 - `mpx config validate` — Validate project configuration.
 - `mpx config resolve` — Resolve merged configuration.

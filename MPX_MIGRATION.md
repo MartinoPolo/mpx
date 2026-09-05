@@ -216,7 +216,9 @@ Exit requires personal and work host routes to behave like native installations 
 
 ### Phase 6 — Workspace facade
 
-Keep ports, worktrees, and development services as separate deep packages. Application exposes workspace list, show, create, remove, start, stop, and logs. `workspace show` joins Git identity and path, assigned ports, managed services, listener or conflict state, and recovery diagnostics. Normal operations perform bounded recovery automatically. `port kill` remains a verified safe listener operation.
+**State: complete.**
+
+Ports, worktrees, and development services remain separate deep packages. The provider-neutral application facade now exposes workspace list, show, create, remove, start, stop, and logs with bounded automatic recovery; Node composition supplies target-scoped project, process, filesystem, port, status, and service adapters. `workspace show` joins Git identity and path, assigned ports, configured or managed services, listener or conflict state, and bounded redacted diagnostics. Removal stops managed checkout-scoped services before durable Git removal and identity-bound lease release. `port kill` remains delegated to verified port-service termination. The replaced top-level status, worktree, dev, and ports routes were deleted rather than retained as aliases. The final human-leaf count remains a Phase 8 acceptance item and is not claimed here.
 
 ### Phase 7 — Provider consolidation
 

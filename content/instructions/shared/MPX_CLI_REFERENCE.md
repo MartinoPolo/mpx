@@ -10,12 +10,6 @@ Initialize an MPX project.
 
 - `mpx init` — default operation
 
-## `mpx status`
-
-Show current project status.
-
-- `mpx status` — default operation
-
 ## `mpx doctor`
 
 Diagnose project configuration and services.
@@ -222,97 +216,45 @@ Show CI run logs.
 
 Retry a CI run.
 
-## `mpx worktree`
+## `mpx workspace`
 
-Manage repository worktrees.
+Inspect and manage project workspaces.
 
-### `mpx worktree list`
+### `mpx workspace list`
 
-List worktrees.
+List workspaces.
 
-### `mpx worktree status`
+### `mpx workspace show [path] [--machine]`
 
-Show worktree lifecycle status.
+Show a workspace.
 
-### `mpx worktree create <branch> [options]`
+### `mpx workspace create <branch> [options]`
 
-Create a worktree.
+Create a workspace.
 
-### `mpx worktree select <path>`
+### `mpx workspace remove <path>`
 
-Select a worktree.
+Remove a workspace.
 
-### `mpx worktree remove <path>`
+### `mpx workspace start <service-id> [path]`
 
-Remove a worktree.
+Start a configured service.
 
-### `mpx worktree prepare <key>`
+### `mpx workspace stop <service-id> [path]`
 
-Prepare a lifecycle item.
+Stop a configured service.
 
-### `mpx worktree cancel <key>`
+### `mpx workspace logs <service-id> [path] [--lines <count>]`
 
-Cancel a lifecycle item.
+Show configured service logs.
 
-### `mpx worktree reconcile`
+## `mpx port`
 
-Reconcile worktree state.
+Manage verified port listeners.
 
-## `mpx dev`
+### `mpx port kill <pid>`
 
-Manage development services.
-
-### `mpx dev start --id <id>`
-
-Start a service.
-
-### `mpx dev status [--id <id>]`
-
-Show service status.
-
-### `mpx dev logs --id <id> [--lines <count>]`
-
-Show service logs.
-
-### `mpx dev restart --id <id>`
-
-Restart a service.
-
-### `mpx dev stop --id <id>`
-
-Stop a service.
-
-## `mpx ports`
-
-Manage project port assignments.
-
-### `mpx ports list`
-
-List port leases.
-
-### `mpx ports inspect`
-
-Inspect project ports.
-
-### `mpx ports ensure`
-
-Ensure project ports.
-
-### `mpx ports resolve`
-
-Resolve project ports.
-
-### `mpx ports kill <pid>`
-
-Kill a process by PID.
-
-### `mpx ports release`
-
-Release project ports.
-
-### `mpx ports reconcile [--rebuild]`
-
-Reconcile port state.
+Kill a verified listener by PID.
 
 ## `mpx config`
 

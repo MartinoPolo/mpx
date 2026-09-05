@@ -6,12 +6,15 @@ import {
   type LifecycleDevService,
   type LifecycleWorktreeService,
   type SetupApplicationService,
+  type WorkspaceApplicationService,
 } from '@mpx/application';
 import {
   createNodeConfiguredProviderApplicationService,
   createNodeSetupApplicationService,
   NodePrivateRouteMaterializer,
   createNodeWorktreeLifecycleService,
+  createNodeWorkspaceApplicationService,
+  createNodeDevService,
   createProductionSessionDockerResumeAdmission,
   preparationRuntime as nodePreparationRuntime,
   windowsProcessIdentityInspector,
@@ -164,6 +167,7 @@ export interface CliContext extends LaunchExecutionContext {
   installIntentBuilder?: InstallIntentBuilder;
   setupService?: SetupApplicationService;
   setupServiceFactory?: () => SetupApplicationService;
+  workspaceApplication?: WorkspaceApplicationService;
   installerOperationAdapter?: InstallerOperationAdapter;
   installerTransactionStore?: TransactionStore;
   /** Application-owned trusted extensions; never populated from project configuration. */
@@ -374,6 +378,36 @@ export function worktrees(context: CliContext, operationCwd = process.cwd()): Cl
     includes: createNodeWorktreeIncludeDependencies(),
     fileSystem,
     processIdentityInspector: windowsProcessIdentityInspector(new WindowsProcessCapabilities()),
+  });
+}
+
+export function workspaceApplication(
+  context: CliContext,
+  operationCwd: string,
+): WorkspaceApplicationService {
+  if (context.workspaceApplication) {
+    return context.workspaceApplication;
+  }
+  const portService = ports(context);
+  const worktreeService = worktrees(context, operationCwd);
+  return createNodeWorkspaceApplicationService({
+    worktrees: worktreeService,
+    ports: portService,
+    projects: {
+      async discover(cwd) {
+        const found = await (context.discoverProjectConfig ?? discoverProjectConfig)(cwd);
+        if (!found) {
+          throw new MpxError({ code: 'PROJECT_NOT_FOUND', message: 'No MPX project was found.' });
+        }
+        return found;
+      },
+    },
+    status: status(context, portService),
+    services: {
+      forWorkspace(root) {
+        return context.devService ?? createNodeDevService(context.env, root);
+      },
+    },
   });
 }
 
