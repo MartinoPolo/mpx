@@ -439,8 +439,11 @@ test('verification reports import policy for a nonliteral dynamic import', async
   );
 });
 
-test('verification rejects tampered source and bundler digests', async () => {
-  for (const field of ['sourceTreeDigest', 'bundlerConfigDigest'] as const) {
+test('verification recomputes source and bundler digests from checked inputs', async () => {
+  for (const [field, expectedMessage] of [
+    ['sourceTreeDigest', /source tree digest mismatch/],
+    ['bundlerConfigDigest', /bundler config digest mismatch/],
+  ] as const) {
     await assertVerificationRejects(async () => {
       const metadataPath = path.join(artifactRoot, 'build-metadata.json');
       const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as Record<
@@ -449,7 +452,7 @@ test('verification rejects tampered source and bundler digests', async () => {
       >;
       metadata[field] = differentSha256(metadata[field]);
       await writeFile(metadataPath, JSON.stringify(metadata));
-    });
+    }, expectedMessage);
   }
 }, 20_000);
 

@@ -78,6 +78,7 @@ const nodeBuiltinSpecifiers = new Set(
   ),
 );
 const fileSystem = { lstat, readdir };
+let verifiedReleaseFingerprint;
 
 export const BUNDLER_OPTIONS = Object.freeze({
   bundle: true,
@@ -365,6 +366,8 @@ async function assertMetadataInventory(root) {
   }
   if (
     metadata?.schemaVersion !== 1 ||
+    Object.keys(metadata).join('\0') !==
+      ['schemaVersion', 'sourceTreeDigest', 'bundlerConfigDigest', 'files'].join('\0') ||
     typeof metadata.sourceTreeDigest !== 'string' ||
     typeof metadata.bundlerConfigDigest !== 'string' ||
     !metadata.files ||
@@ -372,6 +375,14 @@ async function assertMetadataInventory(root) {
     Array.isArray(metadata.files)
   ) {
     throw new Error('Release metadata has an invalid shape');
+  }
+  const sourceTreeDigest = await treeDigest(packageRoot, await productionInputs());
+  if (metadata.sourceTreeDigest !== sourceTreeDigest) {
+    throw new Error('Release metadata source tree digest mismatch');
+  }
+  const bundlerConfigDigest = sha256(canonicalJson(BUNDLER_CONFIG));
+  if (metadata.bundlerConfigDigest !== bundlerConfigDigest) {
+    throw new Error('Release metadata bundler config digest mismatch');
   }
   assertExactFiles(
     Object.keys(metadata.files),
@@ -471,6 +482,17 @@ export async function verifyRelease() {
   await assertPortable(artifactRoot);
   await assertArtifactImportPolicy(artifactRoot);
   await assertMetadataInventory(artifactRoot);
+  const files = await artifactFiles(artifactRoot);
+  const fingerprint = sha256(
+    canonicalJson({
+      artifactDigest: await treeDigest(artifactRoot, files),
+      bundlerConfigDigest: sha256(canonicalJson(BUNDLER_CONFIG)),
+      sourceTreeDigest: await treeDigest(packageRoot, await productionInputs()),
+    }),
+  );
+  if (fingerprint === verifiedReleaseFingerprint) {
+    return;
+  }
   try {
     await createArtifact(verificationRoot);
     await assertPortable(verificationRoot);
@@ -486,6 +508,7 @@ export async function verifyRelease() {
         throw new Error(`Release artifact is stale or tampered: ${file}`);
       }
     }
+    verifiedReleaseFingerprint = fingerprint;
   } finally {
     await rm(verificationRoot, { recursive: true, force: true });
   }

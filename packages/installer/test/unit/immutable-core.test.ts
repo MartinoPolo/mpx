@@ -1,23 +1,88 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   NodeInstalledReleaseAuthority,
   activateRelease,
+  buildCurrentReleaseManifest,
   buildReleaseManifest,
   canonicalJson,
   installerDigest,
   parseInstallIntentV1,
   parseOwnershipReceiptV1,
   parseReleaseManifestV1,
+  publishCurrentRelease,
   publishRelease,
   readActiveRelease,
   type OwnershipReceiptV1,
 } from '../../src/immutable-core.js';
 
 const temporary = () => mkdtemp(path.join(tmpdir(), 'mpx-release-'));
+
+async function isolatedCanonicalRepository(): Promise<{
+  repositoryRoot: string;
+  buildRelease: () => Promise<void>;
+  cleanup: () => Promise<void>;
+}> {
+  const checkoutRoot = path.resolve(import.meta.dirname, '../../../..');
+  const repositoryRoot = await mkdtemp(path.join(checkoutRoot, '.installer-release-test-'));
+  const source = path.join(checkoutRoot, 'runtimes', 'pi', 'extensions');
+  const destination = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions');
+  await mkdir(path.dirname(destination), { recursive: true });
+  await cp(path.join(checkoutRoot, 'tsconfig.json'), path.join(repositoryRoot, 'tsconfig.json'));
+  await cp(source, destination, {
+    recursive: true,
+    filter: (name) => !['dist', 'node_modules'].includes(path.basename(name)),
+  });
+  for (const dependency of ['croner', 'nanoid']) {
+    await cp(
+      path.join(source, 'node_modules', dependency),
+      path.join(destination, 'node_modules', dependency),
+      { recursive: true, dereference: true },
+    );
+  }
+  const script = path.join(destination, 'scripts', 'release.mjs');
+  const release = (await import(`${pathToFileURL(script).href}?isolated=${Date.now()}`)) as {
+    buildRelease: () => Promise<void>;
+  };
+  await release.buildRelease();
+  return {
+    repositoryRoot,
+    buildRelease: release.buildRelease,
+    cleanup: () => rm(repositoryRoot, { recursive: true, force: true }),
+  };
+}
+
+async function writePiExtensionArtifact(repositoryRoot: string): Promise<string> {
+  const artifact = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions', 'dist', 'package');
+  const payload = {
+    'config/settings.json': '{"theme":"amber"}\n',
+    'index.mjs': 'export default function extension() {}\n',
+  };
+  for (const [name, body] of Object.entries(payload)) {
+    const target = path.join(artifact, ...name.split('/'));
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, body);
+  }
+  await writeFile(
+    path.join(artifact, 'build-metadata.json'),
+    `${canonicalJson({
+      schemaVersion: 1,
+      sourceTreeDigest: 'a'.repeat(64),
+      bundlerConfigDigest: 'b'.repeat(64),
+      files: Object.fromEntries(
+        Object.entries(payload).map(([name, body]) => [
+          name,
+          createHash('sha256').update(body).digest('hex'),
+        ]),
+      ),
+    })}\n`,
+  );
+  return artifact;
+}
 
 describe('immutable installer core', () => {
   it('accepts non-canonical strict JSON user-config bytes bound to their exact SHA-256', () => {
@@ -148,6 +213,128 @@ describe('immutable installer core', () => {
     expect(first.files.map((entry) => entry.bytes)).toEqual([5, 4]);
     expect(first.releaseKey).toBe(first.convergenceHash);
     expect(parseReleaseManifestV1(first)).toEqual(first);
+  });
+
+  it('includes the complete canonically verified Pi extension artifact in the release manifest', async () => {
+    const isolated = await isolatedCanonicalRepository();
+    try {
+      const manifest = await buildCurrentReleaseManifest({
+        repositoryRoot: isolated.repositoryRoot,
+        assetPaths: ['runtimes/pi/extensions/dist'],
+      });
+      const paths = manifest.files.map((file) => file.path);
+      expect(paths).toContain('runtimes/pi/extensions/dist/package/build-metadata.json');
+      expect(paths).toContain('runtimes/pi/extensions/dist/package/index.mjs');
+      expect(paths).toContain('runtimes/pi/extensions/dist/package/subagents/LICENSE');
+      expect(paths).toContain('runtimes/pi/extensions/dist/package/licenses/croner.LICENSE');
+      expect(paths).toContain('runtimes/pi/extensions/dist/package/licenses/nanoid.LICENSE');
+      expect(manifest.releaseKey).toBe(installerDigest(manifest.files));
+    } finally {
+      await isolated.cleanup();
+    }
+  }, 20_000);
+
+  it('changes artifact digest and release root identity after a checked extension source rebuild', async () => {
+    const isolated = await isolatedCanonicalRepository();
+    const appsRoot = await temporary();
+    const artifactPrefix = 'runtimes/pi/extensions/dist/package/';
+    try {
+      const first = await publishCurrentRelease({
+        repositoryRoot: isolated.repositoryRoot,
+        appsRoot,
+        assetPaths: ['runtimes/pi/extensions/dist'],
+      });
+      const firstArtifactDigest = installerDigest(
+        first.files.filter((file) => file.path.startsWith(artifactPrefix)),
+      );
+      const source = path.join(isolated.repositoryRoot, 'runtimes', 'pi', 'extensions', 'index.ts');
+      await writeFile(
+        source,
+        `${await readFile(source, 'utf8')}\nexport const releaseIdentityFixture = 'rebuilt';\n`,
+      );
+      await isolated.buildRelease();
+
+      const second = await publishCurrentRelease({
+        repositoryRoot: isolated.repositoryRoot,
+        appsRoot,
+        assetPaths: ['runtimes/pi/extensions/dist'],
+      });
+      const secondArtifactDigest = installerDigest(
+        second.files.filter((file) => file.path.startsWith(artifactPrefix)),
+      );
+
+      expect(secondArtifactDigest).not.toBe(firstArtifactDigest);
+      expect(second.releaseKey).not.toBe(first.releaseKey);
+      expect(
+        (await stat(path.join(appsRoot, 'mpx', 'releases', first.releaseKey))).isDirectory(),
+      ).toBe(true);
+      expect(
+        (await stat(path.join(appsRoot, 'mpx', 'releases', second.releaseKey))).isDirectory(),
+      ).toBe(true);
+    } finally {
+      await isolated.cleanup();
+      await rm(appsRoot, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('does not trust a tampered bundle with self-consistent ignored metadata', async () => {
+    const isolated = await isolatedCanonicalRepository();
+    const repositoryRoot = isolated.repositoryRoot;
+    const artifact = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions', 'dist', 'package');
+    try {
+      const bundle = path.join(artifact, 'index.mjs');
+      const metadataPath = path.join(artifact, 'build-metadata.json');
+      const tampered = `${await readFile(bundle, 'utf8')}\n// tampered\n`;
+      await writeFile(bundle, tampered);
+      const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
+        files: Record<string, string>;
+      };
+      metadata.files['index.mjs'] = createHash('sha256').update(tampered).digest('hex');
+      await writeFile(metadataPath, `${JSON.stringify(metadata)}\n`);
+
+      await expect(
+        buildCurrentReleaseManifest({
+          repositoryRoot,
+          assetPaths: ['runtimes/pi/extensions/dist/package'],
+        }),
+      ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
+    } finally {
+      await isolated.cleanup();
+    }
+  }, 20_000);
+
+  it('rejects custom asset paths that include only part of the canonical artifact', async () => {
+    const repositoryRoot = await temporary();
+    await writePiExtensionArtifact(repositoryRoot);
+
+    await expect(
+      buildCurrentReleaseManifest({
+        repositoryRoot,
+        assetPaths: ['runtimes/pi/extensions/dist/package/index.mjs'],
+      }),
+    ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
+  });
+
+  it('rejects a case-variant partial Pi artifact path before it can bypass verification', async () => {
+    const repositoryRoot = await temporary();
+    const partial = path.join(
+      repositoryRoot,
+      'RUNTIMES',
+      'PI',
+      'EXTENSIONS',
+      'DIST',
+      'PACKAGE',
+      'index.mjs',
+    );
+    await mkdir(path.dirname(partial), { recursive: true });
+    await writeFile(partial, 'export default function unverifiedExtension() {}\n');
+
+    await expect(
+      buildCurrentReleaseManifest({
+        repositoryRoot,
+        assetPaths: ['RUNTIMES/PI/EXTENSIONS/DIST/PACKAGE/index.mjs'],
+      }),
+    ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
   });
 
   it('orders full release paths ordinally across prefix siblings and traversal order', async () => {

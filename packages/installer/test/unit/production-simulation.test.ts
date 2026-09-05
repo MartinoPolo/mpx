@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, it, vi } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
 import {
@@ -110,8 +110,9 @@ function registration(
     : { ...common, runtime: 'claude' as const };
 }
 async function simulation(existing: boolean) {
+  const checkoutRoot = path.resolve(import.meta.dirname, '../../../..');
   const root = await mkdtemp(
-    path.join(tmpdir(), `mpx-production-${existing ? 'existing' : 'clean'}-`),
+    path.join(checkoutRoot, 'node_modules', `mpx-production-${existing ? 'existing' : 'clean'}-`),
   );
   const repositoryRoot = path.join(root, 'source'),
     appsRoot = path.join(root, 'apps'),
@@ -120,24 +121,25 @@ async function simulation(existing: boolean) {
     userProfile = path.join(root, 'user');
   await mkdir(path.join(repositoryRoot, 'bin'), { recursive: true });
   await writeFile(path.join(repositoryRoot, 'bin', 'mpx.mjs'), 'export {};\n');
-  const nativePackageRoot = path.join(
-    repositoryRoot,
-    'runtimes',
-    'pi',
-    'extensions',
-    'dist',
-    'package',
-  );
-  await mkdir(nativePackageRoot, { recursive: true });
-  await Promise.all(
-    (
-      [
-        ['build-metadata.json', 'm'],
-        ['index.mjs', 'i'],
-        ['package.json', 'p'],
-      ] as const
-    ).map(([file, body]) => writeFile(path.join(nativePackageRoot, file), body)),
-  );
+  await cp(path.join(checkoutRoot, 'tsconfig.json'), path.join(repositoryRoot, 'tsconfig.json'));
+  const extensionRoot = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions');
+  await mkdir(path.dirname(extensionRoot), { recursive: true });
+  const sourceExtensionRoot = path.join(checkoutRoot, 'runtimes', 'pi', 'extensions');
+  await cp(sourceExtensionRoot, extensionRoot, {
+    recursive: true,
+    filter: (name) => !['dist', 'node_modules'].includes(path.basename(name)),
+  });
+  for (const dependency of ['croner', 'nanoid']) {
+    await cp(
+      path.join(sourceExtensionRoot, 'node_modules', dependency),
+      path.join(extensionRoot, 'node_modules', dependency),
+      { recursive: true, dereference: true },
+    );
+  }
+  const release = (await import(
+    `${pathToFileURL(path.join(extensionRoot, 'scripts', 'release.mjs')).href}?simulation=${Date.now()}`
+  )) as { buildRelease: () => Promise<void> };
+  await release.buildRelease();
   for (const runtime of ['claude', 'pi'] as const) {
     for (const role of roles(runtime)) {
       const file = path.join(repositoryRoot, runtime, `${role}.json`);
@@ -836,4 +838,4 @@ it('runs clean and existing-machine production-backed simulations without live w
     successfulSimulations: 2,
     rollbackSimulations: mutatingOperations.length,
   });
-}, 120_000);
+}, 300_000);

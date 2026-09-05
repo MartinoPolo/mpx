@@ -39,6 +39,49 @@ function execute(entry, localAppData, options = {}) {
 }
 
 describe('generated CLI bundle validation', () => {
+  it('builds the canonical Pi extension artifact before walking CLI release sources', async () => {
+    const workspace = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+
+    expect(workspace.scripts['bundle:cli']).toBe(
+      'pnpm --filter @mpx/pi-extensions run build:release && pnpm --filter @mpx/pi-extensions run verify:release && node scripts/bundle-cli.mjs',
+    );
+    expect(workspace.scripts['bundle:generate']).toBe('pnpm run bundle:cli');
+  });
+
+  it('executes the production bundle pipeline and leaves a verified artifact and CLI output', async () => {
+    const command = process.platform === 'win32' ? process.env.ComSpec : 'corepack';
+    const args =
+      process.platform === 'win32'
+        ? ['/d', '/s', '/c', 'corepack pnpm run bundle:cli']
+        : ['pnpm', 'run', 'bundle:cli'];
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn(command, args, {
+        cwd: root,
+        env: { ...process.env, pnpm_config_verify_deps_before_run: 'false' },
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8').on('data', (value) => (stdout += value));
+      child.stderr.setEncoding('utf8').on('data', (value) => (stderr += value));
+      child.once('error', reject);
+      child.once('close', (code) => resolve({ code, stdout, stderr }));
+    });
+
+    expect(result).toMatchObject({ code: 0 });
+    const metadata = JSON.parse(
+      await readFile(
+        path.join(root, 'runtimes', 'pi', 'extensions', 'dist', 'package', 'build-metadata.json'),
+        'utf8',
+      ),
+    );
+    expect(metadata.sourceTreeDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(await readFile(path.join(root, 'bin', 'mpx.mjs'), 'utf8')).toMatch(
+      /canonical-source-sha256:[a-f0-9]{64}/u,
+    );
+  }, 90_000);
+
   it('builds deterministic bytes without mutating tracked bundles or evidence', async () => {
     const tracked = ['bin/mpx.mjs', 'bin/claude-gateway.js', 'evidence/executor-evidence.ts'];
     const before = await Promise.all(tracked.map((name) => readFile(path.join(root, name))));

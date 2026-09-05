@@ -36,7 +36,10 @@ describe('CLI build preparation', () => {
 
     expect(workspace.devDependencies.esbuild).toMatch(/^\d+\.\d+\.\d+$/u);
     expect(cli.scripts.build).toBe('tsc -p tsconfig.json');
-    expect(workspace.scripts['bundle:generate']).toBe('node scripts/bundle-cli.mjs');
+    expect(workspace.scripts['bundle:cli']).toBe(
+      'pnpm --filter @mpx/pi-extensions run build:release && pnpm --filter @mpx/pi-extensions run verify:release && node scripts/bundle-cli.mjs',
+    );
+    expect(workspace.scripts['bundle:generate']).toBe('pnpm run bundle:cli');
     expect(workspace.scripts['validate:generated']).toBe('node scripts/validate-generated.mjs');
   });
 

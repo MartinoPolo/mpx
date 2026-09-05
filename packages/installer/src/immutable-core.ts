@@ -14,6 +14,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { MpxError, parseStrictJson } from '@mpx/core';
 import {
   parseRuntimeRegistrationMatrixV1,
@@ -965,6 +966,48 @@ export interface CurrentReleaseOptions {
   readonly repositoryRoot: string;
   readonly assetPaths?: readonly string[];
 }
+
+const PI_EXTENSION_ARTIFACT = 'runtimes/pi/extensions/dist/package';
+const PI_EXTENSION_RELEASE_SCRIPT = 'runtimes/pi/extensions/scripts/release.mjs';
+
+function canonicalPiArtifactSelection(assets: readonly string[]): 'included' | 'excluded' {
+  const canonicalArtifact = PI_EXTENSION_ARTIFACT.toLowerCase();
+  let included = false;
+  for (const asset of assets) {
+    const comparableAsset = asset.toLowerCase();
+    if (
+      canonicalArtifact.startsWith(`${comparableAsset}/`) ||
+      comparableAsset === canonicalArtifact
+    ) {
+      included = true;
+    } else if (comparableAsset.startsWith(`${canonicalArtifact}/`)) {
+      fail(
+        'INSTALL_RELEASE_ARTIFACT_INVALID',
+        'Custom asset paths must include the complete canonical Pi extension artifact.',
+      );
+    }
+  }
+  return included ? 'included' : 'excluded';
+}
+
+async function verifyPiExtensionArtifact(repositoryRoot: string): Promise<void> {
+  try {
+    const script = path.join(repositoryRoot, ...PI_EXTENSION_RELEASE_SCRIPT.split('/'));
+    const release = (await import(pathToFileURL(script).href)) as {
+      verifyRelease?: () => Promise<void>;
+    };
+    if (typeof release.verifyRelease !== 'function') {
+      throw new Error('Canonical release verifier is unavailable');
+    }
+    await release.verifyRelease();
+  } catch {
+    fail(
+      'INSTALL_RELEASE_ARTIFACT_INVALID',
+      'Canonical Pi extension release artifact failed verification.',
+    );
+  }
+}
+
 async function withCurrentReleaseSource<T>(
   options: CurrentReleaseOptions,
   action: (sourceDirectory: string) => Promise<T>,
@@ -978,6 +1021,9 @@ async function withCurrentReleaseSource<T>(
     'LICENSE',
     'LICENSE.md',
   ];
+  if (canonicalPiArtifactSelection(assets) === 'included') {
+    await verifyPiExtensionArtifact(options.repositoryRoot);
+  }
   const staging = await mkdtemp(path.join(tmpdir(), 'mpx-current-release-'));
   return withInstallerCleanup(
     async () => {
