@@ -5,10 +5,11 @@
  * matching Claude Code's task output file format.
  */
 
-import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent';
+import { ensureSafeDirectory } from './safe-directory.js';
 
 /**
  * Project/global default for writing a subagent's `.output` transcript; a custom
@@ -46,7 +47,7 @@ export function encodeCwd(cwd: string): string {
 export function createOutputFilePath(cwd: string, agentId: string, sessionId: string): string {
   const encoded = encodeCwd(cwd);
   const root = join(tmpdir(), `pi-subagents-${process.getuid?.() ?? 0}`);
-  mkdirSync(root, { recursive: true, mode: 0o700 });
+  ensureSafeDirectory(root);
   // chmod is a no-op on Windows and throws on some Windows filesystems.
   // On Unix we still want to enforce 0o700 past umask, so only swallow on Windows.
   try {
@@ -55,7 +56,7 @@ export function createOutputFilePath(cwd: string, agentId: string, sessionId: st
     if (process.platform !== 'win32') throw err;
   }
   const dir = join(root, encoded, sessionId, 'tasks');
-  mkdirSync(dir, { recursive: true });
+  ensureSafeDirectory(dir);
   return join(dir, `${agentId}.output`);
 }
 
@@ -66,6 +67,7 @@ export function writeInitialEntry(
   prompt: string,
   cwd: string,
 ): void {
+  ensureSafeDirectory(dirname(path));
   const entry = {
     isSidechain: true,
     agentId,
@@ -91,6 +93,12 @@ export function streamToOutputFile(
 
   const flush = () => {
     const messages = session.messages;
+    if (writtenCount >= messages.length) return;
+    try {
+      ensureSafeDirectory(dirname(path));
+    } catch {
+      return;
+    }
     while (writtenCount < messages.length) {
       const msg = messages[writtenCount];
       const entry = {

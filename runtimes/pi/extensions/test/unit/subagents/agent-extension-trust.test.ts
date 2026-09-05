@@ -4,19 +4,19 @@ import { test, vi } from 'vitest';
 
 import {
   loadAgentExtensionResources,
+  resolveMemoryScopePolicy,
   resolveSessionPersistencePolicy,
 } from '../../../subagents/agent-runner.js';
 
-test('forces noExtensions before discovery for default-true untrusted project config', async () => {
+test('forces noExtensions before discovery for an untrusted built-in default-true config', async () => {
   const projectDiscoveryOverride = vi.fn((extensions) => extensions);
   const loader = vi.fn(async (policy) => policy);
 
   const policy = await loadAgentExtensionResources(
-    'project',
     undefined,
     false,
     projectDiscoveryOverride,
-    () => false,
+    false,
     loader,
   );
 
@@ -29,22 +29,43 @@ test('forces noExtensions before discovery for default-true untrusted project co
   assert.equal(projectDiscoveryOverride.mock.calls.length, 0);
 });
 
-test('strips untrusted project extension paths and overrides', async () => {
+test('strips every untrusted agent extension path and override', async () => {
   const override = vi.fn((extensions) => extensions);
   const loader = vi.fn(async (policy) => policy);
 
-  const policy = await loadAgentExtensionResources(
-    'project',
-    ['/project/.pi/extensions/untrusted.ts'],
-    false,
-    override,
-    () => false,
-    loader,
-  );
+  for (const source of ['default', 'global', 'project']) {
+    const policy = await loadAgentExtensionResources(
+      [`/${source}/extension.ts`],
+      false,
+      override,
+      false,
+      loader,
+    );
 
-  assert.equal(policy.noExtensions, true);
-  assert.equal(policy.additionalExtensionPaths, undefined);
-  assert.equal(policy.extensionsOverride, undefined);
+    assert.equal(policy.noExtensions, true);
+    assert.equal(policy.additionalExtensionPaths, undefined);
+    assert.equal(policy.extensionsOverride, undefined);
+  }
+});
+
+test('applies the untrusted memory scope policy matrix', () => {
+  for (const scope of ['user', 'project', 'local'] as const) {
+    assert.equal(resolveMemoryScopePolicy('project', false, scope), undefined);
+  }
+
+  for (const source of ['default', 'global', undefined] as const) {
+    assert.equal(resolveMemoryScopePolicy(source, false, 'user'), 'user');
+    assert.equal(resolveMemoryScopePolicy(source, false, 'project'), undefined);
+    assert.equal(resolveMemoryScopePolicy(source, false, 'local'), undefined);
+  }
+});
+
+test('preserves configured memory when the project is trusted', () => {
+  for (const source of ['default', 'global', 'project', undefined] as const) {
+    for (const scope of ['user', 'project', 'local'] as const) {
+      assert.equal(resolveMemoryScopePolicy(source, true, scope), scope);
+    }
+  }
 });
 
 test('disables native persistence paths from untrusted project agents', () => {
@@ -65,31 +86,14 @@ test('retains persistence for trusted projects and global agents', () => {
   });
 });
 
-test('preserves trusted project and global extension loading', async () => {
+test('preserves extension loading when the project is trusted', async () => {
   const paths = ['/project/.pi/extensions/trusted.ts'];
   const override = vi.fn((extensions) => extensions);
   const reload = vi.fn(async (policy) => policy);
 
-  const trustedPolicy = await loadAgentExtensionResources(
-    'project',
-    paths,
-    false,
-    override,
-    () => true,
-    reload,
-  );
-  const globalPolicy = await loadAgentExtensionResources(
-    'global',
-    paths,
-    false,
-    override,
-    () => false,
-    reload,
-  );
+  const policy = await loadAgentExtensionResources(paths, false, override, true, reload);
 
-  for (const policy of [trustedPolicy, globalPolicy]) {
-    assert.equal(policy.noExtensions, false);
-    assert.deepEqual(policy.additionalExtensionPaths, paths);
-    assert.equal(policy.extensionsOverride, override);
-  }
+  assert.equal(policy.noExtensions, false);
+  assert.deepEqual(policy.additionalExtensionPaths, paths);
+  assert.equal(policy.extensionsOverride, override);
 });

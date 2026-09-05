@@ -38,7 +38,7 @@ import {
 } from './nested-tools.js';
 import { buildAgentPrompt, type PromptExtras } from './prompts.js';
 import { preloadSkills } from './skill-loader.js';
-import type { SubagentType, ThinkingLevel } from './types.js';
+import type { MemoryScope, SubagentType, ThinkingLevel } from './types.js';
 
 /**
  * Tool names registered by THIS extension. Single source of truth so the
@@ -535,14 +535,13 @@ interface AgentExtensionLoadPolicy {
 }
 
 export async function loadAgentExtensionResources<T>(
-  source: string | undefined,
   paths: string[] | undefined,
   noExtensions: boolean,
   extensionsOverride: ((base: LoadExtensionsResult) => LoadExtensionsResult) | undefined,
-  isProjectTrusted: () => boolean,
+  projectTrusted: boolean,
   reload: (policy: AgentExtensionLoadPolicy) => Promise<T>,
 ): Promise<T> {
-  if (source === 'project' && !isProjectTrusted()) {
+  if (!projectTrusted) {
     return reload({
       noExtensions: true,
       additionalExtensionPaths: undefined,
@@ -555,6 +554,16 @@ export async function loadAgentExtensionResources<T>(
     additionalExtensionPaths: paths?.length ? paths : undefined,
     extensionsOverride,
   });
+}
+
+export function resolveMemoryScopePolicy(
+  source: string | undefined,
+  projectTrusted: boolean,
+  configuredScope: MemoryScope | undefined,
+): MemoryScope | undefined {
+  if (!configuredScope || projectTrusted) return configuredScope;
+  if (source === 'project') return undefined;
+  return configuredScope === 'user' ? 'user' : undefined;
 }
 
 export async function runAgent(
@@ -571,6 +580,7 @@ export async function runAgent(
   // Filesystem work happens in effectiveCwd; config discovery in configCwd.
   // They differ only for SpawnOptions.cwd spawns (config stays with the parent).
   const configCwd = options.configCwd ?? effectiveCwd;
+  const projectTrusted = ctx.isProjectTrusted();
 
   const env = await detectEnv(options.pi, effectiveCwd);
 
@@ -599,7 +609,19 @@ export async function runAgent(
 
   // Persistent memory: detect write capability and branch accordingly.
   // Account for disallowedTools — a tool in the base set but on the denylist is not truly available.
-  if (agentConfig?.memory) {
+  const configuredMemoryScope = agentConfig?.memory;
+  const memoryScope = resolveMemoryScopePolicy(
+    agentConfig?.source,
+    projectTrusted,
+    configuredMemoryScope,
+  );
+  if (configuredMemoryScope && !memoryScope) {
+    options.onToolActivity?.({
+      type: 'end',
+      toolName: 'memory-warning:configured memory disabled for untrusted project',
+    });
+  }
+  if (agentConfig && memoryScope) {
     const existingNames = new Set(toolNames);
     const denied = agentConfig.disallowedTools ? new Set(agentConfig.disallowedTools) : undefined;
     const effectivelyHas = (name: string) => existingNames.has(name) && !denied?.has(name);
@@ -609,16 +631,12 @@ export async function runAgent(
       // Read-write memory: add any missing memory tool names (read/write/edit)
       const extraNames = getMemoryToolNames(existingNames);
       if (extraNames.length > 0) toolNames = [...toolNames, ...extraNames];
-      extras.memoryBlock = buildMemoryBlock(agentConfig.name, agentConfig.memory, configCwd);
+      extras.memoryBlock = buildMemoryBlock(agentConfig.name, memoryScope, configCwd);
     } else {
       // Read-only memory: only add read tool name, use read-only prompt
       const extraNames = getReadOnlyMemoryToolNames(existingNames);
       if (extraNames.length > 0) toolNames = [...toolNames, ...extraNames];
-      extras.memoryBlock = buildReadOnlyMemoryBlock(
-        agentConfig.name,
-        agentConfig.memory,
-        configCwd,
-      );
+      extras.memoryBlock = buildReadOnlyMemoryBlock(agentConfig.name, memoryScope, configCwd);
     }
   }
 
@@ -667,8 +685,7 @@ export async function runAgent(
     options.isolated ? [] : (agentConfig?.extSelectors ?? []),
   );
   const configuredNoExtensions = extensions === false;
-  const untrustedProjectAgent = agentConfig?.source === 'project' && !ctx.isProjectTrusted();
-  const noExtensions = configuredNoExtensions || untrustedProjectAgent;
+  const noExtensions = configuredNoExtensions || !projectTrusted;
 
   const extensionsSpec = Array.isArray(extensions)
     ? parseExtensionsSpec(extensions, configCwd)
@@ -707,11 +724,10 @@ export async function runAgent(
         };
 
   const loader = await loadAgentExtensionResources(
-    agentConfig?.source,
     extensionsSpec?.paths,
     noExtensions,
     extensionsOverride,
-    () => !untrustedProjectAgent,
+    projectTrusted,
     async (extensionPolicy) => {
       const resourceLoader = new DefaultResourceLoader({
         cwd: configCwd,
@@ -899,7 +915,7 @@ export async function runAgent(
   const settingsManager = SettingsManager.create(configCwd, agentDir);
   const persistence = resolveSessionPersistencePolicy(
     agentConfig?.source,
-    ctx.isProjectTrusted(),
+    projectTrusted,
     agentConfig?.persistSession,
     agentConfig?.sessionDir,
   );

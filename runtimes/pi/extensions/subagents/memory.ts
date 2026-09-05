@@ -11,10 +11,11 @@
  * so existing memories aren't orphaned.
  */
 
-import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import { ensureSafeDirectory } from './safe-directory.js';
 import type { MemoryScope } from './types.js';
 
 /** Maximum lines to read from MEMORY.md */
@@ -81,20 +82,9 @@ export function resolveMemoryDir(agentName: string, scope: MemoryScope, cwd: str
   }
 }
 
-/**
- * Ensure the memory directory exists, creating it if needed.
- * Refuses to create directories if any component in the path is a symlink
- * to prevent symlink-based directory traversal attacks.
- */
+/** Ensure the memory directory exists without traversing linked components. */
 export function ensureMemoryDir(memoryDir: string): void {
-  // If the directory already exists, verify it's not a symlink
-  if (existsSync(memoryDir)) {
-    if (isSymlink(memoryDir)) {
-      throw new Error(`Refusing to use symlinked memory directory: ${memoryDir}`);
-    }
-    return;
-  }
-  mkdirSync(memoryDir, { recursive: true });
+  ensureSafeDirectory(memoryDir);
 }
 
 /**
