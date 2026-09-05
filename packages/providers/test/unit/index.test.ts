@@ -1,5 +1,5 @@
 import { errorEnvelope } from '@mpx/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   BUILTIN_PROVIDERS,
   CI_CAPABILITIES,
@@ -10,7 +10,6 @@ import {
   ProviderRegistry,
   REVIEW_CAPABILITIES,
   providerRegistry,
-  type ProviderDescriptor,
 } from '../../src/index.js';
 
 describe('provider contracts', () => {
@@ -100,51 +99,28 @@ describe('provider contracts', () => {
     expect(providerRegistry.get('gitlab', 'issues').capabilities).not.toContain('issue.move');
     expect(providerRegistry.get('kanbanflow', 'issues').capabilities).toContain('issue.move');
     expect(providerRegistry.get('local', 'issues').capabilities).toEqual([
-      ...ISSUE_CAPABILITIES,
+      ...ISSUE_CAPABILITIES.filter((capability) => capability !== 'issue.move'),
       ...LOCAL_ISSUE_CAPABILITIES,
     ]);
   });
 });
 
-describe('registry validation', () => {
-  const github = BUILTIN_PROVIDERS[0]!;
-  it('rejects duplicate IDs', () => {
-    expect(() => new ProviderRegistry([github, github])).toThrowError(
-      expect.objectContaining({ code: 'PROVIDER_DUPLICATE' }),
-    );
-  });
-  it('rejects caller-supplied provider extensions', () => {
-    const extension = {
-      id: 'trusted-issues',
-      roles: ['issues'],
-      capabilities: ['issue.list'],
-      backend: 'trusted-sdk',
-      schema: { type: 'object', properties: {}, additionalProperties: false },
-    } as const;
-    expect(() => new ProviderRegistry([...BUILTIN_PROVIDERS, extension])).toThrowError(
-      expect.objectContaining({ code: 'UNTRUSTED_PROVIDER_INJECTION' }),
+describe('fixed registry', () => {
+  it('ignores runtime descriptor arguments and always exposes canonical built-ins', () => {
+    expectTypeOf<ConstructorParameters<typeof ProviderRegistry>>().toEqualTypeOf<[]>();
+    const RuntimeRegistry = ProviderRegistry as unknown as new (
+      ...arguments_: unknown[]
+    ) => ProviderRegistry;
+    const altered = { ...BUILTIN_PROVIDERS[0]!, backend: 'filesystem' };
+    const registry = new RuntimeRegistry([altered], [{ ...altered, id: 'injected' }]);
+
+    expect(registry.list()).toEqual(providerRegistry.list());
+    expect(registry.get('github').backend).toBe('gh');
+    expect(() => registry.get('injected')).toThrowError(
+      expect.objectContaining({ code: 'PROVIDER_NOT_FOUND' }),
     );
   });
 
-  it('rejects executable/backend injection', () => {
-    expect(() => new ProviderRegistry([{ ...github, backend: 'filesystem' }])).toThrowError(
-      expect.objectContaining({ code: 'UNTRUSTED_PROVIDER_INJECTION' }),
-    );
-  });
-  it('rejects unknown capabilities and invalid role combinations', () => {
-    const unknown = { ...github, capabilities: ['issue.delete'] } as unknown as ProviderDescriptor;
-    expect(() => new ProviderRegistry([unknown])).toThrowError(
-      expect.objectContaining({ code: 'CAPABILITY_UNKNOWN' }),
-    );
-    const mismatch = {
-      ...github,
-      roles: ['repository'],
-      capabilities: ['issue.list'],
-    } as ProviderDescriptor;
-    expect(() => new ProviderRegistry([mismatch])).toThrowError(
-      expect.objectContaining({ code: 'PROVIDER_INVALID' }),
-    );
-  });
   it('fails capability checks structurally', () => {
     expect(() => providerRegistry.assertCapability('generic', 'ci.logs')).toThrowError(
       expect.objectContaining({

@@ -27,7 +27,6 @@ defineIssueAdapterConformance('local issue adapter', () => {
       local: {
         root,
         projectId: 'test/local',
-        promotion: { promote: async (issue) => issue },
       },
     },
   )[0]!;

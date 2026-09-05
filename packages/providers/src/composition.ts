@@ -3,11 +3,7 @@ import type { ProviderProcessExecutor } from './process.js';
 import { createGitHubAdapters, type GitHubAdapterOptions } from './adapters/github.js';
 import { createGitLabAdapters, type GitLabAdapterOptions } from './adapters/gitlab.js';
 import { createKanbanFlowAdapter, type KanbanFlowAdapterOptions } from './adapters/kanbanflow.js';
-import {
-  createLocalIssueAdapter,
-  type BoardPromotionAdapter,
-  type LocalIssue,
-} from './adapters/local.js';
+import { createLocalIssueAdapter, type LocalIssue } from './adapters/local.js';
 
 export type BuiltinProviderId = 'github' | 'gitlab' | 'kanbanflow' | 'local';
 
@@ -21,7 +17,6 @@ export interface BuiltinProviderAdapterOptions {
   readonly local?: Readonly<{
     root: string;
     staleLockMilliseconds?: number;
-    promotion?: BoardPromotionAdapter;
     projectId?: string;
     onChanged?: (issue: LocalIssue) => Promise<void>;
   }>;

@@ -21,9 +21,6 @@ export interface LocalDependencies {
 export interface LocalIssue extends IssueV1 {
   readonly providerData: { readonly local: Readonly<Record<string, JsonValue>> };
 }
-export interface BoardPromotionAdapter {
-  promote(issue: LocalIssue, destination: string): Promise<LocalIssue | void>;
-}
 export interface LocalIssueStoreOptions {
   /** Lease duration retained under the historical option name for compatibility. */
   staleLockMilliseconds?: number;
@@ -42,7 +39,6 @@ export interface LocalIssueStoreOptions {
   /** Testable Windows-contention boundaries for quarantined release cleanup. */
   beforeLockQuarantineReadAttempt?: (attempt: number) => void | Promise<void>;
   beforeLockQuarantineRemoveAttempt?: (attempt: number) => void | Promise<void>;
-  promotion?: BoardPromotionAdapter;
   projectId?: string;
   onChanged?: (issue: LocalIssue) => Promise<void>;
 }
@@ -1337,29 +1333,19 @@ export class LocalIssueStore {
       };
     });
   }
-  async promote(id: string, destination: string) {
-    if (!this.options.promotion) {
-      throw new ProviderError(
-        'CAPABILITY_UNSUPPORTED',
-        'Local issues have no configured board promotion adapter.',
-        { capability: 'issue.move' },
-      );
-    }
-    const issue = await this.view(id),
-      result = await this.options.promotion.promote(issue, destination);
-    return result ?? issue;
-  }
 }
 
 export function createLocalIssueAdapter(options: {
   root: string;
   staleLockMilliseconds?: number;
-  promotion?: BoardPromotionAdapter;
   projectId?: string;
   onChanged?: (issue: LocalIssue) => Promise<void>;
 }): ProviderAdapter {
   const store = new LocalIssueStore(options.root, options),
-    capabilities = [...ISSUE_CAPABILITIES, ...LOCAL_ISSUE_CAPABILITIES];
+    capabilities = [
+      ...ISSUE_CAPABILITIES.filter((capability) => capability !== 'issue.move'),
+      ...LOCAL_ISSUE_CAPABILITIES,
+    ];
   return {
     providerId: 'local',
     role: 'issues',
@@ -1397,8 +1383,6 @@ export function createLocalIssueAdapter(options: {
             { state: 'finished', localState: 'done' },
             typeof input.revision === 'string' ? input.revision : undefined,
           );
-        case 'issue.move':
-          return store.promote(String(input.id), String(input.destination));
         case 'issue.dependency.add':
           return store.setDependency(
             String(input.id),

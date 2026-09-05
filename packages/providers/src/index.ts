@@ -13,7 +13,6 @@ export {
   rebuildObsidianSessionViews,
 } from './adapters/local.js';
 export type {
-  BoardPromotionAdapter,
   LocalDependencies,
   LocalIssue,
   LocalIssueCreate,

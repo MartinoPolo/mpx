@@ -584,21 +584,26 @@ describe('local Markdown issues', () => {
     });
   });
 
-  it('exposes current provider contracts and reports unsupported promotion structurally', async () => {
-    const adapter = createLocalIssueAdapter({ root: await root() });
+  it('rejects issue.move structurally without advertising or mutating it', async () => {
+    const issueRoot = await root();
+    const adapter = createLocalIssueAdapter({ root: issueRoot });
     const created = await adapter.invoke({
       providerId: 'local',
       capability: 'issue.create',
       input: { title: 'T', body: 'B' } as never,
     });
-    expect(created).toMatchObject({ id: '1', state: 'open' });
+    expect(adapter.capabilities).not.toContain('issue.move');
+    const before = await readFile(path.join(issueRoot, '000001-t.md'), 'utf8');
+
     await expect(
       adapter.invoke({
         providerId: 'local',
         capability: 'issue.move',
         input: { id: '1', destination: 'board' } as never,
       }),
-    ).rejects.toMatchObject({ code: 'CAPABILITY_UNSUPPORTED' });
+    ).rejects.toMatchObject({ code: 'CAPABILITY_UNSUPPORTED', capability: 'issue.move' });
+    expect(await readFile(path.join(issueRoot, '000001-t.md'), 'utf8')).toBe(before);
+    expect(created).toMatchObject({ id: '1', state: 'open' });
   });
 
   it('generates privacy-safe session projections with validated resume links', async () => {

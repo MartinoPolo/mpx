@@ -5,7 +5,6 @@ import {
   ProviderService,
   type IssueV1,
   type ProviderAdapter,
-  type ProviderDescriptor,
 } from '../../src/index.js';
 
 const registry = new ProviderRegistry();
@@ -45,13 +44,6 @@ describe('adapter registry', () => {
   ] as const)('rejects %s adapters structurally', (_name, adapters, code) => {
     expect(() => new ProviderAdapterRegistry(new ProviderRegistry(), adapters)).toThrowError(
       expect.objectContaining({ code }),
-    );
-  });
-
-  it('rejects adapters whose declared provider identity is not trusted', () => {
-    const injected = { ...github, id: 'injected' } as ProviderDescriptor;
-    expect(() => new ProviderRegistry([injected])).toThrowError(
-      expect.objectContaining({ code: 'UNTRUSTED_PROVIDER_INJECTION' }),
     );
   });
 });

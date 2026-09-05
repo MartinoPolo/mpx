@@ -47,7 +47,7 @@ mpx issue dependency remove --id 12 --dependency-id 7 [--revision HASH]
 unfinished leaf prerequisites; cycles are reported with `cycle: true` and an empty
 frontier.
 
-## Optional projections and promotion
+## Optional projections
 
 `rebuildObsidianIssueViews(store, config)` and
 `rebuildObsidianSessionViews(sessions, config)` are explicit rebuild APIs. They only
@@ -58,6 +58,6 @@ repeatedly is idempotent.
 The `views` block above is manual configuration for callers that opt into this API; no
 vault is read or written merely because the block exists.
 
-A caller may inject `BoardPromotionAdapter` into `createLocalIssueAdapter`. Without one,
-`issue move` returns structured `CAPABILITY_UNSUPPORTED`; there is no board SDK or plugin
-dependency in the local provider.
+The fixed local adapter does not advertise `issue.move`; invoking it returns structured
+`CAPABILITY_UNSUPPORTED` before any local issue mutation. Board movement is available only
+through a fixed built-in provider that declares it, such as KanbanFlow.

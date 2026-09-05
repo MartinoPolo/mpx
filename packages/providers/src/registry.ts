@@ -42,7 +42,6 @@ export const capabilitiesForProviderRole = (
 export type TrustedBackendId =
   'gh' | 'glab' | 'git-ssh' | 'kf' | 'filesystem' | 'none' | (string & {});
 export type ProviderErrorCode =
-  | 'PROVIDER_DUPLICATE'
   | 'PROVIDER_INVALID'
   | 'PROVIDER_NOT_FOUND'
   | 'PROVIDER_ROUTE_REQUIRED'
@@ -55,8 +54,7 @@ export type ProviderErrorCode =
   | 'COMMAND_FAILURE'
   | 'INVALID_RESPONSE'
   | 'MUTATION_OUTCOME_UNKNOWN'
-  | 'WORKFLOW_POLICY_DENIED'
-  | 'UNTRUSTED_PROVIDER_INJECTION';
+  | 'WORKFLOW_POLICY_DENIED';
 
 export class ProviderError extends MpxError {
   constructor(
@@ -132,9 +130,10 @@ const freezeDescriptor = (descriptor: ProviderDescriptor): ProviderDescriptor =>
     schema: Object.freeze(descriptor.schema),
   });
 
-const localIssue = [...ISSUE_CAPABILITIES, ...LOCAL_ISSUE_CAPABILITIES];
 const allIssue = [...ISSUE_CAPABILITIES];
-const hostedIssue = allIssue.filter((capability) => capability !== 'issue.move');
+const withoutMove = allIssue.filter((capability) => capability !== 'issue.move');
+const localIssue = [...withoutMove, ...LOCAL_ISSUE_CAPABILITIES];
+const hostedIssue = withoutMove;
 const repoCaps = [...REVIEW_CAPABILITIES, ...CI_CAPABILITIES];
 export const BUILTIN_PROVIDERS: readonly ProviderDescriptor[] = Object.freeze([
   freezeDescriptor({
@@ -188,27 +187,11 @@ export const BUILTIN_PROVIDERS: readonly ProviderDescriptor[] = Object.freeze([
   }),
 ]);
 
-const TRUSTED_PAIRS = new Set(BUILTIN_PROVIDERS.map(({ id, backend }) => `${id}:${backend}`));
-
 export class ProviderRegistry {
   readonly #providers: ReadonlyMap<string, ProviderDescriptor>;
 
-  constructor(descriptors: readonly ProviderDescriptor[] = BUILTIN_PROVIDERS) {
-    const providers = new Map<string, ProviderDescriptor>();
-    for (const input of descriptors) {
-      if (providers.has(input.id)) {
-        throw new ProviderError('PROVIDER_DUPLICATE', `Duplicate provider ID: ${input.id}`);
-      }
-      if (!TRUSTED_PAIRS.has(`${input.id}:${input.backend}`)) {
-        throw new ProviderError(
-          'UNTRUSTED_PROVIDER_INJECTION',
-          `Provider/backend is not trusted: ${input.id}/${input.backend}`,
-        );
-      }
-      validateDescriptor(input);
-      providers.set(input.id, freezeDescriptor(input));
-    }
-    this.#providers = providers;
+  constructor() {
+    this.#providers = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.id, provider]));
     Object.freeze(this);
   }
 
@@ -246,40 +229,6 @@ export class ProviderRegistry {
         'CAPABILITY_UNSUPPORTED',
         `Provider '${id}' does not support ${capability}.`,
         { capability, remediation: 'Select a provider that declares this capability.' },
-      );
-    }
-  }
-}
-
-function validateDescriptor(descriptor: ProviderDescriptor): void {
-  if (
-    !/^[a-z][a-z0-9-]{0,62}$/u.test(descriptor.id) ||
-    !/^[a-z][a-z0-9-]{0,62}$/u.test(descriptor.backend) ||
-    descriptor.roles.length === 0 ||
-    new Set(descriptor.roles).size !== descriptor.roles.length
-  ) {
-    throw new ProviderError('PROVIDER_INVALID', `Invalid roles for provider '${descriptor.id}'.`);
-  }
-  if (descriptor.schema.type !== 'object' || descriptor.schema.additionalProperties) {
-    throw new ProviderError(
-      'PROVIDER_INVALID',
-      `Provider '${descriptor.id}' must use a strict object schema.`,
-    );
-  }
-  for (const capability of descriptor.capabilities as readonly string[]) {
-    if (!ALL_CAPABILITIES.has(capability)) {
-      throw new ProviderError('CAPABILITY_UNKNOWN', `Unknown capability: ${capability}`, {
-        capability,
-      });
-    }
-    const role = capabilitiesForProviderRole([capability as ProviderCapability], 'issues').length
-      ? 'issues'
-      : 'repository';
-    if (!descriptor.roles.includes(role)) {
-      throw new ProviderError(
-        'PROVIDER_INVALID',
-        `Capability '${capability}' is invalid for provider roles.`,
-        { capability },
       );
     }
   }
