@@ -53,6 +53,7 @@ export interface WorkspaceSummaryV1 {
 }
 export interface WorkspaceListResultV1 {
   readonly schemaVersion: 1;
+  readonly kind: 'workspace-list';
   readonly workspaces: readonly WorkspaceSummaryV1[];
   readonly diagnostics: readonly WorkspaceDiagnosticV1[];
 }
@@ -69,6 +70,7 @@ export interface WorkspaceServiceV1 {
 }
 export interface WorkspaceShowResultV1 extends WorkspaceSummaryV1 {
   readonly schemaVersion: 1;
+  readonly kind: 'workspace-show';
   readonly projectId: string;
   readonly portResolution: 'valid' | 'missing' | 'invalid' | 'stale';
   readonly services: readonly WorkspaceServiceV1[];
@@ -76,12 +78,14 @@ export interface WorkspaceShowResultV1 extends WorkspaceSummaryV1 {
 }
 export interface WorkspaceMutationResultV1 {
   readonly schemaVersion: 1;
+  readonly kind: 'workspace-mutation';
   readonly operation: 'create' | 'remove';
   readonly status: string;
   readonly path: string | null;
 }
 export interface WorkspaceServiceResultV1 {
   readonly schemaVersion: 1;
+  readonly kind: 'workspace-service';
   readonly path: string;
   readonly service: Pick<WorkspaceServiceV1, 'id' | 'managed' | 'state' | 'pid'>;
 }
@@ -115,6 +119,13 @@ export interface WorkspaceApplicationDependencies {
   };
   readonly ports: {
     list(): Promise<readonly LeaseView[]>;
+    reconcile?(request: { cwd: string; orphanPolicy?: 'release' | 'report' }): Promise<unknown>;
+    ensure?(request: {
+      cwd: string;
+      projectRoot: string;
+      config: ProjectConfig;
+      configHash: string;
+    }): Promise<unknown>;
     resolve(request: {
       cwd: string;
       projectRoot: string;
@@ -135,6 +146,11 @@ export interface WorkspaceApplicationDependencies {
   readonly services: {
     forWorkspace(root: string): Promise<WorkspaceDevService> | WorkspaceDevService;
   };
+  readonly executor: ExecutorKind;
+  readonly resolvePackageInvocation?: (
+    manager: 'auto' | 'pnpm' | 'yarn' | 'npm' | 'bun',
+    cwd: string,
+  ) => Promise<{ readonly executable: string; readonly prefixArguments: readonly string[] }>;
 }
 
 const secret =
@@ -148,6 +164,14 @@ function diagnostic(error: unknown): WorkspaceDiagnosticV1 {
       .replace(/[\r\n\t]+/gu, ' ')
       .slice(0, 256),
   };
+}
+function assertSchema(request: { readonly schemaVersion: number }): void {
+  if (request.schemaVersion !== 1) {
+    throw new MpxError({
+      code: 'SCHEMA_VERSION_UNSUPPORTED',
+      message: 'Only workspace application schema version 1 is supported.',
+    });
+  }
 }
 function blocked(error: unknown): never {
   throw new MpxError({
@@ -171,16 +195,52 @@ function publicSnapshot(
 export class WorkspaceApplicationService {
   constructor(private readonly dependencies: WorkspaceApplicationDependencies) {}
 
-  private async recover(cwd: string, tolerate: boolean): Promise<readonly WorkspaceDiagnosticV1[]> {
-    try {
-      await this.dependencies.worktrees.reconcile({ cwd });
-      return [];
-    } catch (error) {
-      if (!tolerate) {
-        blocked(error);
+  private async recover(
+    cwd: string,
+    tolerate: boolean,
+    resolvePorts = true,
+    statusPass = true,
+  ): Promise<readonly WorkspaceDiagnosticV1[]> {
+    const diagnostics: WorkspaceDiagnosticV1[] = [];
+    const attempt = async (operation: () => Promise<unknown>) => {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!tolerate) {
+          blocked(error);
+        }
+        diagnostics.push(diagnostic(error));
+        return undefined;
       }
-      return [diagnostic(error)];
+    };
+    await attempt(() => this.dependencies.worktrees.reconcile({ cwd }));
+    if (this.dependencies.ports.reconcile) {
+      await attempt(() => this.dependencies.ports.reconcile!({ cwd, orphanPolicy: 'report' }));
     }
+    const found = await attempt(() => this.dependencies.projects.discover(cwd));
+    if (found && typeof found === 'object' && 'root' in found && 'config' in found) {
+      const project = found as { root: string; config: ProjectConfig };
+      const configHash = sha256Canonical(project.config as unknown as JsonValue);
+      await attempt(async () => {
+        if (resolvePorts) {
+          await this.dependencies.ports.resolve({
+            cwd,
+            projectRoot: project.root,
+            config: project.config,
+            configHash,
+          });
+        }
+        if (statusPass) {
+          await this.dependencies.status.snapshot({
+            cwd,
+            projectRoot: project.root,
+            config: project.config,
+            configHash,
+          });
+        }
+      });
+    }
+    return diagnostics.slice(0, 32);
   }
 
   private async inventory(cwd: string) {
@@ -208,12 +268,19 @@ export class WorkspaceApplicationService {
   }
 
   async list(request: WorkspaceRequestV1): Promise<WorkspaceListResultV1> {
+    assertSchema(request);
     const diagnostics = await this.recover(request.cwd, true);
-    return { schemaVersion: 1, workspaces: await this.inventory(request.cwd), diagnostics };
+    return {
+      schemaVersion: 1,
+      kind: 'workspace-list',
+      workspaces: await this.inventory(request.cwd),
+      diagnostics,
+    };
   }
 
   async show(request: WorkspaceShowRequestV1): Promise<WorkspaceShowResultV1> {
-    const diagnostics = [...(await this.recover(request.cwd, true))];
+    assertSchema(request);
+    const diagnostics = [...(await this.recover(request.cwd, true, true, false))];
     const inventory = await this.inventory(request.cwd);
     const requested = this.dependencies.path.resolve(request.path ?? request.cwd);
     const workspace = request.path
@@ -289,6 +356,7 @@ export class WorkspaceApplicationService {
     );
     return {
       schemaVersion: 1,
+      kind: 'workspace-show',
       ...workspace,
       projectId: found.config.project.id,
       portResolution: snapshot.portResolution,
@@ -298,11 +366,22 @@ export class WorkspaceApplicationService {
   }
 
   async create(request: WorkspaceCreateRequestV1): Promise<WorkspaceMutationResultV1> {
-    await this.recover(request.cwd, false);
+    assertSchema(request);
+    await this.recover(request.cwd, false, false);
+    if (this.dependencies.ports.ensure) {
+      const found = await this.dependencies.projects.discover(request.cwd);
+      await this.dependencies.ports.ensure({
+        cwd: request.cwd,
+        projectRoot: found.root,
+        config: found.config,
+        configHash: sha256Canonical(found.config as unknown as JsonValue),
+      });
+    }
     const { schemaVersion: _schemaVersion, ...lifecycle } = request;
     const result = await this.dependencies.worktrees.create(lifecycle);
     return {
       schemaVersion: 1,
+      kind: 'workspace-mutation',
       operation: 'create',
       status: result.status,
       path: result.worktreePath ?? null,
@@ -310,9 +389,27 @@ export class WorkspaceApplicationService {
   }
 
   async remove(request: WorkspaceRemoveRequestV1): Promise<WorkspaceMutationResultV1> {
+    assertSchema(request);
     await this.recover(request.cwd, false);
-    const found = await this.dependencies.projects.discover(request.path);
-    const manager = await this.dependencies.services.forWorkspace(found.root);
+    const target = this.dependencies.path.resolve(request.path);
+    const inventory = await this.inventory(request.cwd);
+    const workspace = inventory.find(
+      (item) => this.dependencies.path.resolve(item.path) === target && item.role === 'linked',
+    );
+    if (!workspace) {
+      throw new MpxError({
+        code: 'WORKSPACE_REMOVE_TARGET_INVALID',
+        message: 'Removal requires an exact linked worktree from repository inventory.',
+      });
+    }
+    const found = await this.dependencies.projects.discover(workspace.path);
+    const manager = await this.dependencies.services.forWorkspace(workspace.path);
+    if (!manager.runtimeKind || manager.runtimeKind !== this.dependencies.executor) {
+      throw new MpxError({
+        code: manager.runtimeKind ? 'DEV_EXECUTOR_BINDING_INVALID' : 'DEV_EXECUTOR_UNSUPPORTED',
+        message: 'Development-service manager does not match the runtime executor binding.',
+      });
+    }
     const status = await manager.status();
     const active = Array.isArray(status) ? status : status ? [status as DevServiceSnapshot] : [];
     for (const [id, definition] of Object.entries(found.config.development?.services ?? {})) {
@@ -328,15 +425,38 @@ export class WorkspaceApplicationService {
     }
     const result = await this.dependencies.worktrees.remove({
       cwd: request.cwd,
-      worktreePath: request.path,
+      worktreePath: workspace.path,
     });
-    return { schemaVersion: 1, operation: 'remove', status: result.status, path: request.path };
+    return {
+      schemaVersion: 1,
+      kind: 'workspace-mutation',
+      operation: 'remove',
+      status: result.status,
+      path: workspace.path,
+    };
   }
 
   private async serviceContext(request: WorkspaceServiceRequestV1, tolerateRecovery = false) {
-    await this.recover(request.cwd, tolerateRecovery);
-    const root = request.path ?? request.cwd;
-    const found = await this.dependencies.projects.discover(root);
+    assertSchema(request);
+    if (!tolerateRecovery) {
+      await this.recover(request.cwd, false);
+    }
+    const inventory = await this.inventory(request.cwd);
+    const requested = this.dependencies.path.resolve(request.path ?? request.cwd);
+    const workspace = request.path
+      ? inventory.find((item) => this.dependencies.path.resolve(item.path) === requested)
+      : inventory
+          .filter((item) =>
+            this.dependencies.path.contains(this.dependencies.path.resolve(item.path), requested),
+          )
+          .sort((a, b) => b.path.length - a.path.length)[0];
+    if (!workspace) {
+      throw new MpxError({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Service path must exactly select a reported Git worktree.',
+      });
+    }
+    const found = await this.dependencies.projects.discover(workspace.path);
     const configured = found.config.development?.services[request.serviceId];
     if (!configured) {
       throw new MpxError({
@@ -356,26 +476,64 @@ export class WorkspaceApplicationService {
         message: 'The configured package script is invalid.',
       });
     }
-    return {
-      found,
-      configured,
-      script: configured.start.script,
-      manager: await this.dependencies.services.forWorkspace(found.root),
-    };
+    let lease: LeaseView | undefined;
+    if (configured.scope === 'project') {
+      lease = await this.dependencies.ports.resolve({
+        cwd: workspace.path,
+        projectRoot: found.root,
+        config: found.config,
+        configHash: sha256Canonical(found.config as unknown as JsonValue),
+      });
+      if (!lease.ownerRoot) {
+        throw new MpxError({
+          code: 'WORKSPACE_OWNER_ROOT_REQUIRED',
+          message: 'Project-scoped service owner is unavailable.',
+        });
+      }
+    }
+    const managerRoot = configured.scope === 'project' ? lease!.ownerRoot! : workspace.path;
+    const manager = await this.dependencies.services.forWorkspace(managerRoot);
+    if (!manager.runtimeKind) {
+      throw new MpxError({
+        code: 'DEV_EXECUTOR_UNSUPPORTED',
+        message: 'No development-service manager is bound to the selected executor.',
+      });
+    }
+    if (manager.runtimeKind !== this.dependencies.executor) {
+      throw new MpxError({
+        code: 'DEV_EXECUTOR_BINDING_INVALID',
+        message: 'Development-service manager does not match the runtime executor binding.',
+      });
+    }
+    return { found, workspace, configured, script: configured.start.script, manager, lease };
   }
 
   async start(request: WorkspaceServiceRequestV1): Promise<WorkspaceServiceResultV1> {
-    const { found, configured, script, manager } = await this.serviceContext(request);
+    const {
+      found,
+      workspace,
+      configured,
+      script,
+      manager,
+      lease: contextLease,
+    } = await this.serviceContext(request);
     const current = singleStatus(await manager.status(request.serviceId));
     if (current && (current.state === 'ready' || current.state === 'starting')) {
-      return { schemaVersion: 1, path: found.root, service: publicSnapshot(current) };
+      return {
+        schemaVersion: 1,
+        kind: 'workspace-service',
+        path: workspace.path,
+        service: publicSnapshot(current),
+      };
     }
-    const lease = await this.dependencies.ports.resolve({
-      cwd: found.root,
-      projectRoot: found.root,
-      config: found.config,
-      configHash: sha256Canonical(found.config as unknown as JsonValue),
-    });
+    const lease =
+      contextLease ??
+      (await this.dependencies.ports.resolve({
+        cwd: workspace.path,
+        projectRoot: found.root,
+        config: found.config,
+        configHash: sha256Canonical(found.config as unknown as JsonValue),
+      }));
     const port = lease.services[request.serviceId];
     if (port === undefined) {
       throw new MpxError({
@@ -397,62 +555,88 @@ export class WorkspaceApplicationService {
           `${service.protocol ?? 'http'}://localhost:${lease.services[id]}`;
       }
     }
-    const cwd = configured.scope === 'project' ? lease.ownerRoot : found.root;
+    const cwd = configured.scope === 'project' ? lease.ownerRoot : workspace.path;
     if (!cwd) {
       throw new MpxError({
         code: 'WORKSPACE_OWNER_ROOT_REQUIRED',
         message: 'Project-scoped service owner is unavailable.',
       });
     }
+    const invocation = this.dependencies.resolvePackageInvocation
+      ? await this.dependencies.resolvePackageInvocation(managerName, cwd)
+      : {
+          executable: managerName === 'auto' ? 'npm' : managerName,
+          prefixArguments: [] as readonly string[],
+        };
     const next = current
       ? await manager.restart(request.serviceId)
       : await manager.start({
           id: request.serviceId,
-          executable: managerName === 'auto' ? 'npm' : managerName,
-          args: ['run', script],
+          executable: invocation.executable,
+          ...(invocation.executable.startsWith('/') ||
+          /^[A-Za-z]:[\\/]/u.test(invocation.executable)
+            ? { trustedAbsoluteExecutable: true as const }
+            : {}),
+          args: [...invocation.prefixArguments, 'run', script],
           cwd,
           ports: [port],
           assignment: { worktreeRoot: cwd, ports: [port] },
-          executor: manager.runtimeKind ?? 'host',
+          executor: this.dependencies.executor,
           environment,
         });
-    return { schemaVersion: 1, path: found.root, service: publicSnapshot(next) };
+    return {
+      schemaVersion: 1,
+      kind: 'workspace-service',
+      path: workspace.path,
+      service: publicSnapshot(next),
+    };
   }
 
   async stop(request: WorkspaceServiceRequestV1): Promise<WorkspaceServiceResultV1> {
-    const { found, manager } = await this.serviceContext(request, true);
+    const { workspace, manager } = await this.serviceContext(request, true);
     const current = singleStatus(await manager.status(request.serviceId));
     if (!current || current.state === 'stopped' || current.state === 'crashed') {
       return {
         schemaVersion: 1,
-        path: found.root,
+        kind: 'workspace-service',
+        path: workspace.path,
         service: { id: request.serviceId, managed: true, state: 'stopped', pid: null },
       };
     }
     return {
       schemaVersion: 1,
-      path: found.root,
+      kind: 'workspace-service',
+      path: workspace.path,
       service: publicSnapshot(await manager.stop(request.serviceId)),
     };
   }
 
-  async logs(
-    request: WorkspaceLogsRequestV1,
-  ): Promise<{ schemaVersion: 1; path: string; serviceId: string; text: string }> {
-    const { found, manager } = await this.serviceContext(request, true);
+  async logs(request: WorkspaceLogsRequestV1): Promise<{
+    schemaVersion: 1;
+    kind: 'workspace-service-logs';
+    path: string;
+    serviceId: string;
+    text: string;
+  }> {
+    const { workspace, manager } = await this.serviceContext(request, true);
     const lines = Math.min(500, Math.max(1, request.lines ?? 200));
+    const current = singleStatus(await manager.status(request.serviceId));
     return {
       schemaVersion: 1,
-      path: found.root,
+      kind: 'workspace-service-logs',
+      path: workspace.path,
       serviceId: request.serviceId,
-      text: await manager.logs(request.serviceId, { maxLines: lines, maxCharacters: 20_000 }),
+      text: current
+        ? await manager.logs(request.serviceId, { maxLines: lines, maxCharacters: 20_000 })
+        : '',
     };
   }
 
   async killPort(
     request: PortKillRequestV1,
-  ): Promise<{ schemaVersion: 1; killed: true; pid: number }> {
+  ): Promise<{ schemaVersion: 1; kind: 'port-killed'; killed: true; pid: number }> {
+    assertSchema(request);
     await this.dependencies.ports.kill(request.pid);
-    return { schemaVersion: 1, killed: true, pid: request.pid };
+    return { schemaVersion: 1, kind: 'port-killed', killed: true, pid: request.pid };
   }
 }

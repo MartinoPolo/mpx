@@ -2,7 +2,7 @@
 
 ## Authority and projections
 
-The per-user registry at `%LOCALAPPDATA%/mpx/ports-registry.json` is the global authority for MPX port leases. A worktree's `.worktree-ports.json` is only a local projection. Consumers must distrust it until `mpx ports resolve` verifies its shape, repository/worktree identity, project, configuration hash, service map, and corresponding registry lease. `resolve` and `status` are read-only and never allocate or repair state.
+The per-user registry at `%LOCALAPPDATA%/mpx/ports-registry.json` is the global authority for MPX port leases. A worktree's `.worktree-ports.json` is only a local projection. The workspace application verifies its shape, repository/worktree identity, project, configuration hash, service map, and corresponding registry lease before use. `mpx workspace list` and `mpx workspace show` expose the supported read surface.
 
 The validated **full project configuration** is canonical-JSON encoded and SHA-256 hashed. A lease made for another configuration hash is not current.
 
@@ -20,19 +20,18 @@ The main worktree uses slot 0. Linked worktrees begin at slot 1 and advance the 
 
 Registry updates use an interprocess lock and atomic replacement. Stale lock recovery uses lock ownership/fingerprint and age checks; clients must not delete locks manually. The registry commits before projections, so retrying `ensure` repairs a missing projection without changing an already stable lease. Ordinary `reconcile` removes leases for disappeared linked worktrees and repairs missing projections for worktrees still reported by Git.
 
-`mpx ports reconcile --rebuild` is the explicit disaster-recovery path for a missing or corrupt registry. It scans only roots declared in user domains plus the current project root, never follows symbolic links, and rebuilds exclusively from strict local projections, current validated project configurations, and current Git identities. Any malformed, tampered, conflicting, or orphaned candidate aborts the complete atomic rebuild; old registry-only metadata is never reused.
+Workspace operations perform bounded repository reconciliation through the application facade. Recovery scans only trusted repository inventory and rebuilds exclusively from strict local projections, current validated project configurations, and current Git identities. Malformed, tampered, conflicting, or orphaned state blocks mutations.
 
 ## Commands
 
-- `mpx ports ensure` — allocate a stable lease when needed and repair projections.
-- `mpx ports resolve` — strictly validate and read the current lease.
-- `mpx ports list` — list the globally authoritative registry in stable order.
-- `mpx ports inspect` — show process-safe summaries for listeners on registered ports.
-- `mpx ports kill PID` or `mpx ports kill --pid PID` — terminate only the explicit PID when it is listening on an exclusive managed registry claim and has a process start fingerprint that can be rechecked natively.
-- `mpx ports release` — release the current worktree lease (a main lease cannot be released while linked leases remain).
-- `mpx ports reconcile` — reconcile only the current repository.
-- `mpx ports reconcile --rebuild` — strictly rebuild the complete registry from known user roots and local projections.
-- `mpx status` — produce a read-only status snapshot; it never ensures a lease.
+- `mpx workspace list` — list repository worktrees and their assigned ports.
+- `mpx workspace show [PATH]` — show one exact worktree, configured services, listeners, and diagnostics.
+- `mpx workspace start SERVICE [PATH]` — start a configured managed service in the selected executor.
+- `mpx workspace stop SERVICE [PATH]` — stop a configured managed service; repeated stops are safe.
+- `mpx workspace logs SERVICE [PATH]` — read bounded service logs; a never-started service returns empty text.
+- `mpx port kill PID` — terminate only the explicit PID after managed-claim and process-identity verification.
+
+The removed `status`, `worktree`, `dev`, and `ports` top-level routes are not supported.
 
 Use `--json` for one versioned envelope. Allocation warnings appear in the envelope's top-level `warnings` array. `--all` is unsupported.
 

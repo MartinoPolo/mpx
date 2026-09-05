@@ -6,11 +6,13 @@ function facade() {
   return {
     list: vi.fn(async () => ({
       schemaVersion: 1,
+      kind: 'workspace-list',
       workspaces: [{ path: 'C:/repo', branch: 'main', head: 'abc', role: 'main', ports: {} }],
       diagnostics: [],
     })),
     show: vi.fn(async () => ({
       schemaVersion: 1,
+      kind: 'workspace-show',
       path: 'C:/repo',
       branch: 'main',
       head: 'abc',
@@ -23,28 +25,43 @@ function facade() {
     })),
     create: vi.fn(async () => ({
       schemaVersion: 1,
+      kind: 'workspace-mutation',
       operation: 'create',
       status: 'ready',
       path: 'C:/repo.worktrees/x',
     })),
     remove: vi.fn(async () => ({
       schemaVersion: 1,
+      kind: 'workspace-mutation',
       operation: 'remove',
       status: 'removed',
       path: 'C:/repo.worktrees/x',
     })),
     start: vi.fn(async () => ({
       schemaVersion: 1,
+      kind: 'workspace-service',
       path: 'C:/repo',
       service: { id: 'web', managed: true, state: 'ready', pid: 7 },
     })),
     stop: vi.fn(async () => ({
       schemaVersion: 1,
+      kind: 'workspace-service',
       path: 'C:/repo',
       service: { id: 'web', managed: true, state: 'stopped', pid: null },
     })),
-    logs: vi.fn(async () => ({ schemaVersion: 1, path: 'C:/repo', serviceId: 'web', text: 'ok' })),
-    killPort: vi.fn(async ({ pid }: { pid: number }) => ({ schemaVersion: 1, killed: true, pid })),
+    logs: vi.fn(async () => ({
+      schemaVersion: 1,
+      kind: 'workspace-service-logs',
+      path: 'C:/repo',
+      serviceId: 'web',
+      text: 'ok',
+    })),
+    killPort: vi.fn(async ({ pid }: { pid: number }) => ({
+      schemaVersion: 1,
+      kind: 'port-killed',
+      killed: true,
+      pid,
+    })),
   };
 }
 
@@ -53,12 +70,12 @@ describe('workspace command', () => {
     const workspaceApplication = facade();
     for (const args of [
       ['workspace', 'list'],
-      ['workspace', 'show'],
-      ['workspace', 'create', 'feature/x'],
+      ['workspace', 'show', 'C:/repo.worktrees/x'],
+      ['workspace', 'create', 'feature/x', '--base', 'main'],
       ['workspace', 'remove', 'C:/repo.worktrees/x'],
-      ['workspace', 'start', 'web'],
-      ['workspace', 'stop', 'web'],
-      ['workspace', 'logs', 'web', '--lines', '50'],
+      ['workspace', 'start', 'web', 'C:/repo.worktrees/x'],
+      ['workspace', 'stop', 'web', 'C:/repo.worktrees/x'],
+      ['workspace', 'logs', 'web', 'C:/repo.worktrees/x', '--lines', '50'],
       ['port', 'kill', '42'],
     ]) {
       const io = captureIo();
@@ -67,9 +84,36 @@ describe('workspace command', () => {
       );
       expect(JSON.parse(io.out[0]!)).toMatchObject({ apiVersion: 1, ok: true });
     }
-    expect(workspaceApplication.logs).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceId: 'web', lines: 50 }),
+    const cwd = process.cwd();
+    expect(workspaceApplication.list).toHaveBeenCalledWith({ schemaVersion: 1, cwd });
+    expect(workspaceApplication.show).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      cwd,
+      path: 'C:/repo.worktrees/x',
+    });
+    expect(workspaceApplication.create).toHaveBeenCalledWith(
+      expect.objectContaining({ schemaVersion: 1, cwd, branch: 'feature/x', base: 'main' }),
     );
+    expect(workspaceApplication.remove).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      cwd,
+      path: 'C:/repo.worktrees/x',
+    });
+    for (const method of ['start', 'stop'] as const) {
+      expect(workspaceApplication[method]).toHaveBeenCalledWith({
+        schemaVersion: 1,
+        cwd,
+        serviceId: 'web',
+        path: 'C:/repo.worktrees/x',
+      });
+    }
+    expect(workspaceApplication.logs).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      cwd,
+      serviceId: 'web',
+      path: 'C:/repo.worktrees/x',
+      lines: 50,
+    });
     expect(workspaceApplication.killPort).toHaveBeenCalledWith({ schemaVersion: 1, pid: 42 });
   });
 

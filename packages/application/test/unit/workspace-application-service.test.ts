@@ -123,6 +123,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
       })),
     },
     services: { forWorkspace: vi.fn(async () => manager) },
+    executor: 'host' as const,
     ...overrides,
   };
   return {
@@ -209,13 +210,93 @@ describe('WorkspaceApplicationService', () => {
     expect(manager.stop).not.toHaveBeenCalled();
   });
 
+  it('stops an active service once and makes a repeated stop convergent', async () => {
+    const { service, manager } = fixture();
+    manager.status
+      .mockResolvedValueOnce({ id: 'web', state: 'ready', pid: 7 } as never)
+      .mockResolvedValueOnce(undefined as never);
+    const request = { schemaVersion: 1 as const, cwd: '/repo.worktrees/x', serviceId: 'web' };
+    await service.stop(request);
+    await service.stop(request);
+    expect(manager.stop).toHaveBeenCalledTimes(1);
+  });
+
   it('delegates verified port termination with a stable result', async () => {
     const { service, dependencies } = fixture();
     await expect(service.killPort({ schemaVersion: 1, pid: 42 })).resolves.toEqual({
       schemaVersion: 1,
+      kind: 'port-killed',
       killed: true,
       pid: 42,
     });
     expect(dependencies.ports.kill).toHaveBeenCalledWith(42);
+  });
+
+  it('rejects every unsupported schema before calling providers', async () => {
+    const { service, dependencies } = fixture();
+    const requests = [
+      () => service.list({ schemaVersion: 2, cwd: '/repo' } as never),
+      () => service.show({ schemaVersion: 2, cwd: '/repo' } as never),
+      () => service.create({ schemaVersion: 2, cwd: '/repo', branch: 'x' } as never),
+      () => service.remove({ schemaVersion: 2, cwd: '/repo', path: '/repo.worktrees/x' } as never),
+      () => service.start({ schemaVersion: 2, cwd: '/repo', serviceId: 'web' } as never),
+      () => service.stop({ schemaVersion: 2, cwd: '/repo', serviceId: 'web' } as never),
+      () => service.logs({ schemaVersion: 2, cwd: '/repo', serviceId: 'web' } as never),
+      () => service.killPort({ schemaVersion: 2, pid: 42 } as never),
+    ];
+    for (const invoke of requests) {
+      await expect(invoke()).rejects.toMatchObject({ code: 'SCHEMA_VERSION_UNSUPPORTED' });
+    }
+    expect(dependencies.worktrees.reconcile).not.toHaveBeenCalled();
+    expect(dependencies.projects.discover).not.toHaveBeenCalled();
+    expect(dependencies.services.forWorkspace).not.toHaveBeenCalled();
+    expect(dependencies.ports.kill).not.toHaveBeenCalled();
+  });
+
+  it('refuses a host manager when the runtime binding selects docker', async () => {
+    const { service, manager } = fixture({ executor: 'docker' });
+    await expect(
+      service.start({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' }),
+    ).rejects.toMatchObject({ code: 'DEV_EXECUTOR_BINDING_INVALID' });
+    expect(manager.start).not.toHaveBeenCalled();
+  });
+
+  it('requires an optional service path to exactly match repository inventory', async () => {
+    const { service, dependencies, manager } = fixture();
+    await expect(
+      service.start({ schemaVersion: 1, cwd: '/repo', path: '/repo/evil', serviceId: 'web' }),
+    ).rejects.toMatchObject({ code: 'WORKSPACE_NOT_FOUND' });
+    expect(dependencies.projects.discover).toHaveBeenCalledWith('/repo');
+    expect(manager.start).not.toHaveBeenCalled();
+  });
+
+  it('refuses main, unknown, and subdirectory removal targets before stopping services', async () => {
+    const { service, dependencies, manager } = fixture();
+    for (const target of ['/repo', '/unknown', '/repo.worktrees/x/subdir']) {
+      await expect(
+        service.remove({ schemaVersion: 1, cwd: '/repo', path: target }),
+      ).rejects.toMatchObject({ code: 'WORKSPACE_REMOVE_TARGET_INVALID' });
+    }
+    expect(manager.stop).not.toHaveBeenCalled();
+    expect(dependencies.worktrees.remove).not.toHaveBeenCalled();
+  });
+
+  it('keys project-scoped managers to the lease owner root', async () => {
+    const projectConfig = structuredClone(config);
+    (projectConfig.development.services.web as { scope: 'checkout' | 'project' }).scope = 'project';
+    const { service, dependencies } = fixture({
+      projects: { discover: vi.fn(async (cwd: string) => ({ root: cwd, config: projectConfig })) },
+    });
+    await service.start({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' });
+    expect(dependencies.services.forWorkspace).toHaveBeenCalledWith('/repo');
+  });
+
+  it('returns empty logs for a configured service that was never started', async () => {
+    const { service, manager } = fixture();
+    manager.status.mockResolvedValue(undefined as never);
+    await expect(
+      service.logs({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' }),
+    ).resolves.toMatchObject({ kind: 'workspace-service-logs', text: '' });
+    expect(manager.logs).not.toHaveBeenCalled();
   });
 });

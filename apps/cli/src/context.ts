@@ -14,7 +14,7 @@ import {
   NodePrivateRouteMaterializer,
   createNodeWorktreeLifecycleService,
   createNodeWorkspaceApplicationService,
-  createNodeDevService,
+  type NodeWorkspaceApplicationOptions,
   createProductionSessionDockerResumeAdmission,
   preparationRuntime as nodePreparationRuntime,
   windowsProcessIdentityInspector,
@@ -168,6 +168,9 @@ export interface CliContext extends LaunchExecutionContext {
   setupService?: SetupApplicationService;
   setupServiceFactory?: () => SetupApplicationService;
   workspaceApplication?: WorkspaceApplicationService;
+  workspaceApplicationFactory?: (
+    options: NodeWorkspaceApplicationOptions,
+  ) => WorkspaceApplicationService;
   installerOperationAdapter?: InstallerOperationAdapter;
   installerTransactionStore?: TransactionStore;
   /** Application-owned trusted extensions; never populated from project configuration. */
@@ -388,26 +391,12 @@ export function workspaceApplication(
   if (context.workspaceApplication) {
     return context.workspaceApplication;
   }
-  const portService = ports(context);
-  const worktreeService = worktrees(context, operationCwd);
-  return createNodeWorkspaceApplicationService({
-    worktrees: worktreeService,
-    ports: portService,
-    projects: {
-      async discover(cwd) {
-        const found = await (context.discoverProjectConfig ?? discoverProjectConfig)(cwd);
-        if (!found) {
-          throw new MpxError({ code: 'PROJECT_NOT_FOUND', message: 'No MPX project was found.' });
-        }
-        return found;
-      },
-    },
-    status: status(context, portService),
-    services: {
-      forWorkspace(root) {
-        return context.devService ?? createNodeDevService(context.env, root);
-      },
-    },
+  const factory = context.workspaceApplicationFactory ?? createNodeWorkspaceApplicationService;
+  return factory({
+    environment: context.env,
+    stateRoot: stateRoot(context),
+    cwd: operationCwd,
+    preparationWorkerEntry: fileURLToPath(new URL('./main.js', import.meta.url)),
   });
 }
 

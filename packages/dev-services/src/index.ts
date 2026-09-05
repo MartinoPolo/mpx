@@ -20,6 +20,8 @@ export interface PortAssignment {
 export interface StartRequest {
   readonly id: string;
   readonly executable: string;
+  /** Set only by a trusted composition after fixed-candidate resolution. */
+  readonly trustedAbsoluteExecutable?: true;
   readonly args: readonly string[];
   readonly cwd: string;
   readonly ports: readonly number[];
@@ -141,8 +143,14 @@ export function validateStartRequest(request: StartRequest): StartRequest {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(request.id)) {
     throw new Error('Dev service id must be a bounded safe label.');
   }
-  if (!safeExecutable.test(request.executable) || path.isAbsolute(request.executable)) {
-    throw new Error('Dev service executable must be a safe PATH-resolved program label.');
+  const absoluteExecutable =
+    path.win32.isAbsolute(request.executable) || path.posix.isAbsolute(request.executable);
+  if (
+    absoluteExecutable
+      ? request.trustedAbsoluteExecutable !== true
+      : !safeExecutable.test(request.executable)
+  ) {
+    throw new Error('Dev service executable must be a safe label or trusted absolute program.');
   }
   if (
     !Array.isArray(request.args) ||

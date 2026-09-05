@@ -1,6 +1,20 @@
+import { access, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { sha256Canonical, type JsonValue } from '@mpx/core';
-import { DurableDevServiceManager, createSystemRuntime } from '@mpx/dev-services';
+import { discoverProjectConfig } from '@mpx/config';
+import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
+import {
+  DurableDevServiceManager,
+  createSystemRuntime,
+  type ExecutorKind,
+} from '@mpx/dev-services';
+import { PortService, RealGitWorktreeAdapter, RegistryStore } from '@mpx/ports';
+import { createStatusProvider } from '@mpx/status';
+import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from '@mpx/windows';
+import {
+  createNodeWorktreeIncludeDependencies,
+  resolveTrustedExecutable,
+  type FileSystemAdapter,
+} from '@mpx/worktrees';
 import {
   LifecycleApplicationService,
   type LifecycleApplicationDependencies,
@@ -10,6 +24,8 @@ import {
   WorkspaceApplicationService,
   type WorkspaceApplicationDependencies,
 } from '../workspace-application-service.js';
+import { preparationRuntime, windowsProcessIdentityInspector } from './preparation-lifecycle.js';
+import { createNodeWorktreeLifecycleService } from './worktree-lifecycle.js';
 
 export * from './account-application-service.js';
 export * from './local-issue-view-rebuilder.js';
@@ -32,6 +48,13 @@ export function createNodeDevService(
   environment: NodeJS.ProcessEnv,
   projectRoot: string,
 ): LifecycleDevService {
+  const executor = runtimeExecutor(environment);
+  if (executor !== 'host') {
+    throw new MpxError({
+      code: 'DEV_EXECUTOR_UNSUPPORTED',
+      message: 'Docker development services require an injected Docker service manager.',
+    });
+  }
   const local = environment.LOCALAPPDATA;
   if (!local || !path.isAbsolute(local)) {
     throw new Error('LOCALAPPDATA is required for durable development-service state.');
@@ -46,13 +69,123 @@ export function createNodeDevService(
   return Object.assign(manager, { runtimeKind: 'host' as const });
 }
 
-/** Composes Node path semantics with target-scoped workspace adapters. */
+function runtimeExecutor(environment: NodeJS.ProcessEnv): ExecutorKind {
+  const selected = environment.MPX_RUNTIME_EXECUTOR;
+  if (selected !== 'host' && selected !== 'docker') {
+    throw new MpxError({
+      code: 'DEV_EXECUTOR_UNSUPPORTED',
+      message: 'MPX_RUNTIME_EXECUTOR must be exactly host or docker.',
+    });
+  }
+  return selected;
+}
+
+export interface NodeWorkspaceApplicationOptions {
+  readonly environment: NodeJS.ProcessEnv;
+  readonly stateRoot: string;
+  readonly cwd: string;
+  readonly preparationWorkerEntry: string;
+  readonly dockerServices?: WorkspaceApplicationDependencies['services'];
+}
+
+/** Production Node composition for the complete workspace facade. */
 export function createNodeWorkspaceApplicationService(
-  dependencies: Omit<WorkspaceApplicationDependencies, 'path'>,
+  options: NodeWorkspaceApplicationOptions,
 ): WorkspaceApplicationService {
+  const executor = runtimeExecutor(options.environment);
+  if (!path.isAbsolute(options.stateRoot) || !path.isAbsolute(options.cwd)) {
+    throw new MpxError({
+      code: 'WORKSPACE_NODE_BINDING_INVALID',
+      message: 'Workspace state and caller roots must be absolute.',
+    });
+  }
+  if (executor === 'docker' && !options.dockerServices) {
+    throw new MpxError({
+      code: 'DEV_EXECUTOR_UNSUPPORTED',
+      message: 'Docker development services require an injected Docker service manager.',
+    });
+  }
+  const portService = new PortService({
+    store: new RegistryStore(options.stateRoot),
+    git: new RealGitWorktreeAdapter(),
+    platform: new WindowsPortPlatformAdapter(),
+  });
+  const fileSystem: FileSystemAdapter = {
+    realpath,
+    readText: (file) => readFile(file, 'utf8'),
+    writeText: (file, content) => writeFile(file, content, 'utf8'),
+    mkdir: (directory) => mkdir(directory, { recursive: true }).then(() => undefined),
+    exists: async (value) => {
+      try {
+        await access(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+  const worktrees = createNodeWorktreeLifecycleService({
+    stateRoot: options.stateRoot,
+    operationCwd: options.cwd,
+    ports: portService,
+    preparation: preparationRuntime(
+      options.stateRoot,
+      options.environment,
+      options.preparationWorkerEntry,
+    ),
+    includes: createNodeWorktreeIncludeDependencies(),
+    fileSystem,
+    processIdentityInspector: windowsProcessIdentityInspector(new WindowsProcessCapabilities()),
+  });
+  const hostManagers = new Map<
+    string,
+    WorkspaceApplicationDependencies['services'] extends {
+      forWorkspace(root: string): infer T;
+    }
+      ? Awaited<T>
+      : never
+  >();
+  const services: WorkspaceApplicationDependencies['services'] =
+    executor === 'docker'
+      ? options.dockerServices!
+      : {
+          forWorkspace(root) {
+            const key = path.resolve(root).toLowerCase();
+            let manager = hostManagers.get(key);
+            if (!manager) {
+              manager = createNodeDevService(options.environment, root) as never;
+              hostManagers.set(key, manager);
+            }
+            return manager;
+          },
+        };
   const canonical = (value: string) => path.resolve(value).replaceAll('\\', '/').toLowerCase();
   return new WorkspaceApplicationService({
-    ...dependencies,
+    executor,
+    async resolvePackageInvocation(manager, cwd) {
+      const command = manager === 'auto' ? 'npm' : manager;
+      if (executor === 'docker') {
+        return { executable: command, prefixArguments: [] };
+      }
+      const resolved = await resolveTrustedExecutable(command, cwd);
+      return {
+        executable: resolved.path,
+        prefixArguments: resolved.trustedPrefixArguments,
+      };
+    },
+    worktrees,
+    ports: portService,
+    projects: {
+      async discover(cwd) {
+        const found = await discoverProjectConfig(cwd);
+        if (!found) {
+          throw new MpxError({ code: 'PROJECT_NOT_FOUND', message: 'No MPX project was found.' });
+        }
+        return found;
+      },
+    },
+    status: createStatusProvider({ portService }),
+    services,
     path: {
       resolve: path.resolve,
       contains(root, candidate) {
