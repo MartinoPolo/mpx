@@ -312,6 +312,7 @@ async function createArtifact(destination) {
 
   await esbuild({
     ...BUNDLER_OPTIONS,
+    absWorkingDir: packageRoot,
     entryPoints: [path.join(packageRoot, BUNDLER_CONFIG.entryPoint)],
     outfile: path.join(destination, BUNDLER_CONFIG.outputFile),
   });

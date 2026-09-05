@@ -13,9 +13,14 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 
 const execFileAsync = promisify(execFile);
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 async function makeFileLink(target: string, destination: string): Promise<void> {
   if (process.platform === 'win32') {
@@ -35,6 +40,7 @@ import {
 
 it('derives identities, provider route keys, resolved detach roots and fixed projections', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-node-setup-'));
+  roots.push(root);
   const appData = path.join(root, 'appdata');
   const configFile = path.join(appData, 'mpx', 'config.json');
   const claude = path.join(root, 'claude.exe');
@@ -137,6 +143,7 @@ it('rejects duplicate resolved Pi roots', () => {
 
 async function requestFixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-node-setup-invalid-'));
+  roots.push(root);
   const appData = path.join(root, 'appdata');
   const configFile = path.join(appData, 'mpx', 'config.json');
   const claude = path.join(root, 'claude.exe');
@@ -276,7 +283,10 @@ it.runIf(process.platform === 'win32')(
     const node = path.join(bin, 'node.exe');
     await mkdir(path.dirname(cli), { recursive: true });
     await link(process.execPath, node);
-    await writeFile(cli, "console.log('Pi disposable 9.8.7')\n");
+    await writeFile(
+      cli,
+      "if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(['--version'])) { process.exit(1); }\nconsole.log('Pi disposable 9.8.7')\n",
+    );
     await writeFile(
       wrapper,
       '#!/bin/sh\nbasedir=$(dirname "$(echo "$0" | sed -e \'s,\\\\,/,g\')")\nexec "$basedir/node" "$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" "$@"\n',

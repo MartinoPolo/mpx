@@ -151,26 +151,33 @@ export function resolvePiDetachConfig(
 }
 
 async function ensurePrivateStateRoot(localAppData: string): Promise<string> {
-  const localInfo = await lstat(localAppData);
-  if (localInfo.isSymbolicLink() || !localInfo.isDirectory()) {
+  try {
+    const localInfo = await lstat(localAppData);
+    if (localInfo.isSymbolicLink() || !localInfo.isDirectory()) {
+      return invalid('SETUP_STATE_INVALID', 'The setup state directory is unsafe.');
+    }
+    const localReal = await realpath(localAppData);
+    const stateRoot = path.join(localAppData, 'mpx');
+    await mkdir(stateRoot, { recursive: true, mode: 0o700 });
+    const stateInfo = await lstat(stateRoot);
+    const stateReal = await realpath(stateRoot);
+    const relative = path.relative(localReal, stateReal);
+    if (
+      stateInfo.isSymbolicLink() ||
+      !stateInfo.isDirectory() ||
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
+      return invalid('SETUP_STATE_INVALID', 'The setup state directory is unsafe.');
+    }
+    return stateRoot;
+  } catch (error) {
+    if (error instanceof MpxError) {
+      throw error;
+    }
     return invalid('SETUP_STATE_INVALID', 'The setup state directory is unsafe.');
   }
-  const localReal = await realpath(localAppData);
-  const stateRoot = path.join(localAppData, 'mpx');
-  await mkdir(stateRoot, { recursive: true, mode: 0o700 });
-  const stateInfo = await lstat(stateRoot);
-  const stateReal = await realpath(stateRoot);
-  const relative = path.relative(localReal, stateReal);
-  if (
-    stateInfo.isSymbolicLink() ||
-    !stateInfo.isDirectory() ||
-    relative === '..' ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
-    return invalid('SETUP_STATE_INVALID', 'The setup state directory is unsafe.');
-  }
-  return stateRoot;
 }
 
 export interface SetupProcessPort {
@@ -341,12 +348,16 @@ export function createNodeSetupApplicationService(dependencies: {
     builder: dependencies.builder,
     orchestrator: dependencies.orchestrator,
     detach: {
-      run: async () =>
-        new PiLegacyDetachService({
+      run: async () => {
+        const detach = new PiLegacyDetachService({
           config: resolvePiDetachConfig(requestFactory.config(), dependencies.environment),
           projectsRoot,
           stateRoot: await ensurePrivateStateRoot(localAppData),
-        }).run(),
+        });
+        await detach.run();
+        // Recovery may only restore links; a second run completes detachment or verifies the receipt.
+        await detach.run();
+      },
     },
   });
 }

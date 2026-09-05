@@ -39,6 +39,7 @@
     "@mpx/config": "workspace:*",
     "@mpx/core": "workspace:*",
     "@mpx/executors": "workspace:*",
+    "@mpx/installer": "workspace:*",
     "@mpx/provider-github": "workspace:*",
     "@mpx/providers": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",

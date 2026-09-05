@@ -20,6 +20,9 @@ importers:
       '@mpx/executors':
         specifier: workspace:*
         version: link:packages/executors
+      '@mpx/installer':
+        specifier: workspace:*
+        version: link:packages/installer
       '@mpx/provider-github':
         specifier: workspace:*
         version: link:packages/provider-github

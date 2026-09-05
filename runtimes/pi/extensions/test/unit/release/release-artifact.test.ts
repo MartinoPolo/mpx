@@ -158,9 +158,9 @@ function recomputeBundlerConfigDigest(target = 'node22'): string {
   return createHash('sha256').update(canonicalJson(exactBundleConfig)).digest('hex');
 }
 
-function runRelease(action: 'build' | 'verify'): void {
+function runRelease(action: 'build' | 'verify', cwd = packageRoot): void {
   execFileSync(process.execPath, [path.join(packageRoot, 'scripts', 'release.mjs'), action], {
-    cwd: packageRoot,
+    cwd,
     stdio: 'pipe',
   });
 }
@@ -236,6 +236,11 @@ test('release builds are byte-identical', () => {
   const first = snapshot(artifactRoot);
   runRelease('build');
   assert.deepEqual(snapshot(artifactRoot), first);
+}, 20_000);
+
+test('release verification is independent of the working directory', () => {
+  runRelease('build');
+  runRelease('verify', path.resolve(packageRoot, '../../..'));
 }, 20_000);
 
 test('release manifest is the exact native Pi package manifest', () => {

@@ -10,7 +10,7 @@ const execute = promisify(execFile);
 
 it('reports an uninstalled machine from mpx install verify in each fresh process', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-install-fresh-'));
-  const entry = fileURLToPath(new URL('../../dist/main.js', import.meta.url));
+  const entry = fileURLToPath(new URL('../../../apps/cli/dist/main.js', import.meta.url));
   const env = {
     ...process.env,
     MPX_APPS: path.join(root, 'apps'),
@@ -71,6 +71,8 @@ it('builds deterministic intent and prepare plans in fresh read-only processes',
     executors: { host: {} },
   };
   const configSource = `${JSON.stringify(config, null, 2)}\n`;
+  await mkdir(native('pi-personal'), { recursive: true });
+  await mkdir(native('pi-work'), { recursive: true });
   await mkdir(path.dirname(configPath), { recursive: true });
   await writeFile(configPath, configSource);
   const files = [
@@ -100,17 +102,7 @@ it('builds deterministic intent and prepare plans in fresh read-only processes',
       'agents',
       'licenses',
     ],
-    piRoles = [
-      'extension',
-      'profile',
-      'keybindings',
-      'themes',
-      'status',
-      'settings',
-      'canonical-content',
-      'agents',
-      'licenses',
-    ];
+    piRoles = ['profile', 'status', 'settings', 'canonical-content', 'agents', 'licenses'];
   const request = {
     schemaVersion: 1,
     kind: 'install-intent-request',
@@ -128,7 +120,7 @@ it('builds deterministic intent and prepare plans in fresh read-only processes',
     external: { gitRemotes: [] },
   };
   await writeFile(requestPath, JSON.stringify(request));
-  const entry = fileURLToPath(new URL('../../dist/main.js', import.meta.url));
+  const entry = fileURLToPath(new URL('../../../apps/cli/dist/main.js', import.meta.url));
   const env = {
     ...process.env,
     MPX_APPS: path.join(machine, 'apps'),

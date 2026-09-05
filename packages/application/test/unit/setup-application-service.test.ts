@@ -113,6 +113,9 @@ it('throws a typed failure instead of reporting success when strict verification
   await expect(service.execute()).rejects.toMatchObject({
     code: 'SETUP_VERIFICATION_FAILED',
     message: 'Setup verification failed.',
+    details: { issues: ['drift'] },
+    retryable: true,
+    remediation: 'Retry mpx setup and inspect mpx install verify --json.',
   });
 });
 

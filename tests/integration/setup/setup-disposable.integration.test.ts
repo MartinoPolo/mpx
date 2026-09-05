@@ -6,16 +6,24 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { createNodeSetupApplicationService } from '@mpx/application/node';
-import { expect, it, vi } from 'vitest';
+import { createNodeSetupApplicationService, resolvePiDetachConfig } from '@mpx/application/node';
+import { parseUserConfig } from '@mpx/config';
+import { PiLegacyDetachService } from '@mpx/installer';
+import { afterEach, expect, it, vi } from 'vitest';
 
 const execFileAsync = promisify(execFile);
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 const digest = 'a'.repeat(64);
 const entries = [
   ['mpx-pi', 'agents', 'agents', 'tree'],
@@ -48,6 +56,7 @@ async function makeLink(target: string, destination: string, directory: boolean)
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-setup-integration-'));
+  roots.push(root);
   const projects = path.join(root, 'projects');
   const home = path.join(root, 'home');
   const personal = path.join(home, '.pi', 'agent');
@@ -87,7 +96,12 @@ async function fixture() {
   ) as { identities: Record<string, { runtimeRoots: { pi: string } }> };
   config.identities.personal!.runtimeRoots.pi = '~/.pi/agent';
   config.identities.work!.runtimeRoots.pi = '~/work-pi';
-  await writeFile(path.join(appData, 'mpx', 'config.json'), JSON.stringify(config));
+  const configFile = path.join(appData, 'mpx', 'config.json');
+  const configBody = Buffer.from(
+    `${JSON.stringify(config, null, 2).replace(/\n/gu, '\r\n')}\r\n`,
+    'utf8',
+  );
+  await writeFile(configFile, configBody);
 
   const bin = path.join(root, 'apps', 'bin');
   const piCli = path.join(
@@ -114,6 +128,8 @@ async function fixture() {
     personal,
     work,
     sourceBodies,
+    configFile,
+    configBody,
     environment: {
       APPDATA: appData,
       LOCALAPPDATA: localAppData,
@@ -165,6 +181,7 @@ it('rejects a symlink setup state directory before detachment', async () => {
 it('detaches both disposable legacy roots through the complete node setup composition', async () => {
   const value = await fixture();
   const order: string[] = [];
+  let buildCount = 0;
   const intent = {
     schemaVersion: 1,
     kind: 'install-intent',
@@ -181,7 +198,9 @@ it('detaches both disposable legacy roots through the complete node setup compos
   const builder = {
     build: vi.fn(async () => {
       order.push('build');
-      expect((await lstat(path.join(value.personal, 'settings.json'))).isSymbolicLink()).toBe(true);
+      expect((await lstat(path.join(value.personal, 'settings.json'))).isSymbolicLink()).toBe(
+        buildCount++ === 0,
+      );
       return built;
     }),
     verify: vi.fn(
@@ -222,7 +241,10 @@ it('detaches both disposable legacy roots through the complete node setup compos
     orchestrator: orchestrator as never,
   });
   await expect(service.execute()).resolves.toMatchObject({ verification: { healthy: true } });
-  expect(order).toEqual(['build', 'plan']);
+  expect(await readFile(value.configFile)).toEqual(value.configBody);
+  await expect(service.execute()).resolves.toMatchObject({ verification: { healthy: true } });
+  expect(order).toEqual(['build', 'plan', 'build', 'plan']);
+  expect(await readFile(value.configFile)).toEqual(value.configBody);
   expect(await readdir(path.join(value.environment.LOCALAPPDATA, 'mpx'))).toContain(
     'pi-legacy-detach.receipt.json',
   );
@@ -239,4 +261,75 @@ it('detaches both disposable legacy roots through the complete node setup compos
   expect(await readFile(path.join(value.personal, 'settings.json'), 'utf8')).toBe(
     value.sourceBodies.get(path.join(value.projects, 'mpx-pi', 'settings.json')),
   );
+});
+
+it('completes detachment after recovering an interrupted journal', async () => {
+  const value = await fixture();
+  const stateRoot = path.join(value.environment.LOCALAPPDATA, 'mpx');
+  await mkdir(stateRoot);
+  let crashed = false;
+  await expect(
+    new PiLegacyDetachService({
+      config: resolvePiDetachConfig(
+        parseUserConfig(value.configBody.toString('utf8'), value.environment),
+        value.environment,
+      ),
+      projectsRoot: value.projects,
+      stateRoot,
+      testCrash: (point) => {
+        if (point === 'journaled' && !crashed) {
+          crashed = true;
+          throw new Error('disposable interruption');
+        }
+      },
+    }).run(),
+  ).rejects.toMatchObject({ code: 'PI_LEGACY_CRASH_INJECTED' });
+  expect(crashed).toBe(true);
+  const intent = {
+    schemaVersion: 1,
+    kind: 'install-intent',
+    releaseKey: digest,
+    convergenceHash: digest,
+    components: ['cli'],
+  } as const;
+  const plan = vi.fn(async () => {
+    for (const root of [value.personal, value.work]) {
+      for (const [, , destination] of entries) {
+        expect((await lstat(path.join(root, destination))).isSymbolicLink()).toBe(false);
+      }
+    }
+    return {
+      schemaVersion: 1,
+      kind: 'install-plan',
+      intent,
+      confirmationDigest: digest,
+      classifications: { automatic: [], confirmationRequired: [], manualOnly: [] },
+    } as never;
+  });
+  const service = createNodeSetupApplicationService({
+    environment: value.environment,
+    builder: {
+      build: async () =>
+        ({
+          schemaVersion: 1,
+          kind: 'install-intent-build-result',
+          intent,
+          externalPlans: [],
+        }) as never,
+      verify: vi.fn(),
+    },
+    orchestrator: {
+      plan,
+      apply: vi.fn(async () => ({}) as never),
+      verify: vi.fn(async () => ({ healthy: true, issues: [] }) as never),
+    },
+  });
+
+  await expect(service.execute()).resolves.toMatchObject({ verification: { healthy: true } });
+  for (const root of [value.personal, value.work]) {
+    for (const [, , destination] of entries) {
+      expect((await lstat(path.join(root, destination))).isSymbolicLink()).toBe(false);
+    }
+  }
+  expect(await readdir(stateRoot)).toContain('pi-legacy-detach.receipt.json');
 });
