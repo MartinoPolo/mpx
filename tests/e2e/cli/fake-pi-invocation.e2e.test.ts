@@ -26,7 +26,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-it('invokes fake Pi with native discovery and no retired bridge, status, or extension overrides', async () => {
+it('invokes fake Pi without retired bridge, status, or extension overrides', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-fake-pi-native-'));
   roots.push(root);
   const fake = path.join(root, 'fake-pi.mjs');
