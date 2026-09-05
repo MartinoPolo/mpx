@@ -23,9 +23,6 @@ importers:
       '@mpx/installer':
         specifier: workspace:*
         version: link:packages/installer
-      '@mpx/provider-github':
-        specifier: workspace:*
-        version: link:packages/provider-github
       '@mpx/providers':
         specifier: workspace:*
         version: link:packages/providers
@@ -153,18 +150,6 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../ports
-      '@mpx/provider-github':
-        specifier: workspace:*
-        version: link:../provider-github
-      '@mpx/provider-gitlab':
-        specifier: workspace:*
-        version: link:../provider-gitlab
-      '@mpx/provider-kanbanflow':
-        specifier: workspace:*
-        version: link:../provider-kanbanflow
-      '@mpx/provider-local':
-        specifier: workspace:*
-        version: link:../provider-local
       '@mpx/providers':
         specifier: workspace:*
         version: link:../providers
@@ -359,76 +344,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
 
-  packages/provider-github:
-    dependencies:
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:../providers
-    devDependencies:
-      '@types/node':
-        specifier: ^22.15.0
-        version: 22.20.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
-
-  packages/provider-gitlab:
-    dependencies:
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:../providers
-    devDependencies:
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
-
-  packages/provider-kanbanflow:
-    dependencies:
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:../providers
-    devDependencies:
-      '@types/node':
-        specifier: ^22.15.0
-        version: 22.20.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
-
-  packages/provider-local:
-    dependencies:
-      '@mpx/core':
-        specifier: workspace:*
-        version: link:../core
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:../providers
-    devDependencies:
-      '@types/node':
-        specifier: ^22.15.0
-        version: 22.20.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
-
   packages/providers:
     dependencies:
       '@mpx/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

@@ -362,40 +362,6 @@ describe('provider CLI', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('selects a caller-supplied trusted provider composition without project command injection', async () => {
-    const cwd = await project(config('generic', 'trusted-issues')),
-      env = await identityEnv(cwd, { 'trusted-issues': 'work-trusted' }),
-      io = captureIo();
-    const invoke = vi.fn(async () => []);
-    const descriptor = {
-      id: 'trusted-issues',
-      roles: ['issues'],
-      capabilities: ['issue.list'],
-      backend: 'trusted-sdk',
-      schema: { type: 'object', properties: {}, additionalProperties: false },
-    } as const;
-    const adapter = {
-      providerId: 'trusted-issues',
-      role: 'issues',
-      backend: 'trusted-sdk',
-      capabilities: ['issue.list'],
-      routeRequired: true,
-      invoke,
-    } as const;
-    expect(
-      await run(['--json', '--cwd', cwd, 'issue', 'list', '--identity', 'work'], io, {
-        env,
-        trustedProviderComposition: { descriptors: [descriptor], adapters: [adapter] },
-      }),
-    ).toBe(0);
-    expect(invoke).toHaveBeenCalledWith({
-      providerId: 'trusted-issues',
-      capability: 'issue.list',
-      route: 'work-trusted',
-      input: {},
-    });
-  });
-
   it('rejects project-supplied provider executable and command templates', async () => {
     const value = config('github', 'github');
     (value.repository as Record<string, unknown>).executable = 'evil.exe';
@@ -813,39 +779,6 @@ describe('provider CLI', () => {
       },
     });
     expect(execute).not.toHaveBeenCalled();
-  });
-
-  it('preflights a synthetic incapable provider before identity and required flags', async () => {
-    const cwd = await project(config('generic', 'trusted-issues')),
-      io = captureIo();
-    const descriptor = {
-      id: 'trusted-issues',
-      roles: ['issues'],
-      capabilities: [],
-      backend: 'trusted-sdk',
-      schema: { type: 'object', properties: {}, additionalProperties: false },
-    } as const;
-    const adapter = {
-      providerId: 'trusted-issues',
-      role: 'issues',
-      backend: 'trusted-sdk',
-      capabilities: [],
-      routeRequired: false,
-      invoke: vi.fn(),
-    } as const;
-
-    expect(
-      await run(['--json', '--cwd', cwd, 'issue', 'create'], io, {
-        env: {},
-        trustedProviderComposition: { descriptors: [descriptor], adapters: [adapter] },
-      }),
-      io.out.join('\n'),
-    ).toBe(1);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({
-      ok: false,
-      error: { code: 'CAPABILITY_UNSUPPORTED', capability: 'issue.create' },
-    });
-    expect(adapter.invoke).not.toHaveBeenCalled();
   });
 
   it('diagnoses the trusted providers selected by strict project roles with real redacted probes', async () => {

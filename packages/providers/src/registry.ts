@@ -193,22 +193,13 @@ const TRUSTED_PAIRS = new Set(BUILTIN_PROVIDERS.map(({ id, backend }) => `${id}:
 export class ProviderRegistry {
   readonly #providers: ReadonlyMap<string, ProviderDescriptor>;
 
-  constructor(
-    descriptors: readonly ProviderDescriptor[] = BUILTIN_PROVIDERS,
-    explicitlyTrusted: readonly ProviderDescriptor[] = [],
-  ) {
-    const explicitlyTrustedPairs = new Set(
-      explicitlyTrusted.map(({ id, backend }) => `${id}:${backend}`),
-    );
+  constructor(descriptors: readonly ProviderDescriptor[] = BUILTIN_PROVIDERS) {
     const providers = new Map<string, ProviderDescriptor>();
     for (const input of descriptors) {
       if (providers.has(input.id)) {
         throw new ProviderError('PROVIDER_DUPLICATE', `Duplicate provider ID: ${input.id}`);
       }
-      if (
-        !TRUSTED_PAIRS.has(`${input.id}:${input.backend}`) &&
-        !explicitlyTrustedPairs.has(`${input.id}:${input.backend}`)
-      ) {
+      if (!TRUSTED_PAIRS.has(`${input.id}:${input.backend}`)) {
         throw new ProviderError(
           'UNTRUSTED_PROVIDER_INJECTION',
           `Provider/backend is not trusted: ${input.id}/${input.backend}`,

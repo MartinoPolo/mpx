@@ -1,18 +1,11 @@
 import path from 'node:path';
 import { loadUserConfig, type ProjectConfig } from '@mpx/config';
 import { MpxError, type JsonValue } from '@mpx/core';
-import { createGitHubAdapters } from '@mpx/provider-github';
-import { createGitLabAdapters } from '@mpx/provider-gitlab';
-import { createKanbanFlowAdapter } from '@mpx/provider-kanbanflow';
-import { createLocalIssueAdapter } from '@mpx/provider-local';
 import {
-  BUILTIN_PROVIDERS,
-  ProviderRegistry,
+  createBuiltinProviderAdapters,
   ProviderService,
   probeProvider,
   providerRegistry,
-  type ProviderAdapter,
-  type ProviderDescriptor,
   type ProviderProcessExecutor,
 } from '@mpx/providers';
 import { createProviderApplicationService } from '../provider-application-service.js';
@@ -41,19 +34,6 @@ export interface NodeProviderCompositionDependencies {
   readonly providerService?: NodeProviderInvoker;
   readonly providerProcessExecutor?: ProviderProcessExecutor;
   readonly repositorySelectorResolver?: NodeRepositorySelector;
-  readonly trustedProviderComposition?: Readonly<{
-    descriptors: readonly ProviderDescriptor[];
-    adapters: readonly ProviderAdapter[];
-  }>;
-}
-
-function configuredProviderRegistry(
-  dependencies: NodeProviderCompositionDependencies,
-): ProviderRegistry {
-  const extensions = dependencies.trustedProviderComposition?.descriptors ?? [];
-  return extensions.length === 0
-    ? providerRegistry
-    : new ProviderRegistry([...BUILTIN_PROVIDERS, ...extensions], extensions);
 }
 
 export async function createNodeProviderService(
@@ -119,37 +99,24 @@ export async function createNodeProviderService(
     }
   }
 
-  const adapters = [
-    ...(selectedProvider === undefined || selectedProvider === 'github'
-      ? createGitHubAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) })
-      : []),
-    ...(selectedProvider === undefined || selectedProvider === 'gitlab'
-      ? createGitLabAdapters(executor, { cwd, ...(repository === undefined ? {} : { repository }) })
-      : []),
-    ...(selectedProvider === undefined || selectedProvider === 'kanbanflow'
-      ? [
-          createKanbanFlowAdapter(executor, {
-            cwd,
-            ...(config.issues?.provider === 'kanbanflow' && config.issues.states !== undefined
-              ? { states: config.issues.states }
-              : {}),
-          }),
-        ]
-      : []),
+  const adapters = createBuiltinProviderAdapters(executor, {
+    ...(selectedProvider === undefined ? {} : { providerId: selectedProvider }),
+    cwd,
+    ...(repository === undefined ? {} : { repository }),
+    ...(config.issues?.provider === 'kanbanflow' && config.issues.states !== undefined
+      ? { kanbanflow: { states: config.issues.states } }
+      : {}),
     ...(selectedProvider === 'local' && localRoot
-      ? [
-          createLocalIssueAdapter({
+      ? {
+          local: {
             root: localRoot,
             projectId: config.project.id,
             ...(localOnChanged ? { onChanged: async () => localOnChanged() } : {}),
-          }),
-        ]
-      : []),
-    ...(dependencies.trustedProviderComposition?.adapters.filter(
-      (adapter) => selectedProvider === undefined || adapter.providerId === selectedProvider,
-    ) ?? []),
-  ];
-  return new ProviderService(configuredProviderRegistry(dependencies), adapters);
+          },
+        }
+      : {}),
+  });
+  return new ProviderService(providerRegistry, adapters);
 }
 
 export function createNodeConfiguredProviderApplicationService(
@@ -158,7 +125,7 @@ export function createNodeConfiguredProviderApplicationService(
   const executor =
     dependencies.providerProcessExecutor ?? new NodeProviderProcessExecutor(dependencies.env);
   return createProviderApplicationService({
-    registry: configuredProviderRegistry(dependencies),
+    registry: providerRegistry,
     routePolicy: {
       requiresRoute: ({ providerId, capabilities }) =>
         providerId !== 'local' && capabilities.length > 0,

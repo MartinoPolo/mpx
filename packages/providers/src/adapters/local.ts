@@ -2,15 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { MpxError, type JsonValue } from '@mpx/core';
-import {
-  ISSUE_CAPABILITIES,
-  LOCAL_ISSUE_CAPABILITIES,
-  ProviderError,
-  type IssueCommentV1,
-  type IssueV1,
-  type ProviderAdapter,
-  type ProviderInvocation,
-} from '@mpx/providers';
+import { ISSUE_CAPABILITIES, LOCAL_ISSUE_CAPABILITIES, ProviderError } from '../registry.js';
+import { type IssueCommentV1, type IssueV1 } from '../contracts.js';
+import type { ProviderAdapter, ProviderInvocation } from '../service.js';
 
 export interface LocalRelationships {
   parent?: string;

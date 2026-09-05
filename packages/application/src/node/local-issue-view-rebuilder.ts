@@ -1,4 +1,4 @@
-import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/provider-local';
+import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/providers';
 import type { LocalIssueViewRebuilder } from '../project-application-service.js';
 
 interface LocalIssueViewRebuilderDependencies {
@@ -19,7 +19,7 @@ const productionDependencies: LocalIssueViewRebuilderDependencies = {
   rebuildViews: (store, options) => rebuildObsidianIssueViews(store as LocalIssueStore, options),
 };
 
-/** Concrete provider-local structural adapter; exported only from @mpx/application/node. */
+/** Concrete local-provider structural adapter; exported only from @mpx/application/node. */
 export function createNodeLocalIssueViewRebuilder(
   dependencies: LocalIssueViewRebuilderDependencies = productionDependencies,
 ): LocalIssueViewRebuilder {

@@ -113,7 +113,7 @@ describe('registry validation', () => {
       expect.objectContaining({ code: 'PROVIDER_DUPLICATE' }),
     );
   });
-  it('accepts only caller-explicit trusted extension descriptors', () => {
+  it('rejects caller-supplied provider extensions', () => {
     const extension = {
       id: 'trusted-issues',
       roles: ['issues'],
@@ -121,11 +121,9 @@ describe('registry validation', () => {
       backend: 'trusted-sdk',
       schema: { type: 'object', properties: {}, additionalProperties: false },
     } as const;
-    const registry = new ProviderRegistry([...BUILTIN_PROVIDERS, extension], [extension]);
-    expect(registry.get('trusted-issues', 'issues')).toMatchObject({
-      backend: 'trusted-sdk',
-      capabilities: ['issue.list'],
-    });
+    expect(() => new ProviderRegistry([...BUILTIN_PROVIDERS, extension])).toThrowError(
+      expect.objectContaining({ code: 'UNTRUSTED_PROVIDER_INJECTION' }),
+    );
   });
 
   it('rejects executable/backend injection', () => {

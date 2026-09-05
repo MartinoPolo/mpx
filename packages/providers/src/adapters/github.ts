@@ -1,19 +1,20 @@
+import { ProviderError } from '../registry.js';
 import {
-  ProviderError,
   isMutationCapability,
   runProviderCommand,
+  type ProviderProcessExecutor,
+} from '../process.js';
+import {
   type CiCheckV1,
   type CiLogV1,
   type CiRetryV1,
   type CiStatusV1,
   type IssueCommentV1,
   type IssueV1,
-  type ProviderAdapter,
-  type ProviderInvocation,
-  type ProviderProcessExecutor,
   type ReviewCommentV1,
   type ReviewV1,
-} from '@mpx/providers';
+} from '../contracts.js';
+import type { ProviderAdapter, ProviderInvocation } from '../service.js';
 
 export const GITHUB_ISSUE_CAPABILITIES = [
   'issue.list',

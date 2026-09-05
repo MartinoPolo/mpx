@@ -7,7 +7,7 @@ import type {
   ProviderProcessResult,
 } from '@mpx/providers';
 import { defineIssueAdapterConformance } from '@mpx/providers/testing';
-import { createGitHubAdapters } from '@mpx/provider-github';
+import { createBuiltinProviderAdapters } from '@mpx/providers';
 
 interface NativeIssue {
   number: number;
@@ -107,7 +107,7 @@ class StatefulGh implements ProviderProcessExecutor {
 
 defineIssueAdapterConformance('GitHub issue adapter', () => {
   const gh = new StatefulGh();
-  const adapter = createGitHubAdapters(gh)[0];
+  const adapter = createBuiltinProviderAdapters(gh, { providerId: 'github' })[0]!;
   return {
     capabilities: adapter.capabilities.filter((value): value is IssueCapability =>
       value.startsWith('issue.'),

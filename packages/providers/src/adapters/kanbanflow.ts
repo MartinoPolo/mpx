@@ -3,15 +3,15 @@ import {
   ISSUE_CAPABILITIES,
   ProviderError,
   REVIEW_CAPABILITIES,
+} from '../registry.js';
+import {
   isMutationCapability,
   runProviderCommand,
-  type IssueCommentV1,
-  type IssueV1,
-  type ProviderAdapter,
-  type ProviderInvocation,
   type ProviderCommandRequest,
   type ProviderProcessExecutor,
-} from '@mpx/providers';
+} from '../process.js';
+import { type IssueCommentV1, type IssueV1 } from '../contracts.js';
+import type { ProviderAdapter, ProviderInvocation } from '../service.js';
 
 export interface KanbanFlowStateMapping {
   readonly todo?: string;

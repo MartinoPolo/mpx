@@ -27,7 +27,7 @@ import { MpxError } from '@mpx/core';
 import { discoverProjectConfig } from '@mpx/config';
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from '@mpx/ports';
 import { createStatusProvider, type StatusProvider } from '@mpx/status';
-import type { ProviderAdapter, ProviderDescriptor, ProviderProcessExecutor } from '@mpx/providers';
+import type { ProviderProcessExecutor } from '@mpx/providers';
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from '@mpx/windows';
 import { createNodeWorktreeIncludeDependencies, type FileSystemAdapter } from '@mpx/worktrees';
 import type { JsonValue } from '@mpx/core';
@@ -173,11 +173,6 @@ export interface CliContext extends LaunchExecutionContext {
   ) => WorkspaceApplicationService;
   installerOperationAdapter?: InstallerOperationAdapter;
   installerTransactionStore?: TransactionStore;
-  /** Application-owned trusted extensions; never populated from project configuration. */
-  trustedProviderComposition?: Readonly<{
-    descriptors: readonly ProviderDescriptor[];
-    adapters: readonly ProviderAdapter[];
-  }>;
 }
 
 export function configuredProviderApplicationService(context: CliContext) {
