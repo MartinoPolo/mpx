@@ -1,3 +1,4 @@
+import { sha256Canonical, type JsonValue } from '@mpx/core';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceApplicationService } from '../../src/workspace-application-service.js';
 
@@ -148,6 +149,55 @@ describe('WorkspaceApplicationService', () => {
     });
   });
 
+  it('performs one automatic orphan recovery using only the exact bounded approval', async () => {
+    const orphaned = [{ leaseId: 'lease' }];
+    const expectedApproval = `APPROVE WORKTREE ORPHAN RELEASE ${sha256Canonical(orphaned as JsonValue)}`;
+    const reconcile = vi
+      .fn()
+      .mockResolvedValueOnce({ orphaned, expectedApproval })
+      .mockResolvedValueOnce({ orphaned: [], status: 'resolved' });
+    const { service } = fixture({
+      worktrees: { ...fixture().dependencies.worktrees, reconcile },
+    });
+    await service.list({ schemaVersion: 1, cwd: '/repo' });
+    expect(reconcile.mock.calls).toEqual([
+      [{ cwd: '/repo' }],
+      [{ cwd: '/repo', orphanApproval: expectedApproval }],
+    ]);
+  });
+
+  it('reports malformed orphan recovery as a bounded degraded read without retrying', async () => {
+    const reconcile = vi.fn(async () => ({
+      orphaned: [{ leaseId: 'lease' }],
+      expectedApproval: `UNTRUSTED C:\\private\\secret ${'x'.repeat(1000)}`,
+    }));
+    const { service } = fixture({
+      worktrees: { ...fixture().dependencies.worktrees, reconcile },
+    });
+    const result = await service.list({ schemaVersion: 1, cwd: '/repo' });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({ code: 'WORKSPACE_RECOVERY_INVALID' }),
+    ]);
+    expect(result.diagnostics[0]!.message).not.toContain('private');
+  });
+
+  it('blocks mutation before side effects for a structurally invalid orphan recovery result', async () => {
+    const create = vi.fn();
+    const reconcile = vi.fn(async () => ({
+      orphaned: new Array(129).fill({ leaseId: 'lease' }),
+      expectedApproval: `APPROVE WORKTREE ORPHAN RELEASE ${'a'.repeat(64)}`,
+    }));
+    const { service } = fixture({
+      worktrees: { ...fixture().dependencies.worktrees, reconcile, create },
+    });
+    await expect(
+      service.create({ schemaVersion: 1, cwd: '/repo', branch: 'feature/x' }),
+    ).rejects.toMatchObject({ code: 'WORKSPACE_RECOVERY_BLOCKED' });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('returns bounded redacted diagnostics for degraded reads', async () => {
     const reconcile = vi.fn(async () => {
       throw new Error('failed C:\\private\\secret TOKEN=value '.repeat(100));
@@ -221,6 +271,40 @@ describe('WorkspaceApplicationService', () => {
     expect(manager.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('attempts tolerant recovery before stop without masking the stop operation', async () => {
+    const failure = new Error('recovery failed');
+    const { service, dependencies, manager } = fixture({
+      worktrees: {
+        ...fixture().dependencies.worktrees,
+        reconcile: vi.fn(async () => {
+          throw failure;
+        }),
+      },
+    });
+    manager.status.mockResolvedValue({ id: 'web', state: 'ready', pid: 7 } as never);
+    await service.stop({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' });
+    expect(dependencies.worktrees.reconcile).toHaveBeenCalledTimes(1);
+    expect(manager.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('attempts tolerant recovery before logs and preserves the service log error', async () => {
+    const logFailure = new Error('actual log failure');
+    const { service, dependencies, manager } = fixture({
+      worktrees: {
+        ...fixture().dependencies.worktrees,
+        reconcile: vi.fn(async () => {
+          throw new Error('recovery failed');
+        }),
+      },
+    });
+    manager.status.mockResolvedValue({ id: 'web', state: 'ready', pid: 7 } as never);
+    manager.logs.mockRejectedValue(logFailure);
+    await expect(
+      service.logs({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' }),
+    ).rejects.toBe(logFailure);
+    expect(dependencies.worktrees.reconcile).toHaveBeenCalledTimes(1);
+  });
+
   it('delegates verified port termination with a stable result', async () => {
     const { service, dependencies } = fixture();
     await expect(service.killPort({ schemaVersion: 1, pid: 42 })).resolves.toEqual({
@@ -289,6 +373,19 @@ describe('WorkspaceApplicationService', () => {
     });
     await service.start({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' });
     expect(dependencies.services.forWorkspace).toHaveBeenCalledWith('/repo');
+  });
+
+  it('does not grant absolute executable trust to an injected package resolver', async () => {
+    const { service, manager } = fixture({
+      resolvePackageInvocation: vi.fn(async () => ({
+        executable: '/repo/malicious-pnpm',
+        prefixArguments: [],
+      })),
+    });
+    await service.start({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' });
+    expect(manager.start).toHaveBeenCalledWith(
+      expect.not.objectContaining({ trustedAbsoluteExecutable: true }),
+    );
   });
 
   it('returns empty logs for a configured service that was never started', async () => {

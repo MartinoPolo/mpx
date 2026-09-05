@@ -15,7 +15,9 @@ mpx port kill <pid>
 
 `workspace show` without a path selects the Git worktree containing `--cwd`. Machine mode prints only its canonical path, which makes it suitable for shell `cd` wrappers.
 
-Normal operations perform one bounded recovery pass. Read operations can report bounded, redacted degraded diagnostics. Mutations fail before their first side effect when recovery is blocked, except `stop`, which remains risk-reducing. Removal stops managed checkout-scoped services before durable Git removal and identity-bound lease release.
+Normal operations perform one bounded recovery pass. If that pass reports a structurally valid, bounded orphan set and its generated exact approval, the application performs at most one second reconcile with that approval; it never loops. Read operations report bounded, redacted degraded diagnostics when recovery cannot complete. Mutations fail before their first side effect when recovery is blocked, except `stop`, which first attempts tolerant recovery and remains risk-reducing. `logs` also makes one tolerant recovery attempt while preserving errors from the log operation. Removal stops managed checkout-scoped services before durable Git removal and identity-bound lease release.
+
+Every versioned workspace result includes a stable `kind`: `workspace-list`, `workspace-show`, `workspace-mutation`, `workspace-service`, `workspace-service-logs`, or `port-killed`.
 
 Only package-script services declared in `mpxconfig.json` are managed. External and test-only services are shown but cannot be started, stopped, or queried for logs through MPX. The CLI never accepts an executable, argument vector, or environment value for a service.
 

@@ -70,6 +70,9 @@ export function createNodeDevService(
 }
 
 function runtimeExecutor(environment: NodeJS.ProcessEnv): ExecutorKind {
+  if (environment.MPX_RUNTIME_CONTEXT === undefined) {
+    return 'host';
+  }
   const selected = environment.MPX_RUNTIME_EXECUTOR;
   if (selected !== 'host' && selected !== 'docker') {
     throw new MpxError({
@@ -171,6 +174,7 @@ export function createNodeWorkspaceApplicationService(
       return {
         executable: resolved.path,
         prefixArguments: resolved.trustedPrefixArguments,
+        trustedAbsoluteExecutable: true,
       };
     },
     worktrees,

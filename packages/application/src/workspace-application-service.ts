@@ -112,7 +112,7 @@ export interface WorkspaceApplicationDependencies {
     contains(root: string, candidate: string): boolean;
   };
   readonly worktrees: {
-    reconcile(request: { cwd: string }): Promise<unknown>;
+    reconcile(request: { cwd: string; orphanApproval?: string }): Promise<unknown>;
     list(request: { cwd: string }): Promise<readonly WorktreeInventoryEntry[]>;
     create(request: CreateWorktreeRequest): Promise<LifecycleResult>;
     remove(request: { cwd: string; worktreePath: string }): Promise<LifecycleResult>;
@@ -150,7 +150,12 @@ export interface WorkspaceApplicationDependencies {
   readonly resolvePackageInvocation?: (
     manager: 'auto' | 'pnpm' | 'yarn' | 'npm' | 'bun',
     cwd: string,
-  ) => Promise<{ readonly executable: string; readonly prefixArguments: readonly string[] }>;
+  ) => Promise<{
+    readonly executable: string;
+    readonly prefixArguments: readonly string[];
+    /** Node composition sets this only after fixed-candidate executable resolution. */
+    readonly trustedAbsoluteExecutable?: true;
+  }>;
 }
 
 const secret =
@@ -171,6 +176,51 @@ function assertSchema(request: { readonly schemaVersion: number }): void {
       code: 'SCHEMA_VERSION_UNSUPPORTED',
       message: 'Only workspace application schema version 1 is supported.',
     });
+  }
+}
+function recoveryInvalid(): MpxError {
+  return new MpxError({
+    code: 'WORKSPACE_RECOVERY_INVALID',
+    message: 'Workspace orphan recovery returned an invalid or unbounded result.',
+  });
+}
+function orphanApproval(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return undefined;
+  }
+  const value = result as { orphaned?: unknown; expectedApproval?: unknown };
+  if (value.orphaned === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value.orphaned)) {
+    throw recoveryInvalid();
+  }
+  if (value.orphaned.length === 0) {
+    return undefined;
+  }
+  if (value.orphaned.length > 128 || typeof value.expectedApproval !== 'string') {
+    throw recoveryInvalid();
+  }
+  let encoded: string;
+  let generated: string;
+  try {
+    encoded = JSON.stringify(value.orphaned);
+    generated = `APPROVE WORKTREE ORPHAN RELEASE ${sha256Canonical(value.orphaned as JsonValue)}`;
+  } catch {
+    throw recoveryInvalid();
+  }
+  if (encoded.length > 65_536 || value.expectedApproval !== generated) {
+    throw recoveryInvalid();
+  }
+  return value.expectedApproval;
+}
+function assertOrphansResolved(result: unknown): void {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw recoveryInvalid();
+  }
+  const orphaned = (result as { orphaned?: unknown }).orphaned;
+  if (orphaned !== undefined && (!Array.isArray(orphaned) || orphaned.length !== 0)) {
+    throw recoveryInvalid();
   }
 }
 function blocked(error: unknown): never {
@@ -213,7 +263,17 @@ export class WorkspaceApplicationService {
         return undefined;
       }
     };
-    await attempt(() => this.dependencies.worktrees.reconcile({ cwd }));
+    await attempt(async () => {
+      const first = await this.dependencies.worktrees.reconcile({ cwd });
+      const approval = orphanApproval(first);
+      if (approval !== undefined) {
+        const second = await this.dependencies.worktrees.reconcile({
+          cwd,
+          orphanApproval: approval,
+        });
+        assertOrphansResolved(second);
+      }
+    });
     if (this.dependencies.ports.reconcile) {
       await attempt(() => this.dependencies.ports.reconcile!({ cwd, orphanPolicy: 'report' }));
     }
@@ -438,9 +498,7 @@ export class WorkspaceApplicationService {
 
   private async serviceContext(request: WorkspaceServiceRequestV1, tolerateRecovery = false) {
     assertSchema(request);
-    if (!tolerateRecovery) {
-      await this.recover(request.cwd, false);
-    }
+    await this.recover(request.cwd, tolerateRecovery);
     const inventory = await this.inventory(request.cwd);
     const requested = this.dependencies.path.resolve(request.path ?? request.cwd);
     const workspace = request.path
@@ -573,8 +631,7 @@ export class WorkspaceApplicationService {
       : await manager.start({
           id: request.serviceId,
           executable: invocation.executable,
-          ...(invocation.executable.startsWith('/') ||
-          /^[A-Za-z]:[\\/]/u.test(invocation.executable)
+          ...(invocation.trustedAbsoluteExecutable === true
             ? { trustedAbsoluteExecutable: true as const }
             : {}),
           args: [...invocation.prefixArguments, 'run', script],

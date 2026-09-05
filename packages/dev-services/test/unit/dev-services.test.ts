@@ -107,6 +107,18 @@ describe('managed development services', () => {
   });
   it('fails closed rather than executing host runtime for a Docker launch', () =>
     expect(() => assertExecutorBoundary('docker', 'host')).toThrow(/Docker executor/));
+  it('rejects an absolute executable unless trusted composition explicitly marks it', () => {
+    expect(() => validateStartRequest({ ...request, executable: 'C:/tools/npm.cmd' })).toThrow(
+      /trusted absolute/,
+    );
+    expect(() =>
+      validateStartRequest({
+        ...request,
+        executable: 'C:/tools/npm.cmd',
+        trustedAbsoluteExecutable: true,
+      }),
+    ).not.toThrow();
+  });
   it('rejects ports not assigned to the exact worktree', () =>
     expect(() => validateStartRequest({ ...request, ports: [4100, 9999] })).toThrow(/assigned/));
   it('rejects malicious ids and cwd escapes', () => {

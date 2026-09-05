@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createNodeWorkspaceApplicationService } from '../../packages/application/src/node/index.js';
+import { createNodeWorkspaceApplicationService } from '@mpx/application/node';
 
 const exec = promisify(execFile);
 const roots: string[] = [];
@@ -101,12 +101,43 @@ describe('real Node workspace lifecycle', () => {
     }
     expect(['starting', 'ready']).toContain(started.service.state);
     expect(logs.text).toContain('ready');
+    let shown = await application.show({ schemaVersion: 1, cwd: linked });
+    for (
+      let attempt = 0;
+      attempt < 25 && (!shown.services[0]?.listening || shown.services[0]?.state !== 'ready');
+      attempt++
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      shown = await application.show({ schemaVersion: 1, cwd: linked });
+    }
+    expect(shown.services).toEqual([
+      expect.objectContaining({
+        id: 'web',
+        configured: true,
+        port: expect.any(Number),
+        listening: true,
+        conflict: 'unknown',
+        state: 'ready',
+        pid: expect.any(Number),
+      }),
+    ]);
     await expect(access(path.join(linked, 'malicious-project-executed.txt'))).rejects.toMatchObject(
       {
         code: 'ENOENT',
       },
     );
     await application.stop({ schemaVersion: 1, cwd: linked, serviceId: 'web' });
+    const afterStop = await application.show({ schemaVersion: 1, cwd: linked });
+    expect(afterStop.services).toEqual([
+      expect.objectContaining({
+        id: 'web',
+        configured: true,
+        listening: false,
+        conflict: 'none',
+        state: 'stopped',
+        pid: null,
+      }),
+    ]);
     const stoppedAgain = await application.stop({
       schemaVersion: 1,
       cwd: linked,
@@ -115,5 +146,5 @@ describe('real Node workspace lifecycle', () => {
     expect(stoppedAgain.service.state).toBe('stopped');
     const removed = await application.remove({ schemaVersion: 1, cwd: repository, path: linked });
     expect(removed.status).toBe('removed');
-  }, 60_000);
+  }, 120_000);
 });
