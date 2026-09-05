@@ -94,7 +94,16 @@ describe('provider contracts', () => {
     });
   });
 
-  it('advertises only issue capabilities implemented by each trusted built-in', () => {
+  it('advertises only capabilities implemented by each trusted built-in', () => {
+    expect(providerRegistry.get('gerrit', 'repository').capabilities).toEqual([
+      'review.view',
+      'review.create',
+      'review.update',
+      'review.comment',
+      'review.ready',
+      'review.merge',
+    ]);
+    expect(providerRegistry.get('gerrit', 'repository').capabilities).not.toContain('ci.status');
     expect(providerRegistry.get('github', 'issues').capabilities).not.toContain('issue.move');
     expect(providerRegistry.get('gitlab', 'issues').capabilities).not.toContain('issue.move');
     expect(providerRegistry.get('kanbanflow', 'issues').capabilities).toContain('issue.move');

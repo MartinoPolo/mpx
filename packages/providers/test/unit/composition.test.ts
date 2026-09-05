@@ -17,4 +17,27 @@ describe('built-in provider composition', () => {
       adapters.map(({ providerId, backend, role }) => ({ providerId, backend, role })),
     ).toEqual([{ providerId: 'kanbanflow', backend: 'kf', role: 'issues' }]);
   });
+
+  it('constructs the fixed Gerrit adapter only when selector and configured remote are present', () => {
+    const adapters = createBuiltinProviderAdapters(executor, {
+      providerId: 'gerrit',
+      cwd: 'C:/project',
+      repository: 'review.example/team/project',
+      remote: 'review-upstream',
+    });
+    expect(adapters).toHaveLength(1);
+    expect(adapters[0]).toMatchObject({
+      providerId: 'gerrit',
+      backend: 'git-ssh',
+      role: 'repository',
+      capabilities: [
+        'review.view',
+        'review.create',
+        'review.update',
+        'review.comment',
+        'review.ready',
+        'review.merge',
+      ],
+    });
+  });
 });

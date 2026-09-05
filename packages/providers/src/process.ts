@@ -6,6 +6,8 @@ export interface ProviderProcessRequest {
   readonly cwd?: string;
   readonly timeoutMilliseconds?: number;
   readonly authExitCodes?: readonly number[];
+  /** Optional bounded standard input for trusted commands with structured input modes. */
+  readonly stdin?: string;
 }
 
 export interface ProviderProcessResult {
@@ -62,6 +64,7 @@ export async function runProviderCommand<T = string>(
         ? {}
         : { timeoutMilliseconds: request.timeoutMilliseconds }),
       ...(request.authExitCodes === undefined ? {} : { authExitCodes: [...request.authExitCodes] }),
+      ...(request.stdin === undefined ? {} : { stdin: request.stdin }),
     });
   } catch (error) {
     const missing =

@@ -25,7 +25,7 @@ export interface NodeProviderInvoker {
 }
 
 export interface NodeRepositorySelector {
-  resolve(request: { root: string; remote: string }): Promise<string>;
+  resolve(request: { root: string; remote: string; providerId?: string }): Promise<string>;
 }
 
 /** Structural composition inputs; deliberately independent of the CLI context. */
@@ -51,12 +51,17 @@ export async function createNodeProviderService(
   const needsForgeRepository =
     selectedProvider === undefined ||
     selectedProvider === 'github' ||
-    selectedProvider === 'gitlab';
+    selectedProvider === 'gitlab' ||
+    selectedProvider === 'gerrit';
   const repository = needsForgeRepository
     ? await (
         dependencies.repositorySelectorResolver ??
         new NodeRepositorySelectorResolver(dependencies.env)
-      ).resolve({ root: cwd, remote: config.repository.remote })
+      ).resolve({
+        root: cwd,
+        remote: config.repository.remote,
+        ...(selectedProvider === 'gerrit' ? { providerId: 'gerrit' } : {}),
+      })
     : undefined;
 
   let localRoot: string | undefined;
@@ -103,6 +108,7 @@ export async function createNodeProviderService(
     ...(selectedProvider === undefined ? {} : { providerId: selectedProvider }),
     cwd,
     ...(repository === undefined ? {} : { repository }),
+    remote: config.repository.remote,
     ...(config.issues?.provider === 'kanbanflow' && config.issues.states !== undefined
       ? { kanbanflow: { states: config.issues.states } }
       : {}),

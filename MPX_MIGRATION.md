@@ -222,7 +222,9 @@ Ports, worktrees, and development services remain separate deep packages. The pr
 
 ### Phase 7 — Provider consolidation
 
-Move GitHub, GitLab, KanbanFlow, local Markdown, and minimal Gerrit into one private providers package while keeping adapters internally separated. Move conformance tests before deleting old packages. Remove dynamic provider injection and verify every operation referenced by canonical issue, review, and CI skills.
+**State: complete.**
+
+GitHub, GitLab, KanbanFlow, local Markdown, and minimal Gerrit are fixed, internally separated adapters in the private providers package. Dynamic provider injection is removed, fixed registry/adapter agreement fails closed, and provider, application, CLI, and contract tests verify the provider-neutral operations referenced by canonical issue, review, and CI skills. Gerrit's review operations are covered against recorded command/response contracts; live Gerrit acceptance remains a separate environment-dependent check because no live server is available in the repository gate.
 
 ### Phase 8 — Obsolete architecture deletion
 

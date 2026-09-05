@@ -12,6 +12,8 @@ import {
   classifyProviderProcessResult,
   createNodeProviderService as providerService,
   parseForgeRepositoryUrl,
+  parseGerritRepositoryUrl,
+  providerExecutableArguments,
   resolveBuiltInProviderExecutable,
 } from '../../src/node/index.js';
 
@@ -88,6 +90,52 @@ it('binds production GitHub and GitLab adapters to the resolved project root', a
   ]);
 });
 
+it('selects the fixed Gerrit adapter with the configured remote name', async () => {
+  const requests: ProviderProcessRequest[] = [];
+  const execute = vi.fn(async (request: ProviderProcessRequest) => {
+    requests.push(request);
+    return {
+      exitCode: 0,
+      stdout: `${JSON.stringify({ project: 'team/platform/service', branch: 'main', number: 42, id: 'I1111111111111111111111111111111111111111', subject: 'Change', status: 'NEW', wip: false, currentPatchSet: { number: 1, revision: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ref: 'refs/changes/42/42/1' } })}\n${JSON.stringify({ type: 'stats', rowCount: 1 })}\n`,
+      stderr: '',
+    };
+  });
+  const resolve = vi.fn(async () => 'review.example/team/platform/service');
+  const service = await providerService(
+    { env: {}, providerProcessExecutor: { execute }, repositorySelectorResolver: { resolve } },
+    {
+      schemaVersion: 1,
+      project: { id: 'sample' },
+      repository: { provider: 'gerrit', remote: 'review-upstream' },
+    } as ProjectConfig,
+    'C:/repo',
+    { providerId: 'gerrit', capability: 'review.view' },
+  );
+  await service.invoke({
+    providerId: 'gerrit',
+    capability: 'review.view',
+    route: 'work',
+    input: { id: '42' },
+  });
+  expect(resolve).toHaveBeenCalledWith({
+    root: 'C:/repo',
+    remote: 'review-upstream',
+    providerId: 'gerrit',
+  });
+  expect(requests[0]?.argv).toEqual([
+    'ssh',
+    'review.example',
+    'gerrit',
+    'query',
+    '--format=JSON',
+    '--current-patch-set',
+    '--',
+    'limit:2',
+    'project:team/platform/service',
+    'change:42',
+  ]);
+});
+
 it('rejects an operation-cwd provider executable found on PATH', async () => {
   const operationCwd = await mkdtemp(path.join(tmpdir(), 'mpx-provider-hijack-'));
   roots.push(operationCwd);
@@ -97,6 +145,49 @@ it('rejects an operation-cwd provider executable found on PATH', async () => {
   await expect(
     resolveBuiltInProviderExecutable('gh', operationCwd, { PATH: operationCwd, PATHEXT: '.EXE' }),
   ).rejects.toMatchObject({ code: 'EACCES' });
+});
+
+it.each(['git', 'ssh'] as const)(
+  'resolves trusted %s outside the project and rejects a project-local shim',
+  async (name) => {
+    const root = await mkdtemp(path.join(tmpdir(), `mpx-provider-${name}-`));
+    roots.push(root);
+    const operationCwd = path.join(root, 'project');
+    const trustedDirectory = path.join(root, 'trusted-bin');
+    await Promise.all([mkdir(operationCwd), mkdir(trustedDirectory)]);
+    const filename = `${name}${process.platform === 'win32' ? '.EXE' : ''}`;
+    const trusted = path.join(trustedDirectory, filename);
+    const shim = path.join(operationCwd, filename);
+    await Promise.all([writeFile(trusted, 'trusted'), writeFile(shim, 'shim')]);
+    await expect(
+      resolveBuiltInProviderExecutable(name, operationCwd, {
+        PATH: trustedDirectory,
+        PATHEXT: '.EXE',
+      }),
+    ).resolves.toBe(await realpath(trusted));
+    await expect(
+      resolveBuiltInProviderExecutable(name, operationCwd, { PATH: operationCwd, PATHEXT: '.EXE' }),
+    ).rejects.toMatchObject({ code: 'EACCES' });
+  },
+);
+
+it('uses only the exact runtime SSH route config and leaves native SSH argv unchanged outside runtime', () => {
+  const route = path.resolve('C:/runtime/routes/ssh/work');
+  expect(
+    providerExecutableArguments('ssh', ['review.example', 'gerrit', 'version'], {
+      MPX_RUNTIME_CONTEXT: '{}',
+      MPX_RUNTIME_ROUTE_SSH: route,
+    }),
+  ).toEqual(['-F', path.join(route, 'config'), 'review.example', 'gerrit', 'version']);
+  expect(providerExecutableArguments('ssh', ['review.example'], { APPDATA: 'C:/ambient' })).toEqual(
+    ['review.example'],
+  );
+  expect(() =>
+    providerExecutableArguments('ssh', ['review.example'], {
+      MPX_RUNTIME_CONTEXT: '{}',
+      MPX_RUNTIME_ROUTE_SSH: '../other-route',
+    }),
+  ).toThrowError(expect.objectContaining({ code: 'EINVAL' }));
 });
 
 it('resolves a trusted built-in from an absolute PATH directory to its canonical path', async () => {
@@ -196,6 +287,37 @@ it('binds native provider authentication to isolated safe route environments wit
   });
   expect(kanbanWork).toEqual({ route: 'kanban-work' });
   expect(process.env.MPX_PROVIDER_ROUTE).toBe(originalProcessRoute);
+});
+
+it('writes bounded structured stdin to the trusted child without a shell', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-provider-stdin-'));
+  roots.push(root);
+  const operationCwd = path.join(root, 'project');
+  const trustedDirectory = path.join(root, 'trusted-bin');
+  const appData = path.join(root, 'appdata');
+  await Promise.all([mkdir(operationCwd), mkdir(trustedDirectory), mkdir(appData)]);
+  const executable = path.join(trustedDirectory, process.platform === 'win32' ? 'gh.EXE' : 'gh');
+  await copyFile(process.execPath, executable);
+  const executor = new NodeProviderProcessExecutor({
+    PATH: trustedDirectory,
+    PATHEXT: '.EXE',
+    APPDATA: appData,
+  });
+  const result = await executor.execute({
+    argv: ['gh', '-e', "process.stdin.on('data',d=>process.stdout.write(d))"],
+    stdin: '{"ready":true}\n',
+    route: 'work',
+    cwd: operationCwd,
+  });
+  expect(result).toMatchObject({ exitCode: 0, stdout: '{"ready":true}\n' });
+  await expect(
+    executor.execute({
+      argv: ['gh', '--version'],
+      stdin: 'x'.repeat(64 * 1024 + 1),
+      route: 'work',
+      cwd: operationCwd,
+    }),
+  ).rejects.toMatchObject({ code: 'EINVAL' });
 });
 
 it('uses the exact launch-injected provider route instead of ambient or requested identity paths', async () => {
@@ -315,6 +437,15 @@ it('honors provider operation timeouts and rejects signalled execution', async (
       timeoutMilliseconds: 20,
     }),
   ).rejects.toMatchObject({ killed: true });
+});
+
+it('parses safe nested Gerrit projects without weakening forge selectors', () => {
+  expect(parseGerritRepositoryUrl('ssh://git@review.example/team/platform/service.git')).toBe(
+    'review.example/team/platform/service',
+  );
+  expect(() =>
+    parseForgeRepositoryUrl('https://github.example/team/platform/service.git'),
+  ).toThrowError(expect.objectContaining({ code: 'REPOSITORY_REMOTE_INVALID' }));
 });
 
 it.each([

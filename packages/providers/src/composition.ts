@@ -2,17 +2,20 @@ import type { ProviderAdapter } from './service.js';
 import type { ProviderProcessExecutor } from './process.js';
 import { createGitHubAdapters, type GitHubAdapterOptions } from './adapters/github.js';
 import { createGitLabAdapters, type GitLabAdapterOptions } from './adapters/gitlab.js';
+import { createGerritAdapter, type GerritAdapterOptions } from './adapters/gerrit.js';
 import { createKanbanFlowAdapter, type KanbanFlowAdapterOptions } from './adapters/kanbanflow.js';
 import { createLocalIssueAdapter, type LocalIssue } from './adapters/local.js';
 
-export type BuiltinProviderId = 'github' | 'gitlab' | 'kanbanflow' | 'local';
+export type BuiltinProviderId = 'github' | 'gitlab' | 'gerrit' | 'kanbanflow' | 'local';
 
 export interface BuiltinProviderAdapterOptions {
   readonly providerId?: string;
   readonly cwd?: string;
   readonly repository?: string;
+  readonly remote?: string;
   readonly github?: Omit<GitHubAdapterOptions, 'cwd' | 'repository'>;
   readonly gitlab?: Omit<GitLabAdapterOptions, 'cwd' | 'repository'>;
+  readonly gerrit?: Omit<GerritAdapterOptions, 'cwd' | 'repository' | 'remote'>;
   readonly kanbanflow?: Omit<KanbanFlowAdapterOptions, 'cwd'>;
   readonly local?: Readonly<{
     root: string;
@@ -42,6 +45,16 @@ export function createBuiltinProviderAdapters(
           ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
           ...(options.repository === undefined ? {} : { repository: options.repository }),
         })
+      : []),
+    ...(selected === 'gerrit' && options.repository !== undefined && options.remote !== undefined
+      ? [
+          createGerritAdapter(executor, {
+            ...options.gerrit,
+            repository: options.repository,
+            remote: options.remote,
+            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+          }),
+        ]
       : []),
     ...(selected === undefined || selected === 'kanbanflow'
       ? [

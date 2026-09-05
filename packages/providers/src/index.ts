@@ -4,6 +4,8 @@ export * from './probe.js';
 export * from './registry.js';
 export * from './service.js';
 export * from './composition.js';
+export { createGerritAdapter, GERRIT_REPOSITORY_CAPABILITIES } from './adapters/gerrit.js';
+export type { GerritAdapterOptions } from './adapters/gerrit.js';
 export {
   LocalIssueError,
   LocalIssueStore,

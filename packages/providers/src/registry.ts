@@ -153,7 +153,7 @@ export const BUILTIN_PROVIDERS: readonly ProviderDescriptor[] = Object.freeze([
   freezeDescriptor({
     id: 'gerrit',
     roles: ['repository'],
-    capabilities: [],
+    capabilities: [...REVIEW_CAPABILITIES],
     backend: 'git-ssh',
     schema: REMOTE_SCHEMA,
   }),

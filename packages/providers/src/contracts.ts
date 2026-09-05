@@ -38,8 +38,10 @@ export interface ReviewCommentV1 extends ProviderRecordV1 {
   readonly id: string;
   readonly reviewId: string;
   readonly body: string;
-  readonly author: string;
-  readonly createdAt: string;
+  /** Omitted when a provider mutation acknowledgement cannot truthfully identify the author. */
+  readonly author?: string;
+  /** Omitted when the provider does not return the server timestamp. */
+  readonly createdAt?: string;
 }
 
 export interface CiLogV1 extends ProviderRecordV1 {

@@ -642,6 +642,71 @@ describe('provider CLI', () => {
     },
   );
 
+  it('selects the fixed Gerrit Review adapter from CLI composition', async () => {
+    const value = config('gerrit', 'none');
+    value.repository.remote = 'review-upstream';
+    const cwd = await project(value),
+      env = await identityEnv(cwd, { gerrit: 'work-gerrit' }),
+      io = captureIo();
+    const execute = vi.fn(async () => ({
+      exitCode: 0,
+      stderr: '',
+      stdout: `${JSON.stringify({ project: 'team/platform/service', branch: 'main', number: 7, id: 'I1111111111111111111111111111111111111111', subject: 'Gerrit Review', status: 'NEW', wip: false, currentPatchSet: { number: 2, revision: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ref: 'refs/changes/07/7/2' } })}\n${JSON.stringify({ type: 'stats', rowCount: 1 })}\n`,
+    }));
+    const resolve = vi.fn(async () => 'review.example/team/platform/service');
+    expect(
+      await run(['--json', '--cwd', cwd, 'review', 'view', '--id', '7', '--identity', 'work'], io, {
+        env,
+        providerProcessExecutor: { execute },
+        repositorySelectorResolver: { resolve },
+      }),
+    ).toBe(0);
+    expect(resolve).toHaveBeenCalledWith({
+      root: cwd,
+      remote: 'review-upstream',
+      providerId: 'gerrit',
+    });
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        argv: [
+          'ssh',
+          'review.example',
+          'gerrit',
+          'query',
+          '--format=JSON',
+          '--current-patch-set',
+          '--',
+          'limit:2',
+          'project:team/platform/service',
+          'change:7',
+        ],
+        route: 'work-gerrit',
+        cwd,
+      }),
+    );
+  });
+
+  it('rejects unsupported Gerrit CI before repository resolution or process execution', async () => {
+    const cwd = await project(config('gerrit', 'none')),
+      env = await identityEnv(cwd, { gerrit: 'work-gerrit' }),
+      io = captureIo(),
+      execute = vi.fn(),
+      resolve = vi.fn();
+    expect(
+      await run(['--json', '--cwd', cwd, 'ci', 'status', '--id', '7', '--identity', 'work'], io, {
+        env,
+        providerProcessExecutor: { execute },
+        repositorySelectorResolver: { resolve },
+      }),
+    ).toBe(1);
+    expect(JSON.parse(io.out[0]!)).toMatchObject({
+      ok: false,
+      error: { code: 'CAPABILITY_UNSUPPORTED', capability: 'ci.status' },
+    });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['issue list', ['issue', 'list'], 'kanbanflow', 'issue.list', {}],
     ['issue view', ['issue', 'view', '--id', '1'], 'kanbanflow', 'issue.view', { id: '1' }],

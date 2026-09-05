@@ -9,14 +9,14 @@ import type {
   ProviderProcessResult,
 } from '@mpx/providers';
 
-const builtInProviderExecutables = new Set(['gh', 'glab', 'kf']);
+const builtInProviderExecutables = new Set(['gh', 'glab', 'kf', 'git', 'ssh']);
 const providerProcessTimeoutMilliseconds = 120_000;
 const providerProcessMaxBufferBytes = 10 * 1024 * 1024;
 const safeRepositorySegment = /^[A-Za-z0-9_.][A-Za-z0-9._-]*$/u;
 const safeRemoteName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 
 export interface NodeRepositorySelectorResolverContract {
-  resolve(request: { root: string; remote: string }): Promise<string>;
+  resolve(request: { root: string; remote: string; providerId?: string }): Promise<string>;
 }
 
 type ExecutableResolver = (
@@ -169,7 +169,28 @@ function routeBoundEnvironment(
       ? injected!
       : path.join(appData, 'mpx', 'provider-routes', 'gitlab', route);
   }
+  if (executable === 'ssh' && runtimeBound) {
+    const injected = environmentValue(environment, 'MPX_RUNTIME_ROUTE_SSH');
+    if (!injected || !path.isAbsolute(injected)) {
+      throw resolutionError('EINVAL', 'The exact launch-injected SSH route is required.');
+    }
+  }
   return result;
+}
+
+export function providerExecutableArguments(
+  executable: string,
+  args: readonly string[],
+  environment: NodeJS.ProcessEnv,
+): readonly string[] {
+  if (executable !== 'ssh' || environmentValue(environment, 'MPX_RUNTIME_CONTEXT') === undefined) {
+    return args;
+  }
+  const route = environmentValue(environment, 'MPX_RUNTIME_ROUTE_SSH');
+  if (!route || !path.isAbsolute(route)) {
+    throw resolutionError('EINVAL', 'The exact launch-injected SSH route is required.');
+  }
+  return ['-F', path.join(route, 'config'), ...args];
 }
 
 export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
@@ -182,10 +203,14 @@ export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
 
   async execute(request: ProviderProcessRequest): Promise<ProviderProcessResult> {
     const [executable, ...args] = request.argv;
+    if (request.stdin !== undefined && Buffer.byteLength(request.stdin) > 64 * 1024) {
+      throw resolutionError('EINVAL', 'Provider command input exceeds the trusted bound.');
+    }
     if (!builtInProviderExecutables.has(executable)) {
       throw resolutionError('EINVAL', 'The provider executable is not a trusted built-in.');
     }
     const childEnvironment = routeBoundEnvironment(this.environment, executable, request.route);
+    const executedArgs = providerExecutableArguments(executable, args, this.environment);
     const operationCwd = request.cwd ?? process.cwd();
     const canonicalOperationCwd = await realpath(operationCwd);
     const cacheKey = JSON.stringify([
@@ -224,12 +249,13 @@ export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
         );
       }
     }
-    return new Promise((resolve, reject) =>
-      execFile(
+    return new Promise((resolve, reject) => {
+      const child = execFile(
         resolvedExecutable,
-        args,
+        executedArgs,
         {
           cwd: canonicalOperationCwd,
+          shell: false,
           env: childEnvironment,
           windowsHide: true,
           timeout: request.timeoutMilliseconds ?? providerProcessTimeoutMilliseconds,
@@ -244,8 +270,9 @@ export class NodeProviderProcessExecutor implements ProviderProcessExecutor {
             reject(failure);
           }
         },
-      ),
-    );
+      );
+      child.stdin?.end(request.stdin);
+    });
   }
 }
 
@@ -257,7 +284,7 @@ function validRepositorySegment(value: string): boolean {
   return value !== '.' && value !== '..' && safeRepositorySegment.test(value);
 }
 
-export function parseForgeRepositoryUrl(value: string): string {
+function parseRepositoryUrl(value: string, allowNestedProject: boolean): string {
   if (value.length === 0 || value !== value.trim() || /[\\\0]/u.test(value)) {
     throw repositorySelectorError(
       'REPOSITORY_REMOTE_INVALID',
@@ -315,27 +342,32 @@ export function parseForgeRepositoryUrl(value: string): string {
     );
   }
   const segments = pathValue.split('/');
-  if (segments.length !== 2) {
+  if (segments.length < 2 || (!allowNestedProject && segments.length !== 2)) {
     throw repositorySelectorError(
       'REPOSITORY_REMOTE_INVALID',
-      'The configured repository remote URL must identify one owner and repository.',
+      allowNestedProject
+        ? 'The configured repository remote URL must identify a Gerrit project.'
+        : 'The configured repository remote URL must identify one owner and repository.',
     );
   }
-  const owner = segments[0]!;
-  const repository = segments[1]!.endsWith('.git') ? segments[1]!.slice(0, -4) : segments[1]!;
-  if (!validRepositorySegment(owner) || !validRepositorySegment(repository)) {
+  const last = segments.at(-1)!;
+  segments[segments.length - 1] = last.endsWith('.git') ? last.slice(0, -4) : last;
+  if (!segments.every(validRepositorySegment)) {
     throw repositorySelectorError(
       'REPOSITORY_REMOTE_INVALID',
       'The configured repository remote URL contains unsafe path segments.',
     );
   }
-  return `${host}/${owner}/${repository}`;
+  return `${host}/${segments.join('/')}`;
 }
+
+export const parseForgeRepositoryUrl = (value: string): string => parseRepositoryUrl(value, false);
+export const parseGerritRepositoryUrl = (value: string): string => parseRepositoryUrl(value, true);
 
 export class NodeRepositorySelectorResolver implements NodeRepositorySelectorResolverContract {
   constructor(private readonly environment: NodeJS.ProcessEnv = process.env) {}
 
-  async resolve(request: { root: string; remote: string }): Promise<string> {
+  async resolve(request: { root: string; remote: string; providerId?: string }): Promise<string> {
     if (
       !path.isAbsolute(request.root) ||
       !safeRemoteName.test(request.remote) ||
@@ -362,6 +394,7 @@ export class NodeRepositorySelectorResolver implements NodeRepositorySelectorRes
         ['-C', request.root, 'config', '--get', `remote.${request.remote}.url`],
         {
           cwd: request.root,
+          shell: false,
           env: { ...this.environment, GIT_TERMINAL_PROMPT: '0' },
           encoding: 'utf8',
           windowsHide: true,
@@ -383,6 +416,8 @@ export class NodeRepositorySelectorResolver implements NodeRepositorySelectorRes
         'The configured repository remote URL is malformed.',
       );
     }
-    return parseForgeRepositoryUrl(lines[0]!);
+    return request.providerId === 'gerrit'
+      ? parseGerritRepositoryUrl(lines[0]!)
+      : parseForgeRepositoryUrl(lines[0]!);
   }
 }

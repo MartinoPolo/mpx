@@ -10,6 +10,42 @@ trailer, and is pushed to the magic ref `refs/for/<target-branch>`. A new patchs
 for an existing review is another push of a commit carrying the **same**
 `Change-Id`.
 
+## MPX provider behavior
+
+The fixed Gerrit provider implements `review.view`, `review.create`,
+`review.update`, `review.comment`, `review.ready`, and `review.merge`. It does not
+implement Issue or CI capabilities.
+
+- The configured Git remote is parsed as an exact safe `HOST/PROJECT` selector;
+  nested Gerrit project paths are supported. Uploads use that configured remote
+  name, never an assumed `origin`.
+- Reads use `ssh HOST gerrit query --format=JSON --current-patch-set --
+project:PROJECT ...` and accept exactly one bounded JSON-lines result plus its
+  stats record.
+- Create validates source and target refs and requires the requested title/body
+  to exactly match the selected local commit before pushing that exact commit to
+  `refs/for/TARGET%ready` or `%wip`. Update similarly validates `HEAD`, queries
+  the existing change's target branch, and uploads `HEAD` as a new patchset.
+  MPX never commits, amends, checks out, or otherwise mutates local Git state.
+- Comment uses `gerrit review --message`. Its result contains only the known
+  mutation acknowledgement; author and server timestamp are omitted because the
+  SSH command does not return them.
+- Ready uses the documented structured `gerrit review --json` input to atomically
+  set `ready: true` and apply `Code-Review +2` to the current patchset. This
+  avoids a `%ready` re-push that Gerrit could reject as “no new changes.” A
+  dispatch failure or ambiguous read-back is reported as
+  `MUTATION_OUTCOME_UNKNOWN`; MPX never retries automatically.
+- Merge invokes only `gerrit review --submit`. Gerrit's configured submit
+  strategy remains authoritative, so client-selected merge, squash, or rebase
+  methods are rejected.
+
+All subprocesses are fixed `git`/`ssh` argv with bounded time and output and no
+shell. In a launched runtime, direct SSH is forced through the exact
+launch-owned `MPX_RUNTIME_ROUTE_SSH/config`; otherwise native SSH configuration
+is used. Errors do not include route paths, command stderr, or response bodies.
+The command contract is covered by automated tests. Live acceptance is tracked
+separately because this repository does not provide a live Gerrit server.
+
 ## Access (Windows specifics)
 
 A typical SSH remote has this form:
@@ -63,7 +99,7 @@ a separate local Gerrit binary.
    from the Gerrit server using the configured port:
 
    ```bash
-   C:/Windows/System32/OpenSSH/scp.exe -p -P 29418 <user>@<gerrit-host>:hooks/commit-msg .git/hooks/commit-msg
+   C:/Windows/System32/OpenSSH/scp.exe -P 29418 <user>@<gerrit-host>:hooks/commit-msg .git/hooks/commit-msg
    chmod +x .git/hooks/commit-msg
    ```
 

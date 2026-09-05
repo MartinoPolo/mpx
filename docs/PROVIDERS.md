@@ -1,6 +1,6 @@
 # Provider contracts
 
-MPX selects provider IDs from `mpxconfig.json`, but configuration cannot add an adapter, choose or replace a backend, or define executable paths or command templates. The private `@mpx/providers` package contains the fixed built-in GitHub/`gh`, GitLab/`glab`, KanbanFlow/`kf`, and local/`filesystem` adapters in separate internal modules. The registry also retains Gerrit/`git-ssh`, generic/`none`, and none/`none` descriptors. There is no project, user, hidden, or embedding API for dynamically injecting providers. Canonical descriptors carry fixed roles, capabilities, and strict schemas; adapter provider/backend/capability disagreement and unknown provider selection fail closed.
+MPX selects provider IDs from `mpxconfig.json`, but configuration cannot add an adapter, choose or replace a backend, or define executable paths or command templates. The private `@mpx/providers` package contains fixed built-in GitHub/`gh`, GitLab/`glab`, Gerrit/`git-ssh`, KanbanFlow/`kf`, and local/`filesystem` adapters in separate internal modules. The registry also retains generic/`none` and none/`none` descriptors. There is no project, user, hidden, or embedding API for dynamically injecting providers. Canonical descriptors carry fixed roles, capabilities, and strict schemas; adapter provider/backend/capability disagreement and unknown provider selection fail closed.
 
 ## Roles and capabilities
 
@@ -11,12 +11,12 @@ MPX selects provider IDs from `mpxconfig.json`, but configuration cannot add an 
 | GitHub           | repository, issues | list, view, create, edit, comment, label, finish                        | view, create, update, comment, ready, merge | status, watch, logs, retry |
 | GitLab           | repository, issues | list, view, create, edit, comment, label, finish                        | view, create, update, comment, ready, merge | status, watch, logs, retry |
 | KanbanFlow       | issues             | list, view, create, edit, comment, label, move, finish                  | —                                           | —                          |
-| Gerrit           | repository         | —                                                                       | none implemented                            | none implemented           |
+| Gerrit           | repository         | —                                                                       | view, create, update, comment, ready, merge | none implemented           |
 | generic Git      | repository         | —                                                                       | none implemented                            | none implemented           |
 | local filesystem | issues             | list, view, create, edit, comment, label, finish; dependency add/remove | —                                           | —                          |
 | none             | issues             | none                                                                    | —                                           | —                          |
 
-GitHub, GitLab, and local intentionally do not declare `issue.move`; KanbanFlow is the only fixed built-in that implements it. KanbanFlow does not declare Review or CI. Local issues are Markdown documents in an identity-owned registered store and can rebuild configured Obsidian projections. Gerrit remains explicitly pending and declares no operational capabilities in this phase; generic and none likewise fail closed. An invocation outside the selected provider's declared set returns `CAPABILITY_UNSUPPORTED`; an unknown or wrong-role provider fails before execution. MPX never falls back to a direct provider command.
+GitHub, GitLab, and local intentionally do not declare `issue.move`; KanbanFlow is the only fixed built-in that implements it. KanbanFlow does not declare Review or CI. Local issues are Markdown documents in an identity-owned registered store and can rebuild configured Obsidian projections. Gerrit implements only provider-neutral Review behavior and deliberately declares no Issue or CI capability. Its create/update operations upload an already-existing exact local commit without committing, amending, or otherwise changing local Git state; submit leaves merge strategy to Gerrit. Generic and none fail closed. An invocation outside the selected provider's declared set returns `CAPABILITY_UNSUPPORTED`; an unknown or wrong-role provider fails before execution. MPX never falls back to a direct provider command.
 
 The capability names are `issue.{list,view,create,edit,comment,label,move,finish}`, `review.{view,create,update,comment,ready,merge}`, and `ci.{status,watch,logs,retry}`.
 
@@ -24,7 +24,7 @@ The capability names are `issue.{list,view,create,edit,comment,label,move,finish
 
 Every operational Issue, Review, and CI command requires `--identity NAME`. MPX reads the selected provider from the project manifest, then looks up `identities.NAME.providerRoutes[provider]` in `%APPDATA%/mpx/config.json`. A missing identity fails with `IDENTITY_REQUIRED` or `IDENTITY_UNKNOWN`; a missing route fails with `PROVIDER_ROUTE_REQUIRED`.
 
-A route is an opaque, identity-owned label passed to the trusted adapter. It is not a path, token, host command, executable, private-key location, or permission grant. Route labels are validated as safe values, and neither CWD classification nor project/content-scope configuration may select or override one. Native provider authentication remains in `gh`, `glab`, or `kf`; MPX does not copy credentials.
+A route is an opaque, identity-owned label passed to the trusted adapter. It is not a path, token, host command, executable, private-key location, or permission grant. Route labels are validated as safe values, and neither CWD classification nor project/content-scope configuration may select or override one. Native provider authentication remains in `gh`, `glab`, `kf`, Git, or SSH; MPX does not copy credentials. Gerrit uses the configured safe Git remote name for uploads and the validated host/project selector from that remote for SSH queries and reviews. Runtime-bound direct SSH receives only the exact launch-owned `MPX_RUNTIME_ROUTE_SSH/config`; outside a runtime it uses native SSH configuration. Git continues to receive the launch-owned `GIT_SSH_COMMAND`.
 
 ## Inspection and diagnostics
 
