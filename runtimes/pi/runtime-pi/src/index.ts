@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import {
   lstat,
@@ -377,6 +378,126 @@ function loadPublishedPiProfile(
   }
 }
 
+function stableProjectionValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableProjectionValue).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableProjectionValue(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function projectionDigest(value: unknown): string {
+  return createHash('sha256').update(stableProjectionValue(value)).digest('hex');
+}
+
+function projectionFilesForInvocation(
+  input: PiInvocationInput,
+  directory: string,
+  reference: PublishedRuntimeArtifactReference | undefined,
+): readonly string[] {
+  if (input.projection && verifiedPiProjections.has(input.projection as object)) {
+    return input.projection.files;
+  }
+  if (!reference) {
+    throw new Error('published Pi projection reference is required');
+  }
+  const metadataFile = path.join(directory, '.mpx-runtime-artifact.json');
+  try {
+    const stat = lstatSync(metadataFile);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 * 1024) {
+      throw new Error('invalid metadata');
+    }
+    const metadata = JSON.parse(readFileSync(metadataFile, 'utf8')) as {
+      schemaVersion?: unknown;
+      reference?: PublishedRuntimeArtifactReference;
+      fileMap?: Array<{ path?: unknown; sha256?: unknown; bytes?: unknown }>;
+    };
+    const publishedReference = metadata.reference;
+    if (
+      metadata.schemaVersion !== 1 ||
+      !publishedReference ||
+      publishedReference.projectionKey !== reference.projectionKey ||
+      publishedReference.fileMapHash !== reference.fileMapHash ||
+      publishedReference.launchBinding.launchKey !== reference.launchBinding.launchKey ||
+      publishedReference.launchBinding.descriptorDigest !==
+        reference.launchBinding.descriptorDigest ||
+      publishedReference.launchBinding.runtimeArtifactKey !==
+        reference.launchBinding.runtimeArtifactKey ||
+      publishedReference.launchBinding.runtime !== reference.launchBinding.runtime ||
+      publishedReference.launchBinding.manifestKey !== reference.launchBinding.manifestKey ||
+      !Array.isArray(metadata.fileMap)
+    ) {
+      throw new Error('invalid metadata');
+    }
+    const fileMap = metadata.fileMap.map((entry) => {
+      if (
+        !entry ||
+        Object.keys(entry).sort().join(',') !== 'bytes,path,sha256' ||
+        typeof entry.path !== 'string' ||
+        typeof entry.sha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/u.test(entry.sha256) ||
+        !Number.isSafeInteger(entry.bytes) ||
+        (entry.bytes as number) < 0
+      ) {
+        throw new Error('invalid metadata');
+      }
+      return { path: entry.path, sha256: entry.sha256, bytes: entry.bytes as number };
+    });
+    if (
+      projectionDigest(fileMap) !== reference.fileMapHash ||
+      projectionDigest({
+        schemaVersion: 1,
+        launchBinding: reference.launchBinding,
+        fileMapHash: reference.fileMapHash,
+      }) !== reference.projectionKey
+    ) {
+      throw new Error('invalid metadata');
+    }
+    return fileMap.map((entry) => entry.path);
+  } catch {
+    throw new Error('published Pi projection file map is unavailable or invalid');
+  }
+}
+
+function compiledAgentsDirectory(directory: string, files: readonly string[]): string {
+  const normalized = new Set<string>();
+  let agentFileCount = 0;
+  for (const file of files) {
+    const identity = file.toLowerCase();
+    if (normalized.has(identity)) {
+      throw new Error('published Pi projection file map collides');
+    }
+    normalized.add(identity);
+    if (/^agents\/[^/]+\.md$/u.test(file)) {
+      agentFileCount += 1;
+    }
+  }
+  if (!normalized.has('active-content.json') || agentFileCount === 0) {
+    throw new Error('published Pi projection does not contain compiled agents');
+  }
+  const agents = absolute(path.join(directory, 'agents'), 'compiled agents directory');
+  const directoryStat = lstatSync(directory);
+  const agentsStat = lstatSync(agents);
+  if (
+    !directoryStat.isDirectory() ||
+    directoryStat.isSymbolicLink() ||
+    !agentsStat.isDirectory() ||
+    agentsStat.isSymbolicLink()
+  ) {
+    throw new Error('compiled agents directory must be an immutable projection directory');
+  }
+  const relative = path.relative(directory, agents);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error('compiled agents directory escapes the published Pi projection');
+  }
+  return agents;
+}
+
 export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
   const extension = input.projection?.extension ?? input.extension;
   const runtimeContextFile = input.projection?.runtimeContextFile ?? input.runtimeContextFile;
@@ -418,6 +539,10 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
   }
   const lifecycle = input.lifecycle,
     projectionReference = input.projection?.reference ?? input.projectionReference;
+  const agentsDirectory = compiledAgentsDirectory(
+    activeContentRoot,
+    projectionFilesForInvocation(input, activeContentRoot, projectionReference),
+  );
   const nativeSkillDirectories = (
     input.projection && verifiedPiProjections.has(input.projection as object)
       ? input.projection.files
@@ -504,6 +629,7 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
       MPX_ACTIVE_CONTENT_MANIFEST: path
         .join(activeContentRoot, 'active-content.json')
         .replaceAll('\\', '/'),
+      MPX_COMPILED_AGENTS_DIR: agentsDirectory,
       ...(input.statusSnapshotPath
         ? { MPX_STATUS_SNAPSHOT_FILE: absolute(input.statusSnapshotPath, 'status snapshot') }
         : {}),
@@ -785,6 +911,20 @@ export async function buildPiProjection(
     ...file,
     bytes: Uint8Array.from(file.bytes),
   }));
+  if (
+    compiledContent.manifest.agents.length === 0 ||
+    compiledContent.manifest.agents.some(
+      (agent) =>
+        !compiledFiles.some(
+          (file) =>
+            file.relativePath === agent.generatedPath &&
+            file.sha256 === agent.generatedSha256 &&
+            file.byteCount === agent.generatedByteCount,
+        ),
+    )
+  ) {
+    throw new Error('Pi projection requires compiler-owned agents in its exact file map');
+  }
   if (skillPlan.runtime !== 'pi') {
     throw new Error('Pi projection requires a Pi skill projection plan');
   }

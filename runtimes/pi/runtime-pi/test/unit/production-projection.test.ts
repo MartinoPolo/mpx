@@ -31,6 +31,7 @@ import {
   createPiRuntimeProjection,
   planPiInvocation,
   renderPiRuntimeStatus,
+  verifyPiResumeTarget,
 } from '../../src/index.js';
 import { fixture } from '../fixtures/fixture.js';
 import { compileContent } from '@mpx/content-compiler';
@@ -42,6 +43,7 @@ const originalRuntimeStatusEnvelopeFile = process.env.MPX_RUNTIME_STATUS_ENVELOP
 const originalLifecycleBindingId = process.env.MPX_SESSION_LIFECYCLE_BINDING_ID;
 const originalLifecycleEventDirectory = process.env.MPX_SESSION_LIFECYCLE_EVENT_DIR;
 const originalPiCodingAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+const originalCompiledAgentsDirectory = process.env.MPX_COMPILED_AGENTS_DIR;
 
 function required<T>(value: T | undefined, label: string): T {
   expect(value, label).toBeDefined();
@@ -89,6 +91,7 @@ afterEach(() => {
     ['MPX_SESSION_LIFECYCLE_BINDING_ID', originalLifecycleBindingId],
     ['MPX_SESSION_LIFECYCLE_EVENT_DIR', originalLifecycleEventDirectory],
     ['PI_CODING_AGENT_DIR', originalPiCodingAgentDirectory],
+    ['MPX_COMPILED_AGENTS_DIR', originalCompiledAgentsDirectory],
   ] as const) {
     if (value === undefined) {
       delete process.env[name];
@@ -1273,12 +1276,55 @@ describe('production Pi projection', () => {
       MPX_ACTIVE_CONTENT_MANIFEST: path
         .join(projection.directory, 'active-content.json')
         .replaceAll('\\', '/'),
+      MPX_COMPILED_AGENTS_DIR: path.join(projection.directory, 'agents').replaceAll('\\', '/'),
     });
     expect(projection.revalidation).toEqual({
       directory: projection.directory,
       reference: projection.reference,
       profile: f.piRuntimeProfile,
     });
+  });
+
+  it('pins compiler-owned agents for a resumed sandbox launch despite an attacker environment override', async () => {
+    const f = await fixture();
+    const projection = await buildPiProjection({
+      ...f,
+      artifactsRoot: await mkdtemp(path.join(tmpdir(), 'pi-resume-agents-')),
+    });
+    const accountRoot = await mkdtemp(path.join(tmpdir(), 'pi-resume-account-'));
+    const sessionFile = path.join(accountRoot, 'sessions', 'resume.jsonl');
+    await mkdir(path.dirname(sessionFile));
+    await writeFile(sessionFile, '{}\n');
+    const resumeTarget = await verifyPiResumeTarget(accountRoot, {
+      kind: 'root-relative-file',
+      value: 'sessions/resume.jsonl',
+    });
+    process.env.MPX_COMPILED_AGENTS_DIR = 'C:/attacker/agents';
+
+    const plan = planPiInvocation({
+      executable: 'C:/trusted/pi.cmd',
+      projection,
+      accountRoot,
+      runtimeContext: f.context,
+      cwd: 'C:/repo',
+      resumeTarget,
+      bridge: {
+        schemaVersion: 1,
+        endpoint: 'tcp://127.0.0.1:43123',
+        nonce: 'a'.repeat(64),
+        launchKey: f.context.launchKey,
+        identity: { name: 'work', domain: 'work' },
+        planKey: 'b'.repeat(64),
+        runtimeToolInventorySha256: 'c'.repeat(64),
+        capabilitySha256: 'd'.repeat(64),
+      },
+    });
+
+    expect(plan.env.MPX_COMPILED_AGENTS_DIR).toBe(
+      path.join(projection.directory, 'agents').replaceAll('\\', '/'),
+    );
+    expect(plan.env.MPX_COMPILED_AGENTS_DIR).not.toBe(process.env.MPX_COMPILED_AGENTS_DIR);
+    expect(plan.args.slice(-2)).toEqual(['--session', sessionFile.replaceAll('\\', '/')]);
   });
 
   it('loads the bound profile when the published projection is passed as flattened launch data', async () => {
@@ -1299,6 +1345,9 @@ describe('production Pi projection', () => {
       cwd: 'C:/repo',
     });
 
+    expect(plan.env.MPX_COMPILED_AGENTS_DIR).toBe(
+      path.join(projection.directory, 'agents').replaceAll('\\', '/'),
+    );
     expect(plan.args.slice(3)).toEqual([
       '--no-skills',
       '--provider',

@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,7 +11,7 @@ import {
 } from '@mpx/runtime-contracts';
 import {
   createPiRuntimeProfileV1,
-  planPiInvocation,
+  planPiInvocation as planRawPiInvocation,
   verifyPiResumeTarget,
 } from '../../src/index.js';
 
@@ -23,6 +25,58 @@ const invocationProfile = createPiRuntimeProfileV1(
   },
   [],
 );
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+const digest = (value: unknown) => createHash('sha256').update(stable(value)).digest('hex');
+const projectionFileMap = [
+  { path: 'active-content.json', sha256: '1'.repeat(64), bytes: 3 },
+  { path: 'agents/Explore.md', sha256: '2'.repeat(64), bytes: 15 },
+];
+const projectionLaunchBinding = {
+  launchKey: 'a'.repeat(64),
+  descriptorDigest: 'b'.repeat(64),
+  runtimeArtifactKey: 'd'.repeat(64),
+  runtime: 'pi' as const,
+  manifestKey: 'c'.repeat(64),
+};
+const projectionFileMapHash = digest(projectionFileMap);
+const projectionReference: PublishedRuntimeArtifactReference = {
+  projectionKey: digest({
+    schemaVersion: 1,
+    launchBinding: projectionLaunchBinding,
+    fileMapHash: projectionFileMapHash,
+  }),
+  launchBinding: projectionLaunchBinding,
+  fileMapHash: projectionFileMapHash,
+};
+const projectionDirectory = mkdtempSync(path.join(tmpdir(), 'pi-invocation-projection-'));
+mkdirSync(path.join(projectionDirectory, 'agents'));
+writeFileSync(path.join(projectionDirectory, 'active-content.json'), '{}\n');
+writeFileSync(path.join(projectionDirectory, 'agents', 'Explore.md'), 'compiled agent\n');
+writeFileSync(
+  path.join(projectionDirectory, '.mpx-runtime-artifact.json'),
+  JSON.stringify({
+    schemaVersion: 1,
+    reference: projectionReference,
+    fileMap: projectionFileMap,
+  }),
+);
+process.on('exit', () => rmSync(projectionDirectory, { recursive: true, force: true }));
+const publishedProjection = {
+  immutableProjectionDirectory: projectionDirectory,
+  projectionReference,
+};
+const planPiInvocation = (input: Parameters<typeof planRawPiInvocation>[0]) =>
+  planRawPiInvocation({ ...publishedProjection, ...input });
 
 const runtimeContext = createRuntimeContextV1({
   launchKey: 'a'.repeat(64),
@@ -44,7 +98,6 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
     extension: 'C:/artifacts/pi-extension.js',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
-    immutableProjectionDirectory: 'C:/artifacts/pi',
     runtimeContextFile: 'C:/launch/context.json',
     runtimeContext,
     cwd: 'C:/repo',
@@ -73,8 +126,12 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
       MPX_RUNTIME: 'pi',
       MPX_RUNTIME_CONTEXT: JSON.stringify(runtimeContext),
       MPX_RUNTIME_CONTEXT_FILE: 'C:/launch/context.json',
-      MPX_ACTIVE_CONTENT_ROOT: 'C:/artifacts/pi',
-      MPX_ACTIVE_CONTENT_MANIFEST: 'C:/artifacts/pi/active-content.json',
+      MPX_ACTIVE_CONTENT_ROOT: projectionDirectory.replaceAll('\\', '/'),
+      MPX_ACTIVE_CONTENT_MANIFEST: path
+        .join(projectionDirectory, 'active-content.json')
+        .replaceAll('\\', '/'),
+      MPX_COMPILED_AGENTS_DIR: path.join(projectionDirectory, 'agents').replaceAll('\\', '/'),
+      MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projectionReference),
     },
   });
   const serializedRuntimeContext = plan.env.MPX_RUNTIME_CONTEXT;
@@ -277,40 +334,90 @@ it('binds the live status snapshot path only in the Pi child environment', () =>
 });
 
 it('propagates the exact published projection reference as JSON', () => {
-  const projectionReference: PublishedRuntimeArtifactReference = {
-    projectionKey: 'f'.repeat(64),
-    launchBinding: {
-      launchKey: runtimeContext.launchKey,
-      descriptorDigest: runtimeContext.launchDescriptor.digest,
-      runtimeArtifactKey: runtimeContext.runtimeArtifact.artifactKey,
-      runtime: 'pi',
-      manifestKey: runtimeContext.manifestKey,
-    },
-    fileMapHash: 'e'.repeat(64),
-  };
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
+    extension: path.join(projectionDirectory, 'extension.mjs'),
+    runtimeContextFile: path.join(projectionDirectory, 'runtime-context.json'),
+    profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     cwd: 'C:/repo',
     runtimeContext,
-    projection: {
-      directory: 'C:/artifacts/pi',
-      extension: 'C:/artifacts/pi/extension.mjs',
-      runtimeContextFile: 'C:/artifacts/pi/runtime-context.json',
-      profile: invocationProfile,
-      theme: 'dark',
-      artifactKey: 'd'.repeat(64),
-      reference: projectionReference,
-      files: Object.freeze([]),
-      reused: false,
-      revalidation: {
-        directory: 'C:/artifacts/pi',
-        reference: projectionReference,
-        profile: invocationProfile,
-      },
-    },
   });
   expect(plan.env.MPX_RUNTIME_PROJECTION_REFERENCE).toBe(JSON.stringify(projectionReference));
-  expect(plan.env.MPX_ACTIVE_CONTENT_ROOT).toBe('C:/artifacts/pi');
-  expect(plan.env.MPX_ACTIVE_CONTENT_MANIFEST).toBe('C:/artifacts/pi/active-content.json');
+  expect(plan.env.MPX_ACTIVE_CONTENT_ROOT).toBe(projectionDirectory.replaceAll('\\', '/'));
+  expect(plan.env.MPX_ACTIVE_CONTENT_MANIFEST).toBe(
+    path.join(projectionDirectory, 'active-content.json').replaceAll('\\', '/'),
+  );
+  expect(plan.env.MPX_COMPILED_AGENTS_DIR).toBe(
+    path.join(projectionDirectory, 'agents').replaceAll('\\', '/'),
+  );
+  expect(path.isAbsolute(plan.env.MPX_COMPILED_AGENTS_DIR!)).toBe(true);
+  expect(path.relative(plan.env.MPX_ACTIVE_CONTENT_ROOT!, plan.env.MPX_COMPILED_AGENTS_DIR!)).toBe(
+    'agents',
+  );
+});
+
+it('fails closed when flattened published projection metadata is absent', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'pi-missing-map-'));
+  try {
+    expect(() =>
+      planRawPiInvocation({
+        executable: 'C:/trusted/pi.cmd',
+        extension: path.join(directory, 'extension.mjs'),
+        profile: invocationProfile,
+        accountRoot: 'C:/native/pi/account-a',
+        immutableProjectionDirectory: directory,
+        runtimeContextFile: path.join(directory, 'runtime-context.json'),
+        runtimeContext,
+        projectionReference,
+        cwd: 'C:/repo',
+      }),
+    ).toThrow(/file map/u);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('fails closed when a flattened projection file map has a case-insensitive collision', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'pi-colliding-map-'));
+  try {
+    mkdirSync(path.join(directory, 'agents'));
+    writeFileSync(path.join(directory, 'active-content.json'), '{}\n');
+    writeFileSync(path.join(directory, 'agents', 'Explore.md'), 'compiled agent\n');
+    const fileMap = [
+      { path: 'active-content.json', sha256: '1'.repeat(64), bytes: 3 },
+      { path: 'agents/Explore.md', sha256: '2'.repeat(64), bytes: 15 },
+      { path: 'AGENTS/explore.md', sha256: '2'.repeat(64), bytes: 15 },
+    ];
+    const fileMapHash = digest(fileMap);
+    const collisionReference = {
+      projectionKey: digest({
+        schemaVersion: 1,
+        launchBinding: projectionLaunchBinding,
+        fileMapHash,
+      }),
+      launchBinding: projectionLaunchBinding,
+      fileMapHash,
+    };
+    writeFileSync(
+      path.join(directory, '.mpx-runtime-artifact.json'),
+      JSON.stringify({ schemaVersion: 1, reference: collisionReference, fileMap }),
+    );
+
+    expect(() =>
+      planRawPiInvocation({
+        executable: 'C:/trusted/pi.cmd',
+        extension: path.join(directory, 'extension.mjs'),
+        profile: invocationProfile,
+        accountRoot: 'C:/native/pi/account-a',
+        immutableProjectionDirectory: directory,
+        runtimeContextFile: path.join(directory, 'runtime-context.json'),
+        runtimeContext,
+        projectionReference: collisionReference,
+        cwd: 'C:/repo',
+      }),
+    ).toThrow(/collides/u);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
