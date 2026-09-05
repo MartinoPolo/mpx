@@ -1,9 +1,9 @@
 /**
- * custom-agents.ts — Load user-defined agents from project (.pi/agents/, plus the shared .agents/agents/ workspace) and global ($PI_CODING_AGENT_DIR/agents/, default ~/.pi/agent/agents/) locations.
+ * custom-agents.ts — Load compiler-owned, global, and project-defined agent overlays.
  */
 
-import { readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { lstatSync, readdirSync, realpathSync } from 'node:fs';
+import { basename, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
 import {
   readExistingAgentFile,
@@ -19,21 +19,86 @@ import type { AgentConfig, MemoryScope, ThinkingLevel } from './types.js';
  *   1. Project:   <cwd>/.pi/agents/*.md (authoritative — also where /agents writes)
  *   2. Workspace: <cwd>/.agents/agents/*.md (shared cross-tool .agents workspace, read-only)
  *   3. Global:    $PI_CODING_AGENT_DIR/agents/*.md (default: ~/.pi/agent/agents/*.md)
+ *   4. Compiled:  $MPX_COMPILED_AGENTS_DIR/*.md (compiler-owned immutable base layer)
  *
  * Project-level agents override global ones with the same name. On a name clash
  * between the two project locations, .pi/agents wins — .pi stays the project
  * authority; .agents/agents is an additional read location.
  * Any name is allowed — names matching defaults (e.g. "Explore") override them.
  */
+export interface CompiledAgentsFileSystem {
+  lstat(path: string): {
+    isDirectory(): boolean;
+    isSymbolicLink(): boolean;
+    isReparsePoint?(): boolean;
+  };
+  realpath(path: string): string;
+}
+
+const compiledAgentsFileSystem: CompiledAgentsFileSystem = {
+  lstat: (path) => lstatSync(path),
+  realpath: (path) => realpathSync.native(path),
+};
+
+const MAX_COMPILED_AGENTS_PATH_LENGTH = 4096;
+
+function comparablePath(path: string): string {
+  const absolute = resolve(path);
+  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+}
+
+/** Validate the compiler-owned directory and every ancestor without following redirects. */
+export function resolveCompiledAgentsDirectory(
+  configuredPath: string,
+  fileSystem: CompiledAgentsFileSystem = compiledAgentsFileSystem,
+): string {
+  if (
+    configuredPath.length === 0 ||
+    configuredPath.length > MAX_COMPILED_AGENTS_PATH_LENGTH ||
+    /[\x00-\x1f\x7f]/.test(configuredPath) ||
+    !isAbsolute(configuredPath)
+  ) {
+    throw new Error('Unsafe compiled agents directory');
+  }
+
+  const directory = resolve(configuredPath);
+  const root = parse(directory).root;
+  const components = relative(root, directory).split(sep).filter(Boolean);
+  let current = root;
+
+  for (const component of [undefined, ...components]) {
+    if (component !== undefined) current = join(current, component);
+    const metadata = fileSystem.lstat(current);
+    if (
+      !metadata.isDirectory() ||
+      metadata.isSymbolicLink() ||
+      metadata.isReparsePoint?.() === true ||
+      comparablePath(fileSystem.realpath(current)) !== comparablePath(current)
+    ) {
+      throw new Error(`Unsafe compiled agents directory: "${current}"`);
+    }
+  }
+
+  return directory;
+}
+
 export function loadCustomAgents(cwd: string): Map<string, AgentConfig> {
   const globalDir = join(getAgentDir(), 'agents');
   const workspaceProjectDir = join(cwd, '.agents', 'agents');
   const projectDir = join(cwd, '.pi', 'agents');
 
   const agents = new Map<string, AgentConfig>();
-  loadFromDir(globalDir, agents, 'global'); // lowest priority
-  loadFromDir(workspaceProjectDir, agents, 'project'); // shared workspace
-  loadFromDir(projectDir, agents, 'project'); // highest priority (overwrites)
+  const compiledDir = process.env.MPX_COMPILED_AGENTS_DIR;
+  if (compiledDir !== undefined) {
+    try {
+      loadFromDir(resolveCompiledAgentsDirectory(compiledDir), agents, 'compiled', true);
+    } catch {
+      // A malformed, missing, or redirected compiler source contributes no agents.
+    }
+  }
+  loadFromDir(globalDir, agents, 'global');
+  loadFromDir(workspaceProjectDir, agents, 'project');
+  loadFromDir(projectDir, agents, 'project');
   return agents;
 }
 
@@ -41,13 +106,20 @@ export function loadCustomAgents(cwd: string): Map<string, AgentConfig> {
 function loadFromDir(
   dir: string,
   agents: Map<string, AgentConfig>,
-  source: 'project' | 'global',
+  source: 'compiled' | 'project' | 'global',
+  requireDirectRegularFiles = false,
 ): void {
   let safeDirectory: string;
   let files: string[];
   try {
     safeDirectory = resolveAgentDirectory(dir);
-    files = readdirSync(safeDirectory).filter((f) => f.endsWith('.md'));
+    files = requireDirectRegularFiles
+      ? readdirSync(safeDirectory, { withFileTypes: true })
+          .filter(
+            (entry) => entry.name.endsWith('.md') && entry.isFile() && !entry.isSymbolicLink(),
+          )
+          .map((entry) => entry.name)
+      : readdirSync(safeDirectory).filter((file) => file.endsWith('.md'));
   } catch {
     return;
   }

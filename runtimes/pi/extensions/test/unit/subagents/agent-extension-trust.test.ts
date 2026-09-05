@@ -75,15 +75,23 @@ test('disables native persistence paths from untrusted project agents', () => {
   });
 });
 
-test('retains persistence for trusted projects and global agents', () => {
+test('retains persistence for trusted projects and non-project agent sources', () => {
   assert.deepEqual(resolveSessionPersistencePolicy('project', true, true, '.pi/sessions'), {
     persistSession: true,
     sessionDir: '.pi/sessions',
   });
-  assert.deepEqual(resolveSessionPersistencePolicy('global', false, true, '~/sessions'), {
-    persistSession: true,
-    sessionDir: '~/sessions',
-  });
+  for (const source of ['compiled', 'global'] as const) {
+    assert.deepEqual(resolveSessionPersistencePolicy(source, false, true, '~/sessions'), {
+      persistSession: true,
+      sessionDir: '~/sessions',
+    });
+  }
+});
+
+test('treats compiled agent memory as environment-trusted rather than project-provided', () => {
+  assert.equal(resolveMemoryScopePolicy('compiled', false, 'user'), 'user');
+  assert.equal(resolveMemoryScopePolicy('compiled', false, 'project'), undefined);
+  assert.equal(resolveMemoryScopePolicy('compiled', false, 'local'), undefined);
 });
 
 test('preserves extension loading when the project is trusted', async () => {

@@ -239,3 +239,14 @@ test('composition entry point does not discover extensions dynamically', () => {
   const entryPoint = readFileSync(join(packageRoot, 'index.ts'), 'utf8');
   assert.doesNotMatch(entryPoint, /readdir|glob|import\s*\(/);
 });
+
+test('compiled agent discovery is environment-owned and imports no mutation primitives', () => {
+  const customAgents = readFileSync(join(packageRoot, 'subagents', 'custom-agents.ts'), 'utf8');
+  const configuredSource = customAgents.match(/process\.env\.MPX_COMPILED_AGENTS_DIR/g) ?? [];
+
+  assert.equal(configuredSource.length, 1);
+  assert.doesNotMatch(
+    customAgents,
+    /\b(?:mkdir|writeFile|open|truncate|unlink|rename|rm)(?:Sync)?\b/,
+  );
+});
