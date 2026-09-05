@@ -456,26 +456,6 @@ rollback installation.
 
 uninstall installation.
 
-## `mpx migration`
-
-Operate migration safeguards.
-
-### `mpx migration reconcile`
-
-reconcile migration state.
-
-### `mpx migration report`
-
-report migration state.
-
-### `mpx migration rollback-drill`
-
-rollback-drill migration state.
-
-### `mpx migration cutover-plan`
-
-cutover-plan migration state.
-
 ## `mpx identity`
 
 Inspect configured identities.

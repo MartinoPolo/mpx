@@ -282,13 +282,6 @@ export const commandRegistry: readonly CommandGroupMetadata[] = [
     ),
   },
   {
-    name: 'migration',
-    summary: 'Operate migration safeguards.',
-    actions: ['reconcile', 'report', 'rollback-drill', 'cutover-plan'].map((name) =>
-      action(name, `${name} migration state.`, `mpx migration ${name}`),
-    ),
-  },
-  {
     name: 'identity',
     summary: 'Inspect configured identities.',
     actions: [

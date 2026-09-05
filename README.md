@@ -10,7 +10,7 @@ MPX is a skills-first local control plane for launching Claude and Pi with expli
 - **Develop:** use `mpx dev` and the managed-port model documented in [Runtime adapters](docs/RUNTIME_ADAPTERS.md), [Ports](docs/PORTS.md), and [Worktrees](docs/WORKTREES.md).
 - **Sessions and accounts:** see [Sessions installer](docs/SESSIONS_INSTALLER.md) and [Pi accounts](docs/PI_ACCOUNTS.md).
 - **Issues:** see [Issues](docs/ISSUES.md) and [local Markdown issues](docs/local-markdown-issues.md).
-- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md) and [ADR 0004: Canonical native Pi extensions](docs/adr/0004-canonical-native-pi-extensions.md). Supporting evidence includes [Phase J reconciliation](docs/PHASE_J_RECONCILIATION.md).
+- **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md) and [ADR 0004: Canonical native Pi extensions](docs/adr/0004-canonical-native-pi-extensions.md).
 
 ## Private-state boundary
 

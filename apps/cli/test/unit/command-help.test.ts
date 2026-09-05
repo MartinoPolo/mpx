@@ -85,7 +85,8 @@ describe('CLI help', () => {
 
     expect(await run(['help', '--all'], io, { env: {} })).toBe(0);
     expect(io.out.join('')).toContain('All commands:');
-    expect(io.out.join('')).toContain('migration rollback-drill');
+    expect(io.out.join('')).toContain('session resume');
+    expect(io.out.join('')).not.toContain('migration');
   });
 
   it('prints command-specific help for a recognized leaf command', async () => {
@@ -104,15 +105,18 @@ describe('CLI help', () => {
     expect(io.err.join('')).not.toContain('Common commands:');
   });
 
-  it('keeps unknown commands as structured JSON usage errors', async () => {
-    const io = captureIo();
+  it.each(['unknown', 'migration'])(
+    'keeps removed and unknown %s commands as structured JSON usage errors',
+    async (command) => {
+      const io = captureIo();
 
-    expect(await run(['--json', 'unknown'], io, { env: {} })).toBe(2);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({
-      ok: false,
-      error: { code: 'USAGE_ERROR', message: 'Unknown command: unknown' },
-    });
-  });
+      expect(await run(['--json', command], io, { env: {} })).toBe(2);
+      expect(JSON.parse(io.out[0]!)).toMatchObject({
+        ok: false,
+        error: { code: 'USAGE_ERROR', message: `Unknown command: ${command}` },
+      });
+    },
+  );
 
   it('bounds rendered root progressive disclosure and advertises active content inspection', () => {
     const rootCommandLines = renderRootHelp()

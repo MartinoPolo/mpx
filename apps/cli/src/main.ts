@@ -16,7 +16,6 @@ import {
   currentLaunchTuple,
   executionMpxError,
   type AccountApplicationService,
-  type MigrationAction,
   type ProjectApplicationService,
   type SkillApplicationService,
 } from '@mpx/application';
@@ -25,7 +24,6 @@ import {
   createNodeInstallApplicationService,
   createNodeLocalIssueViewRebuilder,
   createNodeLaunchApplicationService,
-  createNodeMigrationApplicationService,
   executeNodeSessionResumeLaunch,
   resolveTrustedRuntimeExecutable,
 } from '@mpx/application/node';
@@ -132,7 +130,6 @@ function parse(argv: readonly string[]): Parsed {
         'dry-run',
         'acknowledge-shared-risk',
         'terminal-tab',
-        'legacy-disabled',
         'approve-host',
         'approve-resurrection',
       ].includes(name!)
@@ -464,24 +461,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
   }
   if (parsed.options.get('rebuild') === true && (group !== 'ports' || action !== 'reconcile')) {
     throw new UsageError('--rebuild is valid only for ports reconcile');
-  }
-  if (group === 'migration') {
-    if (
-      !action ||
-      !['reconcile', 'report', 'rollback-drill', 'cutover-plan'].includes(action) ||
-      args.length
-    ) {
-      throw new UsageError(usage);
-    }
-    return {
-      data: await createNodeMigrationApplicationService().execute({
-        action: action as MigrationAction,
-        repoRoot: parsed.cwd,
-        env: context.env,
-        legacyDisabled: parsed.options.get('legacy-disabled') === true,
-      }),
-      warnings: [],
-    };
   }
   if (group === 'content') {
     if (!action || !['current', 'list', 'show', 'check'].includes(action)) {

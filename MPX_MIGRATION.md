@@ -1,6 +1,6 @@
 # MPX cleanup execution authority
 
-**Status:** Cleanup execution is active. Gate 4 salvage is complete. The structural baseline is repaired, but the repository baseline is not yet accepted because the clean `mpx-pi` migration source has advanced beyond the reviewed convergence manifest. Do not hide that drift; resolve it by moving retained Pi source into the canonical static extension package.
+**Status:** Cleanup execution is active. The obsolete Phase-J command slice has been removed. The repository baseline is not yet accepted because the clean `mpx-pi` migration source has advanced beyond the reviewed convergence manifest. Do not hide that drift; resolve it by moving retained Pi source into the canonical static extension package.
 
 **Authority:** This file is the sole active migration status and evidence authority. User instructions override it. Durable architecture remains in [CONTENT_COMPILER_ARCHITECTURE.md](docs/CONTENT_COMPILER_ARCHITECTURE.md), [ADR 0004](docs/adr/0004-canonical-native-pi-extensions.md), and [PI_EXTENSION_MIGRATION.md](docs/PI_EXTENSION_MIGRATION.md).
 
@@ -224,7 +224,14 @@ Move GitHub, GitLab, KanbanFlow, local Markdown, and minimal Gerrit into one pri
 
 ### Phase 8 — Obsolete architecture deletion
 
-Remove Phase-J, F2 proof and inventory machinery, host-Pi remote-tool replacement, sandbox worker or proxy bridge, root-attestation and account commands, generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
+**State: in progress.**
+
+Completed:
+
+- removed the obsolete public Phase-J migration commands, application services, dedicated tests, temporary handoff, and reconciliation documentation;
+- regenerated the CLI references and bundles without retaining hidden migration aliases.
+
+Remaining work includes F2 proof and inventory machinery, host-Pi remote-tool replacement, sandbox worker or proxy bridge, root-attestation and account commands, generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
 
 ### Phase 9 — Optional sandbox
 
