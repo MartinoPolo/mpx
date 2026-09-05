@@ -9,13 +9,17 @@ function run(modulePath, args) {
     cwd: process.cwd(),
     stdio: 'inherit',
   });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
 }
 
 switch (action) {
   case 'build':
-    run('typescript/bin/tsc', ['-p', 'tsconfig.json']);
+    run('./release.mjs', ['build']);
     break;
   case 'test':
     run('vitest/vitest.mjs', ['run']);
@@ -23,6 +27,9 @@ switch (action) {
   case 'typecheck':
     run('typescript/bin/tsc', ['-p', 'tsconfig.json', '--noEmit']);
     run('typescript/bin/tsc', ['-p', 'tsconfig.test.json']);
+    break;
+  case 'verify-release':
+    run('./release.mjs', ['verify']);
     break;
   default:
     throw new Error(`Unknown package script action: ${String(action)}`);

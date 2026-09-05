@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/run.mjs build",
+    "build:release": "node scripts/run.mjs build",
+    "verify:release": "node scripts/run.mjs verify-release",
     "test:unit": "node scripts/run.mjs test",
     "test": "pnpm run test:unit",
     "typecheck": "node scripts/run.mjs typecheck",
-    "check": "pnpm run build && pnpm run typecheck"
+    "check": "pnpm run build:release && pnpm run verify:release && pnpm run typecheck"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },

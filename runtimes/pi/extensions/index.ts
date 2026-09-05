@@ -10,6 +10,9 @@ import devServer from './dev-server/index.js';
 import subagents from './subagents/index.js';
 import terminalProgress from './terminal-progress/index.js';
 
+export { resolveCompactInstructionsFile } from './compact-instructions.js';
+export { resolveGuardsDirectory } from './guard-hooks.js';
+
 export interface ExtensionComponent {
   name: string;
   register: (pi: ExtensionAPI) => void;

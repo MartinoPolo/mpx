@@ -1,5 +1,4 @@
-import { uuidv7 } from '@earendil-works/pi-ai';
-import { completeSimple, type UserMessage } from '@earendil-works/pi-ai/compat';
+import { type UserMessage, uuidv7 } from '@earendil-works/pi-ai';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 
 const TITLE_PROVIDER = 'openai-codex';
@@ -107,7 +106,7 @@ async function generateTitle(
       content: [{ type: 'text', text: prompt.slice(0, MAX_PROMPT_CHARACTERS) }],
       timestamp: Date.now(),
     };
-    const response = await completeSimple(
+    const response = await ctx.modelRegistry.complete(
       model,
       { systemPrompt: TITLE_SYSTEM_PROMPT, messages: [message] },
       {

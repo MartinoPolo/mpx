@@ -14,7 +14,11 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import { inChildSessionContext } from './subagents/child-context.js';
 
-const GUARDS_DIRECTORY = fileURLToPath(new URL('./guards/', import.meta.url));
+export function resolveGuardsDirectory(): string {
+  return fileURLToPath(new URL('./guards/', import.meta.url));
+}
+
+const GUARDS_DIRECTORY = resolveGuardsDirectory();
 const NOTIFY_FLASH_BEEP_SCRIPT = join(GUARDS_DIRECTORY, 'notify-flash-beep.ps1');
 
 /** Exit code Claude Code reserves for "block this tool call, stderr holds the reason". */
