@@ -75,6 +75,15 @@ it('derives identities, provider route keys, resolved detach roots and fixed pro
     pi: { path: pi, version: 'Pi 2.3' },
   });
   expect(request.external.gitRemotes).toEqual([]);
+  expect(request.projections.claude).toEqual([
+    { path: 'content/agents/metadata.json', role: 'agents' },
+    { path: 'content/output-styles/mpx-terse.md', role: 'canonical-content' },
+    { path: 'runtimes/claude/runtime-claude/COMPATIBILITY.md', role: 'settings' },
+    { path: 'runtimes/claude/runtime-claude/package.json', role: 'status' },
+    { path: 'runtimes/claude/runtime-claude/src/index.ts', role: 'plugin' },
+    { path: 'runtimes/claude/runtime-claude/src/runtime-tools.ts', role: 'hooks' },
+    { path: 'runtimes/pi/extensions/subagents/LICENSE', role: 'licenses' },
+  ]);
   expect(request.projections.pi).toEqual([
     { path: 'content/agents/metadata.json', role: 'agents' },
     { path: 'content/instructions/runtime/pi/APPEND_SYSTEM.md', role: 'canonical-content' },
