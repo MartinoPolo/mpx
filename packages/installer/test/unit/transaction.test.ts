@@ -117,6 +117,15 @@ class RetainingAdapter implements SideEffectAdapter {
     return operation.id === 'config';
   }
 }
+function operationLocators(operations: readonly InstallOperationV1[], spec: unknown = null) {
+  return operations.map((operation) => ({
+    operationId: operation.id,
+    adapter: operation.adapter,
+    spec,
+    bindingDigest: installerDigest({ operation, spec }),
+  }));
+}
+
 const intent: InstallIntentV1 = {
   schemaVersion: 1,
   kind: 'install-intent',
@@ -158,6 +167,7 @@ describe('durable installer transaction state', () => {
       },
       snapshots: {},
       operations: [],
+      operationLocators: [],
     };
     await store.writeReceipt(receipt);
     await store.writeTransaction(stored);
@@ -172,13 +182,15 @@ describe('durable installer transaction state', () => {
   it('quarantines journals whose completed IDs are not the exact eligible prefix', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-invalid-prefix-'));
     await mkdir(root, { recursive: true });
-    const operations = ['owned-a', 'owned-b', 'owned-c'].map((target, index) => ({
-      id: `op-${index}`,
-      adapter: 'files',
-      action: 'ensure',
-      target,
-      desiredDigest: String(index + 1).repeat(64),
-    }));
+    const operations: readonly InstallOperationV1[] = ['owned-a', 'owned-b', 'owned-c'].map(
+      (target, index) => ({
+        id: `op-${index}`,
+        adapter: 'files',
+        action: 'ensure',
+        target,
+        desiredDigest: String(index + 1).repeat(64),
+      }),
+    );
     const snapshot = {
       schemaVersion: 1,
       kind: 'machine-snapshot',
@@ -199,6 +211,7 @@ describe('durable installer transaction state', () => {
         },
         snapshots: { 'op-1': null },
         operations,
+        operationLocators: operationLocators(operations),
       }),
     );
     const values = new Map([
@@ -223,7 +236,7 @@ describe('durable installer transaction state', () => {
   it('rejects an independently malformed snapshot map after valid operation IDs', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-invalid-snapshots-'));
     await mkdir(root, { recursive: true });
-    const operation = {
+    const operation: InstallOperationV1 = {
       id: 'op',
       adapter: 'files',
       action: 'ensure',
@@ -251,11 +264,78 @@ describe('durable installer transaction state', () => {
         },
         snapshots: {},
         operations: [operation],
+        operationLocators: operationLocators([operation]),
       }),
     );
     await expect(new NodeTransactionStore(root).readTransaction()).rejects.toMatchObject({
       code: 'INSTALL_TRANSACTION_INVALID',
     });
+  });
+
+  it('rejects missing, reordered, duplicate, forged, adapter-mismatched, and malformed locators', async () => {
+    const operations: readonly InstallOperationV1[] = [
+        {
+          id: 'op-0',
+          adapter: 'files',
+          action: 'ensure',
+          target: 'owned-a',
+          desiredDigest: 'a'.repeat(64),
+        },
+        {
+          id: 'op-1',
+          adapter: 'files',
+          action: 'ensure',
+          target: 'owned-b',
+          desiredDigest: 'b'.repeat(64),
+        },
+      ],
+      locators = operationLocators(operations),
+      snapshot = {
+        schemaVersion: 1,
+        kind: 'machine-snapshot',
+        transactionId: 'tx',
+        observations: operations.map((operation) => ({ id: operation.id, digest: null })),
+        capturedAt: '2025-01-01T00:00:00.000Z',
+      },
+      base = {
+        journal: {
+          schemaVersion: 1,
+          kind: 'transaction-journal',
+          transactionId: 'tx',
+          phase: 'applying',
+          completedOperationIds: [],
+          inFlightOperationId: 'op-0',
+          snapshot,
+        },
+        snapshots: { 'op-0': null },
+        operations,
+        operationLocators: locators,
+      },
+      variants = [
+        Object.fromEntries(Object.entries(base).filter(([key]) => key !== 'operationLocators')),
+        { ...base, operationLocators: locators.slice(1) },
+        { ...base, operationLocators: [...locators].reverse() },
+        { ...base, operationLocators: [locators[0], locators[0]] },
+        {
+          ...base,
+          operationLocators: [{ ...locators[0], spec: { forged: true } }, locators[1]],
+        },
+        {
+          ...base,
+          operationLocators: [{ ...locators[0], adapter: 'forged' }, locators[1]],
+        },
+        {
+          ...base,
+          operationLocators: [{ ...locators[0], extra: true }, locators[1]],
+        },
+      ];
+    for (const [index, transaction] of variants.entries()) {
+      const root = await mkdtemp(path.join(tmpdir(), `mpx-invalid-locator-${index}-`));
+      await writeFile(path.join(root, 'transaction.json'), JSON.stringify(transaction));
+      await expect(new NodeTransactionStore(root).readTransaction()).rejects.toMatchObject({
+        code: 'INSTALL_TRANSACTION_INVALID',
+      });
+    }
   });
 
   it('serializes transactions across independent store instances', async () => {
@@ -595,6 +675,7 @@ describe('installer transactions', () => {
       },
       snapshots: { 'op-0': null, 'op-1': null },
       operations,
+      operationLocators: operationLocators(operations),
     };
     await new NodeTransactionStore(root).writeTransaction(stored);
     const restarted = new NodeTransactionStore(root);

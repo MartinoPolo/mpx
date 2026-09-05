@@ -15,6 +15,19 @@ const LOCKFILE =
 export const PI_NATIVE_PACKAGE_NAME = '@mpx/pi-extensions' as const;
 export const PI_NATIVE_PACKAGE_ROOT = 'runtimes/pi/extensions/dist/package' as const;
 
+export function resolvePiNativePackageSource(releaseRoot: string, packageRoot: unknown): string {
+  if (packageRoot !== PI_NATIVE_PACKAGE_ROOT) {
+    fail('PI_SETTINGS_PATH_INVALID', 'Pi package root is not the registered package root.');
+  }
+  if (windowsPath(releaseRoot)) {
+    return path.win32.join(releaseRoot, ...PI_NATIVE_PACKAGE_ROOT.split('/'));
+  }
+  if (path.posix.isAbsolute(releaseRoot)) {
+    return path.posix.join(releaseRoot, ...PI_NATIVE_PACKAGE_ROOT.split('/'));
+  }
+  fail('PI_SETTINGS_PATH_INVALID', 'Pi release root must be absolute.');
+}
+
 export interface PiNativePackageFileV1 {
   readonly path: string;
   readonly sha256: string;
@@ -234,9 +247,7 @@ function validateDesired(
       'Release root and package source must use one absolute path style.',
     );
   }
-  const expected = windows
-    ? path.win32.join(releaseRoot, ...registration.packageRoot.split('/'))
-    : path.posix.join(releaseRoot, ...registration.packageRoot.split('/'));
+  const expected = resolvePiNativePackageSource(releaseRoot, registration.packageRoot);
   const root = normalizeAbsolute(releaseRoot),
     source = normalizeAbsolute(desired);
   const separator = windows ? '\\' : '/';

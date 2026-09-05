@@ -19,10 +19,12 @@
   "dependencies": {
     "@mpx/config": "workspace:*",
     "@mpx/core": "workspace:*",
-    "@mpx/windows": "workspace:*"
+    "@mpx/windows": "workspace:*",
+    "proper-lockfile": "^4.1.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/proper-lockfile": "^4.1.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

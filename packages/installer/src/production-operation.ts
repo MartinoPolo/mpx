@@ -1,15 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-  type FileHandle,
-} from 'node:fs/promises';
+import { link, lstat, mkdir, open, readFile, rm, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { MpxError, parseStrictJson } from '@mpx/core';
 import { parseUserConfig } from '@mpx/config';
@@ -37,7 +27,6 @@ import {
   buildWindowsIntegrationSpecs,
 } from './windows-integration.js';
 import {
-  assertPiNativePackagesMatchRelease,
   verifyAccountEnrollment,
   verifyRuntimeRegistrationMatrix,
   type AccountProbeV1,
@@ -48,13 +37,27 @@ import {
 } from './runtime-registration.js';
 import type { InstallerOperationAdapter, InstallerOperationSet } from './orchestration.js';
 import { withInstallerCleanup } from './failure.js';
+import { atomicReplaceRegularFile, type AtomicRegularFileOperations } from './atomic-file.js';
+import {
+  EnvironmentPiPrivateRootResolver,
+  NodePiNativeSettingsPort,
+  type PiNativeSettingsPort,
+  type PiPrivateRootResolver,
+} from './pi-native-settings.js';
+import {
+  PiNativeSettingsOperationService,
+  type PiNativeSettingsOperation,
+} from './pi-native-settings-operation.js';
 
 const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException).code === 'ENOENT';
-function fail(code: string, message: string): never {
-  throw new MpxError({ code, message });
+function fail(code: string, message: string, cause?: unknown): never {
+  const failure = new MpxError({ code, message });
+  if (cause !== undefined) {
+    Object.defineProperty(failure, 'cause', { value: cause, configurable: true });
+  }
+  throw failure;
 }
 const sha = (body: Uint8Array): string => createHash('sha256').update(body).digest('hex');
-
 interface BinaryCreateOperations {
   open(target: string, flags: 'wx'): Promise<Pick<FileHandle, 'writeFile' | 'sync' | 'close'>>;
   link(existingPath: string, newPath: string): Promise<void>;
@@ -111,13 +114,9 @@ export class NodeBinaryFileSystem implements BinaryFileSystem {
   }
   async write(target: string, body: Buffer): Promise<void> {
     await mkdir(path.dirname(target), { recursive: true });
-    const temporary = `${target}.${randomUUID()}.tmp`;
-    await withInstallerCleanup(
-      async () => {
-        await writeFile(temporary, body, { flag: 'wx' });
-        await rename(temporary, target);
-      },
-      () => rm(temporary, { force: true }),
+    await atomicReplaceRegularFile(
+      target,
+      body,
       'File replacement and temporary cleanup both failed.',
     );
   }
@@ -128,6 +127,8 @@ export class NodeBinaryFileSystem implements BinaryFileSystem {
 
 /** File-backed host used by JSON integration tests. Native stores can be injected by the CLI. */
 export class NodeJsonResourceStore implements JsonResourceStore {
+  constructor(private readonly atomicOperations: Partial<AtomicRegularFileOperations> = {}) {}
+
   private assertFile(target: string): void {
     if (!path.isAbsolute(target) || path.extname(target).toLowerCase() !== '.json') {
       fail(
@@ -150,16 +151,13 @@ export class NodeJsonResourceStore implements JsonResourceStore {
   async write(target: string, value: unknown): Promise<void> {
     this.assertFile(target);
     await mkdir(path.dirname(target), { recursive: true });
-    const temporary = `${target}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-        encoding: 'utf8',
-        flag: 'wx',
-      });
-      await rename(temporary, target);
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    const body = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await atomicReplaceRegularFile(
+      target,
+      body,
+      'JSON resource replacement and temporary cleanup both failed.',
+      this.atomicOperations,
+    );
   }
   async remove(target: string): Promise<void> {
     this.assertFile(target);
@@ -346,6 +344,8 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
 export interface ProductionInstallerResources {
   readonly files: BinaryFileSystem;
   readonly resources: JsonResourceStore;
+  readonly piNativeSettings: PiNativeSettingsPort;
+  readonly piPrivateRoots?: PiPrivateRootResolver;
   readonly runtimeRegistrations?: RuntimeRegistrationInspectionPort;
 }
 class RoutedProductionResourceStore implements JsonResourceStore {
@@ -371,11 +371,14 @@ export function createProductionInstallerResources(
   environment: NodeJS.ProcessEnv = process.env,
 ): ProductionInstallerResources {
   const files = new NodeBinaryFileSystem(),
-    json = new NodeJsonResourceStore();
+    json = new NodeJsonResourceStore(),
+    piNativeSettings = new NodePiNativeSettingsPort();
   if (platform !== 'win32') {
     return {
       files,
       resources: json,
+      piNativeSettings,
+      piPrivateRoots: new EnvironmentPiPrivateRootResolver(environment),
       runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment),
     };
   }
@@ -383,6 +386,8 @@ export function createProductionInstallerResources(
   return {
     files,
     resources: new RoutedProductionResourceStore(json, native),
+    piNativeSettings,
+    piPrivateRoots: new EnvironmentPiPrivateRootResolver(environment),
     runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment),
   };
 }
@@ -464,14 +469,22 @@ interface Entry {
   fileSource?: string;
   expectedBytes?: number;
   appliedFileState?: Buffer | null;
+  appliedResourceRemoval?: boolean;
   createOnly?: boolean;
   retainOnUninstall?: boolean;
 }
+type ProductionInstallerResourceOverrides = Omit<
+  ProductionInstallerResources,
+  'piNativeSettings'
+> & { readonly piNativeSettings?: PiNativeSettingsPort };
+
 export class ProductionInstallerOperationAdapter implements InstallerOperationAdapter {
   readonly name = 'windows-production';
   private readonly launchers: ManagedLauncherAdapter;
   private readonly owned: OwnedJsonResourceAdapter;
   private readonly files: BinaryFileSystem;
+  private piNativeSettingsPort: PiNativeSettingsPort;
+  private readonly piSettings: PiNativeSettingsOperation;
   private readonly runtimeRegistrations: RuntimeRegistrationInspectionPort | undefined;
   private readonly resources: JsonResourceStore;
   private readonly environment: Readonly<NodeJS.ProcessEnv>;
@@ -479,18 +492,39 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   constructor(
     environment: NodeJS.ProcessEnv,
     private readonly currentUser: string,
-    resources: ProductionInstallerResources = createProductionInstallerResources(
+    resources: ProductionInstallerResourceOverrides = createProductionInstallerResources(
       process.platform,
       environment,
     ),
   ) {
     this.environment = { ...environment };
     this.files = resources.files;
+    this.piNativeSettingsPort = resources.piNativeSettings ?? new NodePiNativeSettingsPort();
+    const privateRoots =
+      resources.piPrivateRoots ?? new EnvironmentPiPrivateRootResolver(this.environment);
+    this.piSettings = new PiNativeSettingsOperationService(
+      this.environment,
+      this.piNativeSettingsPort,
+      privateRoots,
+      this.name,
+    );
     this.resources = resources.resources;
     this.launchers = new ManagedLauncherAdapter(resources.files);
     this.owned = new OwnedJsonResourceAdapter(resources.resources);
     this.runtimeRegistrations = resources.runtimeRegistrations;
   }
+
+  private get piNativeSettings(): PiNativeSettingsPort {
+    return this.piNativeSettingsPort;
+  }
+
+  private set piNativeSettings(port: PiNativeSettingsPort) {
+    this.piNativeSettingsPort = port;
+    if (this.piSettings instanceof PiNativeSettingsOperationService) {
+      this.piSettings.setNativeSettingsPort(port);
+    }
+  }
+
   async operations(
     intent: InstallIntentV1,
     manifest: ReleaseManifestV1,
@@ -533,7 +567,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       };
     }
     if (intent.runtimeRegistrations) {
-      assertPiNativePackagesMatchRelease(manifest, intent.runtimeRegistrations);
       if (!this.runtimeRegistrations) {
         fail(
           'INSTALL_REGISTRATION_INSPECTION_UNAVAILABLE',
@@ -580,6 +613,12 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         );
       }
     }
+    const piSettingsOperations = await this.piSettings.plan(
+      intent,
+      manifest,
+      requireActual,
+      priorReceipt,
+    );
     const specs = buildWindowsIntegrationSpecs(
       {
         ...this.environment,
@@ -757,20 +796,32 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     automatic.sort((left, right) => left.operation.id.localeCompare(right.operation.id));
     for (const entry of automatic) {
+      for (const [digest, priorEntry] of this.entries) {
+        if (
+          priorEntry.operation.id === entry.operation.id &&
+          priorEntry.operation.target === entry.operation.target
+        ) {
+          this.entries.delete(digest);
+        }
+      }
       this.entries.set(installerDigest(entry.operation), entry);
     }
     while (this.entries.size > 2_048) {
       this.entries.delete(this.entries.keys().next().value!);
     }
     const references = (intent.externalIntegrations ?? []).map((integration) => ({
-      id: integration.id,
-      planDigest: integration.planDigest,
-      verifierRef: integration.verifierRef,
-    }));
+        id: integration.id,
+        planDigest: integration.planDigest,
+        verifierRef: integration.verifierRef,
+      })),
+      automaticOperations = [
+        ...automatic.map((entry) => entry.operation),
+        ...piSettingsOperations,
+      ].sort((left, right) => left.id.localeCompare(right.id));
     return {
-      automatic: automatic.map((x) => x.operation),
+      automatic: automaticOperations,
       classifications: {
-        automatic: automatic.map((x) => x.operation.id),
+        automatic: automaticOperations.map((operation) => operation.id),
         confirmationRequired: references.filter(
           (_reference, index) =>
             intent.externalIntegrations![index]!.classification === 'confirmation-required',
@@ -837,6 +888,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     };
   }
   async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
+    if (this.piSettings.handles(operation)) {
+      return this.piSettings.receiptLocator(operation);
+    }
     const entry = await this.entry(operation);
     if (entry.launcher) {
       return { kind: 'launcher', spec: entry.launcher };
@@ -850,6 +904,18 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     return { kind: 'file' };
   }
   async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown): Promise<void> {
+    if (this.piSettings.handles(operation, locator)) {
+      await this.piSettings.hydrateReceiptOperation(operation, locator);
+      return;
+    }
+    const existing =
+      this.entries.get(installerDigest(operation)) ??
+      (operation.action === 'remove'
+        ? [...this.entries.values()].find(
+            (entry) =>
+              entry.operation.id === operation.id && entry.operation.target === operation.target,
+          )
+        : undefined);
     if (!locator || typeof locator !== 'object' || Array.isArray(locator)) {
       fail('INSTALL_RECEIPT_AMBIGUOUS', `Invalid durable locator for ${operation.id}.`);
     }
@@ -926,7 +992,8 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       }
       if (
         resource.target !== operation.target ||
-        installerDigest(resource.desired) !== operation.desiredDigest
+        (operation.action === 'ensure' &&
+          installerDigest(resource.desired) !== operation.desiredDigest)
       ) {
         fail('INSTALL_RECEIPT_FORGED', `Native resource locator does not bind ${operation.id}.`);
       }
@@ -934,10 +1001,34 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     } else {
       fail('INSTALL_RECEIPT_AMBIGUOUS', `Invalid durable locator for ${operation.id}.`);
     }
+    if (existing) {
+      return;
+    }
+    if (operation.action === 'remove') {
+      if (entry.resource) {
+        entry.appliedResourceRemoval =
+          (await this.owned.inspect(entry.resource)).status === 'absent';
+      } else {
+        entry.appliedFileState = null;
+      }
+    } else if (entry.launcher) {
+      const inspection = await this.launchers.inspect(entry.launcher),
+        current = await this.files.read(operation.target);
+      if (inspection.digest === operation.desiredDigest && current) {
+        entry.appliedFileState = current;
+      }
+    } else if (entry.fileBody || entry.fileSource) {
+      const current = await this.files.read(operation.target);
+      if (current && sha(current) === operation.desiredDigest) {
+        entry.appliedFileState = current;
+      }
+    }
     this.entries.set(installerDigest(operation), entry);
   }
   async retainOnUninstall(operation: InstallOperationV1): Promise<boolean> {
-    return (await this.entry(operation)).retainOnUninstall === true;
+    return this.piSettings.handles(operation)
+      ? false
+      : (await this.entry(operation)).retainOnUninstall === true;
   }
   private async entry(operation: InstallOperationV1): Promise<Entry> {
     const exact = this.entries.get(installerDigest(operation));
@@ -947,7 +1038,11 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     if (operation.action === 'remove') {
       for (const entry of this.entries.values()) {
         if (entry.operation.id === operation.id && entry.operation.target === operation.target) {
-          if (entry.resource && (await this.owned.inspect(entry.resource!)).status === 'owned') {
+          if (
+            entry.resource &&
+            (entry.appliedResourceRemoval ||
+              (await this.owned.inspect(entry.resource)).status === 'owned')
+          ) {
             return entry;
           }
           if (entry.fileBody || entry.fileSource || entry.launcher) {
@@ -959,6 +1054,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     return fail('INSTALL_PLAN_STALE', `Unknown or stale production operation ${operation.id}.`);
   }
   async observe(operation: InstallOperationV1): Promise<string | null> {
+    if (this.piSettings.handles(operation)) {
+      return this.piSettings.observe(operation);
+    }
     const entry = await this.entry(operation),
       target = operation.target;
     if (entry.fileBody || entry.fileSource) {
@@ -971,6 +1069,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     return (await this.owned.inspect(entry.resource!)).digest;
   }
   async capture(operation: InstallOperationV1): Promise<string | null> {
+    if (this.piSettings.handles(operation)) {
+      return this.piSettings.capture(operation);
+    }
     const entry = await this.entry(operation),
       target = operation.target;
     if (entry.fileBody || entry.fileSource || entry.launcher) {
@@ -981,6 +1082,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     return current === undefined ? null : Buffer.from(JSON.stringify(current)).toString('base64');
   }
   async apply(operation: InstallOperationV1): Promise<void> {
+    if (this.piSettings.handles(operation)) {
+      await this.piSettings.apply(operation);
+      return;
+    }
     const entry = await this.entry(operation);
     if (entry.fileBody || entry.fileSource) {
       if (operation.action === 'remove') {
@@ -1019,7 +1124,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     if (operation.action === 'remove') {
       if (entry.launcher) {
         const plan = await this.launchers.plan(entry.launcher);
-        entry.appliedFileState = null;
         if (plan.previousManagedBase64 === null) {
           return;
         }
@@ -1031,6 +1135,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           managedBase64: plan.previousManagedBase64,
           previousManagedBase64: null,
         });
+        entry.appliedFileState = (await this.files.read(entry.launcher.path)) ?? null;
       } else {
         const plan = await this.owned.plan(entry.resource!);
         if (plan.inspection.status === 'absent') {
@@ -1042,6 +1147,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           spec: entry.resource!,
           desiredDigest: installerDigest(entry.resource!.desired),
         });
+        entry.appliedResourceRemoval = true;
       }
       return;
     }
@@ -1054,6 +1160,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
   }
   async restore(operation: InstallOperationV1, snapshot: string | null): Promise<void> {
+    if (this.piSettings.handles(operation)) {
+      await this.piSettings.restore(operation, snapshot);
+      return;
+    }
     const entry = await this.entry(operation),
       target = operation.target;
     if (entry.fileBody || entry.fileSource || entry.launcher) {
@@ -1105,7 +1215,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           installerDigest({ ...priorRecord, ...entry.resource!.desired }),
           installerDigest(expectedEnvironmentAfterApply(prior, entry.resource!.desired)),
         ]);
-      if (currentDigest === null || !appliedDigests.has(currentDigest)) {
+      if (
+        (currentDigest === null && !entry.appliedResourceRemoval) ||
+        (currentDigest !== null && !appliedDigests.has(currentDigest))
+      ) {
         fail(
           'INSTALL_FOREIGN_OR_DRIFTED',
           'Refusing to restore over a foreign or drifted native resource.',
@@ -1114,8 +1227,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     } else {
       const inspection = await this.owned.inspect(entry.resource!);
       if (
-        inspection.status !== 'owned' ||
-        inspection.digest !== installerDigest(entry.resource!.desired)
+        !entry.appliedResourceRemoval &&
+        (inspection.status !== 'owned' ||
+          inspection.digest !== installerDigest(entry.resource!.desired))
       ) {
         fail(
           'INSTALL_FOREIGN_OR_DRIFTED',

@@ -4,6 +4,8 @@ export * from './windows-integration.js';
 export * from './orchestration.js';
 export * from './runtime-registration.js';
 export * from './pi-native-package.js';
+export * from './pi-native-settings.js';
+export * from './pi-native-settings-operation.js';
 export * from './production-operation.js';
 export * from './external-integrations.js';
 export * from './install-intent-builder.js';

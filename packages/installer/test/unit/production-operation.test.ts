@@ -13,6 +13,7 @@ import {
 } from '../../src/immutable-core.js';
 import {
   NodeBinaryFileSystem,
+  NodeJsonResourceStore,
   ProductionInstallerOperationAdapter,
   ReadOnlyRuntimeRegistrationInspector,
 } from '../../src/production-operation.js';
@@ -66,6 +67,34 @@ it('atomically creates a production binary file without clobbering an existing t
     await expect(files.create(target, Buffer.from('first'))).resolves.toBe(true);
     await expect(files.create(target, Buffer.from('second'))).resolves.toBe(false);
     expect(await readFile(target, 'utf8')).toBe('first');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('atomically serializes JSON resources and cleans temporary state after replacement failure', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-json-replace-failure-')),
+    target = path.join(root, 'config.json'),
+    initial = { nested: { enabled: true } };
+  try {
+    await new NodeJsonResourceStore().write(target, initial);
+    expect(await readFile(target, 'utf8')).toBe(`${JSON.stringify(initial, null, 2)}\n`);
+
+    const store = new NodeJsonResourceStore({
+      temporarySuffix: () => 'injected',
+      writeFile: async (temporary, body, options) => {
+        expect(Buffer.isBuffer(body)).toBe(true);
+        await writeFile(temporary, body, options);
+      },
+      rename: async () => {
+        throw new Error('injected replacement failure');
+      },
+    });
+    await expect(store.write(target, { replaced: true })).rejects.toThrow(
+      'injected replacement failure',
+    );
+    expect(await readFile(target, 'utf8')).toBe(`${JSON.stringify(initial, null, 2)}\n`);
+    expect(await readdir(root)).toEqual(['config.json']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -501,7 +530,8 @@ it('captures the complete environment Path and resumes restore when the snapshot
       operations.automatic.find((operation) => operation.id === '20-user-environment'),
       'user environment operation',
     ),
-    captured = await adapter.capture(environment);
+    captured = await adapter.capture(environment),
+    locatorSpec = await adapter.receiptLocator(environment);
 
   if (captured === null) {
     throw new Error('Expected environment snapshot');
@@ -526,6 +556,14 @@ it('captures the complete environment Path and resumes restore when the snapshot
     },
     snapshots: { [environment.id]: captured },
     operations: [environment],
+    operationLocators: [
+      {
+        operationId: environment.id,
+        adapter: environment.adapter,
+        spec: locatorSpec,
+        bindingDigest: installerDigest({ operation: environment, spec: locatorSpec }),
+      },
+    ],
   });
   readResource.mockClear();
   await expect(

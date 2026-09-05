@@ -9,6 +9,7 @@ import {
   parsePiNativePackageRegistration,
   parsePiSettings,
   planPiNativePackageSettings,
+  resolvePiNativePackageSource,
   type ReleaseFileV1,
 } from '../../src/index.js';
 
@@ -79,6 +80,20 @@ describe('Pi native package registration', () => {
         artifactRootDigest: installerDigest(changed),
       }),
     ).toThrowError(expect.objectContaining({ code: 'PI_NATIVE_INVENTORY_INVALID' }));
+  });
+
+  it('resolves only the registered package root below an absolute release root', () => {
+    expect(resolvePiNativePackageSource('C:\\MPX\\releases\\release', PI_NATIVE_PACKAGE_ROOT)).toBe(
+      'C:\\MPX\\releases\\release\\runtimes\\pi\\extensions\\dist\\package',
+    );
+    for (const [root, packageRoot] of [
+      ['relative', PI_NATIVE_PACKAGE_ROOT],
+      ['C:\\MPX\\releases\\release', '../escape'],
+    ] as const) {
+      expect(() => resolvePiNativePackageSource(root, packageRoot)).toThrowError(
+        expect.objectContaining({ code: 'PI_SETTINGS_PATH_INVALID' }),
+      );
+    }
   });
 
   it('fails closed when required package artifacts are absent', () => {

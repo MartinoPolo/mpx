@@ -14,6 +14,7 @@ import {
   NodeBinaryFileSystem,
   ProductionInstallerOperationAdapter,
 } from '../../src/production-operation.js';
+import { NodePiNativeSettingsPort } from '../../src/pi-native-settings.js';
 import {
   createRuntimeRegistrationMatrix,
   type ProjectionFileV1,
@@ -157,6 +158,14 @@ async function simulation(existing: boolean) {
     }
   }
   const before = await Promise.all(fixtureFiles.map((file) => readFile(file)));
+  const piSettingsBefore = { packages: ['foreign'], theme: 'keep' };
+  await Promise.all(
+    fixtureRoots
+      .slice(2)
+      .map((nativeRoot) =>
+        writeFile(path.join(nativeRoot, 'settings.json'), JSON.stringify(piSettingsBefore)),
+      ),
+  );
   if (existing) {
     await mkdir(userProfile, { recursive: true });
     await writeFile(path.join(userProfile, '.bashrc'), 'native-profile\r\n');
@@ -185,6 +194,8 @@ async function simulation(existing: boolean) {
   }
   const environment = {
     MPX_APPS: appsRoot,
+    MPX_PI_PERSONAL_ROOT: required(fixtureRoots[2], 'Pi personal fixture root'),
+    MPX_PI_WORK_ROOT: required(fixtureRoots[3], 'Pi work fixture root'),
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
     USERPROFILE: userProfile,
@@ -205,10 +216,12 @@ async function simulation(existing: boolean) {
     theme: 'native',
   };
   const native = new FakeJsonResourceStore(existing ? { [terminalTarget]: terminalSettings } : {});
+  const piNativeSettings = new NodePiNativeSettingsPort();
   let runtimeRegistrations!: ReturnType<typeof createRuntimeRegistrationMatrix>;
   const adapter = new ProductionInstallerOperationAdapter(environment, 'DOMAIN\\me', {
     files: new NodeBinaryFileSystem(),
     resources: native,
+    piNativeSettings,
     runtimeRegistrations: {
       inspect: async () => ({
         observations: runtimeRegistrations.registrations.map(
@@ -288,7 +301,10 @@ async function simulation(existing: boolean) {
     userProfile,
     fixtureFiles,
     before,
+    piSettingsBefore,
+    fixtureRoots,
     adapter,
+    piNativeSettings,
     store,
     releases,
     intent,
@@ -300,6 +316,7 @@ async function simulation(existing: boolean) {
 
 it('plans, applies, and verifies a fresh base install without scheduled capture', async () => {
   const f = await simulation(false),
+    writePiSettings = vi.spyOn(f.piNativeSettings, 'atomicWrite'),
     readNative = vi.spyOn(f.native, 'read'),
     writeNative = vi.spyOn(f.native, 'write'),
     removeNative = vi.spyOn(f.native, 'remove'),
@@ -332,6 +349,24 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
   );
   const receipt = await orchestrator.apply(plan, plan.confirmationDigest);
   expect(receipt.operations.map((operation) => operation.id)).not.toContain('90-scheduled-capture');
+  const packageSource = path.join(
+    f.appsRoot,
+    'mpx',
+    'releases',
+    receipt.releaseKey,
+    'runtimes',
+    'pi',
+    'extensions',
+    'dist',
+    'package',
+  );
+  for (const nativeRoot of f.fixtureRoots.slice(2)) {
+    expect(JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8'))).toEqual({
+      packages: ['foreign', packageSource],
+      theme: 'keep',
+    });
+  }
+  expect(writePiSettings).toHaveBeenCalledTimes(2);
   await expect(orchestrator.verify(false, externalVerification(f.intent))).resolves.toMatchObject({
     healthy: true,
     releaseKey: receipt.releaseKey,
@@ -339,6 +374,13 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
   expect(readNative).not.toHaveBeenCalledWith(scheduledTarget);
   expect(writeNative).not.toHaveBeenCalledWith(scheduledTarget, expect.anything());
   expect(removeNative).not.toHaveBeenCalledWith(scheduledTarget);
+  for (const file of ['build-metadata.json', 'index.mjs', 'package.json']) {
+    expect(await readFile(path.join(packageSource, file))).toEqual(
+      await readFile(
+        path.join(f.repositoryRoot, 'runtimes', 'pi', 'extensions', 'dist', 'package', file),
+      ),
+    );
+  }
 }, 30_000);
 
 it('upgrades an exact pre-node-entry v2 receipt and owned environment state', async () => {
@@ -407,6 +449,94 @@ it('upgrades an exact pre-node-entry v2 receipt and owned environment state', as
     owner: 'mpx',
     MPX_NODE_ENTRY: path.win32.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs'),
   });
+  const packageB = path.join(
+    f.appsRoot,
+    'mpx',
+    'releases',
+    manifestB.releaseKey,
+    'runtimes',
+    'pi',
+    'extensions',
+    'dist',
+    'package',
+  );
+  for (const nativeRoot of f.fixtureRoots.slice(2)) {
+    expect(
+      JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8')).packages,
+    ).toEqual(['foreign', packageB]);
+  }
+  const uninstallPlan = await orchestrator.planUninstall();
+  await orchestrator.uninstall(uninstallPlan.confirmationDigest);
+  const packageA = path.join(
+    f.appsRoot,
+    'mpx',
+    'releases',
+    receiptA.releaseKey,
+    'runtimes',
+    'pi',
+    'extensions',
+    'dist',
+    'package',
+  );
+  for (const nativeRoot of f.fixtureRoots.slice(2)) {
+    expect(
+      JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8')).packages,
+    ).toEqual(['foreign', packageA]);
+  }
+}, 30_000);
+
+it('restores the prior Pi package when upgrade selector activation fails', async () => {
+  const f = await simulation(false);
+  let failActivation = false;
+  const orchestrator = new InstallOrchestrator({
+    adapter: f.adapter,
+    store: f.store,
+    releases: f.releases,
+    activate: async () => {
+      if (failActivation) {
+        throw new Error('injected selector activation failure');
+      }
+      return async () => undefined;
+    },
+  });
+  const planA = await orchestrator.plan(f.intent),
+    receiptA = await orchestrator.apply(planA, planA.confirmationDigest),
+    packageA = path.join(
+      f.appsRoot,
+      'mpx',
+      'releases',
+      receiptA.releaseKey,
+      'runtimes',
+      'pi',
+      'extensions',
+      'dist',
+      'package',
+    );
+
+  await writeFile(path.join(f.repositoryRoot, 'bin', 'mpx.mjs'), 'export const next = true;\n');
+  const manifestB = await f.releases.build(),
+    intentB = {
+      ...f.intent,
+      releaseKey: manifestB.releaseKey,
+      convergenceHash: manifestB.convergenceHash,
+    },
+    planB = await orchestrator.plan(intentB);
+  failActivation = true;
+
+  const failure = await orchestrator
+    .apply(planB, planB.confirmationDigest)
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).not.toBeInstanceOf(AggregateError);
+  expect(failure).toMatchObject({ message: 'injected selector activation failure' });
+  expect((await f.store.readTransaction())?.journal.phase).toBe('rolled-back');
+  expect(await f.store.readReceipt()).toEqual(receiptA);
+  for (const nativeRoot of f.fixtureRoots.slice(2)) {
+    expect(JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8'))).toEqual({
+      packages: ['foreign', packageA],
+      theme: 'keep',
+    });
+  }
 }, 30_000);
 
 it('keeps the stable Node entry ownership-safe across release upgrades and uninstall', async () => {
@@ -455,6 +585,67 @@ it('keeps the stable Node entry ownership-safe across release upgrades and unins
   expect(await readFile(nodeEntry)).toEqual(foreign);
 }, 30_000);
 
+it('rolls back an apply transaction when Pi settings fail before the temporary write', async () => {
+  const f = await simulation(true);
+  const orchestrator = new InstallOrchestrator({
+    adapter: f.adapter,
+    store: f.store,
+    releases: f.releases,
+  });
+  const plan = await orchestrator.plan(f.intent);
+  (f.adapter as unknown as { piNativeSettings: NodePiNativeSettingsPort }).piNativeSettings =
+    new NodePiNativeSettingsPort({
+      writeFile: async () => {
+        throw new Error('injected pre-write failure');
+      },
+    });
+
+  await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({
+    code: 'INSTALL_PI_SETTINGS_UNAVAILABLE',
+    cause: expect.objectContaining({ message: 'injected pre-write failure' }),
+  });
+  expect((await f.store.readTransaction())?.journal.phase).toBe('rolled-back');
+  expect(await f.store.readReceipt()).toBeUndefined();
+  for (const nativeRoot of f.fixtureRoots.slice(2)) {
+    expect(JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8'))).toEqual(
+      f.piSettingsBefore,
+    );
+  }
+}, 30_000);
+
+it('rolls back an uninstall transaction when Pi settings fail before rename', async () => {
+  const f = await simulation(true);
+  const orchestrator = new InstallOrchestrator({
+    adapter: f.adapter,
+    store: f.store,
+    releases: f.releases,
+  });
+  const installPlan = await orchestrator.plan(f.intent);
+  const receipt = await orchestrator.apply(installPlan, installPlan.confirmationDigest);
+  const uninstallPlan = await orchestrator.planUninstall();
+  const installedSettings = await Promise.all(
+    f.fixtureRoots.slice(2).map((nativeRoot) => readFile(path.join(nativeRoot, 'settings.json'))),
+  );
+  (f.adapter as unknown as { piNativeSettings: NodePiNativeSettingsPort }).piNativeSettings =
+    new NodePiNativeSettingsPort({
+      rename: async () => {
+        throw new Error('injected pre-rename failure');
+      },
+    });
+
+  await expect(orchestrator.uninstall(uninstallPlan.confirmationDigest)).rejects.toMatchObject({
+    code: 'INSTALL_PI_SETTINGS_UNAVAILABLE',
+    cause: expect.objectContaining({ message: 'injected pre-rename failure' }),
+  });
+  expect((await f.store.readTransaction())?.journal.phase).toBe('rolled-back');
+  expect(await f.store.readReceipt()).toEqual(receipt);
+  for (const [index, nativeRoot] of f.fixtureRoots.slice(2).entries()) {
+    expect(await readFile(path.join(nativeRoot, 'settings.json'))).toEqual(
+      required(installedSettings[index], `installed Pi settings ${index}`),
+    );
+  }
+}, 30_000);
+
 it('runs clean and existing-machine production-backed simulations without live writes', async () => {
   let successfulSimulations = 0,
     rollbackSimulations = 0;
@@ -471,8 +662,10 @@ it('runs clean and existing-machine production-backed simulations without live w
     expect(plan.classifications?.confirmationRequired.map((item) => item.id)).toEqual(['git']);
     expect(plan.classifications?.manualOnly).toEqual([]);
     await orchestrator.apply(plan, plan.confirmationDigest);
+    const repeatWrites = vi.spyOn(f.piNativeSettings, 'atomicWrite');
     const second = await orchestrator.plan(f.intent);
     await orchestrator.apply(second, second.confirmationDigest);
+    expect(repeatWrites).not.toHaveBeenCalled();
     expect(await readFile(f.userConfigTarget, 'utf8')).toBe(f.userConfigContent);
     if (existing) {
       expect((await stat(f.userConfigTarget)).mtimeMs).toBe(originalConfigMtime);
@@ -502,6 +695,14 @@ it('runs clean and existing-machine production-backed simulations without live w
     const restartedAdapter = new ProductionInstallerOperationAdapter(
       {
         MPX_APPS: f.appsRoot,
+        MPX_PI_PERSONAL_ROOT: required(f.fixtureFiles[6], 'Pi personal fixture file').replace(
+          /[\\/]auth\.json$/u,
+          '',
+        ),
+        MPX_PI_WORK_ROOT: required(f.fixtureFiles[9], 'Pi work fixture file').replace(
+          /[\\/]auth\.json$/u,
+          '',
+        ),
         APPDATA: path.join(f.root, 'roaming'),
         LOCALAPPDATA: f.localAppData,
         USERPROFILE: f.userProfile,
@@ -535,6 +736,11 @@ it('runs clean and existing-machine production-backed simulations without live w
       uninstallPlan = await restarted.planUninstall();
     }
     await restarted.uninstall(uninstallPlan.confirmationDigest);
+    for (const nativeRoot of f.fixtureRoots.slice(2)) {
+      expect(JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8'))).toEqual(
+        f.piSettingsBefore,
+      );
+    }
     await expect(
       readFile(path.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs')),
     ).rejects.toMatchObject({ code: 'ENOENT' });

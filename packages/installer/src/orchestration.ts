@@ -451,7 +451,7 @@ export class InstallOrchestrator {
     const receipt = await service.apply(plan, confirmation);
     let rollbackActivation: (() => Promise<void>) | undefined;
     try {
-      await this.options.adapter.operations(plan.intent, manifest, true);
+      await this.options.adapter.operations(plan.intent, manifest, true, priorReceipt);
       const operationVerification = await service.verify();
       const releaseIssues = await this.options.releases.verify(receipt, false);
       if (!operationVerification.healthy || releaseIssues.length > 0) {

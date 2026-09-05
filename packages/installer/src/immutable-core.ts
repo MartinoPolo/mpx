@@ -478,7 +478,7 @@ function boundedLocatorSpec(value: unknown): unknown {
   let nodes = 0;
   const visit = (item: unknown, depth: number): unknown => {
     if (++nodes > 4_096 || depth > 16) {
-      fail('INSTALL_SCHEMA_INVALID', 'Receipt operation locator is too large.');
+      fail('INSTALL_SCHEMA_INVALID', 'Install operation locator is too large.');
     }
     if (
       item === null ||
@@ -492,11 +492,11 @@ function boundedLocatorSpec(value: unknown): unknown {
       return item.map((child) => visit(child, depth + 1));
     }
     if (!item || typeof item !== 'object') {
-      fail('INSTALL_SCHEMA_INVALID', 'Receipt operation locator is invalid.');
+      fail('INSTALL_SCHEMA_INVALID', 'Install operation locator is invalid.');
     }
     const entries = Object.entries(item as Record<string, unknown>);
     if (entries.some(([key]) => !key || key.length > 128)) {
-      fail('INSTALL_SCHEMA_INVALID', 'Receipt operation locator is invalid.');
+      fail('INSTALL_SCHEMA_INVALID', 'Install operation locator is invalid.');
     }
     return Object.fromEntries(
       entries
@@ -506,10 +506,40 @@ function boundedLocatorSpec(value: unknown): unknown {
   };
   const parsed = visit(value, 0);
   if (Buffer.byteLength(canonicalJson(parsed), 'utf8') > 65_536) {
-    fail('INSTALL_SCHEMA_INVALID', 'Receipt operation locator is too large.');
+    fail('INSTALL_SCHEMA_INVALID', 'Install operation locator is too large.');
   }
   return parsed;
 }
+
+export function parseInstallOperationLocatorsV1(
+  value: unknown,
+  operations: readonly InstallOperationV1[],
+): readonly InstallOperationLocatorV1[] {
+  if (!Array.isArray(value) || value.length !== operations.length) {
+    fail('INSTALL_SCHEMA_INVALID', 'Operation locators must be ordered and complete.');
+  }
+  return value.map((item, index): InstallOperationLocatorV1 => {
+    const locator = exact(item, ['operationId', 'adapter', 'spec', 'bindingDigest']),
+      operation = operations[index]!,
+      spec = boundedLocatorSpec(locator.spec);
+    if (
+      locator.operationId !== operation.id ||
+      locator.adapter !== operation.adapter ||
+      typeof locator.bindingDigest !== 'string' ||
+      !SHA.test(locator.bindingDigest) ||
+      locator.bindingDigest !== installerDigest({ operation, spec })
+    ) {
+      fail('INSTALL_SCHEMA_INVALID', 'Operation locator binding is invalid.');
+    }
+    return {
+      operationId: operation.id,
+      adapter: operation.adapter,
+      spec,
+      bindingDigest: locator.bindingDigest,
+    };
+  });
+}
+
 export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
   const source = value as Record<string, unknown> | null,
     hasIntent = Boolean(source && Object.prototype.hasOwnProperty.call(source, 'installIntent'));
@@ -542,31 +572,10 @@ export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
     files: receipt.files,
   });
   const operations = receipt.operations.map(parseInstallOperationV1);
-  if (!orderedUnique(operations) || receipt.operationLocators.length !== operations.length) {
-    fail('INSTALL_SCHEMA_INVALID', 'Receipt operations and locators must be sorted and complete.');
+  if (!orderedUnique(operations)) {
+    fail('INSTALL_SCHEMA_INVALID', 'Receipt operations must be sorted and unique.');
   }
-  const operationLocators = receipt.operationLocators.map(
-    (value, index): InstallOperationLocatorV1 => {
-      const locator = exact(value, ['operationId', 'adapter', 'spec', 'bindingDigest']),
-        operation = operations[index]!,
-        spec = boundedLocatorSpec(locator.spec);
-      if (
-        locator.operationId !== operation.id ||
-        locator.adapter !== operation.adapter ||
-        typeof locator.bindingDigest !== 'string' ||
-        !SHA.test(locator.bindingDigest) ||
-        locator.bindingDigest !== installerDigest({ operation, spec })
-      ) {
-        fail('INSTALL_SCHEMA_INVALID', 'Receipt operation locator binding is invalid.');
-      }
-      return {
-        operationId: operation.id,
-        adapter: operation.adapter,
-        spec,
-        bindingDigest: locator.bindingDigest,
-      };
-    },
-  );
+  const operationLocators = parseInstallOperationLocatorsV1(receipt.operationLocators, operations);
   const installIntent = hasIntent ? parseInstallIntentV1(receipt.installIntent) : undefined;
   if (installIntent && installIntent.releaseKey !== manifest.releaseKey) {
     fail('INSTALL_SCHEMA_INVALID', 'Receipt intent does not match its release.');

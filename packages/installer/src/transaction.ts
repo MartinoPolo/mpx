@@ -8,6 +8,7 @@ import {
   parseInstallIntentV1,
   parseInstallPlanV1,
   parseInstallOperationV1,
+  parseInstallOperationLocatorsV1,
   parseMachineSnapshotV1,
   parseReleaseManifestV1,
   parseOwnershipReceiptV1,
@@ -44,6 +45,7 @@ export interface StoredTransaction {
   journal: TransactionJournalV1;
   snapshots: Readonly<Record<string, string | null>>;
   operations: readonly InstallOperationV1[];
+  operationLocators: readonly InstallOperationLocatorV1[];
   priorReceipt?: OwnershipReceiptV1;
 }
 function durableSnapshots(
@@ -55,6 +57,28 @@ function durableSnapshots(
     ...(journal.inFlightOperationId ? [journal.inFlightOperationId] : []),
   ];
   return Object.fromEntries(ids.map((id) => [id, snapshots[id] ?? null]));
+}
+
+function parseStoredOperationState(source: Record<string, unknown>): {
+  operations: readonly InstallOperationV1[];
+  operationLocators: readonly InstallOperationLocatorV1[];
+} {
+  if (!Array.isArray(source.operations) || !Array.isArray(source.operationLocators)) {
+    throw new Error('Stored transaction operations are invalid.');
+  }
+  const operations = source.operations.map(parseInstallOperationV1);
+  if (
+    new Set(operations.map((item) => item.id)).size !== operations.length ||
+    operations.some(
+      (item, index) => index > 0 && operations[index - 1]!.id.localeCompare(item.id) >= 0,
+    )
+  ) {
+    throw new Error('Stored transaction operations are invalid.');
+  }
+  return {
+    operations,
+    operationLocators: parseInstallOperationLocatorsV1(source.operationLocators, operations),
+  };
 }
 export interface LegacyOwnershipReceiptV1 {
   readonly schemaVersion: 1;
@@ -169,7 +193,16 @@ export class MemoryTransactionStore implements TransactionStore {
     this.transaction = structuredClone(value);
   }
   async readTransaction() {
-    return this.transaction && structuredClone(this.transaction);
+    if (!this.transaction) {
+      return undefined;
+    }
+    const transaction = structuredClone(this.transaction);
+    try {
+      const parsed = parseStoredOperationState(transaction as unknown as Record<string, unknown>);
+      return { ...transaction, ...parsed };
+    } catch {
+      fail('INSTALL_TRANSACTION_INVALID', 'Transaction state is invalid.');
+    }
   }
   async removeTransaction() {
     this.transaction = undefined;
@@ -268,30 +301,27 @@ export class NodeTransactionStore implements TransactionStore {
         hasPrior = Object.prototype.hasOwnProperty.call(source, 'priorReceipt');
       if (
         Object.keys(source).sort().join('\0') !==
-        ['journal', 'snapshots', 'operations', ...(hasPrior ? ['priorReceipt'] : [])]
+        [
+          'journal',
+          'snapshots',
+          'operations',
+          'operationLocators',
+          ...(hasPrior ? ['priorReceipt'] : []),
+        ]
           .sort()
           .join('\0')
       ) {
         throw new Error();
       }
       if (
-        !Array.isArray(source.operations) ||
         !source.snapshots ||
         typeof source.snapshots !== 'object' ||
         Array.isArray(source.snapshots)
       ) {
         throw new Error();
       }
-      const operations = source.operations.map(parseInstallOperationV1);
-      if (
-        new Set(operations.map((item) => item.id)).size !== operations.length ||
-        operations.some(
-          (item, index) => index > 0 && operations[index - 1]!.id.localeCompare(item.id) >= 0,
-        )
-      ) {
-        throw new Error();
-      }
-      const journalSource = source.journal as Record<string, unknown> | null,
+      const { operations, operationLocators } = parseStoredOperationState(source),
+        journalSource = source.journal as Record<string, unknown> | null,
         hasInFlight = Boolean(
           journalSource &&
           Object.prototype.hasOwnProperty.call(journalSource, 'inFlightOperationId'),
@@ -388,6 +418,7 @@ export class NodeTransactionStore implements TransactionStore {
         },
         snapshots: snapshots as Record<string, string | null>,
         operations,
+        operationLocators,
         ...(priorReceipt ? { priorReceipt } : {}),
       };
     } catch {
@@ -535,6 +566,46 @@ export class ImmutableInstallerService {
       fail('INSTALL_ADAPTER_UNAVAILABLE', `Side effect adapter ${name} is unavailable.`)
     );
   }
+
+  private async locateOperations(
+    operations: readonly InstallOperationV1[],
+  ): Promise<readonly InstallOperationLocatorV1[]> {
+    const locators: InstallOperationLocatorV1[] = [];
+    for (const operation of operations) {
+      const spec = (await this.adapter(operation.adapter).receiptLocator?.(operation)) ?? null;
+      locators.push({
+        operationId: operation.id,
+        adapter: operation.adapter,
+        spec,
+        bindingDigest: installerDigest({ operation, spec }),
+      });
+    }
+    return parseInstallOperationLocatorsV1(locators, operations);
+  }
+
+  private async hydrateOperations(
+    operations: readonly InstallOperationV1[],
+    locatorValues: unknown,
+    ambiguousCode: string,
+  ): Promise<void> {
+    const locators = parseInstallOperationLocatorsV1(locatorValues, operations);
+    for (let index = 0; index < operations.length; index++) {
+      const operation = operations[index]!,
+        locator = locators[index]!,
+        adapter = this.adapter(operation.adapter);
+      if (locator.spec === null) {
+        continue;
+      }
+      if (!adapter.hydrateReceiptOperation) {
+        fail(
+          ambiguousCode,
+          `Adapter ${operation.adapter} cannot hydrate its durable operation locator.`,
+        );
+      }
+      await adapter.hydrateReceiptOperation(operation, locator.spec);
+    }
+  }
+
   async plan(
     intentValue: InstallIntentV1,
     requested: readonly InstallOperationV1[],
@@ -637,13 +708,14 @@ export class ImmutableInstallerService {
       for (const operation of plan.operations) {
         snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
       }
-      const snapshot: MachineSnapshotV1 = {
-        schemaVersion: 1,
-        kind: 'machine-snapshot',
-        transactionId: randomUUID(),
-        observations: plan.observations,
-        capturedAt: this.now().toISOString(),
-      };
+      const operationLocators = await this.locateOperations(plan.operations),
+        snapshot: MachineSnapshotV1 = {
+          schemaVersion: 1,
+          kind: 'machine-snapshot',
+          transactionId: randomUUID(),
+          observations: plan.observations,
+          capturedAt: this.now().toISOString(),
+        };
       let journal: TransactionJournalV1 = {
         schemaVersion: 1,
         kind: 'transaction-journal',
@@ -656,6 +728,7 @@ export class ImmutableInstallerService {
         journal,
         snapshots: {},
         operations: plan.operations,
+        operationLocators,
         ...(priorReceipt ? { priorReceipt } : {}),
       });
       try {
@@ -671,6 +744,7 @@ export class ImmutableInstallerService {
               journal: inFlightJournal,
               snapshots: durableSnapshots(snapshots, inFlightJournal),
               operations: plan.operations,
+              operationLocators,
               ...(priorReceipt ? { priorReceipt } : {}),
             });
             journal = inFlightJournal;
@@ -685,6 +759,7 @@ export class ImmutableInstallerService {
               journal,
               snapshots: durableSnapshots(snapshots, journal),
               operations: plan.operations,
+              operationLocators,
               ...(priorReceipt ? { priorReceipt } : {}),
             });
           }
@@ -701,16 +776,7 @@ export class ImmutableInstallerService {
             'Exact release manifest is required for ownership.',
           );
         }
-        const operationLocators: InstallOperationLocatorV1[] = [];
-        for (const operation of plan.operations) {
-          const spec = (await this.adapter(operation.adapter).receiptLocator?.(operation)) ?? null;
-          operationLocators.push({
-            operationId: operation.id,
-            adapter: operation.adapter,
-            spec,
-            bindingDigest: installerDigest({ operation, spec }),
-          });
-        }
+        const receiptOperationLocators = await this.locateOperations(plan.operations);
         const receipt: OwnershipReceiptV1 =
           priorReceipt && !upgrading
             ? priorReceipt
@@ -721,7 +787,7 @@ export class ImmutableInstallerService {
                 convergenceHash: plan.intent.convergenceHash,
                 files: manifest!.files,
                 operations: plan.operations,
-                operationLocators,
+                operationLocators: receiptOperationLocators,
                 installIntent: plan.intent,
                 installedAt: this.now().toISOString(),
               };
@@ -731,6 +797,7 @@ export class ImmutableInstallerService {
           journal,
           snapshots: durableSnapshots(snapshots, journal),
           operations: plan.operations,
+          operationLocators,
           ...(priorReceipt ? { priorReceipt } : {}),
         });
         return receipt;
@@ -741,6 +808,7 @@ export class ImmutableInstallerService {
               journal,
               snapshots,
               operations: plan.operations,
+              operationLocators,
               ...(priorReceipt ? { priorReceipt } : {}),
             },
             plan.operations,
@@ -760,6 +828,11 @@ export class ImmutableInstallerService {
     stored: StoredTransaction,
     operations: readonly InstallOperationV1[],
   ): Promise<void> {
+    await this.hydrateOperations(
+      operations,
+      stored.operationLocators,
+      'INSTALL_TRANSACTION_INVALID',
+    );
     const mutated = new Set([
       ...stored.journal.completedOperationIds,
       ...(stored.journal.inFlightOperationId ? [stored.journal.inFlightOperationId] : []),
@@ -814,18 +887,11 @@ export class ImmutableInstallerService {
     });
   }
   private async hydrateReceiptOperations(receipt: OwnershipReceiptV1): Promise<void> {
-    for (let index = 0; index < receipt.operations.length; index++) {
-      const operation = receipt.operations[index]!,
-        locator = receipt.operationLocators[index]!,
-        adapter = this.adapter(operation.adapter);
-      if (locator.spec !== null && !adapter.hydrateReceiptOperation) {
-        fail(
-          'INSTALL_RECEIPT_AMBIGUOUS',
-          `Adapter ${operation.adapter} cannot hydrate its durable receipt operation.`,
-        );
-      }
-      await adapter.hydrateReceiptOperation?.(operation, locator.spec);
-    }
+    await this.hydrateOperations(
+      receipt.operations,
+      receipt.operationLocators,
+      'INSTALL_RECEIPT_AMBIGUOUS',
+    );
   }
   async assertOwnedReceipt(receiptValue: OwnershipReceiptV1): Promise<void> {
     const receipt = parseOwnershipReceiptV1(receiptValue);
@@ -928,13 +994,14 @@ export class ImmutableInstallerService {
       for (const operation of plan.operations) {
         snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
       }
-      const snapshot: MachineSnapshotV1 = {
-        schemaVersion: 1,
-        kind: 'machine-snapshot',
-        transactionId: randomUUID(),
-        observations: plan.observations,
-        capturedAt: this.now().toISOString(),
-      };
+      const operationLocators = await this.locateOperations(plan.operations),
+        snapshot: MachineSnapshotV1 = {
+          schemaVersion: 1,
+          kind: 'machine-snapshot',
+          transactionId: randomUUID(),
+          observations: plan.observations,
+          capturedAt: this.now().toISOString(),
+        };
       let journal: TransactionJournalV1 = {
         schemaVersion: 1,
         kind: 'transaction-journal',
@@ -947,6 +1014,7 @@ export class ImmutableInstallerService {
         journal,
         snapshots,
         operations: plan.operations,
+        operationLocators,
         priorReceipt: receipt,
       };
       await this.options.store.writeTransaction({ ...stored, snapshots: {} });
