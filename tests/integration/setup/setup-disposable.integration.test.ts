@@ -263,6 +263,66 @@ it('detaches both disposable legacy roots through the complete node setup compos
   );
 });
 
+it('keeps the committed detachment receipt when setup fails afterward so retry can continue', async () => {
+  const value = await fixture();
+  const intent = {
+    schemaVersion: 1,
+    kind: 'install-intent',
+    releaseKey: digest,
+    convergenceHash: digest,
+    components: ['cli'],
+  } as const;
+  const built = {
+    schemaVersion: 1,
+    kind: 'install-intent-build-result',
+    intent,
+    externalPlans: [],
+  } as never;
+  let fail = true;
+  const service = createNodeSetupApplicationService({
+    environment: value.environment,
+    builder: {
+      build: async () => built,
+      verify: vi.fn(
+        async () =>
+          ({
+            schemaVersion: 1,
+            kind: 'install-external-verification',
+            integrations: [],
+          }) as const,
+      ),
+    },
+    orchestrator: {
+      plan: async () => {
+        if (fail) {
+          throw new Error('injected post-detachment setup failure');
+        }
+        return {
+          schemaVersion: 1,
+          kind: 'install-plan',
+          intent,
+          confirmationDigest: digest,
+          classifications: { automatic: [], confirmationRequired: [], manualOnly: [] },
+        } as never;
+      },
+      apply: vi.fn(async () => ({}) as never),
+      verify: vi.fn(async () => ({ healthy: true, issues: [] }) as never),
+    },
+  });
+
+  await expect(service.execute()).rejects.toThrow('injected post-detachment setup failure');
+  await expect(
+    readFile(path.join(value.environment.LOCALAPPDATA, 'mpx', 'pi-legacy-detach.receipt.json')),
+  ).resolves.toBeInstanceOf(Buffer);
+  fail = false;
+  await expect(service.execute()).resolves.toMatchObject({ verification: { healthy: true } });
+  for (const root of [value.personal, value.work]) {
+    for (const [, , destination] of entries) {
+      expect((await lstat(path.join(root, destination))).isSymbolicLink()).toBe(false);
+    }
+  }
+});
+
 it('completes detachment after recovering an interrupted journal', async () => {
   const value = await fixture();
   const stateRoot = path.join(value.environment.LOCALAPPDATA, 'mpx');
