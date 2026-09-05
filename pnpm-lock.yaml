@@ -672,27 +672,12 @@ importers:
       '@mpx/content-compiler':
         specifier: workspace:*
         version: link:../../../packages/content-compiler
-      '@mpx/dev-services':
-        specifier: workspace:*
-        version: link:../../../packages/dev-services
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../../../packages/runtime-contracts
-      '@mpx/runtime-hooks':
-        specifier: workspace:*
-        version: link:../../../packages/runtime-hooks
-      '@mpx/runtime-tools':
-        specifier: workspace:*
-        version: link:../../../packages/runtime-tools
       '@mpx/skills':
         specifier: workspace:*
         version: link:../../../packages/skills
-      '@mpx/status':
-        specifier: workspace:*
-        version: link:../../../packages/status
-      '@mpx/subagents':
-        specifier: workspace:*
-        version: link:../../../packages/subagents
     devDependencies:
       '@mpx/config':
         specifier: workspace:*
@@ -700,9 +685,6 @@ importers:
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

@@ -34,10 +34,7 @@ const SHA = /^[a-f0-9]{64}$/u;
 const PROJECTION_ROLES = new Set<ProjectionRole>([
   'plugin',
   'hooks',
-  'extension',
   'profile',
-  'keybindings',
-  'themes',
   'status',
   'settings',
   'canonical-content',

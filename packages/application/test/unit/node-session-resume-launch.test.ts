@@ -1,12 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UserConfig } from '@mpx/config';
+import { ExecutionError } from '@mpx/executors';
 import type { ResumePlanV1 } from '@mpx/sessions';
 
 const mocks = vi.hoisted(() => ({
-  execute: vi.fn(async (input: { beforeChildExecution?: () => Promise<void> }) => {
-    await input.beforeChildExecution?.();
-    return { exitCode: 0 };
-  }),
+  executeBoundary: undefined as
+    typeof import('../../src/node/launch-execution.js').executeResolvedNodeLaunch | undefined,
+  createSbxAdapter: vi.fn(async () => ({
+    name: 'docker' as const,
+    verify: async () => ({
+      status: 'verified' as const,
+      verifier: 'sbx-test',
+      evidenceDigest: 'a'.repeat(64),
+    }),
+    execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
+    ...(mocks.workerClientAvailable ? { remoteToolClient: {} } : {}),
+    setResumeAction: mocks.setResumeAction,
+  })),
+  execute: vi.fn(
+    async (input: {
+      beforeChildExecution?: () => Promise<void>;
+      context?: { launchExecutorAdapterSource?: string };
+    }) => {
+      await input.beforeChildExecution?.();
+      return { exitCode: 0 };
+    },
+  ),
   setResumeAction: vi.fn(),
   workerClientAvailable: true,
   status: vi.fn(),
@@ -29,21 +48,13 @@ const mocks = vi.hoisted(() => ({
     }),
   ),
 }));
-vi.mock('../../src/node/launch-execution.js', () => ({
-  executeResolvedNodeLaunch: mocks.execute,
-}));
+vi.mock('../../src/node/launch-execution.js', async (importActual) => {
+  const actual = await importActual<typeof import('../../src/node/launch-execution.js')>();
+  mocks.executeBoundary = actual.executeResolvedNodeLaunch;
+  return { ...actual, executeResolvedNodeLaunch: mocks.execute };
+});
 vi.mock('../../src/node/sbx-execution.js', () => ({
-  createProductionSbxExecutionAdapter: vi.fn(async () => ({
-    name: 'docker',
-    verify: async () => ({
-      status: 'verified',
-      verifier: 'sbx-test',
-      evidenceDigest: 'a'.repeat(64),
-    }),
-    execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
-    ...(mocks.workerClientAvailable ? { remoteToolClient: {} } : {}),
-    setResumeAction: mocks.setResumeAction,
-  })),
+  createProductionSbxExecutionAdapter: mocks.createSbxAdapter,
 }));
 vi.mock('../../src/launch-skill-resolution.js', () => ({
   resolveLaunchSkills: vi.fn(async () => ({
@@ -236,40 +247,88 @@ describe('Node session resume launch composition', () => {
     expect(events).toEqual(['verify']);
   });
 
-  it('fails closed before Pi Docker resume when no sandbox worker client exists', async () => {
+  it('routes production Pi Docker resume to the shared typed fail-closed boundary', async () => {
     const base = input();
     mocks.execute.mockClear();
-    mocks.workerClientAvailable = false;
-    try {
-      await expect(
-        executeNodeSessionResumeLaunch(
-          {
-            ...base,
-            store: {
-              readNativeBinding: async () => ({
-                ref: 'binding',
-                runtime: 'pi',
-                identity: { name: 'work', domain: 'work' },
-                accountBindingRef: 'account',
-              }),
-            } as never,
-            context: {
-              sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
-              rootAttestationService: {
-                store: { list: async () => [] },
-                verify: async () => ({}),
-              } as never,
-              accountAuthVerifier: { verify: async () => undefined },
-            },
-          },
-          plan('pi'),
-          user,
-        ),
-      ).rejects.toMatchObject({ code: 'PI_SANDBOX_WORKER_UNAVAILABLE' });
-      expect(mocks.execute).not.toHaveBeenCalled();
-    } finally {
-      mocks.workerClientAvailable = true;
-    }
+    mocks.execute.mockRejectedValueOnce(
+      new ExecutionError(
+        'PI_DOCKER_UNAVAILABLE',
+        'Pi Docker execution is unavailable pending whole-agent sandbox isolation.',
+        { executor: 'docker', runtime: 'pi' },
+      ),
+    );
+    const error = await executeNodeSessionResumeLaunch(
+      {
+        ...base,
+        store: {
+          readNativeBinding: async () => ({
+            ref: 'binding',
+            runtime: 'pi',
+            identity: { name: 'work', domain: 'work' },
+            accountBindingRef: 'private-account-reference',
+          }),
+        } as never,
+        context: {
+          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
+          rootAttestationService: {
+            store: { list: async () => [] },
+            verify: async () => ({}),
+          } as never,
+          accountAuthVerifier: { verify: async () => undefined },
+        },
+      },
+      plan('pi'),
+      user,
+    ).catch((failure) => failure);
+
+    expect(error).toMatchObject({
+      name: 'ExecutionError',
+      code: 'PI_DOCKER_UNAVAILABLE',
+      details: { executor: 'docker', runtime: 'pi' },
+    });
+    expect(JSON.stringify(error)).not.toContain('private-account-reference');
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.execute.mock.calls[0]![0].context?.launchExecutorAdapterSource).toBe(
+      'production-admission',
+    );
+  });
+
+  it('fails closed before child execution when Pi Docker resume adapter construction fails', async () => {
+    const base = input();
+    const verify = vi.fn(async () => ({}));
+    mocks.execute.mockClear();
+    mocks.createSbxAdapter.mockClear();
+    mocks.createSbxAdapter.mockRejectedValueOnce(new Error('SBX unavailable'));
+    mocks.execute.mockImplementationOnce((execution) => mocks.executeBoundary!(execution as never));
+
+    const error = await executeNodeSessionResumeLaunch(
+      {
+        ...base,
+        store: {
+          readNativeBinding: async () => ({
+            ref: 'binding',
+            runtime: 'pi',
+            identity: { name: 'work', domain: 'work' },
+            accountBindingRef: 'account',
+          }),
+        } as never,
+        context: {
+          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
+          rootAttestationService: { store: { list: async () => [] }, verify } as never,
+          accountAuthVerifier: { verify: async () => undefined },
+        },
+      },
+      plan('pi'),
+      user,
+    ).catch((failure) => failure);
+
+    expect(error).toMatchObject({
+      name: 'ExecutionError',
+      code: 'PI_DOCKER_UNAVAILABLE',
+      details: { executor: 'docker', runtime: 'pi' },
+    });
+    expect(mocks.createSbxAdapter).toHaveBeenCalledOnce();
+    expect(verify).toHaveBeenCalledOnce();
   });
 
   it('reverifies Pi once before discovery and once at the child boundary', async () => {

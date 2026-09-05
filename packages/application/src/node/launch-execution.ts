@@ -14,10 +14,8 @@ import {
 import {
   ExecutionError,
   compactLaunchBanner,
-  startLaunchPrivateBridge,
   type DirectTty,
   type ExecutorAdapter,
-  type LaunchPrivateBridge,
   type ProcessResult,
 } from '@mpx/executors';
 import { createPiRuntimeProfileV1, PI_CAPABILITY_IDS, verifyPiResumeTarget } from '@mpx/runtime-pi';
@@ -58,29 +56,6 @@ function productionComposer(
       );
     }
     let snapshotPath: string | undefined;
-    let privateBridge: LaunchPrivateBridge | undefined;
-    if (input.descriptor.runtime === 'pi' && input.descriptor.executor.name === 'docker') {
-      const remote = executorAdapter(input.context, 'docker').remoteToolClient;
-      if (remote) {
-        const binding = remote.descriptor;
-        if (
-          binding.launchKey !== input.descriptor.launchKey ||
-          binding.identity.name !== input.descriptor.identity.name ||
-          binding.identity.domain !== input.descriptor.identity.domain ||
-          binding.capabilitySha256 !== composition.wiring.capability.manifestKey
-        ) {
-          throw new ExecutionError(
-            'REMOTE_BINDING_INVALID',
-            'The Docker RemoteToolClient belongs to another launch, identity, inventory, plan, or capability.',
-          );
-        }
-        privateBridge = await startLaunchPrivateBridge({
-          stateRoot: input.stateRoot,
-          binding,
-          client: remote,
-        });
-      }
-    }
     let runtimeStatusPath: string | undefined;
     const piProfile =
       input.descriptor.runtime === 'pi'
@@ -133,7 +108,6 @@ function productionComposer(
       ...(input.context.launchProjectionValidator
         ? { validator: input.context.launchProjectionValidator }
         : {}),
-      ...(privateBridge ? { bridge: privateBridge.config } : {}),
     });
     return {
       adapters,
@@ -141,7 +115,6 @@ function productionComposer(
         ...(snapshotPath ? { snapshot: snapshotPath } : {}),
         ...(runtimeStatusPath ? { runtime: runtimeStatusPath } : {}),
       }),
-      ...(privateBridge ? { cleanup: () => privateBridge.close() } : {}),
     };
   };
 }
@@ -150,6 +123,19 @@ function productionComposer(
 export const executeResolvedNodeLaunch = async (
   input: NodeLaunchExecutionInput,
 ): Promise<ProcessResult> => {
+  if (
+    input.descriptor.runtime === 'pi' &&
+    input.descriptor.executor.name === 'docker' &&
+    input.context.launchRuntimeAdapters === undefined &&
+    (input.context.launchExecutorAdapters === undefined ||
+      input.context.launchExecutorAdapterSource === 'production-admission')
+  ) {
+    throw new ExecutionError(
+      'PI_DOCKER_UNAVAILABLE',
+      'Pi Docker execution is unavailable pending whole-agent sandbox isolation.',
+      { executor: 'docker', runtime: 'pi' },
+    );
+  }
   const injectedRuntimeAdapters = input.context.launchRuntimeAdapters;
   let trustedExecutable: TrustedRuntimeExecutable | undefined;
   const composer: LaunchRuntimeComposer = injectedRuntimeAdapters

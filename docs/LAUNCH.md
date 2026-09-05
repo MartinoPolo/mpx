@@ -2,7 +2,7 @@
 
 `mpx launch claude|pi` resolves and executes the MPX v2 launch contract. Resolution produces a deeply immutable descriptor, a runtime-neutral resolved-skill manifest, and a runtime-specific immutable published projection. The logical skill artifact and the launch-bound full published-projection reference are separate bindings. Their hashes bind runtime, identity, project/repository/content scope, mode, skill policy, executor evidence, workspace, network policy, routes, approvals, and artifact bytes. A running process cannot widen that tuple: changed rights, bindings, evidence, or artifacts require a new launch and runtime restart (`LAUNCH_RESTART_REQUIRED`). `mpx launch current --json` reports only validated process-bound hashes and binding.
 
-> **Migration direction:** Current Pi launches still suppress normal extension discovery and the current Docker route still uses host Pi with remote tools. [ADR 0004](adr/0004-canonical-native-pi-extensions.md) replaces that design with normal discovery of canonical checked-in MPX Pi extensions on host and whole-agent sandbox routes. See [the implementation plan](PI_EXTENSION_MIGRATION.md).
+> **Migration status:** Host Pi uses normal discovery of the canonical checked-in MPX Pi extension package. Pi Docker launch and resume are unavailable pending whole-agent sandbox isolation; MPX fails closed before child execution. See [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and [the implementation plan](PI_EXTENSION_MIGRATION.md).
 
 ## Selection and aliases
 
@@ -23,9 +23,9 @@ Launch-only runtime arguments use repeatable `--runtime-arg <value>`. MPX bounds
 
 ## Execution gates
 
-**Temporary current implementation:** Docker selection uses the pinned standalone-sbx backend only when its live diagnostics, launch-plan export, packaged inventories, and proof report match. Missing or stale proof returns `EXECUTOR_GATE_UNVERIFIED` with no host fallback. The current backend starts a launch-private worker bridge and attaches host Pi to remote tools. This path is retained only until Gate 5 whole-agent replacement passes; it must not gain new runtime features.
+**Current implementation:** Docker selection uses the pinned standalone-sbx backend only when its live diagnostics, launch-plan export, packaged inventories, and proof report match. Missing or stale proof returns `EXECUTOR_GATE_UNVERIFIED` with no host fallback. Pi Docker launch and resume additionally return `PI_DOCKER_UNAVAILABLE` at the shared production launch boundary before projection or child execution. MPX does not run host Pi under a Docker-labelled descriptor and does not inject a worker bridge, generated extension, status-file environment, extension-disable flags, or explicit extension path. Native project trust remains Pi-owned under the approved ADR.
 
-The Gate 5 target runs Pi, its canonical native extensions, tools, and subprocesses inside `sbx`. The selected standalone baseline is `open`, mapped to sbx global `allow-all`, so it provides no destination-egress isolation. The retained boundary denies the opposite identity, original checkout, unrelated host paths and processes, and host Docker socket; public egress can disclose anything readable by the selected identity inside the sandbox.
+Gate 5 will run Pi, its canonical native extensions, tools, and subprocesses inside `sbx`. Until that whole-agent route is implemented and accepted, Pi Docker is unavailable. Host Pi remains an explicit elevated compatibility path and is not sandbox isolation.
 
 Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where required, a nonempty reason, and exact one-use launch-bound approval. Approval is either fresh direct-TTY confirmation or the explicit argv-scoped `--approve-host` flag; the latter is accepted only for an explicit host launch with a reason and is never read from durable configuration or the environment. Interactive runtime processes have no artificial 120-second lifetime; finite readiness and diagnostic probes remain bounded.
 

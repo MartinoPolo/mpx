@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -109,9 +110,28 @@ async function launchFixture(): Promise<{
   };
 }
 
-function publishedReference(
-  input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-) {
+type ProjectionInput = Parameters<
+  NonNullable<LaunchExecutionContext['launchProjectionBuilder']>
+>[0];
+
+function stableProjectionValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableProjectionValue).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableProjectionValue(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function projectionDigest(value: unknown): string {
+  return createHash('sha256').update(stableProjectionValue(value)).digest('hex');
+}
+
+function publishedReference(input: ProjectionInput) {
   return {
     projectionKey: 'f'.repeat(64),
     fileMapHash: 'e'.repeat(64),
@@ -122,6 +142,53 @@ function publishedReference(
       runtime: input.descriptor.runtime,
       manifestKey: input.skillPlan.manifestKey,
     },
+  };
+}
+
+async function materializeThinPiProjection(input: ProjectionInput, directory?: string) {
+  const root = directory ?? (await mkdtemp(path.join(tmpdir(), 'mpx-cli-thin-pi-')));
+  await mkdir(root, { recursive: true });
+  const contextBytes = Buffer.from(`${JSON.stringify(input.runtimeContext, null, 2)}\n`);
+  const files = [
+    ...input.compiledContent.files.map((file) => ({
+      path: file.relativePath,
+      bytes: Buffer.from(file.bytes),
+    })),
+    { path: 'runtime-context.json', bytes: contextBytes },
+  ];
+  for (const file of files) {
+    const target = path.join(root, ...file.path.split('/'));
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, file.bytes);
+  }
+  const fileMap = files
+    .map((file) => ({
+      path: file.path,
+      sha256: createHash('sha256').update(file.bytes).digest('hex'),
+      bytes: file.bytes.byteLength,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  const launchBinding = {
+    launchKey: input.runtimeContext.launchKey,
+    descriptorDigest: input.runtimeContext.launchDescriptor.digest,
+    runtimeArtifactKey: input.skillPlan.artifactReference.artifactKey,
+    runtime: 'pi' as const,
+    manifestKey: input.skillPlan.manifestKey,
+  };
+  const fileMapHash = projectionDigest(fileMap);
+  const reference = {
+    projectionKey: projectionDigest({ schemaVersion: 1, launchBinding, fileMapHash }),
+    fileMapHash,
+    launchBinding,
+  };
+  await writeFile(
+    path.join(root, '.mpx-runtime-artifact.json'),
+    JSON.stringify({ schemaVersion: 1, reference, fileMap }),
+  );
+  return {
+    directory: root,
+    runtimeContextFile: path.join(root, 'runtime-context.json'),
+    reference,
   };
 }
 function materializeRoutes(descriptor: {
@@ -512,14 +579,16 @@ describe('Phase F launch execution', () => {
     ['pi', 'MPX_PI_EXECUTABLE'],
     ['claude', 'MPX_CLAUDE_EXECUTABLE'],
   ] as const)(
-    'privately propagates a launch-bound live status file to the production %s plan',
+    'uses the runtime-owned status integration for the production %s plan',
     async (runtime, executableVariable) => {
       const fixture = await launchFixture(),
         io = captureIo();
       const executable = path.join(fixture.env.APPDATA!, `${runtime}-live.exe`);
       await writeFile(executable, 'trusted\n');
       let childStatusPath: string | undefined;
+      let childEnvironment: Readonly<Record<string, string>> | undefined;
       const execute = vi.fn(async (request: Parameters<ExecutorAdapter['execute']>[0]) => {
+        childEnvironment = request.environment;
         childStatusPath = request.environment.MPX_STATUS_SNAPSHOT_FILE;
         if (childStatusPath) {
           const updated = {
@@ -543,20 +612,14 @@ describe('Phase F launch execution', () => {
         }),
         execute,
       };
-      const builder = vi.fn(
-        async (
-          input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-        ) => ({
-          directory: `C:/immutable/${runtime}`,
-          reference: publishedReference(input),
-          ...(runtime === 'pi'
-            ? {
-                extension: 'C:/immutable/pi/extension.mjs',
-                runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-                theme: 'green',
-              }
-            : { pluginDirectory: 'C:/immutable/claude' }),
-        }),
+      const builder = vi.fn(async (input: ProjectionInput) =>
+        runtime === 'pi'
+          ? materializeThinPiProjection(input)
+          : {
+              directory: 'C:/immutable/claude',
+              reference: publishedReference(input),
+              pluginDirectory: 'C:/immutable/claude',
+            },
       );
       const auditRecords: unknown[] = [];
       const launchAudit = {
@@ -580,7 +643,13 @@ describe('Phase F launch execution', () => {
         }),
         JSON.stringify(io),
       ).toBe(0);
-      expect(childStatusPath).toContain(path.join(fixture.env.LOCALAPPDATA!, 'mpx', 'status'));
+      if (runtime === 'claude') {
+        expect(childStatusPath).toContain(path.join(fixture.env.LOCALAPPDATA!, 'mpx', 'status'));
+      } else {
+        expect(childStatusPath).toBeUndefined();
+        expect(childEnvironment).not.toHaveProperty('MPX_PI_LAUNCH_PRIVATE_BRIDGE');
+        expect(childEnvironment).not.toHaveProperty('MPX_RUNTIME_STATUS_ENVELOPE_FILE');
+      }
       const { skillPlan: _skillPlan, ...serializableProjection } = builder.mock.calls[0]![0];
       const publicSurfaces = JSON.stringify({
         io,
@@ -658,7 +727,7 @@ describe('Phase F launch execution', () => {
   it('awaits failed refresh fallback during shutdown and cancels all later status work', async () => {
     const fixture = await launchFixture(),
       io = captureIo();
-    const executable = path.join(fixture.env.APPDATA!, 'pi-refresh.exe');
+    const executable = path.join(fixture.env.APPDATA!, 'claude-refresh.exe');
     await writeFile(executable, 'trusted\n');
     const stateRoot = path.join(fixture.env.LOCALAPPDATA!, 'mpx');
     await mkdir(stateRoot, { recursive: true });
@@ -727,22 +796,16 @@ describe('Phase F launch execution', () => {
       }),
       execute,
     };
-    const builder = vi.fn(
-      async (
-        input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-      ) => ({
-        directory: 'C:/immutable/pi',
-        reference: publishedReference(input),
-        extension: 'C:/immutable/pi/extension.mjs',
-        runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-        theme: 'green' as const,
-      }),
-    );
+    const builder = vi.fn(async (input: ProjectionInput) => ({
+      directory: 'C:/immutable/claude',
+      reference: publishedReference(input),
+      pluginDirectory: 'C:/immutable/claude',
+    }));
     const statusProvider = { snapshot: vi.fn(async () => snapshot) };
     const reader = vi.fn(async () => fallbackRead.promise);
 
-    const launch = run(['--cwd', fixture.cwd, 'launch', 'pi', '--identity', 'work'], io, {
-      env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable },
+    const launch = run(['--cwd', fixture.cwd, 'launch', 'claude', '--identity', 'work'], io, {
+      env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_CLAUDE_EXECUTABLE: executable },
       catalogRoot: fixture.catalogRoot,
       launchExecutorAdapters: [executor],
       launchProjectionBuilder: builder,
@@ -785,7 +848,7 @@ describe('Phase F launch execution', () => {
     async (hungStage) => {
       const fixture = await launchFixture(),
         io = captureIo();
-      const executable = path.join(fixture.env.APPDATA!, `pi-hung-${hungStage}.exe`);
+      const executable = path.join(fixture.env.APPDATA!, `claude-hung-${hungStage}.exe`);
       await writeFile(executable, 'trusted\n');
       const stateRoot = path.join(fixture.env.LOCALAPPDATA!, 'mpx');
       await mkdir(stateRoot, { recursive: true });
@@ -862,22 +925,20 @@ describe('Phase F launch execution', () => {
         }),
         execute,
       };
-      const builder = vi.fn(
-        async (
-          input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-        ) => ({
-          directory: 'C:/immutable/pi',
-          reference: publishedReference(input),
-          extension: 'C:/immutable/pi/extension.mjs',
-          runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-          theme: 'green' as const,
-        }),
-      );
+      const builder = vi.fn(async (input: ProjectionInput) => ({
+        directory: 'C:/immutable/claude',
+        reference: publishedReference(input),
+        pluginDirectory: 'C:/immutable/claude',
+      }));
       const unhandled = vi.fn();
       process.on('unhandledRejection', unhandled);
       try {
-        const launch = run(['--cwd', fixture.cwd, 'launch', 'pi', '--identity', 'work'], io, {
-          env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable },
+        const launch = run(['--cwd', fixture.cwd, 'launch', 'claude', '--identity', 'work'], io, {
+          env: {
+            ...fixture.env,
+            MPX_APPS: fixture.env.APPDATA,
+            MPX_CLAUDE_EXECUTABLE: executable,
+          },
           catalogRoot: fixture.catalogRoot,
           launchExecutorAdapters: [executor],
           launchProjectionBuilder: builder,
@@ -1006,9 +1067,10 @@ describe('Phase F launch execution', () => {
       if (runtime === 'pi') {
         await writeFile(runtimeEntry, 'process.exitCode = 0;\n');
       }
-      const builder = async (
-        input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-      ) => {
+      const builder = async (input: ProjectionInput) => {
+        if (runtime === 'pi') {
+          return materializeThinPiProjection(input, projectionDirectory);
+        }
         await mkdir(projectionDirectory, { recursive: true });
         await writeFile(
           path.join(projectionDirectory, 'projection.txt'),
@@ -1017,13 +1079,7 @@ describe('Phase F launch execution', () => {
         return {
           directory: projectionDirectory,
           reference: publishedReference(input),
-          ...(runtime === 'pi'
-            ? {
-                extension: path.join(projectionDirectory, 'extension.mjs'),
-                runtimeContextFile: path.join(projectionDirectory, 'context.json'),
-                theme: 'green',
-              }
-            : { pluginDirectory: projectionDirectory }),
+          pluginDirectory: projectionDirectory,
         };
       };
       const launchExecutableResolver = vi.fn(async () => ({
@@ -1112,7 +1168,7 @@ describe('Phase F launch execution', () => {
         expect(JSON.parse(io.out[0]!)).toMatchObject({
           ok: false,
           error: {
-            code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
+            code: 'PI_DOCKER_UNAVAILABLE',
             details: { executor: 'docker', runtime: 'pi' },
           },
         });
@@ -1744,25 +1800,6 @@ describe('Phase F launch execution', () => {
         path.resolve('content/output-styles/mpx-terse.md'),
         path.join(contentRoot, 'content', 'output-styles', 'mpx-terse.md'),
       );
-      await cp(
-        path.resolve('runtimes/pi/runtime-pi/projection'),
-        path.join(contentRoot, 'runtimes', 'pi', 'runtime-pi', 'projection'),
-        { recursive: true },
-      );
-      const vendorDirectory = path.join(
-        contentRoot,
-        'runtimes',
-        'pi',
-        'runtime-pi',
-        'vendor',
-        'subagents',
-      );
-      await mkdir(vendorDirectory, { recursive: true });
-      await cp(
-        path.resolve('runtimes/pi/runtime-pi/vendor/subagents/VENDORED.md'),
-        path.join(vendorDirectory, 'VENDORED.md'),
-      );
-
       expect(
         await run(['--cwd', fixture.cwd, 'launch', runtime, '--identity', 'work'], io, {
           env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, [executableVariable]: executable },
@@ -1814,17 +1851,13 @@ describe('Phase F launch execution', () => {
           input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
         ) => {
           effects.push('build');
-          return {
-            directory: `C:/immutable/${runtime}`,
-            reference: publishedReference(input),
-            ...(runtime === 'pi'
-              ? {
-                  extension: 'C:/immutable/pi/extension.mjs',
-                  runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-                  theme: 'green',
-                }
-              : { pluginDirectory: 'C:/immutable/claude' }),
-          };
+          return runtime === 'pi'
+            ? materializeThinPiProjection(input)
+            : {
+                directory: 'C:/immutable/claude',
+                reference: publishedReference(input),
+                pluginDirectory: 'C:/immutable/claude',
+              };
         },
       );
       const validator = vi.fn(async () => {
@@ -1866,20 +1899,16 @@ describe('Phase F launch execution', () => {
       }),
       execute,
     };
-    const builder = vi.fn(
-      async (
-        input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-      ) => ({
-        directory: 'C:/immutable/pi',
+    const builder = vi.fn(async (input: ProjectionInput) => {
+      const projection = await materializeThinPiProjection(input);
+      return {
+        ...projection,
         reference: {
-          ...publishedReference(input),
-          launchBinding: { ...publishedReference(input).launchBinding, launchKey: '0'.repeat(64) },
+          ...projection.reference,
+          launchBinding: { ...projection.reference.launchBinding, launchKey: '0'.repeat(64) },
         },
-        extension: 'C:/immutable/pi/extension.mjs',
-        runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-        theme: 'green' as const,
-      }),
-    );
+      };
+    });
     expect(
       await run(['--json', '--cwd', fixture.cwd, 'launch', 'pi', '--identity', 'work'], io, {
         env: { ...fixture.env, MPX_APPS: fixture.env.APPDATA, MPX_PI_EXECUTABLE: executable },
@@ -1953,13 +1982,7 @@ describe('Phase F launch execution', () => {
           input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
         ) => {
           effects.push('build');
-          return {
-            directory: 'C:/immutable/pi',
-            reference: publishedReference(input),
-            extension: 'C:/immutable/pi/extension.mjs',
-            runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-            theme: 'green' as const,
-          };
+          return materializeThinPiProjection(input);
         },
       );
       const statusProvider = {
@@ -2030,13 +2053,7 @@ describe('Phase F launch execution', () => {
         input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
       ) => {
         effects.push('build');
-        return {
-          directory: 'C:/immutable/pi',
-          reference: publishedReference(input),
-          extension: 'C:/immutable/pi/extension.mjs',
-          runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-          theme: 'green' as const,
-        };
+        return materializeThinPiProjection(input);
       },
     );
     const statusProvider = {
@@ -2081,7 +2098,7 @@ describe('Phase F launch execution', () => {
     expect(effects).toEqual([]);
   });
 
-  it('binds a nested project skill into the combined artifact without native Pi skill argv', async () => {
+  it('binds a nested project skill into the combined artifact and projected Pi skill argv', async () => {
     const fixture = await launchFixture(),
       io = captureIo();
     const nested = path.join(fixture.cwd, 'packages', 'web');
@@ -2131,13 +2148,7 @@ describe('Phase F launch execution', () => {
         expect(input).not.toHaveProperty('artifact');
         expect(input).not.toHaveProperty('catalog');
         expect(input).not.toHaveProperty('canonicalRoot');
-        return {
-          directory: 'C:/immutable/pi',
-          reference: publishedReference(input),
-          extension: 'C:/immutable/pi/extension.mjs',
-          runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-          theme: 'green' as const,
-        };
+        return materializeThinPiProjection(input);
       },
     );
     expect(
@@ -2151,7 +2162,10 @@ describe('Phase F launch execution', () => {
       }),
     ).toBe(0);
     expect(execute.mock.calls[0]![0]).toMatchObject({ cwd: nested });
-    expect(execute.mock.calls[0]![0].argv).not.toContain('--skill');
+    const argv = execute.mock.calls[0]![0].argv;
+    const skillIndex = argv.indexOf('--skill');
+    expect(skillIndex).toBeGreaterThanOrEqual(0);
+    expect(argv[skillIndex + 1]).toMatch(/\/skills\/local$/u);
     expect(execute.mock.calls[0]![0].argv.join(' ')).not.toContain(skillDirectory);
   });
 
@@ -2199,13 +2213,7 @@ describe('Phase F launch execution', () => {
     const builder = vi.fn(
       async (
         input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
-      ) => ({
-        directory: 'C:/immutable/pi',
-        reference: publishedReference(input),
-        extension: 'C:/immutable/pi/extension.mjs',
-        runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-        theme: 'green' as const,
-      }),
+      ) => materializeThinPiProjection(input),
     );
     const statusProvider = {
       snapshot: async () => ({
@@ -2296,13 +2304,7 @@ describe('Phase F launch execution', () => {
         input: Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0],
       ) => {
         effects.push(`build:${input.launchBanner}`);
-        return {
-          directory: 'C:/immutable/pi',
-          reference: publishedReference(input),
-          extension: 'C:/immutable/pi/extension.mjs',
-          runtimeContextFile: 'C:/immutable/pi/runtime-context.json',
-          theme: 'green' as const,
-        };
+        return materializeThinPiProjection(input);
       },
     );
     const validator = vi.fn(async () => {
@@ -2368,10 +2370,9 @@ describe('Phase F launch execution', () => {
     expect(execute.mock.calls[0]![0]).toMatchObject({
       executable: trustedExecutable.replaceAll('\\', '/'),
       argv: [
-        '--no-extensions',
-        '--extension',
-        'C:/immutable/pi/extension.mjs',
         '--no-skills',
+        '--skill',
+        expect.stringMatching(/\/skills\/review$/u),
         '--provider',
         'openai-codex',
         '--model',

@@ -19,15 +19,22 @@ export type RegisteredRuntime = 'claude' | 'pi';
 export type ProjectionRole =
   | 'plugin'
   | 'hooks'
-  | 'extension'
   | 'profile'
-  | 'keybindings'
-  | 'themes'
   | 'status'
   | 'settings'
   | 'canonical-content'
   | 'agents'
   | 'licenses';
+const PROJECTION_ROLES = new Set<ProjectionRole>([
+  'plugin',
+  'hooks',
+  'profile',
+  'status',
+  'settings',
+  'canonical-content',
+  'agents',
+  'licenses',
+]);
 export interface ExecutableEvidenceV1 {
   readonly path: string;
   readonly sha256: string;
@@ -148,6 +155,7 @@ function projection(
     files.some(
       (file) =>
         file.owner !== 'convergence' ||
+        !PROJECTION_ROLES.has(file.role) ||
         !SHA256.test(file.sha256) ||
         !Number.isSafeInteger(file.bytes) ||
         file.bytes < 0 ||
@@ -176,17 +184,7 @@ function projection(
   const required: ProjectionRole[] =
     runtime === 'claude'
       ? ['plugin', 'hooks', 'status', 'settings', 'canonical-content', 'agents', 'licenses']
-      : [
-          'extension',
-          'profile',
-          'keybindings',
-          'themes',
-          'status',
-          'settings',
-          'canonical-content',
-          'agents',
-          'licenses',
-        ];
+      : ['profile', 'canonical-content', 'agents', 'licenses'];
   const roles = new Set(files.map((file) => file.role));
   if (required.some((role) => !roles.has(role))) {
     fail('REGISTRATION_PROJECTION_INCOMPLETE', `The ${runtime} projection is incomplete.`);
@@ -759,12 +757,7 @@ export function materializePrivateRuntimeLaunch(input: {
   }
   return {
     executable: input.registration.executable,
-    argv: [
-      '--no-extensions',
-      '--extension',
-      path.win32.join(projectionRoot, 'extension.js'),
-      '--no-skills',
-    ],
+    argv: ['--no-skills'],
     environment: { PI_CODING_AGENT_DIR: nativeRoot, MPX_LAUNCH_KEY: input.launchKey },
     privateFiles,
   };

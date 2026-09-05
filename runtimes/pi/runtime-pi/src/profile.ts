@@ -19,7 +19,6 @@ export interface PiRuntimeProfileV1 {
   readonly tuiMode: 'fullscreen';
   readonly terminalProgress: false;
   readonly trust: 'ask';
-  readonly keybindings: Readonly<Record<string, string | readonly string[]>>;
   readonly capabilityIds: readonly string[];
 }
 
@@ -68,7 +67,6 @@ export function parsePiRuntimeProfileV1(value: unknown): PiRuntimeProfileV1 {
   const profile = value as Record<string, unknown>;
   const expectedKeys = [
     'capabilityIds',
-    'keybindings',
     'model',
     'models',
     'provider',
@@ -79,7 +77,6 @@ export function parsePiRuntimeProfileV1(value: unknown): PiRuntimeProfileV1 {
     'trust',
     'tuiMode',
   ];
-  const keybindings = profile.keybindings;
   if (
     Object.keys(profile).sort().join(',') !== expectedKeys.join(',') ||
     profile.schemaVersion !== PI_RUNTIME_PROFILE_SCHEMA_VERSION ||
@@ -98,15 +95,6 @@ export function parsePiRuntimeProfileV1(value: unknown): PiRuntimeProfileV1 {
     profile.tuiMode !== 'fullscreen' ||
     profile.terminalProgress !== false ||
     profile.trust !== 'ask' ||
-    !keybindings ||
-    typeof keybindings !== 'object' ||
-    Array.isArray(keybindings) ||
-    !Object.entries(keybindings).every(
-      ([key, binding]) =>
-        key.length > 0 &&
-        (typeof binding === 'string' ||
-          (Array.isArray(binding) && binding.every((item) => typeof item === 'string'))),
-    ) ||
     !uniqueNonemptyStrings(profile.capabilityIds)
   ) {
     return invalidProfile();
@@ -121,12 +109,6 @@ export function parsePiRuntimeProfileV1(value: unknown): PiRuntimeProfileV1 {
     tuiMode: 'fullscreen',
     terminalProgress: false,
     trust: 'ask',
-    keybindings: Object.fromEntries(
-      Object.entries(keybindings).map(([key, binding]) => [
-        key,
-        Array.isArray(binding) ? [...binding] : binding,
-      ]),
-    ),
     capabilityIds: [...profile.capabilityIds],
   });
 }
@@ -154,37 +136,6 @@ export function createPiRuntimeProfileV1(
     tuiMode: 'fullscreen',
     terminalProgress: false,
     trust: 'ask',
-    keybindings: {
-      'app.model.select': 'alt+p',
-      'app.model.cycleBackward': 'shift+ctrl+p',
-      'tui.altScreen.pageUp': [],
-      'tui.altScreen.pageDown': [],
-      'tui.altScreen.halfPageUp': 'pageUp',
-      'tui.altScreen.halfPageDown': 'pageDown',
-      'tui.altScreen.top': [],
-      'tui.altScreen.bottom': [],
-    },
     capabilityIds: [...capabilityIds],
-  });
-}
-
-export function profileSettings(profile: PiRuntimeProfileV1) {
-  return freeze({
-    defaultProvider: profile.provider,
-    defaultModel: profile.model,
-    enabledModels: profile.models,
-    defaultThinkingLevel: profile.thinking,
-    compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 20_000 },
-    terminal: { showTerminalProgress: profile.terminalProgress },
-    tuiMode: profile.tuiMode,
-    fullscreenScrollbar: 'always',
-    theme: profile.theme,
-    enableSkillCommands: false,
-    steeringMode: 'all',
-    followUpMode: 'all',
-    treeFilterMode: 'no-tools',
-    doubleEscapeAction: 'tree',
-    defaultProjectTrust: profile.trust,
-    enableInstallTelemetry: false,
   });
 }

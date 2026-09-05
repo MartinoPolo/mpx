@@ -28,17 +28,7 @@ const projection = (runtime: 'claude' | 'pi'): ImmutableProjectionV1 => {
   const roles: readonly ProjectionRole[] =
     runtime === 'claude'
       ? ['plugin', 'hooks', 'status', 'settings', 'canonical-content', 'agents', 'licenses']
-      : [
-          'extension',
-          'profile',
-          'keybindings',
-          'themes',
-          'status',
-          'settings',
-          'canonical-content',
-          'agents',
-          'licenses',
-        ];
+      : ['profile', 'canonical-content', 'agents', 'licenses'];
   const files: ProjectionFileV1[] = roles.map((role) => ({
     path: `${role}/owned`,
     sha256: sha(role),
@@ -156,6 +146,55 @@ describe('immutable runtime registration', () => {
     ).toThrowError(/REGISTRATION_NATIVE_PACKAGE_AMBIGUOUS/u);
   });
 
+  it('registers Pi with only the thin adapter and compiler projection roles', () => {
+    const thinRoles = ['profile', 'canonical-content', 'agents', 'licenses'] as const;
+    const files: ProjectionFileV1[] = thinRoles.map((role) => ({
+      path: `${role}/owned`,
+      sha256: sha(role),
+      bytes: role.length,
+      role,
+      owner: 'convergence',
+    }));
+    const pi = input('pi', 'personal', 'C:\\native\\pi-personal');
+    const matrix = createRuntimeRegistrationMatrix([
+      input('claude', 'personal', 'C:\\native\\claude-personal'),
+      input('claude', 'work', 'C:\\native\\claude-work'),
+      {
+        ...pi,
+        projection: { ...pi.projection, files, rootDigest: installerDigest(files) },
+      },
+      input('pi', 'work', 'C:\\native\\pi-work'),
+    ]);
+
+    expect(matrix.registrations[2]?.projection.files.map((file) => file.role)).toEqual(thinRoles);
+  });
+
+  it('rejects obsolete generated projection roles', () => {
+    const pi = input('pi', 'personal', 'C:\\native\\pi-personal');
+    const files = [
+      ...pi.projection.files,
+      {
+        path: 'extension/owned',
+        sha256: sha('extension'),
+        bytes: 1,
+        role: 'extension',
+        owner: 'convergence',
+      },
+    ] as unknown as ProjectionFileV1[];
+
+    expect(() =>
+      createRuntimeRegistrationMatrix([
+        input('claude', 'personal', 'C:\\native\\claude-personal'),
+        input('claude', 'work', 'C:\\native\\claude-work'),
+        {
+          ...pi,
+          projection: { ...pi.projection, files, rootDigest: installerDigest(files) },
+        },
+        input('pi', 'work', 'C:\\native\\pi-work'),
+      ]),
+    ).toThrowError(/REGISTRATION_PROJECTION_INVALID/u);
+  });
+
   it('strictly parses installed registration contracts and refuses native state fields', () => {
     const matrix = createRuntimeRegistrationMatrix([
       input('claude', 'personal', 'C:\\native\\claude-personal'),
@@ -230,6 +269,21 @@ describe('immutable runtime registration', () => {
       projectionRoot: 'C:\\immutable\\claude',
       mcpBindings: [{ label: descriptor.label, privateConfigPath: 'C:\\private\\mcp.json' }],
     });
+    expect(claude.argv.slice(0, 2)).toEqual(['--plugin-dir', 'C:\\immutable\\claude']);
+    expect(claude.privateFiles.map((file) => file.name)).toEqual([
+      'launch-key.json',
+      'route-bindings.json',
+    ]);
+    expect(JSON.stringify(descriptor)).not.toContain('C:\\private');
+  });
+
+  it('enables native Pi extension discovery without loading the generated extension', () => {
+    const matrix = createRuntimeRegistrationMatrix([
+      input('claude', 'personal', 'C:\\native\\claude-personal'),
+      input('claude', 'work', 'C:\\native\\claude-work'),
+      input('pi', 'personal', 'C:\\native\\pi-personal'),
+      input('pi', 'work', 'C:\\native\\pi-work'),
+    ]);
     const pi = materializePrivateRuntimeLaunch({
       registration: required(matrix.registrations[2], 'Pi personal registration'),
       launchKey: sha('pi-launch'),
@@ -237,18 +291,8 @@ describe('immutable runtime registration', () => {
       projectionRoot: 'C:\\immutable\\pi',
       mcpBindings: [],
     });
-    expect(claude.argv.slice(0, 2)).toEqual(['--plugin-dir', 'C:\\immutable\\claude']);
-    expect(pi.argv.slice(0, 4)).toEqual([
-      '--no-extensions',
-      '--extension',
-      'C:\\immutable\\pi\\extension.js',
-      '--no-skills',
-    ]);
-    expect(claude.privateFiles.map((file) => file.name)).toEqual([
-      'launch-key.json',
-      'route-bindings.json',
-    ]);
-    expect(JSON.stringify(descriptor)).not.toContain('C:\\private');
+
+    expect(pi.argv).toEqual(['--no-skills']);
   });
 
   it('refuses credentials and environment material in static MCP argv', () => {
@@ -411,7 +455,7 @@ describe('immutable runtime registration', () => {
 
   it('requires the complete convergence-owned synthetic projection and rejects native/static readers', () => {
     const incomplete = input('pi', 'personal', 'C:\\native\\pi-personal');
-    const files = incomplete.projection.files.filter((file) => file.role !== 'themes');
+    const files = incomplete.projection.files.filter((file) => file.role !== 'agents');
     const altered = {
       ...incomplete,
       projection: { ...incomplete.projection, files, rootDigest: installerDigest(files) },

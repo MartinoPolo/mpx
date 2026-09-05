@@ -16,7 +16,6 @@ function validProfileInput() {
     tuiMode: 'fullscreen',
     terminalProgress: false,
     trust: 'ask',
-    keybindings: { 'app.model.select': 'alt+p' },
     capabilityIds: ['model-search'],
   };
 }
@@ -56,15 +55,12 @@ it('returns an immutable copy that cannot be changed through mutable input alias
   const parsed = parsePiRuntimeProfileV1(input);
   input.models[0] = 'openai-codex/changed';
   input.capabilityIds[0] = 'changed';
-  input.keybindings['app.model.select'] = 'changed';
 
   expect(parsed.models[0]).toBe('openai-codex/gpt-5.6-luna');
   expect(parsed.capabilityIds[0]).toBe('model-search');
-  expect(parsed.keybindings['app.model.select']).toBe('alt+p');
   expect(Object.isFrozen(parsed)).toBe(true);
   expect(Object.isFrozen(parsed.models)).toBe(true);
   expect(Object.isFrozen(parsed.capabilityIds)).toBe(true);
-  expect(Object.isFrozen(parsed.keybindings)).toBe(true);
 });
 
 it('parses a valid serialized profile without changing its value', () => {
@@ -106,7 +102,4 @@ it('translates supplied model selection into an immutable account-safe profile',
   expect(Object.hasOwn(profile, 'nativeState')).toBe(false);
   expect(JSON.stringify(profile)).not.toMatch(/auth|credential|sessionDir|accountRoot|jwt/iu);
   expect(Object.isFrozen(profile)).toBe(true);
-  expect(() => {
-    (profile.keybindings as Record<string, unknown>)['x'] = 'y';
-  }).toThrow();
 });

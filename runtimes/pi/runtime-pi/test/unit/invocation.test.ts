@@ -27,7 +27,9 @@ const invocationProfile = createPiRuntimeProfileV1(
 );
 
 function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(stable).join(',')}]`;
+  }
   if (value !== null && typeof value === 'object') {
     return `{${Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
@@ -92,10 +94,23 @@ const runtimeContext = createRuntimeContextV1({
   binding: { projectId: 'sample/app', repositoryId: 'sample/app', contentScope: 'work' },
 });
 
+it('does not disable native extension discovery', () => {
+  const plan = planPiInvocation({
+    executable: 'C:/trusted/pi.cmd',
+    profile: invocationProfile,
+    accountRoot: 'C:/native/pi/account-a',
+    runtimeContextFile: 'C:/launch/context.json',
+    runtimeContext,
+    cwd: 'C:/repo',
+  });
+
+  expect(plan.args).not.toContain('--no-extensions');
+  expect(plan.args).not.toContain('--extension');
+});
+
 it('creates a hermetic Pi invocation with launch-current-compatible runtime-context JSON', () => {
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
-    extension: 'C:/artifacts/pi-extension.js',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
@@ -106,9 +121,6 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
     executable: 'C:/trusted/pi.cmd',
     cwd: 'C:/repo',
     args: [
-      '--no-extensions',
-      '--extension',
-      'C:/artifacts/pi-extension.js',
       '--no-skills',
       '--provider',
       'openai-codex',
@@ -166,7 +178,6 @@ it.each([
     );
     const plan = planPiInvocation({
       executable: 'C:/trusted/pi.cmd',
-      extension: 'C:/artifacts/pi-extension.js',
       profile,
       accountRoot: 'C:/native/pi/selected-account',
       runtimeContextFile: 'C:/launch/context.json',
@@ -174,7 +185,7 @@ it.each([
       cwd: 'C:/repo',
     });
 
-    expect(plan.args.slice(3)).toEqual([
+    expect(plan.args).toEqual([
       '--no-skills',
       '--provider',
       provider,
@@ -202,7 +213,6 @@ it('accepts only a module-verified regular Pi session beneath the exact account 
     });
     const base = {
       executable: path.join(account, 'pi.cmd'),
-      extension: path.join(account, 'extension.js'),
       profile: invocationProfile,
       accountRoot: account,
       runtimeContextFile: path.join(account, 'context.json'),
@@ -268,7 +278,6 @@ it('injects only a full validated Pi lifecycle binding id and directory', () => 
     }),
     base = {
       executable: 'C:/trusted/pi.cmd',
-      extension: 'C:/artifacts/pi-extension.js',
       profile: invocationProfile,
       accountRoot: 'C:/native/pi/account-a',
       runtimeContextFile: 'C:/launch/context.json',
@@ -288,55 +297,24 @@ it('injects only a full validated Pi lifecycle binding id and directory', () => 
     }),
   ).toThrow(/BINDING_MISMATCH/u);
 });
-it('passes only the launch-private bridge attestation to the generated Pi extension', () => {
-  const bridge = {
-    schemaVersion: 1 as const,
-    endpoint: 'tcp://127.0.0.1:43123',
-    nonce: 'a'.repeat(64),
-    launchKey: 'a'.repeat(64),
-    identity: { name: 'work', domain: 'work' as const },
-    planKey: 'c'.repeat(64),
-    runtimeToolInventorySha256: 'd'.repeat(64),
-    capabilitySha256: 'e'.repeat(64),
-  };
+it('leaves bridge and status integration to the canonically discovered native package', () => {
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
-    extension: 'C:/artifacts/pi-extension.js',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
     runtimeContext,
     cwd: 'C:/repo',
-    bridge,
   });
-  const serializedBridge = plan.env.MPX_PI_LAUNCH_PRIVATE_BRIDGE;
-  expect(serializedBridge).toBeDefined();
-  if (!serializedBridge) {
-    throw new Error('launch-private bridge was not serialized');
-  }
-  expect(JSON.parse(serializedBridge)).toEqual(bridge);
-  expect(serializedBridge).not.toMatch(/oauth|auth\.json|accountRoot|token/iu);
-});
 
-it('binds the live status snapshot path only in the Pi child environment', () => {
-  const plan = planPiInvocation({
-    executable: 'C:/trusted/pi.cmd',
-    extension: 'C:/artifacts/pi-extension.js',
-    profile: invocationProfile,
-    accountRoot: 'C:/native/pi/account-a',
-    runtimeContextFile: 'C:/launch/context.json',
-    runtimeContext,
-    cwd: 'C:/repo',
-    statusSnapshotPath: 'C:/private/status/current.json',
-  });
-  expect(plan.env.MPX_STATUS_SNAPSHOT_FILE).toBe('C:/private/status/current.json');
-  expect(plan.args.join(' ')).not.toContain('current.json');
+  expect(plan.env).not.toHaveProperty('MPX_PI_LAUNCH_PRIVATE_BRIDGE');
+  expect(plan.env).not.toHaveProperty('MPX_STATUS_SNAPSHOT_FILE');
+  expect(plan.env).not.toHaveProperty('MPX_RUNTIME_STATUS_ENVELOPE_FILE');
 });
 
 it('propagates the exact published projection reference as JSON', () => {
   const plan = planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
-    extension: path.join(projectionDirectory, 'extension.mjs'),
     runtimeContextFile: path.join(projectionDirectory, 'runtime-context.json'),
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
@@ -363,7 +341,6 @@ it('fails closed when flattened published projection metadata is absent', () => 
     expect(() =>
       planRawPiInvocation({
         executable: 'C:/trusted/pi.cmd',
-        extension: path.join(directory, 'extension.mjs'),
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         immutableProjectionDirectory: directory,
@@ -407,7 +384,6 @@ it('fails closed when a flattened projection file map has a case-insensitive col
     expect(() =>
       planRawPiInvocation({
         executable: 'C:/trusted/pi.cmd',
-        extension: path.join(directory, 'extension.mjs'),
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         immutableProjectionDirectory: directory,

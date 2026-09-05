@@ -19,11 +19,11 @@ Model search is artifact-key-bound and can inspect canonical metadata only for `
 
 ## Pi
 
-[ADR 0004](adr/0004-canonical-native-pi-extensions.md) supersedes the generated-extension ownership model. Gate 4 will move canonical Pi-specific source into `runtimes/pi/extensions`; native host Pi and whole-agent sandbox Pi will use that same checked-in extension package through normal Pi discovery. The adapter will not generate substitute footer, tool, hook, command, editor, widget, or lifecycle implementations.
+[ADR 0004](adr/0004-canonical-native-pi-extensions.md) supersedes the generated-extension ownership model. Canonical Pi-specific source lives in `runtimes/pi/extensions`; native host Pi loads its immutable release package through normal Pi discovery. The adapter does not generate substitute footer, tool, hook, command, editor, widget, lifecycle, configuration, or theme implementations.
 
-The target Pi adapter projects runtime-neutral skills and agents plus launch-bound data such as the resolved manifest and runtime context. It registers the canonical package in the selected discovery surface, passes the selected account root as `PI_CODING_AGENT_DIR`, and translates paths for host or sandbox execution. Build output may package canonical source but is not a second implementation. Command registration, model search, and body loading consume the exact v4 reference, and Pi performs exact open-handle and body-hash checks.
+The Pi adapter publishes only compiler-owned skills and agents plus launch-bound runtime context and profile data. It passes the selected account root as `PI_CODING_AGENT_DIR`, loads projected skills explicitly while suppressing ambient skill discovery, and exposes projected agents as the lowest-precedence trusted overlay. Native global and trusted-project agent definitions retain their Pi-owned precedence. Build output packages canonical extension source but is not a second implementation.
 
-The current adapter still publishes a self-contained projection containing runtime context, a generated `extension.mjs`, settings, keybindings, themes, compiler-generated agents, and policy-selected skills. Its explicit `--extension` and `--no-extensions` launch remain temporary migration state to be reconciled when Gate 4 replaces them; the canonical package must never be loaded through both explicit argv and discovery.
+Pi Docker launch and resume fail closed until whole-agent sandbox execution can load the same canonical package inside its isolated native root. MPX does not label a host Pi process as Docker-isolated and does not restore the retired host-to-worker tool bridge.
 
 ## Claude
 

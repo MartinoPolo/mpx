@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { LaunchDescriptor } from '@mpx/launch';
 import { createRuntimeCapabilityManifestV1, createRuntimeContextV1 } from '@mpx/runtime-contracts';
 import {
@@ -13,7 +13,6 @@ import {
 } from '@mpx/skills';
 import { composeRuntimeStatusEnvelopeV1 } from '@mpx/status';
 import { createPiRuntimeProfileV1 } from '@mpx/runtime-pi';
-import { verifyCompiledContentTree } from '@mpx/content-compiler';
 import {
   productionRuntimeAdapters,
   resolveClaudeCanonicalOutputStyle,
@@ -154,6 +153,8 @@ describe('Node launch execution runtime adapters', () => {
 
     try {
       const descriptor = { runtime: 'pi', launchKey } as LaunchDescriptor;
+      const statusMaterialize = vi.fn(async () => undefined);
+      const runtimeStatusMaterialize = vi.fn(async () => 'C:/state/runtime.json');
       const [adapter] = productionRuntimeAdapters({
         descriptor,
         cwd: canonicalRoot,
@@ -190,14 +191,19 @@ describe('Node launch execution runtime adapters', () => {
         statusSnapshot: async () => statusSnapshot,
         bindStatusPath: () => undefined,
         bindRuntimeStatusPath: () => undefined,
-        statusMaterializer: { materialize: async () => undefined },
-        runtimeStatusMaterializer: { materialize: async () => 'C:/state/runtime.json' },
+        statusMaterializer: { materialize: statusMaterialize },
+        runtimeStatusMaterializer: { materialize: runtimeStatusMaterialize },
         trustedExecutable: { executable: process.execPath, argvPrefix: [] },
       });
       const invocation = await adapter!.prepare({ routes: {} } as never);
-      const extensionIndex = invocation.argv.indexOf('--extension');
-      expect(extensionIndex).toBeGreaterThan(-1);
-      const projectionDirectory = path.dirname(invocation.argv[extensionIndex + 1]!);
+      expect(statusMaterialize).not.toHaveBeenCalled();
+      expect(runtimeStatusMaterialize).not.toHaveBeenCalled();
+      expect(invocation.environment).not.toHaveProperty('MPX_PI_LAUNCH_PRIVATE_BRIDGE');
+      expect(invocation.environment).not.toHaveProperty('MPX_STATUS_SNAPSHOT_FILE');
+      expect(invocation.environment).not.toHaveProperty('MPX_RUNTIME_STATUS_ENVELOPE_FILE');
+      expect(invocation.argv).not.toContain('--no-extensions');
+      expect(invocation.argv).not.toContain('--extension');
+      const projectionDirectory = invocation.environment.MPX_ACTIVE_CONTENT_ROOT!;
       expect(invocation.argv.filter((argument) => argument === '--no-skills')).toEqual([
         '--no-skills',
       ]);
@@ -241,8 +247,6 @@ describe('Node launch execution runtime adapters', () => {
         contentScope: 'work',
       },
     });
-    let selectedBuilderInput:
-      Parameters<NonNullable<LaunchExecutionContext['launchProjectionBuilder']>>[0] | undefined;
     const capability = createRuntimeCapabilityManifestV1({
       runtime: 'pi',
       launchKey,
@@ -274,7 +278,7 @@ describe('Node launch execution runtime adapters', () => {
           skillPlan: content.skillPlan,
           agentsRoot: content.agentsRoot,
           runtimeProfilesFile: content.runtimeProfilesFile,
-          artifactsRoot: 'C:/artifacts',
+          artifactsRoot: stateRoot,
           runtimeContext,
           runtimeStatusEnvelope: {} as never,
           runtimeCapabilityManifest: capability,
@@ -288,7 +292,6 @@ describe('Node launch execution runtime adapters', () => {
             tuiMode: 'fullscreen',
             terminalProgress: false,
             trust: 'ask',
-            keybindings: {},
             capabilityIds: [],
           },
           runtimeLaunchBinding: {
@@ -315,27 +318,10 @@ describe('Node launch execution runtime adapters', () => {
         statusMaterializer: { materialize: async () => undefined },
         runtimeStatusMaterializer: { materialize: async () => 'C:/state/runtime.json' },
         trustedExecutable: { executable: process.execPath, argvPrefix: ['wrapper-entry.js'] },
-        builder: async (input) => {
-          expect(selectedBuilderInput).toBeUndefined();
-          selectedBuilderInput = input;
-          return {
-            directory: stateRoot,
-            extension: path.join(stateRoot, 'extension.ts'),
-            runtimeContextFile: path.join(stateRoot, 'runtime-context.json'),
-            reference: publishedReference(input),
-          };
-        },
-        validator: async () => undefined,
       });
 
       const invocation = await adapter!.prepare({ routes: {} } as never);
 
-      expect(
-        verifyCompiledContentTree(selectedBuilderInput!.compiledContent, {
-          runtime: 'pi',
-          plan: content.skillPlan,
-        }),
-      ).toBe(selectedBuilderInput!.compiledContent);
       expect(invocation.argv.slice(-runtimeArgs.length)).toEqual(runtimeArgs);
       expect(invocation.argv[0]).toBe('wrapper-entry.js');
       expect(invocation.argv.length).toBeGreaterThan(runtimeArgs.length + 1);

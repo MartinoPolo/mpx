@@ -49,17 +49,7 @@ function files(runtime: 'claude' | 'pi'): ProjectionFileV1[] {
           'agents',
           'licenses',
         ] as const)
-      : ([
-          'extension',
-          'profile',
-          'keybindings',
-          'themes',
-          'status',
-          'settings',
-          'canonical-content',
-          'agents',
-          'licenses',
-        ] as const);
+      : (['profile', 'canonical-content', 'agents', 'licenses'] as const);
   return roles.map((role, index) => ({
     path: `${runtime}/${index}-${role}.json`,
     sha256: sha(`${runtime}-${role}`),

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { discoverProjectConfig, type UserConfig } from '@mpx/config';
-import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
+import { sha256Canonical, type JsonValue } from '@mpx/core';
 import { namedSbxPolicies, type F2SandboxSessionResumeAdmission } from '@mpx/executors';
 import { resolveLaunch } from '@mpx/launch';
 import {
@@ -251,13 +251,6 @@ export function createNodeSessionResumeLaunchApplicationService(
             },
             context.launchSbxExecutionDependencies,
           );
-          if (plan.runtime === 'pi' && !adapter.remoteToolClient) {
-            throw new MpxError({
-              code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
-              message: 'Production Pi Docker resume requires a sandbox worker client.',
-              details: { executor: 'docker', runtime: 'pi' },
-            });
-          }
           if (dockerAdmission?.admitted) {
             adapter.setResumeAction(dockerAdmission.action);
           }
@@ -265,12 +258,8 @@ export function createNodeSessionResumeLaunchApplicationService(
             ...context,
             launchExecutorAdapters: [adapter],
             launchExecutorAdapterSource: 'production-admission',
-            ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
           };
-        } catch (error) {
-          if (error instanceof MpxError && error.code === 'PI_SANDBOX_WORKER_UNAVAILABLE') {
-            throw error;
-          }
+        } catch {
           /* Exact production proof remains unavailable and the typed Docker gate denies resume. */
         }
       }

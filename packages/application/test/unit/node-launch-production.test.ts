@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { UserConfig } from '@mpx/config';
+import { ExecutionError } from '@mpx/executors';
 import type { NodeLaunchExecutionInput } from '../../src/node/launch-execution.js';
 
 const executionSpy = vi.hoisted(() => vi.fn(async (_input: unknown) => ({ exitCode: 0 })));
@@ -165,13 +166,29 @@ describe('Node launch production factory', () => {
     expect(execution.context.launchExecutorAdapterSource).toBe('production-admission');
   });
 
-  it('denies production Pi Docker admission when its sandbox adapter has no remote worker client', async () => {
+  it('routes production Pi Docker launch to the shared typed fail-closed boundary', async () => {
     executionSpy.mockClear();
     sbxAdapterFactory.mockReset();
     const verify = vi.fn(verifiedDocker.verify);
     sbxAdapterFactory.mockResolvedValue({ ...verifiedDocker, verify });
+    executionSpy.mockRejectedValueOnce(
+      new ExecutionError(
+        'PI_DOCKER_UNAVAILABLE',
+        'Pi Docker execution is unavailable pending whole-agent sandbox isolation.',
+        { executor: 'docker', runtime: 'pi' },
+      ),
+    );
     const service = factory({
-      context: {},
+      context: {
+        rootAttestationService: {
+          verify: async () => ({
+            identity: { domain: 'work', name: 'work' },
+            runtimeRoot: 'C:/native/work/pi',
+            ref: 'private-account-reference',
+          }),
+        },
+        accountAuthVerifier: { verify: async () => undefined },
+      },
       status: () => ({
         snapshot: async () => ({
           schemaVersion: 1,
@@ -184,12 +201,20 @@ describe('Node launch production factory', () => {
       }),
     });
 
-    await expect(resolvedLaunch(service)).rejects.toMatchObject({
-      code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
+    const resolved = await resolvedLaunch(service);
+    const error = await service.execute(resolved).catch((failure) => failure);
+    expect(error).toMatchObject({
+      name: 'ExecutionError',
+      code: 'PI_DOCKER_UNAVAILABLE',
       details: { executor: 'docker', runtime: 'pi' },
     });
-    expect(verify).not.toHaveBeenCalled();
-    expect(executionSpy).not.toHaveBeenCalled();
+    expect(JSON.stringify(error)).not.toContain('private-account-reference');
+    expect(executionSpy).toHaveBeenCalledOnce();
+    expect(
+      (executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput).context
+        .launchExecutorAdapterSource,
+    ).toBe('production-admission');
+    expect(verify).toHaveBeenCalledOnce();
   });
 
   it('performs initial Pi verification and binds exact pre-child reverification', async () => {

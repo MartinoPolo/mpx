@@ -57,17 +57,7 @@ const roles = (runtime: 'claude' | 'pi') =>
         'agents',
         'licenses',
       ] as const)
-    : ([
-        'extension',
-        'profile',
-        'keybindings',
-        'themes',
-        'status',
-        'settings',
-        'canonical-content',
-        'agents',
-        'licenses',
-      ] as const);
+    : (['profile', 'canonical-content', 'agents', 'licenses'] as const);
 function registration(
   runtime: 'claude' | 'pi',
   domain: 'personal' | 'work',

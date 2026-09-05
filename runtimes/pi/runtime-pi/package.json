@@ -18,18 +18,12 @@
   },
   "dependencies": {
     "@mpx/content-compiler": "workspace:*",
-    "@mpx/dev-services": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
-    "@mpx/runtime-hooks": "workspace:*",
-    "@mpx/runtime-tools": "workspace:*",
-    "@mpx/skills": "workspace:*",
-    "@mpx/status": "workspace:*",
-    "@mpx/subagents": "workspace:*"
+    "@mpx/skills": "workspace:*"
   },
   "devDependencies": {
     "@mpx/config": "workspace:*",
     "@types/node": "^22.15.0",
-    "esbuild": "0.28.2",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

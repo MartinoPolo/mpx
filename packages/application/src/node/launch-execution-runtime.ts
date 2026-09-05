@@ -23,7 +23,6 @@ import {
   type RuntimeAdapter,
   type RuntimeLaunchBinding,
   type VerificationEvidence,
-  type LaunchPrivateBridgeConfig,
 } from '@mpx/executors';
 import { loadRuntimeProfilesV1 } from '@mpx/config';
 import {
@@ -58,9 +57,7 @@ export interface LaunchProjection {
   readonly directory: string;
   readonly reference: PublishedRuntimeArtifactReference;
   readonly pluginDirectory?: string;
-  readonly extension?: string;
   readonly runtimeContextFile?: string;
-  readonly theme?: string;
   readonly profile?: PiRuntimeProfileV1;
 }
 export interface LaunchProjectionBuildInput {
@@ -94,8 +91,6 @@ export interface LaunchExecutionContext {
   launchAudit?: LaunchAuditStore;
   launchTty?: DirectTty;
   launchExpectedKey?: string;
-  /** Launch-private standalone-sbx worker bridge; never serialized into descriptors or audit. */
-  launchSbxBridge?: { readonly endpoint: string; readonly attestationSha256: string };
   launchProjectionBuilder?: (input: LaunchProjectionBuildInput) => Promise<LaunchProjection>;
   launchProjectionValidator?: (input: {
     runtime: 'claude' | 'pi';
@@ -223,32 +218,7 @@ async function buildProductionProjection(
       },
       currentBinding: input.skillPlan.binding,
       artifactsRoot: input.artifactsRoot,
-      assetsRoot: path.join(
-        input.agentsRoot,
-        '..',
-        '..',
-        'runtimes',
-        'pi',
-        'runtime-pi',
-        'projection',
-      ),
-      vendorProvenanceFile: path.join(
-        input.agentsRoot,
-        '..',
-        '..',
-        'runtimes',
-        'pi',
-        'runtime-pi',
-        'vendor',
-        'subagents',
-        'VENDORED.md',
-      ),
-      statusSnapshot: input.statusSnapshot,
-      runtimeStatusEnvelope: input.runtimeStatusEnvelope,
-      runtimeCapabilityManifest: input.runtimeCapabilityManifest,
       piRuntimeProfile: input.piRuntimeProfile!,
-      runtimeLaunchBinding: { ...input.runtimeLaunchBinding, runtime: 'pi' },
-      launchBanner: input.launchBanner,
       ...(input.artifactRevalidator ? { artifactRevalidator: input.artifactRevalidator } : {}),
     });
   }
@@ -287,28 +257,32 @@ export function productionRuntimeAdapters(input: {
   trustedExecutable?: TrustedRuntimeExecutable;
   builder?: LaunchExecutionContext['launchProjectionBuilder'];
   validator?: LaunchExecutionContext['launchProjectionValidator'];
-  bridge?: LaunchPrivateBridgeConfig;
 }): RuntimeAdapter[] {
   const projection = async (runtime: 'claude' | 'pi') => {
     const snapshot = input.initialSnapshot;
-    const statusSnapshotPath = await resolveLaunchStatusSnapshotPath({
-      stateRoot: input.stateRoot,
-      descriptor: input.descriptor,
-      repositoryId: input.projectionInput.skillPlan.binding.repositoryId,
-      snapshot,
-      ...(input.statusMaterializer ? { materializer: input.statusMaterializer } : {}),
-    });
-    input.bindStatusPath(statusSnapshotPath);
-    const runtimeStatusPath = await (
-      input.runtimeStatusMaterializer ?? new NodeRuntimeStatusEnvelopeMaterializer(input.stateRoot)
-    ).materialize({
-      envelope: input.projectionInput.runtimeStatusEnvelope,
-      authority: {
-        descriptorDigest: input.projectionInput.runtimeContext.launchDescriptor.digest,
-        runtimeRootDigest: input.descriptor.nativeRuntimeRootDigest,
-      },
-    });
-    input.bindRuntimeStatusPath(runtimeStatusPath);
+    let statusSnapshotPath: string | undefined;
+    let runtimeStatusPath: string | undefined;
+    if (runtime === 'claude') {
+      statusSnapshotPath = await resolveLaunchStatusSnapshotPath({
+        stateRoot: input.stateRoot,
+        descriptor: input.descriptor,
+        repositoryId: input.projectionInput.skillPlan.binding.repositoryId,
+        snapshot,
+        ...(input.statusMaterializer ? { materializer: input.statusMaterializer } : {}),
+      });
+      input.bindStatusPath(statusSnapshotPath);
+      runtimeStatusPath = await (
+        input.runtimeStatusMaterializer ??
+        new NodeRuntimeStatusEnvelopeMaterializer(input.stateRoot)
+      ).materialize({
+        envelope: input.projectionInput.runtimeStatusEnvelope,
+        authority: {
+          descriptorDigest: input.projectionInput.runtimeContext.launchDescriptor.digest,
+          runtimeRootDigest: input.descriptor.nativeRuntimeRootDigest,
+        },
+      });
+      input.bindRuntimeStatusPath(runtimeStatusPath);
+    }
     const customBuilder = input.builder !== undefined;
     const runtimeProfiles = await loadRuntimeProfilesV1(input.projectionInput.runtimeProfilesFile);
     const compiledContent = await compileContent({
@@ -399,7 +373,7 @@ export function productionRuntimeAdapters(input: {
             gatewayMcpConfigPath: gateway.configPath,
             ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),
             ...(input.resumeTarget ? { resumeTarget: input.resumeTarget } : {}),
-            runtimeStatusEnvelopePath: projectionResult.runtimeStatusPath,
+            runtimeStatusEnvelopePath: projectionResult.runtimeStatusPath!,
           });
           if (
             input.forkInvocation &&
@@ -437,7 +411,7 @@ export function productionRuntimeAdapters(input: {
         }
         const projectionResult = await projection('pi'),
           built = projectionResult.built;
-        if (!built.extension || !built.runtimeContextFile) {
+        if (!built.runtimeContextFile) {
           throw new MpxError({
             code: 'RUNTIME_PROJECTION_INVALID',
             message: 'The Pi projection is incomplete.',
@@ -457,8 +431,6 @@ export function productionRuntimeAdapters(input: {
         const publishedProjection = built as Partial<PiPublishedProjection>;
         const plan = planPiInvocation({
           executable: input.trustedExecutable.executable,
-          extension: built.extension,
-          theme: built.theme === 'amber' ? 'amber' : 'green',
           ...((built.profile ?? input.projectionInput.piRuntimeProfile)
             ? { profile: built.profile ?? input.projectionInput.piRuntimeProfile }
             : {}),
@@ -475,8 +447,6 @@ export function productionRuntimeAdapters(input: {
           ...(input.resumeTarget
             ? { resumeTarget: input.resumeTarget as VerifiedPiResumeTarget }
             : {}),
-          runtimeStatusEnvelopePath: projectionResult.runtimeStatusPath,
-          ...(input.bridge ? { bridge: input.bridge } : {}),
         });
         if (
           input.forkInvocation &&

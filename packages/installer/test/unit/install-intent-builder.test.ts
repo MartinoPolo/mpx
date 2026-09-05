@@ -26,7 +26,7 @@ const baseRequest = (): InstallIntentRequestV1 => ({
   },
   projections: {
     claude: [{ path: 'content/claude', role: 'plugin' }],
-    pi: [{ path: 'content/pi', role: 'extension' }],
+    pi: [{ path: 'content/pi', role: 'profile' }],
   },
   external: { gitRemotes: [] },
 });
@@ -158,17 +158,7 @@ async function createBuildFixture() {
   await Promise.all([writeFile(claude, 'claude'), writeFile(pi, 'pi')]);
   const roles = {
     claude: ['plugin', 'hooks', 'status', 'settings', 'canonical-content', 'agents', 'licenses'],
-    pi: [
-      'extension',
-      'profile',
-      'keybindings',
-      'themes',
-      'status',
-      'settings',
-      'canonical-content',
-      'agents',
-      'licenses',
-    ],
+    pi: ['profile', 'canonical-content', 'agents', 'licenses'],
   } as const;
   const files = [
     ...roles.claude.map((role, index) => ({

@@ -183,18 +183,10 @@ export function createNodeLaunchApplicationService(
           },
           context.launchSbxExecutionDependencies,
         );
-        if (selection.runtime === 'pi' && !adapter.remoteToolClient) {
-          throw new MpxError({
-            code: 'PI_SANDBOX_WORKER_UNAVAILABLE',
-            message: 'Production Pi Docker execution requires a sandbox worker client.',
-            details: { executor: 'docker', runtime: 'pi' },
-          });
-        }
         const admittedContext: NodeLaunchApplicationContext = {
           ...context,
           launchExecutorAdapters: [adapter],
           launchExecutorAdapterSource: 'production-admission',
-          ...(adapter.bridge ? { launchSbxBridge: adapter.bridge } : {}),
         };
         return {
           evidence: await collectNodeExecutorEvidence(admittedContext, 'docker'),
