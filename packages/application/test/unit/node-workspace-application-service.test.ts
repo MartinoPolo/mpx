@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createNodeDevService,
   createNodeWorkspaceApplicationService,
+  createNodeWorkspacePathAdapter,
 } from '../../src/node/index.js';
 
 const roots: string[] = [];
@@ -18,6 +19,20 @@ afterEach(async () => {
 });
 
 describe('Node workspace composition', () => {
+  it('compares canonical Windows workspace paths without case sensitivity', () => {
+    const paths = createNodeWorkspacePathAdapter('win32');
+    expect(paths.equals('C:\\Repo\\Linked', 'c:\\repo\\linked')).toBe(true);
+    expect(paths.contains('C:\\Repo', 'c:\\REPO\\Linked')).toBe(true);
+    expect(paths.contains('C:\\Repo', 'c:\\repo-evil')).toBe(false);
+  });
+
+  it('keeps POSIX workspace equality case-sensitive and containment bounded', () => {
+    const paths = createNodeWorkspacePathAdapter('linux');
+    expect(paths.equals('/Repo/Linked', '/repo/linked')).toBe(false);
+    expect(paths.contains('/repo', '/repo/linked')).toBe(true);
+    expect(paths.contains('/repo', '/repo-evil')).toBe(false);
+  });
+
   it('defaults ordinary unbound process environments to host execution', async () => {
     const stateRoot = await root();
     const service = createNodeWorkspaceApplicationService({

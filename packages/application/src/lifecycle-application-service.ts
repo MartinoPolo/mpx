@@ -39,7 +39,7 @@ export interface LifecycleDevService {
   start(request: StartRequest): Promise<DevServiceSnapshot>;
   status(id?: string): Promise<LifecycleDevStatusResult>;
   logs(id: string, options?: { maxLines?: number; maxCharacters?: number }): Promise<string>;
-  restart(id: string): Promise<DevServiceSnapshot>;
+  restart(id: string, replacementRequest?: StartRequest): Promise<DevServiceSnapshot>;
   stop(id: string): Promise<DevServiceSnapshot>;
 }
 

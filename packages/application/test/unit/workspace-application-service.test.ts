@@ -38,6 +38,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
   const dependencies = {
     path: {
       resolve: (...parts: string[]) => parts.at(-1)!,
+      equals: (left: string, right: string) => left === right,
       contains: (root: string, candidate: string) =>
         candidate === root || candidate.startsWith(`${root}/`),
     },
@@ -90,6 +91,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
           projectId: 'sample',
           worktreeId: 'w',
           worktreePath: '/repo.worktrees/x',
+          ownerRoot: '/repo',
           role: 'linked' as const,
           services: { web: 3010 },
         },
@@ -185,7 +187,7 @@ describe('WorkspaceApplicationService', () => {
   it('blocks mutation before side effects for a structurally invalid orphan recovery result', async () => {
     const create = vi.fn();
     const reconcile = vi.fn(async () => ({
-      orphaned: new Array(129).fill({ leaseId: 'lease' }),
+      orphaned: Array.from({ length: 129 }, () => ({ leaseId: 'lease' })),
       expectedApproval: `APPROVE WORKTREE ORPHAN RELEASE ${'a'.repeat(64)}`,
     }));
     const { service } = fixture({
@@ -365,6 +367,39 @@ describe('WorkspaceApplicationService', () => {
     expect(dependencies.worktrees.remove).not.toHaveBeenCalled();
   });
 
+  it('reads project-scoped show state once from the lease owner manager', async () => {
+    const projectConfig = structuredClone(config);
+    (projectConfig.development.services.web as { scope: 'checkout' | 'project' }).scope = 'project';
+    (projectConfig.development.services.database as { start: unknown }).start = {
+      type: 'package-script',
+      script: 'database',
+    };
+    const ownerManager = fixture().manager;
+    ownerManager.status.mockResolvedValue([
+      { id: 'web', state: 'ready', pid: 91 } as never,
+      { id: 'database', state: 'ready', pid: 92 } as never,
+    ]);
+    const forWorkspace = vi.fn(async (root: string) => {
+      expect(root).toBe('/repo');
+      return ownerManager;
+    });
+    const { service } = fixture({
+      projects: { discover: vi.fn(async (cwd: string) => ({ root: cwd, config: projectConfig })) },
+      services: { forWorkspace },
+    });
+    const shown = await service.show({ schemaVersion: 1, cwd: '/repo.worktrees/x' });
+    expect(shown.services.find((item) => item.id === 'web')).toMatchObject({
+      state: 'ready',
+      pid: 91,
+    });
+    expect(shown.services.find((item) => item.id === 'database')).toMatchObject({
+      state: 'ready',
+      pid: 92,
+    });
+    expect(forWorkspace).toHaveBeenCalledTimes(1);
+    expect(ownerManager.status).toHaveBeenCalledTimes(1);
+  });
+
   it('keys project-scoped managers to the lease owner root', async () => {
     const projectConfig = structuredClone(config);
     (projectConfig.development.services.web as { scope: 'checkout' | 'project' }).scope = 'project';
@@ -374,6 +409,98 @@ describe('WorkspaceApplicationService', () => {
     await service.start({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' });
     expect(dependencies.services.forWorkspace).toHaveBeenCalledWith('/repo');
   });
+
+  it('restarts a crashed service with freshly derived config and lease inputs', async () => {
+    const changed = structuredClone(config);
+    changed.development.services.web.start.script = 'dev:changed';
+    changed.development.services.web.environmentVariable = 'CHANGED_URL';
+    const { service, manager } = fixture({
+      projects: { discover: vi.fn(async (cwd: string) => ({ root: cwd, config: changed })) },
+      ports: {
+        ...fixture().dependencies.ports,
+        resolve: vi.fn(async () => ({
+          leaseId: 'changed',
+          services: { web: 3999, database: 5432 },
+          ownerRoot: '/repo',
+        })),
+      },
+      resolvePackageInvocation: vi.fn(async () => ({
+        executable: '/trusted/pnpm',
+        prefixArguments: ['--fixed'],
+        trustedAbsoluteExecutable: true as const,
+      })),
+    });
+    manager.status.mockResolvedValue({ id: 'web', state: 'crashed', pid: null } as never);
+    manager.restart.mockResolvedValue({ id: 'web', state: 'starting', pid: 92 } as never);
+    await service.start({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'web' });
+    expect(manager.restart).toHaveBeenCalledWith('web', {
+      id: 'web',
+      executable: '/trusted/pnpm',
+      trustedAbsoluteExecutable: true,
+      args: ['--fixed', 'run', 'dev:changed'],
+      cwd: '/repo.worktrees/x',
+      ports: [3999],
+      assignment: { worktreeRoot: '/repo.worktrees/x', ports: [3999] },
+      executor: 'host',
+      environment: { CHANGED_URL: 'http://localhost:3999' },
+    });
+  });
+
+  it('uses canonical equality for lease joins and explicit workspace selection', async () => {
+    const { service } = fixture({
+      path: {
+        resolve: (...parts: string[]) => parts.at(-1)!,
+        equals: (left: string, right: string) => left.toLowerCase() === right.toLowerCase(),
+        contains: (root: string, candidate: string) =>
+          candidate.toLowerCase() === root.toLowerCase() ||
+          candidate.toLowerCase().startsWith(`${root.toLowerCase()}/`),
+      },
+      ports: {
+        ...fixture().dependencies.ports,
+        list: vi.fn(async () => [
+          {
+            leaseId: 'case-lease',
+            worktreeId: 'case-worktree',
+            worktreePath: '/REPO.WORKTREES/X',
+            ownerRoot: '/REPO',
+            role: 'linked' as const,
+            services: { web: 3010 },
+          },
+        ]),
+      },
+    });
+    const listed = await service.list({ schemaVersion: 1, cwd: '/repo' });
+    expect(listed.workspaces[1]).toMatchObject({ leaseId: 'case-lease' });
+    await expect(
+      service.show({ schemaVersion: 1, cwd: '/repo', path: '/REPO.WORKTREES/X' }),
+    ).resolves.toMatchObject({ path: '/repo.worktrees/x' });
+  });
+
+  it.each(['start', 'stop', 'logs'] as const)(
+    'rejects an unknown configured service for %s without process execution',
+    async (operation) => {
+      const { service, manager } = fixture();
+      await expect(
+        service[operation]({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'missing' }),
+      ).rejects.toMatchObject({ code: 'WORKSPACE_SERVICE_UNKNOWN' });
+      expect(manager.start).not.toHaveBeenCalled();
+      expect(manager.stop).not.toHaveBeenCalled();
+      expect(manager.restart).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['start', 'stop', 'logs'] as const)(
+    'rejects an unmanaged configured service for %s without process execution',
+    async (operation) => {
+      const { service, manager } = fixture();
+      await expect(
+        service[operation]({ schemaVersion: 1, cwd: '/repo.worktrees/x', serviceId: 'database' }),
+      ).rejects.toMatchObject({ code: 'WORKSPACE_SERVICE_UNMANAGED' });
+      expect(manager.start).not.toHaveBeenCalled();
+      expect(manager.stop).not.toHaveBeenCalled();
+      expect(manager.restart).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not grant absolute executable trust to an injected package resolver', async () => {
     const { service, manager } = fixture({

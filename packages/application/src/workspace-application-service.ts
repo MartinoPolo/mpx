@@ -103,12 +103,13 @@ interface WorkspaceDevService {
   start(request: StartRequest): Promise<DevServiceSnapshot>;
   status(id?: string): Promise<DevServiceSnapshot | readonly DevServiceSnapshot[] | undefined>;
   logs(id: string, options?: { maxLines?: number; maxCharacters?: number }): Promise<string>;
-  restart(id: string): Promise<DevServiceSnapshot>;
+  restart(id: string, replacementRequest?: StartRequest): Promise<DevServiceSnapshot>;
   stop(id: string): Promise<DevServiceSnapshot>;
 }
 export interface WorkspaceApplicationDependencies {
   readonly path: {
     resolve(...parts: string[]): string;
+    equals(left: string, right: string): boolean;
     contains(root: string, candidate: string): boolean;
   };
   readonly worktrees: {
@@ -312,8 +313,7 @@ export class WorkspaceApplicationService {
       const lease = leases.find(
         (candidate) =>
           candidate.worktreePath !== undefined &&
-          this.dependencies.path.resolve(candidate.worktreePath) ===
-            this.dependencies.path.resolve(item.path),
+          this.dependencies.path.equals(candidate.worktreePath, item.path),
       );
       return {
         path: item.path,
@@ -340,11 +340,11 @@ export class WorkspaceApplicationService {
 
   async show(request: WorkspaceShowRequestV1): Promise<WorkspaceShowResultV1> {
     assertSchema(request);
-    const diagnostics = [...(await this.recover(request.cwd, true, true, false))];
+    const diagnostics = [...(await this.recover(request.cwd, true, false, false))];
     const inventory = await this.inventory(request.cwd);
     const requested = this.dependencies.path.resolve(request.path ?? request.cwd);
     const workspace = request.path
-      ? inventory.find((item) => this.dependencies.path.resolve(item.path) === requested)
+      ? inventory.find((item) => this.dependencies.path.equals(item.path, requested))
       : inventory
           .filter((item) =>
             this.dependencies.path.contains(this.dependencies.path.resolve(item.path), requested),
@@ -381,18 +381,62 @@ export class WorkspaceApplicationService {
         diagnostics: [],
       };
     }
-    const manager = await this.dependencies.services.forWorkspace(workspace.path);
-    let managed: readonly DevServiceSnapshot[] = [];
+    let lease: LeaseView | undefined;
     try {
-      const value = await manager.status();
-      managed = Array.isArray(value) ? value : value ? [value as DevServiceSnapshot] : [];
+      lease = await this.dependencies.ports.resolve({
+        cwd: workspace.path,
+        projectRoot: found.root,
+        config: found.config,
+        configHash: sha256Canonical(found.config as unknown as JsonValue),
+      });
     } catch (error) {
       diagnostics.push(diagnostic(error));
+    }
+    const managerGroups: Array<{
+      root: string;
+      serviceIds: string[];
+      snapshots: readonly DevServiceSnapshot[];
+    }> = [];
+    for (const [id, definition] of Object.entries(found.config.development?.services ?? {})) {
+      if (definition.start.type !== 'package-script') {
+        continue;
+      }
+      const root = definition.scope === 'project' ? lease?.ownerRoot : workspace.path;
+      if (!root) {
+        diagnostics.push(
+          diagnostic(
+            new MpxError({
+              code: 'WORKSPACE_OWNER_ROOT_REQUIRED',
+              message: 'Project-scoped service owner is unavailable.',
+            }),
+          ),
+        );
+        continue;
+      }
+      const existing = managerGroups.find((group) =>
+        this.dependencies.path.equals(group.root, root),
+      );
+      if (existing) {
+        existing.serviceIds.push(id);
+      } else {
+        managerGroups.push({ root, serviceIds: [id], snapshots: [] });
+      }
+    }
+    for (const group of managerGroups) {
+      try {
+        const manager = await this.dependencies.services.forWorkspace(group.root);
+        const value = await manager.status();
+        group.snapshots = Array.isArray(value) ? value : value ? [value as DevServiceSnapshot] : [];
+      } catch (error) {
+        diagnostics.push(diagnostic(error));
+      }
     }
     const services = Object.entries(found.config.development?.services ?? {}).map(
       ([id, definition]): WorkspaceServiceV1 => {
         const status = snapshot.services.find((item) => item.id === id);
-        const process = managed.find((item) => item.id === id);
+        const process = managerGroups
+          .find((group) => group.serviceIds.includes(id))
+          ?.snapshots.find((item) => item.id === id);
         const isManaged = definition.start.type === 'package-script';
         return {
           id,
@@ -454,7 +498,7 @@ export class WorkspaceApplicationService {
     const target = this.dependencies.path.resolve(request.path);
     const inventory = await this.inventory(request.cwd);
     const workspace = inventory.find(
-      (item) => this.dependencies.path.resolve(item.path) === target && item.role === 'linked',
+      (item) => this.dependencies.path.equals(item.path, target) && item.role === 'linked',
     );
     if (!workspace) {
       throw new MpxError({
@@ -502,7 +546,7 @@ export class WorkspaceApplicationService {
     const inventory = await this.inventory(request.cwd);
     const requested = this.dependencies.path.resolve(request.path ?? request.cwd);
     const workspace = request.path
-      ? inventory.find((item) => this.dependencies.path.resolve(item.path) === requested)
+      ? inventory.find((item) => this.dependencies.path.equals(item.path, requested))
       : inventory
           .filter((item) =>
             this.dependencies.path.contains(this.dependencies.path.resolve(item.path), requested),
@@ -626,21 +670,22 @@ export class WorkspaceApplicationService {
           executable: managerName === 'auto' ? 'npm' : managerName,
           prefixArguments: [] as readonly string[],
         };
+    const startRequest: StartRequest = {
+      id: request.serviceId,
+      executable: invocation.executable,
+      ...(invocation.trustedAbsoluteExecutable === true
+        ? { trustedAbsoluteExecutable: true as const }
+        : {}),
+      args: [...invocation.prefixArguments, 'run', script],
+      cwd,
+      ports: [port],
+      assignment: { worktreeRoot: cwd, ports: [port] },
+      executor: this.dependencies.executor,
+      environment,
+    };
     const next = current
-      ? await manager.restart(request.serviceId)
-      : await manager.start({
-          id: request.serviceId,
-          executable: invocation.executable,
-          ...(invocation.trustedAbsoluteExecutable === true
-            ? { trustedAbsoluteExecutable: true as const }
-            : {}),
-          args: [...invocation.prefixArguments, 'run', script],
-          cwd,
-          ports: [port],
-          assignment: { worktreeRoot: cwd, ports: [port] },
-          executor: this.dependencies.executor,
-          environment,
-        });
+      ? await manager.restart(request.serviceId, startRequest)
+      : await manager.start(startRequest);
     return {
       schemaVersion: 1,
       kind: 'workspace-service',

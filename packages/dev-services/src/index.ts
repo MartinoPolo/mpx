@@ -395,13 +395,28 @@ export class DevServiceManager {
       return this.snapshot(r);
     });
   }
-  restart(id: string) {
+  restart(id: string, replacementRequest?: StartRequest) {
     if (this.shuttingDown) {
       return Promise.reject(new Error('Dev service manager is shutting down.'));
     }
     const r = this.require(id);
+    let replacement: StartRequest | undefined;
+    try {
+      if (replacementRequest) {
+        assertExecutorBoundary(replacementRequest.executor, this.runtime.kind);
+        replacement = validateStartRequest(replacementRequest);
+        if (replacement.id !== id) {
+          throw new Error('Replacement dev service id must match the restarted service.');
+        }
+      }
+    } catch (error) {
+      return Promise.reject(error);
+    }
     return this.enqueue(r, async () => {
       await this.stopInternal(r);
+      if (replacement) {
+        r.request = replacement;
+      }
       return this.launch(r);
     });
   }
@@ -969,12 +984,22 @@ export class DurableDevServiceManager {
     await this.save();
     return record.snapshot;
   }
-  async restart(id: string) {
+  async restart(id: string, replacementRequest?: StartRequest) {
     const old = await this.required(id);
+    let request: StartRequest;
+    if (replacementRequest) {
+      assertExecutorBoundary(replacementRequest.executor, this.runtime.kind);
+      request = validateStartRequest(replacementRequest);
+      if (request.id !== id) {
+        throw new Error('Replacement dev service id must match the restarted service.');
+      }
+    } else {
+      const { logFile: _logFile, ...storedRequest } = old.request;
+      request = storedRequest;
+    }
     await this.stop(id);
     this.records.delete(id);
     await this.save();
-    const { logFile: _logFile, ...request } = old.request;
     const next = await this.start(request);
     const current = this.records.get(id)!;
     current.snapshot = {

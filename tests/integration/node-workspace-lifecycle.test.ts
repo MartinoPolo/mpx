@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe('real Node workspace lifecycle', () => {
-  it('creates, starts, logs, stops, and removes a disposable linked worktree', async () => {
+  it('shares a project-scoped durable process across linked and owner workspace views', async () => {
     const sandbox = await mkdtemp(path.join(tmpdir(), 'mpx-workspace-integration-'));
     roots.push(sandbox);
     const repository = path.join(sandbox, 'project');
@@ -31,8 +31,8 @@ describe('real Node workspace lifecycle', () => {
         development: {
           services: {
             web: {
-              scope: 'checkout',
-              port: { mode: 'managed', preferred: 43120 },
+              scope: 'project',
+              port: { mode: 'fixed-shared', preferred: 43120 },
               environmentVariable: 'WEB_URL',
               protocol: 'http',
               start: { type: 'package-script', script: 'dev' },
@@ -101,6 +101,12 @@ describe('real Node workspace lifecycle', () => {
     }
     expect(['starting', 'ready']).toContain(started.service.state);
     expect(logs.text).toContain('ready');
+    const repeatedFromOwner = await application.start({
+      schemaVersion: 1,
+      cwd: repository,
+      serviceId: 'web',
+    });
+    expect(repeatedFromOwner.service.pid).toBe(started.service.pid);
     let shown = await application.show({ schemaVersion: 1, cwd: linked });
     for (
       let attempt = 0;
@@ -118,15 +124,20 @@ describe('real Node workspace lifecycle', () => {
         listening: true,
         conflict: 'unknown',
         state: 'ready',
-        pid: expect.any(Number),
+        pid: started.service.pid,
       }),
     ]);
+    const ownerShown = await application.show({ schemaVersion: 1, cwd: repository });
+    expect(ownerShown.services[0]).toMatchObject({ state: 'ready', pid: started.service.pid });
+    expect(
+      (await application.logs({ schemaVersion: 1, cwd: repository, serviceId: 'web' })).text,
+    ).toContain('ready');
     await expect(access(path.join(linked, 'malicious-project-executed.txt'))).rejects.toMatchObject(
       {
         code: 'ENOENT',
       },
     );
-    await application.stop({ schemaVersion: 1, cwd: linked, serviceId: 'web' });
+    await application.stop({ schemaVersion: 1, cwd: repository, serviceId: 'web' });
     const afterStop = await application.show({ schemaVersion: 1, cwd: linked });
     expect(afterStop.services).toEqual([
       expect.objectContaining({

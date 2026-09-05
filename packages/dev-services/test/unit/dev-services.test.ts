@@ -41,13 +41,15 @@ class Child extends EventEmitter implements ManagedProcess {
 class Runtime implements RuntimeAdapter {
   kind = 'host' as const;
   children: Child[] = [];
+  spawnedRequests: unknown[] = [];
   probes = new Map<number, boolean[]>();
   stopped: number[] = [];
   inspections = 0;
   tick = 0;
   now = () => new Date(1700000000000 + this.tick++).toISOString();
   sleep = async () => {};
-  spawn = () => {
+  spawn = (request: unknown) => {
+    this.spawnedRequests.push(request);
     const c = new Child(100 + this.children.length);
     this.children.push(c);
     return c;
@@ -59,7 +61,7 @@ class Runtime implements RuntimeAdapter {
   };
   stop = async (c: ManagedProcess) => {
     this.stopped.push(c.pid);
-    (c as Child).exit(null, 'SIGTERM');
+    this.children.find((child) => child.pid === c.pid)?.exit(null, 'SIGTERM');
   };
 }
 const request = {
@@ -249,6 +251,39 @@ describe('managed development services', () => {
       state: 'ready',
       pid: 100,
       fingerprint: 'started:100',
+    });
+  });
+  it('durable restart validates and launches a replacement request while preserving counters', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-dev-replacement-')),
+      runtime = new Runtime(),
+      manager = new DurableDevServiceManager(runtime, root);
+    const first = await manager.start({
+      ...request,
+      ports: [],
+      assignment: { worktreeRoot: 'C:/repo', ports: [] },
+    });
+    await manager.stop('web');
+    const replacement = {
+      ...request,
+      executable: 'pnpm',
+      args: ['run', 'changed'],
+      cwd: 'C:/new-repo',
+      ports: [4999],
+      assignment: { worktreeRoot: 'C:/new-repo', ports: [4999] },
+      environment: { WEB_URL: 'http://localhost:4999' },
+    };
+    const restarted = await manager.restart('web', replacement);
+    expect(runtime.spawnedRequests.at(-1)).toMatchObject({
+      ...replacement,
+      cwd: 'c:/new-repo',
+      assignment: { worktreeRoot: 'c:/new-repo', ports: [4999] },
+    });
+    expect(restarted).toMatchObject({
+      cwd: 'c:/new-repo',
+      ports: [4999],
+      run: first.run + 1,
+      generation: first.generation + 1,
+      createdAt: first.createdAt,
     });
   });
   it('uses distinct atomic state temporaries across manager instances', async () => {

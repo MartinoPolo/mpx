@@ -60,7 +60,7 @@ export function createNodeDevService(
     throw new Error('LOCALAPPDATA is required for durable development-service state.');
   }
   const scope = sha256Canonical({
-    projectRoot: path.resolve(projectRoot).replaceAll('\\', '/').toLowerCase(),
+    projectRoot: canonicalNodeWorkspacePath(projectRoot, process.platform),
   } as JsonValue);
   const manager = new DurableDevServiceManager(
     createSystemRuntime(),
@@ -81,6 +81,26 @@ function runtimeExecutor(environment: NodeJS.ProcessEnv): ExecutorKind {
     });
   }
   return selected;
+}
+
+function canonicalNodeWorkspacePath(value: string, platform: NodeJS.Platform): string {
+  const implementation = platform === 'win32' ? path.win32 : path.posix;
+  const canonical = implementation.resolve(value).replaceAll('\\', '/').replace(/\/$/u, '');
+  return platform === 'win32' ? canonical.toLowerCase() : canonical;
+}
+
+export function createNodeWorkspacePathAdapter(platform: NodeJS.Platform = process.platform) {
+  const implementation = platform === 'win32' ? path.win32 : path.posix;
+  const canonical = (value: string) => canonicalNodeWorkspacePath(value, platform);
+  return {
+    resolve: (...parts: string[]) => implementation.resolve(...parts),
+    equals: (left: string, right: string) => canonical(left) === canonical(right),
+    contains(root: string, candidate: string) {
+      const base = canonical(root),
+        selected = canonical(candidate);
+      return selected === base || selected.startsWith(`${base}/`);
+    },
+  };
 }
 
 export interface NodeWorkspaceApplicationOptions {
@@ -140,6 +160,7 @@ export function createNodeWorkspaceApplicationService(
     fileSystem,
     processIdentityInspector: windowsProcessIdentityInspector(new WindowsProcessCapabilities()),
   });
+  const workspacePath = createNodeWorkspacePathAdapter();
   const hostManagers = new Map<
     string,
     WorkspaceApplicationDependencies['services'] extends {
@@ -153,7 +174,7 @@ export function createNodeWorkspaceApplicationService(
       ? options.dockerServices!
       : {
           forWorkspace(root) {
-            const key = path.resolve(root).toLowerCase();
+            const key = canonicalNodeWorkspacePath(root, process.platform);
             let manager = hostManagers.get(key);
             if (!manager) {
               manager = createNodeDevService(options.environment, root) as never;
@@ -162,7 +183,6 @@ export function createNodeWorkspaceApplicationService(
             return manager;
           },
         };
-  const canonical = (value: string) => path.resolve(value).replaceAll('\\', '/').toLowerCase();
   return new WorkspaceApplicationService({
     executor,
     async resolvePackageInvocation(manager, cwd) {
@@ -190,14 +210,7 @@ export function createNodeWorkspaceApplicationService(
     },
     status: createStatusProvider({ portService }),
     services,
-    path: {
-      resolve: path.resolve,
-      contains(root, candidate) {
-        const base = canonical(root),
-          selected = canonical(candidate);
-        return selected === base || selected.startsWith(`${base}/`);
-      },
-    },
+    path: workspacePath,
   });
 }
 
