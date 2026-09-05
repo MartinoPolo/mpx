@@ -23,6 +23,7 @@ For runtime content debugging, use `mpx content current`, `list`, `show`, and `c
 - `mpx content` — Inspect the active generated runtime content.
 - `mpx skill` — Inspect skill resolution.
 - `mpx account` — Manage runtime account bindings.
+- `mpx setup` — Install and configure MPX for this user.
 - `mpx install` — Plan and manage MPX installation.
 
 ## Common operations
@@ -70,6 +71,7 @@ For runtime content debugging, use `mpx content current`, `list`, `show`, and `c
 - `mpx account enroll [options]` — enroll account binding.
 - `mpx account re-enroll [options]` — re-enroll account binding.
 - `mpx account list [options]` — list account binding.
+- `mpx setup` — Install and configure MPX for this user.
 - `mpx install intent [options]` — intent installation.
 - `mpx install prepare [options]` — prepare installation.
 - `mpx install plan [options]` — plan installation.

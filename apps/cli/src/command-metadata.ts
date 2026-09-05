@@ -267,6 +267,13 @@ export const commandRegistry: readonly CommandGroupMetadata[] = [
     ),
   },
   {
+    name: 'setup',
+    summary: 'Install and configure MPX for this user.',
+    common: true,
+    defaultOperation: true,
+    actions: [],
+  },
+  {
     name: 'install',
     summary: 'Plan and manage MPX installation.',
     common: true,

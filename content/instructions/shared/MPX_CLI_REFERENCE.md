@@ -418,6 +418,12 @@ status account binding.
 
 verify account binding.
 
+## `mpx setup`
+
+Install and configure MPX for this user.
+
+- `mpx setup` — default operation
+
 ## `mpx install`
 
 Plan and manage MPX installation.

@@ -1,6 +1,14 @@
 # Production installation
 
-Use the guided, read-only flow to construct and review an exact intent:
+For normal human installation, configure `%APPDATA%/mpx/config.json` and the required `MPX_*` environment roots, then run:
+
+```bash
+mpx setup
+```
+
+`mpx setup` builds and validates the current immutable release before changing native state, durably detaches recognized legacy Pi links, then plans, applies, and strictly verifies that exact release. It derives identity and provider selections from configuration route keys and never reads credentials. Re-running it reuses the immutable release, installer receipt, and legacy-detachment receipt. If installation fails after detachment, retry `mpx setup`; legacy external authority is intentionally not restored.
+
+The standalone protocol below remains available for automation and review. It does not run legacy Pi detachment. Use the guided, read-only flow to construct and review an exact intent:
 
 ```bash
 mpx install intent --request ./install-request.json > ./intent-result.json

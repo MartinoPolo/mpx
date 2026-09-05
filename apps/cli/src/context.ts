@@ -5,9 +5,11 @@ import {
   type AccountAuthVerifier,
   type LifecycleDevService,
   type LifecycleWorktreeService,
+  type SetupApplicationService,
 } from '@mpx/application';
 import {
   createNodeConfiguredProviderApplicationService,
+  createNodeSetupApplicationService,
   NodePrivateRouteMaterializer,
   createNodeWorktreeLifecycleService,
   createProductionSessionDockerResumeAdmission,
@@ -160,6 +162,8 @@ export interface CliContext extends LaunchExecutionContext {
   sessionDockerResumeAdmission?: (plan: ResumePlanV1) => Promise<F2SandboxSessionResumeAdmission>;
   installOrchestrator?: InstallOrchestrator;
   installIntentBuilder?: InstallIntentBuilder;
+  setupService?: SetupApplicationService;
+  setupServiceFactory?: () => SetupApplicationService;
   installerOperationAdapter?: InstallerOperationAdapter;
   installerTransactionStore?: TransactionStore;
   /** Application-owned trusted extensions; never populated from project configuration. */
@@ -255,6 +259,20 @@ export function installIntentBuilder(context: CliContext): InstallIntentBuilder 
       allowedRoots: approvedRoots,
       git: new NodeGitCommandPort(context.env),
     }),
+  });
+}
+
+export function setupApplication(context: CliContext): SetupApplicationService {
+  if (context.setupService) {
+    return context.setupService;
+  }
+  if (context.setupServiceFactory) {
+    return context.setupServiceFactory();
+  }
+  return createNodeSetupApplicationService({
+    environment: context.env,
+    builder: installIntentBuilder(context),
+    orchestrator: immutableInstaller(context),
   });
 }
 

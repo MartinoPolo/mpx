@@ -49,6 +49,7 @@ import {
   ports,
   productionSessionProcessInspector,
   sessions,
+  setupApplication,
   stateRoot,
   status,
   worktrees,
@@ -623,6 +624,23 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       },
     );
     return { data: result.data, warnings: [...result.warnings] };
+  }
+  if (group === 'setup') {
+    if (action || args.length) {
+      throw new UsageError('setup accepts no positional arguments');
+    }
+    const unsupported = [...parsed.options.keys()].filter(
+      (name) => name !== 'json' && name !== 'help',
+    );
+    if (unsupported.length) {
+      throw new UsageError('setup accepts no command options');
+    }
+    const data = await setupApplication(context).execute();
+    return {
+      data,
+      warnings,
+      ...(parsed.json ? {} : { rawOutput: `Setup complete (${data.releaseKey}).\n` }),
+    };
   }
   if (group === 'install') {
     const application = createNodeInstallApplicationService({

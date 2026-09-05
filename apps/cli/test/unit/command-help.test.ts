@@ -68,7 +68,7 @@ describe('CLI help', () => {
   it('marks exactly the implemented bare commands as default operations', () => {
     expect(
       commandRegistry.filter((group) => group.defaultOperation).map((group) => group.name),
-    ).toEqual(['init', 'status', 'doctor', 'help']);
+    ).toEqual(['init', 'status', 'doctor', 'setup', 'help']);
   });
 
   it('prints the complete terminal inventory for help --all', async () => {
