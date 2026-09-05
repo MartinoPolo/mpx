@@ -11,7 +11,7 @@
     {
       "id": "pi",
       "symbolicRoot": "${MPX_PROJECTS}/mpx-pi",
-      "commit": "843d3b30f16373fb42d4eac3db4d33480f92243e",
+      "commit": "9807adb547c64ecedf0091aec20e82627842da33",
       "dirty": true
     }
   ],
@@ -11717,14 +11717,12 @@
       "source": "pi",
       "path": "APPEND_SYSTEM.md",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/APPEND_SYSTEM.md",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/src/profile.ts",
+      "adaptation": "normalized into the generated Pi profile and launch-bound adapter",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -11735,10 +11733,24 @@
             "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e"
           },
           "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e",
-          "reference": "pi:APPEND_SYSTEM.md@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:APPEND_SYSTEM.md@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "APPEND_SYSTEM.md",
+            "sha256": "624f55d0f0054d9e0bffe3cee6d424e2f19322380e32d26081a1d884b7c40e4e"
+          },
+          "sha256": "e93e8cf63e46c49031e8af1d50c412757d1c73dacb11a4e0f4891ab9830e9da6",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
+      "headSha256": "42a85e43f3d0ea83c95ad16a04013719bc6111ea41e7abf6e5e57e452f606842"
     },
     {
       "source": "pi",
@@ -11861,16 +11873,92 @@
     },
     {
       "source": "pi",
+      "path": "extensions/dev-server-pane.ps1",
+      "kind": "file",
+      "state": "deleted",
+      "sha256": null,
+      "headSha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
+      "evidence": [
+        {
+          "schemaVersion": 1,
+          "kind": "source-snapshot",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server-pane.ps1",
+            "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06"
+          },
+          "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06",
+          "reference": "pi:extensions/dev-server-pane.ps1@9807adb547c64ecedf0091aec20e82627842da33",
+          "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server-pane.ps1",
+            "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
+        }
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
+    },
+    {
+      "source": "pi",
+      "path": "extensions/dev-server-pane.ts",
+      "kind": "file",
+      "state": "deleted",
+      "sha256": null,
+      "headSha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
+      "evidence": [
+        {
+          "schemaVersion": 1,
+          "kind": "source-snapshot",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server-pane.ts",
+            "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5"
+          },
+          "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5",
+          "reference": "pi:extensions/dev-server-pane.ts@9807adb547c64ecedf0091aec20e82627842da33",
+          "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server-pane.ts",
+            "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
+        }
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
+    },
+    {
+      "source": "pi",
       "path": "extensions/dev-server/contract.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/contract.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -11881,23 +11969,34 @@
             "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51"
           },
           "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51",
-          "reference": "pi:extensions/dev-server/contract.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/contract.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/contract.ts",
+            "sha256": "eaba9b208f6695d33ae40d47678686de2c47bbf5a5ff6a42bf2b9398bede1b51"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/footer-format.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/footer-format.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -11908,23 +12007,34 @@
             "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6"
           },
           "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6",
-          "reference": "pi:extensions/dev-server/footer-format.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/footer-format.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/footer-format.test.ts",
+            "sha256": "68c86939b44f4d1d484ad64dc5fcedce70b738a829a5d5cd028c6ed92ca2f6e6"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/footer-format.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/footer-format.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -11935,23 +12045,34 @@
             "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d"
           },
           "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d",
-          "reference": "pi:extensions/dev-server/footer-format.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/footer-format.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/footer-format.ts",
+            "sha256": "e405a325ae20842b8381635804459cc52d63c3366c92eeafc605760d81d58e3d"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/footer-lifecycle.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/footer-lifecycle.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -11962,23 +12083,34 @@
             "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626"
           },
           "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626",
-          "reference": "pi:extensions/dev-server/footer-lifecycle.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/footer-lifecycle.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/footer-lifecycle.test.ts",
+            "sha256": "bc6a622d4defa96cefc000eb1ea345ac16c37b8d8d1d5ef6c23d8fb83176a626"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/index.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/index.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -11989,23 +12121,34 @@
             "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861"
           },
           "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861",
-          "reference": "pi:extensions/dev-server/index.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/index.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/index.test.ts",
+            "sha256": "ebefa82f80824268296b0a250771f18d2a337d99bb63789dfb6fece774f85861"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/index.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/index.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12016,23 +12159,34 @@
             "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885"
           },
           "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885",
-          "reference": "pi:extensions/dev-server/index.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/index.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/index.ts",
+            "sha256": "57f5b80b6393f1dff384156b1f738ff560023474de04cfb17e7ef714702bd885"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/log-buffer.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/log-buffer.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12043,23 +12197,34 @@
             "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca"
           },
           "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca",
-          "reference": "pi:extensions/dev-server/log-buffer.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/log-buffer.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/log-buffer.test.ts",
+            "sha256": "2235618e71e4b8f4d2ae98c33258deb4fa4c3cc48161cc04924be43b1afa3aca"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/log-buffer.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/log-buffer.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12070,23 +12235,34 @@
             "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3"
           },
           "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3",
-          "reference": "pi:extensions/dev-server/log-buffer.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/log-buffer.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/log-buffer.ts",
+            "sha256": "92b2607e3771bd0b9702eef7364874dc970d8907be3fb60fecc02191f71c29c3"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/manager.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/manager.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12097,23 +12273,34 @@
             "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013"
           },
           "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013",
-          "reference": "pi:extensions/dev-server/manager.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/manager.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/manager.test.ts",
+            "sha256": "86c2cda4444f184013a7f6c1aa6102fbdd51e27af8d20cbcf853588b80ada013"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/manager.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/manager.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12124,23 +12311,34 @@
             "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034"
           },
           "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034",
-          "reference": "pi:extensions/dev-server/manager.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/manager.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/manager.ts",
+            "sha256": "9d984e0e6c3e324c5fea19959c86080d377a8457a6e57e6c41b29c7a50a9d034"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/package.json",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/package.json",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12151,23 +12349,34 @@
             "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119"
           },
           "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119",
-          "reference": "pi:extensions/dev-server/package.json@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/package.json@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/package.json",
+            "sha256": "4a42463ba8a6dbe0868e982b432a1149b0cafb8d37588fe11a9e26cd6d25f119"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/system-runtime.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/system-runtime.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12178,23 +12387,34 @@
             "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea"
           },
           "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea",
-          "reference": "pi:extensions/dev-server/system-runtime.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/system-runtime.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/system-runtime.test.ts",
+            "sha256": "9433668b01c5bdf634fa9b449fd6ddafede0e3ff8958376d3486d72c0d1c92ea"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/dev-server/system-runtime.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/dev-server/system-runtime.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "packages/dev-services/src/index.ts",
+      "adaptation": "reimplemented as the provider-neutral managed development service",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12205,23 +12425,34 @@
             "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715"
           },
           "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715",
-          "reference": "pi:extensions/dev-server/system-runtime.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/dev-server/system-runtime.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/dev-server/system-runtime.ts",
+            "sha256": "237b798da98e4c7dfed52d0a6f1e16919f7a3e2783090be9b142dfc7311cb715"
+          },
+          "sha256": "a6abfffbe96f44b254ac6b4f292f0be09eefb30a0667d04e07238fbbc8e567a2",
+          "reference": "packages/dev-services/test/unit/dev-services.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "packages/dev-services/test/unit/dev-services.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/footer.ts",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "2cf443edce82e1f7d14a4a907b6d372c132b5eb354c846a302a7c88922ef28a3",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/footer.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "state": "modified",
+      "sha256": "b4568515447542b309cc384688075172379f0b94d03a6d3c1509b7fa09565b8d",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/src/runtime-status.ts",
+      "adaptation": "projected through the Pi status adapter",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12229,13 +12460,27 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "extensions/footer.ts",
-            "sha256": "2cf443edce82e1f7d14a4a907b6d372c132b5eb354c846a302a7c88922ef28a3"
+            "sha256": "b4568515447542b309cc384688075172379f0b94d03a6d3c1509b7fa09565b8d"
           },
-          "sha256": "2cf443edce82e1f7d14a4a907b6d372c132b5eb354c846a302a7c88922ef28a3",
-          "reference": "pi:extensions/footer.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "sha256": "b4568515447542b309cc384688075172379f0b94d03a6d3c1509b7fa09565b8d",
+          "reference": "pi:extensions/footer.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/footer.ts",
+            "sha256": "b4568515447542b309cc384688075172379f0b94d03a6d3c1509b7fa09565b8d"
+          },
+          "sha256": "0b5acb5f4c6d5cc5d06c8bc97a22425f4a9c0da78e617491fbb42c9586922dc4",
+          "reference": "runtimes/pi/runtime-pi/test/unit/footer.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "600d0a75dfbc030a128b77aa0c52202e98249e1db80a43e491c63377c893d6b1",
+      "test": "runtimes/pi/runtime-pi/test/unit/footer.test.ts"
     },
     {
       "source": "pi",
@@ -12420,14 +12665,12 @@
       "source": "pi",
       "path": "extensions/subagents/agent-manager.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/agent-manager.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/agent-manager.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12438,23 +12681,35 @@
             "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce"
           },
           "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce",
-          "reference": "pi:extensions/subagents/agent-manager.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/agent-manager.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/agent-manager.ts",
+            "sha256": "6efa3d1e40d05233b9ad6a7966c95069db23fd1a440d9839a7017099925dd9ce"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "a1dd24e4c994ea54a60e23c2bf571cb7f07e8db089d8d04d6d92bb1724e5db7c",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/subagents/agent-runner.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/agent-runner.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/agent-runner.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12465,10 +12720,24 @@
             "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f"
           },
           "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f",
-          "reference": "pi:extensions/subagents/agent-runner.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/agent-runner.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/agent-runner.ts",
+            "sha256": "b63c04fa3c2473210503437637e164c20fdc60ca012e2a30f3fce4f57b58115f"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "ca96535ae57adbcdff7c9fa561ef5fbcaca87680ed4b1f779bf03598e589ee81",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -12854,14 +13123,12 @@
       "source": "pi",
       "path": "extensions/subagents/index.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/index.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/index.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12872,23 +13139,35 @@
             "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa"
           },
           "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa",
-          "reference": "pi:extensions/subagents/index.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/index.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/index.ts",
+            "sha256": "49a29797dd28067131926deb604905e85a536c51885a5a7d503f131bcb8b05aa"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "b960852aef2e59cc94ffec3f0d312e1859d62638550d49138e1f76ead6cd0220",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/subagents/invocation-config.test.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/invocation-config.test.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/invocation-config.test.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12899,23 +13178,34 @@
             "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6"
           },
           "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6",
-          "reference": "pi:extensions/subagents/invocation-config.test.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/invocation-config.test.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/invocation-config.test.ts",
+            "sha256": "a4c5e8971607bbd7eb7bc3727f05d4d521e1e74fe36f53e8bfd6802032a5e5a6"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/subagents/invocation-config.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/invocation-config.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/invocation-config.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -12926,10 +13216,24 @@
             "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40"
           },
           "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40",
-          "reference": "pi:extensions/subagents/invocation-config.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/invocation-config.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/invocation-config.ts",
+            "sha256": "9b0ff78d87769a04b6c13502efe5db7d6e7c3ac1054106f2b95a6bfbcc162f40"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "930d472cc5d3d0b63f8acc2f1370d5e684b15f664962fc7391aed6fadee34402",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13011,14 +13315,12 @@
       "source": "pi",
       "path": "extensions/subagents/model-resolver.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/model-resolver.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/model-resolver.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -13029,10 +13331,24 @@
             "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581"
           },
           "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581",
-          "reference": "pi:extensions/subagents/model-resolver.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/model-resolver.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/model-resolver.ts",
+            "sha256": "c72780cee8e497c6002423af737774ed4aaba46eb1233d41fb05233f1e377581"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "0a38d761cfd98a993e58e39bcca5c676cfdfbd2310a04dfb93d1191bffcd7893",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13537,14 +13853,12 @@
       "source": "pi",
       "path": "extensions/subagents/types.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/types.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/types.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -13555,23 +13869,35 @@
             "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0"
           },
           "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0",
-          "reference": "pi:extensions/subagents/types.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/types.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/types.ts",
+            "sha256": "0c58000f34a0be81af8a4a713fba648276e6a8fd972d2d2329664cdda09dc5b0"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "c4680ceed3bac4b7542ffcaa8038c4e640913e16f56a77c27c8c79680897c422",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
       "path": "extensions/subagents/ui/agent-widget.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/ui/agent-widget.ts",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/ui/agent-widget.ts",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -13582,10 +13908,24 @@
             "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84"
           },
           "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84",
-          "reference": "pi:extensions/subagents/ui/agent-widget.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/ui/agent-widget.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/ui/agent-widget.ts",
+            "sha256": "586fa8df4ea73571a1d343217c2c547508efb42b782c3a0985d0f42e88472b84"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "1b18ddc5f91e7d63ac302d6081dc96571a4d0c59c353cd6b4afc6482a9f2d4e2",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -13781,14 +14121,12 @@
       "source": "pi",
       "path": "extensions/subagents/VENDORED.md",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/extensions/subagents/VENDORED.md",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/vendor/subagents/VENDORED.md",
+      "adaptation": "vendored with license and checksum governance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -13799,10 +14137,24 @@
             "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0"
           },
           "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0",
-          "reference": "pi:extensions/subagents/VENDORED.md@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:extensions/subagents/VENDORED.md@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "extensions/subagents/VENDORED.md",
+            "sha256": "c67231875f5a5d2ceb5b209cf9221d1a9c7724d1801f9678c45fb9f04d9c50b0"
+          },
+          "sha256": "651223dabf09110d2970dfb775dc77b8c1f10ee39ddd9ea16069317cae3386a0",
+          "reference": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "c8024974766ebbc2280a3d99ed8f3c49a7f0b6f8a07272ada001b574c6955aad",
+      "test": "runtimes/pi/runtime-pi/test/unit/subagents-vendor.test.ts"
     },
     {
       "source": "pi",
@@ -14036,14 +14388,12 @@
       "source": "pi",
       "path": "keybindings.json",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/keybindings.json",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/src/profile.ts",
+      "adaptation": "normalized into the generated Pi profile and launch-bound adapter",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14054,35 +14404,48 @@
             "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52"
           },
           "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52",
-          "reference": "pi:keybindings.json@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:keybindings.json@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "keybindings.json",
+            "sha256": "ae9ec215b5be44e6d9ee0be4d38c3003c0694e83ab2523b37c5c28905a1b2c52"
+          },
+          "sha256": "e93e8cf63e46c49031e8af1d50c412757d1c73dacb11a4e0f4891ab9830e9da6",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "81957c1d02b7d0cd7f55be83c0dc61303605c9d95cc67a7876a244d645bd714f",
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
-      "path": "OPERATIONS.md",
+      "path": "nul",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "1a9b3cae5b5a18585d1ad0863b0a7ca77b16b3d3a168130f30404f2cbfb36637",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/OPERATIONS.md",
+      "state": "untracked",
+      "sha256": "8633d85b176589c1fa89f6e7176dba13330e69ac2869adb6914036c039078535",
+      "disposition": "excluded",
+      "reason": "accidental-filesystem-artifact",
       "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "adaptation": "none",
+      "completion": "excluded",
       "evidence": [
         {
           "schemaVersion": 1,
-          "kind": "source-snapshot",
+          "kind": "exclusion-rule",
           "sourceSnapshot": {
             "source": "pi",
-            "path": "OPERATIONS.md",
-            "sha256": "1a9b3cae5b5a18585d1ad0863b0a7ca77b16b3d3a168130f30404f2cbfb36637"
+            "path": "nul",
+            "sha256": "8633d85b176589c1fa89f6e7176dba13330e69ac2869adb6914036c039078535"
           },
-          "sha256": "1a9b3cae5b5a18585d1ad0863b0a7ca77b16b3d3a168130f30404f2cbfb36637",
-          "reference": "pi:OPERATIONS.md@843d3b30f16373fb42d4eac3db4d33480f92243e",
-          "verification": "captured"
+          "sha256": null,
+          "reference": "accidental-filesystem-artifact",
+          "verification": "verified"
         }
       ]
     },
@@ -14090,14 +14453,12 @@
       "source": "pi",
       "path": "PI_MIGRATION.md",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "a5d64b5a0cf90dc6120f1137513cd0b628f5d3dd04867223f0bae216d29c3c8e",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/PI_MIGRATION.md",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "state": "modified",
+      "sha256": "822ea188102768cc3c88f19af86adc748b48bcbb87db23a83afb9e0f6568e2ff",
+      "completion": "completed",
+      "disposition": "canonicalized",
+      "destination": "docs/history/PI_MIGRATION.md",
+      "adaptation": "intentionally adapted into provider-neutral canonical content",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14105,13 +14466,27 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "PI_MIGRATION.md",
-            "sha256": "a5d64b5a0cf90dc6120f1137513cd0b628f5d3dd04867223f0bae216d29c3c8e"
+            "sha256": "822ea188102768cc3c88f19af86adc748b48bcbb87db23a83afb9e0f6568e2ff"
           },
-          "sha256": "a5d64b5a0cf90dc6120f1137513cd0b628f5d3dd04867223f0bae216d29c3c8e",
-          "reference": "pi:PI_MIGRATION.md@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "sha256": "822ea188102768cc3c88f19af86adc748b48bcbb87db23a83afb9e0f6568e2ff",
+          "reference": "pi:PI_MIGRATION.md@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "generated-artifact",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "PI_MIGRATION.md",
+            "sha256": "822ea188102768cc3c88f19af86adc748b48bcbb87db23a83afb9e0f6568e2ff"
+          },
+          "sha256": "5b5f7937e1cfc43f33b4c3e4553cd3f088365089d21162a64f6433e447ea02d7",
+          "reference": "docs/history/PI_MIGRATION.md",
+          "verification": "verified"
         }
-      ]
+      ],
+      "headSha256": "7a7bbb1fc6fba899b80e7aed974cee0dced95056193b8bd129dc489435888ba4",
+      "test": "docs/history/PI_MIGRATION.md"
     },
     {
       "source": "pi",
@@ -14144,14 +14519,12 @@
       "source": "pi",
       "path": "README.md",
       "kind": "file",
-      "state": "tracked",
-      "sha256": "0675b817353c5c1deae680c7d159004b88edff16948f6668ee8c8c2fb0555192",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/README.md",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "state": "modified",
+      "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981",
+      "completion": "completed",
+      "disposition": "externalized",
+      "destination": "docs/history/PI_MIGRATION.md",
+      "adaptation": "retained as attributed migration history rather than active runtime guidance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14159,13 +14532,27 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "README.md",
-            "sha256": "0675b817353c5c1deae680c7d159004b88edff16948f6668ee8c8c2fb0555192"
+            "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981"
           },
-          "sha256": "0675b817353c5c1deae680c7d159004b88edff16948f6668ee8c8c2fb0555192",
-          "reference": "pi:README.md@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981",
+          "reference": "pi:README.md@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "README.md",
+            "sha256": "70beb16f7c1b9ebd12a09031e7d3418d32570cbe39343bffb1666f83dcaa0981"
+          },
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
+          "reference": "tests/integration/scripts/validate-generated.test.mjs",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "1405558339e42f4ce58885103fb7632a65777ca1815c1e007403f8e22f07cbca",
+      "test": "tests/integration/scripts/validate-generated.test.mjs"
     },
     {
       "source": "pi",
@@ -14209,14 +14596,12 @@
       "source": "pi",
       "path": "scripts/retired/dev-server-pane.ps1",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "retired",
-      "plannedDestination": null,
+      "completion": "completed",
+      "disposition": "retired",
       "destination": null,
-      "adaptation": "retain-attributed-history",
+      "adaptation": "retained only in source-attributed history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14227,23 +14612,23 @@
             "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06"
           },
           "sha256": "117f9cce197461193c76e3651fca5821f05e5b4fdf7ab45a0ce3abf815e64f06",
-          "reference": "pi:scripts/retired/dev-server-pane.ps1@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:scripts/retired/dev-server-pane.ps1@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
         }
-      ]
+      ],
+      "reason": "source already marked deprecated or retired; no active MPX reader",
+      "activeReader": null
     },
     {
       "source": "pi",
       "path": "scripts/retired/dev-server-pane.ts",
       "kind": "file",
-      "state": "tracked",
+      "state": "untracked",
       "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "retired",
-      "plannedDestination": null,
+      "completion": "completed",
+      "disposition": "retired",
       "destination": null,
-      "adaptation": "retain-attributed-history",
+      "adaptation": "retained only in source-attributed history",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14254,10 +14639,12 @@
             "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5"
           },
           "sha256": "36f87fc83133348a891e287d8f17e232f4eddeacd6b2e5c17952cb948af962b5",
-          "reference": "pi:scripts/retired/dev-server-pane.ts@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:scripts/retired/dev-server-pane.ts@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
         }
-      ]
+      ],
+      "reason": "source already marked deprecated or retired; no active MPX reader",
+      "activeReader": null
     },
     {
       "source": "pi",
@@ -14340,13 +14727,11 @@
       "path": "settings.json",
       "kind": "file",
       "state": "modified",
-      "sha256": "68c3ed25e70613fa4fae606cbad264aa2d91655cbdbc482b781b8cecccc85976",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/settings.json",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "sha256": "0e2a111ff1a6ca56d2baf757a8e38e9fd396c0161047d7eab00faf2f5ef6c56b",
+      "completion": "completed",
+      "disposition": "Pi-specific",
+      "destination": "runtimes/pi/runtime-pi/src/profile.ts",
+      "adaptation": "normalized into the generated Pi profile and launch-bound adapter",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14354,14 +14739,27 @@
           "sourceSnapshot": {
             "source": "pi",
             "path": "settings.json",
-            "sha256": "68c3ed25e70613fa4fae606cbad264aa2d91655cbdbc482b781b8cecccc85976"
+            "sha256": "0e2a111ff1a6ca56d2baf757a8e38e9fd396c0161047d7eab00faf2f5ef6c56b"
           },
-          "sha256": "68c3ed25e70613fa4fae606cbad264aa2d91655cbdbc482b781b8cecccc85976",
-          "reference": "pi:settings.json@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "sha256": "0e2a111ff1a6ca56d2baf757a8e38e9fd396c0161047d7eab00faf2f5ef6c56b",
+          "reference": "pi:settings.json@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "settings.json",
+            "sha256": "0e2a111ff1a6ca56d2baf757a8e38e9fd396c0161047d7eab00faf2f5ef6c56b"
+          },
+          "sha256": "e93e8cf63e46c49031e8af1d50c412757d1c73dacb11a4e0f4891ab9830e9da6",
+          "reference": "runtimes/pi/runtime-pi/test/unit/profile.test.ts",
+          "verification": "passed"
         }
       ],
-      "headSha256": "4711390eb4f89df78cd6f7922abbb2744351a6e84c651a18b82c6cc245b19079"
+      "headSha256": "5c2b80766d46287f51484dcc08bb82c7a338bec1733b392303cc2d94ad10a90a",
+      "test": "runtimes/pi/runtime-pi/test/unit/profile.test.ts"
     },
     {
       "source": "pi",
@@ -14557,14 +14955,12 @@
       "source": "pi",
       "path": "WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
       "kind": "file",
-      "state": "tracked",
+      "state": "modified",
       "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48",
-      "completion": "planned",
-      "disposition": "unclassified",
-      "plannedDisposition": "Pi-specific",
-      "plannedDestination": "runtimes/pi/convergence/WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
-      "destination": null,
-      "adaptation": "preserve-harness-specific-surface",
+      "completion": "completed",
+      "disposition": "externalized",
+      "destination": "docs/history/PI_MIGRATION.md",
+      "adaptation": "retained as attributed migration history rather than active runtime guidance",
       "evidence": [
         {
           "schemaVersion": 1,
@@ -14575,10 +14971,24 @@
             "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48"
           },
           "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48",
-          "reference": "pi:WINDOWS_TERMINAL_DEV_SERVER_PANES.md@843d3b30f16373fb42d4eac3db4d33480f92243e",
+          "reference": "pi:WINDOWS_TERMINAL_DEV_SERVER_PANES.md@9807adb547c64ecedf0091aec20e82627842da33",
           "verification": "captured"
+        },
+        {
+          "schemaVersion": 1,
+          "kind": "behavior-test",
+          "sourceSnapshot": {
+            "source": "pi",
+            "path": "WINDOWS_TERMINAL_DEV_SERVER_PANES.md",
+            "sha256": "ad8e042425bd8129d82715598b7b19c5a345e515c9cb4147d58ecba7c00c9d48"
+          },
+          "sha256": "72ba8cad886f371453eadc7124e0db8353c3a3d4919c6fd61c4e54bc73cd3d6b",
+          "reference": "tests/integration/scripts/validate-generated.test.mjs",
+          "verification": "passed"
         }
-      ]
+      ],
+      "headSha256": "7019d1d0671fd5188e8312d6e5be0ebd2a53260708c552e5710746a1b1188879",
+      "test": "tests/integration/scripts/validate-generated.test.mjs"
     }
   ]
 }
