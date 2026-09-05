@@ -20,6 +20,10 @@ import {
 } from '../../src/runtime-registration.js';
 import { ImmutableInstallerService, NodeTransactionStore } from '../../src/transaction.js';
 import type { InstallExternalVerificationResultV1 } from '../../src/install-intent-builder.js';
+import {
+  createPiNativePackageRegistration,
+  type PiNativePackageRegistrationV1,
+} from '../../src/pi-native-package.js';
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {
@@ -63,7 +67,12 @@ const roles = (runtime: 'claude' | 'pi') =>
         'agents',
         'licenses',
       ] as const);
-function registration(runtime: 'claude' | 'pi', domain: 'personal' | 'work', nativeRoot: string) {
+function registration(
+  runtime: 'claude' | 'pi',
+  domain: 'personal' | 'work',
+  nativeRoot: string,
+  nativePackage: PiNativePackageRegistrationV1,
+) {
   const files: ProjectionFileV1[] = roles(runtime).map((role) => {
     const body = Buffer.from(`${runtime}:${role}`);
     return {
@@ -74,8 +83,7 @@ function registration(runtime: 'claude' | 'pi', domain: 'personal' | 'work', nat
       owner: 'convergence',
     };
   });
-  return {
-    runtime,
+  const common = {
     domain,
     nativeRoot,
     executable: {
@@ -96,6 +104,9 @@ function registration(runtime: 'claude' | 'pi', domain: 'personal' | 'work', nat
       mcpSharing: domain === 'personal' ? ('shared' as const) : ('isolated' as const),
     },
   };
+  return runtime === 'pi'
+    ? { ...common, runtime: 'pi' as const, nativePackage }
+    : { ...common, runtime: 'claude' as const };
 }
 async function simulation(existing: boolean) {
   const root = await mkdtemp(
@@ -108,6 +119,24 @@ async function simulation(existing: boolean) {
     userProfile = path.join(root, 'user');
   await mkdir(path.join(repositoryRoot, 'bin'), { recursive: true });
   await writeFile(path.join(repositoryRoot, 'bin', 'mpx.mjs'), 'export {};\n');
+  const nativePackageRoot = path.join(
+    repositoryRoot,
+    'runtimes',
+    'pi',
+    'extensions',
+    'dist',
+    'package',
+  );
+  await mkdir(nativePackageRoot, { recursive: true });
+  await Promise.all(
+    (
+      [
+        ['build-metadata.json', 'm'],
+        ['index.mjs', 'i'],
+        ['package.json', 'p'],
+      ] as const
+    ).map(([file, body]) => writeFile(path.join(nativePackageRoot, file), body)),
+  );
   for (const runtime of ['claude', 'pi'] as const) {
     for (const role of roles(runtime)) {
       const file = path.join(repositoryRoot, runtime, `${role}.json`);
@@ -203,14 +232,30 @@ async function simulation(existing: boolean) {
     releases = new NodeCurrentReleaseBuilder({
       repositoryRoot,
       appsRoot,
-      assetPaths: ['bin', 'claude', 'pi'],
+      assetPaths: ['bin', 'claude', 'pi', 'runtimes'],
     });
-  const manifest = await releases.build();
+  const manifest = await releases.build(),
+    nativePackage = createPiNativePackageRegistration(manifest);
   runtimeRegistrations = createRuntimeRegistrationMatrix([
-    registration('claude', 'personal', required(fixtureRoots[0], 'Claude personal fixture root')),
-    registration('claude', 'work', required(fixtureRoots[1], 'Claude work fixture root')),
-    registration('pi', 'personal', required(fixtureRoots[2], 'Pi personal fixture root')),
-    registration('pi', 'work', required(fixtureRoots[3], 'Pi work fixture root')),
+    registration(
+      'claude',
+      'personal',
+      required(fixtureRoots[0], 'Claude personal fixture root'),
+      nativePackage,
+    ),
+    registration(
+      'claude',
+      'work',
+      required(fixtureRoots[1], 'Claude work fixture root'),
+      nativePackage,
+    ),
+    registration(
+      'pi',
+      'personal',
+      required(fixtureRoots[2], 'Pi personal fixture root'),
+      nativePackage,
+    ),
+    registration('pi', 'work', required(fixtureRoots[3], 'Pi work fixture root'), nativePackage),
   ]);
   const intent: InstallIntentV1 = {
     schemaVersion: 1,

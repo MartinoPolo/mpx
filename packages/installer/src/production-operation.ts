@@ -37,6 +37,7 @@ import {
   buildWindowsIntegrationSpecs,
 } from './windows-integration.js';
 import {
+  assertPiNativePackagesMatchRelease,
   verifyAccountEnrollment,
   verifyRuntimeRegistrationMatrix,
   type AccountProbeV1,
@@ -532,6 +533,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       };
     }
     if (intent.runtimeRegistrations) {
+      assertPiNativePackagesMatchRelease(manifest, intent.runtimeRegistrations);
       if (!this.runtimeRegistrations) {
         fail(
           'INSTALL_REGISTRATION_INSPECTION_UNAVAILABLE',

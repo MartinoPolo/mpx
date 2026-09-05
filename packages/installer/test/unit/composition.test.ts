@@ -12,6 +12,7 @@ import {
   type ProjectionFileV1,
 } from '../../src/runtime-registration.js';
 import { ProductionInstallerOperationAdapter } from '../../src/production-operation.js';
+import { parsePiNativePackageRegistration } from '../../src/pi-native-package.js';
 
 const sha = (value: string) => installerDigest(value);
 function files(runtime: 'claude' | 'pi'): ProjectionFileV1[] {
@@ -45,10 +46,20 @@ function files(runtime: 'claude' | 'pi'): ProjectionFileV1[] {
     owner: 'convergence',
   }));
 }
+const nativeInventory = [
+  { path: 'build-metadata.json', sha256: sha('metadata'), bytes: 1 },
+  { path: 'index.mjs', sha256: sha('index'), bytes: 1 },
+  { path: 'package.json', sha256: sha('package'), bytes: 1 },
+];
+const nativePackage = parsePiNativePackageRegistration({
+  name: '@mpx/pi-extensions',
+  packageRoot: 'runtimes/pi/extensions/dist/package',
+  artifactRootDigest: installerDigest(nativeInventory),
+  files: nativeInventory,
+});
 function input(runtime: 'claude' | 'pi', domain: 'personal' | 'work', root: string) {
   const projectionFiles = files(runtime);
-  return {
-    runtime,
+  const common = {
     domain,
     nativeRoot: root,
     executable: { path: `C:\\tools\\${runtime}.exe`, sha256: sha(`${runtime}-exe`), version: '1' },
@@ -65,10 +76,12 @@ function input(runtime: 'claude' | 'pi', domain: 'personal' | 'work', root: stri
       mcpSharing: domain === 'personal' ? ('shared' as const) : ('isolated' as const),
     },
   };
+  return runtime === 'pi'
+    ? { ...common, runtime: 'pi' as const, nativePackage }
+    : { ...common, runtime: 'claude' as const };
 }
 
 it('composes four runtime registrations and external references into automatic, confirmed, and manual installer state', async () => {
-  const releaseKey = 'a'.repeat(64);
   const runtimeRegistrations = createRuntimeRegistrationMatrix([
     input('claude', 'personal', 'C:\\native\\claude-personal'),
     input('claude', 'work', 'C:\\native\\claude-work'),
@@ -82,24 +95,6 @@ it('composes four runtime registrations and external references into automatic, 
       argv: ['--stdio'],
     }),
   ];
-  const intent = parseInstallIntentV1({
-    schemaVersion: 1,
-    kind: 'install-intent',
-    releaseKey,
-    convergenceHash: releaseKey,
-    components: ['cli', 'runtime-registration'],
-    runtimeRegistrations,
-    staticMcpRegistrations,
-    externalIntegrations: [
-      {
-        id: 'git',
-        adapter: 'git-remotes',
-        classification: 'confirmation-required',
-        planDigest: sha('git-plan'),
-        verifierRef: 'git:repo',
-      },
-    ],
-  });
   const files = new FakeBinaryFileSystem();
   const resources = new FakeJsonResourceStore();
   const adapter = new ProductionInstallerOperationAdapter(
@@ -147,23 +142,67 @@ it('composes four runtime registrations and external references into automatic, 
         .map((file) => [file.path, { path: file.path, bytes: file.bytes, sha256: file.sha256 }]),
     ).values(),
   ];
+  const nativeEvidence = nativePackage.files.map((file) => ({
+    ...file,
+    path: `${nativePackage.packageRoot}/${file.path}`,
+  }));
+  const manifestFiles = [
+    { path: 'bin/mpx.mjs', bytes: 3, sha256: sha('cli') },
+    ...projectionEvidence,
+    ...nativeEvidence,
+  ].sort((a, b) => a.path.localeCompare(b.path));
+  const releaseKey = installerDigest(manifestFiles);
   const manifest = {
     schemaVersion: 1,
     kind: 'release-manifest',
     releaseKey,
     convergenceHash: releaseKey,
-    files: [{ path: 'bin/mpx.mjs', bytes: 3, sha256: sha('cli') }, ...projectionEvidence].sort(
-      (a, b) => a.path.localeCompare(b.path),
-    ),
+    files: manifestFiles,
   } as ReleaseManifestV1;
+  const intent = parseInstallIntentV1({
+    schemaVersion: 1,
+    kind: 'install-intent',
+    releaseKey,
+    convergenceHash: releaseKey,
+    components: ['cli', 'runtime-registration'],
+    runtimeRegistrations,
+    staticMcpRegistrations,
+    externalIntegrations: [
+      {
+        id: 'git',
+        adapter: 'git-remotes',
+        classification: 'confirmation-required',
+        planDigest: sha('git-plan'),
+        verifierRef: 'git:repo',
+      },
+    ],
+  });
+  const changedManifest = (files: ReleaseManifestV1['files']): ReleaseManifestV1 => {
+    const convergenceHash = installerDigest(files);
+    return { ...manifest, releaseKey: convergenceHash, convergenceHash, files };
+  };
   await expect(
-    adapter.operations(intent, {
-      ...manifest,
-      files: manifest.files.map((file, index) =>
-        index === 0 ? file : { ...file, sha256: sha('mismatch') },
+    adapter.operations(
+      intent,
+      changedManifest(
+        manifest.files.map((file) =>
+          file.path.startsWith('claude/') || file.path.startsWith('pi/')
+            ? { ...file, sha256: sha('mismatch') }
+            : file,
+        ),
       ),
-    }),
+    ),
   ).rejects.toMatchObject({ code: 'INSTALL_PROJECTION_MISMATCH' });
+  await expect(
+    adapter.operations(
+      intent,
+      changedManifest(
+        manifest.files.map((file) =>
+          file.path.endsWith('/index.mjs') ? { ...file, sha256: sha('alternate-native') } : file,
+        ),
+      ),
+    ),
+  ).rejects.toMatchObject({ code: 'REGISTRATION_NATIVE_PACKAGE_RELEASE_MISMATCH' });
   const operations = await adapter.operations(intent, manifest);
   const environmentOperation = operations.automatic.find(
     (operation) => operation.id === '20-user-environment',

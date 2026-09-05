@@ -23,6 +23,7 @@ import {
   type ProjectionRole,
   type RegisteredRuntime,
 } from './runtime-registration.js';
+import { createPiNativePackageRegistration } from './pi-native-package.js';
 import type { CurrentReleaseBuilder } from './orchestration.js';
 
 const MAX_REQUEST_ITEMS = 128;
@@ -657,6 +658,7 @@ export class InstallIntentBuilder {
         activation: 'argv-only' as const,
       };
     };
+    const nativePackage = createPiNativePackageRegistration(manifest);
     const matrix = createRuntimeRegistrationMatrix(
       (['claude', 'pi'] as const).flatMap((runtime) =>
         (['personal', 'work'] as const).map((domain) => {
@@ -669,8 +671,7 @@ export class InstallIntentBuilder {
               'INSTALL_ROUTE_REQUIRED',
             );
           }
-          return {
-            runtime,
+          const common = {
             domain,
             nativeRoot: selected.identity.runtimeRoots[runtime],
             executable: runtime === 'claude' ? claudeExecutable : piExecutable,
@@ -682,6 +683,9 @@ export class InstallIntentBuilder {
               mcpSharing: 'isolated' as const,
             },
           };
+          return runtime === 'pi'
+            ? { ...common, runtime: 'pi' as const, nativePackage }
+            : { ...common, runtime: 'claude' as const };
         }),
       ),
     );

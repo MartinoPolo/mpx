@@ -1,9 +1,15 @@
 import path from 'node:path';
 import {
+  canonicalJson,
   installerDigest,
   parseReleaseManifestV1,
   type ReleaseManifestV1,
 } from './immutable-core.js';
+import {
+  createPiNativePackageRegistration,
+  parsePiNativePackageRegistration,
+  type PiNativePackageRegistrationV1,
+} from './pi-native-package.js';
 export { installerDigest } from './immutable-core.js';
 
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -46,25 +52,38 @@ export interface RouteLabelsV1 {
   readonly ssh: string;
   readonly mcpSharing: 'shared' | 'isolated';
 }
-export interface RuntimeRegistrationInput {
-  readonly runtime: RegisteredRuntime;
+interface RuntimeRegistrationInputBase {
   readonly domain: AccountDomain;
   readonly nativeRoot: string;
   readonly executable: ExecutableEvidenceV1;
   readonly projection: ImmutableProjectionV1;
   readonly routes: RouteLabelsV1;
 }
-export interface RuntimeRegistrationV1 {
+export type RuntimeRegistrationInput =
+  | (RuntimeRegistrationInputBase & {
+      readonly runtime: 'claude';
+      readonly nativePackage?: never;
+    })
+  | (RuntimeRegistrationInputBase & {
+      readonly runtime: 'pi';
+      readonly nativePackage: PiNativePackageRegistrationV1;
+    });
+interface RuntimeRegistrationV1Base {
   readonly schemaVersion: 1;
   readonly kind: 'runtime-registration';
   readonly identity: RuntimeIdentity;
-  readonly runtime: RegisteredRuntime;
   readonly domain: AccountDomain;
   readonly nativeRootDigest: string;
   readonly executable: ExecutableEvidenceV1;
   readonly projection: ImmutableProjectionV1;
   readonly routes: RouteLabelsV1;
 }
+export type RuntimeRegistrationV1 =
+  | (RuntimeRegistrationV1Base & { readonly runtime: 'claude'; readonly nativePackage?: never })
+  | (RuntimeRegistrationV1Base & {
+      readonly runtime: 'pi';
+      readonly nativePackage: PiNativePackageRegistrationV1;
+    });
 export interface RuntimeRegistrationMatrixV1 {
   readonly schemaVersion: 1;
   readonly kind: 'runtime-registration-matrix';
@@ -207,6 +226,17 @@ function verifyRuntimeExecutableConsistency(registrations: readonly RuntimeRegis
       );
     }
   }
+  const piPackages = registrations
+    .filter((registration) => registration.runtime === 'pi')
+    .map((registration) => registration.nativePackage);
+  if (
+    piPackages.some((candidate) => installerDigest(candidate) !== installerDigest(piPackages[0]))
+  ) {
+    fail(
+      'REGISTRATION_NATIVE_PACKAGE_AMBIGUOUS',
+      'All Pi identities must bind the same native package artifact.',
+    );
+  }
 }
 
 function exactRegistrationRecord(value: unknown, keys: readonly string[]): Record<string, unknown> {
@@ -240,17 +270,23 @@ export function createRuntimeRegistrationMatrix(
   const registrations = inputs
     .map((input): RuntimeRegistrationV1 => {
       const identity = `${input.runtime}-${input.domain}` as RuntimeIdentity;
-      return {
-        schemaVersion: 1,
-        kind: 'runtime-registration',
+      const base = {
+        schemaVersion: 1 as const,
+        kind: 'runtime-registration' as const,
         identity,
-        runtime: input.runtime,
         domain: input.domain,
         nativeRootDigest: installerDigest(normalized(input.nativeRoot)),
         executable: executable(input.executable),
         projection: projection(input.projection, input.runtime),
         routes: routes(input.routes, input.domain),
       };
+      return input.runtime === 'pi'
+        ? {
+            ...base,
+            runtime: 'pi',
+            nativePackage: parsePiNativePackageRegistration(input.nativePackage),
+          }
+        : { ...base, runtime: 'claude' };
     })
     .sort((left, right) => left.identity.localeCompare(right.identity));
   const expected: RuntimeIdentity[] = ['claude-personal', 'claude-work', 'pi-personal', 'pi-work'];
@@ -283,6 +319,7 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
     fail('REGISTRATION_SCHEMA_INVALID', 'Registration matrix header is invalid.');
   }
   const registrations = matrix.registrations.map((item): RuntimeRegistrationV1 => {
+    const source = item as Record<string, unknown> | null;
     const registration = exactRegistrationRecord(item, [
       'schemaVersion',
       'kind',
@@ -293,6 +330,7 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
       'executable',
       'projection',
       'routes',
+      ...(source?.runtime === 'pi' ? ['nativePackage'] : []),
     ]);
     if (
       registration.schemaVersion !== 1 ||
@@ -328,12 +366,11 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
       'ssh',
       'mcpSharing',
     ]);
-    return {
-      schemaVersion: 1,
-      kind: 'runtime-registration',
+    const base = {
+      schemaVersion: 1 as const,
+      kind: 'runtime-registration' as const,
       identity: registration.identity as RuntimeIdentity,
-      runtime: registration.runtime,
-      domain: registration.domain,
+      domain: registration.domain as AccountDomain,
       nativeRootDigest: registration.nativeRootDigest,
       executable: executable(executableRecord as unknown as ExecutableEvidenceV1),
       projection: projection(
@@ -342,6 +379,13 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
       ),
       routes: routes(routeRecord as unknown as RouteLabelsV1, registration.domain),
     };
+    return registration.runtime === 'pi'
+      ? {
+          ...base,
+          runtime: 'pi',
+          nativePackage: parsePiNativePackageRegistration(registration.nativePackage),
+        }
+      : { ...base, runtime: 'claude' };
   });
   const expected: RuntimeIdentity[] = ['claude-personal', 'claude-work', 'pi-personal', 'pi-work'];
   if (
@@ -424,11 +468,40 @@ export interface RuntimeRegistrationReleaseV1 {
   readonly registrationMatrixDigest: string;
   readonly bindingDigest: string;
 }
+function releaseBoundRuntimeMatrix(
+  releaseValue: ReleaseManifestV1,
+  matrixValue: RuntimeRegistrationMatrixV1,
+): { readonly release: ReleaseManifestV1; readonly matrix: RuntimeRegistrationMatrixV1 } {
+  const release = parseReleaseManifestV1(releaseValue),
+    matrix = parseRuntimeRegistrationMatrixV1(matrixValue),
+    expected = createPiNativePackageRegistration(release),
+    piRegistrations = matrix.registrations.filter((registration) => registration.runtime === 'pi');
+  if (
+    piRegistrations.length !== 2 ||
+    piRegistrations.some(
+      (registration) => canonicalJson(registration.nativePackage) !== canonicalJson(expected),
+    )
+  ) {
+    fail(
+      'REGISTRATION_NATIVE_PACKAGE_RELEASE_MISMATCH',
+      'Pi native package registration does not match the current release inventory.',
+    );
+  }
+  return { release, matrix };
+}
+
+export function assertPiNativePackagesMatchRelease(
+  releaseValue: ReleaseManifestV1,
+  matrixValue: RuntimeRegistrationMatrixV1,
+): void {
+  releaseBoundRuntimeMatrix(releaseValue, matrixValue);
+}
+
 export function bindRuntimeMatrixToRelease(
   releaseValue: ReleaseManifestV1,
-  matrix: RuntimeRegistrationMatrixV1,
+  matrixValue: RuntimeRegistrationMatrixV1,
 ): RuntimeRegistrationReleaseV1 {
-  const release = parseReleaseManifestV1(releaseValue);
+  const { release, matrix } = releaseBoundRuntimeMatrix(releaseValue, matrixValue);
   const base = {
     schemaVersion: 1 as const,
     kind: 'runtime-registration-release' as const,

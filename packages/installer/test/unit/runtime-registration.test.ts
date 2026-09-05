@@ -14,6 +14,7 @@ import {
   type ProjectionRole,
   type RuntimeRegistrationInput,
 } from '../../src/runtime-registration.js';
+import { parsePiNativePackageRegistration } from '../../src/pi-native-package.js';
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {
@@ -52,23 +53,51 @@ const projection = (runtime: 'claude' | 'pi'): ImmutableProjectionV1 => {
     activation: 'argv-only' as const,
   };
 };
-const input = (
+const nativePackage = parsePiNativePackageRegistration({
+  name: '@mpx/pi-extensions',
+  packageRoot: 'runtimes/pi/extensions/dist/package',
+  files: [
+    { path: 'build-metadata.json', sha256: sha('metadata'), bytes: 1 },
+    { path: 'index.mjs', sha256: sha('index'), bytes: 1 },
+    { path: 'package.json', sha256: sha('package'), bytes: 1 },
+  ],
+  artifactRootDigest: installerDigest([
+    { path: 'build-metadata.json', sha256: sha('metadata'), bytes: 1 },
+    { path: 'index.mjs', sha256: sha('index'), bytes: 1 },
+    { path: 'package.json', sha256: sha('package'), bytes: 1 },
+  ]),
+});
+function input(
+  runtime: 'claude',
+  domain: 'personal' | 'work',
+  root: string,
+): Extract<RuntimeRegistrationInput, { runtime: 'claude' }>;
+function input(
+  runtime: 'pi',
+  domain: 'personal' | 'work',
+  root: string,
+): Extract<RuntimeRegistrationInput, { runtime: 'pi' }>;
+function input(
   runtime: 'claude' | 'pi',
   domain: 'personal' | 'work',
   root: string,
-): RuntimeRegistrationInput => ({
-  runtime,
-  domain,
-  nativeRoot: root,
-  executable: { path: `C:\\_MP_apps\\${runtime}.exe`, sha256: sha(runtime), version: '1.0.0' },
-  projection: projection(runtime),
-  routes: {
-    git: `${domain}:git`,
-    provider: `${domain}:provider`,
-    ssh: `${domain}:ssh`,
-    mcpSharing: domain === 'work' ? ('isolated' as const) : ('shared' as const),
-  },
-});
+): RuntimeRegistrationInput {
+  const common = {
+    domain,
+    nativeRoot: root,
+    executable: { path: `C:\\_MP_apps\\${runtime}.exe`, sha256: sha(runtime), version: '1.0.0' },
+    projection: projection(runtime),
+    routes: {
+      git: `${domain}:git`,
+      provider: `${domain}:provider`,
+      ssh: `${domain}:ssh`,
+      mcpSharing: domain === 'work' ? ('isolated' as const) : ('shared' as const),
+    },
+  };
+  return runtime === 'pi'
+    ? { ...common, runtime: 'pi', nativePackage }
+    : { ...common, runtime: 'claude' };
+}
 
 describe('immutable runtime registration', () => {
   it('creates exactly the four secret-free Claude/Pi personal/work registrations and rejects overlapping native roots', () => {
@@ -108,6 +137,23 @@ describe('immutable runtime registration', () => {
         input('pi', 'work', 'C:\\native\\pi-work'),
       ]),
     ).toThrowError(/REGISTRATION_EXECUTABLE_AMBIGUOUS/u);
+
+    const changedFiles = nativePackage.files.map((file) =>
+      file.path === 'index.mjs' ? { ...file, sha256: sha('different-package') } : file,
+    );
+    const changedPackage = parsePiNativePackageRegistration({
+      ...nativePackage,
+      files: changedFiles,
+      artifactRootDigest: installerDigest(changedFiles),
+    });
+    expect(() =>
+      createRuntimeRegistrationMatrix([
+        input('claude', 'personal', 'C:\\native\\claude-personal'),
+        input('claude', 'work', 'C:\\native\\claude-work'),
+        input('pi', 'personal', 'C:\\native\\pi-personal'),
+        { ...input('pi', 'work', 'C:\\native\\pi-work'), nativePackage: changedPackage },
+      ]),
+    ).toThrowError(/REGISTRATION_NATIVE_PACKAGE_AMBIGUOUS/u);
   });
 
   it('strictly parses installed registration contracts and refuses native state fields', () => {
@@ -120,6 +166,38 @@ describe('immutable runtime registration', () => {
     expect(parseRuntimeRegistrationMatrixV1(JSON.parse(JSON.stringify(matrix)))).toEqual(matrix);
     expect(() =>
       parseRuntimeRegistrationMatrixV1({ ...matrix, auth: { token: 'secret' } }),
+    ).toThrowError(/REGISTRATION_SCHEMA_INVALID/u);
+
+    const missingNativeBase = {
+      schemaVersion: 1 as const,
+      kind: 'runtime-registration-matrix' as const,
+      registrations: matrix.registrations.map((item) => {
+        if (item.runtime !== 'pi') {
+          return item;
+        }
+        const { nativePackage: _nativePackage, ...without } = item;
+        return without;
+      }),
+    };
+    expect(() =>
+      parseRuntimeRegistrationMatrixV1({
+        ...missingNativeBase,
+        matrixDigest: installerDigest(missingNativeBase),
+      }),
+    ).toThrowError(/REGISTRATION_SCHEMA_INVALID/u);
+
+    const claudeNativeBase = {
+      schemaVersion: 1 as const,
+      kind: 'runtime-registration-matrix' as const,
+      registrations: matrix.registrations.map((item) =>
+        item.runtime === 'claude' ? { ...item, nativePackage } : item,
+      ),
+    };
+    expect(() =>
+      parseRuntimeRegistrationMatrixV1({
+        ...claudeNativeBase,
+        matrixDigest: installerDigest(claudeNativeBase),
+      }),
     ).toThrowError(/REGISTRATION_SCHEMA_INVALID/u);
   });
 
@@ -261,19 +339,56 @@ describe('immutable runtime registration', () => {
       input('pi', 'personal', 'C:\\native\\pi-personal'),
       input('pi', 'work', 'C:\\native\\pi-work'),
     ]);
-    const convergenceHash = installerDigest([]);
+    const releaseFiles = nativePackage.files.map((file) => ({
+      ...file,
+      path: `${nativePackage.packageRoot}/${file.path}`,
+    }));
+    const convergenceHash = installerDigest(releaseFiles);
     const release = {
       schemaVersion: 1 as const,
       kind: 'release-manifest' as const,
       releaseKey: convergenceHash,
       convergenceHash,
-      files: [],
+      files: releaseFiles,
     };
     const binding = bindRuntimeMatrixToRelease(release, matrix);
     expect(parseRuntimeRegistrationReleaseV1(binding)).toEqual(binding);
     expect(() =>
       parseRuntimeRegistrationReleaseV1({ ...binding, registrationMatrixDigest: sha('other') }),
     ).toThrowError(/INSTALL_REGISTRATION_BINDING_INVALID/u);
+
+    const alternateInventories = [
+      nativePackage.files.map((file) =>
+        file.path === 'index.mjs' ? { ...file, sha256: sha('alternate-index') } : file,
+      ),
+      [
+        ...nativePackage.files,
+        { path: 'runtime-helper.mjs', sha256: sha('absent-from-release'), bytes: 1 },
+      ].sort((left, right) => left.path.localeCompare(right.path)),
+    ];
+    for (const alternateFiles of alternateInventories) {
+      const alternatePackage = parsePiNativePackageRegistration({
+        ...nativePackage,
+        files: alternateFiles,
+        artifactRootDigest: installerDigest(alternateFiles),
+      });
+      const alternateBase = {
+        schemaVersion: matrix.schemaVersion,
+        kind: matrix.kind,
+        registrations: matrix.registrations.map((registration) =>
+          registration.runtime === 'pi'
+            ? { ...registration, nativePackage: alternatePackage }
+            : registration,
+        ),
+      };
+      const alternateMatrix = {
+        ...alternateBase,
+        matrixDigest: installerDigest(alternateBase),
+      };
+      expect(() => bindRuntimeMatrixToRelease(release, alternateMatrix)).toThrowError(
+        expect.objectContaining({ code: 'REGISTRATION_NATIVE_PACKAGE_RELEASE_MISMATCH' }),
+      );
+    }
   });
 
   it('rejects projection inventory paths that are absolute or escape the immutable root', () => {

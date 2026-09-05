@@ -181,6 +181,11 @@ async function createBuildFixture() {
       bytes: 1,
       sha256: sha(String(((index + 2) % 9) + 1)),
     })),
+    ...['build-metadata.json', 'index.mjs', 'package.json'].map((name, index) => ({
+      path: `runtimes/pi/extensions/dist/package/${name}`,
+      bytes: index + 1,
+      sha256: sha(String(index + 1)),
+    })),
   ].sort((a, b) => a.path.localeCompare(b.path));
   const releaseKey = installerDigest(files);
   const manifest: ReleaseManifestV1 = {
@@ -261,6 +266,17 @@ it('builds a deterministic four-registration intent without publishing or extern
     'pi-personal',
     'pi-work',
   ]);
+  const registrations = first.intent.runtimeRegistrations?.registrations ?? [];
+  const piPackages = registrations
+    .filter((item) => item.runtime === 'pi')
+    .map((item) => item.nativePackage);
+  expect(piPackages).toHaveLength(2);
+  expect(piPackages[0]).toEqual(piPackages[1]);
+  expect(
+    registrations
+      .filter((item) => item.runtime === 'claude')
+      .every((item) => !('nativePackage' in item)),
+  ).toBe(true);
   expect(first.intent.runtimeRegistrations?.registrations.map((item) => item.routes)).toEqual([
     {
       git: 'personal:git-home',
