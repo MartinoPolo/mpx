@@ -621,7 +621,13 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     for (const registration of piRegistrations) {
       let privateRoot: string | undefined;
       try {
-        privateRoot = await this.privateRoots.resolvePiNativeRoot(registration.identity);
+        privateRoot = await this.privateRoots.resolvePiNativeRoot({
+          identity: registration.identity,
+          expectedNativeRootDigest: registration.nativeRootDigest,
+          ...(intent.userConfigArtifact
+            ? { userConfigArtifactContent: intent.userConfigArtifact.content }
+            : {}),
+        });
       } catch (failure) {
         fail('INSTALL_PI_ROOT_UNAVAILABLE', 'A registered Pi root is unavailable.', failure);
       }
@@ -827,7 +833,10 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     for (const binding of locatorValue.bindings) {
       let privateRoot: string | undefined;
       try {
-        privateRoot = await this.privateRoots.resolvePiNativeRoot(binding.identity);
+        privateRoot = await this.privateRoots.resolvePiNativeRoot({
+          identity: binding.identity,
+          expectedNativeRootDigest: binding.nativeRootDigest,
+        });
       } catch (failure) {
         fail('INSTALL_PI_ROOT_UNAVAILABLE', 'A registered Pi root is unavailable.', failure);
       }

@@ -86,6 +86,31 @@ function required<T>(value: T | null | undefined, label: string): T {
   return value;
 }
 
+function piUserConfig(personalRoot: string, workRoot: string): string {
+  return JSON.stringify({
+    identities: {
+      personal: {
+        domain: 'personal',
+        runtimeRoots: { claude: 'C:\\claude-personal', pi: personalRoot },
+        gitAuthorRoute: 'personal-git',
+      },
+      work: {
+        domain: 'work',
+        runtimeRoots: { claude: 'C:\\claude-work', pi: workRoot },
+        gitAuthorRoute: 'work-git',
+      },
+    },
+    domains: { personal: ['C:\\personal'], work: ['C:\\work'] },
+    contentScopes: {},
+    modes: {},
+    skillPolicies: {},
+    presets: {},
+    launchDefaults: { scopes: {}, projects: {} },
+    networkPolicies: {},
+    executors: { host: {} },
+  });
+}
+
 function input(runtime: 'claude' | 'pi', domain: 'personal' | 'work', root: string) {
   const projectionFiles = files(runtime);
   const common = {
@@ -148,8 +173,6 @@ async function piRestartRollbackFixture() {
     ]),
     environment = {
       MPX_APPS: apps,
-      MPX_PI_PERSONAL_ROOT: personalRoot,
-      MPX_PI_WORK_ROOT: workRoot,
       APPDATA: path.join(temporary, 'roaming'),
       LOCALAPPDATA: path.join(temporary, 'local'),
       USERPROFILE: path.join(temporary, 'user'),
@@ -167,6 +190,9 @@ async function piRestartRollbackFixture() {
       ),
     ),
   );
+  const configContent = piUserConfig(personalRoot, workRoot);
+  await mkdir(path.join(environment.APPDATA, 'mpx'), { recursive: true });
+  await writeFile(path.join(environment.APPDATA, 'mpx', 'config.json'), configContent);
   const adapter = () =>
       new ProductionInstallerOperationAdapter(environment, 'me', {
         files: new NodeBinaryFileSystem(),
@@ -227,6 +253,11 @@ async function piRestartRollbackFixture() {
           releaseKey,
           convergenceHash: releaseKey,
           components: ['runtime-registration'],
+          userConfigArtifact: {
+            target: '%APPDATA%/mpx/config.json',
+            content: configContent,
+            sha256: createHash('sha256').update(configContent).digest('hex'),
+          },
           runtimeRegistrations,
         }),
         manifest = {
@@ -544,11 +575,10 @@ it('registers the native Pi package without exposing or overwriting private root
       path.join(personalRoot, 'settings.json'),
       JSON.stringify({ packages: ['foreign'], credentials: { token: 'keep' } }),
     );
+    const configContent = piUserConfig(personalRoot, workRoot);
     const adapter = new ProductionInstallerOperationAdapter(
       {
         MPX_APPS: apps,
-        MPX_PI_PERSONAL_ROOT: personalRoot,
-        MPX_PI_WORK_ROOT: workRoot,
         APPDATA: path.join(temporary, 'roaming'),
         LOCALAPPDATA: path.join(temporary, 'local'),
         USERPROFILE: path.join(temporary, 'user'),
@@ -585,6 +615,11 @@ it('registers the native Pi package without exposing or overwriting private root
         releaseKey,
         convergenceHash: releaseKey,
         components: ['runtime-registration'],
+        userConfigArtifact: {
+          target: '%APPDATA%/mpx/config.json',
+          content: configContent,
+          sha256: createHash('sha256').update(configContent).digest('hex'),
+        },
         runtimeRegistrations,
       }),
       manifest = {
@@ -674,7 +709,6 @@ it('registers the native Pi package without exposing or overwriting private root
     const missingRootAdapter = new ProductionInstallerOperationAdapter(
       {
         MPX_APPS: apps,
-        MPX_PI_PERSONAL_ROOT: personalRoot,
         APPDATA: path.join(temporary, 'roaming'),
         LOCALAPPDATA: path.join(temporary, 'local'),
         USERPROFILE: path.join(temporary, 'user'),
@@ -684,6 +718,11 @@ it('registers the native Pi package without exposing or overwriting private root
       {
         files: new NodeBinaryFileSystem(),
         resources: new FakeJsonResourceStore(),
+        piPrivateRoots: {
+          resolvePiNativeRoot: async () => {
+            throw new Error('unavailable');
+          },
+        },
         runtimeRegistrations: {
           inspect: async () => ({
             observations: [],
@@ -781,7 +820,7 @@ it('composes four runtime registrations and external references into automatic, 
       resources,
       piNativeSettings,
       piPrivateRoots: {
-        resolvePiNativeRoot: async (identity) => piRoots[identity as keyof typeof piRoots],
+        resolvePiNativeRoot: async ({ identity }) => piRoots[identity as keyof typeof piRoots],
       },
       runtimeRegistrations: {
         inspect: async () => ({

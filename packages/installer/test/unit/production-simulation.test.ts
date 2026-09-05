@@ -171,8 +171,28 @@ async function simulation(existing: boolean) {
     await writeFile(path.join(userProfile, '.bashrc'), 'native-profile\r\n');
   }
   const userConfig = {
-    identities: {},
-    domains: {},
+    identities: {
+      personal: {
+        domain: 'personal',
+        runtimeRoots: {
+          claude: required(fixtureRoots[0], 'Claude personal fixture root'),
+          pi: required(fixtureRoots[2], 'Pi personal fixture root'),
+        },
+        gitAuthorRoute: 'personal-git',
+      },
+      work: {
+        domain: 'work',
+        runtimeRoots: {
+          claude: required(fixtureRoots[1], 'Claude work fixture root'),
+          pi: required(fixtureRoots[3], 'Pi work fixture root'),
+        },
+        gitAuthorRoute: 'work-git',
+      },
+    },
+    domains: {
+      personal: [required(fixtureRoots[0], 'Claude personal fixture root')],
+      work: [required(fixtureRoots[1], 'Claude work fixture root')],
+    },
     contentScopes: {},
     modes: {},
     skillPolicies: {},
@@ -194,8 +214,6 @@ async function simulation(existing: boolean) {
   }
   const environment = {
     MPX_APPS: appsRoot,
-    MPX_PI_PERSONAL_ROOT: required(fixtureRoots[2], 'Pi personal fixture root'),
-    MPX_PI_WORK_ROOT: required(fixtureRoots[3], 'Pi work fixture root'),
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
     USERPROFILE: userProfile,
@@ -695,14 +713,6 @@ it('runs clean and existing-machine production-backed simulations without live w
     const restartedAdapter = new ProductionInstallerOperationAdapter(
       {
         MPX_APPS: f.appsRoot,
-        MPX_PI_PERSONAL_ROOT: required(f.fixtureFiles[6], 'Pi personal fixture file').replace(
-          /[\\/]auth\.json$/u,
-          '',
-        ),
-        MPX_PI_WORK_ROOT: required(f.fixtureFiles[9], 'Pi work fixture file').replace(
-          /[\\/]auth\.json$/u,
-          '',
-        ),
         APPDATA: path.join(f.root, 'roaming'),
         LOCALAPPDATA: f.localAppData,
         USERPROFILE: f.userProfile,

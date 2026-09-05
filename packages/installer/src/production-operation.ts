@@ -39,8 +39,8 @@ import type { InstallerOperationAdapter, InstallerOperationSet } from './orchest
 import { withInstallerCleanup } from './failure.js';
 import { atomicReplaceRegularFile, type AtomicRegularFileOperations } from './atomic-file.js';
 import {
-  EnvironmentPiPrivateRootResolver,
   NodePiNativeSettingsPort,
+  UserConfigPiPrivateRootResolver,
   type PiNativeSettingsPort,
   type PiPrivateRootResolver,
 } from './pi-native-settings.js';
@@ -179,7 +179,12 @@ export interface RuntimeRegistrationInspectionPort {
   }>;
 }
 export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistrationInspectionPort {
-  constructor(private readonly environment: NodeJS.ProcessEnv = process.env) {}
+  private readonly piPrivateRoots: PiPrivateRootResolver;
+
+  constructor(private readonly environment: NodeJS.ProcessEnv = process.env) {
+    this.piPrivateRoots = new UserConfigPiPrivateRootResolver(environment);
+  }
+
   async inspect(intent: InstallIntentV1, priorReceipt?: OwnershipReceiptV1) {
     const matrix =
       intent.runtimeRegistrations ??
@@ -190,7 +195,18 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
     const mcpSharing = {} as Record<RuntimeIdentity, 'shared' | 'isolated'>;
     for (const registration of matrix.registrations) {
       const key = registration.identity.replace('-', '_').toUpperCase(),
-        nativeRoot = this.environment[`MPX_${key}_ROOT`],
+        nativeRoot =
+          registration.runtime === 'pi'
+            ? await this.piPrivateRoots
+                .resolvePiNativeRoot({
+                  identity: registration.identity,
+                  expectedNativeRootDigest: registration.nativeRootDigest,
+                  ...(intent.userConfigArtifact
+                    ? { userConfigArtifactContent: intent.userConfigArtifact.content }
+                    : {}),
+                })
+                .catch(() => undefined)
+            : this.environment[`MPX_${key}_ROOT`],
         projectionRoot = this.environment[`MPX_${key}_PROJECTION_ROOT`];
       let enrolled = false;
       if (nativeRoot && path.isAbsolute(nativeRoot)) {
@@ -378,7 +394,7 @@ export function createProductionInstallerResources(
       files,
       resources: json,
       piNativeSettings,
-      piPrivateRoots: new EnvironmentPiPrivateRootResolver(environment),
+      piPrivateRoots: new UserConfigPiPrivateRootResolver(environment),
       runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment),
     };
   }
@@ -387,7 +403,7 @@ export function createProductionInstallerResources(
     files,
     resources: new RoutedProductionResourceStore(json, native),
     piNativeSettings,
-    piPrivateRoots: new EnvironmentPiPrivateRootResolver(environment),
+    piPrivateRoots: new UserConfigPiPrivateRootResolver(environment),
     runtimeRegistrations: new ReadOnlyRuntimeRegistrationInspector(environment),
   };
 }
@@ -501,7 +517,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     this.files = resources.files;
     this.piNativeSettingsPort = resources.piNativeSettings ?? new NodePiNativeSettingsPort();
     const privateRoots =
-      resources.piPrivateRoots ?? new EnvironmentPiPrivateRootResolver(this.environment);
+      resources.piPrivateRoots ?? new UserConfigPiPrivateRootResolver(this.environment);
     this.piSettings = new PiNativeSettingsOperationService(
       this.environment,
       this.piNativeSettingsPort,

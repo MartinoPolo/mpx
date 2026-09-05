@@ -1,8 +1,11 @@
 import { lstat, readFile, realpath, rm } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
+import path from 'node:path';
 import lockfile from 'proper-lockfile';
+import { parseUserConfig } from '@mpx/config';
 import { MpxError } from '@mpx/core';
 import { atomicReplaceRegularFile, type AtomicRegularFileOperations } from './atomic-file.js';
+import { installerDigest, USER_CONFIG_ARTIFACT_MAX_BYTES } from './immutable-core.js';
 import type { RuntimeIdentity } from './runtime-registration.js';
 
 export interface PiNativeSettingsLock {
@@ -19,16 +22,94 @@ export interface PiNativeSettingsPort {
   lock(target: string): Promise<PiNativeSettingsLock>;
 }
 
-/** Resolves a private Pi account root at execution time. It must return an absolute root for the exact identity, or undefined when that configured identity cannot be resolved. */
-export interface PiPrivateRootResolver {
-  resolvePiNativeRoot(identity: RuntimeIdentity): Promise<string | undefined>;
+export interface PiPrivateRootResolution {
+  readonly identity: RuntimeIdentity;
+  readonly expectedNativeRootDigest: string;
+  readonly userConfigArtifactContent?: string;
 }
 
-export class EnvironmentPiPrivateRootResolver implements PiPrivateRootResolver {
-  constructor(private readonly environment: Readonly<NodeJS.ProcessEnv>) {}
+/** Resolves a private Pi account root from validated user configuration. */
+export interface PiPrivateRootResolver {
+  resolvePiNativeRoot(input: PiPrivateRootResolution): Promise<string>;
+}
 
-  async resolvePiNativeRoot(identity: RuntimeIdentity): Promise<string | undefined> {
-    return this.environment[`MPX_${identity.replace('-', '_').toUpperCase()}_ROOT`];
+interface UserConfigFileOperations {
+  lstat(target: string): Promise<Stats>;
+  readFile(target: string): Promise<Buffer>;
+}
+
+const userConfigFileOperations: UserConfigFileOperations = { lstat, readFile };
+const normalizedPrivateRoot = (value: string): string =>
+  path.win32
+    .normalize(value)
+    .replace(/[\\]+$/u, '')
+    .toLowerCase();
+
+export class UserConfigPiPrivateRootResolver implements PiPrivateRootResolver {
+  private readonly files: UserConfigFileOperations;
+
+  constructor(
+    private readonly environment: Readonly<NodeJS.ProcessEnv>,
+    files: Partial<UserConfigFileOperations> = {},
+  ) {
+    this.files = { ...userConfigFileOperations, ...files };
+  }
+
+  private unavailable(): never {
+    throw new MpxError({
+      code: 'INSTALL_PI_ROOT_UNAVAILABLE',
+      message: 'A registered Pi root could not be resolved from validated user config.',
+    });
+  }
+
+  private async installedContent(): Promise<string> {
+    const appData = this.environment.APPDATA;
+    if (!appData || !path.win32.isAbsolute(appData)) {
+      return this.unavailable();
+    }
+    const target = path.win32.join(appData, 'mpx', 'config.json');
+    try {
+      const info = await this.files.lstat(target);
+      if (!info.isFile() || info.isSymbolicLink() || info.size > USER_CONFIG_ARTIFACT_MAX_BYTES) {
+        return this.unavailable();
+      }
+      const body = await this.files.readFile(target);
+      if (body.byteLength > USER_CONFIG_ARTIFACT_MAX_BYTES) {
+        return this.unavailable();
+      }
+      return body.toString('utf8');
+    } catch {
+      return this.unavailable();
+    }
+  }
+
+  async resolvePiNativeRoot(input: PiPrivateRootResolution): Promise<string> {
+    try {
+      const content = input.userConfigArtifactContent ?? (await this.installedContent());
+      if (Buffer.byteLength(content, 'utf8') > USER_CONFIG_ARTIFACT_MAX_BYTES) {
+        return this.unavailable();
+      }
+      const domain =
+        input.identity === 'pi-personal'
+          ? 'personal'
+          : input.identity === 'pi-work'
+            ? 'work'
+            : this.unavailable();
+      const config = parseUserConfig(content, this.environment);
+      const matches = Object.values(config.identities).filter(
+        (identity) =>
+          identity.domain === domain &&
+          path.win32.isAbsolute(identity.runtimeRoots.pi) &&
+          installerDigest(normalizedPrivateRoot(identity.runtimeRoots.pi)) ===
+            input.expectedNativeRootDigest,
+      );
+      if (matches.length !== 1) {
+        return this.unavailable();
+      }
+      return matches[0]!.runtimeRoots.pi;
+    } catch {
+      return this.unavailable();
+    }
   }
 }
 
