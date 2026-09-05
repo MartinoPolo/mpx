@@ -9,3 +9,4 @@ export * from './pi-native-settings-operation.js';
 export * from './production-operation.js';
 export * from './external-integrations.js';
 export * from './install-intent-builder.js';
+export * from './pi-legacy-detach.js';
