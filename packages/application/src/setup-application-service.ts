@@ -44,6 +44,12 @@ export class SetupApplicationService {
     const verified: InstallVerificationV1 = await this.dependencies.orchestrator.verify(true, () =>
       this.dependencies.builder.verify(built),
     );
+    if (!verified.healthy) {
+      throw new MpxError({
+        code: 'SETUP_VERIFICATION_FAILED',
+        message: 'Setup verification failed.',
+      });
+    }
     return {
       schemaVersion: 1,
       kind: 'setup-result',

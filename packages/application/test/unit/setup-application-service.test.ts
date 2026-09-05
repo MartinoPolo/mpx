@@ -94,6 +94,28 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
   ]);
 });
 
+it('throws a typed failure instead of reporting success when strict verification is unhealthy', async () => {
+  const service = new SetupApplicationService({
+    requestFactory: { create: async () => ({}) },
+    detach: { run: async () => undefined },
+    builder: {
+      build: async () => built,
+      verify: async () =>
+        ({ schemaVersion: 1, kind: 'install-external-verification', integrations: [] }) as const,
+    },
+    orchestrator: {
+      plan: async () => plan,
+      apply: async () => ({}) as never,
+      verify: async () => ({ healthy: false, issues: ['drift'] }) as never,
+    },
+  });
+
+  await expect(service.execute()).rejects.toMatchObject({
+    code: 'SETUP_VERIFICATION_FAILED',
+    message: 'Setup verification failed.',
+  });
+});
+
 it('does not detach when immutable intent construction fails', async () => {
   const detach = vi.fn();
   const failure = new Error('release build failed');
@@ -129,6 +151,96 @@ it('does not plan or apply when legacy detachment fails', async () => {
   await expect(service.execute()).rejects.toBe(failure);
   expect(planOperation).not.toHaveBeenCalled();
   expect(apply).not.toHaveBeenCalled();
+});
+
+it('does not apply or verify when planning fails', async () => {
+  const apply = vi.fn();
+  const verify = vi.fn();
+  const failure = new Error('plan failed');
+  const service = new SetupApplicationService({
+    requestFactory: { create: async () => ({}) },
+    detach: { run: async () => undefined },
+    builder: { build: async () => built, verify: vi.fn() },
+    orchestrator: {
+      plan: async () => {
+        throw failure;
+      },
+      apply,
+      verify,
+    },
+  });
+  await expect(service.execute()).rejects.toBe(failure);
+  expect(apply).not.toHaveBeenCalled();
+  expect(verify).not.toHaveBeenCalled();
+});
+
+it('does not verify when apply fails', async () => {
+  const verify = vi.fn();
+  const failure = new Error('apply failed');
+  const service = new SetupApplicationService({
+    requestFactory: { create: async () => ({}) },
+    detach: { run: async () => undefined },
+    builder: { build: async () => built, verify: vi.fn() },
+    orchestrator: {
+      plan: async () => plan,
+      apply: async () => {
+        throw failure;
+      },
+      verify,
+    },
+  });
+  await expect(service.execute()).rejects.toBe(failure);
+  expect(verify).not.toHaveBeenCalled();
+});
+
+it('propagates strict verify failure only after apply', async () => {
+  const order: string[] = [];
+  const failure = new Error('verify failed');
+  const service = new SetupApplicationService({
+    requestFactory: { create: async () => ({}) },
+    detach: { run: async () => undefined },
+    builder: { build: async () => built, verify: vi.fn() },
+    orchestrator: {
+      plan: async () => plan,
+      apply: async () => {
+        order.push('apply');
+        return {} as never;
+      },
+      verify: async () => {
+        order.push('verify');
+        throw failure;
+      },
+    },
+  });
+
+  await expect(service.execute()).rejects.toBe(failure);
+  expect(order).toEqual(['apply', 'verify']);
+});
+
+it('can execute twice through idempotent dependency ports', async () => {
+  const create = vi.fn(async () => ({}));
+  const build = vi.fn(async () => built);
+  const detach = vi.fn(async () => undefined);
+  const planOperation = vi.fn(async () => plan);
+  const apply = vi.fn(async () => ({}) as never);
+  const verify = vi.fn(async () => ({ healthy: true, issues: [] }) as never);
+  const service = new SetupApplicationService({
+    requestFactory: { create },
+    detach: { run: detach },
+    builder: {
+      build,
+      verify: async () =>
+        ({ schemaVersion: 1, kind: 'install-external-verification', integrations: [] }) as const,
+    },
+    orchestrator: { plan: planOperation, apply, verify },
+  });
+
+  await service.execute();
+  await service.execute();
+
+  for (const operation of [create, build, detach, planOperation, apply, verify]) {
+    expect(operation).toHaveBeenCalledTimes(2);
+  }
 });
 
 it('rejects a manual-only plan without applying it', async () => {

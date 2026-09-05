@@ -393,8 +393,9 @@ export function renderGroupHelp(group: CommandGroupMetadata): string {
             ...common.map((item) => `  ${item.name.padEnd(18)} ${item.summary}`),
           ]
         : []),
-      '',
-      `Run 'mpx ${group.name} <action> --help' for command usage.`,
+      ...(group.actions.length
+        ? ['', `Run 'mpx ${group.name} <action> --help' for command usage.`]
+        : []),
     ].join('\n') + '\n'
   );
 }

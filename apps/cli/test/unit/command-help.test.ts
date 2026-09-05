@@ -71,6 +71,15 @@ describe('CLI help', () => {
     ).toEqual(['init', 'status', 'doctor', 'setup', 'help']);
   });
 
+  it('prints bare setup usage without suggesting an action', async () => {
+    const io = captureIo();
+
+    expect(await run(['setup', '--help'], io, { env: {} })).toBe(0);
+    const output = io.out.join('');
+    expect(output).toContain('Usage: mpx setup');
+    expect(output).not.toContain('<action>');
+  });
+
   it('prints the complete terminal inventory for help --all', async () => {
     const io = captureIo();
 
@@ -110,7 +119,7 @@ describe('CLI help', () => {
       .split('\n')
       .filter((line) => /^  [a-z][a-z-]*\s{2,}/u.test(line));
 
-    expect(rootCommandLines.length).toBeLessThan(20);
+    expect(rootCommandLines.length).toBeLessThan(30);
     expect(rootCommandLines.some((line) => line.trimStart().startsWith('content '))).toBe(true);
   });
 

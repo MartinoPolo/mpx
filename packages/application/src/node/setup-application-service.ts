@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { parseUserConfig, type UserConfig } from '@mpx/config';
 import { MpxError } from '@mpx/core';
@@ -9,8 +9,10 @@ import {
   type InstallIntentBuilder,
   type InstallIntentRequestV1,
   type InstallOrchestrator,
+  type PiLegacyDetachConfig,
 } from '@mpx/installer';
 import { SetupApplicationService, type SetupRequestFactory } from '../setup-application-service.js';
+import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
 
 const MAX_CONFIG_BYTES = 1024 * 1024;
 const MAX_VERSION_BYTES = 16 * 1024;
@@ -25,20 +27,163 @@ function absoluteEnvironment(environment: NodeJS.ProcessEnv, name: string): stri
   if (!value || (!path.win32.isAbsolute(value) && !path.posix.isAbsolute(value))) {
     invalid('SETUP_ENVIRONMENT_INVALID', `${name} must be an absolute path.`);
   }
-  return path.normalize(value);
+  return value;
+}
+
+function sameFile(
+  left: { dev: number | bigint; ino: number | bigint; size: number },
+  right: { dev: number | bigint; ino: number | bigint; size: number },
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size;
+}
+
+async function readSecureConfig(file: string): Promise<string> {
+  const namedBefore = await lstat(file);
+  if (
+    namedBefore.isSymbolicLink() ||
+    !namedBefore.isFile() ||
+    namedBefore.size > MAX_CONFIG_BYTES
+  ) {
+    throw new Error('unsafe configuration');
+  }
+  const handle = await open(file, 'r');
+  try {
+    const openedBefore = await handle.stat();
+    if (!openedBefore.isFile() || !sameFile(namedBefore, openedBefore)) {
+      throw new Error('configuration identity changed');
+    }
+    const body = Buffer.alloc(openedBefore.size);
+    let offset = 0;
+    while (offset < body.length) {
+      const { bytesRead } = await handle.read(body, offset, body.length - offset, offset);
+      if (bytesRead === 0) {
+        throw new Error('configuration truncated');
+      }
+      offset += bytesRead;
+    }
+    if ((await handle.read(Buffer.alloc(1), 0, 1, body.length)).bytesRead !== 0) {
+      throw new Error('configuration grew');
+    }
+    const [openedAfter, namedAfter] = await Promise.all([handle.stat(), lstat(file)]);
+    if (
+      namedAfter.isSymbolicLink() ||
+      !sameFile(openedBefore, openedAfter) ||
+      !sameFile(openedBefore, namedAfter)
+    ) {
+      throw new Error('configuration identity changed');
+    }
+    return body.toString('utf8');
+  } finally {
+    await handle.close();
+  }
+}
+
+function homeCandidate(environment: NodeJS.ProcessEnv): string | undefined {
+  const candidates =
+    process.platform === 'win32'
+      ? [environment.USERPROFILE, environment.HOME]
+      : [environment.HOME, environment.USERPROFILE];
+  return candidates.find(
+    (candidate): candidate is string =>
+      !!candidate && (path.win32.isAbsolute(candidate) || path.posix.isAbsolute(candidate)),
+  );
+}
+
+function resolveHome(environment: NodeJS.ProcessEnv): string {
+  const candidate = homeCandidate(environment);
+  if (!candidate || (!path.win32.isAbsolute(candidate) && !path.posix.isAbsolute(candidate))) {
+    return invalid('SETUP_ROOT_INVALID', 'The Pi runtime roots could not be resolved.');
+  }
+  return candidate;
+}
+
+function resolveTildeRoot(value: string, environment: NodeJS.ProcessEnv): string {
+  if (value !== '~' && !value.startsWith('~/') && !value.startsWith('~\\')) {
+    if (value.startsWith('~') || (!path.win32.isAbsolute(value) && !path.posix.isAbsolute(value))) {
+      return invalid('SETUP_ROOT_INVALID', 'The Pi runtime roots could not be resolved.');
+    }
+    return value;
+  }
+  const home = resolveHome(environment);
+  if (value === '~') {
+    return home;
+  }
+  return path.join(home, ...value.slice(2).split(/[\\/]+/u));
+}
+
+function preserveRawRuntimeRoots(config: UserConfig, text: string): UserConfig {
+  const raw = JSON.parse(text) as {
+    identities: Record<string, { runtimeRoots: Record<string, string> }>;
+  };
+  const preserved = structuredClone(config);
+  for (const [name, identity] of Object.entries(preserved.identities)) {
+    identity.runtimeRoots = {
+      ...raw.identities[name]!.runtimeRoots,
+    } as typeof identity.runtimeRoots;
+  }
+  return preserved;
+}
+
+export function resolvePiDetachConfig(
+  config: UserConfig,
+  environment: NodeJS.ProcessEnv,
+): PiLegacyDetachConfig {
+  const identities = Object.fromEntries(
+    Object.entries(config.identities).map(([name, identity]) => [
+      name,
+      {
+        domain: identity.domain,
+        runtimeRoots: { pi: resolveTildeRoot(identity.runtimeRoots.pi, environment) },
+      },
+    ]),
+  );
+  const roots = Object.values(identities).map((value) => value.runtimeRoots.pi);
+  const normalized = roots.map((value) =>
+    path
+      .normalize(value)
+      .replace(/[\\/]+$/u, '')
+      .toLowerCase(),
+  );
+  if (new Set(normalized).size !== normalized.length) {
+    return invalid('SETUP_ROOT_INVALID', 'The Pi runtime roots could not be resolved.');
+  }
+  return { identities };
+}
+
+async function ensurePrivateStateRoot(localAppData: string): Promise<string> {
+  const localInfo = await lstat(localAppData);
+  if (localInfo.isSymbolicLink() || !localInfo.isDirectory()) {
+    return invalid('SETUP_STATE_INVALID', 'The setup state directory is unsafe.');
+  }
+  const localReal = await realpath(localAppData);
+  const stateRoot = path.join(localAppData, 'mpx');
+  await mkdir(stateRoot, { recursive: true, mode: 0o700 });
+  const stateInfo = await lstat(stateRoot);
+  const stateReal = await realpath(stateRoot);
+  const relative = path.relative(localReal, stateReal);
+  if (
+    stateInfo.isSymbolicLink() ||
+    !stateInfo.isDirectory() ||
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    return invalid('SETUP_STATE_INVALID', 'The setup state directory is unsafe.');
+  }
+  return stateRoot;
 }
 
 export interface SetupProcessPort {
-  version(executable: string): Promise<string>;
+  version(executable: string, argv: readonly string[]): Promise<string>;
 }
 
 export function createNodeSetupProcessPort(): SetupProcessPort {
   return {
-    version(executable) {
+    version(executable, argv) {
       return new Promise((resolve, reject) => {
         execFile(
           executable,
-          ['--version'],
+          [...argv],
           { shell: false, timeout: 5_000, maxBuffer: MAX_VERSION_BYTES, windowsHide: true },
           (error, stdout, stderr) => {
             if (error) {
@@ -58,21 +203,33 @@ async function executable(
   name: 'MPX_CLAUDE_EXECUTABLE' | 'MPX_PI_EXECUTABLE',
   processPort: SetupProcessPort,
 ): Promise<{ path: string; version: string }> {
-  const file = absoluteEnvironment(environment, name);
+  const original = absoluteEnvironment(environment, name);
   try {
-    const info = await lstat(file);
+    const info = await lstat(original);
     if (!info.isFile() || info.isSymbolicLink() || info.size > INSTALL_EXECUTABLE_MAX_BYTES) {
       throw new Error('unsafe executable');
     }
-    const output = await processPort.version(file);
-    if (Buffer.byteLength(output, 'utf8') > MAX_VERSION_BYTES) {
-      throw new Error('large output');
+    const runtime = name === 'MPX_PI_EXECUTABLE' ? 'pi' : 'claude';
+    const trusted = await resolveTrustedRuntimeExecutable({
+      runtime,
+      cwd: absoluteEnvironment(environment, 'MPX_PROJECTS'),
+      environment,
+    });
+    const output = await processPort.version(trusted.executable, [
+      ...trusted.argvPrefix,
+      '--version',
+    ]);
+    if (
+      Buffer.byteLength(output, 'utf8') > MAX_VERSION_BYTES ||
+      /[\0-\u0009\u000b\u000c\u000e-\u001f\u007f]/u.test(output)
+    ) {
+      throw new Error('invalid output');
     }
     const version = output.replace(/[\r\n\t ]+/gu, ' ').trim();
-    if (!version || version.length > MAX_VERSION_LENGTH || /\0/u.test(version)) {
+    if (!version || version.length > MAX_VERSION_LENGTH) {
       throw new Error('invalid version');
     }
-    return { path: file, version };
+    return { path: original, version };
   } catch {
     return invalid('SETUP_EXECUTABLE_INVALID', `${name} is not a usable executable.`);
   }
@@ -119,20 +276,21 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
     const configFile = path.join(appData, 'mpx', 'config.json');
     let config: UserConfig;
     try {
-      const info = await lstat(configFile);
-      if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_CONFIG_BYTES) {
-        throw new Error('unsafe configuration');
-      }
-      config = parseUserConfig(await readFile(configFile, 'utf8'), this.environment);
+      const text = await readSecureConfig(configFile);
+      const validationHome = homeCandidate(this.environment) ?? path.parse(configFile).root;
+      const validated = parseUserConfig(text, {
+        ...this.environment,
+        USERPROFILE: validationHome,
+        HOME: validationHome,
+      });
+      config = preserveRawRuntimeRoots(validated, text);
     } catch {
       return invalid('SETUP_CONFIG_INVALID', 'Setup configuration is invalid or unreadable.');
     }
     const [personalName, personal] = identity(config, 'personal');
     const [workName, work] = identity(config, 'work');
-    const [claude, pi] = await Promise.all([
-      executable(this.environment, 'MPX_CLAUDE_EXECUTABLE', this.processPort),
-      executable(this.environment, 'MPX_PI_EXECUTABLE', this.processPort),
-    ]);
+    const claude = await executable(this.environment, 'MPX_CLAUDE_EXECUTABLE', this.processPort);
+    const pi = await executable(this.environment, 'MPX_PI_EXECUTABLE', this.processPort);
     this.#config = config;
     return {
       schemaVersion: 1,
@@ -150,7 +308,7 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
           { path: 'content/output-styles/mpx-terse.md', role: 'canonical-content' },
           { path: 'runtimes/claude/runtime-claude/COMPATIBILITY.md', role: 'settings' },
           { path: 'runtimes/claude/runtime-claude/src/index.ts', role: 'plugin' },
-          { path: 'runtimes/claude/runtime-claude/src/runtime-status.ts', role: 'status' },
+          { path: 'packages/status/src/index.ts', role: 'status' },
           { path: 'runtimes/claude/runtime-claude/src/runtime-tools.ts', role: 'hooks' },
           { path: 'runtimes/pi/extensions/subagents/LICENSE', role: 'licenses' },
         ],
@@ -183,11 +341,11 @@ export function createNodeSetupApplicationService(dependencies: {
     builder: dependencies.builder,
     orchestrator: dependencies.orchestrator,
     detach: {
-      run: () =>
+      run: async () =>
         new PiLegacyDetachService({
-          config: requestFactory.config(),
+          config: resolvePiDetachConfig(requestFactory.config(), dependencies.environment),
           projectsRoot,
-          stateRoot: path.join(localAppData, 'mpx'),
+          stateRoot: await ensurePrivateStateRoot(localAppData),
         }).run(),
     },
   });
