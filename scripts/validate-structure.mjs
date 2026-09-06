@@ -8,7 +8,8 @@ const normalized = (value) => value.replaceAll('\\', '/');
 const sourceExtension = /\.(?:[cm]?[jt]sx?)$/u;
 const testLike = /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u;
 const fixturePath = /(?:^|\/)(?:fixture|fixtures|__fixtures__|test-fixtures)(?:\/|$)/u;
-const requiredTestExcludes = ['src/**/*.test.ts', 'src/**/*.spec.ts'];
+const requiredSourceTestExcludes = ['src/**/*.test.ts', 'src/**/*.spec.ts'];
+const requiredRootTestExclude = 'test/**';
 
 async function filesBelow(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -182,8 +183,20 @@ export async function validateStructure(root, options = {}) {
     try {
       const config = JSON.parse(await readFile(path.join(directory, 'tsconfig.json'), 'utf8'));
       const excludes = Array.isArray(config.exclude) ? config.exclude : [];
-      if (!requiredTestExcludes.every((pattern) => excludes.includes(pattern))) {
-        throw new Error(`exclude must contain ${requiredTestExcludes.join(' and ')}`);
+      let hasSourceDirectory = true;
+      try {
+        await readdir(path.join(directory, 'src'));
+      } catch (failure) {
+        if (failure.code !== 'ENOENT') {
+          throw failure;
+        }
+        hasSourceDirectory = false;
+      }
+      const requiredExcludes = hasSourceDirectory
+        ? requiredSourceTestExcludes
+        : [requiredRootTestExclude];
+      if (!requiredExcludes.every((pattern) => excludes.includes(pattern))) {
+        throw new Error(`exclude must contain ${requiredExcludes.join(' and ')}`);
       }
     } catch (failure) {
       diagnostics.push({
