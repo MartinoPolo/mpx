@@ -22,7 +22,7 @@ import type {
 import { parseStatusSnapshotV1, type StatusSnapshotV1 } from '@mpx/status';
 import { resolveLaunchSkills } from './launch-skill-resolution.js';
 
-export type LaunchApplicationOperation = 'explain' | 'launch' | 'sbx-plan-export';
+export type LaunchApplicationOperation = 'explain' | 'launch';
 export interface LaunchApplicationRequest {
   readonly operation: LaunchApplicationOperation;
   readonly cwd: string;
@@ -434,12 +434,6 @@ export class LaunchApplicationService {
     }
     if (facts.request.operation === 'explain') {
       return { data: serializeLaunchPublic(facts.descriptor), warnings: [] };
-    }
-    if (facts.request.operation === 'sbx-plan-export') {
-      throw new MpxError({
-        code: 'SANDBOX_EXPORT_UNAVAILABLE',
-        message: 'Sandbox export is unavailable.',
-      });
     }
     let beforeChildExecution: (() => Promise<void>) | undefined;
     if (facts.selection.runtime === 'pi' && facts.evidence.status === 'verified') {
