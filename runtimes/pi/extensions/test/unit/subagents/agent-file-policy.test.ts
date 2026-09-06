@@ -131,7 +131,9 @@ test('fails closed when file metadata changes before mutation', () => {
   let truncated = false;
   const fileSystem: AgentFileSystem = {
     lstat: (path) => {
-      if (path === directory) return directoryMetadata;
+      if (path === directory) {
+        return directoryMetadata;
+      }
       fileChecks++;
       return fileChecks === 1 ? fileMetadata : { ...fileMetadata, changeTime: String(fileChecks) };
     },

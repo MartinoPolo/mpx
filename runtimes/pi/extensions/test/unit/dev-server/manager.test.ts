@@ -274,7 +274,9 @@ test('shutdown attempts every record and reports cleanup failures', async () => 
   const runtime = new FakeRuntime();
   runtime.stop = async (child) => {
     runtime.stopCalls.push(child.pid);
-    if (child.pid === 100) throw new Error('cannot stop web');
+    if (child.pid === 100) {
+      throw new Error('cannot stop web');
+    }
     (child as FakeChild).exit(null, 'SIGTERM');
   };
   const { manager } = createManager(runtime);

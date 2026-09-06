@@ -92,7 +92,9 @@ export function ensureSafeDirectory(
     try {
       metadata = fileSystem.lstat(current);
     } catch (error) {
-      if (!isMissingPath(error)) throw error;
+      if (!isMissingPath(error)) {
+        throw error;
+      }
       if (dirname(current) === current) {
         throw new Error(`Refusing to create filesystem root: ${current}`);
       }

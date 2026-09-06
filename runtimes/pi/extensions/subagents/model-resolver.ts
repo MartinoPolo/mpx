@@ -21,10 +21,14 @@ export function resolveEffectiveModel<TModel extends ModelEntry>(
   registry: ModelRegistry,
   configuredModel?: string,
 ): TModel | undefined {
-  if (explicitModel) return explicitModel;
+  if (explicitModel) {
+    return explicitModel;
+  }
   if (configuredModel) {
     const resolved = resolveModel(configuredModel, registry);
-    if (typeof resolved !== 'string') return resolved as TModel;
+    if (typeof resolved !== 'string') {
+      return resolved as TModel;
+    }
   }
   return parentModel;
 }
@@ -46,7 +50,9 @@ export function resolveModel(input: string, registry: ModelRegistry): any | stri
     const modelId = input.slice(slashIdx + 1);
     if (availableSet.has(input.toLowerCase())) {
       const found = registry.find(provider, modelId);
-      if (found) return found;
+      if (found) {
+        return found;
+      }
     }
   }
 
@@ -97,7 +103,9 @@ export function resolveModel(input: string, registry: ModelRegistry): any | stri
 
   if (bestMatch && bestScore >= 20) {
     const found = registry.find(bestMatch.provider, bestMatch.id);
-    if (found) return found;
+    if (found) {
+      return found;
+    }
   }
 
   // 3. Provider fallback: a "provider/modelId" query that didn't match under the
@@ -106,7 +114,9 @@ export function resolveModel(input: string, registry: ModelRegistry): any | stri
   // so the same model from another provider beats falling back to "inherit".
   if (slashIdx !== -1) {
     const bare = resolveModel(input.slice(slashIdx + 1), registry);
-    if (typeof bare !== 'string') return bare;
+    if (typeof bare !== 'string') {
+      return bare;
+    }
   }
 
   // 4. No match — list available models

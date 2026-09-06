@@ -56,7 +56,9 @@ function handleRpc<P extends { requestId: string }>(
     try {
       const data = await fn(params);
       const reply: { success: true; data?: unknown } = { success: true };
-      if (data !== undefined) reply.data = data;
+      if (data !== undefined) {
+        reply.data = data;
+      }
       events.emit(`${channel}:reply:${params.requestId}`, reply);
     } catch (err: any) {
       events.emit(`${channel}:reply:${params.requestId}`, {
@@ -83,7 +85,9 @@ export function registerRpcHandlers(deps: RpcDeps): RpcHandle {
     'subagents:rpc:spawn',
     ({ type, prompt, options }) => {
       const ctx = getCtx();
-      if (!ctx) throw new Error('No active session');
+      if (!ctx) {
+        throw new Error('No active session');
+      }
 
       // Cross-extension RPC callers (e.g. pi-tasks TaskExecute) naturally
       // forward serializable values, so options.model can be a string like
@@ -117,7 +121,9 @@ export function registerRpcHandlers(deps: RpcDeps): RpcHandle {
     events,
     'subagents:rpc:stop',
     ({ agentId }) => {
-      if (!manager.abort(agentId)) throw new Error('Agent not found');
+      if (!manager.abort(agentId)) {
+        throw new Error('Agent not found');
+      }
     },
   );
 

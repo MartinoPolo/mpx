@@ -16,12 +16,16 @@ class FakeEventBus {
     this.handlers.set(channel, handlers);
     return () => {
       handlers.delete(handler);
-      if (handlers.size === 0) this.handlers.delete(channel);
+      if (handlers.size === 0) {
+        this.handlers.delete(channel);
+      }
     };
   }
 
   emit(channel: string, data: unknown): void {
-    for (const handler of this.handlers.get(channel) ?? []) handler(data);
+    for (const handler of this.handlers.get(channel) ?? []) {
+      handler(data);
+    }
   }
 }
 

@@ -62,7 +62,9 @@ function packageManagerInvocation(packageManager) {
       'bin',
       'npm-cli.js',
     );
-    if (fs.existsSync(npmCli)) return { executable: process.execPath, prefixArguments: [npmCli] };
+    if (fs.existsSync(npmCli)) {
+      return { executable: process.execPath, prefixArguments: [npmCli] };
+    }
   }
   if (process.platform === 'win32' && (packageManager === 'pnpm' || packageManager === 'yarn')) {
     const corepackCli = path.join(
@@ -85,7 +87,9 @@ function findCheckScript(projectRoot, toolchain) {
   // Vite Plus: prefer check:all which runs vp check + eslint + stylelint + knip
   if (toolchain === 'vite-plus') {
     for (const name of CHECK_ALL_SCRIPTS) {
-      if (hasScript(packageJsonPath, name)) return name;
+      if (hasScript(packageJsonPath, name)) {
+        return name;
+      }
     }
   }
 
@@ -96,7 +100,9 @@ function findCheckScript(projectRoot, toolchain) {
 
   const candidates = isSvelte ? SVELTE_TYPECHECK_SCRIPTS : TYPECHECK_SCRIPTS;
   for (const name of candidates) {
-    if (hasScript(packageJsonPath, name)) return name;
+    if (hasScript(packageJsonPath, name)) {
+      return name;
+    }
   }
   return null;
 }
@@ -152,23 +158,33 @@ export function scanForSecrets(diffContent, filename) {
 export function extractCommitMessage(command) {
   // Try $(cat <<'EOF'...) pattern first (used in skills)
   const catHeredocMatch = command.match(/\$\(cat\s+<<-?['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF/);
-  if (catHeredocMatch) return catHeredocMatch[1].split('\n')[0].trim();
+  if (catHeredocMatch) {
+    return catHeredocMatch[1].split('\n')[0].trim();
+  }
 
   // Try heredoc format: <<'EOF'\n...\nEOF
   const heredocMatch = command.match(/<<-?['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF/);
-  if (heredocMatch) return heredocMatch[1].split('\n')[0].trim();
+  if (heredocMatch) {
+    return heredocMatch[1].split('\n')[0].trim();
+  }
 
   // Try -m with double quotes (handles apostrophes inside)
   const doubleQuoteMatch = command.match(/-m\s+"([^"]+)"/);
-  if (doubleQuoteMatch) return doubleQuoteMatch[1];
+  if (doubleQuoteMatch) {
+    return doubleQuoteMatch[1];
+  }
 
   // Try -m with single quotes (handles double quotes inside)
   const singleQuoteMatch = command.match(/-m\s+'([^']+)'/);
-  if (singleQuoteMatch) return singleQuoteMatch[1];
+  if (singleQuoteMatch) {
+    return singleQuoteMatch[1];
+  }
 
   // Try -m with $'...' (bash ANSI-C quoting)
   const dollarQuoteMatch = command.match(/-m\s+\$'([^']+)'/);
-  if (dollarQuoteMatch) return dollarQuoteMatch[1];
+  if (dollarQuoteMatch) {
+    return dollarQuoteMatch[1];
+  }
 
   return null;
 }
@@ -201,13 +217,19 @@ async function main() {
   const input = await readStdin();
   const command = input.tool_input?.command ?? '';
   const cwd = input.cwd ?? process.cwd();
-  if (!command) process.exit(0);
+  if (!command) {
+    process.exit(0);
+  }
 
   // Only intercept git commit commands
-  if (!/(?:^|\s|&&|\|)git\s+commit(?:\s|$)/.test(command)) process.exit(0);
+  if (!/(?:^|\s|&&|\|)git\s+commit(?:\s|$)/.test(command)) {
+    process.exit(0);
+  }
 
   const projectRoot = findProjectRoot(cwd, ['package.json']);
-  if (!projectRoot) process.exit(0);
+  if (!projectRoot) {
+    process.exit(0);
+  }
 
   // --- Secret scanning (hard block) ---
   try {

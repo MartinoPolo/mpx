@@ -43,7 +43,9 @@ const DEFAULT_MAX_CONCURRENT = 4;
  * (RPC callers send arbitrary JSON: null, numbers, file paths).
  */
 function assertValidSpawnCwd(cwd: unknown): asserts cwd is string | undefined | null {
-  if (cwd == null) return;
+  if (cwd == null) {
+    return;
+  }
   if (typeof cwd !== 'string' || !isAbsolute(cwd)) {
     throw new Error(`SpawnOptions.cwd must be an absolute path: "${String(cwd)}"`);
   }
@@ -294,7 +296,9 @@ export class AgentManager {
 
     record.status = 'running';
     record.startedAt = Date.now();
-    if (occupiesPoolSlot(record)) this.runningBackground++;
+    if (occupiesPoolSlot(record)) {
+      this.runningBackground++;
+    }
     this.onStart?.(record);
 
     // Wire parent abort signal to stop the subagent when the parent is interrupted
@@ -326,7 +330,9 @@ export class AgentManager {
       configCwd: options.configCwd ?? (customCwd !== undefined ? ctx.cwd : undefined),
       signal: record.abortController!.signal,
       onToolActivity: (activity) => {
-        if (activity.type === 'end') record.toolUses++;
+        if (activity.type === 'end') {
+          record.toolUses++;
+        }
         options.onToolActivity?.(activity);
       },
       onTurnEnd: options.onTurnEnd,
@@ -415,7 +421,9 @@ export class AgentManager {
             /* ignore completion side-effect errors */
           }
         } else {
-          if (occupiesPoolSlot(record)) this.runningBackground--;
+          if (occupiesPoolSlot(record)) {
+            this.runningBackground--;
+          }
           try {
             this.onComplete?.(record);
           } catch {
@@ -463,7 +471,9 @@ export class AgentManager {
           record.resultConsumed = true;
           this.onComplete?.(record);
         } else {
-          if (occupiesPoolSlot(record)) this.runningBackground--;
+          if (occupiesPoolSlot(record)) {
+            this.runningBackground--;
+          }
           this.onComplete?.(record);
           this.drainQueue();
         }
@@ -486,7 +496,9 @@ export class AgentManager {
    */
   private abortOwnedChildren(parentId: string): void {
     for (const [id, record] of this.agents) {
-      if (record.parentAgentId === parentId) this.abort(id);
+      if (record.parentAgentId === parentId) {
+        this.abort(id);
+      }
     }
   }
 
@@ -495,7 +507,9 @@ export class AgentManager {
     while (this.queue.length > 0 && this.runningBackground < this.maxConcurrent) {
       const next = this.queue.shift()!;
       const record = this.agents.get(next.id);
-      if (!record || record.status !== 'queued') continue;
+      if (!record || record.status !== 'queued') {
+        continue;
+      }
       try {
         this.startAgent(next.id, record, next.args);
       } catch (err) {
@@ -554,7 +568,9 @@ export class AgentManager {
    */
   async resume(id: string, prompt: string, signal?: AbortSignal): Promise<AgentRecord | undefined> {
     const record = this.agents.get(id);
-    if (!record?.session) return undefined;
+    if (!record?.session) {
+      return undefined;
+    }
 
     record.status = 'running';
     record.startedAt = Date.now();
@@ -565,7 +581,9 @@ export class AgentManager {
     try {
       const { text, failure } = await resumeAgent(record.session, prompt, {
         onToolActivity: (activity) => {
-          if (activity.type === 'end') record.toolUses++;
+          if (activity.type === 'end') {
+            record.toolUses++;
+          }
         },
         onAssistantUsage: (usage) => {
           addUsage(record.lifetimeUsage, usage);
@@ -579,7 +597,9 @@ export class AgentManager {
       // Same contract as the spawn path (#144): a failed final turn is an
       // error, not a completion — but the resumed text stays available.
       record.status = failure ? 'error' : 'completed';
-      if (failure) record.error = failure;
+      if (failure) {
+        record.error = failure;
+      }
       record.result = text;
       record.completedAt = Date.now();
     } catch (err) {
@@ -605,12 +625,18 @@ export class AgentManager {
    */
   steer(id: string, message: string): boolean {
     const record = this.agents.get(id);
-    if (!record) return false;
-    if (record.status !== 'running' && record.status !== 'queued') return false;
+    if (!record) {
+      return false;
+    }
+    if (record.status !== 'running' && record.status !== 'queued') {
+      return false;
+    }
     if (record.session) {
       record.session.steer(message).catch(() => {});
     } else {
-      if (!record.pendingSteers) record.pendingSteers = [];
+      if (!record.pendingSteers) {
+        record.pendingSteers = [];
+      }
       record.pendingSteers.push(message);
     }
     return true;
@@ -626,7 +652,9 @@ export class AgentManager {
 
   abort(id: string): boolean {
     const record = this.agents.get(id);
-    if (!record) return false;
+    if (!record) {
+      return false;
+    }
 
     // Remove from queue if queued
     if (record.status === 'queued') {
@@ -638,7 +666,9 @@ export class AgentManager {
       return true;
     }
 
-    if (record.status !== 'running') return false;
+    if (record.status !== 'running') {
+      return false;
+    }
     record.abortController?.abort();
     record.status = 'stopped';
     record.completedAt = Date.now();
@@ -655,8 +685,12 @@ export class AgentManager {
   private cleanup() {
     const cutoff = Date.now() - 10 * 60_000;
     for (const [id, record] of this.agents) {
-      if (record.status === 'running' || record.status === 'queued') continue;
-      if ((record.completedAt ?? 0) >= cutoff) continue;
+      if (record.status === 'running' || record.status === 'queued') {
+        continue;
+      }
+      if ((record.completedAt ?? 0) >= cutoff) {
+        continue;
+      }
       this.removeRecord(id, record);
     }
   }
@@ -669,8 +703,12 @@ export class AgentManager {
    */
   clearCompleted(skipUnconsumed = false): void {
     for (const [id, record] of this.agents) {
-      if (record.status === 'running' || record.status === 'queued') continue;
-      if (skipUnconsumed && !record.resultConsumed) continue;
+      if (record.status === 'running' || record.status === 'queued') {
+        continue;
+      }
+      if (skipUnconsumed && !record.resultConsumed) {
+        continue;
+      }
       this.removeRecord(id, record);
     }
   }
@@ -717,7 +755,9 @@ export class AgentManager {
         .filter((r) => r.status === 'running' || r.status === 'queued')
         .map((r) => r.promise)
         .filter(Boolean);
-      if (pending.length === 0) break;
+      if (pending.length === 0) {
+        break;
+      }
       await Promise.allSettled(pending);
     }
   }

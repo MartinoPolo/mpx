@@ -9,6 +9,8 @@ export function formatTokensK(tokens: number): string {
 /** ISO-8601 -> local `HH:MM`. */
 export function formatClock(timestamp: string): string {
   const at = new Date(timestamp);
-  if (Number.isNaN(at.getTime())) return '';
+  if (Number.isNaN(at.getTime())) {
+    return '';
+  }
   return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
 }

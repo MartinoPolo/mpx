@@ -25,7 +25,9 @@ function main() {
   process.stdin.on('error', () => {});
 
   const found = ROOTS.filter(([name]) => (process.env[name] ?? '').trim());
-  if (!found.length) process.exit(0);
+  if (!found.length) {
+    process.exit(0);
+  }
 
   const lines = ['Machine roots (from MPX_* env vars — use these instead of guessing paths):'];
   for (const [name, label] of found) {

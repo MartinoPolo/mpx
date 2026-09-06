@@ -19,7 +19,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import {
   defineTool,
   type ExtensionAPI,
@@ -342,14 +342,18 @@ export default function (pi: ExtensionAPI) {
   // Child AgentSessions load normal extensions. Re-entering this extension there
   // would create another manager and leak handlers. Nested orchestration is
   // injected as scoped custom tools by the existing manager instead.
-  if (inChildSessionContext()) return;
+  if (inChildSessionContext()) {
+    return;
+  }
 
   // ---- Register custom notification renderer ----
   pi.registerMessageRenderer<NotificationDetails>(
     'subagent-notification',
     (message, { expanded }, theme) => {
       const d = message.details;
-      if (!d) return undefined;
+      if (!d) {
+        return undefined;
+      }
 
       function renderOne(d: NotificationDetails): string {
         const isError = d.status === 'error' || d.status === 'stopped' || d.status === 'aborted';
@@ -365,10 +369,18 @@ export default function (pi: ExtensionAPI) {
 
         // Line 2: stats
         const parts: string[] = [];
-        if (d.turnCount > 0) parts.push(formatTurns(d.turnCount, d.maxTurns));
-        if (d.toolUses > 0) parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? '' : 's'}`);
-        if (d.totalTokens > 0) parts.push(formatTokens(d.totalTokens));
-        if (d.durationMs > 0) parts.push(formatMs(d.durationMs));
+        if (d.turnCount > 0) {
+          parts.push(formatTurns(d.turnCount, d.maxTurns));
+        }
+        if (d.toolUses > 0) {
+          parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? '' : 's'}`);
+        }
+        if (d.totalTokens > 0) {
+          parts.push(formatTokens(d.totalTokens));
+        }
+        if (d.durationMs > 0) {
+          parts.push(formatMs(d.durationMs));
+        }
         if (parts.length) {
           line +=
             '\n  ' + parts.map((p) => theme.fg('dim', p)).join(' ' + theme.fg('dim', '·') + ' ');
@@ -377,7 +389,9 @@ export default function (pi: ExtensionAPI) {
         // Line 3: result preview (collapsed) or full (expanded)
         if (expanded) {
           const lines = d.resultPreview.split('\n').slice(0, 30);
-          for (const l of lines) line += '\n' + theme.fg('dim', `  ${l}`);
+          for (const l of lines) {
+            line += '\n' + theme.fg('dim', `  ${l}`);
+          }
         } else {
           const preview = d.resultPreview.split('\n')[0]?.slice(0, 80) ?? '';
           line += '\n  ' + theme.fg('dim', `⎿  ${preview}`);
@@ -423,7 +437,9 @@ export default function (pi: ExtensionAPI) {
 
   // ---- Individual nudge helper (async join mode) ----
   function emitIndividualNudge(record: AgentRecord, triggerTurn: boolean) {
-    if (record.resultConsumed) return; // re-check at send time
+    if (record.resultConsumed) {
+      return;
+    } // re-check at send time
 
     const notification = formatTaskNotification(record, 500);
     const footer = record.outputFile ? `\nFull transcript available at: ${record.outputFile}` : '';
@@ -529,7 +545,9 @@ export default function (pi: ExtensionAPI) {
     (record) => {
       // Nested children report only through their owning parent's scoped tools.
       // Keep them out of top-level lifecycle, transcript, notification, and UI channels.
-      if (record.parentAgentId) return;
+      if (record.parentAgentId) {
+        return;
+      }
 
       try {
         // Emit lifecycle event based on terminal status
@@ -584,7 +602,9 @@ export default function (pi: ExtensionAPI) {
     undefined,
     (record) => {
       syncBackgroundAgentsActive();
-      if (record.parentAgentId) return;
+      if (record.parentAgentId) {
+        return;
+      }
       // Emit started event when agent transitions to running (including from queue)
       pi.events.emit('subagents:started', {
         id: record.id,
@@ -593,7 +613,9 @@ export default function (pi: ExtensionAPI) {
       });
     },
     (record, info) => {
-      if (record.parentAgentId) return;
+      if (record.parentAgentId) {
+        return;
+      }
       // Emit compacted event when agent's session compacts (preserves count on record).
       pi.events.emit('subagents:compacted', {
         id: record.id,
@@ -624,7 +646,7 @@ export default function (pi: ExtensionAPI) {
   // Process-external callers may supply arbitrary options. Nested ownership and
   // config-root metadata are internal capabilities issued only by scoped tools.
   const spawnTopLevel = (piRef: any, ctxRef: any, type: string, prompt: string, options: any) => {
-    const safeOptions = { ...(options ?? {}) };
+    const safeOptions = { ...options };
     delete safeOptions.parentAgentId;
     delete safeOptions.depth;
     delete safeOptions.maxSubagentDepth;
@@ -668,7 +690,9 @@ export default function (pi: ExtensionAPI) {
   function startScheduler(ctx: ExtensionContext) {
     try {
       const sessionId = ctx.sessionManager?.getSessionId?.();
-      if (!sessionId) return; // sessionId not yet available — try again on next event
+      if (!sessionId) {
+        return;
+      } // sessionId not yet available — try again on next event
       const path = resolveStorePath(ctx.cwd, sessionId);
       const store = new ScheduleStore(path);
       scheduler.start(pi, ctx, manager, store);
@@ -706,7 +730,9 @@ export default function (pi: ExtensionAPI) {
       // also avoids the race where a consumer loaded after us misses the event.
       pi.events.emit('subagents:ready', {});
     }
-    if (isSchedulingEnabled() && !scheduler.isActive()) startScheduler(ctx);
+    if (isSchedulingEnabled() && !scheduler.isActive()) {
+      startScheduler(ctx);
+    }
   });
 
   pi.on('session_before_switch', () => {
@@ -838,7 +864,9 @@ export default function (pi: ExtensionAPI) {
       // so we feed them into the group now.
       for (const id of ids) {
         const record = manager.getRecord(id);
-        if (!record) continue;
+        if (!record) {
+          continue;
+        }
         record.groupId = groupId;
         if (record.completedAt != null && !record.resultConsumed) {
           groupJoin.onAgentComplete(record);
@@ -866,7 +894,9 @@ export default function (pi: ExtensionAPI) {
   /** Format an agent's tool scope: "*" when it has all built-ins, else a comma-separated list. */
   const formatToolsSuffix = (cfg: AgentConfig | undefined): string => {
     const tools = cfg?.builtinToolNames;
-    if (!tools || tools.length === 0) return '*';
+    if (!tools || tools.length === 0) {
+      return '*';
+    }
     const isFullSet =
       tools.length === BUILTIN_TOOL_NAMES.length &&
       BUILTIN_TOOL_NAMES.every((t) => tools.includes(t));
@@ -1027,7 +1057,9 @@ Terse command-style prompts produce shallow, generic work.
     };
     // Replacement callback (not a string) — agent descriptions may contain `$&` etc.
     return template.replace(/\{\{(\w+)\}\}/g, (raw, name: string) => {
-      if (vars[name]) return vars[name]();
+      if (vars[name]) {
+        return vars[name]();
+      }
       console.warn(
         `[pi-subagents] agent-tool-description.md: unknown placeholder ${raw} left as-is`,
       );
@@ -1041,9 +1073,13 @@ Terse command-style prompts produce shallow, generic work.
       join(getAgentDir(), 'agent-tool-description.md'),
     ]) {
       try {
-        if (!existsSync(path)) continue;
+        if (!existsSync(path)) {
+          continue;
+        }
         const text = readFileSync(path, 'utf-8').trim();
-        if (text) return renderToolDescriptionTemplate(text);
+        if (text) {
+          return renderToolDescriptionTemplate(text);
+        }
         console.warn(`[pi-subagents] ${path} is empty — ignoring`);
       } catch (err) {
         console.warn(
@@ -1056,10 +1092,14 @@ Terse command-style prompts produce shallow, generic work.
 
   const agentToolDescription = (() => {
     const mode = getToolDescriptionMode();
-    if (mode === 'compact') return compactAgentToolDescription;
+    if (mode === 'compact') {
+      return compactAgentToolDescription;
+    }
     if (mode === 'custom') {
       const custom = loadCustomToolDescription();
-      if (custom) return custom;
+      if (custom) {
+        return custom;
+      }
       console.warn(
         '[pi-subagents] toolDescriptionMode is "custom" but no agent-tool-description.md found — using "full"',
       );
@@ -1162,13 +1202,21 @@ Terse command-style prompts produce shallow, generic work.
         // Helper: build "haiku · thinking: high · turn 5/30 · 3 tool uses · 33.8k tokens" stats string
         const stats = (d: AgentDetails) => {
           const parts: string[] = [];
-          if (d.modelName) parts.push(d.modelName);
-          if (d.tags) parts.push(...d.tags);
+          if (d.modelName) {
+            parts.push(d.modelName);
+          }
+          if (d.tags) {
+            parts.push(...d.tags);
+          }
           if (d.turnCount != null && d.turnCount > 0) {
             parts.push(formatTurns(d.turnCount, d.maxTurns));
           }
-          if (d.toolUses > 0) parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? '' : 's'}`);
-          if (d.tokens) parts.push(d.tokens);
+          if (d.toolUses > 0) {
+            parts.push(`${d.toolUses} tool use${d.toolUses === 1 ? '' : 's'}`);
+          }
+          if (d.tokens) {
+            parts.push(d.tokens);
+          }
           return parts
             .map((p) => fgPreservingNestedStyles(theme, 'dim', p))
             .join(' ' + theme.fg('dim', '·') + ' ');
@@ -1266,7 +1314,9 @@ Terse command-style prompts produce shallow, generic work.
         if (resolvedConfig.modelInput) {
           const resolved = resolveModel(resolvedConfig.modelInput, ctx.modelRegistry);
           if (typeof resolved === 'string') {
-            if (resolvedConfig.modelFromParams) return textResult(resolved);
+            if (resolvedConfig.modelFromParams) {
+              return textResult(resolved);
+            }
             // config-specified: silent fallback to parent
           } else {
             model = resolved;
@@ -1284,8 +1334,12 @@ Terse command-style prompts produce shallow, generic work.
           agentLabel: customConfig?.displayName ?? subagentType,
           modelInput: resolvedConfig.modelInput,
         });
-        if (scopeVerdict.kind === 'error') return textResult(scopeVerdict.message);
-        if (scopeVerdict.kind === 'warn') ctx.ui.notify(scopeVerdict.message, 'warning');
+        if (scopeVerdict.kind === 'error') {
+          return textResult(scopeVerdict.message);
+        }
+        if (scopeVerdict.kind === 'warn') {
+          ctx.ui.notify(scopeVerdict.message, 'warning');
+        }
 
         const thinking = resolvedConfig.thinking;
         const inheritContext = resolvedConfig.inheritContext;
@@ -1299,7 +1353,9 @@ Terse command-style prompts produce shallow, generic work.
         // path can re-enable the transcript by accident.
         const outputTranscript = customConfig?.outputTranscript ?? getOutputTranscriptDefault();
         const attachTranscript = (rec: AgentRecord | undefined, agentId: string): void => {
-          if (!rec || !outputTranscript) return;
+          if (!rec || !outputTranscript) {
+            return;
+          }
           rec.outputFile = createOutputFilePath(
             ctx.cwd,
             agentId,
@@ -1469,7 +1525,9 @@ Terse command-style prompts produce shallow, generic work.
             currentBatchAgents.push({ id, joinMode });
             // Debounce: reset timer on each new agent so parallel tool calls
             // dispatched across multiple event loop ticks are captured together
-            if (batchFinalizeTimer) clearTimeout(batchFinalizeTimer);
+            if (batchFinalizeTimer) {
+              clearTimeout(batchFinalizeTimer);
+            }
             batchFinalizeTimer = setTimeout(finalizeBatch, 100);
           }
 
@@ -1635,7 +1693,9 @@ Terse command-style prompts produce shallow, generic work.
 
         const durationMs = (record.completedAt ?? Date.now()) - record.startedAt;
         const statsParts = [`${record.toolUses} tool uses`];
-        if (tokenText) statsParts.push(tokenText);
+        if (tokenText) {
+          statsParts.push(tokenText);
+        }
         return textResult(
           `${fallbackNote}Agent completed in ${formatMs(durationMs)} (${statsParts.join(', ')})${getForegroundOutcomeNote(record.status)}.\n\n` +
             (record.result?.trim() || 'No output.'),
@@ -1689,7 +1749,9 @@ Terse command-style prompts produce shallow, generic work.
               signal,
             );
           }
-          if (record.promise) await abortable(record.promise, signal);
+          if (record.promise) {
+            await abortable(record.promise, signal);
+          }
         }
 
         const displayName = getDisplayName(record.type);
@@ -1697,9 +1759,15 @@ Terse command-style prompts produce shallow, generic work.
         const tokens = formatLifetimeTokens(record);
         const contextPercent = getSessionContextPercent(record.session);
         const statsParts = [`Tool uses: ${record.toolUses}`];
-        if (tokens) statsParts.push(tokens);
-        if (contextPercent !== null) statsParts.push(`Context: ${Math.round(contextPercent)}%`);
-        if (record.compactionCount) statsParts.push(`Compactions: ${record.compactionCount}`);
+        if (tokens) {
+          statsParts.push(tokens);
+        }
+        if (contextPercent !== null) {
+          statsParts.push(`Context: ${Math.round(contextPercent)}%`);
+        }
+        if (record.compactionCount) {
+          statsParts.push(`Compactions: ${record.compactionCount}`);
+        }
         statsParts.push(`Duration: ${duration}`);
 
         let output =
@@ -1764,7 +1832,9 @@ Terse command-style prompts produce shallow, generic work.
         }
         if (!record.session) {
           // Session not ready yet — queue the steer for delivery once initialized
-          if (!record.pendingSteers) record.pendingSteers = [];
+          if (!record.pendingSteers) {
+            record.pendingSteers = [];
+          }
           record.pendingSteers.push(params.message);
           pi.events.emit('subagents:steered', { id: record.id, message: params.message });
           return textResult(
@@ -1778,14 +1848,18 @@ Terse command-style prompts produce shallow, generic work.
           const tokens = formatLifetimeTokens(record);
           const contextPercent = getSessionContextPercent(record.session);
           const stateParts: string[] = [];
-          if (tokens) stateParts.push(tokens);
+          if (tokens) {
+            stateParts.push(tokens);
+          }
           stateParts.push(`${record.toolUses} tool ${record.toolUses === 1 ? 'use' : 'uses'}`);
-          if (contextPercent !== null)
+          if (contextPercent !== null) {
             stateParts.push(`context ${Math.round(contextPercent)}% full`);
-          if (record.compactionCount)
+          }
+          if (record.compactionCount) {
             stateParts.push(
               `${record.compactionCount} compaction${record.compactionCount === 1 ? '' : 's'}`,
             );
+          }
           return textResult(
             `Steering message sent to agent ${record.id}. The agent will process it after its current tool execution.\n` +
               `Current state: ${stateParts.join(' · ')}`,
@@ -1829,13 +1903,19 @@ Terse command-style prompts produce shallow, generic work.
 
   function getModelLabel(type: string, registry?: ModelRegistry): string {
     const cfg = getAgentConfig(type);
-    if (!cfg?.model) return 'inherit'; // no model configured → really inherits parent
+    if (!cfg?.model) {
+      return 'inherit';
+    } // no model configured → really inherits parent
     const label = getModelLabelFromConfig(cfg.model);
-    if (!registry) return label;
+    if (!registry) {
+      return label;
+    }
     const resolved = resolveModel(cfg.model, registry);
     // Configured but unresolvable: the runtime silently falls back to the parent
     // model, so flag it (and the fallback) rather than hiding the config.
-    if (typeof resolved === 'string') return `${label} (unavailable, fallback: inherit)`;
+    if (typeof resolved === 'string') {
+      return `${label} (unavailable, fallback: inherit)`;
+    }
     // Surface what it actually resolved to when that differs from the config —
     // e.g. a provider fallback or a looser version pin. Cosmetic separator/date
     // differences are normalized away so an effectively-identical match stays quiet.
@@ -1845,7 +1925,9 @@ Terse command-style prompts produce shallow, generic work.
         .toLowerCase()
         .replace(/\./g, '-')
         .replace(/-\d{8}$/, '');
-    if (norm(cfg.model) === norm(resolvedFull)) return label;
+    if (norm(cfg.model) === norm(resolvedFull)) {
+      return label;
+    }
     return `${label} (→ ${resolvedFull.replace(/-\d{8}$/, '')})`;
   }
 
@@ -1891,7 +1973,9 @@ Terse command-style prompts produce shallow, generic work.
     }
 
     const choice = await ctx.ui.select('Agents', options);
-    if (!choice) return;
+    if (!choice) {
+      return;
+    }
 
     if (choice.startsWith('Running agents (')) {
       await showRunningAgents(ctx);
@@ -1921,9 +2005,15 @@ Terse command-style prompts produce shallow, generic work.
     // Disabled agents get ✕ prefix
     const sourceIndicator = (cfg: AgentConfig | undefined) => {
       const disabled = cfg?.enabled === false;
-      if (cfg?.source === 'project') return disabled ? '✕• ' : '•  ';
-      if (cfg?.source === 'global') return disabled ? '✕◦ ' : '◦  ';
-      if (disabled) return '✕  ';
+      if (cfg?.source === 'project') {
+        return disabled ? '✕• ' : '•  ';
+      }
+      if (cfg?.source === 'global') {
+        return disabled ? '✕◦ ' : '◦  ';
+      }
+      if (disabled) {
+        return '✕  ';
+      }
       return '   ';
     };
 
@@ -1951,8 +2041,12 @@ Terse command-style prompts produce shallow, generic work.
     });
     const hasDisabled = allNames.some((n) => getAgentConfig(n)?.enabled === false);
     const legendParts: string[] = [];
-    if (hasCustom) legendParts.push('• = project  ◦ = global');
-    if (hasDisabled) legendParts.push('✕ = disabled');
+    if (hasCustom) {
+      legendParts.push('• = project  ◦ = global');
+    }
+    if (hasDisabled) {
+      legendParts.push('✕ = disabled');
+    }
 
     const selected = await ctx.ui.custom<string | undefined>((_tui, _theme, _kb, done) => {
       const slTheme = getSettingsListTheme();
@@ -1965,8 +2059,9 @@ Terse command-style prompts produce shallow, generic work.
       );
       const container = new Container();
       container.addChild(new Text('Agent types', 0, 0));
-      if (legendParts.length)
+      if (legendParts.length) {
         container.addChild(new Text(slTheme.hint(legendParts.join('  ')), 0, 0));
+      }
       container.addChild(new Spacer(1));
       container.addChild(list);
       return {
@@ -1996,11 +2091,15 @@ Terse command-style prompts produce shallow, generic work.
     });
 
     const choice = await ctx.ui.select('Running agents', options);
-    if (!choice) return;
+    if (!choice) {
+      return;
+    }
 
     // Find the selected agent by matching the option index
     const idx = options.indexOf(choice);
-    if (idx < 0) return;
+    if (idx < 0) {
+      return;
+    }
     const record = agents[idx];
 
     await viewAgentConversation(ctx, record);
@@ -2075,7 +2174,9 @@ Terse command-style prompts produce shallow, generic work.
     }
 
     const choice = await ctx.ui.select(name, menuOptions);
-    if (!choice || choice === 'Back') return;
+    if (!choice || choice === 'Back') {
+      return;
+    }
 
     if (choice === 'Edit' && file) {
       const content = readExistingAgentFile(file);
@@ -2122,7 +2223,9 @@ Terse command-style prompts produce shallow, generic work.
       'Project (.pi/agents/)',
       `Personal (${personalAgentsDir()})`,
     ]);
-    if (!location) return;
+    if (!location) {
+      return;
+    }
 
     const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
     ensureAgentDirectory(targetDir);
@@ -2132,38 +2235,67 @@ Terse command-style prompts produce shallow, generic work.
     let allowExisting = false;
     if (destination.existing) {
       allowExisting = await ctx.ui.confirm('Overwrite', `${targetPath} already exists. Overwrite?`);
-      if (!allowExisting) return;
+      if (!allowExisting) {
+        return;
+      }
     }
 
     // Build the .md file content
     const fmFields: string[] = [];
     fmFields.push(`description: ${JSON.stringify(cfg.description)}`);
-    if (cfg.displayName) fmFields.push(`display_name: ${cfg.displayName}`);
+    if (cfg.displayName) {
+      fmFields.push(`display_name: ${cfg.displayName}`);
+    }
     fmFields.push(`tools: ${cfg.builtinToolNames?.join(', ') || 'all'}`);
-    if (cfg.model) fmFields.push(`model: ${cfg.model}`);
-    if (cfg.thinking) fmFields.push(`thinking: ${cfg.thinking}`);
-    if (cfg.maxTurns) fmFields.push(`max_turns: ${cfg.maxTurns}`);
+    if (cfg.model) {
+      fmFields.push(`model: ${cfg.model}`);
+    }
+    if (cfg.thinking) {
+      fmFields.push(`thinking: ${cfg.thinking}`);
+    }
+    if (cfg.maxTurns) {
+      fmFields.push(`max_turns: ${cfg.maxTurns}`);
+    }
     if (cfg.allowedSubagents !== undefined) {
       fmFields.push(
         `allowed_subagents: ${cfg.allowedSubagents === 'all' ? 'all' : cfg.allowedSubagents.join(', ')}`,
       );
     }
     fmFields.push(`prompt_mode: ${cfg.promptMode}`);
-    if (cfg.extensions === false) fmFields.push('extensions: false');
-    else if (Array.isArray(cfg.extensions))
+    if (cfg.extensions === false) {
+      fmFields.push('extensions: false');
+    } else if (Array.isArray(cfg.extensions)) {
       fmFields.push(`extensions: ${cfg.extensions.join(', ')}`);
-    if (cfg.excludeExtensions?.length)
+    }
+    if (cfg.excludeExtensions?.length) {
       fmFields.push(`exclude_extensions: ${cfg.excludeExtensions.join(', ')}`);
-    if (cfg.skills === false) fmFields.push('skills: false');
-    else if (Array.isArray(cfg.skills)) fmFields.push(`skills: ${cfg.skills.join(', ')}`);
-    if (cfg.disallowedTools?.length)
+    }
+    if (cfg.skills === false) {
+      fmFields.push('skills: false');
+    } else if (Array.isArray(cfg.skills)) {
+      fmFields.push(`skills: ${cfg.skills.join(', ')}`);
+    }
+    if (cfg.disallowedTools?.length) {
       fmFields.push(`disallowed_tools: ${cfg.disallowedTools.join(', ')}`);
-    if (cfg.inheritContext) fmFields.push('inherit_context: true');
-    if (cfg.runInBackground) fmFields.push('run_in_background: true');
-    if (cfg.outputTranscript === false) fmFields.push('output_transcript: false');
-    if (cfg.isolated) fmFields.push('isolated: true');
-    if (cfg.memory) fmFields.push(`memory: ${cfg.memory}`);
-    if (cfg.isolation) fmFields.push(`isolation: ${cfg.isolation}`);
+    }
+    if (cfg.inheritContext) {
+      fmFields.push('inherit_context: true');
+    }
+    if (cfg.runInBackground) {
+      fmFields.push('run_in_background: true');
+    }
+    if (cfg.outputTranscript === false) {
+      fmFields.push('output_transcript: false');
+    }
+    if (cfg.isolated) {
+      fmFields.push('isolated: true');
+    }
+    if (cfg.memory) {
+      fmFields.push(`memory: ${cfg.memory}`);
+    }
+    if (cfg.isolation) {
+      fmFields.push(`isolation: ${cfg.isolation}`);
+    }
 
     const content = `---\n${fmFields.join('\n')}\n---\n\n${cfg.systemPrompt}\n`;
 
@@ -2193,7 +2325,9 @@ Terse command-style prompts produce shallow, generic work.
       'Project (.pi/agents/)',
       `Personal (${personalAgentsDir()})`,
     ]);
-    if (!location) return;
+    if (!location) {
+      return;
+    }
 
     const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
     ensureAgentDirectory(targetDir);
@@ -2206,7 +2340,9 @@ Terse command-style prompts produce shallow, generic work.
   /** Enable a disabled agent by removing enabled: false from its frontmatter. */
   async function enableAgent(ctx: ExtensionCommandContext, name: string) {
     const file = findAgentFile(name);
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     const content = readExistingAgentFile(file);
     const updated = content.replace(/^(---\n)enabled: false\n/, '$1');
@@ -2228,7 +2364,9 @@ Terse command-style prompts produce shallow, generic work.
       'Project (.pi/agents/)',
       `Personal (${personalAgentsDir()})`,
     ]);
-    if (!location) return;
+    if (!location) {
+      return;
+    }
 
     const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
 
@@ -2236,7 +2374,9 @@ Terse command-style prompts produce shallow, generic work.
       'Generate with Claude (recommended)',
       'Manual configuration',
     ]);
-    if (!method) return;
+    if (!method) {
+      return;
+    }
 
     if (method.startsWith('Generate')) {
       await showGenerateWizard(ctx, targetDir);
@@ -2247,10 +2387,14 @@ Terse command-style prompts produce shallow, generic work.
 
   async function showGenerateWizard(ctx: ExtensionCommandContext, targetDir: string) {
     const description = await ctx.ui.input('Describe what this agent should do');
-    if (!description) return;
+    if (!description) {
+      return;
+    }
 
     const name = await ctx.ui.input('Agent name (filename, no spaces)');
-    if (!name) return;
+    if (!name) {
+      return;
+    }
 
     ensureAgentDirectory(targetDir);
 
@@ -2259,7 +2403,9 @@ Terse command-style prompts produce shallow, generic work.
     let allowExisting = false;
     if (destination.existing) {
       allowExisting = await ctx.ui.confirm('Overwrite', `${targetPath} already exists. Overwrite?`);
-      if (!allowExisting) return;
+      if (!allowExisting) {
+        return;
+      }
     }
 
     ctx.ui.notify('Generating agent definition...', 'info');
@@ -2325,11 +2471,15 @@ Return only the agent definition markdown.`;
   async function showManualWizard(ctx: ExtensionCommandContext, targetDir: string) {
     // 1. Name
     const name = await ctx.ui.input('Agent name (filename, no spaces)');
-    if (!name) return;
+    if (!name) {
+      return;
+    }
 
     // 2. Description
     const description = await ctx.ui.input('Description (one line)');
-    if (!description) return;
+    if (!description) {
+      return;
+    }
 
     // 3. Tools
     const toolChoice = await ctx.ui.select('Tools', [
@@ -2338,7 +2488,9 @@ Return only the agent definition markdown.`;
       'read-only (read, bash, grep, find, ls)',
       'custom...',
     ]);
-    if (!toolChoice) return;
+    if (!toolChoice) {
+      return;
+    }
 
     let tools: string;
     if (toolChoice === 'all') {
@@ -2352,7 +2504,9 @@ Return only the agent definition markdown.`;
         'Tools (comma-separated)',
         BUILTIN_TOOL_NAMES.join(', '),
       );
-      if (!customTools) return;
+      if (!customTools) {
+        return;
+      }
       tools = customTools;
     }
 
@@ -2364,28 +2518,41 @@ Return only the agent definition markdown.`;
       'opus',
       'custom...',
     ]);
-    if (!modelChoice) return;
+    if (!modelChoice) {
+      return;
+    }
 
     let modelLine = '';
-    if (modelChoice === 'haiku') modelLine = '\nmodel: anthropic/claude-haiku-4-5';
-    else if (modelChoice === 'sonnet') modelLine = '\nmodel: anthropic/claude-sonnet-4-6';
-    else if (modelChoice === 'opus') modelLine = '\nmodel: anthropic/claude-opus-4-6';
-    else if (modelChoice === 'custom...') {
+    if (modelChoice === 'haiku') {
+      modelLine = '\nmodel: anthropic/claude-haiku-4-5';
+    } else if (modelChoice === 'sonnet') {
+      modelLine = '\nmodel: anthropic/claude-sonnet-4-6';
+    } else if (modelChoice === 'opus') {
+      modelLine = '\nmodel: anthropic/claude-opus-4-6';
+    } else if (modelChoice === 'custom...') {
       const customModel = await ctx.ui.input('Model (provider/modelId)');
-      if (customModel) modelLine = `\nmodel: ${customModel}`;
+      if (customModel) {
+        modelLine = `\nmodel: ${customModel}`;
+      }
     }
 
     // 5. Thinking
     // "inherit" is a UI-only pseudo-choice (omit the field); the rest mirror pi.
     const thinkingChoice = await ctx.ui.select('Thinking level', ['inherit', ...THINKING_LEVELS]);
-    if (!thinkingChoice) return;
+    if (!thinkingChoice) {
+      return;
+    }
 
     let thinkingLine = '';
-    if (thinkingChoice !== 'inherit') thinkingLine = `\nthinking: ${thinkingChoice}`;
+    if (thinkingChoice !== 'inherit') {
+      thinkingLine = `\nthinking: ${thinkingChoice}`;
+    }
 
     // 6. System prompt
     const systemPrompt = await ctx.ui.editor('System prompt', '');
-    if (systemPrompt === undefined) return;
+    if (systemPrompt === undefined) {
+      return;
+    }
 
     // Build the file
     const content = `---
@@ -2404,7 +2571,9 @@ ${systemPrompt}
 
     if (destination.existing) {
       allowExisting = await ctx.ui.confirm('Overwrite', `${targetPath} already exists. Overwrite?`);
-      if (!allowExisting) return;
+      if (!allowExisting) {
+        return;
+      }
     }
 
     writeAgentFile(targetDir, name, content, allowExisting);
@@ -2582,7 +2751,9 @@ ${systemPrompt}
           ctx.ui.notify(`Scheduling already ${enabled ? 'enabled' : 'disabled'}.`, 'info');
         } else {
           setSchedulingEnabled(enabled);
-          if (!enabled) scheduler.stop(); // immediate kill — outstanding fires stop ticking
+          if (!enabled) {
+            scheduler.stop();
+          } // immediate kill — outstanding fires stop ticking
           notifyApplied(
             ctx,
             `Scheduling ${enabled ? 'enabled' : 'disabled'}. Tool spec change takes effect on next pi session.`,

@@ -24,10 +24,16 @@ async function agent(directory: string, name: string, description: string): Prom
 }
 
 function restoreEnvironment(): void {
-  if (originalCompiledDir === undefined) delete process.env.MPX_COMPILED_AGENTS_DIR;
-  else process.env.MPX_COMPILED_AGENTS_DIR = originalCompiledDir;
-  if (originalAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
-  else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+  if (originalCompiledDir === undefined) {
+    delete process.env.MPX_COMPILED_AGENTS_DIR;
+  } else {
+    process.env.MPX_COMPILED_AGENTS_DIR = originalCompiledDir;
+  }
+  if (originalAgentDir === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+  }
 }
 
 afterEach(restoreEnvironment);
@@ -134,7 +140,9 @@ test('lstats and realpaths every directory component and rejects simulated links
   const root = parse(target).root;
   const components = relative(root, target).split(sep).filter(Boolean);
   const paths = [root];
-  for (const component of components) paths.push(join(paths.at(-1)!, component));
+  for (const component of components) {
+    paths.push(join(paths.at(-1)!, component));
+  }
 
   for (const unsafeProperty of ['isSymbolicLink', 'isReparsePoint'] as const) {
     const lstatPaths: string[] = [];

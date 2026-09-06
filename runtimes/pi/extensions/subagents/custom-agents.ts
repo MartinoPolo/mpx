@@ -67,7 +67,9 @@ export function resolveCompiledAgentsDirectory(
   let current = root;
 
   for (const component of [undefined, ...components]) {
-    if (component !== undefined) current = join(current, component);
+    if (component !== undefined) {
+      current = join(current, component);
+    }
     const metadata = fileSystem.lstat(current);
     if (
       !metadata.isDirectory() ||
@@ -185,9 +187,13 @@ function nonNegativeInt(val: unknown): number | undefined {
  * Parse a raw CSV field value into items, or undefined if absent/empty/"none".
  */
 function parseCsvField(val: unknown): string[] | undefined {
-  if (val === undefined || val === null) return undefined;
+  if (val === undefined || val === null) {
+    return undefined;
+  }
   const s = String(val).trim();
-  if (!s || s === 'none') return undefined;
+  if (!s || s === 'none') {
+    return undefined;
+  }
   const items = s
     .split(',')
     .map((t) => t.trim())
@@ -205,9 +211,13 @@ function parseCsvField(val: unknown): string[] | undefined {
  * literally named "true", so the tools appear and every spawn is refused.
  */
 function parseAllowedSubagents(val: unknown): 'all' | string[] | undefined {
-  if (typeof val === 'boolean') return val ? 'all' : undefined;
+  if (typeof val === 'boolean') {
+    return val ? 'all' : undefined;
+  }
   const items = parseCsvField(val);
-  if (!items) return undefined;
+  if (!items) {
+    return undefined;
+  }
   return items.some((i) => i === '*' || i.toLowerCase() === 'all') ? 'all' : items;
 }
 
@@ -216,7 +226,9 @@ function parseAllowedSubagents(val: unknown): 'all' | string[] | undefined {
  * omitted → defaults; "none"/empty → []; csv → listed items.
  */
 function csvList(val: unknown, defaults: string[]): string[] {
-  if (val === undefined || val === null) return defaults;
+  if (val === undefined || val === null) {
+    return defaults;
+  }
   return parseCsvField(val) ?? [];
 }
 
@@ -255,7 +267,9 @@ function csvListOptional(val: unknown): string[] | undefined {
  * omitted → undefined; "user"/"project"/"local" → MemoryScope.
  */
 function parseMemory(val: unknown): MemoryScope | undefined {
-  if (val === 'user' || val === 'project' || val === 'local') return val;
+  if (val === 'user' || val === 'project' || val === 'local') {
+    return val;
+  }
   return undefined;
 }
 
@@ -264,8 +278,12 @@ function parseMemory(val: unknown): MemoryScope | undefined {
  * omitted/true → true (inherit all); false/"none"/empty → false; csv → listed names.
  */
 function inheritField(val: unknown): true | string[] | false {
-  if (val === undefined || val === null || val === true) return true;
-  if (val === false || val === 'none') return false;
+  if (val === undefined || val === null || val === true) {
+    return true;
+  }
+  if (val === false || val === 'none') {
+    return false;
+  }
   const items = csvList(val, []);
   return items.length > 0 ? items : false;
 }

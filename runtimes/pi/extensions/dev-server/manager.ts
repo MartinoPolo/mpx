@@ -88,8 +88,9 @@ export class DevServerManager {
     try {
       this.assertStartAllowed();
       const normalized = this.normalize(options);
-      if (this.#records.has(normalized.id))
+      if (this.#records.has(normalized.id)) {
         throw new Error(`Dev server '${normalized.id}' already exists.`);
+      }
       const now = this.runtime.now();
       const record: RecordState = {
         ...normalized,
@@ -142,7 +143,9 @@ export class DevServerManager {
   stop(id: string): Promise<DevServerSnapshot> {
     const record = this.require(id);
     // Interrupt an in-flight readiness wait before joining the mutation queue.
-    if (record.child !== null) record.stopRequested = true;
+    if (record.child !== null) {
+      record.stopRequested = true;
+    }
     return this.enqueue(record, async () => {
       await this.stopInternal(record);
       return this.snapshot(record);
@@ -150,8 +153,9 @@ export class DevServerManager {
   }
 
   restart(id: string): Promise<DevServerSnapshot> {
-    if (this.#shuttingDown)
+    if (this.#shuttingDown) {
       return Promise.reject(new Error('Dev server manager is shutting down.'));
+    }
     const record = this.require(id);
     return this.enqueue(record, async () => {
       this.assertStartAllowed();
@@ -162,11 +166,15 @@ export class DevServerManager {
   }
 
   shutdown(): Promise<void> {
-    if (this.#shutdownPromise !== undefined) return this.#shutdownPromise;
+    if (this.#shutdownPromise !== undefined) {
+      return this.#shutdownPromise;
+    }
     this.#shuttingDown = true;
     const records = [...this.#records.values()];
     for (const record of records) {
-      if (record.child !== null) record.stopRequested = true;
+      if (record.child !== null) {
+        record.stopRequested = true;
+      }
     }
     const readinessTasks = records.flatMap((record) =>
       record.readinessTask === null ? [] : [record.readinessTask],
@@ -225,13 +233,19 @@ export class DevServerManager {
     record.child = child;
     record.pid = child.pid;
     child.stdout.on('data', (chunk: Uint8Array) => {
-      if (record.generation === generation) record.logs.write('stdout', chunk);
+      if (record.generation === generation) {
+        record.logs.write('stdout', chunk);
+      }
     });
     child.stderr.on('data', (chunk: Uint8Array) => {
-      if (record.generation === generation) record.logs.write('stderr', chunk);
+      if (record.generation === generation) {
+        record.logs.write('stderr', chunk);
+      }
     });
     const handleStreamError = (stream: 'stdout' | 'stderr', error: Error): void => {
-      if (record.generation !== generation) return;
+      if (record.generation !== generation) {
+        return;
+      }
       record.lastError = `${stream} stream: ${error.message}`;
       this.emit(record);
     };
@@ -239,7 +253,9 @@ export class DevServerManager {
     child.stderr.on('error', (error: Error) => handleStreamError('stderr', error));
     child.onClose((exit) => this.handleClose(record, generation, exit));
     child.onError?.((error) => {
-      if (record.generation !== generation) return;
+      if (record.generation !== generation) {
+        return;
+      }
       record.lastError = error.message;
       this.emit(record);
     });
@@ -252,12 +268,16 @@ export class DevServerManager {
       record.readinessTask = task;
       void task
         .catch((error) => {
-          if (record.generation !== generation || record.state !== 'starting') return;
+          if (record.generation !== generation || record.state !== 'starting') {
+            return;
+          }
           record.lastError = error instanceof Error ? error.message : String(error);
           this.emit(record);
         })
         .finally(() => {
-          if (record.readinessTask === task) record.readinessTask = null;
+          if (record.readinessTask === task) {
+            record.readinessTask = null;
+          }
         });
     }
     return this.snapshot(record);
@@ -272,8 +292,9 @@ export class DevServerManager {
       const results = await Promise.all(
         record.ports.map(async (port) => ({ port, ready: await this.runtime.probe(port) })),
       );
-      if (record.generation !== generation || record.state !== 'starting' || record.stopRequested)
+      if (record.generation !== generation || record.state !== 'starting' || record.stopRequested) {
         return;
+      }
       const readyPorts = results.filter((result) => result.ready).map((result) => result.port);
       if (!sameNumbers(record.readyPorts, readyPorts)) {
         record.readyPorts = readyPorts;
@@ -288,7 +309,9 @@ export class DevServerManager {
   }
 
   private markReady(record: RecordState, generation: number, ports: readonly number[]): void {
-    if (record.generation !== generation || record.state !== 'starting') return;
+    if (record.generation !== generation || record.state !== 'starting') {
+      return;
+    }
     record.state = 'ready';
     record.readyPorts = [...ports];
     record.readyAt = this.runtime.now();
@@ -296,7 +319,9 @@ export class DevServerManager {
   }
 
   private handleClose(record: RecordState, generation: number, exit: ProcessExit): void {
-    if (record.generation !== generation) return;
+    if (record.generation !== generation) {
+      return;
+    }
     const stopRequested = record.stopRequested;
     record.stopRequested = true;
     record.logs.flush();
@@ -322,7 +347,9 @@ export class DevServerManager {
 
   private async stopInternal(record: RecordState): Promise<void> {
     const child = record.child;
-    if (child === null || record.state === 'stopped' || record.state === 'crashed') return;
+    if (child === null || record.state === 'stopped' || record.state === 'crashed') {
+      return;
+    }
     record.stopRequested = true;
     try {
       await this.runtime.stop(child);
@@ -387,9 +414,15 @@ export class DevServerManager {
     const id = options.id.trim();
     const command = options.command.trim();
     const cwd = options.cwd.trim();
-    if (id === '') throw new Error('Dev server id is required.');
-    if (command === '') throw new Error('Dev server command is required.');
-    if (cwd === '') throw new Error('Dev server cwd is required.');
+    if (id === '') {
+      throw new Error('Dev server id is required.');
+    }
+    if (command === '') {
+      throw new Error('Dev server command is required.');
+    }
+    if (cwd === '') {
+      throw new Error('Dev server cwd is required.');
+    }
     const ports = [...new Set(options.ports ?? [])];
     if (ports.some((port) => !Number.isInteger(port) || port < 1 || port > 65535)) {
       throw new Error('Dev server ports must be integers from 1 through 65535.');
@@ -399,12 +432,16 @@ export class DevServerManager {
 
   private require(id: string): RecordState {
     const record = this.#records.get(id);
-    if (record === undefined) throw new Error(`Unknown dev server '${id}'.`);
+    if (record === undefined) {
+      throw new Error(`Unknown dev server '${id}'.`);
+    }
     return record;
   }
 
   private assertStartAllowed(): void {
-    if (this.#shuttingDown) throw new Error('Dev server manager is shutting down.');
+    if (this.#shuttingDown) {
+      throw new Error('Dev server manager is shutting down.');
+    }
   }
 }
 

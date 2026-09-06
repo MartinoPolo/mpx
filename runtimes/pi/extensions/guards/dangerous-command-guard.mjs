@@ -58,7 +58,7 @@ export function checkDangerousCommand(command) {
 
       if (target) {
         // Block: /, ~, ., .., *
-        if (/^[\/~.*]$/.test(target) || target === '..') {
+        if (/^[/~.*]$/.test(target) || target === '..') {
           return blocked('broad recursive deletion', command);
         }
 
@@ -82,7 +82,7 @@ export function checkDangerousCommand(command) {
   }
 
   // 3. Permission destruction on broad paths
-  if (/\bchmod\s+(-R\s+)?(777|000)\s+[\/~.]/.test(trimmed)) {
+  if (/\bchmod\s+(-R\s+)?(777|000)\s+[/~.]/.test(trimmed)) {
     return blocked('broad permission change', command);
   }
 
@@ -160,7 +160,9 @@ function blocked(reason, command) {
 async function main() {
   const input = await readStdin();
   const command = input.tool_input?.command ?? '';
-  if (!command) process.exit(0);
+  if (!command) {
+    process.exit(0);
+  }
 
   const result = checkDangerousCommand(command);
   if (result.blocked) {

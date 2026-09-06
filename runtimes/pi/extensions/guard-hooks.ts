@@ -131,9 +131,13 @@ function runProcess(
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
     const finish = (outcome: HookScriptOutcome) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
       resolveOutcome(outcome);
     };
 
@@ -212,7 +216,9 @@ function dispatchGuardScript(
   runScript: HookScriptRunner,
   hooksDirectory: string,
 ): Promise<HookScriptOutcome | null> {
-  if (!trusted && TRUSTED_PROJECT_GUARD_SCRIPTS.has(fileName)) return Promise.resolve(null);
+  if (!trusted && TRUSTED_PROJECT_GUARD_SCRIPTS.has(fileName)) {
+    return Promise.resolve(null);
+  }
   return runScript(
     join(hooksDirectory, fileName),
     stdinPayload,
@@ -229,8 +235,12 @@ function truncateReason(text: string): string {
 }
 
 function describeInfrastructureFailure(fileName: string, outcome: HookScriptOutcome): string {
-  if (outcome.timedOut) return `${fileName} timed out`;
-  if (outcome.spawnErrorMessage) return `${fileName} could not run (${outcome.spawnErrorMessage})`;
+  if (outcome.timedOut) {
+    return `${fileName} timed out`;
+  }
+  if (outcome.spawnErrorMessage) {
+    return `${fileName} could not run (${outcome.spawnErrorMessage})`;
+  }
   return `${fileName} exited ${outcome.exitCode}`;
 }
 
@@ -263,7 +273,9 @@ export async function evaluateBashGuards(
       runScript,
       hooksDirectory,
     );
-    if (!outcome) continue;
+    if (!outcome) {
+      continue;
+    }
 
     if (outcome.exitCode === BLOCKING_EXIT_CODE) {
       return {
@@ -285,7 +297,9 @@ export async function evaluateBashGuards(
     }
 
     const advisory = outcome.stderr.trim();
-    if (guard.surfaceSuccessfulStderr && advisory) advisories.push(advisory);
+    if (guard.surfaceSuccessfulStderr && advisory) {
+      advisories.push(advisory);
+    }
   }
 
   return { blocked: false, advisories };
@@ -299,7 +313,9 @@ export async function evaluateBashGuards(
  * (`dist/core/tools/bash.js:343-344`).
  */
 export function deriveBashExitCode(outputText: string, isError: boolean): number {
-  if (!isError) return 0;
+  if (!isError) {
+    return 0;
+  }
   const match = outputText.match(/Command exited with code (\d+)/);
   return match ? Number(match[1]) : 1;
 }
@@ -307,7 +323,9 @@ export function deriveBashExitCode(outputText: string, isError: boolean): number
 /** Pull `hookSpecificOutput.additionalContext` out of a PostToolUse script's stdout. */
 export function extractAdditionalContext(stdout: string): string | null {
   const trimmed = stdout.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
   try {
     const parsed = JSON.parse(trimmed) as { hookSpecificOutput?: { additionalContext?: unknown } };
     const context = parsed.hookSpecificOutput?.additionalContext;
@@ -357,7 +375,9 @@ function joinTextContent(content: readonly { type: string; text?: string }[]): s
 }
 
 function warn(ctx: ExtensionContext, message: string): void {
-  if (ctx.hasUI) ctx.ui.notify(`guard-hooks: ${message}`, 'warning');
+  if (ctx.hasUI) {
+    ctx.ui.notify(`guard-hooks: ${message}`, 'warning');
+  }
 }
 
 export async function runFormatLintHook(
@@ -386,7 +406,9 @@ async function injectSessionContext(
   scriptPath: string,
   customType: string,
 ): Promise<void> {
-  if (!existsSync(scriptPath)) return;
+  if (!existsSync(scriptPath)) {
+    return;
+  }
   const outcome = await runHookScript(
     scriptPath,
     { cwd: ctx.cwd },
@@ -407,31 +429,45 @@ export default function (pi: ExtensionAPI) {
   const isChildSession = inChildSessionContext();
 
   pi.on('tool_call', async (event, ctx): Promise<ToolCallEventResult | undefined> => {
-    if (event.toolName !== 'bash') return undefined;
+    if (event.toolName !== 'bash') {
+      return undefined;
+    }
 
     const command = typeof event.input.command === 'string' ? event.input.command : '';
-    if (!command.trim()) return undefined;
+    if (!command.trim()) {
+      return undefined;
+    }
 
     const verdict = await evaluateBashGuards(command, ctx.cwd, ctx.isProjectTrusted());
-    if (verdict.blocked) return { block: true, reason: verdict.reason };
-    for (const advisory of verdict.advisories) warn(ctx, advisory);
+    if (verdict.blocked) {
+      return { block: true, reason: verdict.reason };
+    }
+    for (const advisory of verdict.advisories) {
+      warn(ctx, advisory);
+    }
     return undefined;
   });
 
   pi.on('tool_result', async (event, ctx) => {
     if (event.toolName === 'edit' || event.toolName === 'write') {
       const rawPath = typeof event.input.path === 'string' ? event.input.path : '';
-      if (!rawPath || event.isError) return undefined;
+      if (!rawPath || event.isError) {
+        return undefined;
+      }
       const filePath = isAbsolute(rawPath) ? rawPath : resolve(ctx.cwd, rawPath);
       // Fire-and-forget: formatting must not delay the tool result the model is waiting on.
       void runFormatLintHook(ctx.isProjectTrusted(), filePath, ctx.cwd);
       return undefined;
     }
 
-    if (event.toolName !== 'bash') return undefined;
+    if (event.toolName !== 'bash') {
+      return undefined;
+    }
 
     const command = typeof event.input.command === 'string' ? event.input.command : '';
-    if (!command.trim()) return undefined;
+    if (!command.trim()) {
+      return undefined;
+    }
 
     const outputText = joinTextContent(event.content);
     const context = await collectPostBashContext(
@@ -441,7 +477,9 @@ export default function (pi: ExtensionAPI) {
       deriveBashExitCode(outputText, event.isError),
       ctx.isProjectTrusted(),
     );
-    if (!context) return undefined;
+    if (!context) {
+      return undefined;
+    }
     return { content: [...event.content, { type: 'text' as const, text: context }] };
   });
 

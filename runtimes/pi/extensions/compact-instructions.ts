@@ -38,10 +38,14 @@ export default function (pi: ExtensionAPI) {
     } catch {
       return undefined;
     }
-    if (!instructions || !ctx.model) return undefined;
+    if (!instructions || !ctx.model) {
+      return undefined;
+    }
 
     const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-    if (!auth.ok) return undefined;
+    if (!auth.ok) {
+      return undefined;
+    }
 
     // Manual `/compact <args>` instructions keep priority; COMPACT.md follows them.
     const mergedInstructions = event.customInstructions

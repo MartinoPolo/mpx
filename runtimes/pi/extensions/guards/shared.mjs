@@ -18,7 +18,9 @@ export const RUNNER_MAP = {
 
 export function detectPackageManager(dir) {
   for (const [file, pm] of Object.entries(LOCKFILE_MAP)) {
-    if (fs.existsSync(path.join(dir, file))) return pm;
+    if (fs.existsSync(path.join(dir, file))) {
+      return pm;
+    }
   }
   return null;
 }
@@ -27,7 +29,9 @@ export function findPackageManager(startDir) {
   let dir = startDir;
   while (dir && dir !== path.dirname(dir)) {
     const pm = detectPackageManager(dir);
-    if (pm) return pm;
+    if (pm) {
+      return pm;
+    }
     dir = path.dirname(dir);
   }
   return null;
@@ -36,7 +40,9 @@ export function findPackageManager(startDir) {
 export function findProjectRoot(startDir, markers = ['package.json']) {
   let dir = startDir;
   while (dir && dir !== path.dirname(dir)) {
-    if (markers.some((m) => fs.existsSync(path.join(dir, m)))) return dir;
+    if (markers.some((m) => fs.existsSync(path.join(dir, m)))) {
+      return dir;
+    }
     dir = path.dirname(dir);
   }
   return null;
@@ -54,7 +60,9 @@ export function getRunner(projectRoot) {
  * - classic: Prettier + ESLint (or manual setup)
  */
 export function detectToolchain(projectRoot) {
-  if (!projectRoot) return 'classic';
+  if (!projectRoot) {
+    return 'classic';
+  }
   const vpBin = path.join(projectRoot, 'node_modules', '.bin', 'vp');
   // Windows: .bin/vp.cmd or .bin/vp.ps1
   if (fs.existsSync(vpBin) || fs.existsSync(vpBin + '.cmd') || fs.existsSync(vpBin + '.ps1')) {

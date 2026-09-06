@@ -10,10 +10,14 @@ async function main() {
   const input = await readStdin();
   const command = input.tool_input?.command ?? '';
   const cwd = input.cwd ?? process.cwd();
-  if (!command) process.exit(0);
+  if (!command) {
+    process.exit(0);
+  }
 
   const pm = findPackageManager(cwd);
-  if (!pm) process.exit(0);
+  if (!pm) {
+    process.exit(0);
+  }
 
   const firstCmd = command.split('\n')[0].trim().split(/\s+/)[0];
   const allPackageManagers = ['npm', 'pnpm', 'yarn', 'bun'];

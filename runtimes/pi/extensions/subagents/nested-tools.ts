@@ -225,7 +225,9 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
       if (invocation.modelInput) {
         const resolvedModel = resolveModel(invocation.modelInput, ctx.modelRegistry);
         if (typeof resolvedModel === 'string') {
-          if (invocation.modelFromParams) return textResult(resolvedModel, true);
+          if (invocation.modelFromParams) {
+            return textResult(resolvedModel, true);
+          }
         } else {
           model = resolvedModel;
         }
@@ -242,7 +244,9 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
         agentLabel: config?.displayName ?? resolvedType,
         modelInput: invocation.modelInput,
       });
-      if (scopeVerdict.kind === 'error') return textResult(scopeVerdict.message, true);
+      if (scopeVerdict.kind === 'error') {
+        return textResult(scopeVerdict.message, true);
+      }
 
       // The whole branch shares the root session's transcript directory; read it
       // off the owning parent rather than this child session's own id.
@@ -276,7 +280,9 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
         onAssistantUsage: (usage) => {
           for (let id: string | undefined = context.parentAgentId; id !== undefined;) {
             const ancestor = context.manager.getRecord(id);
-            if (!ancestor) break;
+            if (!ancestor) {
+              break;
+            }
             addUsage(ancestor.lifetimeUsage, usage);
             id = ancestor.parentAgentId;
           }
@@ -303,9 +309,13 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
       let childId: string | undefined;
       const attachTranscript = (id: string): void => {
         childId = id;
-        if (transcriptSessionId === undefined) return;
+        if (transcriptSessionId === undefined) {
+          return;
+        }
         const rec = context.manager.getRecord(id);
-        if (!rec) return;
+        if (!rec) {
+          return;
+        }
         rec.outputFile = createOutputFilePath(context.configCwd, id, transcriptSessionId);
         writeInitialEntry(rec.outputFile, id, params.prompt, ctx.cwd);
       };
@@ -376,7 +386,9 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
         while (record.status === 'queued') {
           await abortable(new Promise<void>((resolve) => setTimeout(resolve, 250)), signal);
         }
-        if (record.promise) await abortable(record.promise, signal);
+        if (record.promise) {
+          await abortable(record.promise, signal);
+        }
       }
       return textResult(formatRecord(record, 'fetched'), record.status === 'error');
     },
@@ -401,7 +413,9 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
       // Session not ready yet — queue the steer. The manager flushes pending
       // steers when the session is created (same contract as the top-level tool).
       if (!record.session) {
-        if (!record.pendingSteers) record.pendingSteers = [];
+        if (!record.pendingSteers) {
+          record.pendingSteers = [];
+        }
         record.pendingSteers.push(params.message);
         return textResult(`Steering message queued for nested agent ${params.agent_id}.`);
       }

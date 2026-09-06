@@ -61,12 +61,16 @@ function packageRootFromEntry(entryPath, packageName) {
     const manifestPath = path.join(directory, 'package.json');
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      if (manifest.name === packageName) return { directory, manifest };
+      if (manifest.name === packageName) {
+        return { directory, manifest };
+      }
     } catch {
       // Continue toward the package root.
     }
     const parent = path.dirname(directory);
-    if (parent === directory) return undefined;
+    if (parent === directory) {
+      return undefined;
+    }
     directory = parent;
   }
 }
@@ -87,11 +91,15 @@ function resolveProjectPackageRoot(projectRoot, packageName) {
 export function resolveProjectPackageBinary(projectRoot, packageName, binaryName) {
   try {
     const packageRoot = resolveProjectPackageRoot(projectRoot, packageName);
-    if (!packageRoot) return undefined;
+    if (!packageRoot) {
+      return undefined;
+    }
 
     const binary = packageRoot.manifest.bin;
     const relativeBinary = typeof binary === 'string' ? binary : binary?.[binaryName];
-    if (typeof relativeBinary !== 'string') return undefined;
+    if (typeof relativeBinary !== 'string') {
+      return undefined;
+    }
     const resolvedBinary = path.resolve(packageRoot.directory, relativeBinary);
     return fs.existsSync(resolvedBinary) ? resolvedBinary : undefined;
   } catch {
@@ -107,7 +115,9 @@ export function resolveBiomeBinary(projectRoot) {
   const nativePackage = `@biomejs/cli-${process.platform}-${process.arch}${libc}`;
   try {
     const biomePackage = resolveProjectPackageRoot(projectRoot, '@biomejs/biome');
-    if (!biomePackage?.manifest.optionalDependencies?.[nativePackage]) return undefined;
+    if (!biomePackage?.manifest.optionalDependencies?.[nativePackage]) {
+      return undefined;
+    }
     const biomeRequire = createRequire(path.join(biomePackage.directory, 'package.json'));
     const resolvedBinary = biomeRequire.resolve(nativePackage);
     return fs.existsSync(resolvedBinary) ? resolvedBinary : undefined;
@@ -122,14 +132,18 @@ export function resolveExecutable(executable) {
   for (const directory of pathEntries) {
     for (const extension of extensions) {
       const candidate = path.join(directory, `${executable}${extension}`);
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        return candidate;
+      }
     }
   }
   return undefined;
 }
 
 function executeBestEffort(executable, args, projectRoot, silent, execute) {
-  if (!executable) return;
+  if (!executable) {
+    return;
+  }
   try {
     execute(executable, args, {
       cwd: projectRoot,
@@ -140,7 +154,9 @@ function executeBestEffort(executable, args, projectRoot, silent, execute) {
   } catch (error) {
     if (!silent) {
       const output = (error.stdout?.toString() || error.stderr?.toString() || '').trim();
-      if (output) process.stdout.write(`${output}\n`);
+      if (output) {
+        process.stdout.write(`${output}\n`);
+      }
     }
   }
 }
@@ -201,14 +217,17 @@ export function formatAndLintFile(filePath, projectRoot, dependencies = {}) {
       executeBestEffort(ruff, ['check', '--fix', filePath], projectRoot, false, execute);
     }
   } else if (extension === 'json' || extension === 'jsonc') {
-    if (toolchain === 'vite-plus') runVitePlusFormat();
-    else if (toolchain === 'biome') runBiome(['format', '--write', filePath], true);
-    else if (hasConfig(projectRoot, PRETTIER_CONFIGS)) {
+    if (toolchain === 'vite-plus') {
+      runVitePlusFormat();
+    } else if (toolchain === 'biome') {
+      runBiome(['format', '--write', filePath], true);
+    } else if (hasConfig(projectRoot, PRETTIER_CONFIGS)) {
       runNodeCli('prettier', 'prettier', ['--write', filePath], true);
     }
   } else if (PRETTIER_ONLY_EXTENSIONS.has(extension)) {
-    if (toolchain === 'vite-plus') runVitePlusFormat();
-    else if (hasConfig(projectRoot, PRETTIER_CONFIGS)) {
+    if (toolchain === 'vite-plus') {
+      runVitePlusFormat();
+    } else if (hasConfig(projectRoot, PRETTIER_CONFIGS)) {
       runNodeCli('prettier', 'prettier', ['--write', filePath], true);
     }
     if (extension === 'css' && toolchain === 'biome') {
@@ -220,10 +239,14 @@ export function formatAndLintFile(filePath, projectRoot, dependencies = {}) {
 async function main() {
   const input = await readStdin();
   const filePath = input.tool_input?.file_path;
-  if (!filePath || !fs.existsSync(filePath)) return;
+  if (!filePath || !fs.existsSync(filePath)) {
+    return;
+  }
 
   const projectRoot = findProjectRoot(path.dirname(filePath), ['package.json', 'pyproject.toml']);
-  if (projectRoot) formatAndLintFile(filePath, projectRoot);
+  if (projectRoot) {
+    formatAndLintFile(filePath, projectRoot);
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

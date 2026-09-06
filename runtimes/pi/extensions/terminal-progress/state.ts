@@ -40,37 +40,49 @@ export class TerminalProgressController {
   }
 
   onAgentStart(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.agentWorking = true;
     this.update();
   }
 
   onAgentSettled(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.agentWorking = false;
     this.update();
   }
 
   onBlocked(active: boolean): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.blocked = active;
     this.update();
   }
 
   onQuestionStart(toolCallId: string): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.questionCalls.add(toolCallId);
     this.update();
   }
 
   onQuestionEnd(toolCallId: string): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.questionCalls.delete(toolCallId);
     this.update();
   }
 
   dispose(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.disposed = true;
     this.clearTimer(this.timer);
     if (this.sequence !== IDLE_SEQUENCE) {
@@ -86,14 +98,18 @@ export class TerminalProgressController {
   }
 
   private update(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     const next =
       this.blocked || this.questionCalls.size > 0
         ? ATTENTION_SEQUENCE
         : this.agentWorking
           ? WORKING_SEQUENCE
           : IDLE_SEQUENCE;
-    if (next === this.sequence) return;
+    if (next === this.sequence) {
+      return;
+    }
     this.sequence = next;
     this.write(next);
   }

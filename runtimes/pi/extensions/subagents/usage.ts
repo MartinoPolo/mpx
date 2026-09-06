@@ -42,7 +42,9 @@ export type SessionLike = { getSessionStats(): SessionStatsLike };
  * (issue #38).
  */
 export function getSessionTokens(session: SessionLike | undefined): number {
-  if (!session) return 0;
+  if (!session) {
+    return 0;
+  }
   try {
     const t = session.getSessionStats().tokens;
     return t.input + t.output + t.cacheWrite;
@@ -56,7 +58,9 @@ export function getSessionTokens(session: SessionLike | undefined): number {
  * (no model contextWindow, or post-compaction before the next response).
  */
 export function getSessionContextPercent(session: SessionLike | undefined): number | null {
-  if (!session) return null;
+  if (!session) {
+    return null;
+  }
   try {
     return session.getSessionStats().contextUsage?.percent ?? null;
   } catch {

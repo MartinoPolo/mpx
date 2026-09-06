@@ -142,7 +142,9 @@ const SUBAGENT_DEPTH_CEILING = 16;
 
 /** Drop fields that don't match the expected shape. Silent — garbage becomes absent. */
 function sanitize(raw: unknown): SubagentsSettings {
-  if (!raw || typeof raw !== 'object') return {};
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
   const r = raw as Record<string, unknown>;
   const out: SubagentsSettings = {};
   if (
@@ -217,7 +219,9 @@ function projectPath(cwd: string): string {
  * silently reverted to defaults — and still returns `{}` so startup proceeds.
  */
 function readSettingsFile(path: string): SubagentsSettings {
-  if (!existsSync(path)) return {};
+  if (!existsSync(path)) {
+    return {};
+  }
   try {
     return sanitize(JSON.parse(readFileSync(path, 'utf-8')));
   } catch (err) {
@@ -250,19 +254,42 @@ export function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()):
 
 /** Apply persisted settings to the in-memory state via caller-supplied setters. */
 export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers): void {
-  if (typeof s.maxConcurrent === 'number') appliers.setMaxConcurrent(s.maxConcurrent);
-  if (typeof s.defaultMaxTurns === 'number') appliers.setDefaultMaxTurns(s.defaultMaxTurns);
-  if (typeof s.graceTurns === 'number') appliers.setGraceTurns(s.graceTurns);
-  if (typeof s.maxSubagentDepth === 'number') appliers.setMaxSubagentDepth(s.maxSubagentDepth);
-  if (s.defaultJoinMode) appliers.setDefaultJoinMode(s.defaultJoinMode);
-  if (typeof s.schedulingEnabled === 'boolean') appliers.setSchedulingEnabled(s.schedulingEnabled);
-  if (typeof s.scopeModels === 'boolean') appliers.setScopeModels(s.scopeModels);
-  if (typeof s.disableDefaultAgents === 'boolean')
+  if (typeof s.maxConcurrent === 'number') {
+    appliers.setMaxConcurrent(s.maxConcurrent);
+  }
+  if (typeof s.defaultMaxTurns === 'number') {
+    appliers.setDefaultMaxTurns(s.defaultMaxTurns);
+  }
+  if (typeof s.graceTurns === 'number') {
+    appliers.setGraceTurns(s.graceTurns);
+  }
+  if (typeof s.maxSubagentDepth === 'number') {
+    appliers.setMaxSubagentDepth(s.maxSubagentDepth);
+  }
+  if (s.defaultJoinMode) {
+    appliers.setDefaultJoinMode(s.defaultJoinMode);
+  }
+  if (typeof s.schedulingEnabled === 'boolean') {
+    appliers.setSchedulingEnabled(s.schedulingEnabled);
+  }
+  if (typeof s.scopeModels === 'boolean') {
+    appliers.setScopeModels(s.scopeModels);
+  }
+  if (typeof s.disableDefaultAgents === 'boolean') {
     appliers.setDisableDefaultAgents(s.disableDefaultAgents);
-  if (s.toolDescriptionMode) appliers.setToolDescriptionMode(s.toolDescriptionMode);
-  if (typeof s.fleetView === 'boolean') appliers.setFleetView(s.fleetView);
-  if (s.widgetMode) appliers.setWidgetMode(s.widgetMode);
-  if (typeof s.outputTranscript === 'boolean') appliers.setOutputTranscript(s.outputTranscript);
+  }
+  if (s.toolDescriptionMode) {
+    appliers.setToolDescriptionMode(s.toolDescriptionMode);
+  }
+  if (typeof s.fleetView === 'boolean') {
+    appliers.setFleetView(s.fleetView);
+  }
+  if (s.widgetMode) {
+    appliers.setWidgetMode(s.widgetMode);
+  }
+  if (typeof s.outputTranscript === 'boolean') {
+    appliers.setOutputTranscript(s.outputTranscript);
+  }
 }
 
 /**

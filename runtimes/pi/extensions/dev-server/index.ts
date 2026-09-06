@@ -23,8 +23,9 @@ interface ToolParams {
 }
 
 function requireText(value: string | undefined, name: string): string {
-  if (value === undefined || value.trim() === '')
+  if (value === undefined || value.trim() === '') {
     throw new Error(`${name} is required for this action.`);
+  }
   return value.trim();
 }
 
@@ -49,14 +50,22 @@ async function showDevServers(
       ...labels,
       'Close',
     ]);
-    if (choice === undefined || choice === 'Close') return;
+    if (choice === undefined || choice === 'Close') {
+      return;
+    }
     if (choice === 'Start new server') {
       const id = await ctx.ui.input('Server id');
-      if (!id) continue;
+      if (!id) {
+        continue;
+      }
       const command = await ctx.ui.input('Command');
-      if (!command) continue;
+      if (!command) {
+        continue;
+      }
       const cwd = await ctx.ui.input('Working directory', ctx.cwd);
-      if (!cwd) continue;
+      if (!cwd) {
+        continue;
+      }
       const rawPorts = await ctx.ui.input(
         'Readiness ports (comma-separated; blank for immediate)',
         '',
@@ -77,19 +86,25 @@ async function showDevServers(
 
     const selectedIndex = labels.indexOf(choice);
     const snapshot = snapshots[selectedIndex];
-    if (snapshot === undefined) continue;
+    if (snapshot === undefined) {
+      continue;
+    }
     const action = await ctx.ui.select(snapshot.id, ['Status', 'Logs', 'Restart', 'Stop', 'Back']);
     try {
-      if (action === 'Status') ctx.ui.notify(renderSnapshot(manager.status(snapshot.id)!), 'info');
-      else if (action === 'Logs') ctx.ui.notify(manager.logs(snapshot.id) || '(no logs)', 'info');
-      else if (action === 'Restart')
+      if (action === 'Status') {
+        ctx.ui.notify(renderSnapshot(manager.status(snapshot.id)!), 'info');
+      } else if (action === 'Logs') {
+        ctx.ui.notify(manager.logs(snapshot.id) || '(no logs)', 'info');
+      } else if (action === 'Restart') {
         ctx.ui.notify(renderSnapshot(await manager.restart(snapshot.id)), 'info');
-      else if (action === 'Stop') {
+      } else if (action === 'Stop') {
         const confirmed = await ctx.ui.confirm(
           'Stop dev server',
           `Terminate ${snapshot.id} and its process tree?`,
         );
-        if (confirmed) ctx.ui.notify(renderSnapshot(await manager.stop(snapshot.id)), 'info');
+        if (confirmed) {
+          ctx.ui.notify(renderSnapshot(await manager.stop(snapshot.id)), 'info');
+        }
       }
     } catch (error) {
       ctx.ui.notify(error instanceof Error ? error.message : String(error), 'error');
