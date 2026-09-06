@@ -12,7 +12,7 @@ import {
   type RepositoryContext,
   type RepositoryLock,
   type WorktreeInventoryEntry,
-} from './index.js';
+} from './foundation.js';
 
 export type LifecycleStatus =
   | 'creating'

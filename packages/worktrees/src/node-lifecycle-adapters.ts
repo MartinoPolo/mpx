@@ -19,7 +19,7 @@ import {
   type FileSystemAdapter,
   type GitAdapter,
   type RepositoryLock,
-} from './index.js';
+} from './foundation.js';
 import {
   productionTrustedExecutablePolicy,
   resolveTrustedExecutable,
