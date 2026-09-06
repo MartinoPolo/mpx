@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { createGerritAdapter, type ProviderProcessRequest } from '../../src/index.js';
 
@@ -141,6 +142,7 @@ describe('Gerrit review adapter', () => {
         '--',
         'limit:2',
         'project:team/platform/service',
+        'change:I2222222222222222222222222222222222222222',
         `commit:${hash}`,
       ],
     ]);
@@ -229,35 +231,29 @@ describe('Gerrit review adapter', () => {
     });
   });
 
-  it('reads back the exact server comment and returns truthful required fields', async () => {
+  it('reads an official numeric comment timestamp and returns truthful required fields', async () => {
+    const timestamp = 1773059696;
     const commented = queryOutput({
-      comments: [
-        {
-          timestamp: '2026-03-09 12:34:56.123000000',
-          reviewer: { username: 'alice' },
-          message: 'Looks good',
-        },
-      ],
+      comments: [{ timestamp, reviewer: { username: 'alice' }, message: 'Looks good' }],
     });
-    const { adapter, requests } = harness([queryOutput(), '', commented]);
+    const digest = createHash('sha256')
+      .update(JSON.stringify([42, timestamp, 'alice', 'Looks good']))
+      .digest('hex');
+    const { adapter, requests } = harness([queryOutput({ comments: [] }), '', commented]);
     await expect(
       invoke(adapter, 'review.comment', { id: '42', body: 'Looks good' }),
     ).resolves.toEqual({
       schemaVersion: 1,
-      id: 'gerrit:42:2026-03-09%2012%3A34%3A56.123000000:alice',
+      id: `gerrit:sha256:${digest}`,
       reviewId: '42',
       body: 'Looks good',
       author: 'alice',
-      createdAt: '2026-03-09T12:34:56.123Z',
+      createdAt: '2026-03-09T12:34:56.000Z',
       providerData: {
-        gerrit: {
-          changeNumber: 42,
-          patchSet: 3,
-          timestamp: '2026-03-09 12:34:56.123000000',
-          reviewer: 'alice',
-        },
+        gerrit: { changeNumber: 42, patchSet: 3, timestamp, reviewer: 'alice' },
       },
     });
+    expect(requests[0]?.argv).toContain('--comments');
     expect(requests[1]?.argv).toEqual([
       'ssh',
       'review.example',
@@ -271,6 +267,59 @@ describe('Gerrit review adapter', () => {
       '42,3',
     ]);
     expect(requests[2]?.argv).toContain('--comments');
+  });
+
+  it('identifies one newly added repeated comment by multiset difference', async () => {
+    const existing = { timestamp: 1773059600, reviewer: { username: 'alice' }, message: 'LGTM' };
+    const added = { timestamp: 1773059696, reviewer: { username: 'alice' }, message: 'LGTM' };
+    const { adapter } = harness([
+      queryOutput({ comments: [existing] }),
+      '',
+      queryOutput({ comments: [existing, added] }),
+    ]);
+
+    await expect(
+      invoke(adapter, 'review.comment', { id: '42', body: 'LGTM' }),
+    ).resolves.toMatchObject({
+      body: 'LGTM',
+      author: 'alice',
+      createdAt: '2026-03-09T12:34:56.000Z',
+    });
+  });
+
+  it.each([-1, 1.5, 8_640_000_000_001, Number.MAX_SAFE_INTEGER + 1, '2026-03-09 12:34:56'])(
+    'rejects malformed or unsafe Gerrit comment timestamp %j without exposing response content',
+    async (timestamp) => {
+      const secret = 'response-only-secret';
+      const { adapter, requests } = harness([
+        queryOutput({
+          comments: [{ timestamp, reviewer: { username: 'alice' }, message: secret }],
+        }),
+      ]);
+
+      const error = await invoke(adapter, 'review.comment', { id: '42', body: 'LGTM' }).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toMatchObject({ code: 'INVALID_RESPONSE' });
+      expect(JSON.stringify(error)).not.toContain(secret);
+      expect(requests).toHaveLength(1);
+    },
+  );
+
+  it('reports concurrent indistinguishable requested comments as unknown', async () => {
+    const first = { timestamp: 1773059696, reviewer: { username: 'alice' }, message: 'LGTM' };
+    const second = { timestamp: 1773059697, reviewer: { username: 'bob' }, message: 'LGTM' };
+    const { adapter } = harness([
+      queryOutput({ comments: [] }),
+      '',
+      queryOutput({ comments: [first, second] }),
+    ]);
+
+    await expect(
+      invoke(adapter, 'review.comment', { id: '42', body: 'LGTM' }),
+    ).rejects.toMatchObject({
+      code: 'MUTATION_OUTCOME_UNKNOWN',
+    });
   });
 
   it('publishes ready without applying a Code-Review vote', async () => {
@@ -370,7 +419,7 @@ describe('Gerrit review adapter', () => {
       .fn()
       .mockResolvedValueOnce({
         exitCode: 0,
-        stdout: queryOutput({ project: 'team/project' }),
+        stdout: queryOutput({ project: 'team/project', comments: [] }),
         stderr: '',
       })
       .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })

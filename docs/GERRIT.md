@@ -30,13 +30,21 @@ project:PROJECT ...` and accept exactly one bounded JSON-lines result plus its
 - Create validates source and target refs, requires exactly one valid `Change-Id`
   trailer, and requires the requested title/body to exactly match the selected
   local commit before pushing that exact commit to
-  `refs/for/TARGET%ready` or `%wip`. Update similarly validates `HEAD`, queries
-  the existing change's target branch, and uploads `HEAD` as a new patchset.
-  MPX never commits, amends, checks out, or otherwise mutates local Git state.
-- Comment uses `gerrit review --message`, then the documented query-with-comments
-  readback. MPX returns the uniquely matching server timestamp, reviewer, and
-  message rather than inventing an ID. Missing or ambiguous exact readback is
-  `MUTATION_OUTCOME_UNKNOWN`.
+  `refs/for/TARGET%ready` or `%wip`. Its post-upload query requires both that
+  validated `Change-Id` and the exact commit hash. Update similarly validates
+  `HEAD`, queries the existing change's target branch, and uploads `HEAD` as a
+  new patchset. MPX never commits, amends, checks out, or otherwise mutates local
+  Git state. Commit metadata preserves content exactly and removes only Git's
+  single pretty-print record terminator.
+- Comment uses `gerrit review --message` between two documented
+  query-with-comments reads. Gerrit's numeric Unix-seconds timestamp, reviewer,
+  and message are parsed before mutation and again afterward; the new comment is
+  selected by bounded multiset difference, so an older identical message is not
+  mistaken for the result. MPX creates the required provider-specific comment
+  identifier as a deterministic SHA-256 digest of the change number, timestamp,
+  reviewer identity, and message. This locally derived value is **not** a Gerrit
+  server comment ID. Missing, malformed, or ambiguous exact post-mutation
+  readback is `MUTATION_OUTCOME_UNKNOWN`.
 - Ready uses documented structured `gerrit review --json` input with only
   `ready: true`; it never casts a vote. The separate internal vote operation sends
   only a validated `Code-Review` label value. A dispatch failure or ambiguous

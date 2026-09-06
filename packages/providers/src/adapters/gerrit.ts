@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ReviewCommentV1, ReviewV1 } from '../contracts.js';
 import { runProviderCommand, type ProviderProcessExecutor } from '../process.js';
 import { ProviderError, type ProviderCapability } from '../registry.js';
@@ -36,6 +37,7 @@ type GerritReview = ReviewV1 & {
 const providerId = 'gerrit';
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const TIMEOUT_MILLISECONDS = 120_000;
+const MAX_COMMENT_TIMESTAMP_SECONDS = 8_640_000_000_000;
 const safeSegment = /^[A-Za-z0-9_.][A-Za-z0-9._-]*$/u;
 const safeHost = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9])?$/u;
 const safeRemote = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -204,60 +206,100 @@ function parseQuery(output: string, project: string): GerritReview {
   return normalize(parseQueryRecord(output), project);
 }
 
-function parseCommentReadback(
+interface GerritComment {
+  readonly timestamp: number;
+  readonly author: string;
+  readonly message: string;
+  readonly fingerprint: string;
+}
+
+function parseComments(
   output: string,
   project: string,
-  expectedBody: string,
-): ReviewCommentV1 {
+): { review: GerritReview; comments: readonly GerritComment[] } {
   const change = parseQueryRecord(output);
   const review = normalize(change, project);
   if (!Array.isArray(change.comments) || change.comments.length > 10_000) {
     throw new Error('comments');
   }
-  const matches = change.comments.filter((value) => {
-    try {
-      return text(object(value).message) === expectedBody;
-    } catch {
-      return false;
+  const comments = change.comments.map((value): GerritComment => {
+    const comment = object(value);
+    const timestamp = comment.timestamp;
+    if (
+      typeof timestamp !== 'number' ||
+      !Number.isSafeInteger(timestamp) ||
+      timestamp < 0 ||
+      timestamp > MAX_COMMENT_TIMESTAMP_SECONDS
+    ) {
+      throw new Error('timestamp');
     }
+    const reviewer = object(comment.reviewer);
+    const authorValue = reviewer.username ?? reviewer.email ?? reviewer.name;
+    const author = text(authorValue);
+    if (author.length === 0 || author.length > 256 || /[\u0000-\u001f\u007f]/u.test(author)) {
+      throw new Error('reviewer');
+    }
+    const message = text(comment.message);
+    if (message.length > 65_536 || /\u0000/u.test(message)) {
+      throw new Error('message');
+    }
+    return {
+      timestamp,
+      author,
+      message,
+      fingerprint: JSON.stringify([
+        review.providerData.gerrit.changeNumber,
+        timestamp,
+        author,
+        message,
+      ]),
+    };
   });
+  return { review, comments };
+}
+
+function addedComment(
+  before: readonly GerritComment[],
+  after: readonly GerritComment[],
+  expectedBody: string,
+): GerritComment {
+  const remaining = new Map<string, number>();
+  for (const comment of before) {
+    remaining.set(comment.fingerprint, (remaining.get(comment.fingerprint) ?? 0) + 1);
+  }
+  const additions = after.filter((comment) => {
+    const count = remaining.get(comment.fingerprint) ?? 0;
+    if (count === 0) {
+      return true;
+    }
+    remaining.set(comment.fingerprint, count - 1);
+    return false;
+  });
+  if ([...remaining.values()].some((count) => count !== 0)) {
+    throw new Error('comments changed');
+  }
+  const matches = additions.filter((comment) => comment.message === expectedBody);
   if (matches.length !== 1) {
     throw new Error('ambiguous comment');
   }
-  const comment = object(matches[0]);
-  const timestamp = text(comment.timestamp);
-  const timestampMatch = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?:\.(\d{3,9}))?$/u.exec(
-    timestamp,
-  );
-  if (timestampMatch === null || timestamp.length > 40) {
-    throw new Error('timestamp');
-  }
-  const createdAt = `${timestampMatch[1]}T${timestampMatch[2]}.${(timestampMatch[3] ?? '000')
-    .slice(0, 3)
-    .padEnd(3, '0')}Z`;
-  const parsedDate = new Date(createdAt);
-  if (Number.isNaN(parsedDate.valueOf()) || parsedDate.toISOString() !== createdAt) {
-    throw new Error('timestamp');
-  }
-  const reviewer = object(comment.reviewer);
-  const authorValue = reviewer.username ?? reviewer.email ?? reviewer.name;
-  const author = text(authorValue);
-  if (author.length === 0 || author.length > 256 || /[\u0000-\u001f\u007f]/u.test(author)) {
-    throw new Error('reviewer');
-  }
+  return matches[0]!;
+}
+
+function normalizeComment(review: GerritReview, comment: GerritComment): ReviewCommentV1 {
+  const digest = createHash('sha256').update(comment.fingerprint).digest('hex');
   return {
     schemaVersion: 1,
-    id: `gerrit:${review.id}:${encodeURIComponent(timestamp)}:${encodeURIComponent(author)}`,
+    id: `gerrit:sha256:${digest}`,
     reviewId: review.id,
-    body: expectedBody,
-    author,
-    createdAt,
+    body: comment.message,
+    author: comment.author,
+    createdAt: new Date(comment.timestamp * 1000).toISOString(),
     providerData: {
       gerrit: {
-        changeNumber: Number(review.id),
+        changeNumber: review.providerData.gerrit.changeNumber,
         patchSet: review.providerData.gerrit.patchSet,
-        timestamp,
-        reviewer: author,
+        timestamp: comment.timestamp,
+        reviewer: comment.author,
       },
     },
   };
@@ -339,7 +381,7 @@ export function createGerritAdapter(
     'gerrit',
     ...args,
   ];
-  const query = (request: ProviderInvocation, term: string) =>
+  const query = (request: ProviderInvocation, ...terms: readonly string[]) =>
     command(
       executor,
       options,
@@ -351,13 +393,30 @@ export function createGerritAdapter(
         '--',
         'limit:2',
         `project:${project}`,
-        term,
+        ...terms,
       ),
       (output) => parseQuery(output, project),
     );
-  const readAfterMutation = async (request: ProviderInvocation, term: string) => {
+  const queryComments = (request: ProviderInvocation, id: string) =>
+    command(
+      executor,
+      options,
+      request,
+      ssh(
+        'query',
+        '--format=JSON',
+        '--current-patch-set',
+        '--comments',
+        '--',
+        'limit:2',
+        `project:${project}`,
+        `change:${id}`,
+      ),
+      (output) => parseComments(output, project),
+    );
+  const readAfterMutation = async (request: ProviderInvocation, ...terms: readonly string[]) => {
     try {
-      return await query(request, term);
+      return await query(request, ...terms);
     } catch {
       throw unknown(request.capability);
     }
@@ -440,7 +499,7 @@ export function createGerritAdapter(
             invalid(request.capability);
           }
           const commit = await metadata(request, source);
-          assertMetadata(request, commit, inputValue);
+          const localChangeId = assertMetadata(request, commit, inputValue);
           const suffix = inputValue.draft === true ? '%wip' : '%ready';
           await command(
             executor,
@@ -450,7 +509,7 @@ export function createGerritAdapter(
             undefined,
             true,
           );
-          return readAfterMutation(request, `commit:${commit.hash}`);
+          return readAfterMutation(request, `change:${localChangeId}`, `commit:${commit.hash}`);
         }
         case 'review.update': {
           const id = identifier(inputValue, request.capability);
@@ -476,24 +535,13 @@ export function createGerritAdapter(
         case 'review.comment': {
           const id = identifier(inputValue, request.capability);
           const body = required(inputValue, 'body', request.capability, 65_536);
-          const review = await query(request, `change:${id}`);
-          await mutateReview(request, ['--message', remoteArgument(body)], review);
+          const before = await queryComments(request, id);
+          await mutateReview(request, ['--message', remoteArgument(body)], before.review);
           try {
-            return await command(
-              executor,
-              options,
-              request,
-              ssh(
-                'query',
-                '--format=JSON',
-                '--current-patch-set',
-                '--comments',
-                '--',
-                'limit:2',
-                `project:${project}`,
-                `change:${id}`,
-              ),
-              (output) => parseCommentReadback(output, project, body),
+            const after = await queryComments(request, id);
+            return normalizeComment(
+              after.review,
+              addedComment(before.comments, after.comments, body),
             );
           } catch {
             throw unknown(request.capability);
