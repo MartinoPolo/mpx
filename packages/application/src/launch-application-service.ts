@@ -159,12 +159,6 @@ export interface LaunchApplicationDependencies {
     readonly identity: LaunchSelection['identity'];
   }): Promise<void | (() => Promise<void>) | PiPreflightResult>;
   launchExecution?(input: LaunchExecutionInput): Promise<{ readonly exitCode: number }>;
-  sandboxExport?(input: {
-    readonly descriptor: LaunchDescriptor;
-    readonly selection: LaunchSelection;
-    readonly artifact: RuntimeSkillArtifact;
-    readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
-  }): Promise<unknown>;
 }
 export interface ResolvePreparedLaunchInput {
   readonly grants?: readonly string[];
@@ -450,21 +444,10 @@ export class LaunchApplicationService {
       return { data: serializeLaunchPublic(facts.descriptor), warnings: [] };
     }
     if (facts.request.operation === 'sbx-plan-export') {
-      if (!this.dependencies.sandboxExport) {
-        throw new MpxError({
-          code: 'SANDBOX_EXPORT_UNAVAILABLE',
-          message: 'Sandbox export is unavailable.',
-        });
-      }
-      return {
-        data: await this.dependencies.sandboxExport({
-          descriptor: facts.descriptor,
-          selection: facts.selection,
-          artifact: facts.artifact,
-          statusSnapshot: facts.statusSnapshot,
-        }),
-        warnings: [],
-      };
+      throw new MpxError({
+        code: 'SANDBOX_EXPORT_UNAVAILABLE',
+        message: 'Sandbox export is unavailable.',
+      });
     }
     let beforeChildExecution: (() => Promise<void>) | undefined;
     if (facts.selection.runtime === 'pi' && facts.evidence.status === 'verified') {

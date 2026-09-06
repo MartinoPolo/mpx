@@ -5,14 +5,9 @@ import { ExecutionError } from '@mpx/executors';
 import type { NodeLaunchExecutionInput } from '../../src/node/launch-execution.js';
 
 const executionSpy = vi.hoisted(() => vi.fn(async (_input: unknown) => ({ exitCode: 0 })));
-const sbxAdapterFactory = vi.hoisted(() => vi.fn());
 vi.mock('../../src/node/launch-execution.js', async (importActual) => ({
   ...(await importActual<typeof import('../../src/node/launch-execution.js')>()),
   executeResolvedNodeLaunch: executionSpy,
-}));
-vi.mock('../../src/node/sbx-execution.js', async (importActual) => ({
-  ...(await importActual<typeof import('../../src/node/sbx-execution.js')>()),
-  createProductionSbxExecutionAdapter: sbxAdapterFactory,
 }));
 
 import { createNodeLaunchApplicationService } from '../../src/node/index.js';
@@ -141,75 +136,6 @@ describe('Node launch production factory', () => {
     expect(execution).toMatchObject({ approveHost: true });
   });
 
-  it('marks Claude Docker adapters created by production admission with trusted provenance', async () => {
-    executionSpy.mockClear();
-    sbxAdapterFactory.mockReset();
-    sbxAdapterFactory.mockResolvedValue(verifiedDocker);
-    const service = factory({
-      context: {},
-      status: () => ({
-        snapshot: async () => ({
-          schemaVersion: 1,
-          project: { id: 'sample/app', cwd: process.cwd() },
-          worktree: { id: null, path: null, role: null, branch: null },
-          portResolution: 'missing',
-          services: [],
-          diagnostics: [],
-        }),
-      }),
-    });
-
-    await service.execute(await resolvedLaunch(service, { runtime: 'claude' }));
-
-    const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
-    expect(execution.context.launchExecutorAdapterSource).toBe('production-admission');
-  });
-
-  it('routes production Pi Docker launch to the shared typed fail-closed boundary', async () => {
-    executionSpy.mockClear();
-    sbxAdapterFactory.mockReset();
-    const verify = vi.fn(verifiedDocker.verify);
-    sbxAdapterFactory.mockResolvedValue({ ...verifiedDocker, verify });
-    executionSpy.mockRejectedValueOnce(
-      new ExecutionError(
-        'PI_DOCKER_UNAVAILABLE',
-        'Pi Docker execution is unavailable pending whole-agent sandbox isolation.',
-        { executor: 'docker', runtime: 'pi' },
-      ),
-    );
-    const service = factory({
-      context: {
-        exactNativeRootVerifier: { verify: async () => undefined },
-        piAuthVerifier: { verify: async () => undefined },
-      },
-      status: () => ({
-        snapshot: async () => ({
-          schemaVersion: 1,
-          project: { id: 'sample/app', cwd: process.cwd() },
-          worktree: { id: null, path: null, role: null, branch: null },
-          portResolution: 'missing',
-          services: [],
-          diagnostics: [],
-        }),
-      }),
-    });
-
-    const resolved = await resolvedLaunch(service);
-    const error = await service.execute(resolved).catch((failure) => failure);
-    expect(error).toMatchObject({
-      name: 'ExecutionError',
-      code: 'PI_DOCKER_UNAVAILABLE',
-      details: { executor: 'docker', runtime: 'pi' },
-    });
-    expect(JSON.stringify(error)).not.toContain('private-account-reference');
-    expect(executionSpy).toHaveBeenCalledOnce();
-    expect(
-      (executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput).context
-        .launchExecutorAdapterSource,
-    ).toBe('production-admission');
-    expect(verify).toHaveBeenCalledOnce();
-  });
-
   it('performs exact-root and Pi auth verification initially and before child execution', async () => {
     executionSpy.mockClear();
     const verifyRoot = vi.fn(async () => undefined);
@@ -240,43 +166,6 @@ describe('Node launch production factory', () => {
     const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
     expect(execution.context.launchLifecycleBridge).toBeDefined();
     expect(sessions).toHaveBeenCalledOnce();
-  });
-
-  it('rejects unsafe mutable diagnostics before adapter construction, evidence, or execution', async () => {
-    executionSpy.mockClear();
-    sbxAdapterFactory.mockReset();
-    const adapterEvidence = vi.fn(verifiedDocker.verify);
-    sbxAdapterFactory.mockResolvedValue({ ...verifiedDocker, verify: adapterEvidence });
-    const diagnostics = vi.fn(async () => ({ available: true, failureCodes: [], readOnly: false }));
-    const statusSnapshot = vi.fn(async () => ({
-      schemaVersion: 1 as const,
-      project: { id: 'sample/app', cwd: process.cwd() },
-      worktree: { id: null, path: null, role: null, branch: null },
-      portResolution: 'missing' as const,
-      services: [],
-      diagnostics: [],
-    }));
-    const service = factory({
-      context: {},
-      sbxDiagnostics: diagnostics,
-      status: () => ({ snapshot: statusSnapshot }),
-    });
-
-    await expect(
-      service.prepare({
-        operation: 'launch',
-        cwd: process.cwd(),
-        catalogRoot,
-        userConfig: user,
-        runtime: 'pi',
-        identity: 'work',
-      }),
-    ).rejects.toMatchObject({ code: 'SBX_DIAGNOSTICS_UNSAFE' });
-    expect(diagnostics).toHaveBeenCalledTimes(1);
-    expect(statusSnapshot).not.toHaveBeenCalled();
-    expect(sbxAdapterFactory).not.toHaveBeenCalled();
-    expect(adapterEvidence).not.toHaveBeenCalled();
-    expect(executionSpy).not.toHaveBeenCalled();
   });
 
   it('keeps candidate and no-runtime selection explanations free of mutable production services', async () => {

@@ -50,15 +50,6 @@ it('constructs the production installer without injected test adapters', () => {
   expect(orchestrator).toBeDefined();
 });
 
-it('provides fail-closed Docker resume admission in the production CLI context', async () => {
-  expect(defaultContext.sessionDockerResumeAdmission).toBeTypeOf('function');
-  await expect(
-    defaultContext.sessionDockerResumeAdmission!({
-      launch: { executor: { kind: 'docker' } },
-    } as never),
-  ).resolves.toMatchObject({ admitted: false, hostFallback: false });
-});
-
 async function git(cwd: string, ...args: string[]): Promise<void> {
   await exec('git', args, { cwd });
 }

@@ -85,7 +85,6 @@ export interface ProcessResult {
 }
 export interface ExecutorAdapter {
   readonly name: 'docker' | 'host';
-  readonly remoteToolClient?: import('./production-remote.js').ProductionRemoteToolClient;
   verify(): Promise<VerificationEvidence>;
   execute(request: ProcessRequest): Promise<ProcessResult>;
 }
@@ -1103,17 +1102,7 @@ export function compactLaunchBanner(descriptorInput: LaunchDescriptor): string {
   return `[mpx ${descriptor.runtime}/${descriptor.executor.name} ${descriptor.launchKey.slice(0, 12)}${descriptor.elevationAudit.elevated ? ' ELEVATED' : ''}]`;
 }
 
-export * from './launch-private-bridge.js';
 export * from './sbx-client.js';
 export * from './sandbox-plan.js';
 export * from './sbx-plans.js';
 export * from './sbx-policy.js';
-export * from './remote-tool.js';
-export * from './f2-evidence.js';
-export * from './f2-proof-runner.js';
-export * from './production-remote.js';
-export * from './sandbox-resume.js';
-export * from './standalone-sbx-executor.js';
-
-/** Production planning, remote routing, and fake-sbx proof are implemented; live VM attestation remains an explicit installation gate. */
-export const F2_RUNTIME_CONTAINMENT_PROOF_IMPLEMENTED = true as const;

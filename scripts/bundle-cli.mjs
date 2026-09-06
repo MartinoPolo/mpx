@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -7,7 +7,6 @@ import { commandSelectorBytes } from './windows-command.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'bin');
-const evidence = path.join(root, 'evidence');
 
 async function workspaceSourceMap() {
   const directories = ['apps', 'packages', 'runtimes'];
@@ -225,23 +224,9 @@ export async function checkBundles(options = {}) {
 
 async function writeBundles() {
   const bundles = await buildBundleBytes();
-  await Promise.all([mkdir(output, { recursive: true }), mkdir(evidence, { recursive: true })]);
+  await mkdir(output, { recursive: true });
   await Promise.all([...bundles].map(([name, bytes]) => writeFile(path.join(root, name), bytes)));
   await writeFile(path.join(output, 'mpx.cmd'), commandSelectorBytes());
-  await Promise.all([
-    copyFile(
-      path.join(root, 'docs', 'inventory', 'SBX_V0_39_0.json'),
-      path.join(evidence, 'sbx-pin.json'),
-    ),
-    copyFile(
-      path.join(root, 'docs', 'inventory', 'PHASE_F1_RUNTIME_TOOL_INVENTORY.json'),
-      path.join(evidence, 'runtime-tool-inventory.json'),
-    ),
-    copyFile(
-      path.join(root, 'packages', 'executors', 'src', 'index.ts'),
-      path.join(evidence, 'executor-evidence.ts'),
-    ),
-  ]);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

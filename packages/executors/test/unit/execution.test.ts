@@ -6,13 +6,10 @@ import { sha256Canonical } from '@mpx/core';
 import type { JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
-  createF2ProofReportV2,
   createRuntimeCapabilityManifestV1,
   createSbxLaunchPlanExportV1,
 } from '@mpx/runtime-contracts';
 import type { ProcessRequest } from '../../src/index.js';
-import { StandaloneSbxLifecycleAdapter } from '../../src/standalone-sbx-executor.js';
-import { buildSandboxPlanV1 } from '../../src/sandbox-plan.js';
 import {
   ExecutorRegistry,
   ExecutionService,
@@ -21,7 +18,6 @@ import {
   RuntimeAdapterRegistry,
   compactLaunchBanner,
   createLaunchExecutionAudit,
-  buildF2ProofPolicyMatrix,
   invokeBoundedProcess,
   locateTrustedExecutable,
   sanitizedEnvironment,
@@ -358,107 +354,6 @@ describe('execution gates', () => {
       }),
     ).resolves.toMatchObject({ exitCode: 0 });
     expect(effects).toEqual(['routes', 'process:C:/trusted/node.exe']);
-  });
-
-  it('accepts exact V2 executor evidence when the reviewed export and final launch keys differ', async () => {
-    const sandboxPlan = buildSandboxPlanV1({
-      runtime: 'pi',
-      identity: { name: 'personal', domain: 'personal' },
-      workspaceMode: 'direct',
-      directCompatibility: true,
-      worktreeRole: 'main',
-      workspaceRoot: 'C:/project',
-      stateRoot: 'C:/state',
-      nativeRoots: [],
-      credentialRoots: [],
-      oppositeDomainRoots: [],
-      dockerSocketPaths: [],
-      gitCommonDir: 'C:/project/.git',
-      runtimeToolInventorySha256: hash('1'),
-      network: { name: 'implementation', allow: [] },
-    });
-    const policyMatrix = buildF2ProofPolicyMatrix('implementation');
-    const planExport = createSbxLaunchPlanExportV1({
-      launchKey: hash('f'),
-      descriptorSha256: hash('2'),
-      runtime: 'pi',
-      identity: { name: 'personal', domain: 'personal' },
-      artifact: {
-        manifestKey: artifactReference().manifestKey,
-        artifactKey: artifactReference().artifactKey,
-        fileMapHash: artifactReference().fileMapHash,
-      },
-      evidence: {
-        sbxPinSha256: hash('3'),
-        runtimeToolInventorySha256: sandboxPlan.runtimeToolInventorySha256,
-        executorEvidenceSha256: hash('4'),
-      },
-      sandbox: {
-        planKey: sandboxPlan.planKey,
-        profile: 'implementation',
-        proofSandboxName: `mpx-proof-${sandboxPlan.planKey.slice(0, 12)}`,
-        createArgv: ['create', '--name', 'fixture', 'shell', '.'],
-      },
-      policyMatrix,
-    });
-    const report = createF2ProofReportV2({
-      ...planExport,
-      planExportKey: planExport.exportKey,
-      decisions: policyMatrix.flatMap((profile) =>
-        profile.targets.map((target) => ({ profile: profile.profile, ...target, count: 1 })),
-      ),
-      builtInClaudeEvidence: null,
-      verdict: 'pass',
-    });
-    const adapter = new StandaloneSbxLifecycleAdapter({
-      executable: 'C:/trusted/sbx.exe',
-      cwd: 'C:/project',
-      plan: sandboxPlan,
-      agent: 'shell',
-      report,
-      planExport,
-      sbxPinSha256: planExport.evidence.sbxPinSha256,
-      executorEvidenceSha256: planExport.evidence.executorEvidenceSha256,
-      ports: [],
-      diagnostics: async () => ({ status: 'pass', digest: hash('5') }),
-      run: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
-    });
-    const selected = withVerification(descriptor(), await adapter.verify());
-    const process = vi.fn(async () => ({
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
-      truncated: false,
-    }));
-    const executors = new ExecutorRegistry();
-    executors.register(adapter);
-    const runtimes = new RuntimeAdapterRegistry();
-    runtimes.register({
-      runtime: 'pi',
-      prepare: async () => ({ executable: 'C:/trusted/pi.exe', argv: [], environment: {} }),
-    });
-    const execution = new ExecutionService({
-      executors,
-      runtimes,
-      routes: { materialize: async (value) => routesFor(value) },
-      hostPiProcessExecutor: {
-        name: 'host',
-        verify: async () => selected.executorVerification,
-        execute: process,
-      },
-      production: true,
-    });
-
-    expect(planExport.launchKey).not.toBe(selected.launchKey);
-    await expect(
-      execution.execute({
-        artifact: artifactReference(),
-        descriptor: selected,
-        cwd: 'C:/project',
-        environment: {},
-      }),
-    ).resolves.toMatchObject({ exitCode: 0 });
-    expect(process).toHaveBeenCalledOnce();
   });
 
   it('compares exact executor evidence fields semantically immediately before process execution', async () => {

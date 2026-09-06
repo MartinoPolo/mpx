@@ -53,9 +53,6 @@ vi.mock('../../src/node/launch-execution.js', async (importActual) => {
   mocks.executeBoundary = actual.executeResolvedNodeLaunch;
   return { ...actual, executeResolvedNodeLaunch: mocks.execute };
 });
-vi.mock('../../src/node/sbx-execution.js', () => ({
-  createProductionSbxExecutionAdapter: mocks.createSbxAdapter,
-}));
 vi.mock('../../src/launch-skill-resolution.js', () => ({
   resolveLaunchSkills: vi.fn(async () => ({
     catalog: [],
@@ -136,13 +133,7 @@ function input(
       })),
     } as never,
     environment: { APPDATA: '/appdata', LOCALAPPDATA: '/local' },
-    context: {
-      sessionDockerResumeAdmission: async () => ({
-        admitted: true,
-        action: 'attach',
-        sandboxName: 'exact-sandbox',
-      }),
-    },
+    context: {},
     catalogRoot: async () => '/catalog',
     status: () => ({
       snapshot: mocks.status.mockImplementation(
@@ -183,17 +174,10 @@ describe('Node session resume launch composition', () => {
       store: { readNativeBinding: read } as never,
       discoverProjectConfig: discover,
       status,
-      context: {
-        sessionDockerResumeAdmission: async () => ({
-          admitted: false,
-          code: 'F2_ADMISSION_DENIED',
-          hostFallback: false,
-          recreate: { required: true, reasons: ['proof'] },
-        }),
-      },
+      context: {},
     });
     await expect(service.prepare(plan(), user)).rejects.toMatchObject({
-      code: 'SESSION_RESUME_F2_ADMISSION_DENIED',
+      code: 'EXECUTOR_UNAVAILABLE',
     });
     expect(read).not.toHaveBeenCalled();
     expect(discover).not.toHaveBeenCalled();
@@ -216,7 +200,6 @@ describe('Node session resume launch composition', () => {
           }),
         } as never,
         context: {
-          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
           exactNativeRootVerifier: {
             verify: async () => {
               events.push('verify');
@@ -262,7 +245,6 @@ describe('Node session resume launch composition', () => {
           }),
         } as never,
         context: {
-          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
           exactNativeRootVerifier: {
             verify: async () => ({}),
           } as never,
@@ -304,7 +286,6 @@ describe('Node session resume launch composition', () => {
           }),
         } as never,
         context: {
-          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
           exactNativeRootVerifier: { verify } as never,
           piAuthVerifier: { verify: async () => undefined },
         },
@@ -342,7 +323,6 @@ describe('Node session resume launch composition', () => {
           }),
         } as never,
         context: {
-          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
           exactNativeRootVerifier: {
             verify: async () => {
               events.push('verify');

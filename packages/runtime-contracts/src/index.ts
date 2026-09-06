@@ -1334,5 +1334,3 @@ export async function validateRuntimeContext(input: {
 }
 
 export * from './capabilities.js';
-export * from './f2.js';
-export * from './f2-v2.js';

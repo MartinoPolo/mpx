@@ -245,6 +245,8 @@ This is not a host-release gate. Run the same native runtime package and compile
 
 Keep the README, AGENTS instructions, short operating guides, durable ADRs, compiler architecture, native Pi ownership, and generated CLI references. Delete or archive temporary handoffs, gate narratives, TDD journals, F2 proofs, Phase-J documents, obsolete installer prose, historical source-repository instructions, and generated evidence with no consumer.
 
+- Completed: deleted the obsolete F2 proof/proxy stack and generated runtime-tool inventory artifacts.
+
 ## Acceptance
 
 Daily-driver acceptance for personal and work Pi and Claude must cover:

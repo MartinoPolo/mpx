@@ -36,8 +36,7 @@ export * from './preparation-lifecycle.js';
 export * from './preparation-status.js';
 export * from './worktree-lifecycle.js';
 export * from './session-application-service.js';
-export * from './sbx-execution.js';
-export * from './session-docker-resume.js';
+export * from './sbx-diagnostics.js';
 export * from './setup-application-service.js';
 
 /** Concrete Node process/state adapter; kept out of the provider-neutral package root. */

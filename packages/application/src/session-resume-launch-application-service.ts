@@ -6,11 +6,9 @@ import {
   type LaunchDescriptor,
   type LaunchSelection,
 } from '@mpx/launch';
-import type { F2SandboxSessionResumeAdmission } from '@mpx/executors';
 import type { ResumePlanV1 } from '@mpx/sessions';
 import type { CatalogSkill, ResolvedManifest, RuntimeSkillArtifact } from '@mpx/skills';
 
-export type ResumeDockerAdmission = F2SandboxSessionResumeAdmission;
 export interface ResumePiPreflight {
   readonly nativeBinding: unknown;
   readonly reverify: () => Promise<void>;
@@ -46,7 +44,6 @@ export interface PreparedResumeExecutor {
   readonly execute: (input: ResumeExecutionInput) => Promise<object>;
 }
 export interface SessionResumeLaunchApplicationDependencies {
-  dockerAdmission(plan: ResumePlanV1): Promise<ResumeDockerAdmission>;
   piPreflight(plan: ResumePlanV1, userConfig: UserConfig): Promise<ResumePiPreflight>;
   isAbsolutePath(value: string): boolean;
   discoverProjectConfig(cwd: string): Promise<DiscoveredConfig | undefined>;
@@ -65,7 +62,6 @@ export interface SessionResumeLaunchApplicationDependencies {
     readonly project?: DiscoveredConfig;
     readonly repositoryId: string;
     readonly selection: LaunchSelection;
-    readonly dockerAdmission?: ResumeDockerAdmission;
   }): Promise<PreparedResumeExecutor>;
   resolveDescriptor(input: {
     readonly plan: ResumePlanV1;
@@ -113,20 +109,10 @@ export class SessionResumeLaunchApplicationService {
   async prepare(plan: ResumePlanV1, userConfig: UserConfig): Promise<PreparedSessionResumeLaunch> {
     plan = immutable(structuredClone(plan));
     userConfig = immutable(structuredClone(userConfig));
-    const dockerAdmission =
-      plan.launch.executor.kind === 'docker'
-        ? await this.dependencies.dockerAdmission(plan)
-        : undefined;
-    if (dockerAdmission && !dockerAdmission.admitted) {
-      throw fail(
-        'SESSION_RESUME_F2_ADMISSION_DENIED',
-        'Docker resume requires matching persisted F2 proof, plan, inventory, attestation, and identity; recreate in Docker is required.',
-        {
-          hostFallback: false,
-          action: 'recreate',
-          admissionCode: dockerAdmission.code,
-        },
-      );
+    if (plan.launch.executor.kind === 'docker') {
+      throw fail('EXECUTOR_UNAVAILABLE', 'Docker execution is unavailable.', {
+        hostFallback: false,
+      });
     }
 
     const pi =
@@ -206,7 +192,6 @@ export class SessionResumeLaunchApplicationService {
       ...(project ? { project } : {}),
       repositoryId: plan.repositoryId,
       selection,
-      ...(dockerAdmission ? { dockerAdmission } : {}),
     });
     const executorEvidence = immutable(structuredClone(preparedExecutor.evidence));
     const executePrepared = preparedExecutor.execute;

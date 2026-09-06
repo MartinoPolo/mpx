@@ -1,13 +1,7 @@
 import path from 'node:path';
 import { discoverProjectConfig, type UserConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
-import {
-  buildF2ProofPolicyMatrix,
-  namedSbxPolicies,
-  sanitizeHostReason,
-  type DirectTty,
-} from '@mpx/executors';
-import { createSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
+import { sanitizeHostReason, type DirectTty } from '@mpx/executors';
 import type { SessionStore } from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
 import type { StatusProvider } from '@mpx/status';
@@ -24,17 +18,9 @@ import {
   type LaunchExecutionContext,
 } from './launch-execution-runtime.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
-import {
-  createProductionSbxExecutionAdapter,
-  loadProductionSbxProofSources,
-  planProductionSbxExecution,
-  productionProofCreateArgv,
-  type SbxExecutionDependencies,
-} from './sbx-execution.js';
 import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
 
 export interface NodeLaunchApplicationContext extends LaunchExecutionContext {
-  readonly launchSbxExecutionDependencies?: SbxExecutionDependencies;
   readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
   readonly piAuthVerifier?: PiAuthVerifier;
 }
@@ -123,76 +109,12 @@ export function createNodeLaunchApplicationService(
           },
         }
       : {}),
-    dockerAdmission: async ({ selection, statusSnapshot }) => {
-      if (context.launchExecutorAdapters !== undefined || !environment.LOCALAPPDATA) {
-        return;
-      }
-      try {
-        const snapshot = await statusSnapshot();
-        const configured = userConfig.identities[selection.identity.name]!;
-        const network =
-          namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-          namedSbxPolicies['deny-all'];
-        const adapter = await createProductionSbxExecutionAdapter(
-          {
-            environment,
-            cwd: input.cwd,
-            stateRoot: path.join(environment.LOCALAPPDATA, 'mpx'),
-            runtime: selection.runtime,
-            identity: {
-              name: selection.identity.name,
-              domain: configured.domain === 'personal' ? 'personal' : 'work',
-            },
-            workspaceMode: selection.workspace,
-            worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-            ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-            workspaceRoot: input.cwd,
-            gitCommonDir: path.join(input.cwd, '.git'),
-            nativeRoots: Object.values(userConfig.identities).flatMap((identity) =>
-              Object.values(identity.runtimeRoots),
-            ),
-            credentialRoots: [],
-            oppositeDomainRoots: Object.values(userConfig.identities)
-              .filter((identity) => identity.domain !== configured.domain)
-              .flatMap((identity) => Object.values(identity.runtimeRoots)),
-            network: {
-              name:
-                selection.networkPolicy.name in namedSbxPolicies
-                  ? selection.networkPolicy.name
-                  : 'deny-all',
-              allow: network.allow,
-            },
-            ports: snapshot.services.flatMap((service) =>
-              service.port === null ? [] : [service.port],
-            ),
-          },
-          context.launchSbxExecutionDependencies,
-        );
-        const admittedContext: NodeLaunchApplicationContext = {
-          ...context,
-          launchExecutorAdapters: [adapter],
-          launchExecutorAdapterSource: 'production-admission',
-        };
-        return {
-          evidence: await collectNodeExecutorEvidence(admittedContext, 'docker'),
-          execute: (execution) => execute(execution, admittedContext),
-        };
-      } catch (failure) {
-        if (failure instanceof MpxError) {
-          throw failure;
-        }
-        const message =
-          failure instanceof Error ? failure.message : 'Docker admission setup failed.';
-        const matched = /^([A-Z][A-Z0-9_]+)(?::|\b)/u.exec(message);
-        throw new MpxError({
-          code: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
-          message: 'Docker admission setup failed closed.',
-          details: {
-            executor: 'docker',
-            diagnostic: matched?.[1] ?? 'DOCKER_ADMISSION_SETUP_FAILED',
-          },
-        });
-      }
+    dockerAdmission: async () => {
+      throw new MpxError({
+        code: 'EXECUTOR_UNAVAILABLE',
+        message: 'Docker execution is unavailable.',
+        details: { executor: 'docker' },
+      });
     },
     executorEvidence: (executor) => collectNodeExecutorEvidence(context, executor),
     prepareExecutor: async (executor) => ({
@@ -250,78 +172,6 @@ export function createNodeLaunchApplicationService(
           await auth.verify(runtimeRoot);
         },
       };
-    },
-    sandboxExport: async ({ descriptor, selection, artifact }) => {
-      if (!environment.LOCALAPPDATA) {
-        throw new MpxError({
-          code: 'STATE_ROOT_REQUIRED',
-          message: 'LOCALAPPDATA is required to plan a production sandbox.',
-        });
-      }
-      const configured = userConfig.identities[selection.identity.name]!;
-      const network =
-        namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-        namedSbxPolicies['deny-all'];
-      const sources = await loadProductionSbxProofSources(environment);
-      const planned = planProductionSbxExecution({
-        environment,
-        cwd: input.cwd,
-        stateRoot: path.join(environment.LOCALAPPDATA, 'mpx'),
-        runtime: selection.runtime,
-        identity: {
-          name: selection.identity.name,
-          domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
-        },
-        workspaceMode: selection.workspace,
-        worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-        ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-        workspaceRoot: input.cwd,
-        gitCommonDir: path.join(input.cwd, '.git'),
-        nativeRoots: Object.values(userConfig.identities).flatMap((identity) =>
-          Object.values(identity.runtimeRoots),
-        ),
-        credentialRoots: [],
-        oppositeDomainRoots: Object.values(userConfig.identities)
-          .filter((identity) => identity.domain !== configured.domain)
-          .flatMap((identity) => Object.values(identity.runtimeRoots)),
-        network: {
-          name:
-            selection.networkPolicy.name in namedSbxPolicies
-              ? selection.networkPolicy.name
-              : 'deny-all',
-          allow: network.allow,
-        },
-        ports: [],
-        sources,
-      });
-      return createSbxLaunchPlanExportV1({
-        launchKey: descriptor.launchKey,
-        descriptorSha256: sha256Canonical(descriptor as unknown as JsonValue),
-        runtime: selection.runtime,
-        identity: {
-          name: selection.identity.name,
-          domain: selection.identity.domain === 'personal' ? 'personal' : 'work',
-        },
-        artifact: {
-          manifestKey: artifact.reference.manifestKey,
-          artifactKey: artifact.reference.artifactKey,
-          fileMapHash: artifact.reference.fileMapHash,
-        },
-        evidence: {
-          sbxPinSha256: sources.sbxPinSha256,
-          runtimeToolInventorySha256: sources.runtimeToolInventorySha256,
-          executorEvidenceSha256: sources.executorEvidenceSha256,
-        },
-        sandbox: {
-          planKey: planned.plan.planKey,
-          profile: planned.plan.networkPolicy.name,
-          proofSandboxName: `mpx-proof-${planned.plan.planKey.slice(0, 12)}`,
-          createArgv: productionProofCreateArgv(planned.plan),
-        },
-        policyMatrix: buildF2ProofPolicyMatrix(
-          planned.plan.networkPolicy.name as keyof typeof namedSbxPolicies,
-        ),
-      });
     },
     launchExecution: (execution) => execute(execution, context),
   });

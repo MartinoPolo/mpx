@@ -14,12 +14,10 @@ import {
   createNodeWorktreeLifecycleService,
   createNodeWorkspaceApplicationService,
   type NodeWorkspaceApplicationOptions,
-  createProductionSessionDockerResumeAdmission,
   preparationRuntime as nodePreparationRuntime,
   windowsProcessIdentityInspector,
   type CliPreparationRuntime,
   type PreparationRuntime,
-  type SbxExecutionDependencies,
   type LaunchExecutionContext,
 } from '@mpx/application/node';
 import { MpxError } from '@mpx/core';
@@ -33,7 +31,6 @@ import type { JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
   FileLaunchAuditStore,
-  type F2SandboxSessionResumeAdmission,
   type LaunchAuditStartRecord,
   type LaunchAuditStore,
   type LaunchAuditTerminalRecord,
@@ -116,8 +113,6 @@ export interface CliContext extends LaunchExecutionContext {
   devService?: LifecycleDevService;
   providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
-  /** Test seam for the standalone-sbx process transport; production requires no injection. */
-  launchSbxExecutionDependencies?: SbxExecutionDependencies;
   /** Optional read-only standalone sbx probe. It must never start or reset the daemon. */
   sbxDiagnostics?: () => Promise<{
     readonly available: boolean;
@@ -140,8 +135,6 @@ export interface CliContext extends LaunchExecutionContext {
     plan: ResumePlanV1,
     execution: { readonly approveHost?: boolean },
   ) => Promise<unknown>;
-  /** Application-owned F2 proof/state adapter. It plans admission before any resume side effect. */
-  sessionDockerResumeAdmission?: (plan: ResumePlanV1) => Promise<F2SandboxSessionResumeAdmission>;
   installOrchestrator?: InstallOrchestrator;
   installIntentBuilder?: InstallIntentBuilder;
   setupService?: SetupApplicationService;
@@ -199,7 +192,6 @@ export const defaultContext: CliContext = {
   env: process.env,
   launchRoutes: new EnvironmentRouteMaterializer(process.env),
   launchAudit: new EnvironmentLaunchAuditStore(process.env),
-  sessionDockerResumeAdmission: createProductionSessionDockerResumeAdmission(process.env),
 };
 
 export function sessions(context: CliContext): SessionStore {

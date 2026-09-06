@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { discoverProjectConfig, type UserConfig } from '@mpx/config';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
-import { namedSbxPolicies, type F2SandboxSessionResumeAdmission } from '@mpx/executors';
 import { resolveLaunch } from '@mpx/launch';
 import { SessionError, type ResumePlanV1, type SessionStore } from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
@@ -20,20 +19,11 @@ import {
 import { directProcessTty } from './launch-execution-runtime.js';
 import { executeResolvedNodeLaunch } from './launch-execution.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
-import {
-  createProductionSbxExecutionAdapter,
-  type SbxExecutionDependencies,
-} from './sbx-execution.js';
-import { createProductionSessionDockerResumeAdmission } from './session-docker-resume.js';
 import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
 
 export interface NodeSessionResumeLaunchContext extends LaunchExecutionContext {
-  readonly launchSbxExecutionDependencies?: SbxExecutionDependencies;
   readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
   readonly piAuthVerifier?: PiAuthVerifier;
-  readonly sessionDockerResumeAdmission?: (
-    plan: ResumePlanV1,
-  ) => Promise<F2SandboxSessionResumeAdmission>;
 }
 
 export interface NodeSessionResumeLaunchInput {
@@ -81,11 +71,6 @@ export function createNodeSessionResumeLaunchApplicationService(
 ): SessionResumeLaunchApplicationService {
   const { store, context, environment } = input;
   return new SessionResumeLaunchApplicationService({
-    dockerAdmission: (plan) =>
-      (
-        context.sessionDockerResumeAdmission ??
-        createProductionSessionDockerResumeAdmission(environment)
-      )(plan),
     piPreflight: async (plan, userConfig) => {
       let nativeBinding: Awaited<ReturnType<SessionStore['readNativeBinding']>>;
       try {
@@ -144,80 +129,8 @@ export function createNodeSessionResumeLaunchApplicationService(
         },
         { inventoryCanonical, inventoryProjectSkills },
       ),
-    prepareExecutor: async ({
-      plan,
-      userConfig,
-      project,
-      repositoryId,
-      selection,
-      dockerAdmission,
-    }) => {
-      let resumeContext = context;
-      if (
-        plan.launch.executor.kind === 'docker' &&
-        context.launchExecutorAdapters === undefined &&
-        environment.LOCALAPPDATA
-      ) {
-        try {
-          const snapshot = project
-            ? await input.status().snapshot({
-                cwd: plan.cwd,
-                projectRoot: project.root,
-                config: project.config,
-                configHash: sha256Canonical(project.config as unknown as JsonValue),
-              })
-            : emptyStatus(plan.cwd, repositoryId);
-          const configured = userConfig.identities[plan.identity.name]!;
-          const network =
-            namedSbxPolicies[selection.networkPolicy.name as keyof typeof namedSbxPolicies] ??
-            namedSbxPolicies['deny-all'];
-          const adapter = await createProductionSbxExecutionAdapter(
-            {
-              environment,
-              cwd: plan.cwd,
-              stateRoot: path.join(environment.LOCALAPPDATA, 'mpx'),
-              runtime: plan.runtime,
-              identity: {
-                name: plan.identity.name,
-                domain: plan.identity.domain === 'personal' ? 'personal' : 'work',
-              },
-              workspaceMode: selection.workspace,
-              worktreeRole: selection.workspace === 'host-worktree' ? 'linked' : 'main',
-              ...(selection.workspace === 'direct' ? { directCompatibility: true } : {}),
-              workspaceRoot: plan.cwd,
-              gitCommonDir: path.join(plan.cwd, '.git'),
-              nativeRoots: Object.values(userConfig.identities).flatMap((identity) =>
-                Object.values(identity.runtimeRoots),
-              ),
-              credentialRoots: [],
-              oppositeDomainRoots: Object.values(userConfig.identities)
-                .filter((identity) => identity.domain !== configured.domain)
-                .flatMap((identity) => Object.values(identity.runtimeRoots)),
-              network: {
-                name:
-                  selection.networkPolicy.name in namedSbxPolicies
-                    ? selection.networkPolicy.name
-                    : 'deny-all',
-                allow: network.allow,
-              },
-              ports: snapshot.services.flatMap((service) =>
-                service.port === null ? [] : [service.port],
-              ),
-            },
-            context.launchSbxExecutionDependencies,
-          );
-          if (dockerAdmission?.admitted) {
-            adapter.setResumeAction(dockerAdmission.action);
-          }
-          resumeContext = {
-            ...context,
-            launchExecutorAdapters: [adapter],
-            launchExecutorAdapterSource: 'production-admission',
-          };
-        } catch {
-          /* Exact production proof remains unavailable and the typed Docker gate denies resume. */
-        }
-      }
+    prepareExecutor: async ({ plan, userConfig, project, repositoryId, selection }) => {
+      const resumeContext = context;
       const evidence = await collectNodeExecutorEvidence(resumeContext, plan.launch.executor.kind);
       return {
         evidence,

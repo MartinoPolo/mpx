@@ -495,23 +495,6 @@ async function run() {
             cliDocs.stderr.trim() || cliDocs.stdout.trim() || 'generated CLI references are stale',
           ),
         ];
-  const toolInventory = spawnSync(
-    process.execPath,
-    [path.join(root, 'scripts/generate-runtime-tool-inventory.mjs'), '--check'],
-    { cwd: root, encoding: 'utf8' },
-  );
-  const toolInventoryDiagnostics =
-    toolInventory.status === 0
-      ? []
-      : [
-          diagnostic(
-            'RUNTIME_TOOL_INVENTORY_DRIFT',
-            'docs/inventory/PHASE_F1_RUNTIME_TOOL_INVENTORY.json',
-            toolInventory.stderr.trim() ||
-              toolInventory.stdout.trim() ||
-              'runtime tool inventory is stale',
-          ),
-        ];
   const convergenceName = 'docs/history/CONVERGENCE_MANIFEST.json';
   let convergence;
   const convergenceDiagnostics = [];
@@ -554,7 +537,6 @@ async function run() {
     ...files.diagnostics,
     ...bundleDiagnostics,
     ...cliDocDiagnostics,
-    ...toolInventoryDiagnostics,
     ...convergenceDiagnostics,
     ...validateCanonicalScriptSyntax(root, names),
     ...(await validateGeneratedRepository({

@@ -174,15 +174,18 @@ export interface RuntimeToolGateway {
     signal?: AbortSignal;
   }): Promise<{ readonly claim: string; readonly sources: readonly SearchResult[] }>;
 }
-export {
-  RUNTIME_GATEWAY_TOOL_NAMES,
-  RUNTIME_TOOL_NAMES,
-  RUNTIME_TOOL_REGISTRY,
-  RUNTIME_TOOL_INVENTORY_SHA256,
-  type RuntimeToolName,
-  type RuntimeToolRegistryEntry,
-} from './runtime-tool-registry.js';
-import { RUNTIME_GATEWAY_TOOL_NAMES, type RuntimeToolName } from './runtime-tool-registry.js';
+export const RUNTIME_GATEWAY_TOOL_NAMES = Object.freeze([
+  'mcp',
+  'web_search',
+  'fetch_content',
+  'get_search_content',
+  'source_check',
+] as const);
+export const RUNTIME_TOOL_NAMES = Object.freeze([
+  ...RUNTIME_GATEWAY_TOOL_NAMES,
+  'dev_server',
+] as const);
+export type RuntimeToolName = (typeof RUNTIME_GATEWAY_TOOL_NAMES)[number];
 export interface RuntimeToolUnsupportedDiagnostic {
   readonly code: 'RUNTIME_TOOL_UNSUPPORTED';
   readonly tool: RuntimeToolName;
