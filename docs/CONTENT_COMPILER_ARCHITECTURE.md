@@ -146,7 +146,7 @@ Pi implements Agent Skills directory discovery and natively invokes a skill as `
 
 Pi documents `name`, `description`, `license`, `compatibility`, `metadata`, experimental `allowed-tools`, and `disable-model-invocation`. The installed implementation currently consumes name, description, and disable-model-invocation for discovery behavior. The compiler must not claim that an experimental or ignored field enforces a capability.
 
-Normal MPX launches use native Pi skill loading through `/skill:<name>`. The `/mpx:<name>` Pi aliases are transitional compatibility commands. Both command forms load the same generated `skills/<name>/SKILL.md` bytes and preserve equivalent body plus argument content; aliases do not create or read a second body representation. Alias prompts need not inject generated frontmatter.
+Normal MPX launches use native Pi skill loading through `/skill:<name>`. No `/mpx:<name>` aliases remain in `runtimes/pi/extensions`.
 
 ## Description policy
 
@@ -338,10 +338,9 @@ mpx content inspect
 mpx content inspect skill <identity>
 mpx content inspect agent <identity-or-projected-name>
 mpx content check
-mpx content check
 ```
 
-`show` verifies and reads the exact active file; all inspection actions consume the persisted `active-content.json` and never rebuild. Diff, export, open, and any optional relocation remain later work.
+`inspect` verifies and reads the exact active file; all inspection actions consume the persisted `active-content.json` and never rebuild. Diff, export, open, and any optional relocation remain later work.
 
 ## Progressive CLI help
 

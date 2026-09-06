@@ -2,7 +2,7 @@
 
 `@mpx/runtime-tools` is a clean-room, provider-neutral implementation. It does not import, copy, bundle, or redistribute either reviewed package, so neither package is a runtime dependency and no version pin was added.
 
-Reviewed from the installed Pi package set under the maintained `mpx-pi` deployment on 2026-03-17:
+Reviewed from an installed Pi package set on 2026-03-17:
 
 | Package          | Version | License metadata | Installed lock integrity                                                                          | Semantic surface reviewed                                                                                               |
 | ---------------- | ------- | ---------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
