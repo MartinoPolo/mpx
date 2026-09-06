@@ -1065,6 +1065,22 @@ describe('trust and privacy boundaries', () => {
   });
 
   it.each([
+    'MPX_RUNTIME',
+    'MPX_ACTIVE_CONTENT_ROOT',
+    'MPX_ACTIVE_CONTENT_MANIFEST',
+    'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
+    'MPX_COMPILED_AGENTS_DIR',
+  ])('preserves trusted %s skill context without accepting ambient authority', (key) => {
+    expect(sanitizedEnvironment({ [key]: 'ambient' }, {})).toEqual({});
+    expect(
+      sanitizedEnvironment(
+        { [key]: 'ambient' },
+        { [key]: 'trusted', MPX_ACTIVE_CONTENT_UNKNOWN: 'drop' },
+      ),
+    ).toEqual({ [key]: 'trusted' });
+  });
+
+  it.each([
     ['claude', 'CLAUDE_CONFIG_DIR', 'PI_CODING_AGENT_DIR'],
     ['pi', 'PI_CODING_AGENT_DIR', 'CLAUDE_CONFIG_DIR'],
   ] as const)(

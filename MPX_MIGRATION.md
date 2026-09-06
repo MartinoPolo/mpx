@@ -179,7 +179,7 @@ Pi:
 - register the static package exactly once through native discovery;
 - remove `--no-extensions` and explicit generated-extension activation;
 - remove duplicate generated implementations;
-- remove transitional Pi `/mpx:` skill aliases after dependency audit; native Pi uses `/skill:`.
+- register canonical Pi `/mpx:<name>` commands through lazy, integrity-verified compiler content; preserve native `/skill:<name>` discovery for project skills without duplicate canonical discovery.
 
 Claude:
 
@@ -223,7 +223,7 @@ Completed:
 - made Docker launch and resume fail closed without host fallback while retaining only optional whole-agent sandbox planning primitives;
 - regenerated the CLI references and bundles without retaining hidden migration aliases.
 
-Completed work includes deletion of the public installer uninstall/rollback and external-integration protocol; `mpx setup` is bare and idempotent, with receipt-safe upgrades and automatic failed-apply rollback retained internally. The external-source convergence checks and manifest were deleted after their final migration-source consumer. Remaining work includes dead services, superseded tests and docs, and dependencies used only by removed behavior. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
+Completed work includes deletion of the public installer uninstall/rollback and external-integration protocol; `mpx setup` is bare and idempotent, with receipt-safe upgrades and automatic failed-apply rollback retained internally. The external-source convergence checks and manifest remain deleted by explicit user decision: current implementation is validated against required behavior, not external repository hashes. Retained legacy detach and migration-safety tests protect existing installations; they do not restore external repositories as implementation authorities. Remaining work includes dead services, superseded tests and docs, and dependencies used only by removed behavior. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
 
 ### Phase 9 — Optional sandbox
 
@@ -236,12 +236,20 @@ This is not a host-release gate. Run the same native runtime package and compile
 Completed:
 
 - deleted the obsolete Phase-F manual rollback guide now superseded by internal automatic installer recovery and current launch documentation;
-- updated the compiler architecture to document native Pi `/skill:<name>` invocation without transitional aliases and corrected the active content CLI prose;
+- corrected active content CLI prose; the later user-approved namespace integration uses `/mpx:<name>` for canonical Pi skills and native `/skill:<name>` for project skills;
 - removed external `mpx-pi` deployment authority wording from runtime-tools provenance while preserving its dated package provenance.
 
 Keep the README, AGENTS instructions, short operating guides, durable ADRs, compiler architecture, native Pi ownership, and generated CLI references. Delete or archive temporary handoffs, gate narratives, TDD journals, F2 proofs, Phase-J documents, obsolete installer prose, historical source-repository instructions, and generated evidence with no consumer.
 
 ## Acceptance
+
+The user confirmed host-first completion: the host matrix and repository gate below are required; sandbox execution is deferred. Unavailable live-provider checks remain explicitly documented rather than reported as passed. Historical implementation checkpoints do not establish acceptance of the current release.
+
+The user confirmed canonical Pi skills use `/mpx:<name>`, while project skills retain native `/skill:<name>`. The compiler remains the sole owner of final skill bytes; namespace registration must preserve lazy loading and manifest integrity.
+
+The user transferred ownership of the existing `fix/pi-skill-command-namespace` worktree to this migration session, with all uncommitted changes preserved before integration. Notification repair originated in a separate session. The user now authorizes evaluating all MPX worktrees, completing unmerged work and integrating it into main. Preserve each worktree's unique changes and verify active ownership before resolving overlaps; do not overwrite concurrent work or discard dirty worktrees. After disposable tests pass, receipt-authorized host setup changes are permitted on personal and work runtime roots, preserving native credentials, sessions, launchers, and unrelated settings. Stop on ambiguous ownership.
+
+The user's latest completion requirement includes a clean integrated repository after evaluating every worktree, and working MPX or fully functional native fallback in affected projects. The reported `pi-mpx` failure in `${MPX_PROJECTS}/prejemesi` (`PROJECT_SKILL_INVALID: YAML tags, anchors, aliases, and merge keys are forbidden`) is an immediate usability blocker. The scalar punctuation fix and native-versus-managed discovery boundary are implemented. Native skills without MPX metadata retain native interpretation; explicit managed declarations remain fail-closed. Pi receives exact classified native `SKILL.md` entrypoints to prevent ignore-driven nested discovery bypass. Focused skills, invocation and real native-loader regressions passed; the rebuilt candidate still requires combined verification and host launch acceptance. Session evidence also confirms native Pi can discover canonical MPX-only workflows without a launch identity, and identifies a native specialist-directory discovery problem; both require closure or a verified native fallback. Investigate relevant native Pi session evidence for partial-migration skill-discovery and identity failures; verify fixes against actual affected launch paths, not only disposable fixtures. Use Luna for exploration and primarily Astra for implementation, review and acceptance.
 
 Daily-driver acceptance for personal and work Pi and Claude must cover:
 
@@ -250,6 +258,16 @@ Daily-driver acceptance for personal and work Pi and Claude must cover:
 - common compiled skill and subagent;
 - file read/write, shell, Git identity, and provider route;
 - native session persistence and exact resurrection.
+
+### Current integration checkpoint
+
+The namespace changes and root-source structure validation fix are integrated but uncommitted in `migration-acceptance`. Focused namespace tests, disposable setup tests and Pi launch/discovery E2E passed before the restart. Security review completed without concrete findings. The name-only command description fix passed focused tests. The tracked lockfile now includes the compiler workspace dependency; the frozen-lockfile command succeeded. Installer fixture builders now copy the required compiler package and clean failed setup allocations; targeted installer tests passed. Independent fixture review found no unsafe cleanup or weakened rollback assertions; additional sibling-byte preservation coverage passed.
+
+The combined functional gate passed all stages of `pnpm test`, including integration and E2E, plus typecheck, formatting, generated verification, structure and recursive workspace checks. Mechanical lint fixes subsequently passed lint, focused skills and extension tests, and typecheck; the orchestrator regenerated and validated the final bundles. Both integration shared writers now use independent repository snapshots, resolving the release-freshness test race without weakening production checks. Notification repair is integrated from byte-verified preserved files; its imported deployment report remains historical. Combined logs are under `${LOCALAPPDATA}/Temp/mpx-acceptance-4OBTyP`.
+
+The first actual setup attempt failed closed with `PI_LEGACY_INVENTORY_INVALID`: the personal Pi extensions path is already a real directory, while the missing detachment receipt causes setup to expect a legacy symlink. No second attempt or manual repair ran. The prior installed release remains selected; strict setup verification and current-release launch acceptance were not reached. Preservation evidence and before-images are under `${MPX_PROJECTS}/mpx-recovery/host-setup-2026-09-06T18-58-15-529Z`. Resolve this mixed native/legacy state without fabricated receipts, reconstructed legacy links or overwriting native-owned data.
+
+Unused compiler re-exports were removed; extension re-exports used by release artifact tests were retained. The Fallow regression remains unresolved and is deferred to a separate cleanup run by the user's latest usability-first direction. The proposed full-migration comparison gate will not be implemented in this acceptance work. Preserve the existing Fallow command and baseline, report its failure explicitly, and do not claim the aggregate `check` command passes. Functional tests, installer safety, typecheck, formatting, lint, generated verification and structure validation still gate host setup. No current-release host setup, main merge or final acceptance is claimed.
 
 Repository gate:
 

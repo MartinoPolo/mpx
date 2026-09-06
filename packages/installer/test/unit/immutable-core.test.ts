@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   NodeInstalledReleaseAuthority,
@@ -19,41 +18,36 @@ import {
   readActiveRelease,
   type OwnershipReceiptV1,
 } from '../../src/immutable-core.js';
+import { preparePiExtensionBuildFixture } from '../fixtures/pi-extension-build.js';
 
 const temporary = () => mkdtemp(path.join(tmpdir(), 'mpx-release-'));
 
-async function isolatedCanonicalRepository(): Promise<{
+async function isolatedCanonicalRepository(
+  prepareExtension: typeof preparePiExtensionBuildFixture = preparePiExtensionBuildFixture,
+): Promise<{
   repositoryRoot: string;
   buildRelease: () => Promise<void>;
   cleanup: () => Promise<void>;
 }> {
   const checkoutRoot = path.resolve(import.meta.dirname, '../../../..');
-  const repositoryRoot = await mkdtemp(path.join(checkoutRoot, '.installer-release-test-'));
-  const source = path.join(checkoutRoot, 'runtimes', 'pi', 'extensions');
-  const destination = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions');
-  await mkdir(path.dirname(destination), { recursive: true });
-  await cp(path.join(checkoutRoot, 'tsconfig.json'), path.join(repositoryRoot, 'tsconfig.json'));
-  await cp(source, destination, {
-    recursive: true,
-    filter: (name) => !['dist', 'node_modules'].includes(path.basename(name)),
-  });
-  for (const dependency of ['croner', 'nanoid']) {
-    await cp(
-      path.join(source, 'node_modules', dependency),
-      path.join(destination, 'node_modules', dependency),
-      { recursive: true, dereference: true },
+  const temporaryRoot = path.join(checkoutRoot, 'node_modules');
+  await mkdir(temporaryRoot, { recursive: true });
+  const repositoryRoot = await mkdtemp(path.join(temporaryRoot, 'mpx-installer-release-'));
+  try {
+    const buildRelease = await prepareExtension(
+      checkoutRoot,
+      repositoryRoot,
+      `isolated-${Date.now()}`,
     );
+    return {
+      repositoryRoot,
+      buildRelease,
+      cleanup: () => rm(repositoryRoot, { recursive: true, force: true }),
+    };
+  } catch (error) {
+    await rm(repositoryRoot, { recursive: true, force: true });
+    throw error;
   }
-  const script = path.join(destination, 'scripts', 'release.mjs');
-  const release = (await import(`${pathToFileURL(script).href}?isolated=${Date.now()}`)) as {
-    buildRelease: () => Promise<void>;
-  };
-  await release.buildRelease();
-  return {
-    repositoryRoot,
-    buildRelease: release.buildRelease,
-    cleanup: () => rm(repositoryRoot, { recursive: true, force: true }),
-  };
 }
 
 async function writePiExtensionArtifact(repositoryRoot: string): Promise<string> {
@@ -213,6 +207,34 @@ describe('immutable installer core', () => {
     expect(first.files.map((entry) => entry.bytes)).toEqual([5, 4]);
     expect(first.releaseKey).toBe(first.convergenceHash);
     expect(parseReleaseManifestV1(first)).toEqual(first);
+  });
+
+  it('removes only its allocated repository when isolated setup fails', async () => {
+    const checkoutRoot = path.resolve(import.meta.dirname, '../../../..');
+    const temporaryRoot = path.join(checkoutRoot, 'node_modules');
+    await mkdir(temporaryRoot, { recursive: true });
+    const sibling = await mkdtemp(path.join(temporaryRoot, 'mpx-installer-release-sibling-'));
+    const siblingSentinel = Buffer.from([0x00, 0x7f, 0x80, 0xff]);
+    const siblingSentinelPath = path.join(sibling, 'sentinel.bin');
+    await writeFile(siblingSentinelPath, siblingSentinel);
+    let allocatedRoot: string | undefined;
+    try {
+      await expect(
+        isolatedCanonicalRepository(async (_checkoutRoot, repositoryRoot) => {
+          allocatedRoot = repositoryRoot;
+          await writeFile(path.join(repositoryRoot, 'partial-setup'), 'partial');
+          throw new Error('injected fixture setup failure');
+        }),
+      ).rejects.toThrow('injected fixture setup failure');
+      if (allocatedRoot === undefined) {
+        throw new Error('Fixture setup did not expose its allocated root.');
+      }
+      await expect(stat(allocatedRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect((await stat(sibling)).isDirectory()).toBe(true);
+      expect(await readFile(siblingSentinelPath)).toEqual(siblingSentinel);
+    } finally {
+      await rm(sibling, { recursive: true, force: true });
+    }
   });
 
   it('includes the complete canonically verified Pi extension artifact in the release manifest', async () => {

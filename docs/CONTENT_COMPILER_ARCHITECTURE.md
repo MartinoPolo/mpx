@@ -137,8 +137,8 @@ Only fields required by the skill are emitted. `allowed-tools` is a temporary pe
 │   ├── <name>/SKILL.md
 │   └── shared/
 ├── agents/
-├── extension.mjs
-├── settings.json
+├── runtime-context.json
+├── runtime-profile.json
 └── active-content.json
 ```
 
@@ -146,7 +146,7 @@ Pi implements Agent Skills directory discovery and natively invokes a skill as `
 
 Pi documents `name`, `description`, `license`, `compatibility`, `metadata`, experimental `allowed-tools`, and `disable-model-invocation`. The installed implementation currently consumes name, description, and disable-model-invocation for discovery behavior. The compiler must not claim that an experimental or ignored field enforces a capability.
 
-Normal MPX launches use native Pi skill loading through `/skill:<name>`. No `/mpx:<name>` aliases remain in `runtimes/pi/extensions`.
+Normal MPX launches register canonical skills as `/mpx:<name>` through the checked-in native extension package. The extension advertises only manifest-authorized metadata and lazily loads compiler-owned bodies from the verified active projection. The launch binds the manifest bytes and runtime context; invocation revalidates the manifest and selected skill bytes. Project skills retain native `/skill:<name>` commands. Canonical skills are not also supplied to native skill discovery, preventing duplicate commands. Non-MPX native Pi sessions are unchanged.
 
 ## Description policy
 

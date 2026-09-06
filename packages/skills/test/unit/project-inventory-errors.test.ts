@@ -80,6 +80,7 @@ describe('project skill inventory filesystem failures', () => {
     };
     await expect(inventoryProjectSkills('C:/repo', [], filesystem)).resolves.toEqual({
       skills: [],
+      nativeSkillDirectories: [],
       diagnostics: [],
     });
   });

@@ -6,9 +6,15 @@ import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
 import {
+  bindNativeAgentDirectory,
+  type NativeAgentDirectory,
+  type NativeAgentFile,
   readExistingAgentFile,
+  readNativeAgentFile,
   resolveAgentDirectory,
   resolveExistingAgentFile,
+  resolveNativeAgentFile,
+  verifyNativeAgentDirectory,
 } from './agent-file-policy.js';
 import { BUILTIN_TOOL_NAMES } from './agent-types.js';
 import type { AgentConfig, MemoryScope, ThinkingLevel } from './types.js';
@@ -24,7 +30,10 @@ import type { AgentConfig, MemoryScope, ThinkingLevel } from './types.js';
  * Project-level agents override global ones with the same name. On a name clash
  * between the two project locations, .pi/agents wins — .pi stays the project
  * authority; .agents/agents is an additional read location.
- * Any name is allowed — names matching defaults (e.g. "Explore") override them.
+ * Names matching defaults (e.g. "Explore") override them.
+ * Native roots may be linked; discovery pins their canonical directory identity for
+ * the whole scan and reads only verified direct regular files. Linked roots are
+ * read-only in /agents. Compiler-owned roots retain strict ancestor validation.
  */
 export interface CompiledAgentsFileSystem {
   lstat(path: string): {
@@ -84,23 +93,48 @@ export function resolveCompiledAgentsDirectory(
   return directory;
 }
 
-export function loadCustomAgents(cwd: string): Map<string, AgentConfig> {
+export interface AgentDiscoveryOptions {
+  nativeFiles?: Map<string, NativeAgentFile>;
+  onDiagnostic?: (message: string) => void;
+}
+
+export function loadCustomAgents(
+  cwd: string,
+  options: AgentDiscoveryOptions = {},
+): Map<string, AgentConfig> {
   const globalDir = join(getAgentDir(), 'agents');
   const workspaceProjectDir = join(cwd, '.agents', 'agents');
   const projectDir = join(cwd, '.pi', 'agents');
 
   const agents = new Map<string, AgentConfig>();
+  options.nativeFiles?.clear();
+  let diagnosticsRemaining = 3;
+  const diagnose = (error: unknown): void => {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT' && diagnosticsRemaining-- > 0) {
+      options.onDiagnostic?.(
+        String(error)
+          .replace(/[\x00-\x1f\x7f]/g, ' ')
+          .slice(0, 300),
+      );
+    }
+  };
   const compiledDir = process.env.MPX_COMPILED_AGENTS_DIR;
   if (compiledDir !== undefined) {
     try {
-      loadFromDir(resolveCompiledAgentsDirectory(compiledDir), agents, 'compiled', true);
-    } catch {
-      // A malformed, missing, or redirected compiler source contributes no agents.
+      loadFromDir(
+        resolveCompiledAgentsDirectory(compiledDir),
+        agents,
+        'compiled',
+        options,
+        diagnose,
+      );
+    } catch (error) {
+      diagnose(error);
     }
   }
-  loadFromDir(globalDir, agents, 'global');
-  loadFromDir(workspaceProjectDir, agents, 'project');
-  loadFromDir(projectDir, agents, 'project');
+  loadFromDir(globalDir, agents, 'global', options, diagnose);
+  loadFromDir(workspaceProjectDir, agents, 'project', options, diagnose);
+  loadFromDir(projectDir, agents, 'project', options, diagnose);
   return agents;
 }
 
@@ -109,30 +143,42 @@ function loadFromDir(
   dir: string,
   agents: Map<string, AgentConfig>,
   source: 'compiled' | 'project' | 'global',
-  requireDirectRegularFiles = false,
+  options: AgentDiscoveryOptions,
+  diagnose: (error: unknown) => void,
 ): void {
   let safeDirectory: string;
+  let directory: NativeAgentDirectory | undefined;
   let files: string[];
   try {
-    safeDirectory = resolveAgentDirectory(dir);
-    files = requireDirectRegularFiles
-      ? readdirSync(safeDirectory, { withFileTypes: true })
-          .filter(
-            (entry) => entry.name.endsWith('.md') && entry.isFile() && !entry.isSymbolicLink(),
-          )
-          .map((entry) => entry.name)
-      : readdirSync(safeDirectory).filter((file) => file.endsWith('.md'));
-  } catch {
+    directory = source === 'compiled' ? undefined : bindNativeAgentDirectory(dir);
+    safeDirectory = directory?.canonicalPath ?? resolveAgentDirectory(dir);
+    files = readdirSync(safeDirectory, { withFileTypes: true })
+      .filter((entry) => entry.name.endsWith('.md') && entry.isFile() && !entry.isSymbolicLink())
+      .map((entry) => entry.name);
+    if (directory) {
+      verifyNativeAgentDirectory(directory);
+    }
+  } catch (error) {
+    diagnose(error);
     return;
   }
 
+  const discoveredAgents = new Map<string, AgentConfig>();
+  const discoveredFiles = new Map<string, NativeAgentFile>();
   for (const file of files) {
     const name = basename(file, '.md');
 
     let content: string;
     try {
-      content = readExistingAgentFile(resolveExistingAgentFile(safeDirectory, name));
-    } catch {
+      if (directory) {
+        const nativeFile = resolveNativeAgentFile(directory, name);
+        content = readNativeAgentFile(nativeFile);
+        discoveredFiles.set(name, nativeFile);
+      } else {
+        content = readExistingAgentFile(resolveExistingAgentFile(safeDirectory, name));
+      }
+    } catch (error) {
+      diagnose(error);
       continue;
     }
 
@@ -140,7 +186,7 @@ function loadFromDir(
 
     const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
 
-    agents.set(name, {
+    discoveredAgents.set(name, {
       name,
       displayName: str(fm.display_name),
       description: str(fm.description) ?? name,
@@ -167,6 +213,21 @@ function loadFromDir(
       enabled: fm.enabled !== false, // default true; explicitly false disables
       source,
     });
+  }
+  try {
+    if (directory) {
+      verifyNativeAgentDirectory(directory);
+    }
+  } catch (error) {
+    diagnose(error);
+    return;
+  }
+  for (const [name, config] of discoveredAgents) {
+    agents.set(name, config);
+    const file = discoveredFiles.get(name);
+    if (file) {
+      options.nativeFiles?.set(name, file);
+    }
   }
 }
 

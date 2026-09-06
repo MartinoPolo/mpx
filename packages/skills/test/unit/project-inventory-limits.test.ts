@@ -95,7 +95,9 @@ describe('project skill inventory root streaming', () => {
     const filesystem: ProjectSkillFileSystem = {
       opendir: vi.fn(async () => streamed(entries)),
       realpath: vi.fn(async (file) => file),
-      readFile: vi.fn(),
+      readFile: vi.fn(async (file) =>
+        skillBytes(path.basename(path.dirname(file)), 512).toString('utf8'),
+      ),
       enumerateDirectory: vi.fn(async (directory) => [
         { relativePath: 'SKILL.md', bytes: skillBytes(path.basename(directory), 512) },
       ]),
@@ -196,16 +198,18 @@ describe('project skill inventory aggregate limits', () => {
     const filesystem: ProjectSkillFileSystem = {
       opendir: vi.fn(async () => streamed(directories(130))),
       realpath: vi.fn(async (file) => file),
-      readFile: vi.fn(),
+      readFile: vi.fn(async (file) =>
+        skillBytes(path.basename(path.dirname(file)), bytesPerSkill).toString('utf8'),
+      ),
       enumerateDirectory,
     };
 
     await expect(inventoryProjectSkills('C:/repo', [], filesystem)).rejects.toMatchObject({
       diagnostics: [{ code: 'PROJECT_SKILL_INVENTORY_LIMIT' }],
     });
-    expect(filesystem.readFile).not.toHaveBeenCalled();
-    expect(enumerateDirectory).toHaveBeenCalledTimes(129);
-    expect(enumerateDirectory.mock.calls.at(-1)?.[0]).toContain('skill-0128');
+    expect(filesystem.readFile).toHaveBeenCalledTimes(129);
+    expect(enumerateDirectory).toHaveBeenCalledTimes(128);
+    expect(enumerateDirectory.mock.calls.at(-1)?.[0]).toContain('skill-0127');
   });
 
   it('accepts the exact aggregate boundary in deterministic identity order', async () => {
@@ -216,7 +220,9 @@ describe('project skill inventory aggregate limits', () => {
     const filesystem: ProjectSkillFileSystem = {
       opendir: vi.fn(async () => streamed(directories(128).reverse())),
       realpath: vi.fn(async (file) => file),
-      readFile: vi.fn(),
+      readFile: vi.fn(async (file) =>
+        skillBytes(path.basename(path.dirname(file)), bytesPerSkill).toString('utf8'),
+      ),
       enumerateDirectory,
     };
 
@@ -239,7 +245,9 @@ describe('project skill inventory aggregate limits', () => {
     const filesystem: ProjectSkillFileSystem = {
       opendir: vi.fn(async () => streamed(entries.reverse())),
       realpath: vi.fn(async (file) => file),
-      readFile: vi.fn(),
+      readFile: vi.fn(async (file) =>
+        skillBytes(path.basename(path.dirname(file)), 512).toString('utf8'),
+      ),
       enumerateDirectory: vi.fn(async (directory) => {
         const name = path.basename(directory);
         return [{ relativePath: 'SKILL.md', bytes: skillBytes(name, 512) }];

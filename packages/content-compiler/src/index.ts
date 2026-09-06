@@ -8,6 +8,8 @@ export {
   // fallow-ignore-next-line unused-export -- CLI error-mapping contract.
   ActiveContentError,
   checkActiveContentProjection,
+  classifyCompiledSkillSource,
   loadActiveContentProjection,
   readActiveContentEntry,
+  readActiveSkill,
 } from './persisted-manifest.js';

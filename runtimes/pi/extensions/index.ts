@@ -3,6 +3,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import agentResurrect from './agent-resurrect.js';
 import autoTitle from './auto-title.js';
 import compactInstructions from './compact-instructions.js';
+import canonicalSkills from './canonical-skills.js';
 import footer from './footer.js';
 import fullscreenScrollSpeed from './fullscreen-scroll-speed.js';
 import guardHooks from './guard-hooks.js';
@@ -15,13 +16,14 @@ export { resolveGuardsDirectory } from './guard-hooks.js';
 
 export interface ExtensionComponent {
   name: string;
-  register: (pi: ExtensionAPI) => void;
+  register: (pi: ExtensionAPI) => void | Promise<void>;
 }
 
 export const DEFAULT_EXTENSION_COMPONENTS: readonly ExtensionComponent[] = [
   { name: 'agent-resurrect', register: agentResurrect },
   { name: 'auto-title', register: autoTitle },
   { name: 'compact-instructions', register: compactInstructions },
+  { name: 'canonical-skills', register: canonicalSkills },
   { name: 'footer', register: footer },
   { name: 'fullscreen-scroll-speed', register: fullscreenScrollSpeed },
   { name: 'guard-hooks', register: guardHooks },
@@ -30,15 +32,15 @@ export const DEFAULT_EXTENSION_COMPONENTS: readonly ExtensionComponent[] = [
   { name: 'terminal-progress', register: terminalProgress },
 ];
 
-export function composeExtensions(
+export async function composeExtensions(
   pi: ExtensionAPI,
   components: readonly ExtensionComponent[] = DEFAULT_EXTENSION_COMPONENTS,
-): void {
+): Promise<void> {
   for (const component of components) {
-    component.register(pi);
+    await component.register(pi);
   }
 }
 
-export default function mpxPiExtensions(pi: ExtensionAPI): void {
-  composeExtensions(pi);
+export default async function mpxPiExtensions(pi: ExtensionAPI): Promise<void> {
+  await composeExtensions(pi);
 }

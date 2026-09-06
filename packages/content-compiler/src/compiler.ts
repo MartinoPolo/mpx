@@ -17,10 +17,11 @@ import {
   type SkillCapability,
   type SkillProjectionPlan,
 } from '@mpx/skills';
-
-export const CONTENT_MANIFEST_SCHEMA_VERSION = 1 as const;
-export const CONTENT_COMPILER_VERSION = '1.0.0' as const;
-export const RUNTIME_PROFILE_SCHEMA_VERSION = 1 as const;
+import {
+  CONTENT_COMPILER_VERSION,
+  CONTENT_MANIFEST_SCHEMA_VERSION,
+  RUNTIME_PROFILE_SCHEMA_VERSION,
+} from './versions.js';
 
 export type ContentFeature = 'argument-hint' | 'capability-grants';
 export interface CompileContentInput {

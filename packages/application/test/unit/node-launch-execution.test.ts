@@ -210,9 +210,8 @@ describe('Node launch execution runtime adapters', () => {
       const skillIndexes = invocation.argv.flatMap((argument, index) =>
         argument === '--skill' ? [index] : [],
       );
-      expect(skillIndexes.map((index) => invocation.argv[index + 1])).toEqual([
-        path.join(projectionDirectory, 'skills', 'sample').replaceAll('\\', '/'),
-      ]);
+      expect(skillIndexes.map((index) => invocation.argv[index + 1])).toEqual([]);
+      expect(invocation.environment.MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY).toBeDefined();
       await expect(
         readFile(path.join(projectionDirectory, 'skills', 'sample', 'SKILL.md'), 'utf8'),
       ).resolves.toBe("---\nname: sample\ndescription: 'Sample skill'\n---\n# Sample\n");

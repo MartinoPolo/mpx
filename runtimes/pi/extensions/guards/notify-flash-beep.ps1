@@ -17,13 +17,12 @@ if ($env:PI_NOTIFY_SILENT -eq '1' -or (Test-Path $MuteFlag)) { exit 0 }
 # Always notifies (sound + flash) regardless of window focus.
 # Uses NtQueryInformationProcess for fast parent PID walk (no WMI).
 
-# --- Sound configuration ---
-# Place a .wav file at this path to use a custom notification sound.
-# If the file doesn't exist, falls back to Console.Beep.
-$SoundFile = Join-Path $AgentDirectory 'sounds\notify.wav'
-
-# Fallback beep: gentle two-note chime (C5 → E5)
-$FallbackBeep = @(@(523, 180), @(659, 220))
+# Use the Windows asset directly; account migration must not change the sound.
+$SoundFile = Join-Path $env:WINDIR 'Media\tada.wav'
+if (-not (Test-Path -LiteralPath $SoundFile -PathType Leaf)) {
+    Write-Error "Windows notification sound not found: $SoundFile"
+    exit 1
+}
 
 # --- Win32 P/Invoke for taskbar flash ---
 
@@ -112,16 +111,15 @@ for ($i = 0; $i -lt 20; $i++) {
 
 # --- Play sound ---
 
-if (Test-Path $SoundFile) {
-    try {
-        $player = New-Object System.Media.SoundPlayer $SoundFile
-        $player.PlaySync()
-    } catch {}
-} else {
-    foreach ($tone in $FallbackBeep) {
-        [Console]::Beep($tone[0], $tone[1])
-        Start-Sleep -Milliseconds 60
-    }
+try {
+    $player = New-Object System.Media.SoundPlayer $SoundFile
+    $player.Load()
+    $player.PlaySync()
+} catch {
+    Write-Error "Unable to play Windows tada: $_"
+    exit 1
+} finally {
+    if ($player) { $player.Dispose() }
 }
 
 # --- Flash taskbar ---

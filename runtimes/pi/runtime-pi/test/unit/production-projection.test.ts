@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { revalidateRuntimeArtifact } from '@mpx/runtime-contracts';
-import { buildPiProjection } from '../../src/index.js';
+import { buildPiProjection, planPiInvocation } from '../../src/index.js';
 import { fixture } from '../fixtures/fixture.js';
 
 it('publishes only launch data and compiler-owned skills and agents', async () => {
@@ -38,6 +38,19 @@ it('publishes only launch data and compiler-owned skills and agents', async () =
     await expect(
       revalidateRuntimeArtifact(projection.directory, projection.reference),
     ).resolves.toMatchObject({ valid: true });
+    await expect(
+      planPiInvocation({
+        executable: path.join(artifactsRoot, 'pi.cmd'),
+        accountRoot: artifactsRoot,
+        cwd: artifactsRoot,
+        runtimeContext: input.context,
+        projection,
+      }),
+    ).resolves.toMatchObject({
+      env: {
+        MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: expect.any(String),
+      },
+    });
     const descriptor = JSON.parse(
       await readFile(path.join(projection.directory, 'projection.json'), 'utf8'),
     );

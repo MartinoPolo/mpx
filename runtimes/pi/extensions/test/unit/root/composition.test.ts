@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+
+vi.mock('@mpx/content-compiler', () => ({
+  classifyCompiledSkillSource: vi.fn(),
+  loadActiveContentProjection: vi.fn(),
+  readActiveSkill: vi.fn(),
+}));
 
 import mpxPiExtensions, {
   composeExtensions,
@@ -13,6 +19,7 @@ const EXPECTED_COMPONENTS = [
   'agent-resurrect',
   'auto-title',
   'compact-instructions',
+  'canonical-skills',
   'footer',
   'fullscreen-scroll-speed',
   'guard-hooks',
@@ -73,10 +80,10 @@ test('default composition is static, stable, and unique', () => {
   assert.equal(new Set(names).size, names.length);
 });
 
-test('default entry point provides every required public registration and lifecycle category', () => {
+test('default entry point provides every required public registration and lifecycle category', async () => {
   const { api, registrations } = safeExtensionApi();
 
-  mpxPiExtensions(api);
+  await mpxPiExtensions(api);
 
   const requiredLifecycleEvents = [
     'after_provider_response',
@@ -111,10 +118,10 @@ test('default entry point provides every required public registration and lifecy
   }
 });
 
-test('default composition has unique registration and UI ownership', () => {
+test('default composition has unique registration and UI ownership', async () => {
   const { api, registrations } = safeExtensionApi();
 
-  mpxPiExtensions(api);
+  await mpxPiExtensions(api);
 
   assert.equal(new Set(registrations.tools).size, registrations.tools.length);
   assert.equal(new Set(registrations.commands).size, registrations.commands.length);
@@ -124,14 +131,17 @@ test('default composition has unique registration and UI ownership', () => {
   }
 });
 
-test('composition invokes every injected component exactly once in order', () => {
+test('composition awaits every injected component exactly once in order', async () => {
   const calls: string[] = [];
   const components: ExtensionComponent[] = EXPECTED_COMPONENTS.map((name) => ({
     name,
-    register: () => calls.push(name),
+    register: async () => {
+      await Promise.resolve();
+      calls.push(name);
+    },
   }));
 
-  composeExtensions({} as ExtensionAPI, components);
+  await composeExtensions({} as ExtensionAPI, components);
 
   assert.deepEqual(calls, EXPECTED_COMPONENTS);
 });

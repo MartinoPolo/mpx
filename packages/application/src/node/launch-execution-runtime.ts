@@ -416,7 +416,7 @@ export function productionRuntimeAdapters(input: {
           );
         }
         const publishedProjection = built as Partial<PiPublishedProjection>;
-        const plan = planPiInvocation({
+        const plan = await planPiInvocation({
           executable: input.trustedExecutable.executable,
           ...((built.profile ?? input.projectionInput.piRuntimeProfile)
             ? { profile: built.profile ?? input.projectionInput.piRuntimeProfile }

@@ -10,9 +10,74 @@ import {
 export const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const allowedTop = new Set(['name', 'description', 'triggers', 'argument-hint', 'metadata']);
 
+function quotedScalar(value: string): { text: string; length: number } {
+  const quote = value[0];
+  let text = '';
+  for (let index = 1; index < value.length; index++) {
+    const character = value[index]!;
+    if (character === quote) {
+      if (quote === "'" && value[index + 1] === "'") {
+        text += "'";
+        index++;
+        continue;
+      }
+      return {
+        text: quote === '"' ? (JSON.parse(value.slice(0, index + 1)) as string) : text,
+        length: index + 1,
+      };
+    }
+    if (quote === '"' && character === '\\') {
+      index++;
+    }
+    text += character;
+  }
+  throw new Error('unterminated quoted YAML string');
+}
+
+function stringArray(value: string): string[] {
+  if (!value.endsWith(']')) {
+    throw new Error('unterminated YAML string array');
+  }
+  let remaining = value.slice(1, -1).trim();
+  const elements: string[] = [];
+  while (remaining) {
+    let text: string;
+    if (/^['"]/u.test(remaining)) {
+      const quoted = quotedScalar(remaining);
+      text = quoted.text;
+      remaining = remaining.slice(quoted.length).trimStart();
+    } else {
+      const delimiter = remaining.indexOf(',');
+      const element = delimiter < 0 ? remaining : remaining.slice(0, delimiter);
+      if (!element.trim() || /[[\]{}]/u.test(element)) {
+        throw new Error('only strings are supported in YAML arrays');
+      }
+      const parsed = scalar(element);
+      if (typeof parsed !== 'string') {
+        throw new Error('only strings are supported in YAML arrays');
+      }
+      text = parsed;
+      remaining = delimiter < 0 ? '' : remaining.slice(delimiter);
+    }
+    elements.push(text);
+    if (remaining && !remaining.startsWith(',')) {
+      throw new Error('expected a comma between YAML array strings');
+    }
+    remaining = remaining.slice(1).trimStart();
+  }
+  return elements;
+}
+
 function scalar(raw: string): string | boolean | number | string[] {
   const value = raw.trim();
-  if (/[*&!]|<<\s*:/.test(value)) {
+  if (/^['"]/u.test(value)) {
+    const quoted = quotedScalar(value);
+    if (quoted.length !== value.length) {
+      throw new Error('unexpected content after quoted YAML string');
+    }
+    return quoted.text;
+  }
+  if (/^[*&!]/u.test(value) || /^<<\s*:/u.test(value)) {
     throw new Error('YAML tags, anchors, aliases, and merge keys are forbidden');
   }
   if (value === 'true') {
@@ -21,20 +86,16 @@ function scalar(raw: string): string | boolean | number | string[] {
   if (value === 'false') {
     return false;
   }
-  if (value.startsWith('[') && value.endsWith(']')) {
-    return value
-      .slice(1, -1)
-      .split(',')
-      .map((x) => x.trim().replace(/^['"]|['"]$/g, ''))
-      .filter(Boolean);
+  if (value.startsWith('[')) {
+    return stringArray(value);
   }
   if (/^[-+]?\d+$/u.test(value)) {
     return Number(value);
   }
-  if (/^(null|~|\{|\})/i.test(value)) {
+  if (/^(null|~|\{|\})/i.test(value) || /:(?:\s|$)/u.test(value)) {
     throw new Error('only strings, booleans, version 1, and string arrays are supported');
   }
-  return value.replace(/^(['"])(.*)\1$/, '$2');
+  return value;
 }
 
 export function frontmatter(text: string): { data: Record<string, unknown>; body: string } {

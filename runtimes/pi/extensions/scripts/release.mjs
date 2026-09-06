@@ -82,6 +82,7 @@ let verifiedReleaseFingerprint;
 
 export const BUNDLER_OPTIONS = Object.freeze({
   bundle: true,
+  conditions: ['mpx-source'],
   external: HOST_EXTERNALS,
   format: 'esm',
   legalComments: 'none',
@@ -245,8 +246,20 @@ async function productionInputs() {
       ignoredTopLevelDirectories: sourceIgnoredDirectories,
     })
   ).filter((file) => file.endsWith('.ts'));
+  const compilerRoot = await dependencyPackageRoot('@mpx/content-compiler');
+  const compilerPrefix = path.relative(packageRoot, compilerRoot).replaceAll('\\', '/');
+  const compilerSourceFiles = (await walkRegularFiles(path.join(compilerRoot, 'src')))
+    .filter((file) => file.endsWith('.ts'))
+    .map((file) => `${compilerPrefix}/src/${file}`);
   return [
-    ...new Set([...sourceFiles, 'package.json', 'scripts/release.mjs', ...PACKAGE_ASSETS]),
+    ...new Set([
+      ...sourceFiles,
+      ...compilerSourceFiles,
+      `${compilerPrefix}/package.json`,
+      'package.json',
+      'scripts/release.mjs',
+      ...PACKAGE_ASSETS,
+    ]),
   ].sort();
 }
 

@@ -12,7 +12,7 @@ import type {
   ExtensionContext,
   ToolCallEventResult,
 } from '@earendil-works/pi-coding-agent';
-import { inChildSessionContext } from './subagents/child-context.js';
+import { registerNotifications } from './notifications.js';
 
 export function resolveGuardsDirectory(): string {
   return fileURLToPath(new URL('./guards/', import.meta.url));
@@ -426,8 +426,6 @@ async function injectSessionContext(
 }
 
 export default function (pi: ExtensionAPI) {
-  const isChildSession = inChildSessionContext();
-
   pi.on('tool_call', async (event, ctx): Promise<ToolCallEventResult | undefined> => {
     if (event.toolName !== 'bash') {
       return undefined;
@@ -492,16 +490,22 @@ export default function (pi: ExtensionAPI) {
     );
   });
 
-  if (!isChildSession) {
-    pi.on('agent_settled', async (_event, ctx) => {
-      // Fire-and-forget: the beep plays synchronously for ~0.5 s and must not stall the turn.
-      void runProcess(
-        'powershell.exe',
-        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', NOTIFY_FLASH_BEEP_SCRIPT],
-        undefined,
-        NOTIFY_TIMEOUT_MILLISECONDS,
-        ctx.cwd,
+  registerNotifications(pi, async (ctx) => {
+    if (process.platform !== 'win32') {
+      return;
+    }
+    const outcome = await runProcess(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', NOTIFY_FLASH_BEEP_SCRIPT],
+      undefined,
+      NOTIFY_TIMEOUT_MILLISECONDS,
+      ctx.cwd,
+    );
+    if (outcome.exitCode !== 0 || outcome.timedOut || outcome.spawnErrorMessage) {
+      warn(
+        ctx,
+        `${describeInfrastructureFailure('notification', outcome)}: ${truncateReason(outcome.stderr)}`,
       );
-    });
-  }
+    }
+  });
 }

@@ -11,6 +11,7 @@ import {
   type ProjectSkill,
 } from './contracts.js';
 import { ID, frontmatter, parseCanonical } from './frontmatter.js';
+import { classifyProjectSkill } from './project-skill-classification.js';
 
 export const MAX_PROJECT_SKILL_CANDIDATES = 256;
 export const MAX_PROJECT_SKILL_DIRECTORY_ENTRIES = 4_096;
@@ -89,6 +90,7 @@ async function readExactSkillFile(
 export async function enumerateSkillDirectory(
   directory: string,
   inventoryBytesRemaining = Number.MAX_SAFE_INTEGER,
+  onFileBytes?: (relativePath: string, byteCount: number) => void,
 ): Promise<readonly SkillDirectoryFile[]> {
   const rootStat = await lstat(directory);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
@@ -132,18 +134,22 @@ export async function enumerateSkillDirectory(
             'project skill inventory byte limit exceeded',
           );
         }
+        if (stat.size > MAX_SKILL_DIRECTORY_BYTES - totalBytes) {
+          throw new Error('skill directory exceeds byte limit');
+        }
+        const relativePath = path.relative(root, candidate).split(path.sep).join('/');
+        onFileBytes?.(relativePath, stat.size);
         const bytes = await readExactSkillFile(
           candidate,
           stat,
           MAX_SKILL_DIRECTORY_BYTES - totalBytes,
         );
         totalBytes += bytes.length;
-        files.push(
-          Object.freeze({
-            relativePath: path.relative(root, candidate).split(path.sep).join('/'),
-            bytes,
-          }),
-        );
+        const file = Object.freeze({
+          relativePath,
+          bytes,
+        });
+        files.push(file);
       } else {
         throw new Error('skill directory contains a special file');
       }
@@ -229,16 +235,41 @@ export interface ProjectSkillDirectory {
 export interface ProjectSkillFileSystem {
   opendir(root: string): Promise<ProjectSkillDirectory>;
   realpath(file: string): Promise<string>;
-  readFile(file: string, encoding: 'utf8'): Promise<string>;
+  readFile(file: string, encoding: 'utf8', inventoryBytesRemaining?: number): Promise<string>;
   enumerateDirectory?(
     directory: string,
     inventoryBytesRemaining: number,
+    onFileBytes?: (relativePath: string, byteCount: number) => void,
   ): Promise<readonly SkillDirectoryFile[]>;
 }
+async function regularProjectDirectories(directories: readonly string[]): Promise<void> {
+  for (const directory of directories) {
+    const stat = await lstat(directory);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error('project skill inventory roots must be regular directories');
+    }
+  }
+}
+
 const projectSkillFileSystem: ProjectSkillFileSystem = {
-  opendir,
+  opendir: async (root) => {
+    await regularProjectDirectories([path.dirname(root), root]);
+    return opendir(root);
+  },
   realpath,
-  readFile: (file, encoding) => readFile(file, encoding),
+  readFile: async (file, encoding, inventoryBytesRemaining = MAX_PROJECT_SKILL_INVENTORY_BYTES) => {
+    const directory = path.dirname(file);
+    const root = path.dirname(directory);
+    await regularProjectDirectories([path.dirname(root), root, directory]);
+    const stat = await lstat(file);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error('project SKILL.md must be a regular file');
+    }
+    if (stat.size > inventoryBytesRemaining) {
+      throw new ProjectSkillInventoryByteLimitError('project skill inventory byte limit exceeded');
+    }
+    return (await readExactSkillFile(file, stat, MAX_SKILL_DIRECTORY_BYTES)).toString(encoding);
+  },
   enumerateDirectory: enumerateSkillDirectory,
 };
 
@@ -312,10 +343,15 @@ export async function inventoryProjectSkills(
   projectRoot: string,
   canonical: readonly CanonicalSkill[] = [],
   filesystem: ProjectSkillFileSystem = projectSkillFileSystem,
-): Promise<{ skills: ProjectSkill[]; diagnostics: Diagnostic[] }> {
+): Promise<{
+  skills: ProjectSkill[];
+  nativeSkillDirectories: string[];
+  diagnostics: Diagnostic[];
+}> {
   const root = path.join(projectRoot, '.agents', 'skills');
   const diagnostics: Diagnostic[] = [];
   const skills: ProjectSkill[] = [];
+  const nativeSkillDirectories: string[] = [];
   const acceptedIdentities = new Set(canonical.map((x) => x.identity));
   let candidates: ProjectSkillDirectoryEntry[];
   try {
@@ -325,7 +361,7 @@ export async function inventoryProjectSkills(
       throw error;
     }
     if (absentInventory(error)) {
-      return { skills, diagnostics };
+      return { skills, nativeSkillDirectories, diagnostics };
     }
     throw new SkillCatalogError([
       {
@@ -365,33 +401,58 @@ export async function inventoryProjectSkills(
     }
     const file = path.join(root, entry.name, 'SKILL.md');
     try {
-      const real = await containedProject(root, file, filesystem);
+      await containedProject(projectRoot, root, filesystem);
+      const directory = await containedProject(root, path.dirname(file), filesystem);
+      const real = await containedProject(path.dirname(file), file, filesystem);
+      const text = await filesystem.readFile(
+        file,
+        'utf8',
+        MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes,
+      );
+      const classifiedBytes = Buffer.from(text, 'utf8');
+      inventoryBytes += classifiedBytes.length;
+      if (inventoryBytes > MAX_PROJECT_SKILL_INVENTORY_BYTES) {
+        throw new ProjectSkillInventoryByteLimitError();
+      }
+      const classification = classifyProjectSkill(text);
       let files: readonly SkillDirectoryFile[];
+      let reportedBytes = 0;
       if (filesystem.enumerateDirectory) {
         files = await filesystem.enumerateDirectory(
-          path.dirname(real),
-          MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes,
+          directory,
+          MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes + classifiedBytes.length,
+          (relativePath, byteCount) => {
+            const additionalBytes =
+              relativePath === 'SKILL.md'
+                ? Math.max(0, byteCount - classifiedBytes.length)
+                : byteCount;
+            reportedBytes += additionalBytes;
+            inventoryBytes += additionalBytes;
+          },
         );
       } else {
-        const text = await filesystem.readFile(real, 'utf8');
-        files = [{ relativePath: 'SKILL.md', bytes: Buffer.from(text, 'utf8') }];
+        files = [{ relativePath: 'SKILL.md', bytes: classifiedBytes }];
       }
-      const candidateBytes = files.reduce((total, item) => total + item.bytes.length, 0);
-      if (candidateBytes > MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes) {
-        throw new SkillCatalogError([
-          {
-            code: 'PROJECT_SKILL_INVENTORY_LIMIT',
-            message: `project skill inventory exceeds ${MAX_PROJECT_SKILL_INVENTORY_BYTES} bytes`,
-            path: file,
-          },
-        ]);
+      const supplementalBytes = files.reduce(
+        (total, item) =>
+          total +
+          (item.relativePath === 'SKILL.md'
+            ? Math.max(0, item.bytes.length - classifiedBytes.length)
+            : item.bytes.length),
+        0,
+      );
+      inventoryBytes += supplementalBytes - reportedBytes;
+      if (inventoryBytes > MAX_PROJECT_SKILL_INVENTORY_BYTES) {
+        throw new ProjectSkillInventoryByteLimitError();
       }
-      inventoryBytes += candidateBytes;
       const skillFile = files.find((item) => item.relativePath === 'SKILL.md');
-      if (!skillFile) {
-        throw new Error('project skill directory has no SKILL.md');
+      if (!skillFile || !skillFile.bytes.equals(classifiedBytes)) {
+        throw new Error('project SKILL.md changed after ownership classification');
       }
-      const text = skillFile.bytes.toString('utf8');
+      if (classification === 'native') {
+        nativeSkillDirectories.push(directory);
+        continue;
+      }
       const { data } = frontmatter(text);
       const name = data.name;
       if (
@@ -461,7 +522,7 @@ export async function inventoryProjectSkills(
       });
     }
   }
-  return { skills, diagnostics };
+  return { skills, nativeSkillDirectories, diagnostics };
 }
 
 export function isProjectSkill(skill: CatalogSkill): skill is ProjectSkill {

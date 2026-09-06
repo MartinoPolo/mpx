@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
+import { sanitizedEnvironment } from '@mpx/executors';
 
 const cleanupRoots: string[] = [];
 const children = new Set<ChildProcessWithoutNullStreams>();
@@ -75,6 +76,58 @@ async function runNode(
   });
 }
 
+async function skillProjection(root: string): Promise<Record<string, string>> {
+  const files: Array<{ relativePath: string; sha256: string; byteCount: number }> = [];
+  const skills = [];
+  for (const [identity, exposure, source] of [
+    ['canonical-full', 'full', 'content'],
+    ['canonical-manual', 'explicit-only', 'content'],
+    ['local', 'full', '.agents'],
+  ] as const) {
+    const header = `---\nname: ${identity}\ndescription: ${identity} description\n${exposure === 'explicit-only' ? 'disable-model-invocation: true\n' : ''}---\n`;
+    const bytes = Buffer.from(`${header}Instructions for ${identity}.\n`);
+    const relativePath = `skills/${identity}/SKILL.md`;
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    await mkdir(path.join(root, 'skills', identity), { recursive: true });
+    await writeFile(path.join(root, relativePath), bytes);
+    files.push({ relativePath, sha256, byteCount: bytes.byteLength });
+    skills.push({
+      identity,
+      exposure,
+      canonicalDescription: `${identity} description`,
+      effectiveDescription: `${identity} description`,
+      sourcePath: `${source}/skills/${identity}/SKILL.md`,
+      generatedPath: relativePath,
+      generatedSha256: sha256,
+      bodyByteOffset: Buffer.byteLength(header),
+      omittedOptionalFeatures: [],
+    });
+  }
+  const manifestPath = path.join(root, 'active-content.json');
+  const manifest = JSON.stringify({
+    schemaVersion: 1,
+    compilerVersion: '1.0.0',
+    runtime: 'pi',
+    profileSchemaVersion: 1,
+    binding: { projectId: null, repositoryId: 'fixture', contentScope: 'personal' },
+    manifestKey: 'a'.repeat(64),
+    manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
+    skills,
+    agents: [],
+    files,
+  });
+  await writeFile(manifestPath, manifest);
+  return {
+    MPX_RUNTIME: 'pi',
+    MPX_ACTIVE_CONTENT_ROOT: root,
+    MPX_ACTIVE_CONTENT_MANIFEST: manifestPath,
+    MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: JSON.stringify({
+      sha256: createHash('sha256').update(manifest).digest('hex'),
+      byteCount: Buffer.byteLength(manifest),
+    }),
+  };
+}
+
 afterEach(async () => {
   await Promise.all([...children].map(stop));
   children.clear();
@@ -83,7 +136,7 @@ afterEach(async () => {
   );
 });
 
-it('discovers the release artifact once through native Pi package loading and reload', async () => {
+it('discovers the release once and separates MPX commands from native project skills', async () => {
   const workspaceRoot = path.resolve(import.meta.dirname, '../../..');
   const artifactRoot = path.join(workspaceRoot, 'runtimes/pi/extensions/dist/package');
   const releaseScript = path.join(workspaceRoot, 'runtimes/pi/extensions/scripts/release.mjs');
@@ -119,11 +172,29 @@ it('discovers the release artifact once through native Pi package loading and re
   const settingsDigest = createHash('sha256').update(settings).digest('hex');
   const authDigest = createHash('sha256').update(emptyAuth).digest('hex');
 
-  const child = spawn(process.execPath, [piCli, '--mode', 'rpc', '--no-session', '--no-skills'], {
-    cwd,
-    env: { ...process.env, PI_CODING_AGENT_DIR: agentRoot },
-    shell: false,
-  });
+  const activeRoot = path.join(disposable, 'active');
+  const skillEnvironment = await skillProjection(activeRoot);
+  const child = spawn(
+    process.execPath,
+    [
+      piCli,
+      '--mode',
+      'rpc',
+      '--no-session',
+      '--no-skills',
+      '--skill',
+      path.join(activeRoot, 'skills', 'local'),
+    ],
+    {
+      cwd,
+      env: {
+        ...process.env,
+        ...sanitizedEnvironment({}, skillEnvironment),
+        PI_CODING_AGENT_DIR: agentRoot,
+      },
+      shell: false,
+    },
+  );
   children.add(child);
   let stderr = '';
   let stdout = '';
@@ -182,6 +253,16 @@ it('discovers the release artifact once through native Pi package loading and re
       }),
     ),
   );
+  expect(
+    commands
+      .filter(({ name }) => name.startsWith('mpx:'))
+      .map(({ name }) => name)
+      .sort(),
+  ).toEqual(['mpx:canonical-full', 'mpx:canonical-manual']);
+  expect(commands.filter(({ name }) => name.startsWith('skill:')).map(({ name }) => name)).toEqual([
+    'skill:local',
+  ]);
+  expect(commands.find(({ name }) => name === 'skill:local')).toMatchObject({ source: 'skill' });
   expect(
     records.filter((record) => (record as { type?: string }).type === 'extension_error'),
   ).toEqual([]);

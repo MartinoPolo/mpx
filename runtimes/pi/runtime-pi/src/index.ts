@@ -14,8 +14,18 @@ import {
   type RuntimeBinding,
   type RuntimeContextV1,
 } from '@mpx/runtime-contracts';
-import { verifySkillProjectionPlan, type SkillProjectionPlan } from '@mpx/skills';
-import { verifyCompiledContentTree, type CompiledContentTree } from '@mpx/content-compiler';
+import {
+  inventoryProjectSkills,
+  SkillCatalogError,
+  verifySkillProjectionPlan,
+  type SkillProjectionPlan,
+} from '@mpx/skills';
+import {
+  classifyCompiledSkillSource,
+  loadActiveContentProjection,
+  verifyCompiledContentTree,
+  type CompiledContentTree,
+} from '@mpx/content-compiler';
 import { parsePiRuntimeProfileV1, type PiRuntimeProfileV1 } from './profile.js';
 
 export * from './profile.js';
@@ -34,6 +44,7 @@ export interface PiPublishedProjection {
   readonly artifactKey: string;
   readonly reference: PublishedRuntimeArtifactReference;
   readonly files: readonly string[];
+  readonly fileMap: readonly PiProjectionFile[];
   readonly reused: boolean;
   readonly revalidation: PiProjectionRevalidation;
 }
@@ -194,13 +205,19 @@ function projectionDigest(value: unknown): string {
   return createHash('sha256').update(stableProjectionValue(value)).digest('hex');
 }
 
+interface PiProjectionFile {
+  readonly path: string;
+  readonly sha256: string;
+  readonly bytes: number;
+}
+
 function projectionFilesForInvocation(
   input: PiInvocationInput,
   directory: string,
   reference: PublishedRuntimeArtifactReference | undefined,
-): readonly string[] {
+): readonly PiProjectionFile[] {
   if (input.projection && verifiedPiProjections.has(input.projection as object)) {
-    return input.projection.files;
+    return input.projection.fileMap;
   }
   if (!reference) {
     throw new Error('published Pi projection reference is required');
@@ -257,16 +274,17 @@ function projectionFilesForInvocation(
     ) {
       throw new Error('invalid metadata');
     }
-    return fileMap.map((entry) => entry.path);
+    return fileMap;
   } catch {
     throw new Error('published Pi projection file map is unavailable or invalid');
   }
 }
 
-function compiledAgentsDirectory(directory: string, files: readonly string[]): string {
+function compiledAgentsDirectory(directory: string, files: readonly PiProjectionFile[]): string {
   const normalized = new Set<string>();
   let agentFileCount = 0;
-  for (const file of files) {
+  for (const entry of files) {
+    const file = entry.path;
     const identity = file.toLowerCase();
     if (normalized.has(identity)) {
       throw new Error('published Pi projection file map collides');
@@ -297,7 +315,7 @@ function compiledAgentsDirectory(directory: string, files: readonly string[]): s
   return agents;
 }
 
-export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
+export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvocationPlan> {
   const runtimeContextFile = input.projection?.runtimeContextFile ?? input.runtimeContextFile;
   const profileInput = input.projection?.profile ?? input.profile;
   const profile = profileInput
@@ -342,14 +360,48 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
     projectionReference,
   );
   const agentsDirectory = compiledAgentsDirectory(activeContentRoot, projectionFiles);
-  const nativeSkillDirectories = projectionFiles
-    .flatMap((file) => {
-      const match = /^skills\/([^/]+)\/SKILL\.md$/u.exec(file);
-      return match && match[1] !== 'shared'
-        ? [path.join(activeContentRoot, 'skills', match[1]!)]
-        : [];
-    })
-    .map((directory) => absolute(directory, 'native skill'))
+  const manifestFileMatches = projectionFiles.filter(
+    (entry) => entry.path === 'active-content.json',
+  );
+  if (manifestFileMatches.length !== 1) {
+    throw new Error('published Pi projection does not uniquely bind active-content.json');
+  }
+  const manifestFile = manifestFileMatches[0]!;
+  const manifestPath = path.join(activeContentRoot, 'active-content.json');
+  const activeContent = await loadActiveContentProjection({
+    root: activeContentRoot,
+    manifestPath,
+    expected: {
+      runtime: 'pi',
+      manifestKey: context.manifestKey,
+      binding: context.binding,
+      manifestFile: { sha256: manifestFile.sha256, byteCount: manifestFile.bytes },
+    },
+  });
+  const projectInventory = await inventoryProjectSkills(absolute(input.cwd, 'cwd'));
+  if (projectInventory.diagnostics.length) {
+    throw new SkillCatalogError(projectInventory.diagnostics);
+  }
+  const managedProjectSkills = activeContent.manifest.skills.filter(
+    (entry) => classifyCompiledSkillSource(entry) === 'project',
+  );
+  const managedSourceDirectories = new Set(
+    managedProjectSkills.map((entry) => path.dirname(entry.sourcePath).replaceAll('\\', '/')),
+  );
+  for (const directory of projectInventory.nativeSkillDirectories) {
+    const directoryName = path.basename(directory);
+    const sourceDirectory = `.agents/skills/${process.platform === 'win32' ? directoryName.toLowerCase() : directoryName}`;
+    if (managedSourceDirectories.has(sourceDirectory)) {
+      throw new Error('project skill ownership changed since projection; restart required');
+    }
+  }
+  const managedSkillDirectories = managedProjectSkills
+    .map((entry) =>
+      absolute(
+        path.dirname(path.join(activeContentRoot, ...entry.generatedPath.split('/'))),
+        'native skill',
+      ),
+    )
     .sort();
   const lifecycleBinding = lifecycle
     ? validateSessionLifecycleBindingV1({
@@ -364,7 +416,12 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
     cwd: absolute(input.cwd, 'cwd'),
     args: [
       '--no-skills',
-      ...nativeSkillDirectories.flatMap((directory) => ['--skill', directory]),
+      ...[
+        ...managedSkillDirectories,
+        ...projectInventory.nativeSkillDirectories.map((directory) =>
+          absolute(path.join(directory, 'SKILL.md'), 'native project skill entrypoint'),
+        ),
+      ].flatMap((skillPath) => ['--skill', skillPath]),
       ...(profile
         ? [
             '--provider',
@@ -387,9 +444,11 @@ export function planPiInvocation(input: PiInvocationInput): PiInvocationPlan {
       MPX_RUNTIME_CONTEXT: JSON.stringify(context),
       MPX_RUNTIME_CONTEXT_FILE: absolute(runtimeContextFile, 'runtime context'),
       MPX_ACTIVE_CONTENT_ROOT: activeContentRoot,
-      MPX_ACTIVE_CONTENT_MANIFEST: path
-        .join(activeContentRoot, 'active-content.json')
-        .replaceAll('\\', '/'),
+      MPX_ACTIVE_CONTENT_MANIFEST: manifestPath.replaceAll('\\', '/'),
+      MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: JSON.stringify({
+        sha256: manifestFile.sha256,
+        byteCount: manifestFile.bytes,
+      }),
       MPX_COMPILED_AGENTS_DIR: agentsDirectory,
       ...(projectionReference
         ? { MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(projectionReference) }
@@ -440,6 +499,7 @@ function freezeProjection(
     artifactKey: reference.launchBinding.runtimeArtifactKey,
     reference,
     files: Object.freeze(published.fileMap.map((file) => file.path)),
+    fileMap: Object.freeze(published.fileMap.map((file) => Object.freeze({ ...file }))),
     reused: published.reused,
     revalidation: Object.freeze({ directory, reference, profile }),
   });

@@ -44,8 +44,10 @@ import {
   ensureAgentDirectory,
   type ExistingAgentFile,
   inspectAgentFileDestination,
+  type NativeAgentFile,
   readExistingAgentFile,
-  resolveExistingAgentFile,
+  readNativeAgentFile,
+  resolveAgentDirectory,
   resolveSafeAgentFile,
   writeAgentFile,
   writeExistingAgentFile,
@@ -410,9 +412,14 @@ export default function (pi: ExtensionAPI) {
     },
   );
 
+  const nativeAgentFiles = new Map<string, NativeAgentFile>();
+
   /** Reload agents from project/global custom agent dirs and merge with defaults (called on init and each Agent invocation). */
   const reloadCustomAgents = () => {
-    const userAgents = loadCustomAgents(process.cwd());
+    const userAgents = loadCustomAgents(process.cwd(), {
+      nativeFiles: nativeAgentFiles,
+      onDiagnostic: (message) => console.warn(`[pi-subagents] ${message}`),
+    });
     registerAgents(userAgents);
   };
 
@@ -1127,7 +1134,7 @@ Terse command-style prompts produce shallow, generic work.
           description: 'A short (3-5 word) description of the task (shown in UI).',
         }),
         subagent_type: Type.String({
-          description: `The type of specialized agent to use. Available types: ${getAvailableTypes().join(', ')}. Custom agents from .pi/agents/*.md (project) or ${getAgentDir()}/agents/*.md (global) are also available.`,
+          description: `The type of specialized agent to use. Available types: ${getAvailableTypes().join(', ')}. Unknown or disabled types are rejected; request general-purpose explicitly for an unspecialized agent. Resume uses the stored agent's type. Custom agents from .pi/agents/*.md (project) or ${getAgentDir()}/agents/*.md (global) are also available.`,
         }),
         model: Type.Optional(
           Type.String({
@@ -1297,10 +1304,48 @@ Terse command-style prompts produce shallow, generic work.
         // Reload custom agents so new project/global .md files are picked up without restart
         reloadCustomAgents();
 
+        // Resume the stored role, even if its definition is no longer discoverable.
+        if (params.resume && !params.schedule) {
+          const existing = manager.getRecord(params.resume);
+          if (!existing || existing.parentAgentId) {
+            throw new Error(`Agent not found: "${params.resume}". It may have been cleaned up.`);
+          }
+          if (!existing.session) {
+            throw new Error(`Agent "${params.resume}" has no active session to resume.`);
+          }
+          const record = await manager.resume(params.resume, params.prompt, signal);
+          if (!record) {
+            throw new Error(`Failed to resume agent "${params.resume}".`);
+          }
+          const details = buildDetails(
+            {
+              displayName: getDisplayName(record.type),
+              description: record.description,
+              subagentType: record.type,
+              modelName: record.invocation?.modelName ?? getResolvedModelName(ctx.model),
+              tags: record.invocation ? buildInvocationTags(record.invocation).tags : undefined,
+            },
+            record,
+          );
+          return textResult(
+            record.status === 'error'
+              ? `Agent failed: ${record.error}${partialOutputSuffix(record)}`
+              : record.result?.trim() || 'No output.',
+            details,
+          );
+        }
+
         const rawType = params.subagent_type as SubagentType;
         const resolved = resolveType(rawType);
+        if (getAgentConfig(resolved ?? rawType)?.enabled === false) {
+          throw new Error(`Agent type "${rawType}" is disabled.`);
+        }
+        if (!resolved && rawType.toLowerCase() !== 'general-purpose') {
+          throw new Error(
+            `Unknown agent type "${rawType}". Choose an available type or explicitly request general-purpose.`,
+          );
+        }
         const subagentType = resolved ?? 'general-purpose';
-        const fellBack = resolved === undefined;
 
         const displayName = getDisplayName(subagentType);
 
@@ -1442,34 +1487,6 @@ Terse command-style prompts produce shallow, generic work.
           } catch (err) {
             return textResult(err instanceof Error ? err.message : String(err));
           }
-        }
-
-        // Resume existing agent
-        if (params.resume) {
-          const existing = manager.getRecord(params.resume);
-          if (!existing || existing.parentAgentId) {
-            return textResult(`Agent not found: "${params.resume}". It may have been cleaned up.`);
-          }
-          if (!existing.session) {
-            return textResult(`Agent "${params.resume}" has no active session to resume.`);
-          }
-          const record = await manager.resume(params.resume, params.prompt, signal);
-          if (!record) {
-            return textResult(`Failed to resume agent "${params.resume}".`);
-          }
-          // A failed resume surfaces the error, plus any partial output THIS
-          // resume produced (never the previous turn's answer, #144).
-          const resumedModelName = record.invocation?.modelName ?? detailBase.modelName;
-          if (record.status === 'error') {
-            return textResult(
-              `Agent failed: ${record.error}${partialOutputSuffix(record)}`,
-              buildDetails(detailBase, record, undefined, { modelName: resumedModelName }),
-            );
-          }
-          return textResult(
-            record.result?.trim() || 'No output.',
-            buildDetails(detailBase, record, undefined, { modelName: resumedModelName }),
-          );
         }
 
         // Background execution
@@ -1677,18 +1694,9 @@ Terse command-style prompts produce shallow, generic work.
 
         const details = buildDetails(detailBase, record, fgState, { tokens: tokenText });
 
-        // "general-purpose" may itself be unregistered (defaults disabled, no
-        // user override) — getConfig then uses the hardcoded fallback config.
-        const fallbackNote = fellBack
-          ? `Note: Unknown agent type "${rawType}" — using ${resolveType('general-purpose') ? 'general-purpose' : 'the fallback agent config'}.\n\n`
-          : '';
-
         if (record.status === 'error') {
           // Error headline + any partial output the run produced before failing.
-          return textResult(
-            `${fallbackNote}Agent failed: ${record.error}${partialOutputSuffix(record)}`,
-            details,
-          );
+          return textResult(`Agent failed: ${record.error}${partialOutputSuffix(record)}`, details);
         }
 
         const durationMs = (record.completedAt ?? Date.now()) - record.startedAt;
@@ -1697,7 +1705,7 @@ Terse command-style prompts produce shallow, generic work.
           statsParts.push(tokenText);
         }
         return textResult(
-          `${fallbackNote}Agent completed in ${formatMs(durationMs)} (${statsParts.join(', ')})${getForegroundOutcomeNote(record.status)}.\n\n` +
+          `Agent completed in ${formatMs(durationMs)} (${statsParts.join(', ')})${getForegroundOutcomeNote(record.status)}.\n\n` +
             (record.result?.trim() || 'No output.'),
           details,
         );
@@ -1883,22 +1891,23 @@ Terse command-style prompts produce shallow, generic work.
     location: 'project' | 'workspace' | 'personal';
   };
 
-  /** Find a verified custom agent file in discovery-precedence order. */
+  /** Management must use the winning discovery snapshot, never a lower-precedence file. */
   function findAgentFile(name: string): LocatedAgentFile | undefined {
-    const locations = [
-      [projectAgentsDir(), 'project'],
-      [workspaceAgentsDir(), 'workspace'],
-      [personalAgentsDir(), 'personal'],
-    ] as const;
-
-    for (const [directory, location] of locations) {
-      try {
-        return { ...resolveExistingAgentFile(directory, name), location };
-      } catch {
-        continue;
-      }
+    const native = nativeAgentFiles.get(name);
+    if (!native) {
+      return undefined;
     }
-    return undefined;
+    const location =
+      native.directory.declaredPath === projectAgentsDir()
+        ? 'project'
+        : native.directory.declaredPath === workspaceAgentsDir()
+          ? 'workspace'
+          : 'personal';
+    if (native.directory.readOnly || location === 'workspace') {
+      throw new Error(`Read-only agent source: "${native.directory.declaredPath}"`);
+    }
+    readNativeAgentFile(native);
+    return { ...native.file, location };
   }
 
   function getModelLabel(type: string, registry?: ModelRegistry): string {
@@ -2152,6 +2161,20 @@ Terse command-style prompts produce shallow, generic work.
       return;
     }
 
+    const native = nativeAgentFiles.get(name);
+    if (
+      cfg.source === 'compiled' ||
+      native?.directory.readOnly ||
+      native?.directory.declaredPath === workspaceAgentsDir() ||
+      (!cfg.isDefault && !native)
+    ) {
+      ctx.ui.notify(
+        `Read-only agent source: ${native?.directory.declaredPath ?? cfg.source}. Write actions are disabled.`,
+        'info',
+      );
+      await ctx.ui.select(`${name} (read-only)`, ['Back']);
+      return;
+    }
     const file = findAgentFile(name);
     const isDefault = cfg.isDefault === true;
     const disabled = cfg.enabled === false;
@@ -2217,17 +2240,42 @@ Terse command-style prompts produce shallow, generic work.
     }
   }
 
+  async function chooseWritableAgentDirectory(
+    ctx: ExtensionCommandContext,
+  ): Promise<string | undefined> {
+    const locations = [
+      { label: 'Project (.pi/agents/)', directory: projectAgentsDir() },
+      { label: `Personal (${personalAgentsDir()})`, directory: personalAgentsDir() },
+    ].map((location) => {
+      let readOnly = false;
+      if (existsSync(location.directory)) {
+        try {
+          resolveAgentDirectory(location.directory);
+        } catch {
+          readOnly = true;
+        }
+      }
+      return { ...location, readOnly, label: `${location.label}${readOnly ? ' (read-only)' : ''}` };
+    });
+    const choice = await ctx.ui.select(
+      'Choose location',
+      locations.map((location) => location.label),
+    );
+    const selected = locations.find((location) => location.label === choice);
+    if (selected?.readOnly) {
+      ctx.ui.notify('This agent source is read-only. Write actions are disabled.', 'warning');
+      return undefined;
+    }
+    return selected?.directory;
+  }
+
   /** Eject a default agent: write its embedded config as a .md file. */
   async function ejectAgent(ctx: ExtensionCommandContext, name: string, cfg: AgentConfig) {
-    const location = await ctx.ui.select('Choose location', [
-      'Project (.pi/agents/)',
-      `Personal (${personalAgentsDir()})`,
-    ]);
-    if (!location) {
+    const targetDir = await chooseWritableAgentDirectory(ctx);
+    if (!targetDir) {
       return;
     }
 
-    const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
     ensureAgentDirectory(targetDir);
 
     const destination = inspectAgentFileDestination(targetDir, name);
@@ -2321,15 +2369,11 @@ Terse command-style prompts produce shallow, generic work.
     }
 
     // No file (built-in default) — create a stub
-    const location = await ctx.ui.select('Choose location', [
-      'Project (.pi/agents/)',
-      `Personal (${personalAgentsDir()})`,
-    ]);
-    if (!location) {
+    const targetDir = await chooseWritableAgentDirectory(ctx);
+    if (!targetDir) {
       return;
     }
 
-    const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
     ensureAgentDirectory(targetDir);
 
     const targetPath = writeAgentFile(targetDir, name, '---\nenabled: false\n---\n', false);
@@ -2360,15 +2404,10 @@ Terse command-style prompts produce shallow, generic work.
   }
 
   async function showCreateWizard(ctx: ExtensionCommandContext) {
-    const location = await ctx.ui.select('Choose location', [
-      'Project (.pi/agents/)',
-      `Personal (${personalAgentsDir()})`,
-    ]);
-    if (!location) {
+    const targetDir = await chooseWritableAgentDirectory(ctx);
+    if (!targetDir) {
       return;
     }
-
-    const targetDir = location.startsWith('Project') ? projectAgentsDir() : personalAgentsDir();
 
     const method = await ctx.ui.select('Creation method', [
       'Generate with Claude (recommended)',

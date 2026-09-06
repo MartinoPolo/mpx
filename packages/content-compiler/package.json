@@ -7,6 +7,11 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./active": {
+      "types": "./dist/active.d.ts",
+      "mpx-source": "./src/active.ts",
+      "default": "./dist/active.js"
     }
   },
   "scripts": {

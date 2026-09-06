@@ -28,7 +28,11 @@ test('package manifest exposes only the static composition entry point', () => {
   assert.equal(manifest.private, true);
   assert.equal(manifest.type, 'module');
   assert.deepEqual(pi.extensions, ['./index.ts']);
-  assert.deepEqual(dependencies, { croner: '10.0.1', nanoid: '5.1.16' });
+  assert.deepEqual(dependencies, {
+    '@mpx/content-compiler': 'workspace:*',
+    croner: '10.0.1',
+    nanoid: '5.1.16',
+  });
 });
 
 const REQUIRED_THEME_COLORS = [

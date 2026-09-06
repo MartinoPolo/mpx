@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import type {
+  CompiledAgentManifestEntry,
+  CompiledSkillManifestEntry,
+  ContentFeature,
+  ContentInspectionManifest,
+} from './compiler.js';
 import {
   CONTENT_COMPILER_VERSION,
   CONTENT_MANIFEST_SCHEMA_VERSION,
   RUNTIME_PROFILE_SCHEMA_VERSION,
-  type CompiledAgentManifestEntry,
-  type CompiledSkillManifestEntry,
-  type ContentFeature,
-  type ContentInspectionManifest,
-} from './compiler.js';
+} from './versions.js';
 
 export type ActiveContentErrorCode =
   | 'ACTIVE_CONTENT_UNAVAILABLE'
@@ -34,6 +36,13 @@ export interface ActiveContentProjection {
   readonly manifestPath: string;
   readonly manifest: ContentInspectionManifest;
   readonly realRoot: string;
+}
+
+export interface ActiveContentExpectation {
+  readonly runtime?: 'pi' | 'claude';
+  readonly manifestKey?: string;
+  readonly binding?: ContentInspectionManifest['binding'];
+  readonly manifestFile?: { readonly sha256: string; readonly byteCount: number };
 }
 
 const fail = (code: ActiveContentErrorCode, message: string): never => {
@@ -343,9 +352,129 @@ const samePath = (left: string, right: string): boolean =>
     ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
     : path.resolve(left) === path.resolve(right);
 
+function validateExpectation(expected: ActiveContentExpectation): void {
+  const keys = Object.keys(expected as object);
+  if (keys.some((key) => !['runtime', 'manifestKey', 'binding', 'manifestFile'].includes(key))) {
+    fail('ACTIVE_CONTENT_BINDING_INVALID', 'Active content expectation has unknown fields.');
+  }
+  const boundedText = (value: unknown): value is string =>
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 65_536 &&
+    !value.includes('\0');
+  if (
+    expected.runtime !== undefined &&
+    expected.runtime !== 'pi' &&
+    expected.runtime !== 'claude'
+  ) {
+    fail('ACTIVE_CONTENT_BINDING_INVALID', 'Expected active content runtime is invalid.');
+  }
+  if (expected.manifestKey !== undefined && !boundedText(expected.manifestKey)) {
+    fail('ACTIVE_CONTENT_BINDING_INVALID', 'Expected active content manifest key is invalid.');
+  }
+  if (expected.binding !== undefined) {
+    const binding = expected.binding as unknown as Record<string, unknown>;
+    if (
+      !binding ||
+      typeof binding !== 'object' ||
+      Array.isArray(binding) ||
+      Object.keys(binding).sort().join(',') !== 'contentScope,projectId,repositoryId' ||
+      (binding.projectId !== null && !boundedText(binding.projectId)) ||
+      !boundedText(binding.repositoryId) ||
+      !boundedText(binding.contentScope)
+    ) {
+      fail('ACTIVE_CONTENT_BINDING_INVALID', 'Expected active content binding is invalid.');
+    }
+  }
+  if (
+    expected.manifestFile !== undefined &&
+    (!expected.manifestFile ||
+      Object.keys(expected.manifestFile).sort().join(',') !== 'byteCount,sha256' ||
+      !/^[a-f0-9]{64}$/u.test(expected.manifestFile.sha256) ||
+      !Number.isSafeInteger(expected.manifestFile.byteCount) ||
+      expected.manifestFile.byteCount < 0 ||
+      expected.manifestFile.byteCount > 16 * 1024 * 1024)
+  ) {
+    fail(
+      'ACTIVE_CONTENT_BINDING_INVALID',
+      'Expected active content manifest integrity is invalid.',
+    );
+  }
+}
+
+export function classifyCompiledSkillSource(
+  entry: CompiledSkillManifestEntry,
+): 'canonical' | 'project' {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(entry.identity)) {
+    return fail('ACTIVE_CONTENT_MANIFEST_INVALID', 'Skill identity has unsafe provenance.');
+  }
+  const generatedPath = `skills/${entry.identity}/SKILL.md`;
+  if (entry.generatedPath !== generatedPath) {
+    return fail(
+      'ACTIVE_CONTENT_MANIFEST_INVALID',
+      `Skill '${entry.identity}' has unsafe provenance.`,
+    );
+  }
+  if (entry.sourcePath === `content/skills/${entry.identity}/SKILL.md`) {
+    return 'canonical';
+  }
+  if (entry.sourcePath === `.agents/skills/${entry.identity}/SKILL.md`) {
+    return 'project';
+  }
+  return fail(
+    'ACTIVE_CONTENT_MANIFEST_INVALID',
+    `Skill '${entry.identity}' has unknown provenance.`,
+  );
+}
+
+async function verifiedRegularFile(input: {
+  realRoot: string;
+  file: string;
+  expected?: { readonly sha256: string; readonly byteCount: number };
+  maximumBytes: number;
+  code: 'ACTIVE_CONTENT_UNAVAILABLE' | 'ACTIVE_CONTENT_TAMPERED';
+  message: string;
+}): Promise<Buffer> {
+  try {
+    const stat = await lstat(input.file);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.size > input.maximumBytes ||
+      (input.expected && stat.size !== input.expected.byteCount)
+    ) {
+      throw new Error('file metadata changed');
+    }
+    const resolved = await realpath(input.file);
+    const relative = path.relative(input.realRoot, resolved);
+    if (
+      !samePath(resolved, input.file) ||
+      !relative ||
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
+      throw new Error('file escaped active root');
+    }
+    const bytes = await readFile(input.file);
+    if (
+      bytes.byteLength !== stat.size ||
+      (input.expected &&
+        (bytes.byteLength !== input.expected.byteCount ||
+          createHash('sha256').update(bytes).digest('hex') !== input.expected.sha256))
+    ) {
+      throw new Error('file bytes changed');
+    }
+    return bytes;
+  } catch {
+    return fail(input.code, input.message);
+  }
+}
+
 export async function loadActiveContentProjection(input: {
   root: string | undefined;
   manifestPath: string | undefined;
+  expected?: ActiveContentExpectation;
 }): Promise<ActiveContentProjection> {
   if (!input.root || !input.manifestPath) {
     return fail(
@@ -364,23 +493,42 @@ export async function loadActiveContentProjection(input: {
     );
   }
   try {
-    const rootStat = await lstat(input.root),
-      manifestStat = await lstat(input.manifestPath);
-    if (
-      !rootStat.isDirectory() ||
-      rootStat.isSymbolicLink() ||
-      !manifestStat.isFile() ||
-      manifestStat.isSymbolicLink() ||
-      manifestStat.size > 16 * 1024 * 1024
-    ) {
+    if (input.expected) {
+      validateExpectation(input.expected);
+    }
+    const rootStat = await lstat(input.root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
       throw new Error('unsafe active content binding');
     }
-    const realRoot = await realpath(input.root),
-      realManifest = await realpath(input.manifestPath);
-    if (!samePath(realRoot, input.root) || !samePath(realManifest, input.manifestPath)) {
+    const realRoot = await realpath(input.root);
+    if (!samePath(realRoot, input.root)) {
       throw new Error('redirected active content binding');
     }
-    const manifest = parsePersistedContentManifest(await readFile(input.manifestPath, 'utf8'));
+    const manifestBytes = await verifiedRegularFile({
+      realRoot,
+      file: input.manifestPath,
+      ...(input.expected?.manifestFile ? { expected: input.expected.manifestFile } : {}),
+      maximumBytes: 16 * 1024 * 1024,
+      code: input.expected?.manifestFile ? 'ACTIVE_CONTENT_TAMPERED' : 'ACTIVE_CONTENT_UNAVAILABLE',
+      message: input.expected?.manifestFile
+        ? 'Active content manifest bytes changed.'
+        : 'Active content manifest cannot be read.',
+    });
+    const manifest = parsePersistedContentManifest(manifestBytes.toString('utf8'));
+    if (
+      (input.expected?.runtime !== undefined && input.expected.runtime !== manifest.runtime) ||
+      (input.expected?.manifestKey !== undefined &&
+        input.expected.manifestKey !== manifest.manifestKey) ||
+      (input.expected?.binding !== undefined &&
+        (input.expected.binding.projectId !== manifest.binding.projectId ||
+          input.expected.binding.repositoryId !== manifest.binding.repositoryId ||
+          input.expected.binding.contentScope !== manifest.binding.contentScope))
+    ) {
+      return fail(
+        'ACTIVE_CONTENT_BINDING_INVALID',
+        'Active content manifest does not match the expected launch binding.',
+      );
+    }
     return Object.freeze({
       root: input.root,
       manifestPath: input.manifestPath,
@@ -411,35 +559,14 @@ async function verifiedFile(
   }
   const expected = represented[0]!,
     file = path.join(active.root, ...relativePath.split('/'));
-  try {
-    const stat = await lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== expected.byteCount) {
-      throw new Error('file metadata changed');
-    }
-    const resolved = await realpath(file);
-    const relative = path.relative(active.realRoot, resolved);
-    if (
-      !samePath(resolved, file) ||
-      !relative ||
-      relative.startsWith('..') ||
-      path.isAbsolute(relative)
-    ) {
-      throw new Error('file escaped active root');
-    }
-    const bytes = await readFile(file);
-    if (
-      bytes.byteLength !== expected.byteCount ||
-      createHash('sha256').update(bytes).digest('hex') !== expected.sha256
-    ) {
-      throw new Error('file bytes changed');
-    }
-    return bytes;
-  } catch {
-    return fail(
-      'ACTIVE_CONTENT_TAMPERED',
-      `Active content file '${relativePath}' is missing or changed.`,
-    );
-  }
+  return verifiedRegularFile({
+    realRoot: active.realRoot,
+    file,
+    expected: { sha256: expected.sha256, byteCount: expected.byteCount },
+    maximumBytes: 16 * 1024 * 1024,
+    code: 'ACTIVE_CONTENT_TAMPERED',
+    message: `Active content file '${relativePath}' is missing or changed.`,
+  });
 }
 
 export async function readActiveContentEntry(
@@ -460,6 +587,33 @@ export async function readActiveContentEntry(
     return fail('ACTIVE_CONTENT_AMBIGUOUS', `Active ${kind} identity '${identity}' is ambiguous.`);
   }
   return verifiedFile(active, matches[0]!.generatedPath);
+}
+
+export async function readActiveSkill(
+  active: ActiveContentProjection,
+  identity: string,
+): Promise<{
+  entry: CompiledSkillManifestEntry;
+  body: string;
+  filePath: string;
+  baseDirectory: string;
+}> {
+  const matches = active.manifest.skills.filter((entry) => entry.identity === identity);
+  if (matches.length === 0) {
+    return fail('ACTIVE_CONTENT_UNKNOWN', `Unknown active skill '${identity}'.`);
+  }
+  if (matches.length !== 1) {
+    return fail('ACTIVE_CONTENT_AMBIGUOUS', `Active skill identity '${identity}' is ambiguous.`);
+  }
+  const entry = matches[0]!;
+  const bytes = await readActiveContentEntry(active, 'skill', identity);
+  const filePath = path.join(active.root, ...entry.generatedPath.split('/'));
+  return {
+    entry,
+    body: bytes.subarray(entry.bodyByteOffset).toString('utf8'),
+    filePath,
+    baseDirectory: path.dirname(filePath),
+  };
 }
 
 export async function checkActiveContentProjection(

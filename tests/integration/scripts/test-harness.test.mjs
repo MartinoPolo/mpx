@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,11 @@ import {
   workspaceRootsFromPnpmList,
   workspaceTestLayoutViolations,
 } from './fixtures/test-harness-support.mjs';
+
+import {
+  createRepositorySnapshot,
+  repositoryOutputDigests,
+} from '../fixtures/repository-snapshot.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const workspaceRoots = await discoverWorkspaceRoots(root);
@@ -292,12 +297,24 @@ describe('final workspace and root command contracts', () => {
   });
 
   test('keeps tests outside production compilation and emitted build output', async () => {
-    await runPnpm(root, ['run', 'build']);
-    for (const workspace of workspaceRoots) {
-      const emitted = await outputFiles(path.join(root, workspace, 'dist'));
-      expect(emitted.map((file) => path.basename(file)).filter(testLikeFile), workspace).toEqual(
-        [],
-      );
+    const canonicalBefore = await repositoryOutputDigests(root);
+    const snapshotRoot = await createRepositorySnapshot(root, 'mpx-build-integration-');
+    try {
+      for (const workspace of workspaceRoots) {
+        await rm(path.join(snapshotRoot, workspace, 'dist'), { recursive: true, force: true });
+      }
+      await runPnpm(snapshotRoot, ['run', 'build']);
+      for (const workspace of workspaceRoots) {
+        const emitted = await outputFiles(path.join(snapshotRoot, workspace, 'dist'));
+        expect(emitted, workspace).not.toHaveLength(0);
+        expect(emitted.map((file) => path.basename(file)).filter(testLikeFile), workspace).toEqual(
+          [],
+        );
+      }
+      expect(await repositoryOutputDigests(root)).toEqual(canonicalBefore);
+    } finally {
+      await rm(snapshotRoot, { recursive: true, force: true });
+      await expect(stat(snapshotRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     }
   }, 120_000);
 

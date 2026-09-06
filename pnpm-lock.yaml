@@ -562,6 +562,9 @@ importers:
       '@earendil-works/pi-tui':
         specifier: '*'
         version: 0.84.4
+      '@mpx/content-compiler':
+        specifier: workspace:*
+        version: link:../../../packages/content-compiler
       '@sinclair/typebox':
         specifier: '*'
         version: 0.34.52

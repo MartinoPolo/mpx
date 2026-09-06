@@ -51,6 +51,19 @@ export interface ExistingAgentFile {
   fileMetadata: AgentFileMetadata;
 }
 
+export interface NativeAgentDirectory {
+  declaredPath: string;
+  canonicalPath: string;
+  declaredMetadata: AgentFileMetadata;
+  canonicalMetadata: AgentFileMetadata;
+  readOnly: boolean;
+}
+
+export interface NativeAgentFile {
+  directory: NativeAgentDirectory;
+  file: ExistingAgentFile;
+}
+
 export interface AgentFileDestination {
   path: string;
   existing?: ExistingAgentFile;
@@ -153,6 +166,67 @@ export function resolveAgentDirectory(
   fileSystem: AgentFileSystem = nodeAgentFileSystem,
 ): string {
   return inspectDirectory(targetDirectory, fileSystem).path;
+}
+
+/** Bind a native discovery root once; this does not authorize writes through its alias. */
+export function bindNativeAgentDirectory(
+  targetDirectory: string,
+  fileSystem: AgentFileSystem = nodeAgentFileSystem,
+): NativeAgentDirectory {
+  const declaredPath = resolve(targetDirectory);
+  const declaredMetadata = fileSystem.lstat(declaredPath);
+  const canonical = inspectDirectory(fileSystem.realpath(declaredPath), fileSystem);
+  const directory: NativeAgentDirectory = {
+    declaredPath,
+    canonicalPath: canonical.path,
+    declaredMetadata,
+    canonicalMetadata: canonical.metadata,
+    readOnly: declaredMetadata.isSymbolicLink || !pathsEqual(declaredPath, canonical.path),
+  };
+  verifyNativeAgentDirectory(directory, fileSystem);
+  return directory;
+}
+
+export function verifyNativeAgentDirectory(
+  expected: NativeAgentDirectory,
+  fileSystem: AgentFileSystem = nodeAgentFileSystem,
+): void {
+  const canonical = inspectDirectory(expected.canonicalPath, fileSystem);
+  if (
+    !pathsEqual(fileSystem.realpath(expected.declaredPath), expected.canonicalPath) ||
+    !directoryIdentityEqual(fileSystem.lstat(expected.declaredPath), expected.declaredMetadata) ||
+    !directoryIdentityEqual(canonical.metadata, expected.canonicalMetadata)
+  ) {
+    throw new Error(`Native agent directory changed during discovery: "${expected.declaredPath}"`);
+  }
+}
+
+export function resolveNativeAgentFile(
+  directory: NativeAgentDirectory,
+  name: string,
+  fileSystem: AgentFileSystem = nodeAgentFileSystem,
+): NativeAgentFile {
+  verifyNativeAgentDirectory(directory, fileSystem);
+  const file = resolveExistingAgentFile(directory.canonicalPath, name, fileSystem);
+  verifyNativeAgentDirectory(directory, fileSystem);
+  return { directory, file };
+}
+
+/** Descriptor and post-read checks bound discovery races, not OS-level atomicity. */
+export function readNativeAgentFile(
+  expected: NativeAgentFile,
+  fileSystem: AgentFileSystem = nodeAgentFileSystem,
+): string {
+  verifyNativeAgentDirectory(expected.directory, fileSystem);
+  return withVerifiedOpenFile(expected.file, 'r', fileSystem, (fileDescriptor) => {
+    const content = fileSystem.read(fileDescriptor);
+    if (!metadataEqual(fileSystem.fstat(fileDescriptor), expected.file.fileMetadata)) {
+      throw new Error(`Agent file changed during discovery: "${expected.file.path}"`);
+    }
+    verifyExistingAgentFile(expected.file, fileSystem);
+    verifyNativeAgentDirectory(expected.directory, fileSystem);
+    return content;
+  });
 }
 
 /** Create a missing declared agent directory one verified direct child at a time. */

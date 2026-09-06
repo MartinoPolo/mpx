@@ -45,8 +45,15 @@ const payloadFiles = [
 ].sort();
 const completeArtifactFiles = [...payloadFiles, 'build-metadata.json'].sort();
 const productionSourceInputs = [
+  '../../../packages/content-compiler/package.json',
+  '../../../packages/content-compiler/src/active.ts',
+  '../../../packages/content-compiler/src/compiler.ts',
+  '../../../packages/content-compiler/src/index.ts',
+  '../../../packages/content-compiler/src/persisted-manifest.ts',
+  '../../../packages/content-compiler/src/versions.ts',
   'agent-resurrect.ts',
   'auto-title.ts',
+  'canonical-skills.ts',
   'compact-instructions.ts',
   'config/COMPACT.md',
   'config/keybindings.json',
@@ -76,6 +83,7 @@ const productionSourceInputs = [
   'lib/status-line.ts',
   'lib/statusline-ansi.ts',
   'lib/subagent-history.ts',
+  'notifications.ts',
   'package.json',
   'scripts/release.mjs',
   'subagents/LICENSE',
@@ -146,6 +154,7 @@ function recomputeBundlerConfigDigest(target = 'node22'): string {
     esbuildVersion,
     options: {
       bundle: true,
+      conditions: ['mpx-source'],
       external: HOST_EXTERNALS,
       format: 'esm',
       legalComments: 'none',
@@ -157,6 +166,19 @@ function recomputeBundlerConfigDigest(target = 'node22'): string {
   };
   return createHash('sha256').update(canonicalJson(exactBundleConfig)).digest('hex');
 }
+
+test('source digest tracks the persisted content loader source bytes', () => {
+  const digest = recomputeSourceTreeDigest();
+  assert.notEqual(
+    digest,
+    recomputeSourceTreeDigest((relativePath) => {
+      const bytes = readFileSync(path.join(packageRoot, relativePath));
+      return relativePath === '../../../packages/content-compiler/src/persisted-manifest.ts'
+        ? Buffer.concat([bytes, Buffer.from('changed')])
+        : bytes;
+    }),
+  );
+});
 
 function runRelease(action: 'build' | 'verify', cwd = packageRoot): void {
   execFileSync(process.execPath, [path.join(packageRoot, 'scripts', 'release.mjs'), action], {

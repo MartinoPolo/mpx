@@ -49,6 +49,30 @@ The portability seam is limited to environment and path translation:
 - map `/workspace` and sandbox session paths to host-visible private paths for links;
 - keep rendering, quota requests, Git collection, `gh`/`glab`, localhost probes, compaction, subagent events, and development-service events in the native extension.
 
+## Windows notifications
+
+See [Pi notification repair](PI_NOTIFICATION_REPAIR.md) for incident attribution, deployed source
+provenance, verification, and the boundary with the unfinished broader migration.
+
+The canonical notification policy is `runtimes/pi/extensions/notifications.ts`, registered by
+`guard-hooks.ts`. A human prompt arms the main TUI or RPC UI session. Only `agent_settled`, after
+queued continuations have drained, produces the completion sound. Blocking `ui_prompt_start`
+events during that request also signal human attention; idle menus do not.
+
+Headless SDK subagents and print/JSON sessions never notify, even when they load the complete
+extension bundle. Extension-injected background-result runs do not rearm completion sound after
+the human request has already finished. Tool results and low-level `agent_end` are not sound
+triggers. Cancellation, reload, and shutdown clear pending notification state.
+
+The package-local PowerShell script plays `%WINDIR%/Media/tada.wav` directly and retains taskbar
+flashing. It does not depend on an account-local WAV, a former Claude profile, or a beep fallback.
+Missing or unplayable Windows audio is reported as a warning rather than silently changing the
+sound. `PI_NOTIFY_SILENT=1` or `notify-mute` in the selected Pi account root suppresses sound and
+flashing. Restart Pi or use `/reload` after updating the installed package.
+
+Regression lesson: notification migration must verify the actual sound asset and child-session
+silence in the installed bundle, not only rename profile paths or test source-level child markers.
+
 ## Whole-agent sandbox
 
 Gate 5 replaces the legacy host-Pi/remote-tool design. Pi, its native tools, extensions, subprocesses, subagents, Git clients, and development services execute in one `sbx` environment.

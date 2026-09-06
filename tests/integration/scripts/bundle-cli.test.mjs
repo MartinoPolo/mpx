@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildBundleBytes, checkBundles } from '../../../scripts/bundle-cli.mjs';
+import {
+  createRepositorySnapshot,
+  repositoryOutputDigests,
+} from '../fixtures/repository-snapshot.mjs';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const sha = (value) => createHash('sha256').update(value).digest('hex');
@@ -49,38 +53,66 @@ describe('generated CLI bundle validation', () => {
   });
 
   it('executes the production bundle pipeline and leaves a verified artifact and CLI output', async () => {
-    const command = process.platform === 'win32' ? process.env.ComSpec : 'corepack';
-    const args =
-      process.platform === 'win32'
-        ? ['/d', '/s', '/c', 'corepack pnpm run bundle:cli']
-        : ['pnpm', 'run', 'bundle:cli'];
-    const result = await new Promise((resolve, reject) => {
-      const child = spawn(command, args, {
-        cwd: root,
-        env: { ...process.env, pnpm_config_verify_deps_before_run: 'false' },
-        shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
+    const trackedBundles = ['bin/mpx.mjs', 'bin/claude-gateway.js', 'bin/mpx.cmd'];
+    const canonicalBefore = await repositoryOutputDigests(root);
+    const snapshotRoot = await createRepositorySnapshot(root, 'mpx-bundle-integration-');
+    try {
+      await rm(path.join(snapshotRoot, 'runtimes', 'pi', 'extensions', 'dist'), {
+        recursive: true,
+        force: true,
       });
-      let stdout = '';
-      let stderr = '';
-      child.stdout.setEncoding('utf8').on('data', (value) => (stdout += value));
-      child.stderr.setEncoding('utf8').on('data', (value) => (stderr += value));
-      child.once('error', reject);
-      child.once('close', (code) => resolve({ code, stdout, stderr }));
-    });
+      await Promise.all(
+        trackedBundles.map((name) => rm(path.join(snapshotRoot, name), { force: true })),
+      );
 
-    expect(result).toMatchObject({ code: 0 });
-    const metadata = JSON.parse(
-      await readFile(
-        path.join(root, 'runtimes', 'pi', 'extensions', 'dist', 'package', 'build-metadata.json'),
-        'utf8',
-      ),
-    );
-    expect(metadata.sourceTreeDigest).toMatch(/^[a-f0-9]{64}$/u);
-    expect(await readFile(path.join(root, 'bin', 'mpx.mjs'), 'utf8')).toMatch(
-      /canonical-source-sha256:[a-f0-9]{64}/u,
-    );
-  }, 90_000);
+      const command = process.platform === 'win32' ? process.env.ComSpec : 'corepack';
+      const args =
+        process.platform === 'win32'
+          ? ['/d', '/s', '/c', 'corepack pnpm run bundle:cli']
+          : ['pnpm', 'run', 'bundle:cli'];
+      const result = await new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+          cwd: snapshotRoot,
+          env: {
+            ...process.env,
+            pnpm_config_verify_deps_before_run: 'false',
+          },
+          shell: false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.setEncoding('utf8').on('data', (value) => (stdout += value));
+        child.stderr.setEncoding('utf8').on('data', (value) => (stderr += value));
+        child.once('error', reject);
+        child.once('close', (code) => resolve({ code, stdout, stderr }));
+      });
+
+      expect(await repositoryOutputDigests(root)).toEqual(canonicalBefore);
+      expect(result, result.stderr || result.stdout).toMatchObject({ code: 0 });
+      const metadata = JSON.parse(
+        await readFile(
+          path.join(
+            snapshotRoot,
+            'runtimes',
+            'pi',
+            'extensions',
+            'dist',
+            'package',
+            'build-metadata.json',
+          ),
+          'utf8',
+        ),
+      );
+      expect(metadata.sourceTreeDigest).toMatch(/^[a-f0-9]{64}$/u);
+      expect(await readFile(path.join(snapshotRoot, 'bin', 'mpx.mjs'), 'utf8')).toMatch(
+        /canonical-source-sha256:[a-f0-9]{64}/u,
+      );
+    } finally {
+      await rm(snapshotRoot, { recursive: true, force: true });
+      await expect(stat(snapshotRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  }, 120_000);
 
   it('builds deterministic bytes without mutating tracked bundles or evidence', async () => {
     const tracked = ['bin/mpx.mjs', 'bin/claude-gateway.js'];

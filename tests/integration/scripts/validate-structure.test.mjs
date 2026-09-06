@@ -22,7 +22,8 @@ async function fixture(importSource, extraSource = {}, options = {}) {
     "export const includes = ['packages/*/test/unit/**/*.test.ts'];\n",
   );
   for (const name of ['a', 'b']) {
-    await mkdir(path.join(root, 'packages', name, 'src'), { recursive: true });
+    const sourceDirectory = options.rootLayout?.includes(name) ? '' : 'src';
+    await mkdir(path.join(root, 'packages', name, sourceDirectory), { recursive: true });
     await writeFile(
       path.join(root, 'packages', name, 'package.json'),
       options.manifests?.[name] ??
@@ -34,10 +35,12 @@ async function fixture(importSource, extraSource = {}, options = {}) {
     );
     await writeFile(
       path.join(root, 'packages', name, 'tsconfig.json'),
-      JSON.stringify({ exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts'] }),
+      JSON.stringify({
+        exclude: sourceDirectory ? ['src/**/*.test.ts', 'src/**/*.spec.ts'] : ['test/**'],
+      }),
     );
     await writeFile(
-      path.join(root, 'packages', name, 'src', 'index.ts'),
+      path.join(root, 'packages', name, sourceDirectory, 'index.ts'),
       name === 'a' ? importSource : 'export {};\n',
     );
   }
@@ -148,11 +151,25 @@ describe('repository structure validation', () => {
     expect(codes(diagnostics)).toContain('WORKSPACE_EXPORTS_INVALID');
   });
 
-  it('requires production workspace tsconfigs to exclude test and spec sources', async () => {
+  it('requires src-layout workspace tsconfigs to exclude test and spec sources', async () => {
     const root = await fixture('export {};\n');
     await writeFile(
       path.join(root, 'packages', 'a', 'tsconfig.json'),
       JSON.stringify({ exclude: ['src/**/*.test.ts'] }),
+    );
+    expect(codes(await validateStructure(root))).toContain('WORKSPACE_TSCONFIG_TEST_EXCLUDES');
+  });
+
+  it('accepts root-layout workspace tsconfigs that exclude the test directory', async () => {
+    const root = await fixture('export {};\n', {}, { rootLayout: ['a'] });
+    expect(await validateStructure(root)).toEqual([]);
+  });
+
+  it('requires root-layout workspace tsconfigs to exclude the test directory', async () => {
+    const root = await fixture('export {};\n', {}, { rootLayout: ['a'] });
+    await writeFile(
+      path.join(root, 'packages', 'a', 'tsconfig.json'),
+      JSON.stringify({ exclude: [] }),
     );
     expect(codes(await validateStructure(root))).toContain('WORKSPACE_TSCONFIG_TEST_EXCLUDES');
   });

@@ -8,8 +8,12 @@ import { test } from 'vitest';
 import {
   type AgentFileMetadata,
   type AgentFileSystem,
+  bindNativeAgentDirectory,
   readExistingAgentFile,
+  readNativeAgentFile,
+  resolveAgentDirectory,
   resolveExistingAgentFile,
+  resolveNativeAgentFile,
   writeAgentFile,
 } from '../../../subagents/agent-file-policy.js';
 
@@ -157,4 +161,144 @@ test('fails closed when file metadata changes before mutation', () => {
     /Agent file changed during operation/,
   );
   assert.equal(truncated, false);
+});
+
+function nativeFileSystem() {
+  const declared = resolve('native', 'agents');
+  const canonical = resolve('canonical', 'agents');
+  const state = {
+    canonical,
+    rootMetadata: { ...directoryMetadata },
+    aliasMetadata: { ...directoryMetadata, inode: '30', isDirectory: false, isSymbolicLink: true },
+    fileMetadata: { ...fileMetadata },
+    descriptorMetadata: { ...fileMetadata },
+    fileRealPath: join(canonical, 'reviewer.md'),
+    opened: [] as string[],
+    closed: false,
+  };
+  const fileSystem: AgentFileSystem = {
+    ...redirectedFileSystem(canonical, '').fileSystem,
+    lstat: (path) =>
+      path === declared
+        ? state.aliasMetadata
+        : path === canonical
+          ? state.rootMetadata
+          : state.fileMetadata,
+    realpath: (path) =>
+      path === declared ? state.canonical : path.endsWith('.md') ? state.fileRealPath : path,
+    open: (path, flags) => {
+      assert.equal(flags, 'r');
+      state.opened.push(path);
+      return 1;
+    },
+    fstat: () => state.descriptorMetadata,
+    close: () => {
+      state.closed = true;
+    },
+  };
+  return { declared, canonical, state, fileSystem };
+}
+
+test('native discovery binds an alias but opens only the canonical direct child', () => {
+  const { declared, canonical, state, fileSystem } = nativeFileSystem();
+  const directory = bindNativeAgentDirectory(declared, fileSystem);
+  assert.equal(directory.readOnly, true);
+  assert.equal(directory.canonicalPath, canonical);
+  assert.equal(
+    readNativeAgentFile(resolveNativeAgentFile(directory, 'reviewer', fileSystem), fileSystem),
+    'safe',
+  );
+  assert.deepEqual(state.opened, [join(canonical, 'reviewer.md')]);
+  assert.equal(state.closed, true);
+  assert.throws(() => resolveAgentDirectory(declared, fileSystem), /Unsafe agent directory/);
+  assert.throws(
+    () => writeAgentFile(declared, 'reviewer', 'changed', true, fileSystem),
+    /Unsafe agent directory/,
+  );
+});
+
+test('native discovery pins root identity across files and rejects retargeting or replacement', () => {
+  for (const drift of ['alias-target', 'alias-identity', 'root-identity'] as const) {
+    const { declared, state, fileSystem } = nativeFileSystem();
+    const directory = bindNativeAgentDirectory(declared, fileSystem);
+    readNativeAgentFile(resolveNativeAgentFile(directory, 'reviewer', fileSystem), fileSystem);
+    if (drift === 'alias-target') {
+      state.canonical = resolve('outside');
+    }
+    if (drift === 'alias-identity') {
+      state.aliasMetadata = { ...state.aliasMetadata, inode: '31' };
+    }
+    if (drift === 'root-identity') {
+      state.rootMetadata = { ...state.rootMetadata, inode: '11' };
+    }
+    assert.throws(
+      () => resolveNativeAgentFile(directory, 'reviewer', fileSystem),
+      /changed during discovery/,
+    );
+    assert.equal(state.opened.length, 1);
+  }
+});
+
+test('native discovery rejects descendant links and escapes before opening', () => {
+  for (const drift of ['link', 'escape', 'directory'] as const) {
+    const { declared, state, fileSystem } = nativeFileSystem();
+    const directory = bindNativeAgentDirectory(declared, fileSystem);
+    if (drift === 'link') {
+      state.fileMetadata = { ...state.fileMetadata, isSymbolicLink: true };
+    }
+    if (drift === 'escape') {
+      state.fileRealPath = resolve('outside', 'reviewer.md');
+    }
+    if (drift === 'directory') {
+      state.fileMetadata = { ...directoryMetadata };
+    }
+    assert.throws(
+      () => resolveNativeAgentFile(directory, 'reviewer', fileSystem),
+      /Unsafe agent file|Redirected agent file/,
+    );
+    assert.deepEqual(state.opened, []);
+  }
+});
+
+test('native discovery rejects descriptor identity drift at open and closes the descriptor', () => {
+  const { declared, state, fileSystem } = nativeFileSystem();
+  const file = resolveNativeAgentFile(
+    bindNativeAgentDirectory(declared, fileSystem),
+    'reviewer',
+    fileSystem,
+  );
+  state.descriptorMetadata = { ...state.descriptorMetadata, inode: '21' };
+  assert.throws(() => readNativeAgentFile(file, fileSystem), /changed during operation/);
+  assert.equal(state.closed, true);
+});
+
+test('native discovery checks file, descriptor, alias and root identity after reading', () => {
+  for (const drift of ['file', 'descriptor', 'alias', 'root'] as const) {
+    const { declared, state, fileSystem } = nativeFileSystem();
+    const file = resolveNativeAgentFile(
+      bindNativeAgentDirectory(declared, fileSystem),
+      'reviewer',
+      fileSystem,
+    );
+    fileSystem.read = () => {
+      if (drift === 'file') {
+        state.fileMetadata = { ...state.fileMetadata, inode: '21' };
+      }
+      if (drift === 'descriptor') {
+        state.descriptorMetadata = { ...state.descriptorMetadata, changeTime: '2' };
+      }
+      if (drift === 'alias') {
+        state.canonical = resolve('outside');
+      }
+      if (drift === 'root') {
+        state.rootMetadata = { ...state.rootMetadata, inode: '11' };
+      }
+      return 'must not be returned';
+    };
+    assert.throws(
+      () => readNativeAgentFile(file, fileSystem),
+      /changed during discovery|changed during operation/,
+    );
+    assert.equal(state.closed, true);
+  }
 });

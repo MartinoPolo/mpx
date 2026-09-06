@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { expect, it, vi } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
 import {
@@ -24,6 +23,7 @@ import {
   createPiNativePackageRegistration,
   type PiNativePackageRegistrationV1,
 } from '../../src/pi-native-package.js';
+import { preparePiExtensionBuildFixture } from '../fixtures/pi-extension-build.js';
 
 function required<T>(value: T | undefined, label: string): T {
   if (value === undefined) {
@@ -86,11 +86,28 @@ function registration(
     ? { ...common, runtime: 'pi' as const, nativePackage }
     : { ...common, runtime: 'claude' as const };
 }
-async function simulation(existing: boolean) {
+async function simulation(
+  existing: boolean,
+  prepareExtension: typeof preparePiExtensionBuildFixture = preparePiExtensionBuildFixture,
+) {
   const checkoutRoot = path.resolve(import.meta.dirname, '../../../..');
   const root = await mkdtemp(
     path.join(checkoutRoot, 'node_modules', `mpx-production-${existing ? 'existing' : 'clean'}-`),
   );
+  try {
+    return await prepareSimulation(existing, checkoutRoot, root, prepareExtension);
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function prepareSimulation(
+  existing: boolean,
+  checkoutRoot: string,
+  root: string,
+  prepareExtension: typeof preparePiExtensionBuildFixture,
+) {
   const repositoryRoot = path.join(root, 'source'),
     appsRoot = path.join(root, 'apps'),
     appData = path.join(root, 'roaming'),
@@ -98,25 +115,7 @@ async function simulation(existing: boolean) {
     userProfile = path.join(root, 'user');
   await mkdir(path.join(repositoryRoot, 'bin'), { recursive: true });
   await writeFile(path.join(repositoryRoot, 'bin', 'mpx.mjs'), 'export {};\n');
-  await cp(path.join(checkoutRoot, 'tsconfig.json'), path.join(repositoryRoot, 'tsconfig.json'));
-  const extensionRoot = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions');
-  await mkdir(path.dirname(extensionRoot), { recursive: true });
-  const sourceExtensionRoot = path.join(checkoutRoot, 'runtimes', 'pi', 'extensions');
-  await cp(sourceExtensionRoot, extensionRoot, {
-    recursive: true,
-    filter: (name) => !['dist', 'node_modules'].includes(path.basename(name)),
-  });
-  for (const dependency of ['croner', 'nanoid']) {
-    await cp(
-      path.join(sourceExtensionRoot, 'node_modules', dependency),
-      path.join(extensionRoot, 'node_modules', dependency),
-      { recursive: true, dereference: true },
-    );
-  }
-  const release = (await import(
-    `${pathToFileURL(path.join(extensionRoot, 'scripts', 'release.mjs')).href}?simulation=${Date.now()}`
-  )) as { buildRelease: () => Promise<void> };
-  await release.buildRelease();
+  await prepareExtension(checkoutRoot, repositoryRoot, `simulation-${Date.now()}`);
   for (const runtime of ['claude', 'pi'] as const) {
     for (const role of roles(runtime)) {
       const file = path.join(repositoryRoot, runtime, `${role}.json`);
@@ -300,6 +299,31 @@ async function simulation(existing: boolean) {
     userConfigTarget,
   };
 }
+
+it('removes only its allocated simulation root when setup fails', async () => {
+  const checkoutRoot = path.resolve(import.meta.dirname, '../../../..');
+  const sibling = await mkdtemp(path.join(checkoutRoot, 'node_modules', 'mpx-production-sibling-'));
+  const siblingSentinel = Buffer.from([0x00, 0x7f, 0x80, 0xff]);
+  const siblingSentinelPath = path.join(sibling, 'sentinel.bin');
+  await writeFile(siblingSentinelPath, siblingSentinel);
+  let allocatedRoot: string | undefined;
+  try {
+    await expect(
+      simulation(false, async (_checkoutRoot, repositoryRoot) => {
+        allocatedRoot = path.dirname(repositoryRoot);
+        throw new Error('injected simulation setup failure');
+      }),
+    ).rejects.toThrow('injected simulation setup failure');
+    if (allocatedRoot === undefined) {
+      throw new Error('Simulation setup did not expose its allocated root.');
+    }
+    await expect(stat(allocatedRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await stat(sibling)).isDirectory()).toBe(true);
+    expect(await readFile(siblingSentinelPath)).toEqual(siblingSentinel);
+  } finally {
+    await rm(sibling, { recursive: true, force: true });
+  }
+});
 
 it('plans, applies, and verifies a fresh base install without scheduled capture', async () => {
   const f = await simulation(false),
