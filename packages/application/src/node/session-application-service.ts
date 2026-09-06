@@ -37,10 +37,10 @@ export function createNodeSessionApplicationService(
     ...applicationDependencies,
     sessions,
     nativeBindings: store,
-    consumePending: async () => {
+    consumePending: async (scope) => {
       let consumed = 0;
       for (const bindingId of await store.listLifecycleBindingIds()) {
-        consumed += await consumer.consume(bindingId);
+        consumed += await consumer.consume(bindingId, scope);
       }
       return consumed;
     },

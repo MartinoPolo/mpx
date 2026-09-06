@@ -56,6 +56,7 @@ describe('SessionApplicationService list recovery', () => {
     await new SessionApplicationService(input).list({ filter, limit: 1 });
 
     expect(discoveries).toHaveBeenCalledExactlyOnceWith({ runtime: 'pi', identity });
+    expect(input.consumePending).toHaveBeenCalledExactlyOnceWith({ runtime: 'pi', identity });
     expect(selected.scanner.scan).toHaveBeenCalledOnce();
     for (const item of excluded) {
       expect(item.scanner.scan).not.toHaveBeenCalled();
@@ -63,6 +64,7 @@ describe('SessionApplicationService list recovery', () => {
     expect(input.sessions.reconcile).toHaveBeenCalledWith(
       [expect.objectContaining({ context: selected.context })],
       [],
+      { runtime: 'pi', identity },
     );
     expect(input.sessions.list).toHaveBeenCalledWith(filter);
   });
@@ -113,8 +115,10 @@ describe('SessionApplicationService list recovery', () => {
 
   it('leaves discovery unscoped when no filter is requested', async () => {
     const discoveries = vi.fn(async () => []);
-    await new SessionApplicationService(dependencies(discoveries)).list();
+    const input = dependencies(discoveries);
+    await new SessionApplicationService(input).list();
     expect(discoveries).toHaveBeenCalledExactlyOnceWith(undefined);
+    expect(input.sessions.reconcile).toHaveBeenCalledExactlyOnceWith([], [], undefined);
   });
 
   it.each([
@@ -276,7 +280,7 @@ describe('SessionApplicationService list recovery', () => {
     const result = await service.list();
 
     expect(consumePending).toHaveBeenCalledOnce();
-    expect(reconcile).toHaveBeenCalledWith(expect.any(Array), ['b']);
+    expect(reconcile).toHaveBeenCalledWith(expect.any(Array), ['b'], undefined);
     expect(result.records.map((item) => item.recordId)).toEqual(['a', 'z']);
     expect(result.diagnostics).toEqual([
       {

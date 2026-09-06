@@ -1,4 +1,5 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { WindowsProcessCapabilities } from '@mpx/windows';
 import {
   requireRepositoryBoundLifecycleState,
   verifyPreparationWorkerHandshake,
@@ -23,6 +24,47 @@ it('adapts Windows process inspection for lifecycle lock identity with fail-clos
     }).inspect(42),
   ).resolves.toEqual({ status: 'unknown', pid: 42 });
 });
+
+it('adapts a unique Windows snapshot to present and absent session inspections', async () => {
+  const inspect = vi.fn();
+  const inspectMany = vi.fn(
+    async (_pids: readonly number[]) => new Map([[42, { pid: 42, startFingerprint: 'start' }]]),
+  );
+  const inspector = windowsProcessIdentityInspector({ inspect, inspectMany });
+  expect(await inspector.inspectMany!([42, 43, 42])).toEqual(
+    new Map([
+      [42, { status: 'present', pid: 42, startFingerprint: 'start' }],
+      [43, { status: 'absent' }],
+    ]),
+  );
+  expect(inspectMany).toHaveBeenCalledExactlyOnceWith([42, 43]);
+  expect(inspect).not.toHaveBeenCalled();
+  expect(windowsProcessIdentityInspector({ inspect }).inspectMany).toBeUndefined();
+});
+
+it.each([
+  '',
+  'null',
+  '{}',
+  '[{"ProcessId":42,"StartedAt":null}]',
+  '[{"ProcessId":42,"StartedAt":"malformed"}]',
+])(
+  'maps malformed Windows batch output to unknown for every requested session PID: %s',
+  async (stdout) => {
+    const windows = new WindowsProcessCapabilities({
+      runner: {
+        run: async () => ({ stdout, stderr: '', exitCode: 0 }),
+      },
+    });
+    const inspector = windowsProcessIdentityInspector(windows);
+    expect(await inspector.inspectMany!([42, 43])).toEqual(
+      new Map([
+        [42, { status: 'unknown' }],
+        [43, { status: 'unknown' }],
+      ]),
+    );
+  },
+);
 
 it('requires lifecycle state to be bound to the requested repository', async () => {
   const key = deriveLifecycleKey('C:/repos/one/.git', 'feature/test');

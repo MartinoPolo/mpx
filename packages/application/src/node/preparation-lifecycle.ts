@@ -3,6 +3,7 @@ import { sha256Canonical, MpxError, type JsonValue } from '@mpx/core';
 import type { WorktreePreparationResult } from '../lifecycle-application-service.js';
 import type { PreparationPlan } from '@mpx/config';
 import { WindowsProcessCapabilities } from '@mpx/windows';
+import type { ProcessInspection } from '@mpx/sessions';
 import {
   NodePreparationEvidenceAdapter,
   NodePreparationExecutionAdapter,
@@ -24,9 +25,39 @@ import {
 } from '@mpx/worktrees';
 
 export function windowsProcessIdentityInspector(
-  windows: Pick<WindowsProcessCapabilities, 'inspect'>,
+  windows: Pick<WindowsProcessCapabilities, 'inspect'> &
+    Partial<Pick<WindowsProcessCapabilities, 'inspectMany'>>,
 ) {
   return {
+    ...(windows.inspectMany
+      ? {
+          inspectMany: async (
+            pids: readonly number[],
+          ): Promise<ReadonlyMap<number, ProcessInspection>> => {
+            const requested = [...new Set(pids)];
+            try {
+              const processes = await windows.inspectMany!(requested);
+              return new Map(
+                requested.map((pid) => {
+                  const identity = processes.get(pid);
+                  return [
+                    pid,
+                    identity
+                      ? {
+                          status: 'present' as const,
+                          pid: identity.pid,
+                          startFingerprint: identity.startFingerprint,
+                        }
+                      : { status: 'absent' as const },
+                  ];
+                }),
+              );
+            } catch {
+              return new Map(requested.map((pid) => [pid, { status: 'unknown' as const }]));
+            }
+          },
+        }
+      : {}),
     inspect: async (pid: number) => {
       try {
         const identity = await windows.inspect(pid);

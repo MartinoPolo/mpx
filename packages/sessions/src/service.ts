@@ -25,6 +25,8 @@ export interface SessionListFilter {
   readonly liveness?: SessionLiveness;
   readonly workflowStatus?: WorkflowStatus;
 }
+export type SessionReconcileScope = Pick<SessionListFilter, 'identity' | 'runtime'>;
+
 export interface DiscoveryResult {
   readonly status: 'available' | 'unavailable' | 'malformed';
   readonly sessions: readonly DiscoveredSession[];
@@ -52,6 +54,38 @@ export type ProcessInspection =
   | Readonly<{ status: 'absent' | 'unknown' }>;
 export interface SessionProcessInspector {
   inspect(pid: number): Promise<ProcessInspection>;
+  inspectMany?(pids: readonly number[]): Promise<ReadonlyMap<number, ProcessInspection>>;
+}
+
+async function inspectProcesses(
+  inspector: SessionProcessInspector,
+  pids: readonly number[],
+): Promise<ReadonlyMap<number, ProcessInspection>> {
+  if (pids.length === 0) {
+    return new Map();
+  }
+  if (inspector.inspectMany) {
+    try {
+      return await inspector.inspectMany(pids);
+    } catch {
+      return new Map();
+    }
+  }
+  const results = new Map<number, ProcessInspection>();
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(8, pids.length) }, async () => {
+      while (next < pids.length) {
+        const pid = pids[next++]!;
+        try {
+          results.set(pid, await inspector.inspect(pid));
+        } catch {
+          results.set(pid, { status: 'unknown' });
+        }
+      }
+    }),
+  );
+  return results;
 }
 
 const now = (): string => new Date().toISOString();
@@ -261,10 +295,14 @@ export class SessionService {
       context?: DiscoveryContext;
     }[],
     lifecycleBindingIds: readonly string[] = [],
+    scope: SessionReconcileScope = {},
   ): Promise<RuntimeSessionObservationV1[]> {
+    const matchesScope = (candidate: { runtime: RuntimeName; identity: IdentityV1 }) =>
+      (scope.runtime === undefined || candidate.runtime === scope.runtime) &&
+      (scope.identity === undefined || sameIdentity(candidate.identity, scope.identity));
     const consumer = new LifecycleEventDirectoryConsumer(this.store, this);
     for (const bindingId of [...lifecycleBindingIds].sort()) {
-      await consumer.consume(bindingId);
+      await consumer.consume(bindingId, scope);
     }
     const capturedAt = this.clock(),
       observations: RuntimeSessionObservationV1[] = [],
@@ -272,9 +310,19 @@ export class SessionService {
       processVerified = new Set<string>(),
       lifecycleFactTimes = new Map<string, string>();
     if (this.processInspector) {
-      for (const partition of (await this.store.partitions()).filter(
-        (candidate) => candidate.runtime === 'pi',
-      )) {
+      const partitions = (await this.store.partitions()).filter(
+        (candidate) => candidate.runtime === 'pi' && matchesScope(candidate),
+      );
+      const eligible = (record: SessionRecordV1) =>
+        (record.liveness === 'active' || record.liveness === 'unknown') && record.process !== null;
+      const processInspections = await inspectProcesses(this.processInspector, [
+        ...new Set(
+          partitions.flatMap((partition) =>
+            partition.records.filter(eligible).map((record) => record.process!.pid),
+          ),
+        ),
+      ]);
+      for (const partition of partitions) {
         const inspections = new Map<
           string,
           Readonly<{
@@ -284,10 +332,7 @@ export class SessionService {
           }>
         >();
         for (const record of partition.records) {
-          if (
-            (record.liveness !== 'active' && record.liveness !== 'unknown') ||
-            record.process === null
-          ) {
+          if (!eligible(record) || record.process === null) {
             continue;
           }
           const key = `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`;
@@ -295,7 +340,7 @@ export class SessionService {
           inspections.set(record.recordId, {
             sampledPid: record.process.pid,
             sampledStartFingerprint: record.process.startFingerprint,
-            inspection: await this.processInspector.inspect(record.process.pid),
+            inspection: processInspections.get(record.process.pid) ?? { status: 'unknown' },
           });
         }
         if (inspections.size === 0) {
@@ -354,6 +399,13 @@ export class SessionService {
       }
     }
     for (const item of discoveries) {
+      if (
+        (scope.runtime !== undefined && item.scanner.runtime !== scope.runtime) ||
+        (scope.identity !== undefined &&
+          (item.context === undefined || !sameIdentity(item.context.identity, scope.identity)))
+      ) {
+        continue;
+      }
       const discovered = await item.scanner.scan();
       if (discovered.status === 'available' && item.context) {
         if (item.context.runtime !== item.scanner.runtime) {
@@ -436,7 +488,9 @@ export class SessionService {
         );
       }
     }
-    for (const record of await this.list({ runtime: 'pi' })) {
+    for (const record of scope.runtime === undefined || scope.runtime === 'pi'
+      ? await this.list({ ...scope, runtime: 'pi' })
+      : []) {
       const observationKey = `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`;
       if (observed.has(observationKey)) {
         continue;
@@ -564,7 +618,17 @@ export class LifecycleEventDirectoryConsumer {
     private readonly maxBytes = 1024 * 1024,
     private readonly beforeDirectoryEnumeration?: () => Promise<void>,
   ) {}
-  async consume(bindingId: string): Promise<number> {
+  async consume(bindingId: string, scope: SessionReconcileScope = {}): Promise<number> {
+    if (scope.runtime !== undefined || scope.identity !== undefined) {
+      const { binding } = await this.store.readLifecycleBinding(bindingId);
+      if (
+        (scope.runtime !== undefined && binding.runtime !== scope.runtime) ||
+        (scope.identity !== undefined &&
+          binding.identityRef !== `${scope.identity.domain}:${scope.identity.name}`)
+      ) {
+        return 0;
+      }
+    }
     const key = this.store.eventDirectory(bindingId);
     const prior = lifecycleConsumption.get(key) ?? Promise.resolve();
     let release!: () => void;

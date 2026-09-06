@@ -30,6 +30,7 @@ import {
   planResume,
   type LaunchSnapshotV1,
   type NativeBindingRecordV1,
+  type ProcessInspection,
   type SessionLifecycleBindingRecordV1,
   type SessionRecordV1,
 } from '../../src/index.js';
@@ -1259,6 +1260,214 @@ it('preserves active Pi lifecycle state without a process inspector and publishe
     freshUntil: instant,
     lifecycleState: 'active',
   });
+});
+
+it('scopes reconciliation before process probes, discovery scans, lifecycle consumption, and transactions', async () => {
+  const store = new SessionStore(await temporary());
+  const otherIdentity = { domain: 'personal', name: 'other' };
+  await store.put(
+    record({
+      runtime: 'pi',
+      runtimeQualifiedId: 'pi:excluded',
+      recordId: 'excluded',
+      liveness: 'active',
+      process: { pid: 42, startFingerprint: 'start' },
+    }),
+  );
+  await store.saveLifecycleBinding(lifecycleBindingRecord('excluded-binding'));
+  const transaction = vi.spyOn(store, 'transaction');
+  const consume = vi.spyOn(store, 'validateEventDirectory');
+  const inspect = vi.fn(async (): Promise<ProcessInspection> => ({ status: 'absent' }));
+  const inspectMany = vi.fn(async () => new Map<number, ProcessInspection>());
+  const scan = vi.fn(async () => ({
+    status: 'available' as const,
+    sessions: [],
+    diagnostic: null,
+  }));
+  const service = new SessionService(store, () => later, { inspect, inspectMany });
+  const discoveries = [
+    {
+      scanner: { runtime: 'claude' as const, scan },
+      context: {
+        identity,
+        runtime: 'claude' as const,
+        nativeBindingRef: 'native:opaque',
+      },
+    },
+  ];
+  try {
+    expect(
+      await service.reconcile(discoveries, ['excluded-binding'], { identity: otherIdentity }),
+    ).toEqual([]);
+    expect(await service.reconcile([], [], { runtime: 'claude' })).toEqual([]);
+    expect(
+      await service.reconcile(discoveries, ['excluded-binding'], {
+        runtime: 'pi',
+        identity: otherIdentity,
+      }),
+    ).toEqual([]);
+    expect(inspect).not.toHaveBeenCalled();
+    expect(inspectMany).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+    expect(consume).not.toHaveBeenCalled();
+    expect(scan).not.toHaveBeenCalled();
+  } finally {
+    consume.mockRestore();
+  }
+});
+
+it('reconciles only the selected identity/runtime partition while retaining excluded records', async () => {
+  const store = new SessionStore(await temporary());
+  const otherIdentity = { domain: identity.domain, name: 'other' };
+  for (const [selectedIdentity, runtime, pid] of [
+    [identity, 'pi', 42],
+    [otherIdentity, 'pi', 43],
+    [identity, 'claude', 44],
+  ] as const) {
+    await store.put(
+      record({
+        identity: selectedIdentity,
+        runtime,
+        runtimeQualifiedId: `${runtime}:${pid}`,
+        recordId: `record-${pid}`,
+        liveness: 'active',
+        process: { pid, startFingerprint: 'start' },
+      }),
+    );
+  }
+  const transaction = vi.spyOn(store, 'transaction');
+  const inspect = vi.fn(async (pid: number): Promise<ProcessInspection> => ({
+    status: 'present',
+    pid,
+    startFingerprint: 'start',
+  }));
+  const service = new SessionService(store, () => later, { inspect });
+  expect(await service.reconcile([], [], { runtime: 'pi', identity })).toMatchObject([
+    { runtime: 'pi', runtimeQualifiedId: 'pi:42', lifecycleState: 'active' },
+  ]);
+  expect(inspect).toHaveBeenCalledExactlyOnceWith(42);
+  expect(transaction).toHaveBeenCalledExactlyOnceWith(identity, 'pi', expect.any(Function));
+  expect(await service.show('pi:43')).toMatchObject({
+    liveness: 'active',
+    timestamps: { updatedAt: instant },
+  });
+  expect(await service.show('claude:44')).toMatchObject({
+    liveness: 'active',
+    timestamps: { updatedAt: instant },
+  });
+});
+
+it('batches unique eligible Pi PIDs across partitions once per fresh reconcile without losing tuple checks', async () => {
+  const store = new SessionStore(await temporary());
+  const states = [
+    { id: 'exact', pid: 42, startFingerprint: 'start', expected: 'active' },
+    { id: 'reused', pid: 42, startFingerprint: 'old', expected: 'unknown' },
+    { id: 'absent', pid: 43, startFingerprint: 'start', expected: 'inactive' },
+    { id: 'unknown', pid: 44, startFingerprint: 'start', expected: 'unknown' },
+  ] as const;
+  for (const state of states) {
+    await store.put(
+      record({
+        identity: { domain: 'personal', name: state.id },
+        runtime: 'pi',
+        runtimeQualifiedId: `pi:${state.id}`,
+        recordId: state.id,
+        liveness: 'active',
+        process: { pid: state.pid, startFingerprint: state.startFingerprint },
+      }),
+    );
+  }
+  await store.put(
+    record({
+      runtime: 'pi',
+      runtimeQualifiedId: 'pi:inactive',
+      recordId: 'inactive',
+      liveness: 'inactive',
+      process: { pid: 45, startFingerprint: 'start' },
+    }),
+  );
+  const inspect = vi.fn();
+  const inspectMany = vi.fn(
+    async (_pids: readonly number[]): Promise<ReadonlyMap<number, ProcessInspection>> =>
+      new Map([
+        [42, { status: 'present', pid: 42, startFingerprint: 'start' }],
+        [43, { status: 'absent' }],
+        [44, { status: 'unknown' }],
+      ]),
+  );
+  const service = new SessionService(store, () => later, { inspect, inspectMany });
+  await service.reconcile([]);
+  expect(inspect).not.toHaveBeenCalled();
+  expect(inspectMany).toHaveBeenCalledTimes(1);
+  expect([...inspectMany.mock.calls[0]![0]].sort()).toEqual([42, 43, 44]);
+  for (const state of states) {
+    expect(await service.show(`pi:${state.id}`)).toMatchObject({
+      liveness: state.expected,
+      process:
+        state.expected === 'inactive'
+          ? null
+          : { pid: state.pid, startFingerprint: state.startFingerprint },
+    });
+  }
+  await service.reconcile([]);
+  expect(inspectMany).toHaveBeenCalledTimes(2);
+  expect([...inspectMany.mock.calls[1]![0]].sort()).toEqual([42, 44]);
+});
+
+it('bounds fallback concurrency and probes repeated PIDs only once per reconcile', async () => {
+  const store = new SessionStore(await temporary());
+  for (let index = 0; index < 20; index++) {
+    await store.put(
+      record({
+        runtime: 'pi',
+        runtimeQualifiedId: `pi:${index}`,
+        recordId: `record-${index}`,
+        liveness: 'active',
+        process: { pid: 42 + (index % 10), startFingerprint: 'start' },
+      }),
+    );
+  }
+  let running = 0,
+    maximum = 0;
+  const inspect = vi.fn(async (pid: number): Promise<ProcessInspection> => {
+    running++;
+    maximum = Math.max(maximum, running);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    running--;
+    return { status: 'present', pid, startFingerprint: 'start' };
+  });
+  const service = new SessionService(store, () => later, { inspect });
+  await service.reconcile([]);
+  expect(inspect).toHaveBeenCalledTimes(10);
+  expect(maximum).toBeGreaterThan(1);
+  expect(maximum).toBeLessThanOrEqual(8);
+  await service.reconcile([]);
+  expect(inspect).toHaveBeenCalledTimes(20);
+});
+
+it('treats failed or incomplete batch inspection as unknown rather than absence', async () => {
+  const store = new SessionStore(await temporary());
+  await store.put(
+    record({
+      runtime: 'pi',
+      runtimeQualifiedId: 'pi:failed',
+      recordId: 'failed',
+      liveness: 'active',
+      process: { pid: 42, startFingerprint: 'start' },
+    }),
+  );
+  const inspectMany = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('failed'))
+    .mockResolvedValueOnce(new Map());
+  const service = new SessionService(store, () => later, { inspect: vi.fn(), inspectMany });
+  for (let index = 0; index < 2; index++) {
+    await service.reconcile([]);
+    expect(await service.show('pi:failed')).toMatchObject({
+      liveness: 'unknown',
+      process: { pid: 42, startFingerprint: 'start' },
+    });
+  }
 });
 
 it('keeps an exact-live Pi process active and captures its verification at reconcile time', async () => {

@@ -17,7 +17,11 @@ export interface PowerShellResult {
   exitCode: number;
 }
 export interface PowerShellRunner {
-  run(script: string, parameters?: Readonly<Record<string, string>>): Promise<PowerShellResult>;
+  run(
+    script: string,
+    parameters?: Readonly<Record<string, string>>,
+    options?: { readonly timeoutMs: number },
+  ): Promise<PowerShellResult>;
 }
 export interface SocketBinding {
   release(): Promise<void>;
@@ -46,11 +50,13 @@ export class NativePowerShellRunner implements PowerShellRunner {
   async run(
     script: string,
     parameters: Readonly<Record<string, string>> = {},
+    options?: { readonly timeoutMs: number },
   ): Promise<PowerShellResult> {
     const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script];
     const names: Readonly<Record<string, string>> = {
       PortsJson: 'MPX_PORTS_JSON',
       PidValue: 'MPX_PID_VALUE',
+      PidsJson: 'MPX_PIDS_JSON',
       StartedAt: 'MPX_STARTED_AT',
       NativeResourceJson: 'MPX_NATIVE_RESOURCE_JSON',
     };
@@ -71,6 +77,8 @@ export class NativePowerShellRunner implements PowerShellRunner {
       const { stdout, stderr } = await execFile(nativePowerShellExecutable(), args, {
         encoding: 'utf8',
         windowsHide: true,
+        shell: false,
+        ...(options ? { timeout: options.timeoutMs } : {}),
         maxBuffer: 4 * 1024 * 1024,
         env: environment,
       });
@@ -131,6 +139,15 @@ $byPid = @{}; if ($pids.Count -gt 0) { Get-CimInstance Win32_Process -ErrorActio
 const PROCESS_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PidValue" -ErrorAction Stop
 if ($null -eq $p) { $null | ConvertTo-Json -Compress } else { [ordered]@{ ProcessId=[int]$p.ProcessId; Name=[string]$p.Name; ExecutablePath=[string]$p.ExecutablePath; StartedAt=if($p.CreationDate){$p.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{$null} } | ConvertTo-Json -Compress }`;
+
+const PROCESSES_SCRIPT = String.raw`$ErrorActionPreference = 'Stop'
+$wanted = @{}
+foreach ($processId in (ConvertFrom-Json $env:MPX_PIDS_JSON)) { $wanted[[int]$processId] = $true }
+$all = @(Get-CimInstance Win32_Process -Property ProcessId,CreationDate -ErrorAction Stop)
+$items = @($all | Where-Object { $wanted.ContainsKey([int]$_.ProcessId) } | ForEach-Object {
+  [ordered]@{ ProcessId=[int]$_.ProcessId; StartedAt=if($_.CreationDate){$_.CreationDate.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")}else{$null} }
+})
+ConvertTo-Json -InputObject $items -Compress -Depth 3`;
 
 const KILL_SCRIPT = String.raw`$PidValue = [int]$env:MPX_PID_VALUE
 $StartedAt = $env:MPX_STARTED_AT
@@ -212,10 +229,11 @@ export class WindowsProcessCapabilities {
   private async invoke(
     script: string,
     parameters: Readonly<Record<string, string>>,
+    options?: { readonly timeoutMs: number },
   ): Promise<unknown> {
     let output: PowerShellResult;
     try {
-      output = await this.runner.run(script, parameters);
+      output = await this.runner.run(script, parameters, options);
     } catch {
       throw new MpxError({
         code: 'WINDOWS_POWERSHELL_FAILED',
@@ -255,6 +273,48 @@ export class WindowsProcessCapabilities {
     }
     return { pid, startFingerprint: startedAt };
   }
+  async inspectMany(pids: readonly number[]): Promise<ReadonlyMap<number, OwnedWindowsProcess>> {
+    const requested = new Set(pids);
+    if (requested.size === 0) {
+      return new Map();
+    }
+    if (
+      requested.size > 2_048 ||
+      [...requested].some((pid) => !Number.isInteger(pid) || pid < 1 || pid > 2_147_483_647)
+    ) {
+      throw new MpxError({
+        code: 'PROCESS_FINGERPRINT_INVALID',
+        message: 'A bounded set of valid PIDs is required.',
+      });
+    }
+    const parsed = await this.invoke(
+      PROCESSES_SCRIPT,
+      { PidsJson: JSON.stringify([...requested]) },
+      { timeoutMs: 10_000 },
+    );
+    if (!Array.isArray(parsed) || parsed.length > requested.size) {
+      throw malformed();
+    }
+    const processes = new Map<number, OwnedWindowsProcess>();
+    for (const value of parsed) {
+      const item = record(value);
+      const pid = requiredInteger(item.ProcessId);
+      const startedAt = optionalString(item.StartedAt);
+      if (
+        !requested.has(pid) ||
+        processes.has(pid) ||
+        !startedAt ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(startedAt) ||
+        !Number.isFinite(Date.parse(startedAt)) ||
+        new Date(startedAt).toISOString() !== startedAt
+      ) {
+        throw malformed();
+      }
+      processes.set(pid, { pid, startFingerprint: startedAt });
+    }
+    return processes;
+  }
+
   async terminate(process: OwnedWindowsProcess): Promise<void> {
     const parsed = record(
       await this.invoke(KILL_SCRIPT, {

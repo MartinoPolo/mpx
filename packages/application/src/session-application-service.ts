@@ -6,10 +6,11 @@ import type {
   RuntimeDiscovery,
   SessionListFilter,
   SessionRecordV1,
+  SessionReconcileScope,
   SessionResurrectionExportV1,
 } from '@mpx/sessions';
 
-export type SessionDiscoveryScope = Pick<SessionListFilter, 'runtime' | 'identity'>;
+export type SessionDiscoveryScope = SessionReconcileScope;
 
 export interface SessionDiscoveryInput {
   readonly scanner: RuntimeDiscovery;
@@ -26,6 +27,7 @@ export interface SessionOperations {
   reconcile(
     discoveries: readonly SessionDiscoveryInput[],
     bindingIds: readonly string[],
+    scope?: SessionReconcileScope,
   ): Promise<unknown>;
 }
 
@@ -43,7 +45,7 @@ export interface SessionListDiagnostic {
 export interface SessionApplicationDependencies {
   readonly sessions: SessionOperations;
   readonly nativeBindings: SessionNativeBindingOperations;
-  readonly consumePending: () => Promise<number>;
+  readonly consumePending: (scope?: SessionReconcileScope) => Promise<number>;
   readonly projectResurrectionRecord: (
     record: SessionRecordV1 & { readonly launch: NonNullable<SessionRecordV1['launch']> },
   ) => SessionResurrectionExportV1['records'][number];
@@ -91,7 +93,6 @@ export class SessionApplicationService implements SessionApplication {
   }
 
   async list(request: { filter?: SessionListFilter; limit?: number } = {}) {
-    await this.#dependencies.consumePending();
     const diagnostics: SessionListDiagnostic[] = [];
     const scope: SessionDiscoveryScope | undefined = request.filter
       ? {
@@ -99,6 +100,7 @@ export class SessionApplicationService implements SessionApplication {
           ...(request.filter.identity !== undefined ? { identity: request.filter.identity } : {}),
         }
       : undefined;
+    await this.#dependencies.consumePending(scope);
     let discoveries: readonly SessionDiscoveryInput[] = [];
     if (!this.#dependencies.discoveries) {
       diagnostics.push({
@@ -168,6 +170,7 @@ export class SessionApplicationService implements SessionApplication {
     await this.#sessions.reconcile(
       instrumented,
       await this.#dependencies.nativeBindings.listLifecycleBindingIds(),
+      scope,
     );
     const records = (await this.#sessions.list(request.filter))
       .sort((left, right) => left.recordId.localeCompare(right.recordId))

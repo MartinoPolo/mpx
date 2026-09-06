@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MpxError } from '@mpx/core';
 import type { PowerShellRunner, SocketBinder } from '../../src/index.js';
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from '../../src/index.js';
@@ -7,6 +7,74 @@ import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from '../../sr
 const result = (stdout: string, exitCode = 0) => ({ stdout, stderr: 'sensitive stderr', exitCode });
 const runner = (...responses: Array<ReturnType<typeof result>>): PowerShellRunner => ({
   run: async () => responses.shift() ?? result(''),
+});
+
+describe('Windows process batch inspection', () => {
+  it('uses one bounded CIM snapshot for unique requested PIDs and rescans on every call', async () => {
+    const startedAt = '2025-01-01T00:00:00.000Z';
+    const run = vi.fn(async (_script: string) =>
+      result(JSON.stringify([{ ProcessId: 42, StartedAt: startedAt }])),
+    );
+    const capabilities = new WindowsProcessCapabilities({ runner: { run } });
+    expect(await capabilities.inspectMany([42, 43, 42])).toEqual(
+      new Map([[42, { pid: 42, startFingerprint: startedAt }]]),
+    );
+    expect(run).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Get-CimInstance Win32_Process -Property ProcessId,CreationDate'),
+      { PidsJson: '[42,43]' },
+      { timeoutMs: 10_000 },
+    );
+    const script = run.mock.calls[0]![0];
+    expect(script.match(/Get-CimInstance/gu)).toHaveLength(1);
+    expect(script).toContain('ConvertTo-Json -InputObject $items');
+    await capabilities.inspectMany([42]);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    '',
+    'null',
+    '{}',
+    '{',
+    '[{"ProcessId":42}]',
+    '[{"ProcessId":"42","StartedAt":"2025-01-01T00:00:00.000Z"}]',
+    '[{"ProcessId":42,"StartedAt":"not-a-date"}]',
+    '[{"ProcessId":42,"StartedAt":"2025-02-31T00:00:00.000Z"}]',
+    '[{"ProcessId":43,"StartedAt":"2025-01-01T00:00:00.000Z"}]',
+    '[{"ProcessId":42,"StartedAt":"2025-01-01T00:00:00.000Z"},{"ProcessId":42,"StartedAt":"2025-01-01T00:00:00.000Z"}]',
+  ])('rejects malformed or incomplete batch output: %s', async (stdout) => {
+    await expect(
+      new WindowsProcessCapabilities({ runner: runner(result(stdout)) }).inspectMany([42]),
+    ).rejects.toMatchObject({ code: 'WINDOWS_POWERSHELL_MALFORMED' });
+  });
+
+  it('accepts only a successful explicit empty array as an empty snapshot', async () => {
+    expect(
+      await new WindowsProcessCapabilities({ runner: runner(result('[]')) }).inspectMany([42]),
+    ).toEqual(new Map());
+    await expect(
+      new WindowsProcessCapabilities({ runner: runner(result('[]', 1)) }).inspectMany([42]),
+    ).rejects.toMatchObject({ code: 'WINDOWS_POWERSHELL_FAILED' });
+  });
+
+  it('does not spawn for empty, invalid, or oversized requests', async () => {
+    const run = vi.fn();
+    const capabilities = new WindowsProcessCapabilities({ runner: { run } });
+    expect(await capabilities.inspectMany([])).toEqual(new Map());
+    for (const pids of [
+      [0],
+      [-1],
+      [1.5],
+      [Number.NaN],
+      [2_147_483_648],
+      Array.from({ length: 2_049 }, (_, index) => index + 1),
+    ]) {
+      await expect(capabilities.inspectMany(pids)).rejects.toMatchObject({
+        code: 'PROCESS_FINGERPRINT_INVALID',
+      });
+    }
+    expect(run).not.toHaveBeenCalled();
+  });
 });
 
 describe('WindowsPortPlatformAdapter', () => {
