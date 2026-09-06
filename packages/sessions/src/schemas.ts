@@ -103,7 +103,6 @@ export interface NativeBindingRecordV1 {
   readonly identity: IdentityV1;
   readonly runtime: RuntimeName;
   readonly recordedRootDigest: string;
-  readonly accountBindingRef: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -492,16 +491,7 @@ export function parseSessionRegistryV1(value: unknown): SessionRegistryV1 {
 export function parseNativeBindingRecordV1(value: unknown): NativeBindingRecordV1 {
   const item = obj(
     value,
-    [
-      'schemaVersion',
-      'ref',
-      'identity',
-      'runtime',
-      'recordedRootDigest',
-      'accountBindingRef',
-      'createdAt',
-      'updatedAt',
-    ],
+    ['schemaVersion', 'ref', 'identity', 'runtime', 'recordedRootDigest', 'createdAt', 'updatedAt'],
     'native binding',
   );
   if (item.schemaVersion !== 1) {
@@ -518,7 +508,6 @@ export function parseNativeBindingRecordV1(value: unknown): NativeBindingRecordV
     identity: identity(item.identity),
     runtime: runtime(item.runtime),
     recordedRootDigest: sha(item.recordedRootDigest, 'recordedRootDigest'),
-    accountBindingRef: nullableText(item.accountBindingRef, 'accountBindingRef'),
     createdAt,
     updatedAt,
   };

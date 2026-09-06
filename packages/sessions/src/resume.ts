@@ -15,10 +15,8 @@ export interface ConfiguredNativeRoot {
   readonly identity: IdentityV1;
   readonly runtime: RuntimeName;
 }
-export type AccountBindingVerification = 'verified' | 'unavailable' | 'mismatch' | 'duplicate';
 export interface ResumeDependencies {
   resolveConfiguredRoot(nativeBindingRef: string): Promise<ConfiguredNativeRoot>;
-  verifyAccountBinding?(accountBindingRef: string): Promise<AccountBindingVerification>;
   verifyNativeTarget(
     root: string,
     ref: NativeSessionRefV1,
@@ -82,21 +80,6 @@ async function buildResumePlan(
       'SESSION_RESUME_ROOT_MISMATCH',
       'configured canonical root digest differs from recorded digest',
     );
-  }
-  if (record.runtime === 'pi') {
-    if (recorded.accountBindingRef === null || !dependencies.verifyAccountBinding) {
-      throw new SessionError(
-        'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-        'Pi account-binding verification is unavailable',
-      );
-    }
-    const result = await dependencies.verifyAccountBinding(recorded.accountBindingRef);
-    if (result !== 'verified') {
-      throw new SessionError(
-        `SESSION_RESUME_ACCOUNT_${result.toUpperCase()}`,
-        `Pi account-binding verification returned ${result}`,
-      );
-    }
   }
   const target = await dependencies.verifyNativeTarget(
     configured.root,

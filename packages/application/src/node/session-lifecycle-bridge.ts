@@ -22,18 +22,6 @@ export interface LaunchLifecyclePreparation {
   readonly binding: SessionLifecycleBindingV1;
   readonly eventDirectory: string;
 }
-function reconcileAccountBindingRef(
-  existing: string | null,
-  resolved: string | null,
-): string | null {
-  if (existing !== null && resolved !== null && existing !== resolved) {
-    throw new SessionError(
-      'SESSION_ACCOUNT_BINDING_MISMATCH',
-      'The enrolled account binding does not match the existing session binding.',
-    );
-  }
-  return existing ?? resolved;
-}
 export interface SessionLifecycleBridge {
   prepare(input: {
     descriptor: LaunchDescriptor;
@@ -49,17 +37,10 @@ export interface SessionLifecycleBridge {
 }
 export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge {
   private readonly store: SessionStore;
-  private readonly accountBindingRef:
-    ((identity: string, runtime: 'claude' | 'pi') => Promise<string | null>) | undefined;
   private readonly onSessionsChanged: (() => Promise<void>) | undefined;
 
-  constructor(input: {
-    store: SessionStore;
-    accountBindingRef?: (identity: string, runtime: 'claude' | 'pi') => Promise<string | null>;
-    onSessionsChanged?: () => Promise<void>;
-  }) {
+  constructor(input: { store: SessionStore; onSessionsChanged?: () => Promise<void> }) {
     this.store = input.store;
-    this.accountBindingRef = input.accountBindingRef;
     this.onSessionsChanged = input.onSessionsChanged;
   }
   async prepare(input: {
@@ -98,6 +79,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
       const persisted = await this.store.readNativeBinding(input.nativeBinding.ref);
       if (
         JSON.stringify(persisted) !== JSON.stringify(input.nativeBinding) ||
+        persisted.ref !== generatedRef ||
         persisted.recordedRootDigest !== rootDigest ||
         persisted.runtime !== input.descriptor.runtime ||
         persisted.identity.domain !== input.descriptor.identity.domain ||
@@ -114,6 +96,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
         (await this.store.listNativeBindings()).find((binding) => binding.ref === generatedRef);
       if (existing) {
         if (
+          existing.ref !== generatedRef ||
           existing.recordedRootDigest !== rootDigest ||
           existing.runtime !== input.descriptor.runtime ||
           existing.identity.domain !== input.descriptor.identity.domain ||
@@ -123,19 +106,6 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
             'SESSION_BINDING_MISMATCH',
             'The native binding reference is inconsistent.',
           );
-        }
-        if (this.accountBindingRef) {
-          const resolvedAccountBindingRef = await this.accountBindingRef(
-            input.descriptor.identity.name,
-            input.descriptor.runtime,
-          );
-          const accountBindingRef = reconcileAccountBindingRef(
-            existing.accountBindingRef,
-            resolvedAccountBindingRef,
-          );
-          if (accountBindingRef !== existing.accountBindingRef) {
-            await this.store.saveNativeBinding({ ...existing, accountBindingRef, updatedAt: now });
-          }
         }
       } else {
         await this.store.saveNativeBinding({
@@ -147,11 +117,6 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
           },
           runtime: input.descriptor.runtime,
           recordedRootDigest: rootDigest,
-          accountBindingRef:
-            (await this.accountBindingRef?.(
-              input.descriptor.identity.name,
-              input.descriptor.runtime,
-            )) ?? null,
           createdAt: now,
           updatedAt: now,
         });

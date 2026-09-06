@@ -118,13 +118,7 @@ describe('canonical launch dispatch', () => {
       argv: ['wrapper-entry.js', ...(descriptor.runtimeArgs ?? [])],
       environment: {},
     }));
-    const verifyRoot = vi.fn(async (identity, runtimeRoot, ref?: string) => ({
-      schemaVersion: 1 as const,
-      identity,
-      runtime: 'pi' as const,
-      runtimeRoot,
-      ref: ref ?? 'account:exact',
-    }));
+    const verifyRoot = vi.fn(async (_root: string) => undefined);
     const verifyAccount = vi.fn(async () => undefined);
     const io = captureIo();
 
@@ -153,8 +147,8 @@ describe('canonical launch dispatch', () => {
         launchExecutorAdapters: [host],
         launchRuntimeAdapters: [{ runtime: 'pi', prepare }],
         launchRoutes: { materialize: async () => ({ 'git:git-work': 'C:/test/git-work' }) },
-        rootAttestationService: { verify: verifyRoot } as never,
-        accountAuthVerifier: { verify: verifyAccount },
+        exactNativeRootVerifier: { verify: verifyRoot },
+        piAuthVerifier: { verify: verifyAccount },
       },
     );
     expect(exitCode, `${io.out.join('')}\n${io.err.join('')}`).toBe(0);
@@ -171,13 +165,8 @@ describe('canonical launch dispatch', () => {
       executable: path.join(fixture.piRoot, 'pi.exe'),
       argv: ['wrapper-entry.js', ...runtimeArgs],
     });
-    expect(verifyRoot).toHaveBeenNthCalledWith(1, { domain: 'work', name: 'work' }, fixture.piRoot);
-    expect(verifyRoot).toHaveBeenNthCalledWith(
-      2,
-      { domain: 'work', name: 'work' },
-      fixture.piRoot,
-      'account:exact',
-    );
+    expect(verifyRoot).toHaveBeenNthCalledWith(1, fixture.piRoot);
+    expect(verifyRoot).toHaveBeenNthCalledWith(2, fixture.piRoot);
     expect(verifyAccount).toHaveBeenCalledTimes(2);
     expect(verifyAccount).toHaveBeenNthCalledWith(1, fixture.piRoot);
     expect(verifyAccount).toHaveBeenNthCalledWith(2, fixture.piRoot);

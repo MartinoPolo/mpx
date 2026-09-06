@@ -12,14 +12,11 @@ import {
 import {
   createProjectApplicationService,
   executionMpxError,
-  type AccountApplicationService,
   type ProjectApplicationService,
 } from '@mpx/application';
 import {
-  createNodeAccountApplicationService,
   createNodeLaunchApplicationService,
   executeNodeSessionResumeLaunch,
-  resolveTrustedRuntimeExecutable,
 } from '@mpx/application/node';
 import {
   errorEnvelope,
@@ -39,7 +36,6 @@ import {
   productionSessionProcessInspector,
   sessions,
   setupApplication,
-  stateRoot,
   status,
   workspaceApplication,
   type CliContext,
@@ -279,36 +275,6 @@ async function requiredUserConfig(context: CliContext): Promise<UserConfig> {
     environment: context.env,
   });
 }
-function productionAccountApplication(
-  user: UserConfig,
-  context: CliContext,
-  cwd: string,
-): AccountApplicationService {
-  return createNodeAccountApplicationService({
-    accounts: user.identities,
-    stateRoot: stateRoot(context),
-    cwd,
-    environment: context.env,
-    ...(context.rootAttestationService
-      ? { rootAttestationService: context.rootAttestationService }
-      : {}),
-    ...(context.accountAuthVerifier ? { accountAuthVerifier: context.accountAuthVerifier } : {}),
-    resolveTrustedExecutable: () =>
-      resolveTrustedRuntimeExecutable({
-        runtime: 'pi',
-        cwd,
-        environment: context.env,
-        ...(context.launchExecutableResolver ? { resolver: context.launchExecutableResolver } : {}),
-      }),
-  });
-}
-function productionAccountServices(user: UserConfig, context: CliContext, cwd: string) {
-  const application = productionAccountApplication(user, context, cwd);
-  return {
-    verifier: { verify: application.verifyNativeBinding.bind(application) },
-    resolver: { resolve: application.resolveNativeBinding.bind(application) },
-  };
-}
 async function project(
   parsed: Parsed,
   context: CliContext = defaultContext,
@@ -423,7 +389,6 @@ async function executeProductionSessionResume(
       context,
       catalogRoot: (cwd) => catalogPath(context, cwd),
       status: () => status(context),
-      stateRoot: () => stateRoot(context),
       executionRoots: async () => {
         const appData = context.env.APPDATA;
         const localAppData = context.env.LOCALAPPDATA;
@@ -480,10 +445,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
   if (group === 'session') {
     const user = await userConfig(context);
     const sessionStore = sessions(context);
-    const account =
-      (action === 'resume' || action === 'list') && context.env.LOCALAPPDATA
-        ? productionAccountServices(user, context, parsed.cwd)
-        : undefined;
     const resolveIdentity = async (name: string) => {
       const identity = user.identities[name];
       if (!identity) {
@@ -497,9 +458,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
           productionSessionResumeDependencies({
             user,
             store: sessionStore,
-            ...((context.nativeAccountBindingVerifier ?? account?.verifier)
-              ? { verifier: (context.nativeAccountBindingVerifier ?? account?.verifier)! }
-              : {}),
             environment: context.env,
           }))
         : undefined;
@@ -516,12 +474,13 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
                   user,
                   store: sessionStore,
                   environment: context.env,
-                  ...((context.nativeAccountBindingResolver ?? account?.resolver)
-                    ? {
-                        accountResolver: (context.nativeAccountBindingResolver ??
-                          account?.resolver)!,
-                      }
-                    : {}),
+                  cwd: parsed.cwd,
+                  options: {
+                    ...(context.exactNativeRootVerifier
+                      ? { exactNativeRootVerifier: context.exactNativeRootVerifier }
+                      : {}),
+                    ...(context.piAuthVerifier ? { piAuthVerifier: context.piAuthVerifier } : {}),
+                  },
                 })),
           }
         : {}),
@@ -858,7 +817,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       discoverProjectConfig: projectDiscovery,
       status: () => status(context),
       sessions: () => sessions(context),
-      stateRoot: () => stateRoot(context),
       ...(context.sbxDiagnostics ? { sbxDiagnostics: context.sbxDiagnostics } : {}),
     });
     const prepared = await service.prepare({

@@ -76,7 +76,6 @@ function factory(overrides: Record<string, unknown> = {}) {
     }),
     status: () => ({}) as never,
     sessions: () => ({}) as never,
-    stateRoot: () => 'C:/state',
     ...overrides,
   });
 }
@@ -180,14 +179,8 @@ describe('Node launch production factory', () => {
     );
     const service = factory({
       context: {
-        rootAttestationService: {
-          verify: async () => ({
-            identity: { domain: 'work', name: 'work' },
-            runtimeRoot: 'C:/native/work/pi',
-            ref: 'private-account-reference',
-          }),
-        },
-        accountAuthVerifier: { verify: async () => undefined },
+        exactNativeRootVerifier: { verify: async () => undefined },
+        piAuthVerifier: { verify: async () => undefined },
       },
       status: () => ({
         snapshot: async () => ({
@@ -217,144 +210,36 @@ describe('Node launch production factory', () => {
     expect(verify).toHaveBeenCalledOnce();
   });
 
-  it('performs initial Pi verification and binds exact pre-child reverification', async () => {
+  it('performs exact-root and Pi auth verification initially and before child execution', async () => {
     executionSpy.mockClear();
-    const verifyAttestation = vi.fn().mockResolvedValue({
-      identity: { domain: 'work', name: 'work' },
-      runtimeRoot: 'C:/native/work/pi',
-      ref: 'pi-account-ref',
-    });
+    const verifyRoot = vi.fn(async () => undefined);
     const verifyAuth = vi.fn(async () => undefined);
     const service = factory({
       context: {
         launchExecutorAdapters: [verifiedDocker],
-        rootAttestationService: { verify: verifyAttestation },
-        accountAuthVerifier: { verify: verifyAuth },
+        exactNativeRootVerifier: { verify: verifyRoot },
+        piAuthVerifier: { verify: verifyAuth },
       },
     });
 
     await service.execute(await resolvedLaunch(service));
     const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
-    expect(verifyAttestation).toHaveBeenNthCalledWith(
-      1,
-      { domain: 'work', name: 'work' },
-      'C:/native/work/pi',
-    );
-    expect(verifyAuth).toHaveBeenCalledTimes(1);
+    expect(verifyRoot).toHaveBeenCalledOnce();
+    expect(verifyAuth).toHaveBeenCalledOnce();
     await execution.beforeChildExecution!();
-    expect(verifyAttestation).toHaveBeenNthCalledWith(
-      2,
-      { domain: 'work', name: 'work' },
-      'C:/native/work/pi',
-      'pi-account-ref',
-    );
+    expect(verifyRoot).toHaveBeenCalledTimes(2);
     expect(verifyAuth).toHaveBeenCalledTimes(2);
+    expect(verifyRoot).toHaveBeenCalledWith('C:/native/work/pi');
   });
 
-  it('keeps production Docker contexts and Pi account refs launch-local when resolution interleaves', async () => {
-    executionSpy.mockClear();
-    sbxAdapterFactory.mockReset();
-    let adapterNumber = 0;
-    sbxAdapterFactory.mockImplementation(async () => {
-      const launch = ++adapterNumber;
-      return {
-        name: 'docker',
-        remoteToolClient: {},
-        verify: async () => ({
-          status: 'verified',
-          verifier: `adapter-${launch}`,
-          evidenceDigest: String(launch).repeat(64),
-        }),
-      };
-    });
-    let attestationNumber = 0;
-    const service = factory({
-      context: {
-        rootAttestationService: {
-          verify: vi.fn(async () => {
-            const launch = ++attestationNumber;
-            return {
-              identity: { domain: 'work', name: 'work' },
-              runtimeRoot: 'C:/native/work/pi',
-              ref: `account-${launch}`,
-            };
-          }),
-        },
-        accountAuthVerifier: { verify: vi.fn(async () => undefined) },
-      },
-      status: () => ({
-        snapshot: async () => ({
-          schemaVersion: 1,
-          project: { id: 'sample/app', cwd: process.cwd() },
-          worktree: { id: null, path: null, role: null, branch: null },
-          portResolution: 'missing',
-          services: [],
-          diagnostics: [],
-        }),
-      }),
-    });
-    const resolvedA = await resolvedLaunch(service);
-    const resolvedB = await resolvedLaunch(service);
-
-    await service.execute(resolvedA);
-    await service.execute(resolvedB);
-
-    const launchA = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
-    const launchB = executionSpy.mock.calls[1]![0] as NodeLaunchExecutionInput;
-    expect(launchA.descriptor.executorVerification.verifier).toBe('adapter-1');
-    expect(launchB.descriptor.executorVerification.verifier).toBe('adapter-2');
-    expect(launchA.context.launchExecutorAdapters?.[0]).not.toBe(
-      launchB.context.launchExecutorAdapters?.[0],
-    );
-    expect(
-      await (
-        launchA.context.launchLifecycleBridge as never as {
-          accountBindingRef(name: string, runtime: 'pi'): Promise<string | null>;
-        }
-      ).accountBindingRef('work', 'pi'),
-    ).toBe('account-1');
-    expect(
-      await (
-        launchB.context.launchLifecycleBridge as never as {
-          accountBindingRef(name: string, runtime: 'pi'): Promise<string | null>;
-        }
-      ).accountBindingRef('work', 'pi'),
-    ).toBe('account-2');
-  });
-
-  it('creates production lifecycle sessions with exact Pi binding and native fallback', async () => {
+  it('creates a lifecycle bridge without account authority', async () => {
     executionSpy.mockClear();
     const sessions = vi.fn(() => ({}));
-    const nativeResolve = vi.fn(async () => 'native-claude-ref');
-    const service = factory({
-      sessions,
-      context: {
-        launchExecutorAdapters: [verifiedDocker],
-        rootAttestationService: {
-          verify: vi.fn(async () => ({
-            identity: { domain: 'work', name: 'work' },
-            runtimeRoot: 'C:/native/work/pi',
-            ref: 'exact-pi-ref',
-          })),
-        },
-        accountAuthVerifier: { verify: vi.fn(async () => undefined) },
-        nativeAccountBindingResolver: { resolve: nativeResolve },
-      },
-    });
-
+    const service = factory({ sessions, context: { launchExecutorAdapters: [verifiedDocker] } });
     await service.execute(await resolvedLaunch(service));
     const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
-    const lifecycle = execution.context.launchLifecycleBridge as never as {
-      accountBindingRef(name: string, runtime: 'claude' | 'pi'): Promise<string | null>;
-    };
-    expect(sessions).toHaveBeenCalledTimes(1);
-    expect(await lifecycle.accountBindingRef('work', 'pi')).toBe('exact-pi-ref');
-    expect(await lifecycle.accountBindingRef('work', 'claude')).toBe('native-claude-ref');
-    expect(nativeResolve).toHaveBeenCalledWith(
-      { domain: 'work', name: 'work' },
-      'claude',
-      'C:/native/work/claude',
-    );
+    expect(execution.context.launchLifecycleBridge).toBeDefined();
+    expect(sessions).toHaveBeenCalledOnce();
   });
 
   it('rejects unsafe mutable diagnostics before adapter construction, evidence, or execution', async () => {
@@ -401,9 +286,6 @@ describe('Node launch production factory', () => {
     const sessions = vi.fn(() => {
       throw new Error('sessions must remain lazy');
     });
-    const stateRoot = vi.fn(() => {
-      throw new Error('state must remain lazy');
-    });
     const diagnostics = vi.fn(async () => {
       throw new Error('diagnostics must remain lazy');
     });
@@ -416,7 +298,6 @@ describe('Node launch production factory', () => {
       discoverProjectConfig: async () => undefined,
       status,
       sessions,
-      stateRoot,
       sbxDiagnostics: diagnostics,
     });
 
@@ -435,7 +316,6 @@ describe('Node launch production factory', () => {
     expect(selection.data).toMatchObject({ schemaVersion: 1, runtime: null });
     expect(status).not.toHaveBeenCalled();
     expect(sessions).not.toHaveBeenCalled();
-    expect(stateRoot).not.toHaveBeenCalled();
     expect(diagnostics).not.toHaveBeenCalled();
   });
 });

@@ -132,7 +132,6 @@ describe('@mpx/application architecture', () => {
   it('exposes provider-neutral operation facades from the importable package root', async () => {
     const application = await import('../../src/index.js');
     expect(application).toMatchObject({
-      AccountApplicationService: expect.any(Function),
       LifecycleApplicationService: expect.any(Function),
       LaunchApplicationService: expect.any(Function),
       SessionApplicationService: expect.any(Function),
@@ -151,7 +150,7 @@ describe('@mpx/application architecture', () => {
     expect(node).not.toHaveProperty('createNodeInstallApplicationService');
     expect(node).not.toHaveProperty('createNodeInstallProtocolInput');
     expect(node).toMatchObject({
-      createNodeAccountApplicationService: expect.any(Function),
+      ExactNativeRootVerifier: expect.any(Function),
       createNodeLocalIssueViewRebuilder: expect.any(Function),
       createPiAuthAvailabilityProbe: expect.any(Function),
       createDefaultSbxDiagnostics: expect.any(Function),

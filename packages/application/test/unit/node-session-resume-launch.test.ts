@@ -133,7 +133,6 @@ function input(
         ref: 'binding',
         runtime: 'claude',
         identity: { name: 'work', domain: 'work' },
-        accountBindingRef: null,
       })),
     } as never,
     environment: { APPDATA: '/appdata', LOCALAPPDATA: '/local' },
@@ -158,7 +157,6 @@ function input(
           }) as never,
       ),
     }),
-    stateRoot: () => '/state',
     executionRoots: async () => ({ artifactsRoot: '/artifacts', stateRoot: '/state' }),
     discoverProjectConfig: async () => ({
       root: cwd,
@@ -179,14 +177,12 @@ describe('Node session resume launch composition', () => {
     const read = vi.fn(base.store.readNativeBinding.bind(base.store));
     const discover = vi.fn(base.discoverProjectConfig!);
     const status = vi.fn(base.status);
-    const stateRoot = vi.fn(base.stateRoot);
     const service = createNodeSessionResumeLaunchApplicationService({
       ...base,
       environment: { APPDATA: '/appdata' },
       store: { readNativeBinding: read } as never,
       discoverProjectConfig: discover,
       status,
-      stateRoot,
       context: {
         sessionDockerResumeAdmission: async () => ({
           admitted: false,
@@ -202,50 +198,48 @@ describe('Node session resume launch composition', () => {
     expect(read).not.toHaveBeenCalled();
     expect(discover).not.toHaveBeenCalled();
     expect(status).not.toHaveBeenCalled();
-    expect(stateRoot).not.toHaveBeenCalled();
     expect(mocks.status).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['ACCOUNT_ROOT_DUPLICATE', 'SESSION_RESUME_ACCOUNT_DUPLICATE'],
-    ['ACCOUNT_ROOT_CHANGED', 'SESSION_RESUME_ACCOUNT_MISMATCH'],
-    ['OAUTH_UNAVAILABLE', 'SESSION_RESUME_ACCOUNT_UNAVAILABLE'],
-  ])('maps Pi verification %s before project discovery', async (sourceCode, expectedCode) => {
-    const events: string[] = [];
-    const base = input();
-    const service = createNodeSessionResumeLaunchApplicationService({
-      ...base,
-      store: {
-        readNativeBinding: async () => ({
-          ref: 'binding',
-          runtime: 'pi',
-          identity: { name: 'work', domain: 'work' },
-          accountBindingRef: 'account',
-        }),
-      } as never,
-      context: {
-        sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
-        rootAttestationService: {
-          store: { list: async () => [] },
-          verify: async () => {
-            events.push('verify');
-            throw Object.assign(new Error(sourceCode), { code: sourceCode });
-          },
+  it.each(['NATIVE_ROOT_INVALID', 'OAUTH_UNAVAILABLE'])(
+    'fails closed on Pi native preflight %s before project discovery',
+    async (sourceCode) => {
+      const events: string[] = [];
+      const base = input();
+      const service = createNodeSessionResumeLaunchApplicationService({
+        ...base,
+        store: {
+          readNativeBinding: async () => ({
+            ref: 'binding',
+            runtime: 'pi',
+            identity: { name: 'work', domain: 'work' },
+          }),
         } as never,
-        accountAuthVerifier: {
-          verify: async () => {
-            events.push('oauth');
+        context: {
+          sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
+          exactNativeRootVerifier: {
+            verify: async () => {
+              events.push('verify');
+              throw Object.assign(new Error(sourceCode), { code: sourceCode });
+            },
+          } as never,
+          piAuthVerifier: {
+            verify: async () => {
+              events.push('oauth');
+            },
           },
         },
-      },
-      discoverProjectConfig: async () => {
-        events.push('project');
-        return undefined;
-      },
-    });
-    await expect(service.prepare(plan('pi'), user)).rejects.toMatchObject({ code: expectedCode });
-    expect(events).toEqual(['verify']);
-  });
+        discoverProjectConfig: async () => {
+          events.push('project');
+          return undefined;
+        },
+      });
+      await expect(service.prepare(plan('pi'), user)).rejects.toMatchObject({
+        code: 'SESSION_RESUME_NATIVE_PREFLIGHT_UNAVAILABLE',
+      });
+      expect(events).toEqual(['verify']);
+    },
+  );
 
   it('routes production Pi Docker resume to the shared typed fail-closed boundary', async () => {
     const base = input();
@@ -265,16 +259,14 @@ describe('Node session resume launch composition', () => {
             ref: 'binding',
             runtime: 'pi',
             identity: { name: 'work', domain: 'work' },
-            accountBindingRef: 'private-account-reference',
           }),
         } as never,
         context: {
           sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
-          rootAttestationService: {
-            store: { list: async () => [] },
+          exactNativeRootVerifier: {
             verify: async () => ({}),
           } as never,
-          accountAuthVerifier: { verify: async () => undefined },
+          piAuthVerifier: { verify: async () => undefined },
         },
       },
       plan('pi'),
@@ -309,13 +301,12 @@ describe('Node session resume launch composition', () => {
             ref: 'binding',
             runtime: 'pi',
             identity: { name: 'work', domain: 'work' },
-            accountBindingRef: 'account',
           }),
         } as never,
         context: {
           sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
-          rootAttestationService: { store: { list: async () => [] }, verify } as never,
-          accountAuthVerifier: { verify: async () => undefined },
+          exactNativeRootVerifier: { verify } as never,
+          piAuthVerifier: { verify: async () => undefined },
         },
       },
       plan('pi'),
@@ -348,19 +339,17 @@ describe('Node session resume launch composition', () => {
             ref: 'binding',
             runtime: 'pi',
             identity: { name: 'work', domain: 'work' },
-            accountBindingRef: 'account',
           }),
         } as never,
         context: {
           sessionDockerResumeAdmission: base.context.sessionDockerResumeAdmission!,
-          rootAttestationService: {
-            store: { list: async () => [] },
+          exactNativeRootVerifier: {
             verify: async () => {
               events.push('verify');
               return {};
             },
           } as never,
-          accountAuthVerifier: {
+          piAuthVerifier: {
             verify: async () => {
               events.push('oauth');
             },

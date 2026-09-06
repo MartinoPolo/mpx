@@ -2,7 +2,6 @@ import { access, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  type AccountAuthVerifier,
   type LifecycleDevService,
   type LifecycleWorktreeService,
   type SetupApplicationService,
@@ -45,7 +44,6 @@ import {
   type IdentityV1,
   type ResumeDependencies,
   type ResumePlanV1,
-  type RootAttestationService,
   type RuntimeDiscovery,
   type SessionProcessInspector,
   type SessionRecordV1,
@@ -93,16 +91,6 @@ export interface CliRepositorySelectorResolver {
   resolve(request: { root: string; remote: string }): Promise<string>;
 }
 
-export interface NativeAccountBindingVerifier {
-  verify(accountBindingRef: string): Promise<'verified' | 'unavailable' | 'mismatch' | 'duplicate'>;
-}
-export interface NativeAccountBindingResolver {
-  resolve(
-    identity: IdentityV1,
-    runtime: 'claude' | 'pi',
-    nativeRoot: string,
-  ): Promise<string | null>;
-}
 export interface CliContext extends LaunchExecutionContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
@@ -145,11 +133,9 @@ export interface CliContext extends LaunchExecutionContext {
     }[]
   >;
   sessionProcessInspector?: SessionProcessInspector;
-  nativeAccountBindingResolver?: NativeAccountBindingResolver;
   sessionResumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
-  nativeAccountBindingVerifier?: NativeAccountBindingVerifier;
-  rootAttestationService?: RootAttestationService;
-  accountAuthVerifier?: AccountAuthVerifier;
+  exactNativeRootVerifier?: { verify(root: string): Promise<void> };
+  piAuthVerifier?: { verify(root: string): Promise<void> };
   sessionResumeExecutor?: (
     plan: ResumePlanV1,
     execution: { readonly approveHost?: boolean },

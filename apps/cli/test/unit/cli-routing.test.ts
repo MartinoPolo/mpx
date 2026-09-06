@@ -3,13 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalNativeRootDigest } from '@mpx/launch';
-import {
-  deriveNativeBindingRef,
-  RootAttestationService,
-  RootAttestationStore,
-  SessionStore,
-  type ResumePlanV1,
-} from '@mpx/sessions';
+import { deriveNativeBindingRef, SessionStore, type ResumePlanV1 } from '@mpx/sessions';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
 
@@ -65,7 +59,6 @@ async function resumableCliFixture() {
     identity,
     runtime: 'claude',
     recordedRootDigest: digest,
-    accountBindingRef: null,
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   });
@@ -206,10 +199,6 @@ describe('canonical CLI dispatch', () => {
       }),
     );
     const identity = { domain: 'personal', name: 'main' } as const;
-    const attestationService = new RootAttestationService(new RootAttestationStore(stateRoot));
-    const attestation = await attestationService.confirm(
-      await attestationService.plan('enroll', identity, piRoot),
-    );
     const store = new SessionStore(stateRoot);
     const recordedRootDigest = canonicalNativeRootDigest(piRoot);
     const nativeBindingRef = deriveNativeBindingRef(identity, 'pi', recordedRootDigest);
@@ -219,7 +208,6 @@ describe('canonical CLI dispatch', () => {
       identity,
       runtime: 'pi',
       recordedRootDigest,
-      accountBindingRef: attestation.ref,
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:00:00.000Z',
     });
@@ -275,6 +263,8 @@ describe('canonical CLI dispatch', () => {
       await run(['session', 'list', '--runtime', 'pi', '--json'], io, {
         env: { APPDATA: appData, LOCALAPPDATA: localAppData },
         sessionProcessInspector: { inspect: async () => ({ status: 'absent' }) },
+        exactNativeRootVerifier: { verify: async () => undefined },
+        piAuthVerifier: { verify: async () => undefined },
       }),
     ).toBe(0);
     expect(JSON.parse(io.out.join(''))).toMatchObject({
@@ -293,9 +283,7 @@ describe('canonical CLI dispatch', () => {
         ],
       },
     });
-    expect((await store.readNativeBinding(nativeBindingRef)).accountBindingRef).toBe(
-      attestation.ref,
-    );
+    expect(await store.readNativeBinding(nativeBindingRef)).not.toHaveProperty('accountBindingRef');
   });
 
   it('fails closed on a wrong plan confirmation and executes only the exact freshly planned digest', async () => {
@@ -364,7 +352,6 @@ describe('canonical CLI dispatch', () => {
       identity,
       runtime: 'claude',
       recordedRootDigest: digest,
-      accountBindingRef: null,
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:00:00.000Z',
     });

@@ -3,23 +3,16 @@ import { discoverProjectConfig, type UserConfig } from '@mpx/config';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
 import { namedSbxPolicies, type F2SandboxSessionResumeAdmission } from '@mpx/executors';
 import { resolveLaunch } from '@mpx/launch';
-import {
-  RootAttestationService,
-  RootAttestationStore,
-  SessionError,
-  type IdentityV1,
-  type ResumePlanV1,
-  type SessionStore,
-} from '@mpx/sessions';
+import { SessionError, type ResumePlanV1, type SessionStore } from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
 import { parseStatusSnapshotV1, type StatusProvider, type StatusSnapshotV1 } from '@mpx/status';
-import type { AccountAuthVerifier } from '../account-application-service.js';
 import {
   SessionResumeLaunchApplicationService,
   type ResumeExecutionRoots,
 } from '../session-resume-launch-application-service.js';
 import { resolveLaunchSkills } from '../launch-skill-resolution.js';
-import { createPiAuthAvailabilityProbe } from './pi-auth-availability.js';
+import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-availability.js';
+import { ExactNativeRootVerifier } from './exact-native-root.js';
 import {
   collectNodeExecutorEvidence,
   type LaunchExecutionContext,
@@ -36,15 +29,8 @@ import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js'
 
 export interface NodeSessionResumeLaunchContext extends LaunchExecutionContext {
   readonly launchSbxExecutionDependencies?: SbxExecutionDependencies;
-  readonly rootAttestationService?: RootAttestationService;
-  readonly accountAuthVerifier?: AccountAuthVerifier;
-  readonly nativeAccountBindingResolver?: {
-    resolve(
-      identity: IdentityV1,
-      runtime: 'claude' | 'pi',
-      nativeRoot: string,
-    ): Promise<string | null>;
-  };
+  readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
+  readonly piAuthVerifier?: PiAuthVerifier;
   readonly sessionDockerResumeAdmission?: (
     plan: ResumePlanV1,
   ) => Promise<F2SandboxSessionResumeAdmission>;
@@ -57,13 +43,11 @@ export interface NodeSessionResumeLaunchInput {
   catalogRoot(cwd: string): Promise<string>;
   /** Lazily composed because Docker admission must precede status infrastructure. */
   status(): StatusProvider;
-  /** Existing local state root, resolved only for Pi account attestation fallback. */
-  stateRoot(): string;
   executionRoots(): Promise<ResumeExecutionRoots>;
   readonly discoverProjectConfig?: typeof discoverProjectConfig;
 }
 
-function piAuth(input: NodeSessionResumeLaunchInput, cwd: string): AccountAuthVerifier {
+function piAuth(input: NodeSessionResumeLaunchInput, cwd: string): PiAuthVerifier {
   return createPiAuthAvailabilityProbe({
     cwd,
     environment: input.environment,
@@ -108,12 +92,11 @@ export function createNodeSessionResumeLaunchApplicationService(
         nativeBinding = await store.readNativeBinding(plan.nativeBindingRef);
       } catch {
         throw new SessionError(
-          'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-          'The recorded Pi account binding is unavailable.',
+          'SESSION_RESUME_BINDING_UNAVAILABLE',
+          'The recorded Pi native binding is unavailable.',
         );
       }
       const configured = userConfig.identities[plan.identity.name];
-      const accountRef = nativeBinding.accountBindingRef;
       if (
         !configured ||
         configured.domain !== plan.identity.domain ||
@@ -122,50 +105,23 @@ export function createNodeSessionResumeLaunchApplicationService(
         nativeBinding.identity.name !== plan.identity.name
       ) {
         throw new SessionError(
-          'SESSION_RESUME_ACCOUNT_MISMATCH',
-          'The recorded Pi account binding does not match the configured identity.',
+          'SESSION_RESUME_BINDING_MISMATCH',
+          'The recorded Pi native binding does not match the configured identity.',
         );
       }
-      if (accountRef === null) {
-        throw new SessionError(
-          'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-          'The recorded Pi account binding is unavailable.',
-        );
-      }
-      const accountService =
-        context.rootAttestationService ??
-        new RootAttestationService(new RootAttestationStore(input.stateRoot()));
-      const auth = context.accountAuthVerifier ?? piAuth(input, plan.cwd);
+      const root = configured.runtimeRoots.pi;
+      const rootVerifier = context.exactNativeRootVerifier ?? new ExactNativeRootVerifier();
+      const auth = context.piAuthVerifier ?? piAuth(input, plan.cwd);
       return {
         nativeBinding,
         reverify: async () => {
           try {
-            const matchingRefs = await accountService.store?.list();
-            if (
-              matchingRefs &&
-              matchingRefs.filter((record) => record.ref === accountRef).length > 1
-            ) {
-              throw Object.assign(new Error('duplicate'), { code: 'ACCOUNT_ROOT_DUPLICATE' });
-            }
-            await accountService.verify(plan.identity, configured.runtimeRoots.pi, accountRef);
-            await auth.verify(configured.runtimeRoots.pi);
-          } catch (error) {
-            const code = (error as { code?: unknown }).code;
-            if (code === 'ACCOUNT_ROOT_DUPLICATE' || code === 'ACCOUNT_IDENTITY_DUPLICATE') {
-              throw new SessionError(
-                'SESSION_RESUME_ACCOUNT_DUPLICATE',
-                'The recorded Pi account binding is duplicated.',
-              );
-            }
-            if (code === 'ACCOUNT_ROOT_CHANGED' || code === 'ACCOUNT_BINDING_MISMATCH') {
-              throw new SessionError(
-                'SESSION_RESUME_ACCOUNT_MISMATCH',
-                'The recorded Pi account binding no longer matches the configured identity and root.',
-              );
-            }
+            await rootVerifier.verify(root);
+            await auth.verify(root);
+          } catch {
             throw new SessionError(
-              'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-              'The recorded Pi account binding or live OAuth is unavailable.',
+              'SESSION_RESUME_NATIVE_PREFLIGHT_UNAVAILABLE',
+              'The configured Pi native root or live OAuth is unavailable.',
             );
           }
         },
@@ -274,19 +230,7 @@ export function createNodeSessionResumeLaunchApplicationService(
               ? resumeContext
               : {
                   ...resumeContext,
-                  launchLifecycleBridge: new ProductionSessionLifecycleBridge({
-                    store,
-                    ...(resumeContext.nativeAccountBindingResolver
-                      ? {
-                          accountBindingRef: (name: string, runtime: 'claude' | 'pi') =>
-                            resumeContext.nativeAccountBindingResolver!.resolve(
-                              { domain: userConfig.identities[name]!.domain, name },
-                              runtime,
-                              userConfig.identities[name]!.runtimeRoots[runtime],
-                            ),
-                        }
-                      : {}),
-                  }),
+                  launchLifecycleBridge: new ProductionSessionLifecycleBridge({ store }),
                 };
           const statusSnapshot = project
             ? async (): Promise<StatusSnapshotV1> =>

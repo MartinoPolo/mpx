@@ -27,7 +27,7 @@ import {
 import { preparationRuntime, windowsProcessIdentityInspector } from './preparation-lifecycle.js';
 import { createNodeWorktreeLifecycleService } from './worktree-lifecycle.js';
 
-export * from './account-application-service.js';
+export * from './exact-native-root.js';
 export * from './local-issue-view-rebuilder.js';
 export * from './pi-auth-availability.js';
 export * from './preparation-worker-polling.js';

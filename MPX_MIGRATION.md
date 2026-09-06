@@ -235,7 +235,7 @@ Completed:
 - removed the obsolete public Phase-J migration commands, application services, dedicated tests, temporary handoff, and reconciliation documentation;
 - regenerated the CLI references and bundles without retaining hidden migration aliases.
 
-Remaining work includes F2 proof and inventory machinery, host-Pi remote-tool replacement, sandbox worker or proxy bridge, root-attestation and account commands, generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
+Remaining work includes F2 proof and inventory machinery, host-Pi remote-tool replacement, sandbox worker or proxy bridge, generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
 
 ### Phase 9 — Optional sandbox
 

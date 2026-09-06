@@ -25,6 +25,7 @@ import {
   SessionService,
   SessionStore,
   deriveNativeBindingRef,
+  parseNativeBindingRecordV1,
   parseSessionRecordV1,
   planResume,
   type LaunchSnapshotV1,
@@ -69,7 +70,6 @@ function nativeBinding(overrides: Partial<NativeBindingRecordV1> = {}): NativeBi
     identity,
     runtime: 'claude',
     recordedRootDigest: digest,
-    accountBindingRef: null,
     createdAt: instant,
     updatedAt: instant,
     ...overrides,
@@ -137,6 +137,12 @@ function record(overrides: Partial<SessionRecordV1> = {}): SessionRecordV1 {
     ...overrides,
   };
 }
+
+it('rejects obsolete account authority fields instead of retaining a legacy reader', () => {
+  expect(() =>
+    parseNativeBindingRecordV1({ ...nativeBinding(), accountBindingRef: 'obsolete' }),
+  ).toThrowError(expect.objectContaining({ code: 'SESSION_UNKNOWN_FIELD' }));
+});
 
 it('derives one native binding identity from identity, runtime, and root digest', () => {
   expect(deriveNativeBindingRef(identity, 'claude', digest)).toBe(
@@ -1119,54 +1125,29 @@ it('propagates resumable-state persistence failures without attempting a blocked
   expect(transaction).toHaveBeenCalledTimes(1);
 });
 
-it('requires exact Pi account binding verification', async () => {
+it('plans Pi resume from the exact native binding tuple without account authority', async () => {
   const store = new SessionStore(await temporary()),
     piIdentity = { domain: 'local', name: 'pi' };
-  await store.saveNativeBinding(
-    nativeBinding({
+  await store.saveNativeBinding(nativeBinding({ runtime: 'pi', identity: piIdentity }));
+  const plan = await planResume(
+    store,
+    record({
       runtime: 'pi',
+      runtimeQualifiedId: 'pi:abc',
       identity: piIdentity,
-      accountBindingRef: 'account:opaque',
+      nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/abc.jsonl' },
     }),
-  );
-  const pi = record({
-    runtime: 'pi',
-    runtimeQualifiedId: 'pi:abc',
-    identity: piIdentity,
-    nativeSessionRef: {
-      kind: 'root-relative-file',
-      value: 'sessions/abc.jsonl',
+    {
+      resolveConfiguredRoot: async () => ({
+        root: 'C:/pi',
+        canonicalRootDigest: digest,
+        identity: piIdentity,
+        runtime: 'pi',
+      }),
+      verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' }),
     },
-  });
-  const base = {
-    resolveConfiguredRoot: async () => ({
-      root: 'C:/pi',
-      canonicalRootDigest: digest,
-      identity: piIdentity,
-      runtime: 'pi' as const,
-    }),
-    verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' as const }),
-  };
-  expect(
-    (
-      await planResume(store, pi, {
-        ...base,
-        verifyAccountBinding: async () => 'verified',
-      })
-    ).runtime,
-  ).toBe('pi');
-  await expect(planResume(store, pi, base)).rejects.toMatchObject({
-    code: 'SESSION_RESUME_ACCOUNT_UNAVAILABLE',
-  });
-  await expect(
-    planResume(store, pi, { ...base, verifyAccountBinding: async () => 'mismatch' }),
-  ).rejects.toMatchObject({ code: 'SESSION_RESUME_ACCOUNT_MISMATCH' });
-  await expect(
-    planResume(store, pi, {
-      ...base,
-      verifyAccountBinding: async () => 'duplicate',
-    }),
-  ).rejects.toMatchObject({ code: 'SESSION_RESUME_ACCOUNT_DUPLICATE' });
+  );
+  expect(plan.runtime).toBe('pi');
 });
 
 it('fails closed when native resume activity cannot be inspected', async () => {

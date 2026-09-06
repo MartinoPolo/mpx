@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import { MpxError } from '@mpx/core';
-import type { AccountAuthVerifier } from '../account-application-service.js';
+export interface PiAuthVerifier {
+  verify(root: string): Promise<void>;
+}
 
 export interface TrustedExecutable {
   readonly executable: string;
@@ -37,7 +39,7 @@ const exact = (value: unknown, keys: readonly string[]): value is Record<string,
   !Array.isArray(value) &&
   Object.keys(value).sort().join(',') === [...keys].sort().join(',');
 
-export class PiAuthAvailabilityProbe implements AccountAuthVerifier {
+export class PiAuthAvailabilityProbe implements PiAuthVerifier {
   constructor(readonly dependencies: PiAuthAvailabilityDependencies) {}
 
   async verify(root: string): Promise<void> {

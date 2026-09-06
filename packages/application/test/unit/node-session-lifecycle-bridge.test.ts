@@ -36,16 +36,12 @@ function launchFixture(root: string): {
 }
 
 describe('ProductionSessionLifecycleBridge', () => {
-  it('persists launch bindings, preserves one-time account attachment, and durably consumes an event', async () => {
+  it('persists launch and deterministic native bindings and durably consumes an event', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-lifecycle-bridge-'));
     try {
       const store = new SessionStore(path.join(root, 'state'));
       const input = { ...launchFixture(root), nativeRuntimeRoot: path.join(root, 'native-pi') };
-      let attestation: string | null = 'attestation-a';
-      const bridge = new ProductionSessionLifecycleBridge({
-        store,
-        accountBindingRef: async () => attestation,
-      });
+      const bridge = new ProductionSessionLifecycleBridge({ store });
 
       const prepared = await bridge.prepare(input);
       const nativeBindings = await store.listNativeBindings();
@@ -53,7 +49,6 @@ describe('ProductionSessionLifecycleBridge', () => {
       expect(nativeBindings[0]).toMatchObject({
         runtime: 'pi',
         identity: input.descriptor.identity,
-        accountBindingRef: 'attestation-a',
       });
       expect(await store.readLifecycleBinding(prepared.binding.bindingId)).toMatchObject({
         binding: prepared.binding,
@@ -66,9 +61,8 @@ describe('ProductionSessionLifecycleBridge', () => {
       expect(await lstat(prepared.eventDirectory)).toMatchObject({});
       expect((await lstat(prepared.eventDirectory)).isDirectory()).toBe(true);
 
-      attestation = null;
       await bridge.prepare(input);
-      expect((await store.listNativeBindings())[0]!.accountBindingRef).toBe('attestation-a');
+      expect(await store.listNativeBindings()).toHaveLength(1);
 
       const event = createSessionLifecycleEventV1({
         eventId: 'event-1',
@@ -105,12 +99,6 @@ describe('ProductionSessionLifecycleBridge', () => {
         nativeBindingRef: nativeBindings[0]!.ref,
         lifecycle: { bindingId: prepared.binding.bindingId, sequence: 1 },
       });
-
-      attestation = 'attestation-b';
-      await expect(bridge.prepare(input)).rejects.toMatchObject({
-        code: 'SESSION_ACCOUNT_BINDING_MISMATCH',
-      });
-      expect((await store.listNativeBindings())[0]!.accountBindingRef).toBe('attestation-a');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

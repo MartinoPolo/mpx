@@ -16,15 +16,13 @@ import {
 } from '@mpx/sessions';
 import { PiResumeTargetError, verifyPiResumeTarget } from '@mpx/runtime-pi';
 import { WindowsProcessCapabilities } from '@mpx/windows';
+import { ExactNativeRootVerifier } from './exact-native-root.js';
+import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-availability.js';
+import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
 
 export function productionSessionResumeDependencies(input: {
   user: UserConfig;
   store: SessionStore;
-  verifier?: {
-    verify(
-      accountBindingRef: string,
-    ): Promise<'verified' | 'unavailable' | 'mismatch' | 'duplicate'>;
-  };
   environment?: NodeJS.ProcessEnv;
   processes?: {
     inspect(pid: number): Promise<{ readonly startFingerprint: string } | undefined>;
@@ -37,7 +35,6 @@ export function productionSessionResumeDependencies(input: {
   const {
     user,
     store,
-    verifier,
     environment = process.env,
     processes = new WindowsProcessCapabilities(),
     piTargetVerifier = verifyPiResumeTarget,
@@ -60,9 +57,6 @@ export function productionSessionResumeDependencies(input: {
         runtime: binding.runtime,
       };
     },
-    ...(verifier
-      ? { verifyAccountBinding: (accountBindingRef: string) => verifier.verify(accountBindingRef) }
-      : {}),
     verifyNativeTarget: async (root, ref, runtimeQualifiedId) => {
       if (record.runtime === 'pi') {
         try {
@@ -157,19 +151,15 @@ export function productionSessionResumeDependencies(input: {
 export interface ProductionSessionDiscoveryOptions {
   readonly piProcessInspector?: ProcessInspector;
   readonly clock?: () => number;
+  readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
+  readonly piAuthVerifier?: PiAuthVerifier;
 }
 
 export async function productionSessionDiscoveries(input: {
   user: UserConfig;
   store: SessionStore;
   environment: NodeJS.ProcessEnv;
-  accountResolver?: {
-    resolve(
-      identity: IdentityV1,
-      runtime: 'claude' | 'pi',
-      nativeRoot: string,
-    ): Promise<string | null>;
-  };
+  cwd?: string;
   options?: ProductionSessionDiscoveryOptions;
 }): Promise<
   readonly {
@@ -177,7 +167,17 @@ export async function productionSessionDiscoveries(input: {
     context: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
   }[]
 > {
-  const { user, store, environment, accountResolver, options = {} } = input;
+  const { user, store, environment, options = {} } = input;
+  const cwd = input.cwd ?? process.cwd();
+  const exactRoot = options.exactNativeRootVerifier ?? new ExactNativeRootVerifier();
+  const auth =
+    options.piAuthVerifier ??
+    createPiAuthAvailabilityProbe({
+      cwd,
+      environment,
+      resolveTrustedExecutable: () =>
+        resolveTrustedRuntimeExecutable({ runtime: 'pi', cwd, environment }),
+    });
   const existing = await store.listNativeBindings();
   const piProcessInspector = options.piProcessInspector ?? {
     inspect: async (pid: number) => {
@@ -217,7 +217,8 @@ export async function productionSessionDiscoveries(input: {
       const prior = existing.find((binding) => binding.ref === ref) ?? tupleBindings[0];
       if (
         prior &&
-        (prior.identity.domain !== identity.domain ||
+        (prior.ref !== ref ||
+          prior.identity.domain !== identity.domain ||
           prior.identity.name !== identity.name ||
           prior.runtime !== runtime ||
           prior.recordedRootDigest !== recordedRootDigest)
@@ -228,58 +229,46 @@ export async function productionSessionDiscoveries(input: {
             'A stable native binding reference is inconsistent with its exact identity, runtime, or root.',
         });
       }
-      let resolvedAccountBindingRef = prior?.accountBindingRef ?? null;
-      let accountResolutionUnavailable = false;
-      if (accountResolver) {
-        try {
-          resolvedAccountBindingRef = await accountResolver.resolve(identity, runtime, root);
-        } catch {
-          // A transient account lookup cannot revoke previously persisted authority. The
-          // affected scanner still fails closed for this discovery run.
-          accountResolutionUnavailable = true;
-        }
-      }
       const timestamp = new Date().toISOString();
-      const binding = prior
-        ? resolvedAccountBindingRef === prior.accountBindingRef
-          ? prior
-          : { ...prior, accountBindingRef: resolvedAccountBindingRef, updatedAt: timestamp }
-        : {
-            schemaVersion: 1 as const,
-            ref,
-            identity,
-            runtime,
-            recordedRootDigest,
-            accountBindingRef: resolvedAccountBindingRef,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          };
-      if ((!prior && !accountResolutionUnavailable) || (prior && binding !== prior)) {
+      const binding = prior ?? {
+        schemaVersion: 1 as const,
+        ref,
+        identity,
+        runtime,
+        recordedRootDigest,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      if (!prior) {
         await store.saveNativeBinding(binding);
       }
       if (runtime === 'pi') {
-        // Active Pi discovery is admitted only for an enrolled, exact configured root.
-        // The scanner receives that root directly; it never infers or scans a home directory.
+        let available = true;
+        try {
+          await exactRoot.verify(root);
+          await auth.verify(root);
+        } catch {
+          available = false;
+        }
         result.push({
-          scanner:
-            accountResolutionUnavailable || binding.accountBindingRef === null
-              ? {
-                  runtime: 'pi',
-                  scan: async () => ({
-                    status: 'unavailable',
-                    sessions: [],
-                    diagnostic: 'PI_DISCOVERY_UNAVAILABLE',
-                  }),
-                }
-              : new PiV2ActiveRegistryScanner(
-                  root,
-                  path.join(root, 'agent-resurrect', 'active-sessions'),
-                  piProcessInspector,
-                  {
-                    ...(options.clock ? { clock: options.clock } : {}),
-                    missingDirectory: 'available-empty',
-                  },
-                ),
+          scanner: available
+            ? new PiV2ActiveRegistryScanner(
+                root,
+                path.join(root, 'agent-resurrect', 'active-sessions'),
+                piProcessInspector,
+                {
+                  ...(options.clock ? { clock: options.clock } : {}),
+                  missingDirectory: 'available-empty',
+                },
+              )
+            : {
+                runtime: 'pi',
+                scan: async () => ({
+                  status: 'unavailable',
+                  sessions: [],
+                  diagnostic: 'PI_DISCOVERY_UNAVAILABLE',
+                }),
+              },
           context: { identity, nativeBindingRef: binding.ref, runtime },
         });
         continue;

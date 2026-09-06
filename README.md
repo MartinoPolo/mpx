@@ -14,7 +14,7 @@ MPX is a skills-first local control plane for launching Claude and Pi with expli
 
 ## Private-state boundary
 
-Tracked files contain source, schemas, shared-content projections, and public evidence only. User configuration, native runtime roots, credentials, OAuth/account attestations, session registries and transcripts, leases, installer receipts, sandbox state, and preparation logs belong under user-local application/state roots (normally `%APPDATA%/mpx` or `%LOCALAPPDATA%/mpx`) and must not be committed, copied into releases, or exposed in diagnostics. A whole-agent sandbox may deliberately receive its selected identity's runtime state for native Pi and trusted extensions; it must not receive the opposite identity, original checkout, unrelated host state, or host Docker socket. Sandbox failure never falls back silently to host execution.
+Tracked files contain source, schemas, shared-content projections, and public evidence only. User configuration, native runtime roots, credentials, native authentication state, session registries and transcripts, leases, installer receipts, sandbox state, and preparation logs belong under user-local application/state roots (normally `%APPDATA%/mpx` or `%LOCALAPPDATA%/mpx`) and must not be committed, copied into releases, or exposed in diagnostics. A whole-agent sandbox may deliberately receive its selected identity's runtime state for native Pi and trusted extensions; it must not receive the opposite identity, original checkout, unrelated host state, or host Docker socket. Sandbox failure never falls back silently to host execution.
 
 ## Platform support status
 

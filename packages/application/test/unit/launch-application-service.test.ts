@@ -58,8 +58,8 @@ function dependencies(events: string[] = []) {
       events.push('evidence');
       return { status: 'verified' as const, verifier: 'synthetic', evidenceDigest: 'a'.repeat(64) };
     },
-    accountPreflight: async () => {
-      events.push('account');
+    piPreflight: async () => {
+      events.push('native-root');
     },
     launchExecution: async () => {
       events.push('execute');
@@ -84,7 +84,7 @@ describe('LaunchApplicationService', () => {
     const statusSnapshot = vi.fn(dependencies().statusSnapshot);
     const dockerDiagnostics = vi.fn(async () => undefined);
     const executorEvidence = vi.fn(dependencies().executorEvidence);
-    const accountPreflight = vi.fn(async () => undefined);
+    const piPreflight = vi.fn(async () => undefined);
     const launchExecution = vi.fn(dependencies().launchExecution);
     const service = new LaunchApplicationService({
       ...dependencies(),
@@ -93,7 +93,7 @@ describe('LaunchApplicationService', () => {
       statusSnapshot,
       dockerDiagnostics,
       executorEvidence,
-      accountPreflight,
+      piPreflight,
       launchExecution,
     });
 
@@ -136,7 +136,7 @@ describe('LaunchApplicationService', () => {
     expect(statusSnapshot).not.toHaveBeenCalled();
     expect(dockerDiagnostics).not.toHaveBeenCalled();
     expect(executorEvidence).not.toHaveBeenCalled();
-    expect(accountPreflight).not.toHaveBeenCalled();
+    expect(piPreflight).not.toHaveBeenCalled();
     expect(launchExecution).not.toHaveBeenCalled();
   });
 
@@ -208,7 +208,7 @@ describe('LaunchApplicationService', () => {
     const prepared = await service.prepare(request);
     const resolved = await service.resolve(prepared);
     await service.execute(resolved);
-    expect(events).toEqual(['admission', 'evidence', 'account', 'execute']);
+    expect(events).toEqual(['admission', 'evidence', 'native-root', 'execute']);
   });
 
   it('inseparably pairs prepared Docker evidence with its exact execution callback', async () => {
@@ -234,10 +234,10 @@ describe('LaunchApplicationService', () => {
     expect(fallbackExecution).not.toHaveBeenCalled();
   });
 
-  it('keeps admission executors and account bindings private to interleaved resolved launches', async () => {
+  it('keeps admission executors and Pi preflight callbacks private to interleaved launches', async () => {
     let admitted = 0;
     let preflighted = 0;
-    const executions: Array<{ verifier: string; accountBindingRef?: string }> = [];
+    const executions: Array<{ verifier: string }> = [];
     const service = new LaunchApplicationService({
       ...dependencies(),
       dockerAdmission: async () => {
@@ -249,20 +249,14 @@ describe('LaunchApplicationService', () => {
             evidenceDigest: String(launch).repeat(64),
           },
           execute: async (input) => {
-            executions.push({
-              verifier: input.descriptor.executorVerification.verifier,
-              ...(input.accountBindingRef ? { accountBindingRef: input.accountBindingRef } : {}),
-            });
+            executions.push({ verifier: input.descriptor.executorVerification.verifier });
             return { exitCode: launch };
           },
         };
       },
-      accountPreflight: async () => {
-        const launch = ++preflighted;
-        return {
-          accountBindingRef: `account-${launch}`,
-          beforeChildExecution: async () => undefined,
-        };
+      piPreflight: async () => {
+        ++preflighted;
+        return { beforeChildExecution: async () => undefined };
       },
     });
     const preparedA = await service.prepare(request);
@@ -272,10 +266,8 @@ describe('LaunchApplicationService', () => {
 
     expect((await service.execute(resolvedA)).exitCode).toBe(1);
     expect((await service.execute(resolvedB)).exitCode).toBe(2);
-    expect(executions).toEqual([
-      { verifier: 'docker-1', accountBindingRef: 'account-1' },
-      { verifier: 'docker-2', accountBindingRef: 'account-2' },
-    ]);
+    expect(executions).toEqual([{ verifier: 'docker-1' }, { verifier: 'docker-2' }]);
+    expect(preflighted).toBe(2);
     await expect(service.execute(Object.freeze({}) as never)).rejects.toMatchObject({
       code: 'LAUNCH_STATE_INVALID',
     });

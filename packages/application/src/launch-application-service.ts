@@ -121,16 +121,14 @@ export interface LaunchExecutionInput {
   readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
   readonly project?: DiscoveredConfig;
   readonly beforeChildExecution?: () => Promise<void>;
-  readonly accountBindingRef?: string;
 }
 export interface PreparedLaunchExecutor {
   readonly evidence: ExecutorVerificationEvidence;
   readonly execute: (input: LaunchExecutionInput) => Promise<{ readonly exitCode: number }>;
 }
 
-export interface AccountPreflightResult {
+export interface PiPreflightResult {
   readonly beforeChildExecution: () => Promise<void>;
-  readonly accountBindingRef?: string;
 }
 
 export interface LaunchApplicationDependencies {
@@ -156,10 +154,10 @@ export interface LaunchApplicationDependencies {
   executorEvidence(executor: 'host' | 'docker'): Promise<ExecutorVerificationEvidence>;
   prepareExecutor?(executor: 'host' | 'docker'): Promise<PreparedLaunchExecutor>;
   approveHost?(selection: Readonly<LaunchSelection>): Promise<HostApproval>;
-  accountPreflight?(input: {
+  piPreflight?(input: {
     readonly runtimeRoot: string;
     readonly identity: LaunchSelection['identity'];
-  }): Promise<void | (() => Promise<void>) | AccountPreflightResult>;
+  }): Promise<void | (() => Promise<void>) | PiPreflightResult>;
   launchExecution?(input: LaunchExecutionInput): Promise<{ readonly exitCode: number }>;
   sandboxExport?(input: {
     readonly descriptor: LaunchDescriptor;
@@ -469,9 +467,8 @@ export class LaunchApplicationService {
       };
     }
     let beforeChildExecution: (() => Promise<void>) | undefined;
-    let accountBindingRef: string | undefined;
     if (facts.selection.runtime === 'pi' && facts.evidence.status === 'verified') {
-      const result = await this.dependencies.accountPreflight?.({
+      const result = await this.dependencies.piPreflight?.({
         runtimeRoot:
           facts.request.userConfig.identities[facts.selection.identity.name]!.runtimeRoots.pi,
         identity: facts.selection.identity,
@@ -480,7 +477,6 @@ export class LaunchApplicationService {
         beforeChildExecution = result;
       } else if (result) {
         beforeChildExecution = result.beforeChildExecution;
-        accountBindingRef = result.accountBindingRef;
       }
     }
     const execute = facts.preparedExecutor?.execute ?? this.dependencies.launchExecution;
@@ -504,7 +500,6 @@ export class LaunchApplicationService {
       statusSnapshot: facts.statusSnapshot,
       ...(facts.found ? { project: facts.found } : {}),
       ...(beforeChildExecution ? { beforeChildExecution } : {}),
-      ...(accountBindingRef ? { accountBindingRef } : {}),
     });
     return { data: null, warnings: [], silent: true, exitCode: result.exitCode };
   }

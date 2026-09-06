@@ -8,20 +8,15 @@ import {
   type DirectTty,
 } from '@mpx/executors';
 import { createSbxLaunchPlanExportV1 } from '@mpx/runtime-contracts';
-import {
-  RootAttestationService,
-  RootAttestationStore,
-  type IdentityV1,
-  type SessionStore,
-} from '@mpx/sessions';
+import type { SessionStore } from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
 import type { StatusProvider } from '@mpx/status';
-import type { AccountAuthVerifier } from '../account-application-service.js';
 import {
   LaunchApplicationService,
   type LaunchExecutionInput as ApplicationLaunchExecutionInput,
 } from '../launch-application-service.js';
-import { createPiAuthAvailabilityProbe } from './pi-auth-availability.js';
+import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-availability.js';
+import { ExactNativeRootVerifier } from './exact-native-root.js';
 import { executeResolvedNodeLaunch } from './launch-execution.js';
 import {
   collectNodeExecutorEvidence,
@@ -40,15 +35,8 @@ import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js'
 
 export interface NodeLaunchApplicationContext extends LaunchExecutionContext {
   readonly launchSbxExecutionDependencies?: SbxExecutionDependencies;
-  readonly rootAttestationService?: RootAttestationService;
-  readonly accountAuthVerifier?: AccountAuthVerifier;
-  readonly nativeAccountBindingResolver?: {
-    resolve(
-      identity: IdentityV1,
-      runtime: 'claude' | 'pi',
-      nativeRoot: string,
-    ): Promise<string | null>;
-  };
+  readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
+  readonly piAuthVerifier?: PiAuthVerifier;
 }
 
 export interface NodeLaunchInteractionPort {
@@ -70,8 +58,6 @@ export interface NodeLaunchApplicationInput {
   status(): StatusProvider;
   /** Lazily initialized; read-only paths never call it. */
   sessions(): SessionStore;
-  /** Lazily resolved; used only by Pi attestation fallback. */
-  stateRoot(): string;
   readonly sbxDiagnostics?: () => Promise<{
     readonly available: boolean;
     readonly failureCodes: readonly string[];
@@ -79,7 +65,7 @@ export interface NodeLaunchApplicationInput {
   }>;
 }
 
-function piAuth(input: NodeLaunchApplicationInput): AccountAuthVerifier {
+function piAuth(input: NodeLaunchApplicationInput): PiAuthVerifier {
   return createPiAuthAvailabilityProbe({
     cwd: input.cwd,
     environment: input.environment,
@@ -100,11 +86,10 @@ export function createNodeLaunchApplicationService(
   input: NodeLaunchApplicationInput,
 ): LaunchApplicationService {
   const { context, environment, userConfig } = input;
-  const requirePiAccountPreflight =
-    environment.LOCALAPPDATA !== undefined &&
-    (context.launchExecutorAdapters === undefined ||
-      context.rootAttestationService !== undefined ||
-      context.accountAuthVerifier !== undefined);
+  const requirePiPreflight =
+    context.launchExecutorAdapters === undefined ||
+    context.exactNativeRootVerifier !== undefined ||
+    context.piAuthVerifier !== undefined;
 
   return new LaunchApplicationService({
     discoverProjectConfig: input.discoverProjectConfig ?? discoverProjectConfig,
@@ -251,20 +236,17 @@ export function createNodeLaunchApplicationService(
         } as unknown as JsonValue),
       };
     },
-    accountPreflight: async ({ runtimeRoot, identity }) => {
-      if (!requirePiAccountPreflight) {
+    piPreflight: async ({ runtimeRoot }) => {
+      if (!requirePiPreflight) {
         return;
       }
-      const accountService =
-        context.rootAttestationService ??
-        new RootAttestationService(new RootAttestationStore(input.stateRoot()));
-      const auth = context.accountAuthVerifier ?? piAuth(input);
-      const attestation = await accountService.verify(identity, runtimeRoot);
+      const rootVerifier = context.exactNativeRootVerifier ?? new ExactNativeRootVerifier();
+      const auth = context.piAuthVerifier ?? piAuth(input);
+      await rootVerifier.verify(runtimeRoot);
       await auth.verify(runtimeRoot);
       return {
-        accountBindingRef: attestation.ref,
         beforeChildExecution: async () => {
-          await accountService.verify(identity, runtimeRoot, attestation.ref);
+          await rootVerifier.verify(runtimeRoot);
           await auth.verify(runtimeRoot);
         },
       };
@@ -364,16 +346,6 @@ export function createNodeLaunchApplicationService(
             ...executionContext,
             launchLifecycleBridge: new ProductionSessionLifecycleBridge({
               store: input.sessions(),
-              accountBindingRef: async (name, runtime) =>
-                runtime === 'pi' &&
-                name === execution.descriptor.identity.name &&
-                execution.accountBindingRef
-                  ? execution.accountBindingRef
-                  : (executionContext.nativeAccountBindingResolver?.resolve(
-                      { domain: userConfig.identities[name]!.domain, name },
-                      runtime,
-                      userConfig.identities[name]!.runtimeRoots[runtime],
-                    ) ?? null),
             }),
           };
     return executeResolvedNodeLaunch({
