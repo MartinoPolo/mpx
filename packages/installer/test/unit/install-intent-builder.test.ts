@@ -6,7 +6,6 @@ import {
   INSTALL_EXECUTABLE_MAX_BYTES,
   InstallIntentBuilder,
   installerDigest,
-  parseInstallIntentBuildResultV1,
   parseInstallIntentRequestV1,
   type CurrentReleaseBuilder,
   type InstallIntentRequestV1,

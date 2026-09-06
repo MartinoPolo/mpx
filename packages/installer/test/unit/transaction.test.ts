@@ -110,12 +110,6 @@ class RetainingAdapter implements SideEffectAdapter {
     }
     this.hydrated.add(operation.id);
   }
-  async retainOnUninstall(operation: InstallOperationV1) {
-    if (!this.hydrated.has(operation.id)) {
-      throw new Error('retention checked before hydration');
-    }
-    return operation.id === 'config';
-  }
 }
 function operationLocators(operations: readonly InstallOperationV1[], spec: unknown = null) {
   return operations.map((operation) => ({

@@ -1031,11 +1031,6 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     this.entries.set(installerDigest(operation), entry);
   }
-  async retainOnUninstall(operation: InstallOperationV1): Promise<boolean> {
-    return this.piSettings.handles(operation)
-      ? false
-      : (await this.entry(operation)).retainOnUninstall === true;
-  }
   private async entry(operation: InstallOperationV1): Promise<Entry> {
     const exact = this.entries.get(installerDigest(operation));
     if (exact) {

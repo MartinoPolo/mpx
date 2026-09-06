@@ -178,9 +178,7 @@ it('rejects a symlink setup state directory before detachment', async () => {
           schemaVersion: 1,
           kind: 'install-intent-build-result',
           intent,
-          externalPlans: [],
         }) as never,
-      verify: vi.fn(),
     },
     orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
   });
@@ -203,7 +201,6 @@ it('detaches both disposable legacy roots through the complete node setup compos
     schemaVersion: 1,
     kind: 'install-intent-build-result',
     intent,
-    externalPlans: [],
   } as never;
   const builder = {
     build: vi.fn(async () => {
@@ -213,14 +210,6 @@ it('detaches both disposable legacy roots through the complete node setup compos
       );
       return built;
     }),
-    verify: vi.fn(
-      async () =>
-        ({
-          schemaVersion: 1,
-          kind: 'install-external-verification',
-          integrations: [],
-        }) as const,
-    ),
   };
   const orchestrator = {
     plan: vi.fn(async () => {
@@ -235,14 +224,11 @@ it('detaches both disposable legacy roots through the complete node setup compos
         kind: 'install-plan',
         intent,
         confirmationDigest: digest,
-        classifications: { automatic: [], confirmationRequired: [], manualOnly: [] },
+        classifications: { automatic: [], confirmationRequired: [] },
       } as never;
     }),
     apply: vi.fn(async () => ({}) as never),
-    verify: vi.fn(async (_strict: boolean, external?: () => Promise<unknown>) => {
-      await external?.();
-      return { healthy: true, issues: [] } as never;
-    }),
+    verify: vi.fn(async () => ({ healthy: true, issues: [] }) as never),
   };
 
   const service = createNodeSetupApplicationService({
@@ -291,21 +277,12 @@ it('keeps the committed detachment receipt when setup fails afterward so retry c
     schemaVersion: 1,
     kind: 'install-intent-build-result',
     intent,
-    externalPlans: [],
   } as never;
   let fail = true;
   const service = createNodeSetupApplicationService({
     environment: value.environment,
     builder: {
       build: async () => built,
-      verify: vi.fn(
-        async () =>
-          ({
-            schemaVersion: 1,
-            kind: 'install-external-verification',
-            integrations: [],
-          }) as const,
-      ),
     },
     orchestrator: {
       plan: async () => {
@@ -317,7 +294,7 @@ it('keeps the committed detachment receipt when setup fails afterward so retry c
           kind: 'install-plan',
           intent,
           confirmationDigest: digest,
-          classifications: { automatic: [], confirmationRequired: [], manualOnly: [] },
+          classifications: { automatic: [], confirmationRequired: [] },
         } as never;
       },
       apply: vi.fn(async () => ({}) as never),
@@ -378,7 +355,7 @@ it('completes detachment after recovering an interrupted journal', async () => {
       kind: 'install-plan',
       intent,
       confirmationDigest: digest,
-      classifications: { automatic: [], confirmationRequired: [], manualOnly: [] },
+      classifications: { automatic: [], confirmationRequired: [] },
     } as never;
   });
   const service = createNodeSetupApplicationService({
@@ -389,9 +366,7 @@ it('completes detachment after recovering an interrupted journal', async () => {
           schemaVersion: 1,
           kind: 'install-intent-build-result',
           intent,
-          externalPlans: [],
         }) as never,
-      verify: vi.fn(),
     },
     orchestrator: {
       plan,

@@ -6,16 +6,13 @@ import { promisify } from 'node:util';
 import { createNodeSetupApplicationService } from '@mpx/application/node';
 import {
   activateRelease,
-  GitRemotePlanningAdapter,
   InstallIntentBuilder,
   InstallOrchestrator,
   NodeBinaryFileSystem,
   NodeCurrentReleaseBuilder,
-  NodeGitCommandPort,
   NodePiNativeSettingsPort,
   NodeTransactionStore,
   ProductionInstallerOperationAdapter,
-  removeActiveRelease,
   resolvePiNativePackageSource,
   type InstallIntentBuildResultV1,
 } from '@mpx/installer';
@@ -237,7 +234,7 @@ afterEach(async () => {
   );
 });
 
-it('runs setup twice and uninstalls only production-owned state in a fully disposable machine', async () => {
+it('runs production setup twice idempotently in a fully disposable machine', async () => {
   const fixture = await createFixture();
   const releases = new NodeCurrentReleaseBuilder({
     repositoryRoot: fixture.repositoryRoot,
@@ -246,14 +243,6 @@ it('runs setup twice and uninstalls only production-owned state in a fully dispo
   const builder = new InstallIntentBuilder({
     releases,
     environment: fixture.environment,
-    gitRemotes: new GitRemotePlanningAdapter({
-      allowedRoots: [
-        fixture.environment.MPX_PROJECTS,
-        fixture.environment.MPX_WORK,
-        fixture.environment.MPX_CLONED,
-      ],
-      git: new NodeGitCommandPort(fixture.environment),
-    }),
   });
   let built: InstallIntentBuildResultV1 | undefined;
   const realBuild = builder.build.bind(builder);
@@ -308,7 +297,6 @@ it('runs setup twice and uninstalls only production-owned state in a fully dispo
     store,
     releases,
     activate: (releaseKey, prior) => activateRelease(fixture.localAppData, prior, releaseKey),
-    deactivate: (releaseKey) => removeActiveRelease(fixture.localAppData, releaseKey),
   });
   const setup = createNodeSetupApplicationService({
     environment: fixture.environment,
@@ -348,9 +336,7 @@ it('runs setup twice and uninstalls only production-owned state in a fully dispo
   for (const file of ['build-metadata.json', 'index.mjs', 'package.json']) {
     await expect(readFile(path.join(packageSource, file))).resolves.toBeInstanceOf(Buffer);
   }
-  await expect(
-    orchestrator.verify(true, () => builder.verify(required(built, 'build result'))),
-  ).resolves.toMatchObject({
+  await expect(orchestrator.verify(true)).resolves.toMatchObject({
     healthy: true,
     issues: [],
   });
@@ -391,58 +377,5 @@ it('runs setup twice and uninstalls only production-owned state in a fully dispo
       packages: string[];
     };
     expect(settings.packages.filter((entry) => entry === packageSource)).toHaveLength(1);
-  }
-
-  const uninstallPlan = await orchestrator.planUninstall();
-  await orchestrator.uninstall(uninstallPlan.confirmationDigest);
-  for (const piRoot of fixture.piRoots) {
-    expect(JSON.parse(await readFile(path.join(piRoot, 'settings.json'), 'utf8'))).toEqual(
-      fixture.unrelatedPiSettings,
-    );
-    for (const [, , destination] of legacyEntries) {
-      expect((await lstat(path.join(piRoot, destination))).isSymbolicLink()).toBe(false);
-    }
-  }
-  await expect(readFile(path.join(fixture.apps, 'mpx', 'bin', 'mpx.cmd'))).rejects.toMatchObject({
-    code: 'ENOENT',
-  });
-  for (const registration of intent.runtimeRegistrations!.registrations) {
-    await expect(
-      readFile(
-        path.join(
-          fixture.localAppData,
-          'mpx',
-          'installer',
-          'registrations',
-          `${registration.identity}.json`,
-        ),
-      ),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(
-      readFile(
-        path.join(
-          fixture.localAppData,
-          'mpx',
-          'runtime-projections',
-          intent.releaseKey,
-          registration.identity,
-          'projection.json',
-        ),
-      ),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-  }
-  await expect(readFile(path.join(releaseRoot, 'release-manifest.json'))).resolves.toBeInstanceOf(
-    Buffer,
-  );
-  await expect(
-    readFile(path.join(fixture.localAppData, 'mpx', 'pi-legacy-detach.receipt.json')),
-  ).resolves.toBeInstanceOf(Buffer);
-  expect(await readFile(fixture.bashProfile)).toEqual(fixture.bashNative);
-  expect(await readFile(fixture.powershellProfile)).toEqual(fixture.powershellNative);
-  for (const [target, original] of fixture.resourceSentinels) {
-    expect(await fixture.resources.read(target)).toEqual(original);
-  }
-  for (const [file, bytes] of fixture.before) {
-    expect(await readFile(file), file).toEqual(bytes);
   }
 }, 300_000);

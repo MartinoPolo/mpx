@@ -1,5 +1,6 @@
 export * from './immutable-core.js';
-export * from './transaction.js';
+export { NodeTransactionStore } from './transaction.js';
+export type { TransactionStore } from './transaction.js';
 export * from './windows-integration.js';
 export * from './orchestration.js';
 export * from './runtime-registration.js';

@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { Stats } from 'node:fs';
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { FakeBinaryFileSystem, FakeJsonResourceStore } from '@mpx/windows';
+import { FakeJsonResourceStore } from '@mpx/windows';
 import {
   parseInstallIntentV1,
   parseInstallPlanV1,
@@ -16,7 +16,6 @@ import {
 } from '../../src/immutable-core.js';
 import {
   createRuntimeRegistrationMatrix,
-  registerStaticMcp,
   type ProjectionFileV1,
   type RuntimeRegistrationInput,
 } from '../../src/runtime-registration.js';

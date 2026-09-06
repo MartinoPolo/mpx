@@ -38,8 +38,6 @@ export interface SideEffectAdapter {
   restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
   receiptLocator?(operation: InstallOperationV1): Promise<unknown>;
   hydrateReceiptOperation?(operation: InstallOperationV1, locator: unknown): Promise<void>;
-  /** Fail-closed retention decision, consulted only after durable locator hydration. */
-  retainOnUninstall?(operation: InstallOperationV1): Promise<boolean>;
 }
 export interface StoredTransaction {
   journal: TransactionJournalV1;

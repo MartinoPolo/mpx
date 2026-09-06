@@ -116,7 +116,7 @@ it('does not reset local state when setup request construction fails', async () 
     localReset: { run: localReset },
     detach: { run: vi.fn() },
     builder: { build: vi.fn() },
-    orchestrator: { plan: vi.fn(), apply: vi.fn() },
+    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(localReset).not.toHaveBeenCalled();
@@ -135,7 +135,7 @@ it('does not detach when immutable intent construction fails', async () => {
         throw failure;
       },
     },
-    orchestrator: { plan: vi.fn(), apply: vi.fn() },
+    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(localReset).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ it('does not detach when obsolete local-state reset fails', async () => {
     },
     detach: { run: detach },
     builder: { build: async () => built },
-    orchestrator: { plan: vi.fn(), apply: vi.fn() },
+    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(detach).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ it('does not plan or apply when legacy detachment fails', async () => {
       },
     },
     builder: { build: async () => built },
-    orchestrator: { plan: planOperation, apply },
+    orchestrator: { plan: planOperation, apply, verify: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(planOperation).not.toHaveBeenCalled();

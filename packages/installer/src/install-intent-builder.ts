@@ -5,7 +5,6 @@ import { MpxError, parseStrictJson } from '@mpx/core';
 import { parseUserConfig, type UserConfig } from '@mpx/config';
 import {
   USER_CONFIG_ARTIFACT_MAX_BYTES,
-  canonicalJson,
   installerDigest,
   parseInstallIntentV1,
   type InstallIntentV1,
@@ -22,7 +21,6 @@ const MAX_REQUEST_ITEMS = 128;
 const MAX_TEXT = 4_096;
 export const INSTALL_EXECUTABLE_MAX_BYTES = 512 * 1024 * 1024;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
-const SHA = /^[a-f0-9]{64}$/u;
 const PROJECTION_ROLES = new Set<ProjectionRole>([
   'plugin',
   'hooks',
@@ -192,9 +190,7 @@ export interface InstallIntentBuildResultV1 {
   readonly kind: 'install-intent-build-result';
   readonly intent: InstallIntentV1;
 }
-function strings(value: unknown, label: string): string[] {
-  return array(value, label).map((item) => text(item, label));
-}
+
 export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBuildResultV1 {
   const result = exact(value, ['schemaVersion', 'kind', 'intent'], 'Install intent build result');
   if (result.schemaVersion !== 1 || result.kind !== 'install-intent-build-result') {

@@ -591,12 +591,7 @@ it('runs clean and existing-machine production-backed simulations without live w
       'DOMAIN\\me',
       { files: new NodeBinaryFileSystem(), resources: f.native },
     );
-    const restartedStore = new NodeTransactionStore(path.join(f.localAppData, 'mpx', 'installer')),
-      restarted = new InstallOrchestrator({
-        adapter: restartedAdapter,
-        store: restartedStore,
-        releases: f.releases,
-      });
+    const restartedStore = new NodeTransactionStore(path.join(f.localAppData, 'mpx', 'installer'));
     await expect(
       new ImmutableInstallerService({
         adapters: [restartedAdapter],

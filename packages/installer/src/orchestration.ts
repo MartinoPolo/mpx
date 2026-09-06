@@ -289,55 +289,65 @@ export class InstallOrchestrator {
     return receipt;
   }
   async plan(intent: InstallIntentV1): Promise<InstallPlanV1> {
-    const legacy = await this.options.store.readLegacyReceiptForMigration();
-    const priorReceipt = legacy ? undefined : await this.validatedReceipt();
-    const current = await this.current(intent, priorReceipt);
-    const migration = legacy ? await this.migratedReceipt(current, legacy) : undefined;
-    const base = await this.service(current.manifest).plan(
-      current.intent,
-      current.operations,
-      priorReceipt,
-    );
-    const upgrade =
-      priorReceipt && priorReceipt.releaseKey !== current.intent.releaseKey
+    return this.options.store.exclusive(async () => {
+      try {
+        await this.service().recover();
+      } catch {
+        fail(
+          'INSTALL_RECOVERY_FAILED',
+          'Pending installer transaction recovery failed; no fresh plan was created.',
+        );
+      }
+      const legacy = await this.options.store.readLegacyReceiptForMigration();
+      const priorReceipt = legacy ? undefined : await this.validatedReceipt();
+      const current = await this.current(intent, priorReceipt);
+      const migration = legacy ? await this.migratedReceipt(current, legacy) : undefined;
+      const base = await this.service(current.manifest).plan(
+        current.intent,
+        current.operations,
+        priorReceipt,
+      );
+      const upgrade =
+        priorReceipt && priorReceipt.releaseKey !== current.intent.releaseKey
+          ? {
+              id: RELEASE_UPGRADE_ID,
+              planDigest: installerDigest(priorReceipt),
+              verifierRef: 'installer:ownership-release-upgrade',
+            }
+          : undefined;
+      if (!current.classifications && !migration && !upgrade) {
+        return base;
+      }
+      const classifications: InstallOperationClassificationsV1 = current.classifications ?? {
+        automatic: base.operations.map((operation) => operation.id),
+        confirmationRequired: [],
+      };
+      const merged = migration
         ? {
-            id: RELEASE_UPGRADE_ID,
-            planDigest: installerDigest(priorReceipt),
-            verifierRef: 'installer:ownership-release-upgrade',
+            ...classifications,
+            confirmationRequired: [
+              ...classifications.confirmationRequired,
+              {
+                id: RECEIPT_MIGRATION_ID,
+                planDigest: installerDigest(migration),
+                verifierRef: 'installer:ownership-receipt-v2',
+              },
+            ],
           }
-        : undefined;
-    if (!current.classifications && !migration && !upgrade) {
-      return base;
-    }
-    const classifications: InstallOperationClassificationsV1 = current.classifications ?? {
-      automatic: base.operations.map((operation) => operation.id),
-      confirmationRequired: [],
-    };
-    const merged = migration
-      ? {
-          ...classifications,
-          confirmationRequired: [
-            ...classifications.confirmationRequired,
-            {
-              id: RECEIPT_MIGRATION_ID,
-              planDigest: installerDigest(migration),
-              verifierRef: 'installer:ownership-receipt-v2',
-            },
-          ],
-        }
-      : classifications;
-    const upgradeBound = upgrade
-      ? { ...merged, confirmationRequired: [...merged.confirmationRequired, upgrade] }
-      : merged;
-    const classified = {
-      schemaVersion: base.schemaVersion,
-      kind: base.kind,
-      intent: base.intent,
-      observations: base.observations,
-      operations: base.operations,
-      classifications: upgradeBound,
-    };
-    return parseInstallPlanV1({ ...classified, confirmationDigest: installerDigest(classified) });
+        : classifications;
+      const upgradeBound = upgrade
+        ? { ...merged, confirmationRequired: [...merged.confirmationRequired, upgrade] }
+        : merged;
+      const classified = {
+        schemaVersion: base.schemaVersion,
+        kind: base.kind,
+        intent: base.intent,
+        observations: base.observations,
+        operations: base.operations,
+        classifications: upgradeBound,
+      };
+      return parseInstallPlanV1({ ...classified, confirmationDigest: installerDigest(classified) });
+    });
   }
   async apply(planValue: InstallPlanV1, confirmation: string): Promise<OwnershipReceiptV1> {
     const plan = parseInstallPlanV1(planValue);

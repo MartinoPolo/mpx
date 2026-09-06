@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { type InstallIntentV1, type InstallOperationV1 } from '../../src/immutable-core.js';
-import { MemoryTransactionStore, installerDigest } from '../../src/transaction.js';
+import {
+  MemoryTransactionStore,
+  installerDigest,
+  type StoredTransaction,
+} from '../../src/transaction.js';
 import {
   InstallOrchestrator,
   NodeCurrentReleaseBuilder,
@@ -14,8 +18,10 @@ class FixtureAdapter implements InstallerOperationAdapter {
   readonly values = new Map<string, string>();
   applyCalls: string[] = [];
   statusCalls: string[] = [];
+  restoreFailure: Error | undefined;
   constructor(public automatic: readonly InstallOperationV1[]) {}
   async operations() {
+    this.statusCalls.push('operations');
     return { automatic: this.automatic };
   }
   async observe(operation: InstallOperationV1) {
@@ -33,6 +39,9 @@ class FixtureAdapter implements InstallerOperationAdapter {
     }
   }
   async restore(operation: InstallOperationV1, snapshot: string | null) {
+    if (this.restoreFailure) {
+      throw this.restoreFailure;
+    }
     if (snapshot === null) {
       this.values.delete(operation.target);
     } else {
@@ -64,7 +73,81 @@ const operation = (id: string, target = id): InstallOperationV1 => ({
   desiredDigest: installerDigest(id),
 });
 
+function interruptedTransaction(item: InstallOperationV1): StoredTransaction {
+  const snapshot = {
+    schemaVersion: 1 as const,
+    kind: 'machine-snapshot' as const,
+    transactionId: 'interrupted',
+    observations: [{ id: item.id, digest: null }],
+    capturedAt: '2025-01-01T00:00:00.000Z',
+  };
+  return {
+    journal: {
+      schemaVersion: 1,
+      kind: 'transaction-journal',
+      transactionId: snapshot.transactionId,
+      phase: 'applying',
+      completedOperationIds: [item.id],
+      snapshot,
+    },
+    snapshots: { [item.id]: null },
+    operations: [item],
+    operationLocators: [
+      {
+        operationId: item.id,
+        adapter: item.adapter,
+        spec: null,
+        bindingDigest: installerDigest({ operation: item, spec: null }),
+      },
+    ],
+  };
+}
+
 describe('Phase I install orchestration', () => {
+  it('recovers an interrupted apply before observing a fresh retry plan', async () => {
+    const f = await fixture(),
+      item = operation('automatic'),
+      adapter = new FixtureAdapter([item]),
+      store = new MemoryTransactionStore(),
+      orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    adapter.values.set(item.target, item.desiredDigest!);
+    await store.writeTransaction(interruptedTransaction(item));
+
+    const plan = await orchestrator.plan(f.intent);
+
+    expect(plan.observations).toEqual([{ id: item.id, digest: null }]);
+    const receipt = await orchestrator.apply(plan, plan.confirmationDigest);
+    expect(receipt.operations).toEqual([item]);
+    expect(adapter.values.get(item.target)).toBe(item.desiredDigest);
+    expect(await store.readTransaction()).toBeUndefined();
+  });
+
+  it('fails closed with a redacted error when interrupted-transaction recovery fails', async () => {
+    const f = await fixture(),
+      item = operation('automatic'),
+      adapter = new FixtureAdapter([item]),
+      store = new MemoryTransactionStore(),
+      orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+    const secret = 'private-target-recovery-detail';
+    adapter.values.set(item.target, item.desiredDigest!);
+    adapter.restoreFailure = new Error(secret);
+    await store.writeTransaction(interruptedTransaction(item));
+
+    let failure: unknown;
+    try {
+      await orchestrator.plan(f.intent);
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({ code: 'INSTALL_RECOVERY_FAILED' });
+    expect(String(failure)).not.toContain(secret);
+    expect(JSON.stringify(failure)).not.toContain(secret);
+    expect(adapter.statusCalls).toEqual([]);
+    expect(adapter.values.get(item.target)).toBe(item.desiredDigest);
+    expect((await store.readTransaction())?.journal.phase).toBe('applying');
+  });
+
   it('plans the current deterministic release without publishing or applying', async () => {
     const f = await fixture(),
       adapter = new FixtureAdapter([operation('automatic')]);
@@ -392,9 +475,6 @@ describe('Phase I install orchestration', () => {
       activate: async () => {
         events.push('activate');
         throw new Error('activation failed');
-      },
-      deactivate: async () => {
-        events.push('deactivate');
       },
     });
     const plan = await orchestrator.plan(f.intent);
