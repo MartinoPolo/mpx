@@ -233,6 +233,59 @@ describe('Phase I install orchestration', () => {
     expect(adapter.values.get('shared-target')).toBe(installerDigest('shared-b'));
   });
 
+  it.each(['drop', 'remove', 'adapter', 'path', 'identity', 'root'] as const)(
+    'keeps general ownership rejection for an upgrade changing %s',
+    async (change) => {
+      const f = await fixture();
+      const target = path.win32.join(
+        'C:\\Local',
+        'mpx',
+        'runtime-projections',
+        f.intent.releaseKey,
+        'claude-personal',
+        'payload/LICENSE',
+      );
+      const owned = operation('61-projection-claude-personal-0000', target);
+      const store = new MemoryTransactionStore();
+      const adapter = new FixtureAdapter([owned]);
+      const orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
+      const priorPlan = await orchestrator.plan(f.intent);
+      await orchestrator.apply(priorPlan, priorPlan.confirmationDigest);
+      adapter.applyCalls = [];
+      await writeFile(path.join(f.repositoryRoot, 'dist', 'mpx.js'), 'next-release');
+      const manifest = await f.builder.build();
+      const moved = target.replace(f.intent.releaseKey, manifest.releaseKey);
+      adapter.automatic =
+        change === 'drop'
+          ? []
+          : [
+              {
+                ...owned,
+                ...(change === 'remove' ? { action: 'remove' as const, desiredDigest: null } : {}),
+                ...(change === 'adapter' ? { adapter: 'unavailable' } : {}),
+                ...(change === 'path' ? { target: moved.replace('payload', 'different') } : {}),
+                ...(change === 'identity'
+                  ? { target: moved.replace('claude-personal', 'claude-work') }
+                  : {}),
+                ...(change === 'root' ? { target: moved.replace('C:\\Local', 'C:\\Foreign') } : {}),
+              },
+            ];
+      await expect(
+        orchestrator.plan({
+          ...f.intent,
+          releaseKey: manifest.releaseKey,
+          convergenceHash: manifest.convergenceHash,
+        }),
+      ).rejects.toMatchObject({
+        code: expect.stringMatching(
+          /^INSTALL_(OWNERSHIP_MISMATCH|FOREIGN_OR_DRIFTED|ADAPTER_UNAVAILABLE)$/u,
+        ),
+      });
+      expect(adapter.applyCalls).toEqual([]);
+      expect(adapter.values.get(target)).toBe(owned.desiredDigest);
+    },
+  );
+
   it('fails upgrade planning before mutation when a shared target is not exact prior ownership', async () => {
     const f = await fixture(),
       store = new MemoryTransactionStore(),

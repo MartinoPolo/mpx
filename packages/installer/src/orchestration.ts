@@ -7,6 +7,7 @@ import {
   canonicalJson,
   parseInstallIntentV1,
   parseInstallPlanV1,
+  parseOwnershipReceiptV1,
   publishCurrentRelease,
   type CurrentReleaseOptions,
   type InstallIntentV1,
@@ -25,6 +26,18 @@ import {
   type TransactionStore,
 } from './transaction.js';
 import { aggregateInstallerFailure } from './failure.js';
+import {
+  assertPiNativePackagesMatchRelease,
+  type AccountDomain,
+  type RuntimeIdentity,
+} from './runtime-registration.js';
+import { parsePiSettingsLocator } from './pi-native-settings-operation.js';
+import {
+  PI_NATIVE_PACKAGE_ROOT,
+  parsePiSettings,
+  planPiNativePackageSettings,
+  resolvePiNativePackageSource,
+} from './pi-native-package.js';
 
 function fail(code: string, message: string): never {
   throw new MpxError({ code, message });
@@ -167,18 +180,46 @@ export interface InstallOrchestratorOptions {
   ) => Promise<() => Promise<void>>;
   readonly now?: () => Date;
 }
+export interface CurrentInstallationProbe {
+  observe(intent: InstallIntentV1): Promise<{
+    readonly selectedReleaseKey: string | null;
+    readonly hasArtifacts: boolean;
+    readonly piRoots: readonly {
+      readonly identity: RuntimeIdentity;
+      readonly domain: AccountDomain;
+      readonly nativeRootDigest: string;
+      readonly settings: unknown;
+    }[];
+  }>;
+}
+
+export interface CurrentInstallationAdmission {
+  readonly status: 'initial' | 'current';
+  readonly digest: string;
+}
+
+const CURRENT_INSTALLATION_ID = 'setup-current-installation';
 const RECEIPT_MIGRATION_ID = 'ownership-receipt-v1-migration';
 const RELEASE_UPGRADE_ID = 'ownership-release-upgrade';
 export class InstallOrchestrator {
   private readonly now: () => Date;
+  private readonly admissions = new WeakMap<
+    CurrentInstallationAdmission,
+    { intentDigest: string; probe: CurrentInstallationProbe }
+  >();
+  private readonly admittedPlans = new Map<string, CurrentInstallationAdmission>();
   constructor(private readonly options: InstallOrchestratorOptions) {
     this.now = options.now ?? (() => new Date());
   }
-  private service(manifest?: ReleaseManifestV1): ImmutableInstallerService {
+  private service(
+    manifest?: ReleaseManifestV1,
+    beforeApply?: () => Promise<void>,
+  ): ImmutableInstallerService {
     return new ImmutableInstallerService({
       adapters: [this.options.adapter],
       store: this.options.store,
       ...(manifest ? { manifest } : {}),
+      ...(beforeApply ? { beforeApply } : {}),
       now: this.now,
     });
   }
@@ -288,15 +329,241 @@ export class InstallOrchestrator {
     await this.service().assertOwnedReceipt(receipt);
     return receipt;
   }
-  async plan(intent: InstallIntentV1): Promise<InstallPlanV1> {
-    return this.options.store.exclusive(async () => {
-      try {
-        await this.service().recover();
-      } catch {
+  private async recoverPending(): Promise<void> {
+    try {
+      await this.service().recover();
+    } catch {
+      fail(
+        'INSTALL_RECOVERY_FAILED',
+        'Pending installer transaction recovery failed; no fresh plan was created.',
+      );
+    }
+  }
+
+  private async classifyInstallation(
+    intent: InstallIntentV1,
+    probe: CurrentInstallationProbe,
+  ): Promise<CurrentInstallationAdmission> {
+    const transaction = await this.options.store.readTransaction();
+    if (transaction && transaction.journal.phase !== 'rolled-back') {
+      fail('INSTALL_PLAN_STALE', 'A pending transaction appeared after setup recovery.');
+    }
+    const receiptValue = await this.options.store.readReceipt();
+    const observed = await probe.observe(intent);
+    const requested =
+      intent.runtimeRegistrations?.registrations.filter(
+        (registration) => registration.runtime === 'pi',
+      ) ?? [];
+    if (
+      requested.length !== 2 ||
+      new Set(requested.map((registration) => registration.domain)).size !== 2 ||
+      observed.piRoots.length !== requested.length
+    ) {
+      fail(
+        'INSTALL_CURRENT_UNVERIFIED',
+        'Setup requires the requested personal and work Pi roots.',
+      );
+    }
+    for (const registration of requested) {
+      const roots = observed.piRoots.filter(
+        (root) =>
+          root.identity === registration.identity &&
+          root.domain === registration.domain &&
+          root.nativeRootDigest === registration.nativeRootDigest,
+      );
+      if (roots.length !== 1) {
+        fail('INSTALL_CURRENT_UNVERIFIED', 'Setup Pi root registration changed.');
+      }
+    }
+    if (!receiptValue) {
+      const hasPackage = observed.piRoots.some((root) =>
+        (parsePiSettings(root.settings).packages as unknown[] | undefined)?.some((entry) => {
+          const source =
+            typeof entry === 'string' ? entry : (entry as { source?: unknown })?.source;
+          return (
+            typeof source === 'string' &&
+            (source.includes('@mpx/pi-extensions') ||
+              /(?:^|[\\/])mpx[\\/]releases[\\/]/iu.test(source))
+          );
+        }),
+      );
+      if (observed.selectedReleaseKey !== null || observed.hasArtifacts || hasPackage) {
         fail(
-          'INSTALL_RECOVERY_FAILED',
-          'Pending installer transaction recovery failed; no fresh plan was created.',
+          'INSTALL_CURRENT_UNVERIFIED',
+          'Installation evidence exists without an ownership receipt.',
         );
+      }
+      return {
+        status: 'initial',
+        digest: installerDigest({ intent, receipt: null, transaction: transaction ?? null }),
+      };
+    }
+    const receipt = parseOwnershipReceiptV1(receiptValue);
+    const priorIntent = receipt.installIntent;
+    if (
+      !priorIntent?.runtimeRegistrations ||
+      priorIntent.convergenceHash !== receipt.convergenceHash ||
+      observed.selectedReleaseKey !== receipt.releaseKey
+    ) {
+      fail(
+        'INSTALL_CURRENT_UNVERIFIED',
+        'Installed intent or selected release disagrees with ownership.',
+      );
+    }
+    const releaseIssues = await this.options.releases.verify(receipt, true);
+    if (releaseIssues.length) {
+      fail('INSTALL_CURRENT_UNVERIFIED', 'The owned immutable release failed strict verification.');
+    }
+    const ownedManifest: ReleaseManifestV1 = {
+      schemaVersion: 1,
+      kind: 'release-manifest',
+      releaseKey: receipt.releaseKey,
+      convergenceHash: receipt.convergenceHash,
+      files: receipt.files,
+    };
+    assertPiNativePackagesMatchRelease(ownedManifest, priorIntent.runtimeRegistrations);
+    await this.service().assertOwnedReceipt(receipt);
+    const expected = await this.options.adapter.operations(
+      priorIntent,
+      ownedManifest,
+      true,
+      receipt,
+    );
+    if (
+      installerDigest(
+        [...expected.automatic].sort((left, right) => left.id.localeCompare(right.id)),
+      ) !== installerDigest(receipt.operations)
+    ) {
+      fail(
+        'INSTALL_CURRENT_UNVERIFIED',
+        'Receipt operations do not describe the installed release.',
+      );
+    }
+    const priorRegistrations = priorIntent.runtimeRegistrations.registrations.filter(
+      (registration) => registration.runtime === 'pi',
+    );
+    if (priorRegistrations.length !== requested.length) {
+      fail('INSTALL_CURRENT_UNVERIFIED', 'Installed Pi registrations disagree with setup.');
+    }
+    const locators = receipt.operationLocators
+      .filter(
+        (locator) =>
+          locator.operationId.startsWith('50-pi-settings-') ||
+          (locator.spec as { kind?: unknown } | null)?.kind === 'pi-settings',
+      )
+      .map((locator) => ({ locator, settings: parsePiSettingsLocator(locator.spec) }));
+    for (const registration of requested) {
+      const prior = priorRegistrations.find(
+        (candidate) =>
+          candidate.identity === registration.identity &&
+          candidate.domain === registration.domain &&
+          candidate.nativeRootDigest === registration.nativeRootDigest,
+      );
+      if (!prior) {
+        fail('INSTALL_CURRENT_UNVERIFIED', 'Installed Pi root registration disagrees with setup.');
+      }
+      const owned = locators.filter(({ settings }) =>
+        settings.bindings.some(
+          (binding) =>
+            binding.identity === prior.identity &&
+            binding.domain === prior.domain &&
+            binding.nativeRootDigest === prior.nativeRootDigest,
+        ),
+      );
+      const owner = owned[0];
+      const operation = receipt.operations.find(
+        (candidate) => candidate.id === owner?.locator.operationId,
+      );
+      if (
+        owned.length !== 1 ||
+        !owner ||
+        operation?.action !== 'ensure' ||
+        owner.settings.currentRelease.releaseKey !== receipt.releaseKey ||
+        owner.settings.currentRelease.registrationDigest !== installerDigest(prior.nativePackage)
+      ) {
+        fail('INSTALL_CURRENT_UNVERIFIED', 'Pi settings ownership is incomplete or inconsistent.');
+      }
+      const releaseRoot = path.join(
+        this.options.releases.appsRoot,
+        'mpx',
+        'releases',
+        receipt.releaseKey,
+      );
+      const desiredSource = resolvePiNativePackageSource(releaseRoot, PI_NATIVE_PACKAGE_ROOT);
+      const root = observed.piRoots.find(
+        (candidate) => candidate.identity === registration.identity,
+      )!;
+      const inventory = planPiNativePackageSettings({
+        settings: root.settings,
+        releaseRoot,
+        desiredSource,
+        nativePackage: prior.nativePackage,
+        priorOwnedSources: [],
+      });
+      if (
+        inventory.priorOwnedEntries.length !== 1 ||
+        inventory.priorOwnedEntries[0]?.source !== desiredSource ||
+        inventory.beforeDigest !== inventory.afterDigest ||
+        inventory.afterDigest !== operation.desiredDigest
+      ) {
+        fail(
+          'INSTALL_CURRENT_UNVERIFIED',
+          'Pi settings must contain exactly one owned canonical package.',
+        );
+      }
+    }
+    return {
+      status: 'current',
+      digest: installerDigest({
+        intent,
+        receipt,
+        transaction: transaction ?? null,
+        selectedReleaseKey: observed.selectedReleaseKey,
+        roots: observed.piRoots.map(({ settings, ...binding }) => ({
+          ...binding,
+          packages: parsePiSettings(settings).packages ?? [],
+        })),
+      }),
+    };
+  }
+
+  async admitCurrentInstallation(
+    intentValue: InstallIntentV1,
+    probe: CurrentInstallationProbe,
+  ): Promise<CurrentInstallationAdmission> {
+    const intent = parseInstallIntentV1(intentValue);
+    return this.options.store.exclusive(async () => {
+      // Recovery owns its existing lock; classification must inspect the restored state.
+      await this.recoverPending();
+      const admission = await this.classifyInstallation(intent, probe);
+      this.admissions.set(admission, { intentDigest: installerDigest(intent), probe });
+      return admission;
+    });
+  }
+
+  private async assertAdmission(
+    intent: InstallIntentV1,
+    admission: CurrentInstallationAdmission,
+  ): Promise<void> {
+    const authority = this.admissions.get(admission);
+    if (!authority || authority.intentDigest !== installerDigest(intent)) {
+      fail('INSTALL_PLAN_STALE', 'Setup admission is unavailable or belongs to another intent.');
+    }
+    const actual = await this.classifyInstallation(intent, authority.probe);
+    if (actual.status !== admission.status || actual.digest !== admission.digest) {
+      fail('INSTALL_PLAN_STALE', 'Installation changed after setup admission.');
+    }
+  }
+
+  async plan(
+    intent: InstallIntentV1,
+    admission?: CurrentInstallationAdmission,
+  ): Promise<InstallPlanV1> {
+    return this.options.store.exclusive(async () => {
+      if (admission) {
+        await this.assertAdmission(intent, admission);
+      } else {
+        await this.recoverPending();
       }
       const legacy = await this.options.store.readLegacyReceiptForMigration();
       const priorReceipt = legacy ? undefined : await this.validatedReceipt();
@@ -315,7 +582,7 @@ export class InstallOrchestrator {
               verifierRef: 'installer:ownership-release-upgrade',
             }
           : undefined;
-      if (!current.classifications && !migration && !upgrade) {
+      if (!current.classifications && !migration && !upgrade && !admission) {
         return base;
       }
       const classifications: InstallOperationClassificationsV1 = current.classifications ?? {
@@ -338,21 +605,51 @@ export class InstallOrchestrator {
       const upgradeBound = upgrade
         ? { ...merged, confirmationRequired: [...merged.confirmationRequired, upgrade] }
         : merged;
+      const admissionBound = admission
+        ? {
+            ...upgradeBound,
+            confirmationRequired: [
+              ...upgradeBound.confirmationRequired,
+              {
+                id: CURRENT_INSTALLATION_ID,
+                planDigest: admission.digest,
+                verifierRef: 'installer:setup-current-installation',
+              },
+            ],
+          }
+        : upgradeBound;
       const classified = {
         schemaVersion: base.schemaVersion,
         kind: base.kind,
         intent: base.intent,
         observations: base.observations,
         operations: base.operations,
-        classifications: upgradeBound,
+        classifications: admissionBound,
       };
-      return parseInstallPlanV1({ ...classified, confirmationDigest: installerDigest(classified) });
+      const plan = parseInstallPlanV1({
+        ...classified,
+        confirmationDigest: installerDigest(classified),
+      });
+      if (admission) {
+        this.admittedPlans.set(plan.confirmationDigest, admission);
+      }
+      return plan;
     });
   }
   async apply(planValue: InstallPlanV1, confirmation: string): Promise<OwnershipReceiptV1> {
     const plan = parseInstallPlanV1(planValue);
     if (confirmation !== plan.confirmationDigest) {
       fail('INSTALL_CONFIRMATION_MISMATCH', 'Exact plan confirmation is required.');
+    }
+    const admissionReference = plan.classifications?.confirmationRequired.find(
+      (reference) => reference.id === CURRENT_INSTALLATION_ID,
+    );
+    const admission = this.admittedPlans.get(plan.confirmationDigest);
+    if (admissionReference && (!admission || admission.digest !== admissionReference.planDigest)) {
+      fail('INSTALL_PLAN_STALE', 'Setup admission authority is unavailable.');
+    }
+    if (admission) {
+      await this.assertAdmission(plan.intent, admission);
     }
     const legacyBeforeApply = await this.options.store.readLegacyReceiptForMigration();
     const priorReceipt = legacyBeforeApply ? undefined : await this.validatedReceipt();
@@ -419,6 +716,16 @@ export class InstallOrchestrator {
         'Release upgrade requires its confirmation-bound ownership receipt.',
       );
     }
+    if (admissionReference) {
+      const baseClassifications = effectiveClassifications ?? {
+        automatic: current.operations.map((operation) => operation.id),
+        confirmationRequired: [],
+      };
+      effectiveClassifications = {
+        ...baseClassifications,
+        confirmationRequired: [...baseClassifications.confirmationRequired, admissionReference],
+      };
+    }
     if (
       installerDigest(current.operations) !== installerDigest(plan.operations) ||
       installerDigest(effectiveClassifications ?? null) !==
@@ -434,12 +741,29 @@ export class InstallOrchestrator {
     if (installerDigest(revalidated.observations) !== installerDigest(plan.observations)) {
       fail('INSTALL_OBSERVATION_CHANGED', 'Machine observations changed after planning.');
     }
-    const manifest = await this.options.releases.publish(plan.intent.releaseKey);
-    const service = this.service(manifest);
+    const manifest = admission
+      ? current.manifest
+      : await this.options.releases.publish(plan.intent.releaseKey);
+    const service = this.service(
+      manifest,
+      admission
+        ? async () => {
+            await this.assertAdmission(plan.intent, admission);
+            const lockedCurrent = await this.current(plan.intent, priorReceipt);
+            if (installerDigest(lockedCurrent.operations) !== installerDigest(plan.operations)) {
+              fail('INSTALL_PLAN_STALE', 'Install operations changed after setup admission.');
+            }
+            const published = await this.options.releases.publish(plan.intent.releaseKey);
+            if (installerDigest(published) !== installerDigest(manifest)) {
+              fail('INSTALL_PLAN_STALE', 'Release changed after setup admission.');
+            }
+          }
+        : undefined,
+    );
     const receipt = await service.apply(plan, confirmation);
     let rollbackActivation: (() => Promise<void>) | undefined;
     try {
-      await this.options.adapter.operations(plan.intent, manifest, true, priorReceipt);
+      await this.options.adapter.operations(plan.intent, manifest, true, receipt);
       const operationVerification = await service.verify();
       const releaseIssues = await this.options.releases.verify(receipt, false);
       if (!operationVerification.healthy || releaseIssues.length > 0) {

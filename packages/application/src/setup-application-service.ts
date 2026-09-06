@@ -3,6 +3,7 @@ import type {
   InstallIntentBuilder,
   InstallOrchestrator,
   InstallVerificationV1,
+  CurrentInstallationProbe,
 } from '@mpx/installer';
 
 export interface SetupRequestFactory {
@@ -24,7 +25,11 @@ export interface SetupApplicationDependencies {
   readonly localReset: { run(): Promise<void> };
   readonly detach: { run(): Promise<void> };
   readonly builder: Pick<InstallIntentBuilder, 'build'>;
-  readonly orchestrator: Pick<InstallOrchestrator, 'plan' | 'apply' | 'verify'>;
+  readonly installationProbe: CurrentInstallationProbe;
+  readonly orchestrator: Pick<
+    InstallOrchestrator,
+    'admitCurrentInstallation' | 'plan' | 'apply' | 'verify'
+  >;
 }
 
 export class SetupApplicationService {
@@ -33,9 +38,15 @@ export class SetupApplicationService {
   async execute(): Promise<SetupResultV1> {
     const request = await this.dependencies.requestFactory.create();
     const built = await this.dependencies.builder.build(request);
-    await this.dependencies.localReset.run();
-    await this.dependencies.detach.run();
-    const plan = await this.dependencies.orchestrator.plan(built.intent);
+    const admission = await this.dependencies.orchestrator.admitCurrentInstallation(
+      built.intent,
+      this.dependencies.installationProbe,
+    );
+    if (admission.status === 'initial') {
+      await this.dependencies.localReset.run();
+      await this.dependencies.detach.run();
+    }
+    const plan = await this.dependencies.orchestrator.plan(built.intent, admission);
     await this.dependencies.orchestrator.apply(plan, plan.confirmationDigest);
     const verified: InstallVerificationV1 = await this.dependencies.orchestrator.verify(true);
     if (!verified.healthy) {

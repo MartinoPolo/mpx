@@ -180,7 +180,12 @@ it('rejects a symlink setup state directory before detachment', async () => {
           intent,
         }) as never,
     },
-    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
+    orchestrator: {
+      admitCurrentInstallation: async () => ({ status: 'initial', digest }),
+      plan: vi.fn(),
+      apply: vi.fn(),
+      verify: vi.fn(),
+    },
   });
 
   await expect(service.execute()).rejects.toMatchObject({ code: 'SETUP_STATE_INVALID' });
@@ -212,6 +217,7 @@ it('detaches both disposable legacy roots through the complete node setup compos
     }),
   };
   const orchestrator = {
+    admitCurrentInstallation: async () => ({ status: 'initial', digest }),
     plan: vi.fn(async () => {
       order.push('plan');
       for (const root of [value.personal, value.work]) {
@@ -285,6 +291,7 @@ it('keeps the committed detachment receipt when setup fails afterward so retry c
       build: async () => built,
     },
     orchestrator: {
+      admitCurrentInstallation: async () => ({ status: 'initial', digest }),
       plan: async () => {
         if (fail) {
           throw new Error('injected post-detachment setup failure');
@@ -369,6 +376,7 @@ it('completes detachment after recovering an interrupted journal', async () => {
         }) as never,
     },
     orchestrator: {
+      admitCurrentInstallation: async () => ({ status: 'initial', digest }),
       plan,
       apply: vi.fn(async () => ({}) as never),
       verify: vi.fn(async () => ({ healthy: true, issues: [] }) as never),

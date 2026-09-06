@@ -37,7 +37,11 @@ export interface SideEffectAdapter {
   apply(operation: InstallOperationV1): Promise<void>;
   restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
   receiptLocator?(operation: InstallOperationV1): Promise<unknown>;
-  hydrateReceiptOperation?(operation: InstallOperationV1, locator: unknown): Promise<void>;
+  hydrateReceiptOperation?(
+    operation: InstallOperationV1,
+    locator: unknown,
+    priorReceipt?: OwnershipReceiptV1,
+  ): Promise<void>;
 }
 export interface StoredTransaction {
   journal: TransactionJournalV1;
@@ -46,6 +50,10 @@ export interface StoredTransaction {
   operationLocators: readonly InstallOperationLocatorV1[];
   priorReceipt?: OwnershipReceiptV1;
 }
+function operationChanges(operation: InstallOperationV1, digest: string | null): boolean {
+  return operation.action === 'ensure' ? digest !== operation.desiredDigest : digest !== null;
+}
+
 function durableSnapshots(
   snapshots: Readonly<Record<string, string | null>>,
   journal: TransactionJournalV1,
@@ -382,10 +390,7 @@ export class NodeTransactionStore implements TransactionStore {
       const eligible = operations
         .filter((operation, index) => {
           const digest = snapshot.observations[index]!.digest;
-          return !(
-            (operation.action === 'ensure' && digest === operation.desiredDigest) ||
-            (operation.action === 'remove' && digest === null)
-          );
+          return operationChanges(operation, digest);
         })
         .map((operation) => operation.id);
       if (
@@ -496,19 +501,27 @@ export interface ImmutableInstallerServiceOptions {
   readonly manifest?: ReleaseManifestV1;
   readonly now?: () => Date;
   readonly failureInjection?: (operationId: string, index: number) => void;
+  readonly beforeApply?: () => Promise<void>;
 }
 const RELEASE_UPGRADE_ID = 'ownership-release-upgrade';
 const RELEASE_UPGRADE_VERIFIER = 'installer:ownership-release-upgrade';
 
-function isReleaseKeyedRuntimeProjectionTarget(target: string, releaseKey: string): boolean {
-  const segments = target.toLowerCase().split(/[\\/]+/u),
+function runtimeProjectionLocation(target: string, releaseKey: string): string | undefined {
+  const segments = path.win32
+      .normalize(target)
+      .toLowerCase()
+      .split(/[\\/]+/u),
     marker = segments.lastIndexOf('runtime-projections');
-  return (
+  if (
     marker > 0 &&
     segments[marker - 1] === 'mpx' &&
     segments[marker + 1] === releaseKey &&
-    segments.length > marker + 2
-  );
+    segments.length > marker + 3 &&
+    ['claude-personal', 'claude-work', 'pi-personal', 'pi-work'].includes(segments[marker + 2]!)
+  ) {
+    return [...segments.slice(0, marker + 1), ...segments.slice(marker + 2)].join('/');
+  }
+  return undefined;
 }
 
 function validateUpgradeOperations(
@@ -527,10 +540,18 @@ function validateUpgradeOperations(
       fail('INSTALL_OWNERSHIP_MISMATCH', `Upgrade changes ownership for operation ${prior.id}.`);
     }
     if (prior.target !== current.target) {
+      const locator = priorReceipt.operationLocators.find(
+        (candidate) => candidate.operationId === prior.id,
+      )?.spec as { kind?: string; projection?: { releaseKey?: string } } | null;
+      const originalReleaseKey =
+        locator?.kind === 'projection-retained'
+          ? (locator.projection?.releaseKey ?? priorReceipt.releaseKey)
+          : priorReceipt.releaseKey;
       if (
         prior.action !== 'ensure' ||
-        !isReleaseKeyedRuntimeProjectionTarget(prior.target, priorReceipt.releaseKey) ||
-        !isReleaseKeyedRuntimeProjectionTarget(current.target, targetReleaseKey)
+        !runtimeProjectionLocation(prior.target, originalReleaseKey) ||
+        runtimeProjectionLocation(prior.target, originalReleaseKey) !==
+          runtimeProjectionLocation(current.target, targetReleaseKey)
       ) {
         fail('INSTALL_OWNERSHIP_MISMATCH', `Upgrade moves prior owned operation ${prior.id}.`);
       }
@@ -585,6 +606,7 @@ export class ImmutableInstallerService {
     operations: readonly InstallOperationV1[],
     locatorValues: unknown,
     ambiguousCode: string,
+    priorReceipt?: OwnershipReceiptV1,
   ): Promise<void> {
     const locators = parseInstallOperationLocatorsV1(locatorValues, operations);
     for (let index = 0; index < operations.length; index++) {
@@ -600,7 +622,7 @@ export class ImmutableInstallerService {
           `Adapter ${operation.adapter} cannot hydrate its durable operation locator.`,
         );
       }
-      await adapter.hydrateReceiptOperation(operation, locator.spec);
+      await adapter.hydrateReceiptOperation(operation, locator.spec, priorReceipt);
     }
   }
 
@@ -663,7 +685,11 @@ export class ImmutableInstallerService {
       fail('INSTALL_CONFIRMATION_MISMATCH', 'Exact plan confirmation is required.');
     }
     return this.options.store.exclusive(async () => {
-      await this.recover();
+      if (this.options.beforeApply) {
+        await this.options.beforeApply();
+      } else {
+        await this.recover();
+      }
       await this.assertCurrent(plan);
       const priorReceipt = await this.options.store.readReceipt(),
         upgrading = Boolean(priorReceipt && priorReceipt.releaseKey !== plan.intent.releaseKey),
@@ -694,6 +720,7 @@ export class ImmutableInstallerService {
           plan.operations,
           plan.observations,
         );
+        await this.assertOwnedReceipt(priorReceipt!);
       } else if (upgradeReferences.length > 0) {
         fail('INSTALL_OWNERSHIP_MISMATCH', 'Upgrade authority is extraneous.');
       } else if (
@@ -703,8 +730,10 @@ export class ImmutableInstallerService {
         fail('INSTALL_OWNERSHIP_MISMATCH', 'Existing ownership differs from the plan.');
       }
       const snapshots: Record<string, string | null> = {};
-      for (const operation of plan.operations) {
-        snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
+      for (const [index, operation] of plan.operations.entries()) {
+        if (operationChanges(operation, plan.observations[index]!.digest)) {
+          snapshots[operation.id] = await this.adapter(operation.adapter).capture(operation);
+        }
       }
       const operationLocators = await this.locateOperations(plan.operations),
         snapshot: MachineSnapshotV1 = {
@@ -733,10 +762,7 @@ export class ImmutableInstallerService {
         for (let index = 0; index < plan.operations.length; index++) {
           const operation = plan.operations[index]!,
             observation = plan.observations[index]!;
-          if (
-            !(operation.action === 'ensure' && observation.digest === operation.desiredDigest) &&
-            !(operation.action === 'remove' && observation.digest === null)
-          ) {
+          if (operationChanges(operation, observation.digest)) {
             const inFlightJournal = { ...journal, inFlightOperationId: operation.id };
             await this.options.store.writeTransaction({
               journal: inFlightJournal,
@@ -826,15 +852,16 @@ export class ImmutableInstallerService {
     stored: StoredTransaction,
     operations: readonly InstallOperationV1[],
   ): Promise<void> {
-    await this.hydrateOperations(
-      operations,
-      stored.operationLocators,
-      'INSTALL_TRANSACTION_INVALID',
-    );
     const mutated = new Set([
       ...stored.journal.completedOperationIds,
       ...(stored.journal.inFlightOperationId ? [stored.journal.inFlightOperationId] : []),
     ]);
+    await this.hydrateOperations(
+      operations.filter((operation) => mutated.has(operation.id)),
+      stored.operationLocators.filter((locator) => mutated.has(locator.operationId)),
+      'INSTALL_TRANSACTION_INVALID',
+      stored.priorReceipt,
+    );
     for (const operation of operations.filter((item) => mutated.has(item.id)).reverse()) {
       await this.adapter(operation.adapter).restore(
         operation,
@@ -869,6 +896,7 @@ export class ImmutableInstallerService {
       await this.options.store.removeTransaction();
     });
   }
+
   async recover(): Promise<void> {
     const stored = await this.options.store.readTransaction();
     if (!stored || stored.journal.phase === 'rolled-back') {

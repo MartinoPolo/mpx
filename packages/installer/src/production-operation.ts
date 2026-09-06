@@ -475,8 +475,29 @@ function registeredRuntimeExecutableEnvironment(
   );
 }
 
+interface ProjectionFileLocator {
+  kind: 'projection-file';
+  releaseKey: string;
+  identity: RuntimeIdentity;
+  relativePath: string;
+}
+
+interface ProjectionRetainedLocator {
+  kind: 'projection-retained';
+  projection: ProjectionFileLocator;
+  file: ReleaseManifestV1['files'][number];
+}
+
+const normalizedProjectionPath = (relative: string): string =>
+  path.win32.normalize(relative).replaceAll('\\', '/').toLowerCase();
+
+const projectionKey = (identity: RuntimeIdentity, relative: string): string =>
+  `${identity}/${normalizedProjectionPath(relative)}`;
+
 interface Entry {
   operation: InstallOperationV1;
+  projection?: ProjectionFileLocator;
+  retained?: ProjectionRetainedLocator;
   launcher?: ManagedLauncherSpec;
   resource?: OwnedResourceSpec;
   priorOwned?: PriorOwnedResourceAuthorization;
@@ -709,6 +730,8 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         ...(priorOwned ? { priorOwned } : {}),
       });
     }
+    const priorProjections = this.priorProjectionInventory(priorReceipt);
+    const desiredProjectionKeys = new Set<string>();
     for (const [index, registration] of (
       intent.runtimeRegistrations?.registrations ?? []
     ).entries()) {
@@ -734,7 +757,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           desiredDigest: sha(projectionBody),
         },
       });
-      for (const [fileIndex, file] of registration.projection.files.entries()) {
+      for (const file of registration.projection.files) {
         const evidence = manifest.files.find((candidate) => candidate.path === file.path);
         if (!evidence || evidence.sha256 !== file.sha256 || evidence.bytes !== file.bytes) {
           fail(
@@ -757,11 +780,24 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           intent.releaseKey,
           ...file.path.split('/'),
         );
+        const logicalKey = projectionKey(registration.identity, file.path);
+        if (desiredProjectionKeys.has(logicalKey)) {
+          fail('INSTALL_PROJECTION_MISMATCH', `Ambiguous projection path ${file.path}.`);
+        }
+        desiredProjectionKeys.add(logicalKey);
         automatic.push({
           fileSource: source,
           expectedBytes: file.bytes,
+          projection: {
+            kind: 'projection-file',
+            releaseKey: intent.releaseKey,
+            identity: registration.identity,
+            relativePath: normalizedProjectionPath(file.path),
+          },
           operation: {
-            id: `61-projection-${registration.identity}-${String(fileIndex).padStart(4, '0')}`,
+            id:
+              priorProjections.get(logicalKey)?.operation.id ??
+              `61-projection-${registration.identity}-${installerDigest(logicalKey)}`,
             adapter: this.name,
             action: 'ensure',
             target,
@@ -812,6 +848,33 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         },
       });
     }
+    for (const [logicalKey, prior] of priorProjections) {
+      if (!desiredProjectionKeys.has(logicalKey)) {
+        automatic.push({
+          operation: prior.operation,
+          retained: prior.retained ?? {
+            kind: 'projection-retained',
+            projection: prior.projection,
+            file: prior.file,
+          },
+        });
+      }
+    }
+    const reservedIds = new Set(priorReceipt?.operations.map((operation) => operation.id));
+    for (const entry of automatic) {
+      if (
+        entry.projection &&
+        reservedIds.has(entry.operation.id) &&
+        priorProjections.get(
+          projectionKey(entry.projection.identity, entry.projection.relativePath),
+        )?.operation.id !== entry.operation.id
+      ) {
+        fail('INSTALL_OPERATION_DUPLICATE', `Projection ID collision for ${entry.operation.id}.`);
+      }
+    }
+    if (new Set(automatic.map((entry) => entry.operation.id)).size !== automatic.length) {
+      fail('INSTALL_OPERATION_DUPLICATE', 'Production operation IDs collide.');
+    }
     automatic.sort((left, right) => left.operation.id.localeCompare(right.operation.id));
     for (const entry of automatic) {
       for (const [digest, priorEntry] of this.entries) {
@@ -839,6 +902,237 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       },
     };
   }
+  private assertProjectionLocator(
+    operation: InstallOperationV1,
+    projection: ProjectionFileLocator,
+  ): void {
+    const relative = projection.relativePath;
+    if (
+      Object.keys(projection).sort().join('\0') !== 'identity\0kind\0relativePath\0releaseKey' ||
+      projection.kind !== 'projection-file' ||
+      !/^[a-f0-9]{64}$/u.test(projection.releaseKey) ||
+      !['claude-personal', 'claude-work', 'pi-personal', 'pi-work'].includes(projection.identity) ||
+      typeof relative !== 'string' ||
+      !relative ||
+      relative !== normalizedProjectionPath(relative) ||
+      relative
+        .split('/')
+        .some(
+          (segment) => !segment || segment === '.' || segment === '..' || /[:\\]/u.test(segment),
+        ) ||
+      relative === 'projection.json' ||
+      !operation.id.startsWith(`61-projection-${projection.identity}-`) ||
+      operation.adapter !== this.name ||
+      !this.environment.LOCALAPPDATA ||
+      !path.win32.isAbsolute(this.environment.LOCALAPPDATA) ||
+      path.win32.normalize(operation.target).toLowerCase() !==
+        path.win32
+          .join(
+            this.environment.LOCALAPPDATA,
+            'mpx',
+            'runtime-projections',
+            projection.releaseKey,
+            projection.identity,
+            ...relative.split('/'),
+          )
+          .toLowerCase()
+    ) {
+      fail('INSTALL_RECEIPT_FORGED', `Projection locator does not bind ${operation.id}.`);
+    }
+  }
+
+  private priorProjectionInventory(receipt?: OwnershipReceiptV1): Map<
+    string,
+    {
+      operation: InstallOperationV1;
+      projection: ProjectionFileLocator;
+      file: ReleaseManifestV1['files'][number];
+      retained?: ProjectionRetainedLocator;
+    }
+  > {
+    const inventory = new Map<
+      string,
+      {
+        operation: InstallOperationV1;
+        projection: ProjectionFileLocator;
+        file: ReleaseManifestV1['files'][number];
+        retained?: ProjectionRetainedLocator;
+      }
+    >();
+    if (!receipt) {
+      return inventory;
+    }
+    for (const operation of receipt.operations.filter((candidate) =>
+      candidate.id.startsWith('61-projection-'),
+    )) {
+      const durable = receipt.operationLocators.find(
+        (candidate) => candidate.operationId === operation.id,
+      );
+      if ((durable?.spec as { kind?: unknown } | null)?.kind === 'projection-retained') {
+        const retained = durable!.spec as ProjectionRetainedLocator;
+        this.assertRetained(operation, retained);
+        if (
+          durable!.adapter !== this.name ||
+          durable!.bindingDigest !== installerDigest({ operation, spec: retained })
+        ) {
+          fail(
+            'INSTALL_RECEIPT_FORGED',
+            `Prior projection binding is invalid for ${operation.id}.`,
+          );
+        }
+        const key = projectionKey(retained.projection.identity, retained.projection.relativePath);
+        if (inventory.has(key)) {
+          fail(
+            'INSTALL_RECEIPT_FORGED',
+            `Prior projection ownership is ambiguous for ${operation.id}.`,
+          );
+        }
+        inventory.set(key, {
+          operation,
+          projection: retained.projection,
+          file: retained.file,
+          retained,
+        });
+        continue;
+      }
+      const registrations = receipt.installIntent?.runtimeRegistrations?.registrations ?? [];
+      const matches = registrations.flatMap((registration) =>
+        registration.projection.files.flatMap((file) => {
+          const projection: ProjectionFileLocator = {
+            kind: 'projection-file',
+            releaseKey: receipt.releaseKey,
+            identity: registration.identity,
+            relativePath: normalizedProjectionPath(file.path),
+          };
+          const target = path.win32.join(
+            this.environment.LOCALAPPDATA ?? '',
+            'mpx',
+            'runtime-projections',
+            receipt.releaseKey,
+            registration.identity,
+            ...file.path.split('/'),
+          );
+          return path.win32.normalize(operation.target).toLowerCase() === target.toLowerCase()
+            ? [{ projection, file }]
+            : [];
+        }),
+      );
+      const match = matches[0];
+      const locator = receipt.operationLocators.find(
+        (candidate) => candidate.operationId === operation.id,
+      );
+      if (
+        matches.length !== 1 ||
+        !match ||
+        !locator ||
+        locator.adapter !== this.name ||
+        locator.bindingDigest !== installerDigest({ operation, spec: locator.spec }) ||
+        operation.action !== 'ensure' ||
+        operation.desiredDigest !== match.file.sha256 ||
+        !receipt.files.some(
+          (file) =>
+            file.path === match.file.path &&
+            file.sha256 === match.file.sha256 &&
+            file.bytes === match.file.bytes,
+        )
+      ) {
+        fail(
+          'INSTALL_RECEIPT_FORGED',
+          `Prior projection ownership is invalid for ${operation.id}.`,
+        );
+      }
+      this.assertProjectionLocator(operation, match.projection);
+      if (
+        canonicalJson(locator.spec) !== canonicalJson({ kind: 'file' }) &&
+        canonicalJson(locator.spec) !== canonicalJson(match.projection)
+      ) {
+        fail('INSTALL_RECEIPT_FORGED', `Prior projection locator is invalid for ${operation.id}.`);
+      }
+      const key = projectionKey(match.projection.identity, match.projection.relativePath);
+      if (inventory.has(key)) {
+        fail(
+          'INSTALL_RECEIPT_FORGED',
+          `Prior projection ownership is ambiguous for ${operation.id}.`,
+        );
+      }
+      inventory.set(key, {
+        operation,
+        projection: match.projection,
+        file: receipt.files.find((file) => file.path === match.file.path)!,
+      });
+    }
+    return inventory;
+  }
+
+  private assertRetained(operation: InstallOperationV1, retained: ProjectionRetainedLocator): void {
+    if (
+      Object.keys(retained).sort().join('\0') !== 'file\0kind\0projection' ||
+      retained.kind !== 'projection-retained' ||
+      !retained.projection ||
+      typeof retained.projection !== 'object' ||
+      !retained.file ||
+      typeof retained.file !== 'object' ||
+      Object.keys(retained.file).sort().join('\0') !== 'bytes\0path\0sha256' ||
+      typeof retained.file.path !== 'string' ||
+      retained.file.path
+        .split('/')
+        .some(
+          (segment) => !segment || segment === '.' || segment === '..' || /[:\\]/u.test(segment),
+        ) ||
+      normalizedProjectionPath(retained.file.path) !== retained.projection.relativePath ||
+      !Number.isSafeInteger(retained.file.bytes) ||
+      retained.file.bytes < 0 ||
+      !/^[a-f0-9]{64}$/u.test(retained.file.sha256) ||
+      operation.action !== 'ensure' ||
+      operation.desiredDigest !== retained.file.sha256
+    ) {
+      fail(
+        'INSTALL_RECEIPT_FORGED',
+        `Retained projection evidence is invalid for ${operation.id}.`,
+      );
+    }
+    this.assertProjectionLocator(operation, retained.projection);
+  }
+
+  private async assertProjectionBoundary(target: string): Promise<void> {
+    let ancestor = path.dirname(target);
+    while (true) {
+      const info = await lstat(ancestor);
+      if (!info.isDirectory() || info.isSymbolicLink()) {
+        fail('INSTALL_TARGET_UNSAFE', 'Retained projection has an unsafe ancestor.');
+      }
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) {
+        return;
+      }
+      ancestor = parent;
+    }
+  }
+
+  private async readRetainedFile(
+    operation: InstallOperationV1,
+    retained: ProjectionRetainedLocator,
+  ): Promise<Buffer> {
+    await this.assertProjectionBoundary(operation.target);
+    const info = await lstat(operation.target).catch((failure: unknown) => {
+      if (missing(failure)) {
+        return undefined;
+      }
+      throw failure;
+    });
+    if (!info) {
+      fail('INSTALL_FOREIGN_OR_DRIFTED', `Retained projection is missing for ${operation.id}.`);
+    }
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
+      fail('INSTALL_TARGET_UNSAFE', `Retained projection target is unsafe for ${operation.id}.`);
+    }
+    const body = await readFile(operation.target);
+    if (body.length !== retained.file.bytes || sha(body) !== retained.file.sha256) {
+      fail('INSTALL_FOREIGN_OR_DRIFTED', `Retained projection is changed for ${operation.id}.`);
+    }
+    return body;
+  }
+
   private priorOwnedAuthorization(
     receipt: OwnershipReceiptV1,
     operation: InstallOperationV1,
@@ -898,6 +1192,12 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       return this.piSettings.receiptLocator(operation);
     }
     const entry = await this.entry(operation);
+    if (entry.retained) {
+      return entry.retained;
+    }
+    if (entry.projection) {
+      return entry.projection;
+    }
     if (entry.launcher) {
       return { kind: 'launcher', spec: entry.launcher };
     }
@@ -909,7 +1209,11 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     return { kind: 'file' };
   }
-  async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown): Promise<void> {
+  async hydrateReceiptOperation(
+    operation: InstallOperationV1,
+    locator: unknown,
+    priorReceipt?: OwnershipReceiptV1,
+  ): Promise<void> {
     if (this.piSettings.handles(operation, locator)) {
       await this.piSettings.hydrateReceiptOperation(operation, locator);
       return;
@@ -944,8 +1248,37 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           );
         }
       };
+    if (operation.action === 'remove' && operation.id.startsWith('61-projection-')) {
+      fail('INSTALL_RECEIPT_FORGED', `Projection removal is unsupported for ${operation.id}.`);
+    }
     let entry: Entry;
-    if (value.kind === 'file' && keys === 'kind') {
+    if (value.kind === 'projection-retained') {
+      const retained = value as unknown as ProjectionRetainedLocator;
+      this.assertRetained(operation, retained);
+      if (priorReceipt) {
+        const prior = this.priorProjectionInventory(priorReceipt).get(
+          projectionKey(retained.projection.identity, retained.projection.relativePath),
+        );
+        if (
+          !prior ||
+          canonicalJson(prior.operation) !== canonicalJson(operation) ||
+          canonicalJson(prior.projection) !== canonicalJson(retained.projection) ||
+          canonicalJson(prior.file) !== canonicalJson(retained.file) ||
+          (prior.retained && canonicalJson(prior.retained) !== canonicalJson(retained))
+        ) {
+          fail(
+            'INSTALL_RECEIPT_FORGED',
+            `Retained projection does not bind prior ownership for ${operation.id}.`,
+          );
+        }
+      }
+      await this.readRetainedFile(operation, retained);
+      entry = { operation, retained };
+    } else if (value.kind === 'projection-file') {
+      const projection = value as unknown as ProjectionFileLocator;
+      this.assertProjectionLocator(operation, projection);
+      entry = { operation, projection, fileBody: Buffer.alloc(0) };
+    } else if (value.kind === 'file' && keys === 'kind') {
       assertFileTarget();
       entry = { operation, fileBody: Buffer.alloc(0) };
     } else if (
@@ -1007,6 +1340,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     } else {
       fail('INSTALL_RECEIPT_AMBIGUOUS', `Invalid durable locator for ${operation.id}.`);
     }
+    if (entry.retained) {
+      this.entries.set(installerDigest(operation), entry);
+      return;
+    }
     if (existing) {
       return;
     }
@@ -1037,6 +1374,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       return exact;
     }
     if (operation.action === 'remove') {
+      if (operation.id.startsWith('61-projection-')) {
+        fail('INSTALL_RECEIPT_FORGED', `Projection removal is unsupported for ${operation.id}.`);
+      }
       for (const entry of this.entries.values()) {
         if (entry.operation.id === operation.id && entry.operation.target === operation.target) {
           if (
@@ -1060,6 +1400,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     const entry = await this.entry(operation),
       target = operation.target;
+    if (entry.retained) {
+      return sha(await this.readRetainedFile(operation, entry.retained));
+    }
     if (entry.fileBody || entry.fileSource) {
       const current = await this.files.read(target);
       return current ? sha(current) : null;
@@ -1075,6 +1418,12 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     const entry = await this.entry(operation),
       target = operation.target;
+    if (entry.retained) {
+      fail(
+        'INSTALL_TRANSACTION_INVALID',
+        `Retained projection must not be captured: ${operation.id}.`,
+      );
+    }
     if (entry.fileBody || entry.fileSource || entry.launcher) {
       const current = await this.files.read(target);
       return current?.toString('base64') ?? null;
@@ -1088,6 +1437,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       return;
     }
     const entry = await this.entry(operation);
+    if (entry.retained) {
+      await this.readRetainedFile(operation, entry.retained);
+      return;
+    }
     if (entry.fileBody || entry.fileSource) {
       if (operation.action === 'remove') {
         entry.appliedFileState = null;
@@ -1167,6 +1520,12 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     const entry = await this.entry(operation),
       target = operation.target;
+    if (entry.retained) {
+      fail(
+        'INSTALL_TRANSACTION_INVALID',
+        `Retained projection must never be restored: ${operation.id}.`,
+      );
+    }
     if (entry.fileBody || entry.fileSource || entry.launcher) {
       const current = await this.files.read(target),
         prior = snapshot === null ? undefined : Buffer.from(snapshot, 'base64');

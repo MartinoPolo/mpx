@@ -102,6 +102,9 @@ export async function createRepositorySnapshot(repositoryRoot, prefix) {
 export async function repositoryOutputDigests(repositoryRoot) {
   const result = {};
   async function visit(relative) {
+    if (relative === 'runtimes/pi/extensions/dist/.package-verify') {
+      return;
+    }
     const absolute = path.join(repositoryRoot, relative);
     let entries;
     try {

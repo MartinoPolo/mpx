@@ -1,5 +1,18 @@
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  lstat,
+  utimes,
+  writeFile,
+  rename,
+  link,
+} from 'node:fs/promises';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
@@ -7,6 +20,8 @@ import {
   activateRelease,
   installerDigest,
   type InstallIntentV1,
+  type OwnershipReceiptV1,
+  type ReleaseManifestV1,
 } from '../../src/immutable-core.js';
 import { InstallOrchestrator, NodeCurrentReleaseBuilder } from '../../src/orchestration.js';
 import {
@@ -214,28 +229,33 @@ async function prepareSimulation(
   const native = new FakeJsonResourceStore(existing ? { [terminalTarget]: terminalSettings } : {});
   const piNativeSettings = new NodePiNativeSettingsPort();
   let runtimeRegistrations!: ReturnType<typeof createRuntimeRegistrationMatrix>;
-  const adapter = new ProductionInstallerOperationAdapter(environment, 'DOMAIN\\me', {
-    files: new NodeBinaryFileSystem(),
-    resources: native,
-    piNativeSettings,
-    runtimeRegistrations: {
-      inspect: async () => ({
-        observations: runtimeRegistrations.registrations.map(
-          ({ identity, executable, projection }) => ({ identity, executable, projection }),
-        ),
-        nativeRootProbes: runtimeRegistrations.registrations.map((item) => ({
-          identity: item.identity,
-          runtime: item.runtime,
-          domain: item.domain,
-          nativeRootDigest: item.nativeRootDigest,
-          status: 'available' as const,
-        })),
-        mcpSharing: Object.fromEntries(
-          runtimeRegistrations.registrations.map((item) => [item.identity, item.routes.mcpSharing]),
-        ) as never,
-      }),
-    },
-  });
+  const createAdapter = () =>
+    new ProductionInstallerOperationAdapter(environment, 'DOMAIN\\me', {
+      files: new NodeBinaryFileSystem(),
+      resources: native,
+      piNativeSettings,
+      runtimeRegistrations: {
+        inspect: async (requested) => ({
+          observations: requested.runtimeRegistrations!.registrations.map(
+            ({ identity, executable, projection }) => ({ identity, executable, projection }),
+          ),
+          nativeRootProbes: runtimeRegistrations.registrations.map((item) => ({
+            identity: item.identity,
+            runtime: item.runtime,
+            domain: item.domain,
+            nativeRootDigest: item.nativeRootDigest,
+            status: 'available' as const,
+          })),
+          mcpSharing: Object.fromEntries(
+            runtimeRegistrations.registrations.map((item) => [
+              item.identity,
+              item.routes.mcpSharing,
+            ]),
+          ) as never,
+        }),
+      },
+    });
+  const adapter = createAdapter();
   const store = new NodeTransactionStore(path.join(localAppData, 'mpx', 'installer')),
     releases = new NodeCurrentReleaseBuilder({
       repositoryRoot,
@@ -280,6 +300,8 @@ async function prepareSimulation(
   };
   return {
     root,
+    environment,
+    createAdapter,
     repositoryRoot,
     appsRoot,
     appData,
@@ -695,3 +717,585 @@ it('runs clean and existing-machine production-backed simulations without live w
     rollbackSimulations: mutatingOperations.length,
   });
 }, 300_000);
+
+function projectionIntent(
+  intent: InstallIntentV1,
+  manifest: ReleaseManifestV1,
+  change: (runtime: 'claude' | 'pi', files: readonly ProjectionFileV1[]) => ProjectionFileV1[],
+): InstallIntentV1 {
+  const registrations = intent.runtimeRegistrations!.registrations.map((registration) => {
+    const files = change(registration.runtime, registration.projection.files).sort((left, right) =>
+      left.path.localeCompare(right.path),
+    );
+    return {
+      ...registration,
+      ...(registration.runtime === 'pi'
+        ? { nativePackage: createPiNativePackageRegistration(manifest) }
+        : {}),
+      projection: { ...registration.projection, files, rootDigest: installerDigest(files) },
+    };
+  });
+  const matrix = {
+    schemaVersion: 1 as const,
+    kind: 'runtime-registration-matrix' as const,
+    registrations,
+  };
+  return {
+    ...intent,
+    releaseKey: manifest.releaseKey,
+    convergenceHash: manifest.convergenceHash,
+    runtimeRegistrations: { ...matrix, matrixDigest: installerDigest(matrix) },
+  } as InstallIntentV1;
+}
+
+async function projectionUpgradeFixture() {
+  const fixture = await simulation(false);
+  const obsoleteBody = Buffer.from('old-only\r\n\0payload');
+  await writeFile(path.join(fixture.repositoryRoot, 'pi', 'obsolete.json'), obsoleteBody);
+  const oldManifest = await fixture.releases.build();
+  const oldIntent = projectionIntent(fixture.intent, oldManifest, (runtime, files) => [
+    ...files,
+    ...(runtime === 'pi'
+      ? [
+          {
+            path: 'pi/obsolete.json',
+            bytes: obsoleteBody.length,
+            sha256: createHash('sha256').update(obsoleteBody).digest('hex'),
+            role: 'licenses' as const,
+            owner: 'convergence' as const,
+          },
+        ]
+      : []),
+  ]);
+  const orchestrator = new InstallOrchestrator({
+    adapter: fixture.adapter,
+    store: fixture.store,
+    releases: fixture.releases,
+    activate: (releaseKey, prior) => activateRelease(fixture.localAppData, prior, releaseKey),
+  });
+  const oldPlan = await orchestrator.plan(oldIntent);
+  const installed = await orchestrator.apply(oldPlan, oldPlan.confirmationDigest);
+  const operations = installed.operations
+    .map((operation) => {
+      if (!operation.id.startsWith('61-projection-')) {
+        return operation;
+      }
+      const identity = operation.id.split('-').slice(2, 4).join('-');
+      const ordinal = oldIntent
+        .runtimeRegistrations!.registrations.find(
+          (registration) => registration.identity === identity,
+        )!
+        .projection.files.findIndex((file) =>
+          operation.target.endsWith(file.path.replaceAll('/', '\\')),
+        );
+      expect(ordinal).toBeGreaterThanOrEqual(0);
+      return { ...operation, id: `61-projection-${identity}-${String(ordinal).padStart(4, '0')}` };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const priorReceipt: OwnershipReceiptV1 = {
+    ...installed,
+    operations,
+    operationLocators: operations.map((operation) => {
+      const original = installed.operationLocators.find(
+        (locator) =>
+          installed.operations.find((candidate) => candidate.id === locator.operationId)?.target ===
+          operation.target,
+      )!;
+      const spec = operation.id.startsWith('61-projection-') ? { kind: 'file' } : original.spec;
+      return {
+        operationId: operation.id,
+        adapter: operation.adapter,
+        spec,
+        bindingDigest: installerDigest({ operation, spec }),
+      };
+    }),
+  };
+  await fixture.store.writeReceipt(priorReceipt);
+  const retiredPaths = [
+    'claude/agents.json',
+    'claude/hooks.json',
+    'claude/licenses.json',
+    'pi/obsolete.json',
+  ];
+  const newPath = (relative: string) =>
+    `claude/inserted/${path.basename(relative) === 'licenses.json' ? 'LICENSE' : path.basename(relative)}`;
+  for (const relative of retiredPaths) {
+    const source = path.join(fixture.repositoryRoot, relative);
+    if (relative.startsWith('claude/')) {
+      const target = path.join(fixture.repositoryRoot, newPath(relative));
+      await mkdir(path.dirname(target), { recursive: true });
+      await rename(source, target);
+    } else {
+      await rm(source);
+    }
+  }
+  const manifest = await fixture.releases.build();
+  const intent = projectionIntent(oldIntent, manifest, (_runtime, files) =>
+    files
+      .filter((file) => file.path !== 'pi/obsolete.json')
+      .map((file) => ({
+        ...file,
+        path: retiredPaths.includes(file.path) ? newPath(file.path) : file.path,
+      })),
+  );
+  const plan = await orchestrator.plan(intent);
+  const retained = plan.operations.filter(
+    (operation) =>
+      operation.id.startsWith('61-projection-') && operation.target.includes(oldIntent.releaseKey),
+  );
+  const preserved = new Map(
+    await Promise.all(
+      priorReceipt.operations
+        .filter(
+          (operation) =>
+            operation.id.startsWith('61-projection-') || operation.id.startsWith('60-projection-'),
+        )
+        .map(async (operation) => [operation.target, await readFile(operation.target)] as const),
+    ),
+  );
+  const sibling = path.join(
+    fixture.localAppData,
+    'mpx',
+    'runtime-projections',
+    oldIntent.releaseKey,
+    'claude-personal',
+    'foreign.bin',
+  );
+  await writeFile(sibling, 'foreign-sibling');
+  preserved.set(sibling, await readFile(sibling));
+  return {
+    ...fixture,
+    orchestrator,
+    priorReceipt,
+    oldIntent,
+    intent,
+    manifest,
+    plan,
+    retained,
+    preserved,
+    sibling,
+  };
+}
+
+it('reconciles ordinal inventories by logical path and retains inert historical ownership across upgrades', async () => {
+  const fixture = await projectionUpgradeFixture();
+  try {
+    const oldPayloads = fixture.priorReceipt.operations.filter((operation) =>
+      operation.id.startsWith('61-projection-'),
+    );
+    expect(oldPayloads).toHaveLength(24);
+    expect(
+      fixture.plan.operations.filter(
+        (operation) =>
+          operation.id.startsWith('61-projection-') &&
+          operation.target.includes(fixture.intent.releaseKey),
+      ),
+    ).toHaveLength(22);
+    expect(fixture.retained).toHaveLength(8);
+    const regenerated = await fixture.createAdapter().operations(
+      fixture.oldIntent,
+      {
+        schemaVersion: 1,
+        kind: 'release-manifest',
+        releaseKey: fixture.priorReceipt.releaseKey,
+        convergenceHash: fixture.priorReceipt.convergenceHash,
+        files: fixture.priorReceipt.files,
+      },
+      true,
+      fixture.priorReceipt,
+    );
+    expect(regenerated.automatic).toEqual(fixture.priorReceipt.operations);
+    for (const prior of oldPayloads) {
+      const current = fixture.plan.operations.find((operation) => operation.id === prior.id)!;
+      if (!fixture.retained.some((operation) => operation.id === current.id)) {
+        expect(
+          current.target.replace(fixture.intent.releaseKey, fixture.oldIntent.releaseKey),
+        ).toBe(prior.target);
+      } else {
+        expect(current).toEqual(prior);
+      }
+    }
+    const modifiedTimes = await Promise.all(
+      fixture.retained.map(async (operation) => (await lstat(operation.target)).mtimeMs),
+    );
+    const capture = vi.spyOn(fixture.adapter, 'capture');
+    const apply = vi.spyOn(fixture.adapter, 'apply');
+    const restore = vi.spyOn(fixture.adapter, 'restore');
+    const writes = vi.spyOn(fixture.store, 'writeTransaction');
+    const receipt = await fixture.orchestrator.apply(fixture.plan, fixture.plan.confirmationDigest);
+    const retainedIds = new Set(fixture.retained.map((operation) => operation.id));
+    for (const spy of [capture, apply, restore]) {
+      expect(spy.mock.calls.filter(([operation]) => retainedIds.has(operation.id))).toEqual([]);
+    }
+    for (const [stored] of writes.mock.calls) {
+      expect(Object.keys(stored.snapshots).some((id) => retainedIds.has(id))).toBe(false);
+      expect(stored.journal.completedOperationIds.some((id) => retainedIds.has(id))).toBe(false);
+      expect(retainedIds.has(stored.journal.inFlightOperationId ?? '')).toBe(false);
+    }
+    expect(receipt.operations.every((operation) => operation.action === 'ensure')).toBe(true);
+    const retainedLocators = receipt.operationLocators.filter(
+      (locator) => (locator.spec as { kind?: string })?.kind === 'projection-retained',
+    );
+    expect(retainedLocators).toHaveLength(8);
+    expect(
+      await Promise.all(
+        fixture.retained.map(async (operation) => (await lstat(operation.target)).mtimeMs),
+      ),
+    ).toEqual(modifiedTimes);
+    for (const [target, bytes] of fixture.preserved) {
+      expect(await readFile(target)).toEqual(bytes);
+    }
+    for (const retirement of fixture.retained.filter((operation) =>
+      operation.target.endsWith('licenses.json'),
+    )) {
+      const priorSource = retirement.target
+        .replace(
+          path.win32.join(
+            fixture.localAppData,
+            'mpx',
+            'runtime-projections',
+            fixture.oldIntent.releaseKey,
+          ),
+          path.win32.join(fixture.appsRoot, 'mpx', 'releases', fixture.oldIntent.releaseKey),
+        )
+        .replace(/\\claude-(?:personal|work)\\/u, '\\');
+      expect(await readFile(priorSource)).toEqual(fixture.preserved.get(retirement.target));
+      const identity = retirement.id.split('-').slice(2, 4).join('-');
+      const currentTarget = path.join(
+        fixture.localAppData,
+        'mpx',
+        'runtime-projections',
+        fixture.intent.releaseKey,
+        identity,
+        'claude/inserted/LICENSE',
+      );
+      expect(await readFile(currentTarget)).toEqual(fixture.preserved.get(retirement.target));
+    }
+    await rm(path.join(fixture.appsRoot, 'mpx', 'releases', fixture.oldIntent.releaseKey), {
+      recursive: true,
+    });
+    const restarted = new InstallOrchestrator({
+      adapter: fixture.createAdapter(),
+      store: fixture.store,
+      releases: fixture.releases,
+    });
+    const rerun = await restarted.plan(fixture.intent);
+    expect(rerun.operations).toEqual(receipt.operations);
+    expect(rerun.operations.every((operation) => operation.action === 'ensure')).toBe(true);
+    await restarted.apply(rerun, rerun.confirmationDigest);
+    await expect(restarted.verify(true)).resolves.toMatchObject({ healthy: true });
+    await writeFile(
+      path.join(fixture.repositoryRoot, 'bin/mpx.mjs'),
+      'export const nextRelease = true;\n',
+    );
+    const nextManifest = await fixture.releases.build();
+    const nextIntent = projectionIntent(fixture.intent, nextManifest, (_runtime, files) => [
+      ...files,
+    ]);
+    const nextPlan = await restarted.plan(nextIntent);
+    expect(nextPlan.operations.every((operation) => operation.action === 'ensure')).toBe(true);
+    expect(nextPlan.operations.map((operation) => operation.id)).toEqual(
+      receipt.operations.map((operation) => operation.id),
+    );
+    const nextReceipt = await restarted.apply(nextPlan, nextPlan.confirmationDigest);
+    expect(
+      nextReceipt.operationLocators.filter((locator) => retainedIds.has(locator.operationId)),
+    ).toEqual(retainedLocators);
+    await expect(restarted.verify(true)).resolves.toMatchObject({ healthy: true });
+    const returning = fixture.retained.find((operation) =>
+      operation.target.endsWith('obsolete.json'),
+    )!;
+    const returningBytes = fixture.preserved.get(returning.target)!;
+    await writeFile(path.join(fixture.repositoryRoot, 'pi', 'obsolete.json'), returningBytes);
+    const returnManifest = await fixture.releases.build();
+    const returnIntent = projectionIntent(nextIntent, returnManifest, (runtime, files) => [
+      ...files,
+      ...(runtime === 'pi'
+        ? [
+            {
+              path: 'pi/obsolete.json',
+              bytes: returningBytes.length,
+              sha256: returning.desiredDigest!,
+              role: 'licenses' as const,
+              owner: 'convergence' as const,
+            },
+          ]
+        : []),
+    ]);
+    const returnPlan = await restarted.plan(returnIntent);
+    expect(returnPlan.operations.find((operation) => operation.id === returning.id)).toEqual({
+      ...returning,
+      target: returning.target.replace(fixture.oldIntent.releaseKey, returnIntent.releaseKey),
+    });
+    await restarted.apply(returnPlan, returnPlan.confirmationDigest);
+    await expect(restarted.verify(true)).resolves.toMatchObject({ healthy: true });
+    expect(await readFile(returning.target)).toEqual(returningBytes);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it.each(['mutation', 'verification', 'activation'])(
+  'rolls back only changed resources while preserving external retained drift during %s',
+  async (phase) => {
+    const fixture = await projectionUpgradeFixture();
+    const selector = path.join(fixture.localAppData, 'mpx', 'active-release');
+    const selectorBefore = await readFile(selector);
+    const retained = fixture.retained[0]!;
+    const replacement = Buffer.from('foreign retained replacement');
+    const restore = vi.spyOn(fixture.adapter, 'restore');
+    const capture = vi.spyOn(fixture.adapter, 'capture');
+    const originalApply = fixture.adapter.apply.bind(fixture.adapter);
+    const apply = vi.spyOn(fixture.adapter, 'apply').mockImplementation(async (operation) => {
+      await originalApply(operation);
+      if (phase !== 'activation') {
+        await writeFile(retained.target, replacement);
+        if (phase === 'mutation') {
+          throw new Error('injected-after-mutation');
+        }
+      }
+    });
+    const activation = vi.fn(async (releaseKey: string, prior: string | null) => {
+      const rollback = await activateRelease(fixture.localAppData, prior, releaseKey);
+      if (phase === 'activation') {
+        await writeFile(retained.target, replacement);
+      }
+      return rollback;
+    });
+    try {
+      const orchestrator = new InstallOrchestrator({
+        adapter: fixture.adapter,
+        store: fixture.store,
+        releases: fixture.releases,
+        activate: activation,
+      });
+      await expect(
+        orchestrator.apply(fixture.plan, fixture.plan.confirmationDigest),
+      ).rejects.toThrow();
+      expect(await readFile(retained.target)).toEqual(replacement);
+      expect(await fixture.store.readReceipt()).toEqual(fixture.priorReceipt);
+      expect(await readFile(selector)).toEqual(selectorBefore);
+      expect(restore.mock.calls.length).toBeGreaterThan(0);
+      for (const spy of [capture, apply, restore]) {
+        expect(
+          spy.mock.calls.filter(([operation]) =>
+            fixture.retained.some((candidate) => candidate.id === operation.id),
+          ),
+        ).toEqual([]);
+      }
+      expect(activation).toHaveBeenCalledTimes(phase === 'activation' ? 1 : 0);
+    } finally {
+      vi.restoreAllMocks();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);
+
+it('rejects missing, changed, linked and forged retained ownership without touching siblings or native files', async () => {
+  const fixture = await projectionUpgradeFixture();
+  try {
+    const retire = fixture.retained[0]!;
+    const bytes = fixture.preserved.get(retire.target)!;
+    const survivor = fixture.priorReceipt.operations.find(
+      (operation) =>
+        operation.id.startsWith('61-projection-') &&
+        !fixture.retained.some((candidate) => candidate.id === operation.id),
+    )!;
+    await rm(survivor.target);
+    await expect(
+      new ImmutableInstallerService({
+        adapters: [fixture.adapter],
+        store: fixture.store,
+        manifest: fixture.manifest,
+      }).apply(fixture.plan, fixture.plan.confirmationDigest),
+    ).rejects.toMatchObject({ code: 'INSTALL_FOREIGN_OR_DRIFTED' });
+    await writeFile(survivor.target, fixture.preserved.get(survivor.target)!);
+    await rm(retire.target);
+    await expect(
+      fixture.orchestrator.apply(fixture.plan, fixture.plan.confirmationDigest),
+    ).rejects.toThrow();
+    await writeFile(retire.target, 'tampered');
+    await expect(fixture.adapter.apply(retire)).rejects.toMatchObject({
+      code: 'INSTALL_FOREIGN_OR_DRIFTED',
+    });
+    await expect(fixture.adapter.restore(retire, bytes.toString('base64'))).rejects.toMatchObject({
+      code: 'INSTALL_TRANSACTION_INVALID',
+    });
+    expect(await readFile(retire.target, 'utf8')).toBe('tampered');
+    await writeFile(retire.target, bytes);
+    const modified = (await lstat(retire.target)).mtimeMs;
+    await fixture.adapter.apply(retire);
+    expect((await lstat(retire.target)).mtimeMs).toBe(modified);
+    const locator = (await fixture.adapter.receiptLocator(retire)) as Record<string, unknown>;
+    const newPayload = fixture.plan.operations.find(
+      (operation) =>
+        operation.id.startsWith('61-projection-claude-personal-') &&
+        !fixture.priorReceipt.operations.some((prior) => prior.id === operation.id),
+    )!;
+    const collidingPrior = fixture.priorReceipt.operations.find((operation) =>
+      operation.id.startsWith('61-projection-claude-personal-'),
+    )!;
+    const collisionOperations = fixture.priorReceipt.operations
+      .map((operation) =>
+        operation.id === collidingPrior.id ? { ...operation, id: newPayload.id } : operation,
+      )
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const collisionReceipt = {
+      ...fixture.priorReceipt,
+      operations: collisionOperations,
+      operationLocators: collisionOperations.map((operation) => {
+        const priorId = operation.id === newPayload.id ? collidingPrior.id : operation.id;
+        const spec = fixture.priorReceipt.operationLocators.find(
+          (candidate) => candidate.operationId === priorId,
+        )!.spec;
+        return {
+          operationId: operation.id,
+          adapter: operation.adapter,
+          spec,
+          bindingDigest: installerDigest({ operation, spec }),
+        };
+      }),
+    };
+    await expect(
+      fixture.createAdapter().operations(fixture.intent, fixture.manifest, false, collisionReceipt),
+    ).rejects.toMatchObject({ code: 'INSTALL_OPERATION_DUPLICATE' });
+    const cases = [
+      { ...retire, target: fixture.fixtureFiles[0]! },
+      { ...retire, target: fixture.sibling },
+      { ...retire, target: path.join(fixture.root, 'outside.bin') },
+      { ...retire, id: '60-projection-claude-personal-descriptor' },
+      { ...retire, id: '50-pi-settings-personal' },
+      { ...retire, desiredDigest: 'a'.repeat(64) },
+    ];
+    for (const operation of cases) {
+      await expect(
+        fixture.createAdapter().hydrateReceiptOperation(operation, locator, fixture.priorReceipt),
+      ).rejects.toThrow();
+    }
+    for (const forgedLocator of [
+      { ...locator, unexpected: true },
+      { ...locator, file: { ...(locator.file as object), sha256: 'a'.repeat(64) } },
+      { ...locator, file: { ...(locator.file as object), bytes: -1 } },
+      { ...locator, projection: { ...(locator.projection as object), releaseKey: 'a'.repeat(64) } },
+      { ...locator, projection: { ...(locator.projection as object), identity: 'pi-work' } },
+      {
+        ...locator,
+        projection: { ...(locator.projection as object), relativePath: '../foreign.bin' },
+      },
+    ]) {
+      await expect(
+        fixture
+          .createAdapter()
+          .hydrateReceiptOperation(retire, forgedLocator, fixture.priorReceipt),
+      ).rejects.toThrow();
+    }
+    const receiptWithoutMembership = {
+      ...fixture.priorReceipt,
+      files: fixture.priorReceipt.files.filter(
+        (file) => !retire.target.endsWith(file.path.replaceAll('/', '\\')),
+      ),
+    };
+    await expect(
+      fixture.createAdapter().hydrateReceiptOperation(retire, locator, receiptWithoutMembership),
+    ).rejects.toThrow();
+    const ancestor = path.dirname(retire.target);
+    const redirected = `${ancestor}-redirected`;
+    await rename(ancestor, redirected);
+    if (process.platform === 'win32') {
+      await promisify(execFile)(
+        'cmd.exe',
+        ['/d', '/s', '/c', 'mklink', '/J', ancestor, redirected],
+        { windowsVerbatimArguments: true },
+      );
+    } else {
+      const { symlink } = await import('node:fs/promises');
+      await symlink(redirected, ancestor, 'dir');
+    }
+    try {
+      await expect(fixture.adapter.observe(retire)).rejects.toMatchObject({
+        code: 'INSTALL_TARGET_UNSAFE',
+      });
+      await expect(fixture.adapter.apply(retire)).rejects.toMatchObject({
+        code: 'INSTALL_TARGET_UNSAFE',
+      });
+      expect(await readFile(path.join(redirected, path.basename(retire.target)))).toEqual(bytes);
+    } finally {
+      await rm(ancestor);
+      await rename(redirected, ancestor);
+    }
+    const hardlink = path.join(fixture.root, 'hardlink.bin');
+    await link(retire.target, hardlink);
+    await expect(fixture.adapter.apply(retire)).rejects.toMatchObject({
+      code: 'INSTALL_TARGET_UNSAFE',
+    });
+    await rm(hardlink);
+    for (const [target, original] of fixture.preserved) {
+      expect(await readFile(target)).toEqual(original);
+    }
+    for (const [index, target] of fixture.fixtureFiles.entries()) {
+      expect(await readFile(target)).toEqual(fixture.before[index]);
+    }
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it('validates retained observations under the apply lock before capture and never reconstructs missing historical bytes', async () => {
+  const fixture = await projectionUpgradeFixture();
+  try {
+    const retained = fixture.retained[0]!;
+    const capture = vi.spyOn(fixture.adapter, 'capture');
+    const apply = vi.spyOn(fixture.adapter, 'apply');
+    const service = new ImmutableInstallerService({
+      adapters: [fixture.adapter],
+      store: fixture.store,
+      manifest: fixture.manifest,
+      beforeApply: async () => {
+        await writeFile(retained.target, 'changed-under-lock');
+      },
+    });
+    await expect(
+      service.apply(fixture.plan, fixture.plan.confirmationDigest),
+    ).rejects.toMatchObject({ code: 'INSTALL_FOREIGN_OR_DRIFTED' });
+    expect(capture).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    expect(await readFile(retained.target, 'utf8')).toBe('changed-under-lock');
+    await writeFile(retained.target, fixture.preserved.get(retained.target)!);
+    const receipt = await fixture.orchestrator.apply(fixture.plan, fixture.plan.confirmationDigest);
+    await rm(path.join(fixture.appsRoot, 'mpx', 'releases', fixture.oldIntent.releaseKey), {
+      recursive: true,
+    });
+    const locator = receipt.operationLocators.find(
+      (candidate) => candidate.operationId === retained.id,
+    )!.spec;
+    await fixture.createAdapter().hydrateReceiptOperation(retained, locator);
+    const inputPath = path.join(fixture.root, 'retained-input.json');
+    await writeFile(
+      inputPath,
+      JSON.stringify({ environment: fixture.environment, operation: retained, locator }),
+    );
+    const run = () =>
+      promisify(execFile)(process.execPath, [
+        path.resolve(import.meta.dirname, '../fixtures/projection-retention-process.mjs'),
+        inputPath,
+      ]);
+    expect(JSON.parse((await run()).stdout)).toEqual({ digest: retained.desiredDigest });
+    await writeFile(retained.target, 'tampered-without-source');
+    await expect(run()).rejects.toMatchObject({
+      stderr: expect.stringContaining('Retained projection is changed'),
+    });
+    expect(await readFile(retained.target, 'utf8')).toBe('tampered-without-source');
+    await rm(retained.target);
+    await expect(
+      fixture.createAdapter().hydrateReceiptOperation(retained, locator),
+    ).rejects.toMatchObject({ code: 'INSTALL_FOREIGN_OR_DRIFTED' });
+    await expect(run()).rejects.toMatchObject({
+      stderr: expect.stringContaining('Retained projection is missing'),
+    });
+    await expect(readFile(retained.target)).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally {
+    vi.restoreAllMocks();
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+}, 60_000);

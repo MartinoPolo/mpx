@@ -264,7 +264,7 @@ interface PiSettingsRootInspection {
   readonly settings: unknown | undefined;
 }
 
-async function inspectPiSettingsRoot(
+export async function inspectPiSettingsRoot(
   nativeSettings: PiNativeSettingsPort,
   root: string,
 ): Promise<PiSettingsRootInspection> {
@@ -354,7 +354,7 @@ function releaseBinding(
   };
 }
 
-function parsePiSettingsLocator(value: unknown): PiSettingsLocator {
+export function parsePiSettingsLocator(value: unknown): PiSettingsLocator {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('locator');

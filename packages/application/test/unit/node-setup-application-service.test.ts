@@ -32,9 +32,14 @@ async function makeFileLink(target: string, destination: string): Promise<void> 
   }
 }
 import type { UserConfig } from '@mpx/config';
-import { INSTALL_EXECUTABLE_MAX_BYTES } from '@mpx/installer';
+import {
+  INSTALL_EXECUTABLE_MAX_BYTES,
+  installerDigest,
+  type InstallIntentV1,
+} from '@mpx/installer';
 import {
   NodeSetupRequestFactory,
+  createNodeCurrentInstallationProbe,
   resolvePiDetachConfig,
 } from '../../src/node/setup-application-service.js';
 
@@ -272,6 +277,56 @@ it('rejects a symlink configuration with a fixed redacted error', async () => {
     message: 'Setup configuration is invalid or unreadable.',
   });
 });
+
+it.each([false, true])(
+  'probes real and legacy-linked settings without hiding canonical package evidence (linked = %s)',
+  async (linked) => {
+    const value = await requestFixture();
+    const content = await readFile(value.configFile, 'utf8');
+    const nativeRoot = path.join(value.environment.USERPROFILE, '.pi', 'agent');
+    const source = path.join(value.root, 'legacy-settings.json');
+    const settings = { packages: ['@mpx/pi-extensions'], unrelated: true };
+    await mkdir(nativeRoot, { recursive: true });
+    if (linked) {
+      await writeFile(source, JSON.stringify(settings));
+      await makeFileLink(source, path.join(nativeRoot, 'settings.json'));
+    } else {
+      await writeFile(path.join(nativeRoot, 'settings.json'), JSON.stringify(settings));
+    }
+    const intent = {
+      userConfigArtifact: { content },
+      runtimeRegistrations: {
+        registrations: [
+          {
+            runtime: 'pi',
+            identity: 'pi-personal',
+            domain: 'personal',
+            nativeRootDigest: installerDigest(
+              path.win32
+                .normalize(nativeRoot)
+                .replace(/[\\]+$/u, '')
+                .toLowerCase(),
+            ),
+          },
+        ],
+      },
+    } as unknown as InstallIntentV1;
+    const probe = createNodeCurrentInstallationProbe(value.environment);
+    const emptyArtifacts = path.join(value.root, 'mpx', 'runtime-projections', 'rolled-back');
+    await mkdir(emptyArtifacts, { recursive: true });
+    await expect(probe.observe(intent)).resolves.toMatchObject({
+      selectedReleaseKey: null,
+      hasArtifacts: false,
+      piRoots: [{ settings }],
+    });
+    await writeFile(path.join(emptyArtifacts, 'partial.json'), '{}');
+    await expect(probe.observe(intent)).resolves.toMatchObject({ hasArtifacts: true });
+    await writeFile(path.join(value.root, 'mpx', 'active-release'), 'malformed-selector');
+    await expect(probe.observe(intent)).rejects.toMatchObject({
+      code: 'INSTALL_SELECTOR_UNAVAILABLE',
+    });
+  },
+);
 
 it.runIf(process.platform === 'win32')(
   'uses the real default process port for a trusted extensionless pi-fnm wrapper',

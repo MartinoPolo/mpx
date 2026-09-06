@@ -143,6 +143,55 @@ describe('repository-derived test taxonomy', () => {
     }
   });
 
+  test('digests published output while ignoring only the Pi package verification scratch tree', async () => {
+    const fixture = await mkdtemp(path.join(tmpdir(), 'mpx-output-digests-'));
+    const workspace = 'runtimes/pi/extensions';
+    const scratch = `${workspace}/dist/.package-verify`;
+    const trackedFiles = [
+      'bin/mpx.mjs',
+      `${workspace}/dist/package/index.js`,
+      `${workspace}/dist/package/package.json`,
+      `${workspace}/dist/.package-staging/index.js`,
+      `${workspace}/dist/.package-backup/index.js`,
+      `${workspace}/dist/package/.package-verify/index.js`,
+      'packages/example/dist/.package-verify/index.js',
+    ];
+    try {
+      await writeFile(path.join(fixture, 'package.json'), '{"name":"fixture","private":true}');
+      await writeFile(
+        path.join(fixture, 'pnpm-workspace.yaml'),
+        'packages:\n  - runtimes/pi/*\n  - packages/*\n',
+      );
+      for (const directory of [workspace, 'packages/example']) {
+        await mkdir(path.join(fixture, directory), { recursive: true });
+        await writeFile(
+          path.join(fixture, directory, 'package.json'),
+          JSON.stringify({ name: path.basename(directory) }),
+        );
+      }
+      for (const file of [...trackedFiles, `${scratch}/nested/index.js`]) {
+        await mkdir(path.dirname(path.join(fixture, file)), { recursive: true });
+        await writeFile(path.join(fixture, file), 'original');
+      }
+      const before = await repositoryOutputDigests(fixture);
+      expect(Object.keys(before).sort()).toEqual([...trackedFiles].sort());
+      await writeFile(path.join(fixture, scratch, 'nested/index.js'), 'changed');
+      await writeFile(path.join(fixture, scratch, 'package.json'), '{}');
+      expect(await repositoryOutputDigests(fixture)).toEqual(before);
+      await rm(path.join(fixture, scratch), { recursive: true });
+      expect(await repositoryOutputDigests(fixture)).toEqual(before);
+      for (const file of trackedFiles) {
+        await writeFile(path.join(fixture, file), 'changed');
+        const after = await repositoryOutputDigests(fixture);
+        expect(after[file], file).not.toBe(before[file]);
+        expect(after).toEqual({ ...before, [file]: after[file] });
+        await writeFile(path.join(fixture, file), 'original');
+      }
+    } finally {
+      await rm(fixture, { recursive: true, force: true });
+    }
+  });
+
   test('fails closed for overlapping definitions and incidental category words', () => {
     const overlapping = {
       unit: ['tests/**/*.test.ts'],

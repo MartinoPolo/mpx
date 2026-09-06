@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ImmutableInstallerService,
   MemoryTransactionStore,
@@ -129,6 +129,65 @@ const intent: InstallIntentV1 = {
 };
 
 describe('durable installer transaction state', () => {
+  it.each(['ensure', 'remove'] as const)(
+    'skips capture and mutation state for unchanged %s after locked observation validation',
+    async (action) => {
+      const adapter = new RetainingAdapter();
+      const store = new MemoryTransactionStore();
+      const releaseKey = installerDigest([]);
+      const operation: InstallOperationV1 = {
+        id: 'owned',
+        adapter: adapter.name,
+        action,
+        target: 'owned',
+        desiredDigest: action === 'ensure' ? 'b'.repeat(64) : null,
+      };
+      if (action === 'ensure') {
+        adapter.values.set(operation.target, operation.desiredDigest!);
+      }
+      const service = new ImmutableInstallerService({
+        adapters: [adapter],
+        store,
+        manifest: {
+          schemaVersion: 1,
+          kind: 'release-manifest',
+          releaseKey,
+          convergenceHash: releaseKey,
+          files: [],
+        },
+      });
+      const capture = vi.spyOn(adapter, 'capture');
+      const apply = vi.spyOn(adapter, 'apply');
+      const restore = vi.spyOn(adapter, 'restore');
+      const plan = await service.plan({ ...intent, releaseKey, convergenceHash: releaseKey }, [
+        operation,
+      ]);
+      await service.apply(plan, plan.confirmationDigest);
+      const stored = (await store.readTransaction())!;
+      expect(stored.operations).toEqual([operation]);
+      expect(stored.operationLocators).toHaveLength(1);
+      expect(stored.snapshots).toEqual({});
+      expect(stored.journal.completedOperationIds).toEqual([]);
+      expect(stored.journal.inFlightOperationId).toBeUndefined();
+      await service.rollback();
+      for (const spy of [capture, apply, restore]) {
+        expect(spy).not.toHaveBeenCalled();
+      }
+      const drifted = new ImmutableInstallerService({
+        adapters: [adapter],
+        store,
+        beforeApply: async () => {
+          adapter.values.set(operation.target, 'c'.repeat(64));
+        },
+      });
+      await expect(drifted.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({
+        code: 'INSTALL_OBSERVATION_CHANGED',
+      });
+      expect(capture).not.toHaveBeenCalled();
+      expect(apply).not.toHaveBeenCalled();
+    },
+  );
+
   it('atomically persists private receipts and in-flight snapshots across process instances', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-installer-state-'));
     const store = new NodeTransactionStore(root);

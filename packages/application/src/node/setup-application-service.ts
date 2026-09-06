@@ -1,10 +1,16 @@
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, open, realpath } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { parseUserConfig, type UserConfig } from '@mpx/config';
-import { MpxError } from '@mpx/core';
+import { MpxError, parseStrictJson } from '@mpx/core';
 import {
   INSTALL_EXECUTABLE_MAX_BYTES,
+  inspectPiSettingsRoot,
+  NodePiNativeSettingsPort,
+  UserConfigPiPrivateRootResolver,
+  readActiveRelease,
+  parsePiSettings,
+  type CurrentInstallationProbe,
   PiLegacyDetachService,
   type InstallIntentBuilder,
   type InstallIntentRequestV1,
@@ -331,10 +337,94 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
   }
 }
 
+async function exists(target: string): Promise<boolean> {
+  try {
+    await lstat(target);
+    return true;
+  } catch (failure) {
+    if ((failure as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw failure;
+  }
+}
+
+async function containsInstallationArtifact(target: string): Promise<boolean> {
+  if (!(await exists(target))) {
+    return false;
+  }
+  const info = await lstat(target);
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    return true;
+  }
+  for (const name of await readdir(target)) {
+    if (await containsInstallationArtifact(path.join(target, name))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function createNodeCurrentInstallationProbe(
+  environment: NodeJS.ProcessEnv,
+): CurrentInstallationProbe {
+  const localAppData = absoluteEnvironment(environment, 'LOCALAPPDATA');
+  const nativeSettings = new NodePiNativeSettingsPort();
+  const privateRoots = new UserConfigPiPrivateRootResolver(environment);
+  return {
+    async observe(intent) {
+      const selectedReleaseKey = (await exists(path.join(localAppData, 'mpx', 'active-release')))
+        ? await readActiveRelease(localAppData)
+        : null;
+      const hasArtifacts = (
+        await Promise.all(
+          [
+            ...['installer/registrations', 'runtime-projections'].map((relative) =>
+              path.join(localAppData, 'mpx', relative),
+            ),
+            path.join(absoluteEnvironment(environment, 'MPX_APPS'), 'mpx', 'bin'),
+          ].map(containsInstallationArtifact),
+        )
+      ).some(Boolean);
+      const piRoots = [];
+      for (const registration of intent.runtimeRegistrations?.registrations ?? []) {
+        if (registration.runtime !== 'pi') {
+          continue;
+        }
+        const root = await privateRoots.resolvePiNativeRoot({
+          identity: registration.identity,
+          expectedNativeRootDigest: registration.nativeRootDigest,
+          ...(intent.userConfigArtifact
+            ? { userConfigArtifactContent: intent.userConfigArtifact.content }
+            : {}),
+        });
+        const settingsPath = path.join(root, 'settings.json');
+        const legacyLink =
+          (await exists(settingsPath)) && (await lstat(settingsPath)).isSymbolicLink();
+        const settings = legacyLink
+          ? parsePiSettings(
+              parseStrictJson((await nativeSettings.read(settingsPath)).toString('utf8')),
+            )
+          : (await inspectPiSettingsRoot(nativeSettings, root)).settings;
+        piRoots.push({
+          identity: registration.identity,
+          domain: registration.domain,
+          nativeRootDigest: registration.nativeRootDigest,
+          settings,
+        });
+      }
+      return { selectedReleaseKey, hasArtifacts, piRoots };
+    },
+  };
+}
+
 export function createNodeSetupApplicationService(dependencies: {
   readonly environment: NodeJS.ProcessEnv;
   readonly builder: Pick<InstallIntentBuilder, 'build'>;
-  readonly orchestrator: Pick<InstallOrchestrator, 'plan' | 'apply' | 'verify'>;
+  readonly orchestrator: Pick<
+    InstallOrchestrator,
+    'admitCurrentInstallation' | 'plan' | 'apply' | 'verify'
+  >;
   readonly processPort?: SetupProcessPort;
 }): SetupApplicationService {
   const requestFactory = new NodeSetupRequestFactory(
@@ -344,9 +434,15 @@ export function createNodeSetupApplicationService(dependencies: {
   const projectsRoot = absoluteEnvironment(dependencies.environment, 'MPX_PROJECTS');
   const localAppData = absoluteEnvironment(dependencies.environment, 'LOCALAPPDATA');
   return new SetupApplicationService({
-    requestFactory,
+    requestFactory: {
+      create: async () => {
+        await ensurePrivateStateRoot(localAppData);
+        return requestFactory.create();
+      },
+    },
     builder: dependencies.builder,
     orchestrator: dependencies.orchestrator,
+    installationProbe: createNodeCurrentInstallationProbe(dependencies.environment),
     localReset: {
       run: async () => {
         await ensurePrivateStateRoot(localAppData);
