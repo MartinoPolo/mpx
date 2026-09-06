@@ -255,23 +255,33 @@ describe('repository-derived test taxonomy', () => {
 describe('final workspace and root command contracts', () => {
   test('gives every workspace its final Vitest, tsconfig, and package-script contract', async () => {
     for (const workspace of workspaceRoots) {
+      const production = await json(`${workspace}/tsconfig.json`);
+      const tests = await json(`${workspace}/tsconfig.test.json`);
+      const manifest = await json(`${workspace}/package.json`);
+      if (workspace === 'runtimes/pi/extensions') {
+        expect(production.include, workspace).toEqual(['**/*.ts']);
+        expect(production.exclude, workspace).toEqual(['**/*.test.ts', 'dist/**', 'test/**']);
+        expect(tests.compilerOptions.noEmit, workspace).toBe(true);
+        expect(tests.include, workspace).toEqual(['**/*.ts']);
+        expect(tests.exclude, workspace).toEqual(['dist/**']);
+        expect(manifest.scripts.build, workspace).toBe('node scripts/run.mjs build');
+        expect(manifest.scripts['test:unit'], workspace).toBe('node scripts/run.mjs test');
+        expect(manifest.scripts.typecheck, workspace).toBe('node scripts/run.mjs typecheck');
+        expect(manifest.scripts.check, workspace).not.toContain('vitest run');
+        continue;
+      }
       const vitest = await import(path.join(root, workspace, 'vitest.config.ts'));
       expect(vitest.default.test.include, workspace).toEqual([
         'test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
       ]);
-      const production = await json(`${workspace}/tsconfig.json`);
       expect(production.include, workspace).toEqual(['src/**/*.ts']);
       expect(production.exclude, workspace).toEqual(
         expect.arrayContaining(['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/fixtures/**']),
       );
-      const tests = await json(`${workspace}/tsconfig.test.json`);
       expect(tests.compilerOptions.noEmit, workspace).toBe(true);
       expect(tests.include, workspace).toEqual(['src/**/*.ts', 'test/**/*.ts']);
       expect(tests.exclude, workspace).toEqual([]);
-      const manifest = await json(`${workspace}/package.json`);
-      expect(manifest.scripts.build, workspace).toBe(
-        workspace === 'apps/cli' ? 'tsc -p tsconfig.json' : 'tsc -p tsconfig.json',
-      );
+      expect(manifest.scripts.build, workspace).toBe('tsc -p tsconfig.json');
       expect(manifest.scripts['test:unit'], workspace).toBe(
         `pnpm --filter ${manifest.name}... build && vitest run`,
       );
