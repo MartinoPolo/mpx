@@ -7,7 +7,6 @@
   "types": "./dist/index.d.ts",
   "exports": "./dist/index.js",
   "dependencies": {
-    "@mpx/executors": "workspace:*",
     "@mpx/windows": "workspace:*"
   },
   "scripts": {

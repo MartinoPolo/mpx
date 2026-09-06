@@ -77,9 +77,6 @@ importers:
       '@mpx/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mpx/dev-services':
-        specifier: workspace:*
-        version: link:../../packages/dev-services
       '@mpx/executors':
         specifier: workspace:*
         version: link:../../packages/executors
@@ -239,9 +236,6 @@ importers:
 
   packages/dev-services:
     dependencies:
-      '@mpx/executors':
-        specifier: workspace:*
-        version: link:../executors
       '@mpx/windows':
         specifier: workspace:*
         version: link:../windows
