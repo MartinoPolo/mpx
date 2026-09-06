@@ -39,7 +39,7 @@ export async function createNodeProviderService(
   dependencies: NodeProviderCompositionDependencies,
   config: ProjectConfig,
   cwd: string,
-  selection?: { providerId: string; capability: string },
+  selection: { providerId: string; capability: string },
 ): Promise<NodeProviderInvoker> {
   if (dependencies.providerService) {
     return dependencies.providerService;

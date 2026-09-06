@@ -35,31 +35,41 @@ it('binds production GitHub and GitLab adapters to the resolved project root', a
   });
   const cwd = path.resolve('C:/resolved/project');
   const resolve = vi.fn(async () => 'github.example/remote-owner/remote-repository');
-  const service = await providerService(
-    { env: {}, providerProcessExecutor: { execute }, repositorySelectorResolver: { resolve } },
-    {
-      schemaVersion: 1,
-      project: { id: 'must-not-be-used/as-selector' },
-      repository: { provider: 'github', remote: 'upstream' },
-      issues: { provider: 'github' },
-    } as ProjectConfig,
-    cwd,
-  );
+  const dependencies = {
+    env: {},
+    providerProcessExecutor: { execute },
+    repositorySelectorResolver: { resolve },
+  };
+  const config = {
+    schemaVersion: 1,
+    project: { id: 'must-not-be-used/as-selector' },
+    repository: { provider: 'github', remote: 'upstream' },
+    issues: { provider: 'github' },
+  } as ProjectConfig;
+  const githubService = await providerService(dependencies, config, cwd, {
+    providerId: 'github',
+    capability: 'issue.list',
+  });
+  const gitlabService = await providerService(dependencies, config, cwd, {
+    providerId: 'gitlab',
+    capability: 'issue.list',
+  });
 
-  await service.invoke({
+  await githubService.invoke({
     providerId: 'github',
     capability: 'issue.list',
     route: 'work-gh',
     input: {},
   });
-  await service.invoke({
+  await gitlabService.invoke({
     providerId: 'gitlab',
     capability: 'issue.list',
     route: 'work-gl',
     input: {},
   });
 
-  expect(resolve).toHaveBeenCalledWith({ root: cwd, remote: 'upstream' });
+  expect(resolve).toHaveBeenNthCalledWith(1, { root: cwd, remote: 'upstream' });
+  expect(resolve).toHaveBeenNthCalledWith(2, { root: cwd, remote: 'upstream' });
   expect(requests).toEqual([
     {
       argv: [
@@ -453,6 +463,9 @@ it('preserves safe Gerrit SSH users and ports while supporting standard remote f
   expect(parseGerritRepositoryUrl('https://review.example/team/platform/service.git')).toBe(
     'review.example/team/platform/service',
   );
+  expect(parseGerritRepositoryUrl('https://review.example:8443/team/platform/service.git')).toBe(
+    'review.example/team/platform/service',
+  );
 });
 
 it('rejects unsafe Gerrit SSH usernames and ports without weakening forge selectors', () => {
@@ -572,6 +585,47 @@ it('classifies SSH public-key denial as authentication failure without confusing
     exitCode: 255,
     stdout: '',
     stderr: 'ssh: connect to host review.example port 22: Connection timed out',
+  });
+});
+
+it.each([
+  "fatal: Authentication failed for 'https://review.example/team/platform/service.git'",
+  "fatal: Authentication failed for 'ssh://git@review.example/team/platform/service.git': Permission denied (publickey).",
+  "fatal: could not read Username for 'https://review.example/team/platform/service.git': terminal prompts disabled",
+  'remote: HTTP Basic: Access denied',
+  "fatal: unable to access 'https://review.example/team/platform/service.git/': The requested URL returned error: 401",
+  "fatal: unable to access 'https://review.example/team/platform/service.git/': The requested URL returned error: 403",
+])('classifies git transport authentication diagnostics as auth', (stderr) => {
+  expect(
+    classifyProviderProcessResult(
+      Object.assign(new Error('git'), { code: 128 }),
+      '',
+      stderr,
+      [],
+      'git',
+    ),
+  ).toEqual({
+    exitCode: 128,
+    stdout: '',
+    stderr,
+    failure: 'auth',
+  });
+});
+
+it('keeps non-auth git transport failures unclassified', () => {
+  expect(
+    classifyProviderProcessResult(
+      Object.assign(new Error('git'), { code: 128 }),
+      '',
+      "fatal: unable to access 'https://review.example/team/platform/service.git/': Failed to connect to review.example port 443 after 0 ms: Connection refused",
+      [],
+      'git',
+    ),
+  ).toEqual({
+    exitCode: 128,
+    stdout: '',
+    stderr:
+      "fatal: unable to access 'https://review.example/team/platform/service.git/': Failed to connect to review.example port 443 after 0 ms: Connection refused",
   });
 });
 

@@ -68,27 +68,29 @@ export async function runProviderCommand<T = string>(
       ...(request.stdin === undefined ? {} : { stdin: request.stdin }),
     });
   } catch (error) {
-    const missing =
-      typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
-    const ambiguousMutation = request.mutation === true && !missing;
+    const code =
+      typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
+    const missing = code === 'ENOENT';
+    const preflightFailure = code === 'EINVAL' || code === 'EACCES';
+    const ambiguousMutation = request.mutation === true && !missing && !preflightFailure;
     throw new ProviderError(
       missing
         ? 'EXECUTABLE_MISSING'
-        : ambiguousMutation
-          ? 'MUTATION_OUTCOME_UNKNOWN'
-          : 'COMMAND_FAILURE',
+        : preflightFailure || !ambiguousMutation
+          ? 'COMMAND_FAILURE'
+          : 'MUTATION_OUTCOME_UNKNOWN',
       missing
         ? 'The provider executable is unavailable.'
-        : ambiguousMutation
-          ? 'The provider mutation outcome is unknown.'
-          : 'The provider command could not be started.',
+        : preflightFailure || !ambiguousMutation
+          ? 'The provider command could not be started.'
+          : 'The provider mutation outcome is unknown.',
       {
         retryable: !missing && !ambiguousMutation,
         remediation: missing
           ? 'Install the trusted provider executable and verify the selected route.'
-          : ambiguousMutation
-            ? 'Inspect remote state before attempting the mutation again.'
-            : 'Verify the provider route and retry.',
+          : preflightFailure || !ambiguousMutation
+            ? 'Verify the provider route and retry.'
+            : 'Inspect remote state before attempting the mutation again.',
         details: providerDetails(request.providerId),
       },
     );

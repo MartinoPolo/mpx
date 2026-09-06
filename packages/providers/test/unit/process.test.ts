@@ -102,6 +102,20 @@ describe('provider process execution', () => {
     });
   });
 
+  it('classifies mutation preflight rejections as command failures', async () => {
+    const executor: ProviderProcessExecutor = {
+      execute: async () => {
+        throw Object.assign(new Error('invalid argument'), { code: 'EINVAL' });
+      },
+    };
+    await expect(
+      runProviderCommand({ ...request, mutation: true }, executor),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILURE',
+      retryable: true,
+    });
+  });
+
   it('preserves authentication failure classification for mutating commands', async () => {
     const executor: ProviderProcessExecutor = {
       execute: async () => ({

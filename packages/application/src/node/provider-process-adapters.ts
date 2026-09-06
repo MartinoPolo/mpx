@@ -14,6 +14,10 @@ const providerProcessTimeoutMilliseconds = 120_000;
 const providerProcessMaxBufferBytes = 10 * 1024 * 1024;
 const safeRepositorySegment = /^[A-Za-z0-9_.][A-Za-z0-9._-]*$/u;
 const safeRemoteName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const sshPublicKeyDeniedPattern =
+  /(?:Permission denied \(publickey(?:,[^)]+)?\)|Authentication failed \(publickey\))/iu;
+const gitAuthenticationFailurePattern =
+  /(?:Authentication failed(?: for .*)?|could not read Username for |HTTP Basic: Access denied|The requested URL returned error: (?:401|403))/iu;
 
 export interface NodeRepositorySelectorResolverContract {
   resolve(request: { root: string; remote: string; providerId?: string }): Promise<string>;
@@ -119,16 +123,15 @@ export function classifyProviderProcessResult(
       throw error;
     }
     const sshPublicKeyDenied =
-      executable === 'ssh' &&
-      exitCode === 255 &&
-      /(?:Permission denied \(publickey(?:,[^)]+)?\)|Authentication failed \(publickey\))/iu.test(
-        stderr,
-      );
+      executable === 'ssh' && exitCode === 255 && sshPublicKeyDeniedPattern.test(stderr);
+    const gitAuthenticationFailure =
+      executable === 'git' &&
+      (sshPublicKeyDeniedPattern.test(stderr) || gitAuthenticationFailurePattern.test(stderr));
     return {
       exitCode,
       stdout,
       stderr,
-      ...(authExitCodes.includes(exitCode) || sshPublicKeyDenied
+      ...(authExitCodes.includes(exitCode) || sshPublicKeyDenied || gitAuthenticationFailure
         ? { failure: 'auth' as const }
         : {}),
     };
@@ -369,18 +372,13 @@ function parseRepositoryUrl(value: string, allowNestedProject: boolean): string 
         'The configured repository remote URL has untrusted credentials.',
       );
     }
-    if (
-      remote.search !== '' ||
-      remote.hash !== '' ||
-      (!allowNestedProject && remote.port !== '') ||
-      (remote.protocol === 'https:' && remote.port !== '')
-    ) {
+    if (remote.search !== '' || remote.hash !== '' || (!allowNestedProject && remote.port !== '')) {
       throw repositorySelectorError(
         'REPOSITORY_REMOTE_INVALID',
         'The configured repository remote URL contains unsupported components.',
       );
     }
-    if (allowNestedProject && remote.port !== '') {
+    if (allowNestedProject && remote.protocol === 'ssh:' && remote.port !== '') {
       const port = Number(remote.port);
       if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
         throw repositorySelectorError(
