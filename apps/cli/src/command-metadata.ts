@@ -1,15 +1,17 @@
+export type CommandAudience = 'human' | 'agent' | 'internal' | 'experimental';
+
 export interface CommandActionMetadata {
   readonly name: string;
   readonly summary: string;
   readonly usage: string;
+  readonly audience: CommandAudience;
   readonly examples?: readonly string[];
-  readonly common?: boolean;
 }
 
 export interface CommandGroupMetadata {
   readonly name: string;
   readonly summary: string;
-  readonly common?: boolean;
+  readonly audience: CommandAudience;
   /** True only when `mpx <group>` intentionally performs an operation. */
   readonly defaultOperation?: boolean;
   readonly actions: readonly CommandActionMetadata[];
@@ -19,367 +21,285 @@ const action = (
   name: string,
   summary: string,
   usage: string,
-  common = true,
+  audience: CommandAudience,
   examples?: readonly string[],
-): CommandActionMetadata => ({ name, summary, usage, common, ...(examples ? { examples } : {}) });
+): CommandActionMetadata => ({ name, summary, usage, audience, ...(examples ? { examples } : {}) });
 
-/** Canonical inventory for terminal help and generated CLI references. */
+/** Canonical inventory for dispatch, terminal help, and generated CLI references. */
 export const commandRegistry: readonly CommandGroupMetadata[] = [
   {
-    name: 'init',
-    summary: 'Initialize an MPX project.',
-    common: true,
+    name: 'setup',
+    summary: 'Install and configure MPX for this user.',
+    audience: 'human',
     defaultOperation: true,
     actions: [],
   },
   {
     name: 'doctor',
     summary: 'Diagnose project configuration and services.',
-    common: true,
+    audience: 'human',
+    defaultOperation: true,
+    actions: [],
+  },
+  {
+    name: 'init',
+    summary: 'Initialize an MPX project.',
+    audience: 'human',
     defaultOperation: true,
     actions: [],
   },
   {
     name: 'launch',
-    summary: 'Explain or start a runtime launch.',
-    common: true,
+    summary: 'Start a native runtime with MPX routing and content.',
+    audience: 'human',
     actions: [
-      action('explain', 'Explain launch selection.', 'mpx launch explain [options]', true, [
-        'mpx launch explain --identity work',
-      ]),
-      action('claude', 'Launch Claude.', 'mpx launch claude [options]'),
-      action('pi', 'Launch Pi.', 'mpx launch pi [options]'),
-      action('current', 'Show the process-bound launch.', 'mpx launch current'),
-      action(
-        'sbx-plan-export',
-        'Export a sandbox launch plan.',
-        'mpx launch sbx-plan-export [options]',
-        false,
-      ),
-      action('cc', 'Launch Claude using the short alias.', 'mpx cc [options]', false),
-      action('ccw', 'Launch Claude in the work preset.', 'mpx ccw [options]', false),
-      action('piw', 'Launch Pi in the work preset.', 'mpx piw [options]', false),
+      action('pi', 'Launch Pi.', 'mpx launch pi [options]', 'human'),
+      action('claude', 'Launch Claude.', 'mpx launch claude [options]', 'human'),
     ],
   },
   {
-    name: 'session',
-    summary: 'Inspect and manage runtime sessions.',
-    common: true,
+    name: 'content',
+    summary: 'Inspect and verify the active compiled content projection.',
+    audience: 'human',
     actions: [
-      action('list', 'List sessions.', 'mpx session list [options]'),
-      action('show', 'Show one session.', 'mpx session show <id>'),
-      action('resume', 'Resume one session.', 'mpx session resume <id> [options]', true, [
-        'mpx session resume abc123',
-      ]),
-      action('save', 'Capture active sessions.', 'mpx session save <id...> | --all-active'),
-      action('branch', 'Create a child session.', 'mpx session branch <parent-id> [options]'),
-      action('mark', 'Set workflow status.', 'mpx session mark <id> <status> [options]'),
-      action('handoff', 'Record a session handoff.', 'mpx session handoff <id> [options]'),
-      action('complete', 'Complete a session.', 'mpx session complete <id> [options]'),
-      action('inbox', 'List session inbox entries.', 'mpx session inbox [options]'),
-      action('reconcile', 'Reconcile discovered sessions.', 'mpx session reconcile [options]'),
       action(
-        'completion',
-        'Complete a session (compatibility alias).',
-        'mpx session completion <id> [options]',
-        false,
+        'inspect',
+        'Inspect the active projection or print one exact compiled file.',
+        'mpx content inspect [<skill|agent> <identity>]',
+        'human',
       ),
-      action(
-        'resurrect-export',
-        'Export resurrection data.',
-        'mpx session resurrect-export',
-        false,
-      ),
+      action('check', 'Verify all active compiler files.', 'mpx content check', 'human'),
     ],
   },
   {
     name: 'issue',
     summary: 'Work with provider-neutral issues.',
-    common: true,
+    audience: 'human',
     actions: [
-      action('list', 'List issues.', 'mpx issue list [--state open|finished]'),
-      action('view', 'View an issue.', 'mpx issue view --id <id>', true, [
+      action('list', 'List issues.', 'mpx issue list [--state open|finished]', 'human'),
+      action('view', 'View an issue.', 'mpx issue view --id <id>', 'human', [
         'mpx issue view --id 123',
       ]),
-      action('create', 'Create an issue.', 'mpx issue create --title <title> --body <body>'),
-      action('edit', 'Edit an issue.', 'mpx issue edit --id <id> --title <title> --body <body>'),
-      action('comment', 'Comment on an issue.', 'mpx issue comment --id <id> --body <body>'),
-      action('label', 'Label an issue.', 'mpx issue label --id <id> --label <label>'),
-      action('move', 'Move an issue.', 'mpx issue move --id <id> --destination <target>'),
-      action('finish', 'Finish an issue.', 'mpx issue finish --id <id>'),
+      action(
+        'create',
+        'Create an issue.',
+        'mpx issue create --title <title> --body <body>',
+        'human',
+      ),
+      action(
+        'edit',
+        'Edit an issue.',
+        'mpx issue edit --id <id> --title <title> --body <body>',
+        'human',
+      ),
+      action(
+        'comment',
+        'Comment on an issue.',
+        'mpx issue comment --id <id> --body <body>',
+        'human',
+      ),
+      action('finish', 'Finish an issue.', 'mpx issue finish --id <id>', 'human'),
+      action('label', 'Label an issue.', 'mpx issue label --id <id> --label <label>', 'agent'),
+      action('move', 'Move an issue.', 'mpx issue move --id <id> --destination <target>', 'agent'),
       action(
         'dependency',
-        'Add or remove a dependency.',
+        'Add or remove an issue dependency.',
         'mpx issue dependency <add|remove> --id <id> --dependency-id <id>',
+        'agent',
       ),
-      action('show', 'View an issue (alias).', 'mpx issue show --id <id>', false),
-      action(
-        'update',
-        'Edit an issue (alias).',
-        'mpx issue update --id <id> --title <title> --body <body>',
-        false,
-      ),
-      action('close', 'Finish an issue (alias).', 'mpx issue close --id <id>', false),
     ],
   },
   {
     name: 'review',
     summary: 'Work with provider-neutral code reviews.',
-    common: true,
+    audience: 'human',
     actions: [
-      action('view', 'View a review.', 'mpx review view --id <id>'),
+      action('view', 'View a review.', 'mpx review view --id <id>', 'human'),
       action(
         'create',
         'Create a review.',
         'mpx review create --title <title> --body <body> --source-branch <branch> --target-branch <branch>',
+        'human',
+      ),
+      action(
+        'merge',
+        'Merge a review.',
+        'mpx review merge --id <id> [--method merge|squash|rebase]',
+        'human',
       ),
       action(
         'update',
         'Update a review.',
         'mpx review update --id <id> --title <title> --body <body>',
+        'agent',
       ),
-      action('comment', 'Comment on a review.', 'mpx review comment --id <id> --body <body>'),
-      action('ready', 'Mark a review ready.', 'mpx review ready --id <id>'),
       action(
-        'merge',
-        'Merge a review.',
-        'mpx review merge --id <id> [--method merge|squash|rebase]',
+        'comment',
+        'Comment on a review.',
+        'mpx review comment --id <id> --body <body>',
+        'agent',
       ),
+      action('ready', 'Mark a review ready.', 'mpx review ready --id <id>', 'agent'),
     ],
   },
   {
     name: 'ci',
     summary: 'Inspect and control provider-neutral CI.',
-    common: true,
+    audience: 'human',
     actions: [
-      action('status', 'Show CI status.', 'mpx ci status --id <id>'),
-      action('watch', 'Watch CI status.', 'mpx ci watch --id <id>'),
-      action('logs', 'Show CI run logs.', 'mpx ci logs --run-id <id>'),
-      action('retry', 'Retry a CI run.', 'mpx ci retry --run-id <id>'),
+      action('status', 'Show CI status.', 'mpx ci status --id <id>', 'human'),
+      action('logs', 'Show CI run logs.', 'mpx ci logs --run-id <id>', 'human'),
+      action('watch', 'Watch CI status.', 'mpx ci watch --id <id>', 'agent'),
+      action('retry', 'Retry a CI run.', 'mpx ci retry --run-id <id>', 'agent'),
+    ],
+  },
+  {
+    name: 'session',
+    summary: 'List and resume native runtime sessions.',
+    audience: 'human',
+    actions: [
+      action('list', 'List sessions.', 'mpx session list [options]', 'human'),
+      action('resume', 'Resume one session.', 'mpx session resume <id> [options]', 'human', [
+        'mpx session resume abc123',
+      ]),
+      action(
+        'resurrect-export',
+        'Export bounded resurrection data.',
+        'mpx session resurrect-export',
+        'internal',
+      ),
     ],
   },
   {
     name: 'workspace',
     summary: 'Inspect and manage project workspaces.',
-    common: true,
+    audience: 'human',
     actions: [
-      action('list', 'List workspaces.', 'mpx workspace list'),
-      action('show', 'Show a workspace.', 'mpx workspace show [path] [--machine]'),
-      action('create', 'Create a workspace.', 'mpx workspace create <branch> [options]'),
-      action('remove', 'Remove a workspace.', 'mpx workspace remove <path>'),
-      action('start', 'Start a configured service.', 'mpx workspace start <service-id> [path]'),
-      action('stop', 'Stop a configured service.', 'mpx workspace stop <service-id> [path]'),
+      action('list', 'List workspaces.', 'mpx workspace list', 'human'),
+      action('show', 'Show a workspace.', 'mpx workspace show [path] [--machine]', 'human'),
+      action('create', 'Create a workspace.', 'mpx workspace create <branch> [options]', 'human'),
+      action('remove', 'Remove a workspace.', 'mpx workspace remove <path>', 'human'),
+      action(
+        'start',
+        'Start a configured service.',
+        'mpx workspace start <service-id> [path]',
+        'human',
+      ),
+      action(
+        'stop',
+        'Stop a configured service.',
+        'mpx workspace stop <service-id> [path]',
+        'human',
+      ),
       action(
         'logs',
         'Show configured service logs.',
         'mpx workspace logs <service-id> [path] [--lines <count>]',
+        'human',
       ),
     ],
   },
   {
     name: 'port',
     summary: 'Manage verified port listeners.',
-    common: true,
-    actions: [action('kill', 'Kill a verified listener by PID.', 'mpx port kill <pid>')],
-  },
-  {
-    name: 'config',
-    summary: 'Inspect and validate configuration.',
-    common: true,
-    actions: [
-      action('show', 'Show project configuration.', 'mpx config show'),
-      action('validate', 'Validate project configuration.', 'mpx config validate'),
-      action('resolve', 'Resolve merged configuration.', 'mpx config resolve'),
-      action('explain', 'Explain merged configuration.', 'mpx config explain'),
-    ],
-  },
-  {
-    name: 'provider',
-    summary: 'Inspect configured providers.',
-    common: true,
-    actions: [
-      action('list', 'List provider capabilities.', 'mpx provider list [--role repository|issues]'),
-      action('explain', 'Explain routing for a role.', 'mpx provider explain <repository|issues>'),
-      action('doctor', 'Diagnose provider access.', 'mpx provider doctor [--identity <name>]'),
-    ],
-  },
-  {
-    name: 'content',
-    summary: 'Inspect the active generated runtime content.',
-    common: true,
-    actions: [
-      action('current', 'Show active content paths.', 'mpx content current [--json]'),
-      action('list', 'List active skills and agents.', 'mpx content list [--json]'),
-      action(
-        'show',
-        'Print one exact generated file.',
-        'mpx content show <skill|agent> <identity>',
-      ),
-      action('check', 'Verify all active compiler files.', 'mpx content check [--json]'),
-    ],
-  },
-  {
-    name: 'skill',
-    summary: 'Inspect skill resolution.',
-    common: true,
-    actions: [
-      action('list', 'List skills.', 'mpx skill list [resolution options]'),
-      action('search', 'Search skills.', 'mpx skill search <query> [resolution options]'),
-      action('show', 'Show a skill.', 'mpx skill show <id> [resolution options]'),
-      action('explain', 'Explain skill selection.', 'mpx skill explain <id> [resolution options]'),
-      action(
-        'complete',
-        'Complete a skill prefix.',
-        'mpx skill complete <prefix> [resolution options]',
-      ),
-    ],
-  },
-  {
-    name: 'account',
-    summary: 'Manage runtime account bindings.',
-    common: true,
-    actions: ['enroll', 're-enroll', 'list', 'status', 'verify'].map((name) =>
-      action(name, `${name} account binding.`, `mpx account ${name} [options]`),
-    ),
-  },
-  {
-    name: 'setup',
-    summary: 'Install and configure MPX for this user.',
-    common: true,
-    defaultOperation: true,
-    actions: [],
-  },
-  {
-    name: 'install',
-    summary: 'Plan and manage MPX installation.',
-    common: true,
-    actions: ['intent', 'prepare', 'plan', 'apply', 'verify', 'rollback', 'uninstall'].map((name) =>
-      action(name, `${name} installation.`, `mpx install ${name} [options]`),
-    ),
-  },
-  {
-    name: 'identity',
-    summary: 'Inspect configured identities.',
-    actions: [
-      action('list', 'List identities.', 'mpx identity list'),
-      action('show', 'Show an identity.', 'mpx identity show <name>'),
-    ],
-  },
-  {
-    name: 'mode',
-    summary: 'Inspect configured modes.',
-    actions: [
-      action('list', 'List modes.', 'mpx mode list'),
-      action('show', 'Show a mode.', 'mpx mode show <name>'),
-    ],
-  },
-  {
-    name: 'skill-policy',
-    summary: 'Inspect skill policies.',
-    actions: [
-      action('list', 'List skill policies.', 'mpx skill-policy list'),
-      action('show', 'Show a skill policy.', 'mpx skill-policy show <name>'),
-    ],
-  },
-  {
-    name: 'preset',
-    summary: 'Inspect launch presets.',
-    actions: [
-      action('list', 'List presets.', 'mpx preset list'),
-      action('show', 'Show a preset.', 'mpx preset show <name>'),
-    ],
-  },
-  {
-    name: 'view',
-    summary: 'Manage generated local views.',
-    actions: [action('rebuild', 'Rebuild the local issue view.', 'mpx view rebuild')],
-  },
-  {
-    name: 'runtime',
-    summary: 'Inspect a process-bound runtime.',
-    actions: [
-      action('claude', 'Inspect Claude runtime binding.', 'mpx runtime claude'),
-      action('pi', 'Inspect Pi runtime binding.', 'mpx runtime pi'),
-    ],
-  },
-  {
-    name: 'help',
-    summary: 'Show root or complete command help.',
-    defaultOperation: true,
-    actions: [],
+    audience: 'human',
+    actions: [action('kill', 'Kill a verified listener by PID.', 'mpx port kill <pid>', 'human')],
   },
 ] as const;
+
+const hasAudience = (
+  value: { readonly audience: CommandAudience },
+  audiences: ReadonlySet<CommandAudience>,
+): boolean => audiences.has(value.audience);
 
 export function commandGroup(name: string): CommandGroupMetadata | undefined {
   return commandRegistry.find((group) => group.name === name);
 }
 
-export function renderRootHelp(): string {
-  const groups = commandRegistry.filter((group) => group.common);
-  return (
-    [
-      'Usage: mpx [options] <command>',
-      '',
-      'Common commands:',
-      ...groups.map((group) => `  ${group.name.padEnd(14)} ${group.summary}`),
-      '',
-      'Options:',
-      '  -h, --help     Show help.',
-      '  --cwd DIR      Use DIR as the working directory.',
-      '  --json         Emit structured automation output for command results and errors.',
-      '',
-      "Run 'mpx <command> --help' for focused help.",
-    ].join('\n') + '\n'
+/** Looks up executable metadata without applying help visibility rules. */
+export function commandAction(
+  groupName: string,
+  actionName: string,
+): CommandActionMetadata | undefined {
+  return commandGroup(groupName)?.actions.find((item) => item.name === actionName);
+}
+
+/** Returns a stable, sorted route inventory for exactly the requested audiences. */
+export function commandLeaves(audiences: readonly CommandAudience[]): string[] {
+  const visible = new Set(audiences);
+  return commandRegistry
+    .flatMap((group) => {
+      const defaults = group.defaultOperation && hasAudience(group, visible) ? [group.name] : [];
+      return [
+        ...defaults,
+        ...group.actions
+          .filter((item) => hasAudience(item, visible))
+          .map((item) => `${group.name} ${item.name}`),
+      ];
+    })
+    .sort((left, right) => left.localeCompare(right));
+}
+
+const groupsFor = (audiences: readonly CommandAudience[]): CommandGroupMetadata[] => {
+  const visible = new Set(audiences);
+  return commandRegistry.filter(
+    (group) =>
+      (group.defaultOperation && hasAudience(group, visible)) ||
+      group.actions.some((item) => hasAudience(item, visible)),
   );
+};
+
+export function renderRootHelp(): string {
+  const groups = groupsFor(['human']);
+  return `${[
+    'Usage: mpx [options] <command>',
+    '',
+    'Commands:',
+    ...groups.map((group) => `  ${group.name.padEnd(14)} ${group.summary}`),
+    '',
+    'Options:',
+    '  -h, --help     Show help.',
+    '  --cwd DIR      Use DIR as the working directory.',
+    '  --json         Emit structured automation output for command results and errors.',
+    '',
+    "Run 'mpx <command> --help' for focused help.",
+  ].join('\n')}\n`;
 }
 
 export function renderAllHelp(): string {
-  return (
-    [
-      'Usage: mpx help --all',
-      '',
-      'All commands:',
-      ...commandRegistry.flatMap((group) =>
-        group.actions.length
-          ? group.actions.map((item) => `  ${group.name} ${item.name}`)
-          : [`  ${group.name}`],
-      ),
-    ].join('\n') + '\n'
-  );
+  return `${[
+    'Usage: mpx help --all',
+    '',
+    'All human and agent commands:',
+    ...commandLeaves(['human', 'agent']).map((leaf) => `  ${leaf}`),
+  ].join('\n')}\n`;
 }
 
 export function renderGroupHelp(group: CommandGroupMetadata): string {
-  const common = group.actions.filter((item) => item.common !== false).slice(0, 10);
-  return (
-    [
-      `Usage: mpx ${group.name}${group.actions.length ? ' <action> [options]' : ' [options]'}`,
-      '',
-      group.summary,
-      ...(common.length
-        ? [
-            '',
-            'Common actions:',
-            ...common.map((item) => `  ${item.name.padEnd(18)} ${item.summary}`),
-          ]
-        : []),
-      ...(group.actions.length
-        ? ['', `Run 'mpx ${group.name} <action> --help' for command usage.`]
-        : []),
-    ].join('\n') + '\n'
-  );
+  const actions = group.actions.filter((item) => item.audience === 'human');
+  return `${[
+    `Usage: mpx ${group.name}${group.actions.length ? ' <action> [options]' : ' [options]'}`,
+    '',
+    group.summary,
+    ...(actions.length
+      ? ['', 'Actions:', ...actions.map((item) => `  ${item.name.padEnd(18)} ${item.summary}`)]
+      : []),
+    ...(actions.length ? ['', `Run 'mpx ${group.name} <action> --help' for command usage.`] : []),
+  ].join('\n')}\n`;
 }
 
 export function renderActionHelp(group: CommandGroupMetadata, item: CommandActionMetadata): string {
-  return (
-    [
-      `Usage: ${item.usage}`,
-      '',
-      item.summary,
-      ...(item.examples?.length
-        ? ['', 'Examples:', ...item.examples.map((example) => `  ${example}`)]
-        : []),
-    ].join('\n') + '\n'
-  );
+  if (item.audience !== 'human') {
+    return renderGroupHelp(group);
+  }
+  return `${[
+    `Usage: ${item.usage}`,
+    '',
+    item.summary,
+    ...(item.examples?.length
+      ? ['', 'Examples:', ...item.examples.map((example) => `  ${example}`)]
+      : []),
+  ].join('\n')}\n`;
 }
 
 const generatedHeader = (title: string): string[] => [
@@ -389,58 +309,19 @@ const generatedHeader = (title: string): string[] => [
   '',
 ];
 
-export function renderBasicReference(): string {
-  const groups = commandRegistry.filter((group) => group.common);
-  const lines = [
-    ...generatedHeader('MPX CLI Basic Reference'),
-    'Use `mpx --help` for terminal help and `mpx <group> --help` for focused guidance.',
-    'For runtime content debugging, use `mpx content current`, `list`, `show`, and `check`; these inspect the active projection without rebuilding it.',
-    '',
-    '## Common command groups',
-    '',
-    ...groups.map((group) => `- \`mpx ${group.name}\` — ${group.summary}`),
-    '',
-    '## Common operations',
-    '',
-  ];
-  for (const group of groups) {
-    const actions = group.actions
-      .filter((item) => item.common !== false)
-      .slice(0, group.name === 'content' ? 4 : 3);
-    if (actions.length === 0) {
-      lines.push(`- \`mpx ${group.name}\` — ${group.summary}`);
-    } else {
-      lines.push(...actions.map((item) => `- \`${item.usage}\` — ${item.summary}`));
-    }
-  }
-  const examples = groups
-    .flatMap((group) =>
-      group.actions.filter((item) => item.common !== false).flatMap((item) => item.examples ?? []),
-    )
-    .slice(0, 5);
-  if (examples.length) {
-    lines.push('', '## Examples', '', ...examples.map((example) => `- \`${example}\``));
-  }
-  lines.push(
-    '',
-    'Use [MPX_CLI_REFERENCE.md](MPX_CLI_REFERENCE.md) for the complete inventory.',
-    '',
-  );
-  return lines.join('\n');
-}
-
-export function renderCompleteReference(): string {
-  const lines = [
-    ...generatedHeader('MPX CLI Reference'),
-    'Complete command inventory generated from the CLI command metadata registry.',
-    '',
-  ];
-  for (const group of commandRegistry) {
+function renderReference(
+  title: string,
+  audiences: readonly CommandAudience[],
+  introduction: string,
+): string {
+  const visible = new Set(audiences);
+  const lines = [...generatedHeader(title), introduction, ''];
+  for (const group of groupsFor(audiences)) {
     lines.push(`## \`mpx ${group.name}\``, '', group.summary, '');
-    if (group.defaultOperation) {
-      lines.push(`- \`mpx ${group.name}\` — default operation`, '');
+    if (group.defaultOperation && hasAudience(group, visible)) {
+      lines.push(`- \`mpx ${group.name}\` — ${group.summary}`, '');
     }
-    for (const item of group.actions) {
+    for (const item of group.actions.filter((entry) => hasAudience(entry, visible))) {
       lines.push(`### \`${item.usage}\``, '', item.summary, '');
       if (item.examples?.length) {
         lines.push('Examples:', '', ...item.examples.map((example) => `- \`${example}\``), '');
@@ -448,4 +329,20 @@ export function renderCompleteReference(): string {
     }
   }
   return lines.join('\n');
+}
+
+export function renderBasicReference(): string {
+  return renderReference(
+    'MPX CLI Basic Reference',
+    ['human'],
+    'Human command reference generated from the canonical CLI metadata registry.',
+  );
+}
+
+export function renderCompleteReference(): string {
+  return renderReference(
+    'MPX CLI Reference',
+    ['human', 'agent'],
+    'Complete human and agent command reference generated from the canonical CLI metadata registry.',
+  );
 }
