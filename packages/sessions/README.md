@@ -1,25 +1,15 @@
 # @mpx/sessions
 
-Provider-neutral session records, resume, and conversation branching.
+Private, partitioned session records, bounded native discovery, lifecycle ingestion, resurrection export, and confirmation-bound resume for MPX.
 
-## Conversation branching
+## Supported operations
 
-`ConversationBranchService.plan()` is read-only and returns a digest-bound disclosure of parent/child runtime IDs, immutable identity/root/mode/executor, repository/worktree refs, file sharing, collision risks, and optional terminal behavior. `apply()` rejects any stale digest before creating an MPX worktree or writer lease. Modifying branches default to an isolated `@mpx/worktrees` checkout; sharing the current checkout is an explicit acknowledged-risk choice.
+The public CLI exposes only `mpx session list` and `mpx session resume <id>`. The exact `session resurrect-export` action is an internal executable route and is intentionally omitted from public help.
 
-Native limits are deliberate: Claude uses the supported `--resume <id> --fork-session` flow and never copies transcript files. Pi uses `--fork <verified-root-relative-file>` only after regular-file, non-symlink, file-identity, and selected-root containment checks. Both runtimes assign the final child native session ID at startup; the plan therefore carries a runtime-qualified pending child target until lifecycle ingestion records the runtime-created ID. Windows Terminal support is optional and emits only executable/cwd/argv arrays; it never emits shell command text.
+`session list` first consumes pending lifecycle events, then reconciles the exact configured identity/runtime roots with bounded Claude and Pi scanners. Claude receives the configured root through `CLAUDE_CONFIG_DIR`; Pi reads only the enrolled v2 active registry beneath the configured root. No home-wide scanning occurs. Unavailable or malformed scanners produce bounded normalized diagnostics while existing records remain listable. Returned records are deterministic and never include native roots, scanner output, credentials, prompts, or transcripts.
 
-Private, partitioned session records and lifecycle ingestion for MPX.
+`session resume` revalidates the exact configured identity, native binding, root digest, account attestation, native session target, immutable launch axes, and current launch policy before execution. Its argv and confirmation digest are plan-bound. Host execution and resurrection require explicit authority; Docker admission remains fail-closed.
 
-Production discovery is identity- and runtime-root-bound. Each configured `(domain, identity, runtime, native root digest)` receives a distinct native binding; roots are never inferred from the current directory or shared across identities. Claude discovery runs the trusted absolute `MPX_CLAUDE_EXECUTABLE` with `CLAUDE_CONFIG_DIR` and direct `agents --json` arguments. Pi discovery combines validated lifecycle events with the maintained v2 active registry under the exact configured, enrolled account root. It performs no home scan and admits only contained regular session files whose live process has the exact recorded start fingerprint; foreign-root and stale/reused process entries are denied. Other legacy Pi saves remain explicit, confirmation-bound one-time imports.
+Internal resurrection export consumes pending lifecycle events but deliberately does not trigger broad native discovery. It deterministically projects only eligible records with immutable launch evidence.
 
-## User-authored handoff and completion
-
-`mpx session handoff <id> --identity <name> --summary <text> --next-action <text> --disposition paused|unfinished` records a concise user-authored handoff without invoking a model. `mpx session complete <id> --identity <name> --summary <text> --next-action <text> --disposition completed|paused|unfinished` records the explicit completion disposition; `unfinished` reopens the inbox, while `paused` and `completed` archive it. Both commands return a versioned `session-disposition` observation envelope. Summary and next action are required, NFC-normalized, control-character-free, and limited to 512 characters. Add `--runtime claude|pi` when the same identity has an ambiguous abbreviation.
-
-Retries with the same identity, target, operation, text, and disposition are idempotent, including after restart. Writes remain locked to the recorded identity/runtime partition. These operations update only MPX's private session registry: they never invoke a model, persist prompts/transcripts/native roots/account data, or delete native runtime history. Reconcile observations include workflow status, inbox state, and the latest disposition timestamp for status consumers.
-
-Resume is confirmation-bound and fail-closed. It revalidates the exact configured identity/root, native target, recorded launch axes and current launch policy before process execution. Pi additionally requires root-attested enrollment and live supported OAuth availability verification; both enrollment and live-auth gates are implemented for production launch and resume.
-
-Lifecycle event files are consumed before session reads/reconcile and after a runtime exits. Records retain process `{ pid, startFingerprint }`, full workflow metadata, launch evidence, and opaque native references; transcripts, prompts, credentials, and native roots are not stored in session records.
-
-Legacy Pi imports require explicit per-source identity mappings (for example `pi:<source-path>=work`) plus an exact mapped Pi root. No mapping is inferred from `cwd`, and mixed personal/work sources remain separate partitions.
+Lifecycle event files are bounded, schema-validated, binding-scoped, and consumed before retained operations. Existing optional workflow metadata remains parseable for durable-record compatibility, but obsolete capture, inbox, mark, handoff, completion, branching, and legacy-import services are not exposed.

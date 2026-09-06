@@ -16,18 +16,12 @@ import path from 'node:path';
 import type { RuntimeName } from '@mpx/runtime-contracts';
 import {
   SessionError,
-  parseLegacyImportJournalV1,
-  parseLegacyImportReceiptV1,
   parseLifecycleBindingRecordV1,
   parseNativeBindingRecordV1,
-  parseSessionCaptureV1,
   parseSessionRecordV1,
   parseSessionRegistryV1,
   type IdentityV1,
-  type LegacyImportJournalV1,
-  type LegacyImportReceiptV1,
   type NativeBindingRecordV1,
-  type SessionCaptureV1,
   type SessionLifecycleBindingRecordV1,
   type SessionRecordV1,
   type SessionRegistryV1,
@@ -103,13 +97,6 @@ export class SessionStore {
   registryPath(identity: IdentityV1, runtime: RuntimeName): string {
     return path.join(this.partitionDirectory(identity, runtime), 'registry.json');
   }
-  capturePath(identity: IdentityV1, runtime: RuntimeName, captureId: string): string {
-    return path.join(
-      this.partitionDirectory(identity, runtime),
-      'captures',
-      `${encode(captureId)}.json`,
-    );
-  }
   nativeBindingPath(ref: string): string {
     return path.join(
       this.stateRoot,
@@ -171,20 +158,6 @@ export class SessionStore {
     }
     return true;
   }
-  journalPath(digest: string): string {
-    return path.join(
-      this.stateRoot,
-      'sessions',
-      'v1',
-      'private',
-      'imports',
-      `${digest}.journal.json`,
-    );
-  }
-  receiptPath(digest: string): string {
-    return path.join(this.stateRoot, 'sessions', 'v1', 'private', 'imports', `${digest}.json`);
-  }
-
   private async assertRegular(file: string): Promise<void> {
     const linked = await lstat(file);
     if (linked.isSymbolicLink() || !linked.isFile()) {
@@ -688,73 +661,6 @@ export class SessionStore {
       }
       throw error;
     }
-  }
-  async saveCapture(value: SessionCaptureV1): Promise<void> {
-    const valid = parseSessionCaptureV1(value);
-    await this.withLock(this.capturePath(valid.identity, valid.runtime, valid.captureId), () =>
-      this.atomicJson(this.capturePath(valid.identity, valid.runtime, valid.captureId), valid),
-    );
-  }
-  async serializeImport<T>(digest: string, action: () => Promise<T>): Promise<T> {
-    return this.withLock(`${this.receiptPath(digest)}.transaction`, action);
-  }
-  async readImportJournal(digest: string): Promise<LegacyImportJournalV1 | undefined> {
-    try {
-      const value = parseLegacyImportJournalV1(await this.readJson(this.journalPath(digest)));
-      if (value.confirmationDigest !== digest) {
-        throw new SessionError('SESSION_INVALID_SCHEMA', 'journal digest does not match its file');
-      }
-      return value;
-    } catch (error) {
-      if (missing(error)) {
-        return undefined;
-      }
-      throw error;
-    }
-  }
-  async saveImportJournal(digest: string, value: LegacyImportJournalV1): Promise<void> {
-    const valid = parseLegacyImportJournalV1(value);
-    if (valid.confirmationDigest !== digest) {
-      throw new SessionError('SESSION_INVALID_SCHEMA', 'journal digest does not match its file');
-    }
-    await this.atomicJson(this.journalPath(digest), valid);
-  }
-  async removeImportJournal(digest: string): Promise<void> {
-    await rm(this.journalPath(digest), { force: true });
-  }
-  async readReceipt(digest: string): Promise<LegacyImportReceiptV1 | undefined> {
-    try {
-      const receipt = parseLegacyImportReceiptV1(await this.readJson(this.receiptPath(digest)));
-      if (receipt.confirmationDigest !== digest) {
-        throw new SessionError(
-          'SESSION_INVALID_SCHEMA',
-          'receipt confirmation digest does not match its file',
-        );
-      }
-      return receipt;
-    } catch (error) {
-      if (missing(error)) {
-        return undefined;
-      }
-      throw error;
-    }
-  }
-  async saveReceipt(digest: string, value: LegacyImportReceiptV1): Promise<LegacyImportReceiptV1> {
-    const valid = parseLegacyImportReceiptV1(value);
-    if (valid.confirmationDigest !== digest) {
-      throw new SessionError(
-        'SESSION_INVALID_SCHEMA',
-        'receipt confirmation digest does not match its file',
-      );
-    }
-    return this.withLock(this.receiptPath(digest), async () => {
-      const existing = await this.readReceipt(digest);
-      if (existing !== undefined) {
-        return existing;
-      }
-      await this.atomicJson(this.receiptPath(digest), valid);
-      return value;
-    });
   }
   async readBoundedRegularJson(file: string, maximumBytes: number): Promise<unknown> {
     return this.readJson(file, maximumBytes);

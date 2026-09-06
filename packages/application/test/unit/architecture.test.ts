@@ -153,10 +153,6 @@ describe('@mpx/application architecture', () => {
     expect(node).toMatchObject({
       createNodeAccountApplicationService: expect.any(Function),
       createNodeLocalIssueViewRebuilder: expect.any(Function),
-      createProductionSessionBranchRuntimeAdapter: expect.any(Function),
-      createWindowsTerminalBranchAdapter: expect.any(Function),
-      diagnoseNodeSessionBranchAdapters: expect.any(Function),
-      diagnoseSessionBranchAdapters: expect.any(Function),
       createPiAuthAvailabilityProbe: expect.any(Function),
       createDefaultSbxDiagnostics: expect.any(Function),
       createProductionSbxExecutionAdapter: expect.any(Function),
@@ -174,15 +170,10 @@ describe('@mpx/application architecture', () => {
       productionSessionResumeDependencies: expect.any(Function),
       createNodeSessionResumeLaunchApplicationService: expect.any(Function),
       executeNodeSessionResumeLaunch: expect.any(Function),
-      createNodeSessionBranchProduction: expect.any(Function),
     });
     for (const name of [
       'createNodeAccountApplicationService',
       'createNodeLocalIssueViewRebuilder',
-      'createProductionSessionBranchRuntimeAdapter',
-      'createWindowsTerminalBranchAdapter',
-      'diagnoseNodeSessionBranchAdapters',
-      'diagnoseSessionBranchAdapters',
       'createPiAuthAvailabilityProbe',
       'createDefaultSbxDiagnostics',
       'createProductionSbxExecutionAdapter',
@@ -200,7 +191,6 @@ describe('@mpx/application architecture', () => {
       'productionSessionResumeDependencies',
       'createNodeSessionResumeLaunchApplicationService',
       'executeNodeSessionResumeLaunch',
-      'createNodeSessionBranchProduction',
     ]) {
       expect(root).not.toHaveProperty(name);
     }

@@ -42,9 +42,12 @@ import {
 } from '@mpx/executors';
 import {
   SessionStore,
+  type IdentityV1,
   type ResumeDependencies,
   type ResumePlanV1,
   type RootAttestationService,
+  type RuntimeDiscovery,
+  type SessionProcessInspector,
   type SessionRecordV1,
 } from '@mpx/sessions';
 import {
@@ -93,6 +96,13 @@ export interface CliRepositorySelectorResolver {
 export interface NativeAccountBindingVerifier {
   verify(accountBindingRef: string): Promise<'verified' | 'unavailable' | 'mismatch' | 'duplicate'>;
 }
+export interface NativeAccountBindingResolver {
+  resolve(
+    identity: IdentityV1,
+    runtime: 'claude' | 'pi',
+    nativeRoot: string,
+  ): Promise<string | null>;
+}
 export interface CliContext extends LaunchExecutionContext {
   env: NodeJS.ProcessEnv;
   catalogRoot?: string;
@@ -128,6 +138,14 @@ export interface CliContext extends LaunchExecutionContext {
   }>;
   sessionStore?: SessionStore;
   sessionStoreFactory?: (stateRoot: string) => SessionStore;
+  sessionDiscoveries?: () => Promise<
+    readonly {
+      scanner: RuntimeDiscovery;
+      context?: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
+    }[]
+  >;
+  sessionProcessInspector?: SessionProcessInspector;
+  nativeAccountBindingResolver?: NativeAccountBindingResolver;
   sessionResumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
   nativeAccountBindingVerifier?: NativeAccountBindingVerifier;
   rootAttestationService?: RootAttestationService;
@@ -286,6 +304,10 @@ export function immutableInstaller(context: CliContext): InstallOrchestrator {
       activateRelease(localAppData!, expectedPriorReleaseKey, releaseKey),
     deactivate: (releaseKey) => removeActiveRelease(localAppData!, releaseKey),
   });
+}
+
+export function productionSessionProcessInspector(): SessionProcessInspector {
+  return windowsProcessIdentityInspector(new WindowsProcessCapabilities());
 }
 
 export function ports(context: CliContext): CliPortService {

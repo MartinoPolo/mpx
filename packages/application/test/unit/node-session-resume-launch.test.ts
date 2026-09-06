@@ -394,21 +394,13 @@ describe('Node session resume launch composition', () => {
     expect(mocks.execute).toHaveBeenCalledWith(expect.objectContaining({ approveHost: true }));
   });
 
-  it.each([
-    [undefined, 'resume'],
-    [{ executable: 'pi', argv: ['--fork', 'native'] }, 'branch'],
-  ] as const)('maps SBX status and %s execution input', async (branchInvocation, expected) => {
+  it('maps SBX status and the exact resume target into execution', async () => {
     mocks.execute.mockClear();
     mocks.setResumeAction.mockClear();
     mocks.status.mockClear();
     mocks.resolveLaunch.mockClear();
     const resumePlan = plan();
-    await executeNodeSessionResumeLaunch(
-      input(branchInvocation ? { branchInvocation } : {}),
-      resumePlan,
-      user,
-      branchInvocation ? { approveHost: true } : {},
-    );
+    await executeNodeSessionResumeLaunch(input(), resumePlan, user, {});
     expect(mocks.status).toHaveBeenCalled();
     expect(mocks.setResumeAction).toHaveBeenCalledWith('attach');
     expect(mocks.resolveLaunch).toHaveBeenCalledWith(
@@ -423,26 +415,14 @@ describe('Node session resume launch composition', () => {
     );
     const execution = mocks.execute.mock.calls[0]![0] as Record<string, unknown>;
     expect(execution).toEqual(
-      expect.objectContaining(
-        expected === 'branch'
-          ? {
-              branch: {
-                nativeBinding: await input().store.readNativeBinding('binding'),
-                invocation: branchInvocation,
-              },
-            }
-          : {
-              resume: {
-                nativeBinding: await input().store.readNativeBinding('binding'),
-                nativeSessionRef: resumePlan.nativeSessionRef,
-              },
-            },
-      ),
+      expect.objectContaining({
+        resume: {
+          nativeBinding: await input().store.readNativeBinding('binding'),
+          nativeSessionRef: resumePlan.nativeSessionRef,
+        },
+      }),
     );
-    expect(execution).not.toHaveProperty(expected === 'resume' ? 'branch' : 'resume');
-    if (branchInvocation) {
-      expect(execution).not.toHaveProperty('approveHost');
-    }
+    expect(execution).not.toHaveProperty('branch');
     expect(execution).toMatchObject({ artifactsRoot: '/artifacts', stateRoot: '/state' });
   });
 });

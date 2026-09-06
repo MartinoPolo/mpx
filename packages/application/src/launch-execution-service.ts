@@ -103,7 +103,6 @@ export interface LaunchRuntimeComposerInput {
     readonly eventDirectory: string;
   };
   readonly resumeTarget?: LaunchRuntimeResumeTarget;
-  readonly branchInvocation?: { readonly executable: string; readonly argv: readonly string[] };
 }
 export type LaunchRuntimeComposer = (
   input: LaunchRuntimeComposerInput,
@@ -137,10 +136,6 @@ export interface LaunchExecutionRequest {
   readonly resume?: {
     readonly nativeBinding: NativeBindingRecordV1;
     readonly nativeSessionRef: NativeSessionRefV1;
-  };
-  readonly branch?: {
-    readonly nativeBinding: NativeBindingRecordV1;
-    readonly invocation: { readonly executable: string; readonly argv: readonly string[] };
   };
 }
 export interface LaunchExecutionDependencies {
@@ -739,9 +734,7 @@ export class LaunchExecutionService {
             nativeSessionRef: request.resume.nativeSessionRef,
             nativeBinding: request.resume.nativeBinding,
           }
-        : request.branch
-          ? { nativeBinding: request.branch.nativeBinding }
-          : {}),
+        : {}),
     });
     const executeWithLifecycle = async () => {
       const productionRuntimeAdapters = dependencies.runtimeAdapterMode === 'production';
@@ -794,7 +787,6 @@ export class LaunchExecutionService {
         materializedRoutes: routes,
         ...(lifecycle ? { lifecycle } : {}),
         ...(resumeTarget ? { resumeTarget } : {}),
-        ...(request.branch ? { branchInvocation: request.branch.invocation } : {}),
       });
       const executeWithPlan = async () => {
         let stopped = false,

@@ -4,7 +4,12 @@ import { executeSessionCommand } from '../../src/session-command.js';
 
 function application(overrides: Partial<SessionApplication> = {}): SessionApplication {
   return {
-    list: vi.fn(async () => ({ schemaVersion: 1, kind: 'session-list', records: [] })),
+    list: vi.fn(async () => ({
+      schemaVersion: 1,
+      kind: 'session-list',
+      records: [],
+      diagnostics: [],
+    })),
     resurrectionExport: vi.fn(async () => ({
       schemaVersion: 1,
       kind: 'session-resurrection-export',
@@ -12,7 +17,6 @@ function application(overrides: Partial<SessionApplication> = {}): SessionApplic
       records: [],
     })),
     resume: vi.fn(async () => ({ resumed: true })),
-    resolveIdentity: vi.fn(async (name) => ({ domain: 'personal', name })),
     ...overrides,
   } as SessionApplication;
 }

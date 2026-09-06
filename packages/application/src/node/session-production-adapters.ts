@@ -228,9 +228,14 @@ export async function productionSessionDiscoveries(input: {
             'A stable native binding reference is inconsistent with its exact identity, runtime, or root.',
         });
       }
-      const resolvedAccountBindingRef = accountResolver
-        ? await accountResolver.resolve(identity, runtime, root)
-        : (prior?.accountBindingRef ?? null);
+      let resolvedAccountBindingRef = prior?.accountBindingRef ?? null;
+      if (accountResolver) {
+        try {
+          resolvedAccountBindingRef = await accountResolver.resolve(identity, runtime, root);
+        } catch {
+          resolvedAccountBindingRef = null;
+        }
+      }
       const timestamp = new Date().toISOString();
       const binding = prior
         ? resolvedAccountBindingRef === prior.accountBindingRef
@@ -252,20 +257,28 @@ export async function productionSessionDiscoveries(input: {
       if (runtime === 'pi') {
         // Active Pi discovery is admitted only for an enrolled, exact configured root.
         // The scanner receives that root directly; it never infers or scans a home directory.
-        if (binding.accountBindingRef !== null) {
-          result.push({
-            scanner: new PiV2ActiveRegistryScanner(
-              root,
-              path.join(root, 'agent-resurrect', 'active-sessions'),
-              piProcessInspector,
-              {
-                ...(options.clock ? { clock: options.clock } : {}),
-                missingDirectory: 'available-empty',
-              },
-            ),
-            context: { identity, nativeBindingRef: binding.ref, runtime },
-          });
-        }
+        result.push({
+          scanner:
+            binding.accountBindingRef === null
+              ? {
+                  runtime: 'pi',
+                  scan: async () => ({
+                    status: 'unavailable',
+                    sessions: [],
+                    diagnostic: 'PI_DISCOVERY_UNAVAILABLE',
+                  }),
+                }
+              : new PiV2ActiveRegistryScanner(
+                  root,
+                  path.join(root, 'agent-resurrect', 'active-sessions'),
+                  piProcessInspector,
+                  {
+                    ...(options.clock ? { clock: options.clock } : {}),
+                    missingDirectory: 'available-empty',
+                  },
+                ),
+          context: { identity, nativeBindingRef: binding.ref, runtime },
+        });
         continue;
       }
       const scanner: RuntimeDiscovery = new ClaudeActiveScanner(async (command) => {

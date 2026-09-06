@@ -2,6 +2,8 @@ import { access, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { canonicalNativeRootDigest } from '@mpx/launch';
+import { SessionStore, type ResumePlanV1 } from '@mpx/sessions';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
 
@@ -88,6 +90,101 @@ describe('canonical CLI dispatch', () => {
 
     expect(await run([...route], io, { env: {} })).toBe(2);
     expect(io.err.join('')).toContain('USAGE_ERROR');
+  });
+
+  it('passes the exact prepared resume plan and resurrection authority to the injected executor', async () => {
+    const localAppData = await mkdtemp(path.join(tmpdir(), 'mpx-cli-resume-'));
+    const nativeRoot = path.join(localAppData, 'native');
+    const store = new SessionStore(localAppData);
+    const identity = { domain: 'personal', name: 'main' };
+    const digest = canonicalNativeRootDigest(nativeRoot);
+    await store.saveNativeBinding({
+      schemaVersion: 1,
+      ref: 'binding',
+      identity,
+      runtime: 'claude',
+      recordedRootDigest: digest,
+      accountBindingRef: null,
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    });
+    await store.put({
+      schemaVersion: 1,
+      recordId: 'record-abc',
+      runtimeQualifiedId: 'claude:abc',
+      runtime: 'claude',
+      identity,
+      nativeBindingRef: 'binding',
+      nativeSessionRef: { kind: 'native-id', value: 'abc' },
+      launch: {
+        launchKey: 'launch',
+        descriptorDigest: 'a'.repeat(64),
+        mode: 'interactive',
+        skillPolicy: 'standard',
+        contentScope: 'repo',
+        executor: { kind: 'host' },
+        workspace: 'direct',
+        networkPolicy: 'restricted',
+        grants: [],
+        artifactKey: 'artifact',
+        manifestKey: 'manifest',
+      },
+      location: { cwd: nativeRoot, project: null, repository: null, worktree: null },
+      metadata: { title: null, model: null, effort: null },
+      liveness: 'inactive',
+      process: null,
+      workflow: {
+        status: 'paused',
+        inbox: false,
+        nextAction: null,
+        priority: null,
+        note: null,
+        relatedIssue: null,
+        relatedReview: null,
+      },
+      resume: { state: 'resumable', diagnostic: null, lastVerifiedAt: null, lastPlanDigest: null },
+      timestamps: {
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        lastActivityAt: '2025-01-01T00:00:00.000Z',
+      },
+      lifecycle: { bindingId: null, sequence: 0, timestamp: null },
+    });
+    const executor = vi.fn(
+      async (plan: ResumePlanV1, _authority: { readonly approveHost?: boolean }) => ({
+        digest: plan.confirmationDigest,
+      }),
+    );
+    const io = captureIo();
+
+    expect(
+      await run(['session', 'resume', 'record-abc', '--approve-resurrection', '--json'], io, {
+        env: { LOCALAPPDATA: localAppData },
+        sessionStore: store,
+        sessionResumeDependencies: async () => ({
+          resolveConfiguredRoot: async () => ({
+            root: nativeRoot,
+            canonicalRootDigest: digest,
+            identity,
+            runtime: 'claude',
+          }),
+          verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' }),
+        }),
+        sessionResumeExecutor: executor,
+      }),
+    ).toBe(0);
+    expect(executor).toHaveBeenCalledOnce();
+    const [prepared, authority] = executor.mock.calls[0]!;
+    expect(prepared).toMatchObject({
+      schemaVersion: 1,
+      recordId: 'record-abc',
+      nativeSessionRef: { kind: 'native-id', value: 'abc' },
+    });
+    expect(authority).toEqual({ approveHost: true });
+    expect(JSON.parse(io.out.join(''))).toMatchObject({
+      ok: true,
+      data: { kind: 'session-resume', result: { digest: prepared.confirmationDigest } },
+    });
   });
 
   it('executes internal resurrection without revealing it in direct help', async () => {

@@ -97,7 +97,6 @@ function productionComposer(
       },
       ...(composition.lifecycle ? { lifecycle: composition.lifecycle } : {}),
       ...(composition.resumeTarget ? { resumeTarget: composition.resumeTarget } : {}),
-      ...(composition.branchInvocation ? { forkInvocation: composition.branchInvocation } : {}),
       ...(input.context.launchStatusSnapshotMaterializer
         ? { statusMaterializer: input.context.launchStatusSnapshotMaterializer }
         : {}),
@@ -181,7 +180,6 @@ export const executeResolvedNodeLaunch = async (
       ...(input.projectRoot ? { projectRoot: input.projectRoot } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.resume ? { resume: input.resume } : {}),
-      ...(input.branch ? { branch: input.branch } : {}),
     },
     {
       composer,

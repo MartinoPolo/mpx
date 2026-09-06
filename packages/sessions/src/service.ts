@@ -14,8 +14,6 @@ import {
   parseSessionRecordV1,
   stableDigest,
   type IdentityV1,
-  type SessionCaptureV1,
-  type SessionDispositionObservationV1,
   type SessionLiveness,
   type SessionRecordV1,
   type WorkflowStatus,
@@ -26,7 +24,6 @@ export interface SessionListFilter {
   readonly runtime?: RuntimeName;
   readonly liveness?: SessionLiveness;
   readonly workflowStatus?: WorkflowStatus;
-  readonly inbox?: boolean;
 }
 export interface DiscoveryResult {
   readonly status: 'available' | 'unavailable' | 'malformed';
@@ -87,8 +84,7 @@ export class SessionService {
       .filter(
         (record) =>
           filter.workflowStatus === undefined || record.workflow.status === filter.workflowStatus,
-      )
-      .filter((record) => filter.inbox === undefined || record.workflow.inbox === filter.inbox);
+      );
   }
   async show(query: string): Promise<SessionRecordV1> {
     const records = await this.list();
@@ -108,230 +104,6 @@ export class SessionService {
       throw new SessionError('SESSION_AMBIGUOUS', 'session abbreviation is ambiguous');
     }
     return abbreviated[0]!;
-  }
-  private async disposition(
-    operation: 'handoff' | 'completion',
-    query: string,
-    input: Readonly<{
-      identity: IdentityV1;
-      runtime?: RuntimeName;
-      summary: string;
-      nextAction: string;
-      disposition: 'paused' | 'unfinished' | 'completed';
-    }>,
-  ): Promise<SessionDispositionObservationV1> {
-    const records = await this.list({
-      identity: input.identity,
-      ...(input.runtime ? { runtime: input.runtime } : {}),
-    });
-    const matches = records.filter(
-      (record) =>
-        record.recordId === query ||
-        record.runtimeQualifiedId === query ||
-        record.recordId.startsWith(query) ||
-        record.runtimeQualifiedId.startsWith(query),
-    );
-    if (matches.length === 0) {
-      const outside = (await this.list()).some(
-        (record) =>
-          record.recordId === query ||
-          record.runtimeQualifiedId === query ||
-          record.recordId.startsWith(query) ||
-          record.runtimeQualifiedId.startsWith(query),
-      );
-      throw new SessionError(
-        outside ? 'SESSION_IDENTITY_MISMATCH' : 'SESSION_NOT_FOUND',
-        outside ? 'session belongs to a different identity or runtime' : 'session was not found',
-      );
-    }
-    if (matches.length > 1) {
-      throw new SessionError('SESSION_AMBIGUOUS', 'session abbreviation is ambiguous');
-    }
-    const found = matches[0]!;
-    const eventId = stableDigest({
-      operation,
-      recordId: found.recordId,
-      identity: found.identity,
-      runtime: found.runtime,
-      summary: input.summary,
-      nextAction: input.nextAction,
-      disposition: input.disposition,
-    });
-    return this.store.transaction(found.identity, found.runtime, (registry) => {
-      const current = registry.records.find((record) => record.recordId === found.recordId);
-      if (!current) {
-        throw new SessionError(
-          'SESSION_NOT_FOUND',
-          'session disappeared during disposition transaction',
-        );
-      }
-      if (
-        current.workflow.observationId === eventId &&
-        current.workflow.operation === operation &&
-        current.workflow.dispositionAt
-      ) {
-        return {
-          registry,
-          result: {
-            schemaVersion: 1 as const,
-            kind: 'session-disposition' as const,
-            eventId,
-            operation,
-            disposition: input.disposition,
-            occurredAt: current.workflow.dispositionAt,
-            identity: current.identity,
-            runtime: current.runtime,
-            record: current,
-          },
-        };
-      }
-      const changedAt = this.clock();
-      const changed = parseSessionRecordV1({
-        ...current,
-        workflow: {
-          ...current.workflow,
-          status: input.disposition,
-          inbox: input.disposition === 'unfinished',
-          summary: input.summary,
-          nextAction: input.nextAction,
-          dispositionAt: changedAt,
-          handedOffAt: operation === 'handoff' ? changedAt : current.workflow.handedOffAt,
-          completedAt:
-            operation === 'completion' && input.disposition === 'completed'
-              ? changedAt
-              : current.workflow.completedAt,
-          observationId: eventId,
-          operation,
-        },
-        timestamps: { ...current.timestamps, updatedAt: changedAt },
-      });
-      return {
-        registry: {
-          ...registry,
-          records: registry.records.map((record) =>
-            record.recordId === changed.recordId ? changed : record,
-          ),
-        },
-        result: {
-          schemaVersion: 1 as const,
-          kind: 'session-disposition' as const,
-          eventId,
-          operation,
-          disposition: input.disposition,
-          occurredAt: changedAt,
-          identity: changed.identity,
-          runtime: changed.runtime,
-          record: changed,
-        },
-      };
-    });
-  }
-  async handoff(
-    query: string,
-    input: Readonly<{
-      identity: IdentityV1;
-      runtime?: RuntimeName;
-      summary: string;
-      nextAction: string;
-      disposition: 'paused' | 'unfinished';
-    }>,
-  ): Promise<SessionDispositionObservationV1> {
-    return this.disposition('handoff', query, input);
-  }
-  async complete(
-    query: string,
-    input: Readonly<{
-      identity: IdentityV1;
-      runtime?: RuntimeName;
-      summary: string;
-      nextAction: string;
-      disposition: 'paused' | 'unfinished' | 'completed';
-    }>,
-  ): Promise<SessionDispositionObservationV1> {
-    return this.disposition('completion', query, input);
-  }
-  async mark(
-    query: string,
-    status: WorkflowStatus,
-    options: {
-      priority?: number | null;
-      nextAction?: string | null;
-      note?: string | null;
-      relatedIssue?: string | null;
-      relatedReview?: string | null;
-    } = {},
-  ): Promise<SessionRecordV1> {
-    const found = await this.show(query),
-      changedAt = this.clock();
-    return this.store.transaction(found.identity, found.runtime, (registry) => {
-      const current = registry.records.find((record) => record.recordId === found.recordId);
-      if (!current) {
-        throw new SessionError('SESSION_NOT_FOUND', 'session disappeared during mark transaction');
-      }
-      const inbox = status === 'unfinished' || status === 'needs-review';
-      const changed = parseSessionRecordV1({
-        ...current,
-        workflow: {
-          status,
-          inbox,
-          priority: options.priority === undefined ? current.workflow.priority : options.priority,
-          nextAction:
-            options.nextAction === undefined ? current.workflow.nextAction : options.nextAction,
-          note: options.note === undefined ? current.workflow.note : options.note,
-          relatedIssue:
-            options.relatedIssue === undefined
-              ? current.workflow.relatedIssue
-              : options.relatedIssue,
-          relatedReview:
-            options.relatedReview === undefined
-              ? current.workflow.relatedReview
-              : options.relatedReview,
-        },
-        timestamps: { ...current.timestamps, updatedAt: changedAt },
-      });
-      return {
-        registry: {
-          ...registry,
-          records: registry.records.map((record) =>
-            record.recordId === changed.recordId ? changed : record,
-          ),
-        },
-        result: changed,
-      };
-    });
-  }
-  async inbox(): Promise<SessionRecordV1[]> {
-    return (await this.list({ inbox: true })).sort(
-      (a, b) =>
-        (a.workflow.priority ?? 9) - (b.workflow.priority ?? 9) ||
-        b.timestamps.updatedAt.localeCompare(a.timestamps.updatedAt) ||
-        a.recordId.localeCompare(b.recordId),
-    );
-  }
-  async capture(selected?: readonly string[]): Promise<SessionCaptureV1[]> {
-    const records = selected
-      ? await Promise.all(selected.map((query) => this.show(query)))
-      : await this.list({ liveness: 'active' });
-    const groups = new Map<string, SessionRecordV1[]>();
-    for (const record of records) {
-      const key = JSON.stringify([record.identity.domain, record.identity.name, record.runtime]);
-      groups.set(key, [...(groups.get(key) ?? []), record]);
-    }
-    const result: SessionCaptureV1[] = [];
-    for (const group of groups.values()) {
-      const first = group[0]!;
-      const capture: SessionCaptureV1 = {
-        schemaVersion: 1,
-        captureId: randomUUID(),
-        identity: first.identity,
-        runtime: first.runtime,
-        recordIds: group.map((record) => record.recordId).sort(),
-        createdAt: this.clock(),
-      };
-      await this.store.saveCapture(capture);
-      result.push(capture);
-    }
-    return result;
   }
   async ingest(input: SessionLifecycleEventV1): Promise<SessionRecordV1> {
     const event = parseSessionLifecycleEventV1(input);

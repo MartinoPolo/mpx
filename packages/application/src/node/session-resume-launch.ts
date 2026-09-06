@@ -60,7 +60,6 @@ export interface NodeSessionResumeLaunchInput {
   /** Existing local state root, resolved only for Pi account attestation fallback. */
   stateRoot(): string;
   executionRoots(): Promise<ResumeExecutionRoots>;
-  readonly branchInvocation?: { readonly executable: string; readonly argv: readonly string[] };
   readonly discoverProjectConfig?: typeof discoverProjectConfig;
 }
 
@@ -315,15 +314,13 @@ export function createNodeSessionResumeLaunchApplicationService(
             environment,
             context: launchContext,
             tty: context.launchTty ?? directProcessTty(),
-            ...(authority.approveHost && !input.branchInvocation ? { approveHost: true } : {}),
+            ...(authority.approveHost ? { approveHost: true } : {}),
             nativeRuntimeRoot: execution.nativeRuntimeRoot,
             statusSnapshot,
             ...(execution.beforeChildExecution
               ? { beforeChildExecution: execution.beforeChildExecution }
               : {}),
-            ...(input.branchInvocation
-              ? { branch: { nativeBinding, invocation: input.branchInvocation } }
-              : { resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef } }),
+            resume: { nativeBinding, nativeSessionRef: plan.nativeSessionRef },
           });
         },
       };

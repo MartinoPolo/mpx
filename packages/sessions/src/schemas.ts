@@ -90,17 +90,6 @@ export interface SessionRecordV1 {
     timestamp: string | null;
   }>;
 }
-export interface SessionDispositionObservationV1 {
-  readonly schemaVersion: 1;
-  readonly kind: 'session-disposition';
-  readonly eventId: string;
-  readonly operation: 'handoff' | 'completion';
-  readonly disposition: 'paused' | 'unfinished' | 'completed';
-  readonly occurredAt: string;
-  readonly identity: IdentityV1;
-  readonly runtime: RuntimeName;
-  readonly record: SessionRecordV1;
-}
 export interface SessionRegistryV1 {
   readonly schemaVersion: 1;
   readonly identity: IdentityV1;
@@ -126,35 +115,6 @@ export interface SessionLifecycleBindingRecordV1 {
   readonly launch: LaunchSnapshotV1;
   readonly location: SessionLocationV1;
 }
-export interface SessionCaptureV1 {
-  readonly schemaVersion: 1;
-  readonly captureId: string;
-  readonly identity: IdentityV1;
-  readonly runtime: RuntimeName;
-  readonly recordIds: readonly string[];
-  readonly createdAt: string;
-}
-export interface LegacyImportJournalV1 {
-  readonly schemaVersion: 1;
-  readonly confirmationDigest: string;
-  readonly dispositions: readonly Readonly<{
-    recordId: string;
-    disposition: 'imported' | 'skipped';
-  }>[];
-  readonly committedRecordIds: readonly string[];
-  readonly partitionKeys: readonly string[];
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-export interface LegacyImportReceiptV1 {
-  readonly schemaVersion: 1;
-  readonly confirmationDigest: string;
-  readonly imported: number;
-  readonly skipped: number;
-  readonly partitionKeys: readonly string[];
-  readonly createdAt: string;
-}
-
 const control = /[\u0000-\u001f\u007f-\u009f]/u;
 const digestPattern = /^[a-f0-9]{64}$/u;
 const forbiddenKey =
@@ -563,135 +523,6 @@ export function parseNativeBindingRecordV1(value: unknown): NativeBindingRecordV
     updatedAt,
   };
 }
-export function parseSessionCaptureV1(value: unknown): SessionCaptureV1 {
-  const item = obj(
-    value,
-    ['schemaVersion', 'captureId', 'identity', 'runtime', 'recordIds', 'createdAt'],
-    'session capture',
-  );
-  if (
-    item.schemaVersion !== 1 ||
-    !Array.isArray(item.recordIds) ||
-    item.recordIds.length > 10_000
-  ) {
-    fail('SESSION_INVALID_SCHEMA', 'session capture version or record limit is invalid');
-  }
-  const recordIds = item.recordIds.map((recordId, index) => text(recordId, `recordIds[${index}]`));
-  if (new Set(recordIds).size !== recordIds.length) {
-    fail('SESSION_INVALID_SCHEMA', 'session capture record IDs must be unique');
-  }
-  return {
-    schemaVersion: 1,
-    captureId: text(item.captureId, 'captureId'),
-    identity: identity(item.identity),
-    runtime: runtime(item.runtime),
-    recordIds,
-    createdAt: canonicalTimestamp(item.createdAt, 'createdAt'),
-  };
-}
-export function parseLegacyImportJournalV1(value: unknown): LegacyImportJournalV1 {
-  const item = obj(
-    value,
-    [
-      'schemaVersion',
-      'confirmationDigest',
-      'dispositions',
-      'committedRecordIds',
-      'partitionKeys',
-      'createdAt',
-      'updatedAt',
-    ],
-    'legacy import journal',
-  );
-  if (
-    item.schemaVersion !== 1 ||
-    !Array.isArray(item.dispositions) ||
-    item.dispositions.length > 10_000 ||
-    !Array.isArray(item.committedRecordIds) ||
-    item.committedRecordIds.length > 10_000 ||
-    !Array.isArray(item.partitionKeys) ||
-    item.partitionKeys.length > 10_000
-  ) {
-    fail('SESSION_INVALID_SCHEMA', 'legacy import journal is invalid');
-  }
-  const dispositions = item.dispositions.map((value, index) => {
-    const disposition = obj(value, ['recordId', 'disposition'], `dispositions[${index}]`);
-    return {
-      recordId: text(disposition.recordId, `dispositions[${index}].recordId`),
-      disposition: enumValue(
-        disposition.disposition,
-        ['imported', 'skipped'] as const,
-        `dispositions[${index}].disposition`,
-      ),
-    };
-  });
-  const committedRecordIds = item.committedRecordIds.map((value, index) =>
-    text(value, `committedRecordIds[${index}]`),
-  );
-  const partitionKeys = item.partitionKeys.map((value, index) =>
-    sha(value, `partitionKeys[${index}]`),
-  );
-  const dispositionRecordIds = dispositions.map(({ recordId }) => recordId);
-  if (
-    new Set(dispositionRecordIds).size !== dispositionRecordIds.length ||
-    new Set(committedRecordIds).size !== committedRecordIds.length ||
-    committedRecordIds.some((recordId) => !dispositionRecordIds.includes(recordId)) ||
-    new Set(partitionKeys).size !== partitionKeys.length
-  ) {
-    fail(
-      'SESSION_INVALID_SCHEMA',
-      'legacy import journal entries must be unique and progress must match dispositions',
-    );
-  }
-  const createdAt = canonicalTimestamp(item.createdAt, 'createdAt'),
-    updatedAt = canonicalTimestamp(item.updatedAt, 'updatedAt');
-  if (Date.parse(updatedAt) < Date.parse(createdAt)) {
-    fail('SESSION_INVALID_TIMESTAMP', 'journal updatedAt precedes createdAt');
-  }
-  return {
-    schemaVersion: 1,
-    confirmationDigest: sha(item.confirmationDigest, 'confirmationDigest'),
-    dispositions,
-    committedRecordIds,
-    partitionKeys,
-    createdAt,
-    updatedAt,
-  };
-}
-export function parseLegacyImportReceiptV1(value: unknown): LegacyImportReceiptV1 {
-  const item = obj(
-    value,
-    ['schemaVersion', 'confirmationDigest', 'imported', 'skipped', 'partitionKeys', 'createdAt'],
-    'legacy import receipt',
-  );
-  if (
-    item.schemaVersion !== 1 ||
-    !Number.isSafeInteger(item.imported) ||
-    (item.imported as number) < 0 ||
-    !Number.isSafeInteger(item.skipped) ||
-    (item.skipped as number) < 0 ||
-    !Array.isArray(item.partitionKeys) ||
-    item.partitionKeys.length > 10_000
-  ) {
-    fail('SESSION_INVALID_SCHEMA', 'legacy import receipt fields are invalid');
-  }
-  const partitionKeys = item.partitionKeys.map((key, index) => sha(key, `partitionKeys[${index}]`));
-  if (
-    new Set(partitionKeys).size !== partitionKeys.length ||
-    partitionKeys.some((key, index) => index > 0 && partitionKeys[index - 1]! > key)
-  ) {
-    fail('SESSION_INVALID_SCHEMA', 'receipt partition keys must be unique and sorted');
-  }
-  return {
-    schemaVersion: 1,
-    confirmationDigest: sha(item.confirmationDigest, 'confirmationDigest'),
-    imported: item.imported as number,
-    skipped: item.skipped as number,
-    partitionKeys,
-    createdAt: canonicalTimestamp(item.createdAt, 'createdAt'),
-  };
-}
-
 export function parseLifecycleBindingRecordV1(value: unknown): SessionLifecycleBindingRecordV1 {
   const item = obj(
     value,

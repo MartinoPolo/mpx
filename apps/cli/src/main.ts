@@ -36,6 +36,7 @@ import {
   configuredProviderApplicationService,
   defaultContext,
   ports,
+  productionSessionProcessInspector,
   sessions,
   setupApplication,
   stateRoot,
@@ -45,7 +46,10 @@ import {
 } from './context.js';
 import { executeSessionCommand } from './session-command.js';
 import { executeContentCommand } from './content-command.js';
-import { productionSessionResumeDependencies } from '@mpx/application/node';
+import {
+  productionSessionDiscoveries,
+  productionSessionResumeDependencies,
+} from '@mpx/application/node';
 import { processIo, type CliIo } from './io.js';
 import {
   commandGroup,
@@ -302,6 +306,7 @@ function productionAccountServices(user: UserConfig, context: CliContext, cwd: s
   const application = productionAccountApplication(user, context, cwd);
   return {
     verifier: { verify: application.verifyNativeBinding.bind(application) },
+    resolver: { resolve: application.resolveNativeBinding.bind(application) },
   };
 }
 async function project(
@@ -410,7 +415,6 @@ async function executeProductionSessionResume(
   user: UserConfig,
   context: CliContext,
   authority: { readonly approveHost?: boolean },
-  branchInvocation?: { readonly executable: string; readonly argv: readonly string[] },
 ): Promise<unknown> {
   return executeNodeSessionResumeLaunch(
     {
@@ -434,7 +438,6 @@ async function executeProductionSessionResume(
           stateRoot: path.join(localAppData, 'mpx'),
         };
       },
-      ...(branchInvocation ? { branchInvocation } : {}),
     },
     plan,
     user,
@@ -478,7 +481,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     const user = await userConfig(context);
     const sessionStore = sessions(context);
     const account =
-      action === 'resume' && context.env.LOCALAPPDATA
+      (action === 'resume' || action === 'list') && context.env.LOCALAPPDATA
         ? productionAccountServices(user, context, parsed.cwd)
         : undefined;
     const resolveIdentity = async (name: string) => {
@@ -502,6 +505,26 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         : undefined;
     const application = createNodeSessionApplicationService({
       store: sessionStore,
+      ...(action === 'list'
+        ? {
+            processInspector:
+              context.sessionProcessInspector ?? productionSessionProcessInspector(),
+            discoveries:
+              context.sessionDiscoveries ??
+              (() =>
+                productionSessionDiscoveries({
+                  user,
+                  store: sessionStore,
+                  environment: context.env,
+                  ...((context.nativeAccountBindingResolver ?? account?.resolver)
+                    ? {
+                        accountResolver: (context.nativeAccountBindingResolver ??
+                          account?.resolver)!,
+                      }
+                    : {}),
+                })),
+          }
+        : {}),
       ...(resumeDependencies ? { resumeDependencies } : {}),
       ...(action === 'resume'
         ? {
@@ -510,11 +533,10 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
               ((plan, authority) => executeProductionSessionResume(plan, user, context, authority)),
           }
         : {}),
-      resolveIdentity,
     });
     const result = await executeSessionCommand(
       { action, args, options: parsed.options },
-      { application },
+      { application, resolveIdentity },
     );
     return { data: result.data, warnings: [...result.warnings] };
   }

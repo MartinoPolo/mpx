@@ -16,8 +16,7 @@
   ],
   "dependencies": {
     "@mpx/core": "workspace:*",
-    "@mpx/runtime-contracts": "workspace:*",
-    "@mpx/worktrees": "workspace:*"
+    "@mpx/runtime-contracts": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

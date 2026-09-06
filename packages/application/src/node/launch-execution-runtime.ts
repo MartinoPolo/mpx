@@ -251,7 +251,6 @@ export function productionRuntimeAdapters(input: {
   bindRuntimeStatusPath: (value: string) => void;
   lifecycle?: { binding: SessionLifecycleBindingV1; eventDirectory: string };
   resumeTarget?: LaunchRuntimeResumeTarget;
-  forkInvocation?: { readonly executable: string; readonly argv: readonly string[] };
   statusMaterializer?: LaunchStatusSnapshotMaterializer;
   runtimeStatusMaterializer?: RuntimeStatusEnvelopeMaterializer;
   trustedExecutable?: TrustedRuntimeExecutable;
@@ -375,21 +374,11 @@ export function productionRuntimeAdapters(input: {
             ...(input.resumeTarget ? { resumeTarget: input.resumeTarget } : {}),
             runtimeStatusEnvelopePath: projectionResult.runtimeStatusPath!,
           });
-          if (
-            input.forkInvocation &&
-            path.resolve(input.forkInvocation.executable) !== path.resolve(plan.executable)
-          ) {
-            throw new ExecutionError(
-              'SESSION_BRANCH_EXECUTABLE_MISMATCH',
-              'The confirmed native fork executable differs from the trusted runtime executable.',
-            );
-          }
           return {
             executable: plan.executable,
             argv: [
               ...input.trustedExecutable.argvPrefix,
               ...plan.args,
-              ...(input.forkInvocation?.argv ?? []),
               ...(input.descriptor.runtimeArgs ?? []),
             ],
             environment: plan.env,
@@ -448,21 +437,11 @@ export function productionRuntimeAdapters(input: {
             ? { resumeTarget: input.resumeTarget as VerifiedPiResumeTarget }
             : {}),
         });
-        if (
-          input.forkInvocation &&
-          path.resolve(input.forkInvocation.executable) !== path.resolve(plan.executable)
-        ) {
-          throw new ExecutionError(
-            'SESSION_BRANCH_EXECUTABLE_MISMATCH',
-            'The confirmed native fork executable differs from the trusted runtime executable.',
-          );
-        }
         return {
           executable: plan.executable,
           argv: [
             ...input.trustedExecutable.argvPrefix,
             ...plan.args,
-            ...(input.forkInvocation?.argv ?? []),
             ...(input.descriptor.runtimeArgs ?? []),
           ],
           environment: plan.env,

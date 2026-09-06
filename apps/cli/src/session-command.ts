@@ -9,6 +9,7 @@ export interface SessionCommandInput {
 }
 export interface SessionCommandContext {
   readonly application: SessionApplication;
+  readonly resolveIdentity?: (name: string) => Promise<NonNullable<SessionListFilter['identity']>>;
 }
 export interface SessionCommandResult {
   readonly data: unknown;
@@ -58,6 +59,9 @@ async function filter(
     usage('--state and --status cannot be combined');
   }
   const identityName = text(input, 'identity');
+  if (identityName && !context.resolveIdentity) {
+    usage('identity filtering is unavailable');
+  }
   return {
     ...(runtime ? { runtime } : {}),
     ...(state === 'active' || state === 'unknown' ? { liveness: state } : {}),
@@ -65,7 +69,7 @@ async function filter(
       ? { workflowStatus: state as WorkflowStatus }
       : {}),
     ...(status ? { workflowStatus: status as WorkflowStatus } : {}),
-    ...(identityName ? { identity: await context.application.resolveIdentity(identityName) } : {}),
+    ...(identityName ? { identity: await context.resolveIdentity!(identityName) } : {}),
   };
 }
 function limit(input: SessionCommandInput): number | undefined {
