@@ -1,5 +1,8 @@
-import type { ProviderAdapter } from './service.js';
+import type { JsonValue } from '@mpx/core';
+import type { ProviderCapabilityInputMap, ProviderCapabilityOutputMap } from './contracts.js';
 import type { ProviderProcessExecutor } from './process.js';
+import { providerRegistry, type ProviderCapability } from './registry.js';
+import { ProviderService, type ProviderAdapter } from './service.js';
 import { createGitHubAdapters, type GitHubAdapterOptions } from './adapters/github.js';
 import { createGitLabAdapters, type GitLabAdapterOptions } from './adapters/gitlab.js';
 import { createGerritAdapter, type GerritAdapterOptions } from './adapters/gerrit.js';
@@ -8,7 +11,7 @@ import { createLocalIssueAdapter, type LocalIssue } from './adapters/local.js';
 
 export type BuiltinProviderId = 'github' | 'gitlab' | 'gerrit' | 'kanbanflow' | 'local';
 
-export interface BuiltinProviderAdapterOptions {
+export interface BuiltinProviderOptions {
   readonly providerId?: string;
   readonly cwd?: string;
   readonly repository?: string;
@@ -26,9 +29,9 @@ export interface BuiltinProviderAdapterOptions {
 }
 
 /** Creates MPX's fixed built-in adapters. Configuration can select, but never extend, this set. */
-export function createBuiltinProviderAdapters(
+function createBuiltinProviderAdapters(
   executor: ProviderProcessExecutor,
-  options: BuiltinProviderAdapterOptions = {},
+  options: BuiltinProviderOptions = {},
 ): readonly ProviderAdapter[] {
   const selected = options.providerId;
   return Object.freeze([
@@ -66,4 +69,28 @@ export function createBuiltinProviderAdapters(
       : []),
     ...(selected === 'local' && options.local ? [createLocalIssueAdapter(options.local)] : []),
   ]);
+}
+
+/** Public façade over MPX's canonical registry and fixed built-in adapter set. */
+export interface BuiltinProviderService {
+  invoke<Capability extends ProviderCapability>(request: {
+    providerId: string;
+    capability: Capability;
+    route?: string;
+    input: ProviderCapabilityInputMap[Capability];
+  }): Promise<ProviderCapabilityOutputMap[Capability]>;
+  invoke(request: {
+    providerId: string;
+    capability: string;
+    route?: string;
+    input: JsonValue;
+  }): Promise<unknown>;
+}
+
+/** Composes only MPX's canonical built-in providers around the trusted process executor port. */
+export function createBuiltinProviderService(
+  executor: ProviderProcessExecutor,
+  options: BuiltinProviderOptions = {},
+): BuiltinProviderService {
+  return new ProviderService(providerRegistry, createBuiltinProviderAdapters(executor, options));
 }

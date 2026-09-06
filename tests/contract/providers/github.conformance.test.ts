@@ -1,13 +1,12 @@
 import { expect } from 'vitest';
 import type {
   IssueCapability,
-  ProviderInvocation,
   ProviderProcessExecutor,
   ProviderProcessRequest,
   ProviderProcessResult,
 } from '@mpx/providers';
 import { defineIssueAdapterConformance } from '@mpx/providers/testing';
-import { createBuiltinProviderAdapters } from '@mpx/providers';
+import { createBuiltinProviderService, providerRegistry } from '@mpx/providers';
 
 interface NativeIssue {
   number: number;
@@ -107,17 +106,17 @@ class StatefulGh implements ProviderProcessExecutor {
 
 defineIssueAdapterConformance('GitHub issue adapter', () => {
   const gh = new StatefulGh();
-  const adapter = createBuiltinProviderAdapters(gh, { providerId: 'github' })[0]!;
+  const service = createBuiltinProviderService(gh, { providerId: 'github' });
   return {
-    capabilities: adapter.capabilities.filter((value): value is IssueCapability =>
-      value.startsWith('issue.'),
-    ),
+    capabilities: providerRegistry
+      .get('github', 'issues')
+      .capabilities.filter((value): value is IssueCapability => value.startsWith('issue.')),
     invoke: (capability, input) =>
-      adapter.invoke({
+      service.invoke({
         providerId: 'github',
         capability,
         route: 'personal',
-        input: input as ProviderInvocation['input'],
+        input: input as never,
       }),
   };
 });

@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { IssueCapability, ProviderInvocation } from '@mpx/providers';
-import { createBuiltinProviderAdapters } from '@mpx/providers';
+import type { IssueCapability } from '@mpx/providers';
+import { createBuiltinProviderService, providerRegistry } from '@mpx/providers';
 import { defineIssueAdapterConformance } from '@mpx/providers/testing';
 
 function seed(root: string): void {
@@ -20,7 +20,7 @@ function seed(root: string): void {
 defineIssueAdapterConformance('local issue adapter', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'mpx-local-conformance-'));
   seed(root);
-  const adapter = createBuiltinProviderAdapters(
+  const service = createBuiltinProviderService(
     { execute: async () => ({ exitCode: 0, stdout: '', stderr: '' }) },
     {
       providerId: 'local',
@@ -29,17 +29,19 @@ defineIssueAdapterConformance('local issue adapter', () => {
         projectId: 'test/local',
       },
     },
-  )[0]!;
+  );
   return {
-    capabilities: adapter.capabilities.filter(
-      (value): value is IssueCapability =>
-        value.startsWith('issue.') && !value.startsWith('issue.dependency.'),
-    ),
+    capabilities: providerRegistry
+      .get('local', 'issues')
+      .capabilities.filter(
+        (value): value is IssueCapability =>
+          value.startsWith('issue.') && !value.startsWith('issue.dependency.'),
+      ),
     invoke: (capability, input) =>
-      adapter.invoke({
+      service.invoke({
         providerId: 'local',
         capability,
-        input: input as ProviderInvocation['input'],
+        input: input as never,
       }),
   };
 });

@@ -1,11 +1,11 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { IssueV1 } from '../../src/contracts.js';
+import { ProviderRegistry } from '../../src/registry.js';
 import {
   ProviderAdapterRegistry,
-  ProviderRegistry,
   ProviderService,
-  type IssueV1,
   type ProviderAdapter,
-} from '../../src/index.js';
+} from '../../src/service.js';
 
 const registry = new ProviderRegistry();
 const github = registry.get('github');

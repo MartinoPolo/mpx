@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { createGerritAdapter, type ProviderProcessRequest } from '../../src/index.js';
+import { createGerritAdapter } from '../../src/adapters/gerrit.js';
+import type { ProviderProcessRequest } from '../../src/process.js';
 
 const change = (overrides: Record<string, unknown> = {}) =>
   JSON.stringify({
@@ -231,6 +232,24 @@ describe('Gerrit review adapter', () => {
     });
   });
 
+  it('treats omitted comments as empty before adding the first comment', async () => {
+    const added = { timestamp: 1773059696, reviewer: { username: 'alice' }, message: 'First' };
+    const { adapter } = harness([queryOutput(), '', queryOutput({ comments: [added] })]);
+
+    await expect(
+      invoke(adapter, 'review.comment', { id: '42', body: 'First' }),
+    ).resolves.toMatchObject({ body: 'First', author: 'alice' });
+  });
+
+  it('rejects a present non-array comments value', async () => {
+    const { adapter, requests } = harness([queryOutput({ comments: null })]);
+
+    await expect(
+      invoke(adapter, 'review.comment', { id: '42', body: 'First' }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+    expect(requests).toHaveLength(1);
+  });
+
   it('reads an official numeric comment timestamp and returns truthful required fields', async () => {
     const timestamp = 1773059696;
     const commented = queryOutput({
@@ -267,6 +286,23 @@ describe('Gerrit review adapter', () => {
       '42,3',
     ]);
     expect(requests[2]?.argv).toContain('--comments');
+  });
+
+  it('fails safely when a newly added comment has a pre-existing ID fingerprint', async () => {
+    const identical = {
+      timestamp: 1773059696,
+      reviewer: { username: 'alice' },
+      message: 'LGTM',
+    };
+    const { adapter } = harness([
+      queryOutput({ comments: [identical] }),
+      '',
+      queryOutput({ comments: [identical, identical] }),
+    ]);
+
+    await expect(
+      invoke(adapter, 'review.comment', { id: '42', body: 'LGTM' }),
+    ).rejects.toMatchObject({ code: 'MUTATION_OUTCOME_UNKNOWN' });
   });
 
   it('identifies one newly added repeated comment by multiset difference', async () => {

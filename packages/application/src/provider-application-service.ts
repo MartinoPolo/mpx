@@ -4,7 +4,6 @@ import {
   capabilitiesForProviderRole,
   type ProviderCapability,
   type ProviderDescriptor,
-  type ProviderInvocation,
   type ProviderProbeRequest,
   type ProviderProbeResult,
   type ProviderRole,
@@ -15,6 +14,13 @@ export interface ProviderRegistryOperations {
   list(role?: ProviderRole): readonly ProviderDescriptor[];
   get(id: string, role?: ProviderRole): ProviderDescriptor;
   assertCapability(id: string, capability: string): void;
+}
+
+export interface ProviderInvocation {
+  readonly providerId: string;
+  readonly capability: ProviderCapability;
+  readonly route?: string;
+  readonly input: JsonValue;
 }
 
 export interface ProviderInvoker {

@@ -2,8 +2,7 @@ import path from 'node:path';
 import { loadUserConfig, type ProjectConfig } from '@mpx/config';
 import { MpxError, type JsonValue } from '@mpx/core';
 import {
-  createBuiltinProviderAdapters,
-  ProviderService,
+  createBuiltinProviderService,
   probeProvider,
   providerRegistry,
   type ProviderProcessExecutor,
@@ -104,7 +103,7 @@ export async function createNodeProviderService(
     }
   }
 
-  const adapters = createBuiltinProviderAdapters(executor, {
+  return createBuiltinProviderService(executor, {
     ...(selectedProvider === undefined ? {} : { providerId: selectedProvider }),
     cwd,
     ...(repository === undefined ? {} : { repository }),
@@ -122,7 +121,6 @@ export async function createNodeProviderService(
         }
       : {}),
   });
-  return new ProviderService(providerRegistry, adapters);
 }
 
 export function createNodeConfiguredProviderApplicationService(

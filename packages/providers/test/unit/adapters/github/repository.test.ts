@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type {
-  ProviderInvocation,
   ProviderProcessExecutor,
   ProviderProcessRequest,
   ProviderProcessResult,
 } from '../../../../src/index.js';
+import type { ProviderInvocation } from '../../../../src/service.js';
 import { createGitHubAdapters } from '../../../../src/adapters/github.js';
 
 const nativeReview = {

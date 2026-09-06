@@ -207,6 +207,16 @@ describe('@mpx/application architecture', () => {
     }
   });
 
+  it('composes Node providers through the package-owned fixed service factory', async () => {
+    const source = await readFile(
+      path.resolve(import.meta.dirname, '../../src/node/provider-application-service.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('createBuiltinProviderService');
+    expect(source).not.toMatch(/\b(?:ProviderService|createBuiltinProviderAdapters)\b/u);
+  });
+
   it('keeps concrete provider and route class declarations out of CLI context', async () => {
     const context = await readFile(
       path.resolve(import.meta.dirname, '../../../../apps/cli/src/context.ts'),

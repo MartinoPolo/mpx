@@ -117,6 +117,22 @@ describe('provider contracts', () => {
   });
 });
 
+describe('public provider composition', () => {
+  it('exports only fixed service composition and no arbitrary adapter injection API', async () => {
+    const providers = await import('../../src/index.js');
+
+    expect(providers).toHaveProperty('createBuiltinProviderService', expect.any(Function));
+    for (const name of [
+      'ProviderService',
+      'ProviderAdapterRegistry',
+      'createBuiltinProviderAdapters',
+      'createGerritAdapter',
+    ]) {
+      expect(providers).not.toHaveProperty(name);
+    }
+  });
+});
+
 describe('fixed registry', () => {
   it('ignores runtime descriptor arguments and always exposes canonical built-ins', () => {
     expectTypeOf<ConstructorParameters<typeof ProviderRegistry>>().toEqualTypeOf<[]>();

@@ -1,44 +1,65 @@
-import { describe, expect, it } from 'vitest';
-import { createBuiltinProviderAdapters, type ProviderProcessExecutor } from '../../src/index.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  createBuiltinProviderService,
+  type ProviderProcessExecutor,
+  type ProviderProcessRequest,
+} from '../../src/index.js';
 
-const executor: ProviderProcessExecutor = {
-  execute: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-};
+const gerritOutput = `${JSON.stringify({
+  project: 'team/project',
+  branch: 'main',
+  number: 42,
+  id: 'I1111111111111111111111111111111111111111',
+  subject: 'Review',
+  status: 'NEW',
+  wip: false,
+  currentPatchSet: {
+    number: 1,
+    revision: '0123456789abcdef0123456789abcdef01234567',
+    ref: 'refs/changes/42/42/1',
+  },
+})}\n${JSON.stringify({ type: 'stats', rowCount: 1 })}\n`;
 
 describe('built-in provider composition', () => {
-  it('constructs only the requested fixed built-in adapter', () => {
-    const adapters = createBuiltinProviderAdapters(executor, {
+  it('installs only the requested fixed built-in provider', async () => {
+    const executor: ProviderProcessExecutor = {
+      execute: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    const service = createBuiltinProviderService(executor, {
       providerId: 'kanbanflow',
       cwd: 'C:/project',
       kanbanflow: { states: { todo: 'todo', done: 'done' } },
     });
 
-    expect(
-      adapters.map(({ providerId, backend, role }) => ({ providerId, backend, role })),
-    ).toEqual([{ providerId: 'kanbanflow', backend: 'kf', role: 'issues' }]);
+    await expect(
+      service.invoke({ providerId: 'github', capability: 'issue.list', input: {} }),
+    ).rejects.toMatchObject({ code: 'CAPABILITY_UNSUPPORTED' });
+    expect(executor.execute).not.toHaveBeenCalled();
   });
 
-  it('constructs the fixed Gerrit adapter only when selector and configured remote are present', () => {
-    const adapters = createBuiltinProviderAdapters(executor, {
+  it('constructs the fixed Gerrit service only from selector and configured remote', async () => {
+    const requests: ProviderProcessRequest[] = [];
+    const executor: ProviderProcessExecutor = {
+      execute: vi.fn(async (request) => {
+        requests.push(request);
+        return { exitCode: 0, stdout: gerritOutput, stderr: '' };
+      }),
+    };
+    const service = createBuiltinProviderService(executor, {
       providerId: 'gerrit',
       cwd: 'C:/project',
       repository: 'review.example/team/project',
       remote: 'review-upstream',
     });
-    expect(adapters).toHaveLength(1);
-    expect(adapters[0]).toMatchObject({
-      providerId: 'gerrit',
-      backend: 'git-ssh',
-      role: 'repository',
-      capabilities: [
-        'review.view',
-        'review.create',
-        'review.update',
-        'review.comment',
-        'review.ready',
-        'review.vote',
-        'review.merge',
-      ],
-    });
+
+    await expect(
+      service.invoke({
+        providerId: 'gerrit',
+        capability: 'review.view',
+        route: 'work',
+        input: { id: '42' },
+      }),
+    ).resolves.toMatchObject({ id: '42', title: 'Review' });
+    expect(requests[0]?.argv).toContain('review.example');
   });
 });

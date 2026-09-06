@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ISSUE_CAPABILITIES,
   ProviderError,
-  ProviderService,
   ProviderRegistry,
   type IssueCapability,
-  type ProviderInvocation,
   type ProviderProcessExecutor,
   type ProviderProcessRequest,
   type ProviderProcessResult,
 } from '../../../../src/index.js';
+import { ProviderService, type ProviderInvocation } from '../../../../src/service.js';
 import { defineIssueAdapterConformance, type IssueConformanceDriver } from '@mpx/providers/testing';
 import { createKanbanFlowAdapter } from '../../../../src/adapters/kanbanflow.js';
 

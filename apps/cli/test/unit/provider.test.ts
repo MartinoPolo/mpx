@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { MpxError } from '@mpx/core';
-import type { ProviderInvocation, ProviderProcessRequest } from '@mpx/providers';
+import type { ProviderProcessRequest } from '@mpx/providers';
 import { captureIo } from '../../src/io.js';
 import { run } from '../../src/main.js';
 
@@ -114,7 +114,7 @@ describe('provider CLI', () => {
     const cwd = await project(config()),
       env = await identityEnv(cwd, { kanbanflow: 'work-kf' }),
       io = captureIo();
-    const invoke = vi.fn(async (_request: ProviderInvocation) => [{ schemaVersion: 1, id: '1' }]);
+    const invoke = vi.fn(async (_request: unknown) => [{ schemaVersion: 1, id: '1' }]);
     expect(
       await run(['--json', '--cwd', cwd, 'issue', 'list', '--identity', 'work'], io, {
         env,

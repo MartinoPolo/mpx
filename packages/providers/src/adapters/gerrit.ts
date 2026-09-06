@@ -219,10 +219,11 @@ function parseComments(
 ): { review: GerritReview; comments: readonly GerritComment[] } {
   const change = parseQueryRecord(output);
   const review = normalize(change, project);
-  if (!Array.isArray(change.comments) || change.comments.length > 10_000) {
+  const rawComments = change.comments === undefined ? [] : change.comments;
+  if (!Array.isArray(rawComments) || rawComments.length > 10_000) {
     throw new Error('comments');
   }
-  const comments = change.comments.map((value): GerritComment => {
+  const comments = rawComments.map((value): GerritComment => {
     const comment = object(value);
     const timestamp = comment.timestamp;
     if (
@@ -279,7 +280,10 @@ function addedComment(
     throw new Error('comments changed');
   }
   const matches = additions.filter((comment) => comment.message === expectedBody);
-  if (matches.length !== 1) {
+  if (
+    matches.length !== 1 ||
+    before.some((comment) => comment.fingerprint === matches[0]!.fingerprint)
+  ) {
     throw new Error('ambiguous comment');
   }
   return matches[0]!;
