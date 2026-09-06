@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,12 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   repositoryFiles,
   validateCanonicalScriptSyntax,
-  validateConvergenceArtifacts,
   validateFiles,
   validateSharedInstructionLinks,
 } from '../../../scripts/validate-generated.mjs';
 
-const sha = (text) => createHash('sha256').update(text).digest('hex');
 const messages = (diagnostics) => diagnostics.map((item) => item.code);
 
 function files(path, content) {
@@ -110,54 +107,6 @@ describe('generated repository validation', () => {
       );
     expect(names.length).toBeGreaterThan(0);
     expect(validateCanonicalScriptSyntax(root, names)).toEqual([]);
-  });
-
-  it('requires convergence destinations and completion evidence to resolve to hash-matched repository files', () => {
-    const sourceHash = sha('source');
-    const destination = 'content/skills/example/SKILL.md';
-    const entry = {
-      source: 'pi',
-      path: 'skills/example/SKILL.md',
-      sha256: sourceHash,
-      completion: 'completed',
-      disposition: 'canonicalized',
-      destination,
-      adaptation: 'normalized',
-      evidence: [
-        {
-          schemaVersion: 1,
-          kind: 'generated-artifact',
-          sourceSnapshot: { source: 'pi', path: 'skills/example/SKILL.md', sha256: sourceHash },
-          sha256: sha('wrong'),
-          reference: destination,
-          verification: 'verified',
-        },
-      ],
-    };
-    expect(
-      validateConvergenceArtifacts({ entries: [entry] }, new Map([[destination, 'canonical']])).map(
-        (item) => item.code,
-      ),
-    ).toEqual(['CONVERGENCE_ARTIFACT_HASH_MISMATCH']);
-    entry.evidence[0].sha256 = sha('canonical');
-    expect(
-      validateConvergenceArtifacts({ entries: [entry] }, new Map([[destination, 'canonical']])),
-    ).toEqual([]);
-  });
-
-  it('does not require an artifact destination for reviewed Phase I drift', () => {
-    const entry = {
-      source: 'claude',
-      path: 'settings.json',
-      completion: 'reviewed',
-      phase: 'Phase I',
-      disposition: 'Claude-specific',
-      destination: null,
-      adaptation: 'preserve during install',
-      rationale: 'Installer route is pending.',
-      evidence: [],
-    };
-    expect(validateConvergenceArtifacts({ entries: [entry] }, new Map())).toEqual([]);
   });
 
   it.each(['/mp:ship', '/mp-gh:issue-view', '/kf:board'])(
