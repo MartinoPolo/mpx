@@ -32,7 +32,7 @@ async function identityEnv(
         },
       },
       domains: { work: [domainRoot] },
-      contentScopes: {},
+      contentScopes: { work: { roots: [domainRoot], skillPacks: [] } },
       modes: {},
       skillPolicies: {},
       presets: {},
@@ -59,6 +59,49 @@ const config = (repository = 'github', issues = 'kanbanflow') => ({
 });
 
 describe('provider CLI', () => {
+  it('reports redacted provider authentication failures through bare doctor', async () => {
+    const cwd = await project(config('github', 'github')),
+      env = await identityEnv(cwd, { github: 'private-provider-route' }),
+      io = captureIo();
+    const execute = vi.fn(async () => ({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'credential secret at C:/private/provider-route',
+      failure: 'auth' as const,
+    }));
+    const catalogRoot = path.resolve(import.meta.dirname, '../../../../content/skills');
+
+    expect(
+      await run(['--json', '--cwd', cwd, 'doctor'], io, {
+        env,
+        catalogRoot,
+        providerProcessExecutor: { execute },
+      }),
+    ).toBe(1);
+    const output = io.out.join('');
+    const envelope = JSON.parse(output) as {
+      ok: boolean;
+      data: { diagnostics: Array<Record<string, unknown>> };
+    };
+    expect(envelope.ok, output).toBe(true);
+    expect(envelope.data.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'AUTH_FAILURE',
+          severity: 'error',
+          details: { identity: 'work', provider: 'github', role: 'issues' },
+        }),
+        expect.objectContaining({
+          code: 'AUTH_FAILURE',
+          severity: 'error',
+          details: { identity: 'work', provider: 'github', role: 'repository' },
+        }),
+      ]),
+    );
+    expect(output).not.toContain('provider-route');
+    expect(output).not.toContain('credential secret');
+  });
+
   it('selects the strict issues role and delegates with the explicit identity route', async () => {
     const cwd = await project(config()),
       env = await identityEnv(cwd, { kanbanflow: 'work-kf' }),

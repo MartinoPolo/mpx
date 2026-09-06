@@ -8,7 +8,7 @@ mpx setup
 
 `mpx setup` builds and validates the current immutable release before changing native state, durably detaches recognized legacy Pi links, then plans, applies, and strictly verifies that exact release. It derives identity and provider selections from configuration route keys and never reads credentials. Re-running it reuses the immutable release, installer receipt, and legacy-detachment receipt. If installation fails after detachment, retry `mpx setup`; legacy external authority is intentionally not restored.
 
-The installer intent, planning, confirmation, verification, rollback, and recovery protocols remain internal application components composed by `mpx setup`; they are not separate CLI routes. Their strict contracts are documented in [PHASE_I_INSTALLER.md](PHASE_I_INSTALLER.md).
+Installer planning, confirmation, verification, rollback, and recovery remain internal components composed exclusively by `mpx setup`; they are not separate CLI routes.
 
 Production builds use the workspace-pinned `esbuild` version to bundle the CLI and all workspace/runtime dependencies into `bin/mpx.mjs`. Releases copy that bundle; they do not import a source checkout. `%MPX_APPS%\mpx\bin\mpx.cmd` is the owned stable selector used by managed shell launchers and shortcuts. It reads `%LOCALAPPDATA%\mpx\active-release` and dispatches through the registered absolute Node executable to the selected immutable release bundle.
 

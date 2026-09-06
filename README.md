@@ -4,11 +4,11 @@ MPX is a skills-first local control plane for launching Claude and Pi with expli
 
 ## Start here
 
-- **Install:** follow [Installation](docs/INSTALLATION.md) and the immutable [installer design](docs/PHASE_I_INSTALLER.md).
+- **Install:** follow the setup-only [Installation](docs/INSTALLATION.md) flow.
 - **Verify:** run `pnpm install --frozen-lockfile`, then `pnpm build`, `pnpm check`, `pnpm typecheck`, and `pnpm test`.
 - **Launch:** configure MPX as described in [Configuration](docs/CONFIG.md), then see [Launch](docs/LAUNCH.md) for `mpx launch`, `cc-mpx`, `ccw-mpx`, `pi-mpx`, and `piw-mpx`.
 - **Develop:** use `mpx workspace start|stop|logs` and the managed-port model documented in [Runtime adapters](docs/RUNTIME_ADAPTERS.md), [Ports](docs/PORTS.md), and [Worktrees](docs/WORKTREES.md).
-- **Sessions and accounts:** see [Sessions installer](docs/SESSIONS_INSTALLER.md) and [Pi accounts](docs/PI_ACCOUNTS.md).
+- **Sessions:** see [Sessions installer](docs/SESSIONS_INSTALLER.md).
 - **Issues:** see [Issues](docs/ISSUES.md) and [local Markdown issues](docs/local-markdown-issues.md).
 - **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md) and [ADR 0004: Canonical native Pi extensions](docs/adr/0004-canonical-native-pi-extensions.md).
 

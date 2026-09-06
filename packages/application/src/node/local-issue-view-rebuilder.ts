@@ -1,5 +1,16 @@
 import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/providers';
-import type { LocalIssueViewRebuilder } from '../project-application-service.js';
+
+export interface NodeLocalIssueViewRebuilder {
+  rebuild(request: {
+    readonly storeRoot: string;
+    readonly projectId: string;
+    readonly view: {
+      readonly vaultRoot: string;
+      readonly outputRoot: string;
+      readonly resumeBaseUrl: string;
+    };
+  }): Promise<unknown>;
+}
 
 interface LocalIssueViewRebuilderDependencies {
   readonly createStore: (root: string, options: { projectId: string }) => unknown;
@@ -22,7 +33,7 @@ const productionDependencies: LocalIssueViewRebuilderDependencies = {
 /** Concrete local-provider structural adapter; exported only from @mpx/application/node. */
 export function createNodeLocalIssueViewRebuilder(
   dependencies: LocalIssueViewRebuilderDependencies = productionDependencies,
-): LocalIssueViewRebuilder {
+): NodeLocalIssueViewRebuilder {
   return {
     rebuild(request) {
       const store = dependencies.createStore(request.storeRoot, {

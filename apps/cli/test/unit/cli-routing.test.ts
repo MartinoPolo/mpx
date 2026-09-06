@@ -1,7 +1,7 @@
-import { mkdtemp } from 'node:fs/promises';
+import { access, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
 
@@ -46,6 +46,43 @@ const deletedRoutes = [
 ] as const;
 
 describe('canonical CLI dispatch', () => {
+  it('returns an init dry-run envelope without publishing', async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'mpx-cli-init-dry-'));
+    const io = captureIo();
+    const ensure = vi.fn();
+
+    expect(
+      await run(['init', '--dry-run', '--json', '--cwd', cwd], io, {
+        env: {},
+        portService: { ensure } as never,
+      }),
+    ).toBe(0);
+    expect(JSON.parse(io.out.join(''))).toMatchObject({
+      ok: true,
+      data: { plan: { schemaVersion: 1 }, suggestedManifest: { schemaVersion: 1 } },
+    });
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it('admits confirmed init and publishes its exact discovered manifest', async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), 'mpx-cli-init-confirm-'));
+    const io = captureIo();
+    const ensure = vi.fn(async () => ({ lease: { port: 4173 }, warnings: [] }));
+
+    expect(
+      await run(['init', '--confirm', '--json', '--cwd', cwd], io, {
+        env: {},
+        portService: { ensure } as never,
+      }),
+    ).toBe(0);
+    expect(JSON.parse(io.out.join(''))).toMatchObject({
+      ok: true,
+      data: { confirmed: true, lease: { port: 4173 } },
+    });
+    await expect(access(path.join(cwd, 'mpxconfig.json'))).resolves.toBeUndefined();
+    expect(ensure).toHaveBeenCalledOnce();
+  });
+
   it.each(deletedRoutes.map((route) => [route]))('rejects deleted route %s', async (route) => {
     const io = captureIo();
 

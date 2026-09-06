@@ -20,10 +20,7 @@ export interface NodeAccountApplicationDependencies {
 function attestationPort(service: RootAttestationService): AccountAttestationServicePort {
   return {
     list: () => service.store.list(),
-    find: (identity) => service.find(identity),
     verify: (identity, root, ref) => service.verify(identity, root, ref),
-    plan: (operation, identity, root) => service.plan(operation, identity, root),
-    confirm: (plan) => service.confirm(plan),
   };
 }
 

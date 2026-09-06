@@ -33,18 +33,6 @@ export interface ProjectEnsureResult {
   readonly lease: unknown;
   readonly warnings: readonly { code: string; message: string; port?: number }[];
 }
-export interface LocalIssueViewRebuildRequest {
-  readonly storeRoot: string;
-  readonly projectId: string;
-  readonly view: {
-    readonly vaultRoot: string;
-    readonly outputRoot: string;
-    readonly resumeBaseUrl: string;
-  };
-}
-export interface LocalIssueViewRebuilder {
-  rebuild(request: LocalIssueViewRebuildRequest): Promise<unknown>;
-}
 export interface ProjectApplicationDependencies {
   readonly path: ProjectPathOperations;
   access(file: string): Promise<void>;
@@ -62,14 +50,6 @@ export interface ProjectApplicationDependencies {
     readonly readOnly: boolean;
   }>;
   sbxProofDiagnostics?(): Promise<readonly string[]>;
-  branchDiagnostics?(): Promise<{
-    readonly runtime:
-      { readonly available: true } | { readonly available: false; readonly code: string };
-    readonly terminal:
-      | { readonly available: true; readonly executable: string }
-      | { readonly available: false; readonly code: string };
-    readonly terminalConfigured: boolean;
-  }>;
   statusSnapshot?(request: {
     cwd: string;
     projectRoot: string;
@@ -85,7 +65,11 @@ export interface ProjectApplicationDependencies {
   }>;
   confirmInit?: typeof confirmInit;
   rollbackConfirmedInit?: typeof rollbackConfirmedInit;
-  localIssueViewRebuilder?: LocalIssueViewRebuilder;
+  providerDiagnostics?(request: {
+    cwd: string;
+    project: ProjectConfig;
+    user: UserConfig;
+  }): Promise<readonly Diagnostic[]>;
   ensureProject?(request: {
     cwd: string;
     projectRoot: string;
@@ -93,9 +77,6 @@ export interface ProjectApplicationDependencies {
     configHash: string;
   }): Promise<ProjectEnsureResult>;
 }
-export type ConfigurationKind = 'identity' | 'mode' | 'skill-policy' | 'preset';
-export type ConfigurationAction = 'list' | 'show';
-
 const emptyUserConfig = (): UserConfig => ({
   identities: {},
   domains: {},
@@ -239,125 +220,6 @@ export class ProjectApplicationService {
       throw requiredError(true);
     }
     return this.read(file, request.environment);
-  }
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
-  configurationItem(request: {
-    kind: ConfigurationKind;
-    action: ConfigurationAction;
-    user: UserConfig;
-    name?: string;
-  }): ApplicationOperationResult<unknown> {
-    const source =
-      request.kind === 'identity'
-        ? request.user.identities
-        : request.kind === 'mode'
-          ? request.user.modes
-          : request.kind === 'skill-policy'
-            ? request.user.skillPolicies
-            : request.user.presets;
-    const publicItem = (name: string, value: unknown): unknown => {
-      if (request.kind !== 'identity') {
-        return { name, ...(value as Record<string, unknown>) };
-      }
-      const identity = value as UserConfig['identities'][string];
-      return {
-        name,
-        domain: identity.domain,
-        gitAuthorRoute: identity.gitAuthorRoute,
-        providerRoutes: Object.fromEntries(
-          Object.entries(identity.providerRoutes ?? {}).sort(([a], [b]) => a.localeCompare(b)),
-        ),
-        sshRoute: identity.sshRoute ?? null,
-        mcpSharing: {
-          allow: [...(identity.mcpSharing?.allow ?? [])].sort(),
-          shareNativeAuth: false,
-        },
-      };
-    };
-    if (request.action === 'list') {
-      return {
-        data: {
-          schemaVersion: 1,
-          kind: request.kind,
-          items: Object.entries(source)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([name, value]) => publicItem(name, value)),
-        },
-      };
-    }
-    const value = request.name === undefined ? undefined : source[request.name];
-    if (!value) {
-      throw new MpxError({
-        code: `${request.kind.replace('-', '_').toUpperCase()}_UNKNOWN`,
-        message: `Unknown ${request.kind} '${request.name}'.`,
-      });
-    }
-    return {
-      data: { schemaVersion: 1, kind: request.kind, item: publicItem(request.name!, value) },
-    };
-  }
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
-  async rebuildLocalIssueView(request: {
-    cwd: string;
-    appdata?: string;
-    environment: Record<string, string | undefined>;
-  }): Promise<ApplicationOperationResult<unknown>> {
-    const found = await this.discover(request.cwd);
-    const issues = found.config.issues;
-    if (issues?.provider !== 'local' || !issues.store || !issues.view) {
-      throw new MpxError({
-        code: 'LOCAL_VIEW_UNAVAILABLE',
-        message: 'The project must select logical local store and view registrations.',
-      });
-    }
-    const user = await this.requiredUserConfig(request);
-    const store = user.localIssueStores?.[issues.store];
-    const view = user.localViews?.[issues.view];
-    if (!store || !view) {
-      throw new MpxError({
-        code: 'LOCAL_VIEW_UNAVAILABLE',
-        message: 'The selected logical local store or view is not registered.',
-      });
-    }
-    if (!this.dependencies.localIssueViewRebuilder) {
-      throw new MpxError({
-        code: 'LOCAL_VIEW_UNAVAILABLE',
-        message: 'The selected logical local store or view is not registered.',
-      });
-    }
-    return {
-      data: await this.dependencies.localIssueViewRebuilder.rebuild({
-        storeRoot: store.root,
-        projectId: found.config.project.id,
-        view: {
-          vaultRoot: view.vaultRoot,
-          outputRoot: view.outputRoot,
-          resumeBaseUrl: view.resumeBaseUrl,
-        },
-      }),
-    };
-  }
-  // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
-  async config(
-    request:
-      | { cwd: string; action: 'show' }
-      | { cwd: string; action: 'validate' }
-      | { cwd: string; action: 'resolve'; user: UserConfig }
-      | { cwd: string; action: 'explain'; user: UserConfig },
-  ): Promise<ApplicationOperationResult<unknown>> {
-    const found = await this.discover(request.cwd);
-    if (request.action === 'show') {
-      return { data: { path: found.path, config: found.config } };
-    }
-    if (request.action === 'validate') {
-      return { data: { valid: true, path: found.path } };
-    }
-    const resolved = await (this.dependencies.resolveConfig ?? resolveConfig)(
-      found.config,
-      request.user,
-      request.cwd,
-    );
-    return { data: request.action === 'explain' ? { provenance: resolved.provenance } : resolved };
   }
   // fallow-ignore-next-line unused-class-member -- public application API invoked through package consumers.
   async init(request: {
@@ -507,22 +369,13 @@ export class ProjectApplicationService {
         });
       }
     }
-    const branch = await this.dependencies.branchDiagnostics?.();
-    if (branch && !branch.runtime.available) {
-      additionalDiagnostics.push({
-        code: branch.runtime.code,
-        message: 'Production session branch runtime execution is unavailable.',
-        severity: 'warning',
-      });
-    }
-    if (branch?.terminalConfigured && !branch.terminal.available) {
-      additionalDiagnostics.push({
-        code: branch.terminal.code,
-        message:
-          'Configured Windows Terminal is unavailable or untrusted; side-by-side tabs are disabled.',
-        severity: 'warning',
-      });
-    }
+    additionalDiagnostics.push(
+      ...((await this.dependencies.providerDiagnostics?.({
+        cwd: request.cwd,
+        project: found.config,
+        user,
+      })) ?? []),
+    );
     const services = Object.entries(found.config.development?.services ?? {}).sort(
       ([left], [right]) => left.localeCompare(right),
     );

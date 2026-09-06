@@ -50,38 +50,10 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 describe('ProjectApplicationService', () => {
-  it('constructs a sorted public identity inventory without runtime roots or native auth', () => {
-    expect(setup().configurationItem({ kind: 'identity', action: 'list', user })).toEqual({
-      data: {
-        schemaVersion: 1,
-        kind: 'identity',
-        items: [
-          {
-            name: 'zed',
-            domain: 'work',
-            gitAuthorRoute: 'git-z',
-            providerRoutes: { alpha: 'a', zeta: 'z' },
-            sshRoute: null,
-            mcpSharing: { allow: ['a', 'z'], shareNativeAuth: false },
-          },
-        ],
-      },
-    });
-  });
-
   it('requires an absolute user configuration root for launch-bound operations', async () => {
     await expect(
       setup().requiredUserConfig({ appdata: 'relative', environment: {} }),
     ).rejects.toMatchObject({ code: 'USER_CONFIG_REQUIRED' });
-  });
-
-  it('does not require user configuration for project-only config actions', async () => {
-    await expect(setup().config({ cwd: 'C:/repo', action: 'show' })).resolves.toEqual({
-      data: { path: found.path, config: project },
-    });
-    await expect(setup().config({ cwd: 'C:/repo', action: 'validate' })).resolves.toEqual({
-      data: { valid: true, path: found.path },
-    });
   });
 
   it('compensates a confirmed init when dependent publication fails', async () => {
@@ -128,66 +100,6 @@ describe('ProjectApplicationService', () => {
     });
   });
 
-  it('resolves a selected local store and view before invoking the structural rebuilder', async () => {
-    const rebuild = vi.fn(async () => ({ rebuilt: 3 }));
-    const localProject: ProjectConfig = {
-      ...project,
-      issues: { provider: 'local', store: 'work-items', view: 'vault' },
-    };
-    const localUser = {
-      ...user,
-      localIssueStores: { 'work-items': { root: 'C:/issues' } },
-      localViews: {
-        vault: {
-          vaultRoot: 'C:/vault',
-          outputRoot: 'Projects',
-          vaultSubtree: 'MPX/Issues',
-          resumeBaseUrl: 'mpx://resume',
-        },
-      },
-    } satisfies UserConfig;
-    const service = setup({
-      discoverProjectConfig: async () => ({ ...found, config: localProject }),
-      loadUserConfig: async () => localUser,
-      localIssueViewRebuilder: { rebuild },
-    });
-
-    await expect(
-      service.rebuildLocalIssueView({
-        cwd: 'C:/repo',
-        appdata: 'C:/Users/test/AppData',
-        environment: {},
-      }),
-    ).resolves.toEqual({ data: { rebuilt: 3 } });
-    expect(rebuild).toHaveBeenCalledWith({
-      storeRoot: 'C:/issues',
-      projectId: 'synthetic/project',
-      view: {
-        vaultRoot: 'C:/vault',
-        outputRoot: 'Projects',
-        resumeBaseUrl: 'mpx://resume',
-      },
-    });
-  });
-
-  it('rejects an unselected local view before loading required user configuration', async () => {
-    const load = vi.fn(async () => user);
-    await expect(
-      setup({
-        loadUserConfig: load,
-        localIssueViewRebuilder: { rebuild: vi.fn() },
-      }).rebuildLocalIssueView({
-        cwd: 'C:/repo',
-        appdata: 'C:/Users/test/AppData',
-        environment: {},
-      }),
-    ).rejects.toMatchObject({
-      code: 'LOCAL_VIEW_UNAVAILABLE',
-      message: 'The project must select logical local store and view registrations.',
-    });
-    expect(load).not.toHaveBeenCalled();
-  });
-
   it('owns doctor diagnostic sequencing and only snapshots managed services', async () => {
     const order: string[] = [];
     const managedProject: ProjectConfig = {
@@ -232,13 +144,24 @@ describe('ProjectApplicationService', () => {
         order.push('proof');
         return ['PROOF'];
       },
-      branchDiagnostics: async () => {
-        order.push('branch');
-        return {
-          runtime: { available: true },
-          terminal: { available: false, code: 'WINDOWS_TERMINAL_UNAVAILABLE' },
-          terminalConfigured: true,
-        };
+      providerDiagnostics: async ({
+        project: selectedProject,
+        user: selectedUser,
+      }: {
+        project: ProjectConfig;
+        user: UserConfig;
+      }) => {
+        order.push('providers');
+        expect(selectedProject).toBe(managedProject);
+        expect(selectedUser).toBe(user);
+        return [
+          {
+            code: 'PROVIDER_AUTH_FAILED',
+            message: 'Provider authentication failed.',
+            severity: 'error',
+            details: { identity: 'zed', provider: 'github', role: 'repository' },
+          },
+        ];
       },
       statusSnapshot: async (request: { configHash: string }) => {
         order.push('status');
@@ -270,7 +193,7 @@ describe('ProjectApplicationService', () => {
       'project',
       'sbx',
       'proof',
-      'branch',
+      'providers',
       'status',
       'resolve',
     ]);
@@ -281,22 +204,22 @@ describe('ProjectApplicationService', () => {
       'A_CODE',
       'Z_CODE',
       'PROOF',
-      'WINDOWS_TERMINAL_UNAVAILABLE',
+      'PROVIDER_AUTH_FAILED',
       'FIXED_SHARED_LIMITATION',
       'PORT',
     ]);
   });
 
   it('rejects mutable sandbox diagnostics before later diagnostic side effects', async () => {
-    const branchDiagnostics = vi.fn();
+    const providerDiagnostics = vi.fn();
     await expect(
       setup({
         inventoryCanonical: async () => [],
         inventoryProjectSkills: async () => ({ skills: [], diagnostics: [] }),
         sbxDiagnostics: async () => ({ available: true, failureCodes: [], readOnly: false }),
-        branchDiagnostics,
+        providerDiagnostics,
       }).doctor({ cwd: 'C:/repo', environment: {}, catalogRoot: 'C:/catalog' }),
     ).rejects.toMatchObject({ code: 'SBX_DIAGNOSTICS_UNSAFE' });
-    expect(branchDiagnostics).not.toHaveBeenCalled();
+    expect(providerDiagnostics).not.toHaveBeenCalled();
   });
 });

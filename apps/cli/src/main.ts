@@ -177,6 +177,70 @@ function parse(argv: readonly string[]): Parsed {
     options,
   };
 }
+function providerDiagnostics(context: CliContext) {
+  return async ({
+    cwd,
+    project,
+    user,
+  }: {
+    cwd: string;
+    project: DiscoveredConfig['config'];
+    user: UserConfig;
+  }): Promise<Diagnostic[]> => {
+    const service = configuredProviderApplicationService(context);
+    const diagnostics: Diagnostic[] = [];
+    for (const [identityName, identity] of Object.entries(user.identities).sort(([left], [right]) =>
+      left.localeCompare(right),
+    )) {
+      try {
+        const result = await service.doctor({ project, identityName, identity, cwd });
+        for (const provider of result.data.providers) {
+          const details = {
+            identity: identityName,
+            provider: provider.provider,
+            role: provider.role,
+          };
+          if (provider.status === 'ready') {
+            diagnostics.push({
+              code: 'PROVIDER_READY',
+              message: 'Configured provider authentication is ready.',
+              severity: 'info',
+              details,
+            });
+          } else if (provider.status === 'unsupported') {
+            diagnostics.push({
+              code: 'PROVIDER_PROBE_UNSUPPORTED',
+              message: 'This provider adapter does not support an authentication probe.',
+              severity: 'info',
+              details,
+            });
+          } else {
+            diagnostics.push({
+              code: provider.error.code,
+              message: 'Configured provider authentication probe failed.',
+              severity: 'error',
+              details,
+            });
+          }
+        }
+      } catch {
+        for (const [role, provider] of [
+          ['issues', project.issues?.provider ?? 'none'],
+          ['repository', project.repository.provider],
+        ] as const) {
+          diagnostics.push({
+            code: 'PROVIDER_PROBE_FAILED',
+            message: 'Configured provider diagnostics could not be completed.',
+            severity: 'error',
+            details: { identity: identityName, provider, role },
+          });
+        }
+      }
+    }
+    return diagnostics;
+  };
+}
+
 function projectApplication(context: CliContext): ProjectApplicationService {
   const sbxDiagnostics = context.sbxDiagnostics
     ? async (_request: { cwd: string }) => context.sbxDiagnostics!()
@@ -194,6 +258,7 @@ function projectApplication(context: CliContext): ProjectApplicationService {
     inventoryProjectSkills,
     ...(sbxDiagnostics ? { sbxDiagnostics } : {}),
     sbxProofDiagnostics: () => diagnoseConfiguredF2Proof(context.env),
+    providerDiagnostics: providerDiagnostics(context),
     statusSnapshot: (request) => status(context, context.portService).snapshot(request),
     ensureProject: (request) => ports(context).ensure(request),
   });
