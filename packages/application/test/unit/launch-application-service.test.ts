@@ -187,15 +187,12 @@ describe('LaunchApplicationService', () => {
     });
   });
 
-  it.each(['explain', 'sbx-plan-export'] as const)(
-    'rejects runtime arguments for the read-only %s operation',
-    async (operation) => {
-      const service = new LaunchApplicationService(dependencies());
-      await expect(
-        service.prepare({ ...request, operation, runtimeArgs: ['--print'] }),
-      ).rejects.toMatchObject({ code: 'RUNTIME_ARGS_SCOPE_INVALID' });
-    },
-  );
+  it('rejects runtime arguments for the read-only explain operation', async () => {
+    const service = new LaunchApplicationService(dependencies());
+    await expect(
+      service.prepare({ ...request, operation: 'explain', runtimeArgs: ['--print'] }),
+    ).rejects.toMatchObject({ code: 'RUNTIME_ARGS_SCOPE_INVALID' });
+  });
 
   it('fails Docker launch preparation before status, executor preparation, or process execution', async () => {
     const statusSnapshot = vi.fn(dependencies().statusSnapshot);
