@@ -31,6 +31,9 @@ export function productionSessionResumeDependencies(input: {
     root: string,
     ref: Parameters<typeof verifyPiResumeTarget>[1],
   ) => Promise<unknown>;
+  exactNativeRootVerifier?: { verify(root: string): Promise<void> };
+  piAuthVerifier?: PiAuthVerifier;
+  cwd?: string;
 }): (record: SessionRecordV1) => Promise<ResumeDependencies> {
   const {
     user,
@@ -39,6 +42,16 @@ export function productionSessionResumeDependencies(input: {
     processes = new WindowsProcessCapabilities(),
     piTargetVerifier = verifyPiResumeTarget,
   } = input;
+  const cwd = input.cwd ?? process.cwd();
+  const exactRoot = input.exactNativeRootVerifier ?? new ExactNativeRootVerifier();
+  const auth =
+    input.piAuthVerifier ??
+    createPiAuthAvailabilityProbe({
+      cwd,
+      environment,
+      resolveTrustedExecutable: () =>
+        resolveTrustedRuntimeExecutable({ runtime: 'pi', cwd, environment }),
+    });
   return async (record) => ({
     resolveConfiguredRoot: async (nativeBindingRef) => {
       const binding = await store.readNativeBinding(nativeBindingRef);
@@ -50,6 +63,10 @@ export function productionSessionResumeDependencies(input: {
         });
       }
       const root = configured.runtimeRoots[binding.runtime];
+      if (binding.runtime === 'pi') {
+        await exactRoot.verify(root);
+        await auth.verify(root);
+      }
       return {
         root,
         canonicalRootDigest: canonicalNativeRootDigest(root),

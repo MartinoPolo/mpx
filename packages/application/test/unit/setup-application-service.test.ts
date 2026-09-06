@@ -35,6 +35,11 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
         return request;
       }),
     },
+    localReset: {
+      run: vi.fn(async () => {
+        order.push('reset');
+      }),
+    },
     detach: {
       run: vi.fn(async () => {
         order.push('detach');
@@ -86,6 +91,7 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
   expect(order).toEqual([
     'request',
     'build',
+    'reset',
     'detach',
     'plan',
     'apply',
@@ -97,6 +103,7 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
 it('throws a typed failure instead of reporting success when strict verification is unhealthy', async () => {
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
     builder: {
       build: async () => built,
@@ -115,15 +122,35 @@ it('throws a typed failure instead of reporting success when strict verification
     message: 'Setup verification failed.',
     details: { issues: ['drift'] },
     retryable: true,
-    remediation: 'Retry mpx setup and inspect mpx install verify --json.',
+    remediation: 'Retry mpx setup and inspect mpx doctor --json.',
   });
+});
+
+it('does not reset local state when setup request construction fails', async () => {
+  const localReset = vi.fn();
+  const failure = new Error('request failed');
+  const service = new SetupApplicationService({
+    requestFactory: {
+      create: async () => {
+        throw failure;
+      },
+    },
+    localReset: { run: localReset },
+    detach: { run: vi.fn() },
+    builder: { build: vi.fn(), verify: vi.fn() },
+    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
+  });
+  await expect(service.execute()).rejects.toBe(failure);
+  expect(localReset).not.toHaveBeenCalled();
 });
 
 it('does not detach when immutable intent construction fails', async () => {
   const detach = vi.fn();
+  const localReset = vi.fn();
   const failure = new Error('release build failed');
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: localReset },
     detach: { run: detach },
     builder: {
       build: async () => {
@@ -131,6 +158,25 @@ it('does not detach when immutable intent construction fails', async () => {
       },
       verify: vi.fn(),
     },
+    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
+  });
+  await expect(service.execute()).rejects.toBe(failure);
+  expect(localReset).not.toHaveBeenCalled();
+  expect(detach).not.toHaveBeenCalled();
+});
+
+it('does not detach when obsolete local-state reset fails', async () => {
+  const detach = vi.fn();
+  const failure = new Error('reset failed');
+  const service = new SetupApplicationService({
+    requestFactory: { create: async () => ({}) },
+    localReset: {
+      run: async () => {
+        throw failure;
+      },
+    },
+    detach: { run: detach },
+    builder: { build: async () => built, verify: vi.fn() },
     orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
@@ -143,6 +189,7 @@ it('does not plan or apply when legacy detachment fails', async () => {
   const failure = new Error('detach failed');
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: async () => undefined },
     detach: {
       run: async () => {
         throw failure;
@@ -162,6 +209,7 @@ it('does not apply or verify when planning fails', async () => {
   const failure = new Error('plan failed');
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
     builder: { build: async () => built, verify: vi.fn() },
     orchestrator: {
@@ -182,6 +230,7 @@ it('does not verify when apply fails', async () => {
   const failure = new Error('apply failed');
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
     builder: { build: async () => built, verify: vi.fn() },
     orchestrator: {
@@ -201,6 +250,7 @@ it('propagates strict verify failure only after apply', async () => {
   const failure = new Error('verify failed');
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
     builder: { build: async () => built, verify: vi.fn() },
     orchestrator: {
@@ -229,6 +279,7 @@ it('can execute twice through idempotent dependency ports', async () => {
   const verify = vi.fn(async () => ({ healthy: true, issues: [] }) as never);
   const service = new SetupApplicationService({
     requestFactory: { create },
+    localReset: { run: async () => undefined },
     detach: { run: detach },
     builder: {
       build,
@@ -250,6 +301,7 @@ it('rejects a manual-only plan without applying it', async () => {
   const apply = vi.fn();
   const service = new SetupApplicationService({
     requestFactory: { create: async () => ({}) },
+    localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
     builder: {
       build: async () => built,

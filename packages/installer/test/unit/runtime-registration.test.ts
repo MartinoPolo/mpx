@@ -7,7 +7,7 @@ import {
   parseRuntimeRegistrationMatrixV1,
   parseRuntimeRegistrationReleaseV1,
   registerStaticMcp,
-  verifyAccountEnrollment,
+  verifyNativeRoots,
   verifyRuntimeRegistrationMatrix,
   type ImmutableProjectionV1,
   type ProjectionFileV1,
@@ -312,22 +312,21 @@ describe('immutable runtime registration', () => {
     ).toThrowError(/MCP_SECRET_FORBIDDEN/u);
   });
 
-  it('verifies synthetic clean/existing account enrollment across the full four-route matrix without credentials', () => {
+  it('verifies synthetic clean/existing native root availability across the full four-route matrix without credentials', () => {
     const matrix = createRuntimeRegistrationMatrix([
       input('claude', 'personal', 'C:\\native\\claude-personal'),
       input('claude', 'work', 'C:\\native\\claude-work'),
       input('pi', 'personal', 'C:\\native\\pi-personal'),
       input('pi', 'work', 'C:\\native\\pi-work'),
     ]);
-    const enrolled = matrix.registrations.map((registration) => ({
+    const available = matrix.registrations.map((registration) => ({
       identity: registration.identity,
       runtime: registration.runtime,
       domain: registration.domain,
       nativeRootDigest: registration.nativeRootDigest,
-      status: 'enrolled' as const,
-      accountLabel: `${registration.domain}:account`,
+      status: 'available' as const,
     }));
-    expect(verifyAccountEnrollment(matrix, enrolled)).toMatchObject({
+    expect(verifyNativeRoots(matrix, available)).toMatchObject({
       healthy: true,
       routes: [
         { identity: 'claude-personal', healthy: true },
@@ -336,7 +335,7 @@ describe('immutable runtime registration', () => {
         { identity: 'pi-work', healthy: true },
       ],
     });
-    expect(verifyAccountEnrollment(matrix, [])).toMatchObject({
+    expect(verifyNativeRoots(matrix, [])).toMatchObject({
       healthy: false,
       scenario: 'clean',
       issues: [
@@ -346,7 +345,7 @@ describe('immutable runtime registration', () => {
         'probe-missing:pi-work',
       ],
     });
-    expect(JSON.stringify(enrolled)).not.toMatch(/token|credential|secret/iu);
+    expect(JSON.stringify(available)).not.toMatch(/token|credential|secret/iu);
   });
 
   it('verifies installed executable and synthetic projection evidence for every route', () => {

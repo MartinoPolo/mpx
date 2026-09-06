@@ -197,7 +197,7 @@ function projection(
 function routes(value: RouteLabelsV1, domain: AccountDomain): RouteLabelsV1 {
   for (const label of [value.git, value.provider, value.ssh]) {
     if (!label.startsWith(`${domain}:`) || label.length > 128) {
-      fail('REGISTRATION_CROSS_DOMAIN', 'Route label crosses its account domain.');
+      fail('REGISTRATION_CROSS_DOMAIN', 'Route label crosses its identity domain.');
     }
   }
   return { ...value };
@@ -254,13 +254,13 @@ export function createRuntimeRegistrationMatrix(
   if (inputs.length !== 4) {
     fail('REGISTRATION_MATRIX_INCOMPLETE', 'Exactly four runtime identities are required.');
   }
-  const roots = inputs.map((input) => absolute(input.nativeRoot, 'Native account root'));
+  const roots = inputs.map((input) => absolute(input.nativeRoot, 'Native runtime root'));
   for (let left = 0; left < roots.length; left += 1) {
     for (let right = left + 1; right < roots.length; right += 1) {
       if (overlap(roots[left]!, roots[right]!)) {
         fail(
           'REGISTRATION_ROOT_OVERLAP',
-          'Native account roots must be distinct and non-overlapping.',
+          'Native runtime roots must be distinct and non-overlapping.',
         );
       }
     }
@@ -549,39 +549,38 @@ export function parseRuntimeRegistrationReleaseV1(value: unknown): RuntimeRegist
   return { ...parsed };
 }
 
-export interface AccountProbeV1 {
+export interface NativeRootProbeV1 {
   readonly identity: RuntimeIdentity;
   readonly runtime: RegisteredRuntime;
   readonly domain: AccountDomain;
   readonly nativeRootDigest: string;
-  readonly status: 'enrolled' | 'unenrolled' | 'unavailable';
-  readonly accountLabel: string;
+  readonly status: 'available' | 'unavailable';
 }
-export interface EnrollmentRouteVerificationV1 {
+export interface NativeRootRouteVerificationV1 {
   readonly identity: RuntimeIdentity;
   readonly healthy: boolean;
   readonly issues: readonly string[];
 }
-export interface AccountEnrollmentVerificationV1 {
+export interface NativeRootVerificationV1 {
   readonly schemaVersion: 1;
-  readonly kind: 'account-enrollment-verification';
+  readonly kind: 'native-root-verification';
   readonly scenario: 'clean' | 'existing';
   readonly healthy: boolean;
-  readonly routes: readonly EnrollmentRouteVerificationV1[];
+  readonly routes: readonly NativeRootRouteVerificationV1[];
   readonly issues: readonly string[];
 }
-export function verifyAccountEnrollment(
+export function verifyNativeRoots(
   matrix: RuntimeRegistrationMatrixV1,
-  probes: readonly AccountProbeV1[],
-): AccountEnrollmentVerificationV1 {
-  const byIdentity = new Map<RuntimeIdentity, AccountProbeV1>();
+  probes: readonly NativeRootProbeV1[],
+): NativeRootVerificationV1 {
+  const byIdentity = new Map<RuntimeIdentity, NativeRootProbeV1>();
   for (const probe of probes) {
     if (byIdentity.has(probe.identity)) {
-      fail('ACCOUNT_PROBE_DUPLICATE', 'Account probes must be unique.');
+      fail('NATIVE_ROOT_PROBE_DUPLICATE', 'Native root probes must be unique.');
     }
     byIdentity.set(probe.identity, probe);
   }
-  const routes = matrix.registrations.map((registration): EnrollmentRouteVerificationV1 => {
+  const routes = matrix.registrations.map((registration): NativeRootRouteVerificationV1 => {
     const probe = byIdentity.get(registration.identity);
     const issues: string[] = [];
     if (!probe) {
@@ -592,13 +591,10 @@ export function verifyAccountEnrollment(
         probe.domain !== registration.domain ||
         probe.nativeRootDigest !== registration.nativeRootDigest
       ) {
-        issues.push(`probe-binding-mismatch:${registration.identity}`);
+        issues.push(`native-root-binding-mismatch:${registration.identity}`);
       }
-      if (probe.status !== 'enrolled') {
-        issues.push(`account-not-enrolled:${registration.identity}`);
-      }
-      if (!probe.accountLabel.startsWith(`${registration.domain}:`)) {
-        issues.push(`account-cross-domain:${registration.identity}`);
+      if (probe.status !== 'available') {
+        issues.push(`native-root-unavailable:${registration.identity}`);
       }
     }
     return { identity: registration.identity, healthy: issues.length === 0, issues };
@@ -606,7 +602,7 @@ export function verifyAccountEnrollment(
   const issues = routes.flatMap((route) => route.issues);
   return {
     schemaVersion: 1,
-    kind: 'account-enrollment-verification',
+    kind: 'native-root-verification',
     scenario: probes.length === 0 ? 'clean' : 'existing',
     healthy: issues.length === 0,
     routes,
@@ -627,7 +623,7 @@ export function registerStaticMcp(input: {
   readonly argv: readonly string[];
 }): StaticMcpRegistrationV1 {
   if (!/^(personal|work):[a-z0-9][a-z0-9.-]{0,63}$/u.test(input.label)) {
-    fail('MCP_LABEL_INVALID', 'MCP label must include its account domain.');
+    fail('MCP_LABEL_INVALID', 'MCP label must include its identity domain.');
   }
   if (
     input.argv.length > 32 ||
@@ -704,7 +700,7 @@ export function materializePrivateRuntimeLaunch(input: {
   if (!SHA256.test(input.launchKey)) {
     fail('LAUNCH_KEY_INVALID', 'Launch key must be immutable.');
   }
-  const nativeRoot = absolute(input.nativeRoot, 'Private native account root'),
+  const nativeRoot = absolute(input.nativeRoot, 'Private native runtime root'),
     projectionRoot = absolute(input.projectionRoot, 'Immutable projection root');
   if (installerDigest(normalized(nativeRoot)) !== input.registration.nativeRootDigest) {
     fail('REGISTRATION_ROOT_MISMATCH', 'Private native root does not match the registration.');
@@ -714,7 +710,7 @@ export function materializePrivateRuntimeLaunch(input: {
     new Set(input.mcpBindings.map((binding) => binding.label)).size !== input.mcpBindings.length ||
     input.mcpBindings.some((binding) => !binding.label.startsWith(`${input.registration.domain}:`))
   ) {
-    fail('REGISTRATION_CROSS_DOMAIN', 'MCP binding crosses its account domain.');
+    fail('REGISTRATION_CROSS_DOMAIN', 'MCP binding crosses its identity domain.');
   }
   const bindings = input.mcpBindings
     .map((binding) => ({

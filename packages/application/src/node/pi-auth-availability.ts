@@ -32,7 +32,7 @@ export interface PiAuthAvailabilityDependencies {
 
 const authArgs = ['auth', 'check', '--provider', 'openai-codex', '--json', '--no-refresh'] as const;
 const unavailable = (message: string): MpxError =>
-  new MpxError({ code: 'ACCOUNT_AUTH_UNAVAILABLE', message, retryable: false });
+  new MpxError({ code: 'PI_AUTH_UNAVAILABLE', message, retryable: false });
 const exact = (value: unknown, keys: readonly string[]): value is Record<string, unknown> =>
   value !== null &&
   typeof value === 'object' &&

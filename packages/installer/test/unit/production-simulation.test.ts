@@ -237,13 +237,12 @@ async function simulation(existing: boolean) {
         observations: runtimeRegistrations.registrations.map(
           ({ identity, executable, projection }) => ({ identity, executable, projection }),
         ),
-        accountProbes: runtimeRegistrations.registrations.map((item) => ({
+        nativeRootProbes: runtimeRegistrations.registrations.map((item) => ({
           identity: item.identity,
           runtime: item.runtime,
           domain: item.domain,
           nativeRootDigest: item.nativeRootDigest,
-          status: 'enrolled' as const,
-          accountLabel: `${item.domain}:account`,
+          status: 'available' as const,
         })),
         mcpSharing: Object.fromEntries(
           runtimeRegistrations.registrations.map((item) => [item.identity, item.routes.mcpSharing]),

@@ -190,13 +190,12 @@ async function piRestartRollbackFixture() {
         runtimeRegistrations: {
           inspect: async () => ({
             observations: [],
-            accountProbes: runtimeRegistrations.registrations.map((item) => ({
+            nativeRootProbes: runtimeRegistrations.registrations.map((item) => ({
               identity: item.identity,
               runtime: item.runtime,
               domain: item.domain,
               nativeRootDigest: item.nativeRootDigest,
               status: 'unavailable' as const,
-              accountLabel: `${item.domain}:account`,
             })),
             mcpSharing: Object.fromEntries(
               runtimeRegistrations.registrations.map((item) => [
@@ -581,13 +580,12 @@ it('registers the native Pi package without exposing or overwriting private root
         runtimeRegistrations: {
           inspect: async () => ({
             observations: [],
-            accountProbes: runtimeRegistrations.registrations.map((item) => ({
+            nativeRootProbes: runtimeRegistrations.registrations.map((item) => ({
               identity: item.identity,
               runtime: item.runtime,
               domain: item.domain,
               nativeRootDigest: item.nativeRootDigest,
               status: 'unavailable' as const,
-              accountLabel: `${item.domain}:account`,
             })),
             mcpSharing: Object.fromEntries(
               runtimeRegistrations.registrations.map((item) => [
@@ -716,13 +714,12 @@ it('registers the native Pi package without exposing or overwriting private root
         runtimeRegistrations: {
           inspect: async () => ({
             observations: [],
-            accountProbes: runtimeRegistrations.registrations.map((item) => ({
+            nativeRootProbes: runtimeRegistrations.registrations.map((item) => ({
               identity: item.identity,
               runtime: item.runtime,
               domain: item.domain,
               nativeRootDigest: item.nativeRootDigest,
               status: 'unavailable' as const,
-              accountLabel: `${item.domain}:account`,
             })),
             mcpSharing: Object.fromEntries(
               runtimeRegistrations.registrations.map((item) => [
@@ -815,13 +812,12 @@ it('composes four runtime registrations and external references into automatic, 
       runtimeRegistrations: {
         inspect: async () => ({
           observations: [],
-          accountProbes: runtimeRegistrations.registrations.map((registration) => ({
+          nativeRootProbes: runtimeRegistrations.registrations.map((registration) => ({
             identity: registration.identity,
             runtime: registration.runtime,
             domain: registration.domain,
             nativeRootDigest: registration.nativeRootDigest,
             status: 'unavailable' as const,
-            accountLabel: `${registration.domain}:account`,
           })),
           mcpSharing: Object.fromEntries(
             runtimeRegistrations.registrations.map((registration) => [

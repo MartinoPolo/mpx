@@ -13,6 +13,7 @@ import {
 } from '@mpx/installer';
 import { SetupApplicationService, type SetupRequestFactory } from '../setup-application-service.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
+import { ObsoleteAccountStateResetService } from './obsolete-account-state-reset.js';
 
 const MAX_CONFIG_BYTES = 1024 * 1024;
 const MAX_VERSION_BYTES = 16 * 1024;
@@ -347,6 +348,12 @@ export function createNodeSetupApplicationService(dependencies: {
     requestFactory,
     builder: dependencies.builder,
     orchestrator: dependencies.orchestrator,
+    localReset: {
+      run: async () => {
+        await ensurePrivateStateRoot(localAppData);
+        await new ObsoleteAccountStateResetService(localAppData).run();
+      },
+    },
     detach: {
       run: async () => {
         const detach = new PiLegacyDetachService({

@@ -27,9 +27,9 @@ import {
   buildWindowsIntegrationSpecs,
 } from './windows-integration.js';
 import {
-  verifyAccountEnrollment,
+  verifyNativeRoots,
   verifyRuntimeRegistrationMatrix,
-  type AccountProbeV1,
+  type NativeRootProbeV1,
   type RegisteredRuntime,
   type RuntimeIdentity,
   type RuntimeRegistrationMatrixV1,
@@ -171,7 +171,7 @@ export interface RuntimeRegistrationInspectionPort {
     priorReceipt?: OwnershipReceiptV1,
   ): Promise<{
     readonly observations: readonly RuntimeRegistrationObservationV1[];
-    readonly accountProbes: readonly AccountProbeV1[];
+    readonly nativeRootProbes: readonly NativeRootProbeV1[];
     readonly mcpSharing: Readonly<Record<RuntimeIdentity, 'shared' | 'isolated'>>;
     readonly staticMcpIssues?: readonly string[];
     readonly staticMcpAbsent?: readonly string[];
@@ -190,7 +190,7 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
       intent.runtimeRegistrations ??
       fail('INSTALL_SCHEMA_INVALID', 'Runtime registration intent is required.');
     const observations: RuntimeRegistrationObservationV1[] = [],
-      accountProbes: AccountProbeV1[] = [],
+      nativeRootProbes: NativeRootProbeV1[] = [],
       runtimeIssues: string[] = [];
     const mcpSharing = {} as Record<RuntimeIdentity, 'shared' | 'isolated'>;
     for (const registration of matrix.registrations) {
@@ -208,10 +208,10 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
                 .catch(() => undefined)
             : this.environment[`MPX_${key}_ROOT`],
         projectionRoot = this.environment[`MPX_${key}_PROJECTION_ROOT`];
-      let enrolled = false;
+      let available = false;
       if (nativeRoot && path.isAbsolute(nativeRoot)) {
         const info = await lstat(nativeRoot).catch(() => undefined);
-        enrolled = Boolean(
+        available = Boolean(
           info?.isDirectory() &&
           !info.isSymbolicLink() &&
           installerDigest(
@@ -222,13 +222,12 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
           ) === registration.nativeRootDigest,
         );
       }
-      accountProbes.push({
+      nativeRootProbes.push({
         identity: registration.identity,
         runtime: registration.runtime,
         domain: registration.domain,
         nativeRootDigest: registration.nativeRootDigest,
-        status: enrolled ? 'enrolled' : 'unavailable',
-        accountLabel: `${registration.domain}:safe-root-metadata`,
+        status: available ? 'available' : 'unavailable',
       });
       mcpSharing[registration.identity] = registration.routes.mcpSharing;
       const executableInfo = await lstat(registration.executable.path).catch(() => undefined);
@@ -349,7 +348,7 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
     }
     return {
       observations,
-      accountProbes,
+      nativeRootProbes,
       mcpSharing,
       staticMcpIssues,
       staticMcpAbsent,
@@ -597,12 +596,15 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           intent.runtimeRegistrations,
           inspection.observations,
         ),
-        enrollment = verifyAccountEnrollment(intent.runtimeRegistrations, inspection.accountProbes);
+        nativeRootVerification = verifyNativeRoots(
+          intent.runtimeRegistrations,
+          inspection.nativeRootProbes,
+        );
       const sharingIssues = intent.runtimeRegistrations.registrations
         .filter((item) => inspection.mcpSharing[item.identity] !== item.routes.mcpSharing)
         .map((item) => `mcp-sharing-drift:${item.identity}`);
       const unavailable = new Set(
-        inspection.accountProbes
+        inspection.nativeRootProbes
           .filter((probe) => probe.status === 'unavailable')
           .map((probe) => probe.identity),
       );
@@ -610,10 +612,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         ...registration.issues.filter(
           (issue) => requireActual || !issue.startsWith('observation-missing:'),
         ),
-        ...enrollment.issues.filter(
+        ...nativeRootVerification.issues.filter(
           (issue) =>
-            !issue.startsWith('account-not-enrolled:') ||
-            !unavailable.has(issue.slice('account-not-enrolled:'.length) as RuntimeIdentity),
+            !issue.startsWith('native-root-unavailable:') ||
+            !unavailable.has(issue.slice('native-root-unavailable:'.length) as RuntimeIdentity),
         ),
         ...sharingIssues,
         ...(inspection.staticMcpIssues ?? []),

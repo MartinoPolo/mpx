@@ -459,6 +459,11 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
             user,
             store: sessionStore,
             environment: context.env,
+            cwd: parsed.cwd,
+            ...(context.exactNativeRootVerifier
+              ? { exactNativeRootVerifier: context.exactNativeRootVerifier }
+              : {}),
+            ...(context.piAuthVerifier ? { piAuthVerifier: context.piAuthVerifier } : {}),
           }))
         : undefined;
     const application = createNodeSessionApplicationService({

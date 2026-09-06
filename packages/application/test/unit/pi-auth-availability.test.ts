@@ -50,7 +50,7 @@ describe('PiAuthAvailabilityProbe', () => {
       environment: {},
     });
     await expect(probe.verify('C:/accounts/work')).rejects.toMatchObject({
-      code: 'ACCOUNT_AUTH_UNAVAILABLE',
+      code: 'PI_AUTH_UNAVAILABLE',
     });
   });
 
@@ -87,7 +87,7 @@ describe('PiAuthAvailabilityProbe', () => {
       environment: {},
     });
     await expect(probe.verify('C:/accounts/work')).rejects.toMatchObject({
-      code: 'ACCOUNT_AUTH_UNAVAILABLE',
+      code: 'PI_AUTH_UNAVAILABLE',
     });
   });
 
@@ -108,7 +108,7 @@ describe('PiAuthAvailabilityProbe', () => {
         environment: {},
       });
       await expect(probe.verify('C:/accounts/work')).rejects.toMatchObject({
-        code: 'ACCOUNT_AUTH_UNAVAILABLE',
+        code: 'PI_AUTH_UNAVAILABLE',
       });
     }
   });

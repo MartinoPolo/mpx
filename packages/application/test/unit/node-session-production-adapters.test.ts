@@ -84,7 +84,7 @@ it('returns sanitized unavailable Pi discovery without scanning when live prefli
   expect(scan).not.toHaveBeenCalled();
 });
 
-it('resolves resume only from configured identity/runtime/root digest without account verification', async () => {
+it('fails Pi resume root resolution closed before discovery when the exact root is unsafe', async () => {
   const f = await fixture();
   const store = new SessionStore(f.state);
   const identity = { domain: 'personal', name: 'main' };
@@ -99,7 +99,74 @@ it('resolves resume only from configured identity/runtime/root digest without ac
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   });
-  const dependencies = await productionSessionResumeDependencies({ user: f.user, store })({
+  const verifyAuth = vi.fn(async () => undefined);
+  const dependencies = await productionSessionResumeDependencies({
+    user: f.user,
+    store,
+    exactNativeRootVerifier: {
+      verify: async () => {
+        throw new Error('unsafe root');
+      },
+    },
+    piAuthVerifier: { verify: verifyAuth },
+  })({ runtime: 'pi', process: null } as never);
+
+  await expect(dependencies.resolveConfiguredRoot(ref)).rejects.toThrow('unsafe root');
+  expect(verifyAuth).not.toHaveBeenCalled();
+});
+
+it('fails Pi resume root resolution when auth is unavailable after the root succeeds', async () => {
+  const f = await fixture();
+  const store = new SessionStore(f.state);
+  const identity = { domain: 'personal', name: 'main' };
+  const digest = canonicalNativeRootDigest(f.pi);
+  const ref = deriveNativeBindingRef(identity, 'pi', digest);
+  await store.saveNativeBinding({
+    schemaVersion: 1,
+    ref,
+    identity,
+    runtime: 'pi',
+    recordedRootDigest: digest,
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  });
+  const verifyRoot = vi.fn(async () => undefined);
+  const dependencies = await productionSessionResumeDependencies({
+    user: f.user,
+    store,
+    exactNativeRootVerifier: { verify: verifyRoot },
+    piAuthVerifier: {
+      verify: async () => {
+        throw new Error('oauth unavailable');
+      },
+    },
+  })({ runtime: 'pi', process: null } as never);
+
+  await expect(dependencies.resolveConfiguredRoot(ref)).rejects.toThrow('oauth unavailable');
+  expect(verifyRoot).toHaveBeenCalledWith(f.pi);
+});
+
+it('resolves resume only from configured identity/runtime/root digest after native verification', async () => {
+  const f = await fixture();
+  const store = new SessionStore(f.state);
+  const identity = { domain: 'personal', name: 'main' };
+  const digest = canonicalNativeRootDigest(f.pi);
+  const ref = deriveNativeBindingRef(identity, 'pi', digest);
+  await store.saveNativeBinding({
+    schemaVersion: 1,
+    ref,
+    identity,
+    runtime: 'pi',
+    recordedRootDigest: digest,
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  });
+  const dependencies = await productionSessionResumeDependencies({
+    user: f.user,
+    store,
+    exactNativeRootVerifier: { verify: async () => undefined },
+    piAuthVerifier: { verify: async () => undefined },
+  })({
     runtime: 'pi',
     process: null,
   } as never);

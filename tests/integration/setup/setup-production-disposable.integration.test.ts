@@ -280,13 +280,12 @@ it('runs setup twice and uninstalls only production-owned state in a fully dispo
           executable,
           projection,
         })),
-        accountProbes: registrations.map((registration) => ({
+        nativeRootProbes: registrations.map((registration) => ({
           identity: registration.identity,
           runtime: registration.runtime,
           domain: registration.domain,
           nativeRootDigest: registration.nativeRootDigest,
-          status: 'enrolled' as const,
-          accountLabel: `${registration.domain}:disposable`,
+          status: 'available' as const,
         })),
         mcpSharing: Object.fromEntries(
           registrations.map((registration) => [

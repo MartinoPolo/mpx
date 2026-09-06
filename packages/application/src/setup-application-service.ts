@@ -21,6 +21,7 @@ export interface SetupResultV1 {
 
 export interface SetupApplicationDependencies {
   readonly requestFactory: SetupRequestFactory;
+  readonly localReset: { run(): Promise<void> };
   readonly detach: { run(): Promise<void> };
   readonly builder: Pick<InstallIntentBuilder, 'build' | 'verify'>;
   readonly orchestrator: Pick<InstallOrchestrator, 'plan' | 'apply' | 'verify'>;
@@ -32,6 +33,7 @@ export class SetupApplicationService {
   async execute(): Promise<SetupResultV1> {
     const request = await this.dependencies.requestFactory.create();
     const built = await this.dependencies.builder.build(request);
+    await this.dependencies.localReset.run();
     await this.dependencies.detach.run();
     const plan = await this.dependencies.orchestrator.plan(built.intent);
     if ((plan.classifications?.manualOnly.length ?? 0) !== 0) {
@@ -50,7 +52,7 @@ export class SetupApplicationService {
         message: 'Setup verification failed.',
         details: { issues: [...verified.issues] },
         retryable: true,
-        remediation: 'Retry mpx setup and inspect mpx install verify --json.',
+        remediation: 'Retry mpx setup and inspect mpx doctor --json.',
       });
     }
     return {

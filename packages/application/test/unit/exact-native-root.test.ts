@@ -32,6 +32,44 @@ describe('ExactNativeRootVerifier', () => {
     });
   });
 
+  it('rejects a symlink or reparse point that appears late in verification', async () => {
+    const root = await fixture();
+    const actual = await import('node:fs/promises').then((fs) => fs.lstat(root));
+    const linked = Object.create(actual) as typeof actual;
+    linked.isSymbolicLink = () => true;
+    const lstat = vi
+      .fn()
+      .mockResolvedValueOnce(actual)
+      .mockResolvedValueOnce(actual)
+      .mockResolvedValueOnce(actual)
+      .mockResolvedValueOnce(linked);
+
+    await expect(new ExactNativeRootVerifier({ lstat }).verify(root)).rejects.toMatchObject({
+      code: 'NATIVE_ROOT_INVALID',
+    });
+    expect(lstat).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects device or inode identity drift during verification', async () => {
+    const root = await fixture();
+    const actual = await import('node:fs/promises').then((fs) => fs.lstat(root));
+    const changed = Object.create(actual) as typeof actual;
+    Object.defineProperties(changed, {
+      dev: { value: Number(actual.dev) + 1 },
+      ino: { value: Number(actual.ino) + 1 },
+    });
+    const lstat = vi
+      .fn()
+      .mockResolvedValueOnce(actual)
+      .mockResolvedValueOnce(actual)
+      .mockResolvedValueOnce(changed)
+      .mockResolvedValueOnce(changed);
+
+    await expect(new ExactNativeRootVerifier({ lstat }).verify(root)).rejects.toMatchObject({
+      code: 'NATIVE_ROOT_INVALID',
+    });
+  });
+
   it('fails closed when the configured path drifts during verification', async () => {
     const root = await fixture();
     const realpath = vi.fn().mockResolvedValueOnce(root).mockResolvedValueOnce(`${root}-changed`);

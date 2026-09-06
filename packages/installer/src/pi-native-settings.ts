@@ -28,7 +28,7 @@ export interface PiPrivateRootResolution {
   readonly userConfigArtifactContent?: string;
 }
 
-/** Resolves a private Pi account root from validated user configuration. */
+/** Resolves a private Pi native root from validated user configuration. */
 export interface PiPrivateRootResolver {
   resolvePiNativeRoot(input: PiPrivateRootResolution): Promise<string>;
 }
