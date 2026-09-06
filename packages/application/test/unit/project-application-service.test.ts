@@ -140,10 +140,6 @@ describe('ProjectApplicationService', () => {
         order.push('sbx');
         return { available: false, failureCodes: ['Z_CODE', 'A_CODE', 'A_CODE'], readOnly: true };
       },
-      sbxProofDiagnostics: async () => {
-        order.push('proof');
-        return ['PROOF'];
-      },
       providerDiagnostics: async ({
         project: selectedProject,
         user: selectedUser,
@@ -192,7 +188,6 @@ describe('ProjectApplicationService', () => {
       'canonical',
       'project',
       'sbx',
-      'proof',
       'providers',
       'status',
       'resolve',
@@ -203,7 +198,6 @@ describe('ProjectApplicationService', () => {
       'SKILL',
       'A_CODE',
       'Z_CODE',
-      'PROOF',
       'PROVIDER_AUTH_FAILED',
       'FIXED_SHARED_LIMITATION',
       'PORT',

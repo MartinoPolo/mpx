@@ -394,8 +394,8 @@ export const nodeDockerGate: ExecutorAdapter = {
   name: 'docker',
   verify: async () => ({
     status: 'unverified',
-    verifier: 'phase-f2-pending',
-    evidenceDigest: sha256Canonical({ executor: 'docker', proof: 'pending' }),
+    verifier: 'whole-agent-sandbox-pending',
+    evidenceDigest: sha256Canonical({ executor: 'docker', integration: 'pending' }),
   }),
   execute: async () => unavailableResult(),
 };

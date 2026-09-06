@@ -5,10 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { sha256Canonical } from '@mpx/core';
 import type { JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
-import {
-  createRuntimeCapabilityManifestV1,
-  createSbxLaunchPlanExportV1,
-} from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
 import type { ProcessRequest } from '../../src/index.js';
 import {
   ExecutorRegistry,
@@ -149,18 +146,6 @@ function descriptor(executor: 'docker' | 'host' = 'docker'): LaunchDescriptor {
   } as LaunchDescriptor;
 }
 
-function withVerification(
-  value: LaunchDescriptor,
-  executorVerification: LaunchDescriptor['executorVerification'],
-): LaunchDescriptor {
-  const { launchKey: _launchKey, ...rest } = value;
-  const tuple = { ...rest, executorVerification };
-  return {
-    ...tuple,
-    launchKey: sha256Canonical(tuple as unknown as JsonValue),
-  } as LaunchDescriptor;
-}
-
 function descriptorWithNativeRoot(
   runtime: 'claude' | 'pi',
   identity: 'personal' | 'work',
@@ -227,14 +212,6 @@ function service(verification: 'verified' | 'unverified' | 'unavailable', effect
         return routesFor(value);
       },
     },
-    hostPiProcessExecutor: {
-      name: 'host',
-      verify: async () => ({ status: 'verified', verifier: 'host-pi', evidenceDigest: hash('f') }),
-      execute: async (request) => {
-        effects.push(`process:${request.executable}`);
-        return { exitCode: 0, stdout: 'ok', stderr: '', truncated: false };
-      },
-    },
     production: true,
   });
 }
@@ -276,11 +253,6 @@ describe('execution gates', () => {
       executors,
       runtimes,
       routes: { materialize: async (value) => routesFor(value) },
-      hostPiProcessExecutor: {
-        name: 'host',
-        verify: async () => selected.executorVerification,
-        execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
-      },
     });
     await expect(
       execution.execute({
@@ -304,7 +276,7 @@ describe('execution gates', () => {
     expect(effects).toEqual([]);
   });
 
-  it('executes verified fake Docker through routes, runtime adapter, and executor without an interactive timeout', async () => {
+  it('executes Pi through the exact selected Docker executor without host process authority', async () => {
     const effects: string[] = [];
     const executors = new ExecutorRegistry();
     executors.register({
@@ -332,15 +304,6 @@ describe('execution gates', () => {
         materialize: async (value) => {
           effects.push('routes');
           return routesFor(value);
-        },
-      },
-      hostPiProcessExecutor: {
-        name: 'host',
-        verify: async () => descriptor().executorVerification,
-        execute: async (request) => {
-          effects.push(`process:${request.executable}`);
-          expect(request.timeoutMs).toBeUndefined();
-          return { exitCode: 0, stdout: 'ok', stderr: '', truncated: false };
         },
       },
       production: true,
@@ -394,7 +357,6 @@ describe('execution gates', () => {
         executors,
         runtimes,
         routes: { materialize: async (value) => routesFor(value) },
-        hostPiProcessExecutor: { name: 'host', verify: async () => expected, execute: process },
         production: true,
       });
       const result = execution.execute({
@@ -1147,18 +1109,6 @@ describe('trust and privacy boundaries', () => {
         executors,
         runtimes,
         routes: { materialize: async () => routeMap },
-        hostPiProcessExecutor: {
-          name: 'host',
-          verify: async () => ({
-            status: 'verified',
-            verifier: 'host-pi',
-            evidenceDigest: hash('f'),
-          }),
-          execute: async (request) => {
-            requests.push(request);
-            return { exitCode: 0, stdout: '', stderr: '', truncated: false };
-          },
-        },
         production: true,
       });
 
@@ -1347,18 +1297,6 @@ describe('persistent launch audit sequencing', () => {
       runtimes,
       routes: { materialize: async (value) => routesFor(value) },
       audit,
-      hostPiProcessExecutor: {
-        name: 'host',
-        verify: async () => ({
-          status: 'verified',
-          verifier: 'host-pi',
-          evidenceDigest: hash('f'),
-        }),
-        execute: async () => {
-          effects.push('process');
-          return process();
-        },
-      },
       production: true,
     });
   }

@@ -51,41 +51,6 @@ describe('Node launch runtime adapter mode', () => {
     expect(applicationLaunch.mock.calls[0]![1]).toMatchObject({ runtimeAdapterMode: 'production' });
   });
 
-  it.each([
-    ['fresh launch', undefined],
-    ['resume', { nativeBinding: {}, nativeSessionRef: { file: 'C:/private/session.json' } }],
-  ] as const)(
-    'rejects production-admitted Pi Docker %s before application or child execution',
-    async (_scenario, resume) => {
-      applicationLaunch.mockClear();
-      const productionAdapter = {
-        name: 'docker' as const,
-        verify: vi.fn(),
-        execute: vi.fn(),
-      };
-      const launch = {
-        ...input(),
-        ...(resume ? { resume } : {}),
-        context: {
-          launchExecutorAdapters: [productionAdapter],
-          launchExecutorAdapterSource: 'production-admission' as const,
-        },
-      } as NodeLaunchExecutionInput;
-
-      const error = await executeResolvedNodeLaunch(launch).catch((failure) => failure);
-
-      expect(error).toMatchObject({
-        name: 'ExecutionError',
-        code: 'PI_DOCKER_UNAVAILABLE',
-        details: { executor: 'docker', runtime: 'pi' },
-      });
-      expect(JSON.stringify(error)).not.toContain('C:/private/session.json');
-      expect(applicationLaunch).not.toHaveBeenCalled();
-      expect(productionAdapter.verify).not.toHaveBeenCalled();
-      expect(productionAdapter.execute).not.toHaveBeenCalled();
-    },
-  );
-
   it('rejects Pi Docker resume without an admitted adapter before child execution', async () => {
     applicationLaunch.mockClear();
     const launch = {

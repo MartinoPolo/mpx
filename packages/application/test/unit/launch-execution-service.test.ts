@@ -667,14 +667,14 @@ describe('launch execution application service', () => {
     expect(effects.indexOf('approval')).toBeLessThan(effects.indexOf('execute'));
   });
 
-  it('executes production Docker Pi through the host process adapter without invoking the sandbox worker', async () => {
+  it('never substitutes the host executor for a selected Docker executor', async () => {
     const effects: string[] = [];
     const { request } = fixture();
     const deps = dependencies(effects);
     const docker = {
       ...deps.executorAdapters[0]!,
       execute: vi.fn(async () => {
-        effects.push('standalone-sbx-worker');
+        effects.push('selected-docker');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
       }),
     };
@@ -697,10 +697,10 @@ describe('launch execution application service', () => {
       runtimeAdapterMode: 'production',
     });
 
-    expect(host.execute).toHaveBeenCalledOnce();
-    expect(docker.execute).not.toHaveBeenCalled();
-    expect(effects).toContain('host-process');
-    expect(effects).not.toContain('standalone-sbx-worker');
+    expect(docker.execute).toHaveBeenCalledOnce();
+    expect(host.execute).not.toHaveBeenCalled();
+    expect(effects).toContain('selected-docker');
+    expect(effects).not.toContain('host-process');
   });
 
   it('contains an in-flight status refresh at shutdown', async () => {

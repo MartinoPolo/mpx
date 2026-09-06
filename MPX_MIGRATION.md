@@ -233,9 +233,11 @@ GitHub, GitLab, KanbanFlow, local Markdown, and minimal Gerrit are fixed, intern
 Completed:
 
 - removed the obsolete public Phase-J migration commands, application services, dedicated tests, temporary handoff, and reconciliation documentation;
+- deleted the obsolete F2 proof, runtime-tool inventory, host-Pi proxy, sandbox worker, persisted-proof resume, and generated evidence stacks;
+- made Docker launch and resume fail closed without host fallback while retaining only optional whole-agent sandbox planning primitives;
 - regenerated the CLI references and bundles without retaining hidden migration aliases.
 
-Remaining work includes F2 proof and inventory machinery, host-Pi remote-tool replacement, sandbox worker or proxy bridge, generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
+Remaining work includes generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
 
 ### Phase 9 — Optional sandbox
 
@@ -244,8 +246,6 @@ This is not a host-release gate. Run the same native runtime package and compile
 ### Phase 10 — Documentation and context pruning
 
 Keep the README, AGENTS instructions, short operating guides, durable ADRs, compiler architecture, native Pi ownership, and generated CLI references. Delete or archive temporary handoffs, gate narratives, TDD journals, F2 proofs, Phase-J documents, obsolete installer prose, historical source-repository instructions, and generated evidence with no consumer.
-
-- Completed: deleted the obsolete F2 proof/proxy stack and generated runtime-tool inventory artifacts.
 
 ## Acceptance
 

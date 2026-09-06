@@ -3,7 +3,6 @@
   "entry": [
     "scripts/**/*.{js,mjs,ts}",
     "apps/cli/src/main.ts",
-    "evidence/**/*.ts",
     "tests/contract/**/*.{test,spec}.ts",
     "tests/integration/**/*.{test,spec}.{js,mjs,ts}"
   ],

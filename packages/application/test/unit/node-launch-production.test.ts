@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { UserConfig } from '@mpx/config';
-import { ExecutionError } from '@mpx/executors';
+import { MpxError } from '@mpx/core';
 import type { NodeLaunchExecutionInput } from '../../src/node/launch-execution.js';
 
 const executionSpy = vi.hoisted(() => vi.fn(async (_input: unknown) => ({ exitCode: 0 })));
@@ -30,8 +30,8 @@ const user: UserConfig = {
       mode: 'project',
       skillPolicy: 'clean',
       contentScope: 'work',
-      executor: 'docker',
-      workspace: 'clone',
+      executor: 'host',
+      workspace: 'direct',
       networkPolicy: 'implementation',
     },
   },
@@ -42,11 +42,11 @@ const user: UserConfig = {
 
 const catalogRoot = path.resolve(import.meta.dirname, '../../../../content/skills');
 
-const verifiedDocker = {
-  name: 'docker' as const,
+const verifiedHost = {
+  name: 'host' as const,
   verify: async () => ({
     status: 'verified' as const,
-    verifier: 'test-docker',
+    verifier: 'test-host',
     evidenceDigest: 'd'.repeat(64),
   }),
   execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
@@ -58,8 +58,8 @@ function factory(overrides: Record<string, unknown> = {}) {
     catalogRoot,
     userConfig: user,
     environment: { APPDATA: 'C:/appdata', LOCALAPPDATA: 'C:/local' },
-    context: { launchExecutorAdapters: [verifiedDocker] },
-    interaction: { json: true },
+    context: { launchExecutorAdapters: [verifiedHost] },
+    interaction: { json: true, reason: 'production fixture', approveHost: true },
     discoverProjectConfig: async () => ({
       root: process.cwd(),
       path: path.join(process.cwd(), 'mpxconfig.json'),
@@ -86,15 +86,43 @@ async function resolvedLaunch(
     userConfig: user,
     runtime: 'pi',
     identity: 'work',
+    executor: 'host',
+    workspace: 'direct',
     ...overrides,
   });
-  return service.resolve(
-    prepared,
-    typeof overrides.reason === 'string' ? { reason: overrides.reason } : {},
-  );
+  return service.resolve(prepared, {
+    reason: typeof overrides.reason === 'string' ? overrides.reason : 'production fixture',
+  });
 }
 
 describe('Node launch production factory', () => {
+  it('fails closed for explicit Docker without host fallback or downstream execution', async () => {
+    executionSpy.mockClear();
+    const status = vi.fn(() => ({}) as never);
+    const sessions = vi.fn(() => ({}) as never);
+    const service = factory({ status, sessions });
+    const error = await service
+      .prepare({
+        operation: 'launch',
+        cwd: process.cwd(),
+        catalogRoot,
+        userConfig: user,
+        runtime: 'pi',
+        identity: 'work',
+        executor: 'docker',
+        workspace: 'clone',
+      })
+      .catch((failure) => failure);
+    expect(error).toBeInstanceOf(MpxError);
+    expect(error).toMatchObject({
+      code: 'EXECUTOR_UNAVAILABLE',
+      details: { executor: 'docker', hostFallback: false },
+    });
+    expect(status).not.toHaveBeenCalled();
+    expect(sessions).not.toHaveBeenCalled();
+    expect(executionSpy).not.toHaveBeenCalled();
+  });
+
   it('uses explicit noninteractive host approval without consulting a TTY', async () => {
     executionSpy.mockClear();
     const confirm = vi.fn(async () => {
@@ -142,7 +170,7 @@ describe('Node launch production factory', () => {
     const verifyAuth = vi.fn(async () => undefined);
     const service = factory({
       context: {
-        launchExecutorAdapters: [verifiedDocker],
+        launchExecutorAdapters: [verifiedHost],
         exactNativeRootVerifier: { verify: verifyRoot },
         piAuthVerifier: { verify: verifyAuth },
       },
@@ -161,7 +189,7 @@ describe('Node launch production factory', () => {
   it('creates a lifecycle bridge without account authority', async () => {
     executionSpy.mockClear();
     const sessions = vi.fn(() => ({}));
-    const service = factory({ sessions, context: { launchExecutorAdapters: [verifiedDocker] } });
+    const service = factory({ sessions, context: { launchExecutorAdapters: [verifiedHost] } });
     await service.execute(await resolvedLaunch(service));
     const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
     expect(execution.context.launchLifecycleBridge).toBeDefined();
@@ -175,9 +203,6 @@ describe('Node launch production factory', () => {
     const sessions = vi.fn(() => {
       throw new Error('sessions must remain lazy');
     });
-    const diagnostics = vi.fn(async () => {
-      throw new Error('diagnostics must remain lazy');
-    });
     const service = createNodeLaunchApplicationService({
       cwd: process.cwd(),
       userConfig: user,
@@ -187,7 +212,6 @@ describe('Node launch production factory', () => {
       discoverProjectConfig: async () => undefined,
       status,
       sessions,
-      sbxDiagnostics: diagnostics,
     });
 
     const candidates = await service.prepareCandidates({
@@ -205,6 +229,5 @@ describe('Node launch production factory', () => {
     expect(selection.data).toMatchObject({ schemaVersion: 1, runtime: null });
     expect(status).not.toHaveBeenCalled();
     expect(sessions).not.toHaveBeenCalled();
-    expect(diagnostics).not.toHaveBeenCalled();
   });
 });

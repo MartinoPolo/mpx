@@ -44,11 +44,6 @@ export interface NodeLaunchApplicationInput {
   status(): StatusProvider;
   /** Lazily initialized; read-only paths never call it. */
   sessions(): SessionStore;
-  readonly sbxDiagnostics?: () => Promise<{
-    readonly available: boolean;
-    readonly failureCodes: readonly string[];
-    readonly readOnly: boolean;
-  }>;
 }
 
 function piAuth(input: NodeLaunchApplicationInput): PiAuthVerifier {
@@ -71,7 +66,7 @@ function piAuth(input: NodeLaunchApplicationInput): PiAuthVerifier {
 export function createNodeLaunchApplicationService(
   input: NodeLaunchApplicationInput,
 ): LaunchApplicationService {
-  const { context, environment, userConfig } = input;
+  const { context, environment } = input;
   const requirePiPreflight =
     context.launchExecutorAdapters === undefined ||
     context.exactNativeRootVerifier !== undefined ||
@@ -88,34 +83,6 @@ export function createNodeLaunchApplicationService(
         config,
         configHash: sha256Canonical(config as unknown as JsonValue),
       }),
-    ...(input.sbxDiagnostics
-      ? {
-          dockerDiagnostics: async () => {
-            const diagnostics = await input.sbxDiagnostics!();
-            const code = diagnostics.failureCodes[0];
-            if (!diagnostics.readOnly) {
-              throw new MpxError({
-                code: 'SBX_DIAGNOSTICS_UNSAFE',
-                message: 'Sandbox diagnostics must be read-only.',
-              });
-            }
-            if (code) {
-              throw new MpxError({
-                code,
-                message: `Standalone sbx launch diagnostic: ${code}.`,
-                details: { executor: 'docker' },
-              });
-            }
-          },
-        }
-      : {}),
-    dockerAdmission: async () => {
-      throw new MpxError({
-        code: 'EXECUTOR_UNAVAILABLE',
-        message: 'Docker execution is unavailable.',
-        details: { executor: 'docker' },
-      });
-    },
     executorEvidence: (executor) => collectNodeExecutorEvidence(context, executor),
     prepareExecutor: async (executor) => ({
       evidence: await collectNodeExecutorEvidence(context, executor),

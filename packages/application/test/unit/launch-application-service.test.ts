@@ -51,13 +51,11 @@ function dependencies(events: string[] = []) {
       services: [],
       diagnostics: [],
     }),
-    dockerAdmission: async () => {
-      events.push('admission');
-    },
     executorEvidence: async () => {
       events.push('evidence');
       return { status: 'verified' as const, verifier: 'synthetic', evidenceDigest: 'a'.repeat(64) };
     },
+    approveHost: async () => ({ reason: 'test', approvalKey: 'a'.repeat(64) }),
     piPreflight: async () => {
       events.push('native-root');
     },
@@ -82,7 +80,6 @@ describe('LaunchApplicationService', () => {
     const inventoryCanonical = vi.fn(async () => []);
     const inventoryProjectSkills = vi.fn(async () => ({ skills: [], diagnostics: [] }));
     const statusSnapshot = vi.fn(dependencies().statusSnapshot);
-    const dockerDiagnostics = vi.fn(async () => undefined);
     const executorEvidence = vi.fn(dependencies().executorEvidence);
     const piPreflight = vi.fn(async () => undefined);
     const launchExecution = vi.fn(dependencies().launchExecution);
@@ -91,7 +88,6 @@ describe('LaunchApplicationService', () => {
       inventoryCanonical,
       inventoryProjectSkills,
       statusSnapshot,
-      dockerDiagnostics,
       executorEvidence,
       piPreflight,
       launchExecution,
@@ -134,7 +130,6 @@ describe('LaunchApplicationService', () => {
     expect(inventoryCanonical).not.toHaveBeenCalled();
     expect(inventoryProjectSkills).not.toHaveBeenCalled();
     expect(statusSnapshot).not.toHaveBeenCalled();
-    expect(dockerDiagnostics).not.toHaveBeenCalled();
     expect(executorEvidence).not.toHaveBeenCalled();
     expect(piPreflight).not.toHaveBeenCalled();
     expect(launchExecution).not.toHaveBeenCalled();
@@ -202,16 +197,50 @@ describe('LaunchApplicationService', () => {
     },
   );
 
+  it('fails Docker launch preparation before status, executor preparation, or process execution', async () => {
+    const statusSnapshot = vi.fn(dependencies().statusSnapshot);
+    const executorEvidence = vi.fn(dependencies().executorEvidence);
+    const selectedProcess = vi.fn(async () => ({ exitCode: 0 }));
+    const prepareExecutor = vi.fn(async () => ({
+      evidence: {
+        status: 'verified' as const,
+        verifier: 'prepared',
+        evidenceDigest: 'b'.repeat(64),
+      },
+      execute: selectedProcess,
+    }));
+    const piPreflight = vi.fn(dependencies().piPreflight);
+    const launchExecution = vi.fn(dependencies().launchExecution);
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      statusSnapshot,
+      executorEvidence,
+      prepareExecutor,
+      piPreflight,
+      launchExecution,
+    });
+    await expect(service.prepare(request)).rejects.toMatchObject({
+      code: 'EXECUTOR_UNAVAILABLE',
+      details: { executor: 'docker', hostFallback: false },
+    });
+    expect(statusSnapshot).not.toHaveBeenCalled();
+    expect(executorEvidence).not.toHaveBeenCalled();
+    expect(prepareExecutor).not.toHaveBeenCalled();
+    expect(piPreflight).not.toHaveBeenCalled();
+    expect(selectedProcess).not.toHaveBeenCalled();
+    expect(launchExecution).not.toHaveBeenCalled();
+  });
+
   it('performs executable preconditions before child execution', async () => {
     const events: string[] = [];
     const service = new LaunchApplicationService(dependencies(events));
-    const prepared = await service.prepare(request);
-    const resolved = await service.resolve(prepared);
+    const prepared = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
+    const resolved = await service.resolve(prepared, { reason: 'test' });
     await service.execute(resolved);
-    expect(events).toEqual(['admission', 'evidence', 'native-root', 'execute']);
+    expect(events).toEqual(['evidence', 'native-root', 'execute']);
   });
 
-  it('inseparably pairs prepared Docker evidence with its exact execution callback', async () => {
+  it('inseparably pairs prepared executor evidence with its exact execution callback', async () => {
     const fallbackEvidence = vi.fn(dependencies().executorEvidence);
     const fallbackExecution = vi.fn(dependencies().launchExecution);
     const pairedExecution = vi.fn(async () => ({ exitCode: 9 }));
@@ -224,8 +253,8 @@ describe('LaunchApplicationService', () => {
         execute: pairedExecution,
       }),
     });
-    const prepared = await service.prepare(request);
-    const resolved = await service.resolve(prepared);
+    const prepared = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
+    const resolved = await service.resolve(prepared, { reason: 'test' });
     const result = await service.execute(resolved);
     expect(service.descriptor(resolved).executorVerification).toMatchObject({ verifier: 'paired' });
     expect(result.exitCode).toBe(9);
@@ -240,7 +269,7 @@ describe('LaunchApplicationService', () => {
     const executions: Array<{ verifier: string }> = [];
     const service = new LaunchApplicationService({
       ...dependencies(),
-      dockerAdmission: async () => {
+      prepareExecutor: async () => {
         const launch = ++admitted;
         return {
           evidence: {
@@ -259,10 +288,10 @@ describe('LaunchApplicationService', () => {
         return { beforeChildExecution: async () => undefined };
       },
     });
-    const preparedA = await service.prepare(request);
-    const preparedB = await service.prepare(request);
-    const resolvedA = await service.resolve(preparedA);
-    const resolvedB = await service.resolve(preparedB);
+    const preparedA = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
+    const preparedB = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
+    const resolvedA = await service.resolve(preparedA, { reason: 'test' });
+    const resolvedB = await service.resolve(preparedB, { reason: 'test' });
 
     expect((await service.execute(resolvedA)).exitCode).toBe(1);
     expect((await service.execute(resolvedB)).exitCode).toBe(2);
@@ -288,20 +317,22 @@ describe('LaunchApplicationService', () => {
     expect(events).toEqual([]);
   });
 
-  it('surfaces project skill inventory diagnostics before admission', async () => {
-    const admission = vi.fn();
+  it('surfaces project skill inventory diagnostics before executor preparation', async () => {
+    const prepareExecutor = vi.fn();
     const service = new LaunchApplicationService({
       ...dependencies(),
       inventoryProjectSkills: async () => ({
         skills: [],
         diagnostics: [{ code: 'PROJECT_SKILL_INVALID', message: 'invalid synthetic skill' }],
       }),
-      dockerAdmission: admission,
+      prepareExecutor,
     });
-    await expect(service.prepare(request)).rejects.toMatchObject({
+    await expect(
+      service.prepare({ ...request, executor: 'host', workspace: 'direct' }),
+    ).rejects.toMatchObject({
       diagnostics: [{ code: 'PROJECT_SKILL_INVALID' }],
     });
-    expect(admission).not.toHaveBeenCalled();
+    expect(prepareExecutor).not.toHaveBeenCalled();
   });
 
   it('rejects forged immutable preparation state', async () => {

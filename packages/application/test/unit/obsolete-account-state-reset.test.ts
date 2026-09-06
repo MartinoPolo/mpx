@@ -151,22 +151,24 @@ it('preflights every candidate before deleting any obsolete state', async () => 
   await expect(readFile(earlier, 'utf8')).resolves.toContain('accountBindingRef');
 });
 
-it('rejects named-path identity drift immediately before unlink', async () => {
+it('rejects named-path drift immediately before unlink', async () => {
   const f = await fixture();
   const legacy = path.join(f.bindings, 'legacy.json');
   await writeFile(legacy, JSON.stringify(binding(true)));
   let inspections = 0;
   const driftingFileSystem: ObsoleteAccountStateResetFileSystem = {
     ...nodeFileSystem,
-    async lstat(file) {
+    lstat: (async (file: Parameters<typeof lstat>[0]) => {
       const info = await lstat(file);
       if (file === legacy && ++inspections === 3) {
-        return Object.assign(Object.create(Object.getPrototypeOf(info)), info, {
-          ino: Number(info.ino) + 1,
+        return new Proxy(info, {
+          get(target, property, receiver) {
+            return property === 'size' ? target.size + 1 : Reflect.get(target, property, receiver);
+          },
         });
       }
       return info;
-    },
+    }) as typeof lstat,
   };
 
   await expect(

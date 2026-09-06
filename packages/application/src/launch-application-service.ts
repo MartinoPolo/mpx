@@ -146,11 +146,6 @@ export interface LaunchApplicationDependencies {
     readonly projectRoot: string;
     readonly config: DiscoveredConfig['config'];
   }): Promise<StatusSnapshotV1>;
-  dockerDiagnostics?(): Promise<void>;
-  dockerAdmission?(input: {
-    readonly selection: Readonly<LaunchSelection>;
-    readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
-  }): Promise<void | PreparedLaunchExecutor>;
   executorEvidence(executor: 'host' | 'docker'): Promise<ExecutorVerificationEvidence>;
   prepareExecutor?(executor: 'host' | 'docker'): Promise<PreparedLaunchExecutor>;
   approveHost?(selection: Readonly<LaunchSelection>): Promise<HostApproval>;
@@ -286,7 +281,11 @@ export class LaunchApplicationService {
       });
     }
     if (request.operation === 'launch' && selection.executor === 'docker') {
-      await this.dependencies.dockerDiagnostics?.();
+      throw new MpxError({
+        code: 'EXECUTOR_UNAVAILABLE',
+        message: 'Docker execution is unavailable.',
+        details: { executor: 'docker', hostFallback: false },
+      });
     }
     const { catalog, manifest, artifact, skillArtifact } = await resolveLaunchSkills(
       {
@@ -349,16 +348,9 @@ export class LaunchApplicationService {
       throw invalidState();
     }
     const readOnly = facts.request.operation !== 'launch';
-    const admittedExecutor =
-      !readOnly && facts.selection.executor === 'docker'
-        ? await this.dependencies.dockerAdmission?.({
-            selection: this.selection(state),
-            statusSnapshot: facts.statusSnapshot,
-          })
-        : undefined;
     const preparedExecutor = readOnly
       ? undefined
-      : (admittedExecutor ?? (await this.dependencies.prepareExecutor?.(facts.selection.executor)));
+      : await this.dependencies.prepareExecutor?.(facts.selection.executor);
     const evidence = readOnly
       ? {
           status: 'unverified' as const,

@@ -58,7 +58,6 @@ import {
 import {
   createDefaultSbxDiagnostics,
   createNodeSessionApplicationService,
-  diagnoseConfiguredF2Proof,
   executeInternalPreparationWorker,
 } from '@mpx/application/node';
 import type { ResumePlanV1 } from '@mpx/sessions';
@@ -257,7 +256,6 @@ function projectApplication(context: CliContext): ProjectApplicationService {
     inventoryCanonical,
     inventoryProjectSkills,
     ...(sbxDiagnostics ? { sbxDiagnostics } : {}),
-    sbxProofDiagnostics: () => diagnoseConfiguredF2Proof(context.env),
     providerDiagnostics: providerDiagnostics(context),
     statusSnapshot: (request) => status(context, context.portService).snapshot(request),
     ensureProject: (request) => ports(context).ensure(request),
@@ -822,7 +820,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       discoverProjectConfig: projectDiscovery,
       status: () => status(context),
       sessions: () => sessions(context),
-      ...(context.sbxDiagnostics ? { sbxDiagnostics: context.sbxDiagnostics } : {}),
     });
     const prepared = await service.prepare({
       operation: 'launch',

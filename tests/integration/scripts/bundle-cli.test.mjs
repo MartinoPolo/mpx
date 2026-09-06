@@ -83,7 +83,7 @@ describe('generated CLI bundle validation', () => {
   }, 90_000);
 
   it('builds deterministic bytes without mutating tracked bundles or evidence', async () => {
-    const tracked = ['bin/mpx.mjs', 'bin/claude-gateway.js', 'evidence/executor-evidence.ts'];
+    const tracked = ['bin/mpx.mjs', 'bin/claude-gateway.js'];
     const before = await Promise.all(tracked.map((name) => readFile(path.join(root, name))));
     const first = await buildBundleBytes();
     const second = await buildBundleBytes();

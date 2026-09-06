@@ -49,7 +49,6 @@ export interface ProjectApplicationDependencies {
     readonly failureCodes: readonly string[];
     readonly readOnly: boolean;
   }>;
-  sbxProofDiagnostics?(): Promise<readonly string[]>;
   statusSnapshot?(request: {
     cwd: string;
     projectRoot: string;
@@ -356,14 +355,6 @@ export class ProjectApplicationService {
         additionalDiagnostics.push({
           code,
           message: `Standalone sbx diagnostic: ${code}.`,
-          severity: 'warning',
-          details: { executor: 'docker' },
-        });
-      }
-      for (const code of (await this.dependencies.sbxProofDiagnostics?.()) ?? []) {
-        additionalDiagnostics.push({
-          code,
-          message: `Standalone sbx proof diagnostic: ${code}.`,
           severity: 'warning',
           details: { executor: 'docker' },
         });

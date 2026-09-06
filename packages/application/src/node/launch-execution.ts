@@ -126,8 +126,7 @@ export const executeResolvedNodeLaunch = async (
     input.descriptor.runtime === 'pi' &&
     input.descriptor.executor.name === 'docker' &&
     input.context.launchRuntimeAdapters === undefined &&
-    (input.context.launchExecutorAdapters === undefined ||
-      input.context.launchExecutorAdapterSource === 'production-admission')
+    input.context.launchExecutorAdapters === undefined
   ) {
     throw new ExecutionError(
       'PI_DOCKER_UNAVAILABLE',
@@ -209,10 +208,6 @@ export const executeResolvedNodeLaunch = async (
         : {}),
       ...(input.descriptor.runtime === 'pi' ? { verifyResumeTarget: verifyPiResumeTarget } : {}),
       ...(input.beforeChildExecution ? { beforeChildExecution: input.beforeChildExecution } : {}),
-      ...(input.context.launchExecutorAdapters &&
-      input.context.launchExecutorAdapterSource !== 'production-admission'
-        ? { useSelectedExecutorForHostPi: true }
-        : {}),
       ...(!input.context.launchRuntimeAdapters
         ? {
             liveStatus: {

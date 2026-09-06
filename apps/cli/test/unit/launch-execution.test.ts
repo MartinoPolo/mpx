@@ -172,6 +172,56 @@ describe('canonical launch dispatch', () => {
     expect(verifyAccount).toHaveBeenNthCalledWith(2, fixture.piRoot);
   });
 
+  it('fails explicit Docker launch without executing or falling back to host', async () => {
+    const fixture = await explicitLaunchFixture();
+    const execute = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      truncated: false,
+    }));
+    const prepare = vi.fn<RuntimeAdapter['prepare']>();
+    const io = captureIo();
+
+    const exitCode = await run(
+      [
+        '--json',
+        '--cwd',
+        fixture.cwd,
+        'launch',
+        'pi',
+        '--identity',
+        'work',
+        '--executor',
+        'docker',
+        '--workspace',
+        'clone',
+      ],
+      io,
+      {
+        env: fixture.env,
+        catalogRoot: fixture.catalogRoot,
+        launchExecutorAdapters: [
+          {
+            name: 'docker',
+            verify: async () => ({
+              status: 'verified',
+              verifier: 'test-docker',
+              evidenceDigest: 'd'.repeat(64),
+            }),
+            execute,
+          },
+        ],
+        launchRuntimeAdapters: [{ runtime: 'pi', prepare }],
+      },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(`${io.out.join('')}\n${io.err.join('')}`).toContain('EXECUTOR_UNAVAILABLE');
+    expect(prepare).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it.each(['claude', 'pi'] as const)('admits launch %s through routing', async (runtime) => {
     const io = captureIo();
 

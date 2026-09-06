@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UserConfig } from '@mpx/config';
+import { MpxError } from '@mpx/core';
 import type { ResumePlanV1 } from '@mpx/sessions';
 import {
   SessionResumeLaunchApplicationService,
@@ -44,8 +45,8 @@ const plan = {
     mode: 'project',
     skillPolicy: 'clean',
     contentScope: 'work',
-    executor: { kind: 'docker' },
-    workspace: 'clone',
+    executor: { kind: 'host' },
+    workspace: 'direct',
     networkPolicy: 'implementation',
     grants: [],
     artifactKey: 'artifact',
@@ -56,10 +57,6 @@ const plan = {
 
 function dependencies(events: string[] = []): SessionResumeLaunchApplicationDependencies {
   return {
-    dockerAdmission: async () => {
-      events.push('admission');
-      return { admitted: true, action: 'attach', sandboxName: 'resume-sandbox' };
-    },
     piPreflight: async () => {
       events.push('preflight');
       return {
@@ -104,8 +101,8 @@ function dependencies(events: string[] = []): SessionResumeLaunchApplicationDepe
         mode: 'project',
         skillPolicy: 'clean',
         contentScope: { name: 'work' },
-        executor: { name: 'docker' },
-        workspace: 'clone',
+        executor: { name: 'host' },
+        workspace: 'direct',
         networkPolicy: { name: 'implementation' },
         grants: [],
         policyInputs: { manifestKey: 'manifest' },
@@ -123,7 +120,7 @@ function dependencies(events: string[] = []): SessionResumeLaunchApplicationDepe
 }
 
 describe('SessionResumeLaunchApplicationService', () => {
-  it('denies Docker admission before every downstream port', async () => {
+  it('fails closed for explicit Docker without host fallback or downstream execution', async () => {
     const execution = vi.fn(async () => ({ ok: true }));
     const downstream = {
       piPreflight: vi.fn(dependencies().piPreflight),
@@ -141,16 +138,20 @@ describe('SessionResumeLaunchApplicationService', () => {
     const service = new SessionResumeLaunchApplicationService({
       ...dependencies(),
       ...downstream,
-      dockerAdmission: async () => ({
-        admitted: false,
-        code: 'F2_ADMISSION_DENIED',
-        hostFallback: false,
-        recreate: { required: true, reasons: ['proof-missing'] },
-      }),
     });
-    await expect(service.prepare(plan, user)).rejects.toMatchObject({
-      code: 'SESSION_RESUME_F2_ADMISSION_DENIED',
-      details: { hostFallback: false, action: 'recreate', admissionCode: 'F2_ADMISSION_DENIED' },
+    const dockerPlan = {
+      ...plan,
+      launch: {
+        ...plan.launch,
+        executor: { kind: 'docker' as const },
+        workspace: 'clone' as const,
+      },
+    };
+    const error = await service.prepare(dockerPlan, user).catch((failure) => failure);
+    expect(error).toBeInstanceOf(MpxError);
+    expect(error).toMatchObject({
+      code: 'EXECUTOR_UNAVAILABLE',
+      details: { hostFallback: false },
     });
     for (const port of Object.values(downstream)) {
       expect(port).not.toHaveBeenCalled();

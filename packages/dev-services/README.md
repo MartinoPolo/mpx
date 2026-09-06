@@ -8,9 +8,7 @@ The CLI uses private state below `%LOCALAPPDATA%/mpx/dev-services`, keyed by can
 
 ## Docker runtime
 
-`DockerRuntimeAdapter` binds `dev_server` to an immutable launch key, exact VM worktree, assigned ports, `RemoteToolClient`, and a named `SandboxRuntimeHandle`. Spawn, VM readiness, loopback-published host readiness, inspection, bounded logs, restart, and process-group stop cross that handle. Port conflicts and foreign fingerprints fail closed; no Docker operation constructs a host runtime or invokes a host kill.
-
-Runtime projection assembly must select this adapter for Docker and forward `dev-services:changed` events. Live `sbx` acceptance remains gated by the Phase F2 proof; there is no host fallback.
+Optional whole-agent sandbox integration is pending. Production launch and resume requests selecting Docker fail closed with `EXECUTOR_UNAVAILABLE` before service or process execution and never fall back to host. Existing read-only sandbox diagnostics are retained for future integration but do not authorize execution.
 
 ## Process model
 

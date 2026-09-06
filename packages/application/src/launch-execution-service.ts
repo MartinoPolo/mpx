@@ -167,8 +167,6 @@ export interface LaunchExecutionDependencies {
     ref: NativeSessionRefV1,
   ) => Promise<LaunchVerifiedResumeTarget>;
   readonly beforeChildExecution?: () => Promise<void>;
-  /** Injected containment adapters run the Pi host process through the selected wrapped adapter. */
-  readonly useSelectedExecutorForHostPi?: boolean;
   readonly liveStatus?: {
     readonly materializeSnapshot: (input: {
       readonly descriptor: LaunchDescriptor;
@@ -881,7 +879,6 @@ export class LaunchExecutionService {
         };
         const processAdapter: ExecutorAdapter = {
           name: adapter.name,
-          ...(adapter.remoteToolClient ? { remoteToolClient: adapter.remoteToolClient } : {}),
           verify: () => adapter.verify(),
           execute: async (child) => {
             const defaultSchedule = (callback: () => Promise<void>, milliseconds: number) => {
@@ -947,9 +944,6 @@ export class LaunchExecutionService {
           ...(productionRuntimeAdapters ? { privateRouteConsumption: 'none' as const } : {}),
           ...(dependencies.audit ? { audit: dependencies.audit } : {}),
           approvals,
-          hostPiProcessExecutor: dependencies.useSelectedExecutorForHostPi
-            ? processAdapter
-            : (dependencies.executorAdapters.find((a) => a.name === 'host') ?? processAdapter),
         });
         const environment = Object.fromEntries(
           Object.entries(request.environment).filter(

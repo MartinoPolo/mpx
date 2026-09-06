@@ -51,6 +51,10 @@ describe('Phase G credential-free subprocess boundaries', () => {
       user: f.user,
       store: f.store,
       environment,
+      options: {
+        exactNativeRootVerifier: { verify: async () => undefined },
+        piAuthVerifier: { verify: async () => undefined },
+      },
     });
     const claude = discoveries.find((item) => item.scanner.runtime === 'claude')!;
     await expect(claude.scanner.scan()).resolves.toMatchObject({
@@ -124,8 +128,9 @@ describe('Phase G credential-free subprocess boundaries', () => {
         user: f.user,
         store: f.store,
         environment: {},
-        accountResolver: {
-          resolve: async (_identity, runtime) => (runtime === 'pi' ? 'account:fixture' : null),
+        options: {
+          exactNativeRootVerifier: { verify: async () => undefined },
+          piAuthVerifier: { verify: async () => undefined },
         },
       });
       await expect(

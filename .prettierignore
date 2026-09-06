@@ -12,8 +12,6 @@ bin/mpx.mjs
 runtimes/pi/runtime-pi/vendor/
 docs/history/
 docs/inventory/
-evidence/runtime-tool-inventory.json
-evidence/sbx-pin.json
 
 # Reference artifacts and lockfiles
 content/skills/tutorial-create/reference/

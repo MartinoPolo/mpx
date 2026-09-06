@@ -378,7 +378,6 @@ export class ExecutionService {
       audit?: LaunchAuditStore;
       approvals?: HostApprovalStore;
       production?: boolean;
-      hostPiProcessExecutor?: ExecutorAdapter;
     },
   ) {
     this.#approvals = dependencies.approvals ?? new HostApprovalStore();
@@ -564,17 +563,7 @@ export class ExecutionService {
             { restartRequired: true },
           );
         }
-        // Docker selects the model-triggerable executor, not Pi's UI/model process. Pi and its
-        // account/session environment remain host-side while all tool adapters use SandboxHandle.
-        const processExecutor =
-          descriptor.runtime === 'pi' && descriptor.executor.name === 'docker'
-            ? (this.dependencies.hostPiProcessExecutor ??
-              fail(
-                'HOST_PI_PROCESS_REQUIRED',
-                'Docker Pi launch requires the dedicated host-side Pi process adapter.',
-              ))
-            : executor;
-        result = await processExecutor.execute(request);
+        result = await executor.execute(request);
       } finally {
         await prepared.shutdown?.();
       }
@@ -1103,6 +1092,3 @@ export function compactLaunchBanner(descriptorInput: LaunchDescriptor): string {
 }
 
 export * from './sbx-client.js';
-export * from './sandbox-plan.js';
-export * from './sbx-plans.js';
-export * from './sbx-policy.js';

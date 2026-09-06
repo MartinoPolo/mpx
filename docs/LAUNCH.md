@@ -2,7 +2,7 @@
 
 `mpx launch claude|pi` resolves and executes the MPX v2 launch contract. Resolution produces a deeply immutable descriptor, a runtime-neutral resolved-skill manifest, and a runtime-specific immutable published projection. The logical skill artifact and the launch-bound full published-projection reference are separate bindings. Their hashes bind runtime, identity, project/repository/content scope, mode, skill policy, executor evidence, workspace, network policy, routes, approvals, and artifact bytes. A running process cannot widen that tuple: changed rights, bindings, evidence, or artifacts require a new launch and runtime restart (`LAUNCH_RESTART_REQUIRED`).
 
-> **Migration status:** Host Pi uses normal discovery of the canonical checked-in MPX Pi extension package. Pi Docker launch and resume are unavailable pending whole-agent sandbox isolation; MPX fails closed before child execution. See [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and [the implementation plan](PI_EXTENSION_MIGRATION.md).
+> **Migration status:** Host Pi uses normal discovery of the canonical checked-in MPX Pi extension package. Optional whole-agent sandbox integration is pending. Docker launch and resume fail closed at the application boundary with no host fallback. See [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and [the implementation plan](PI_EXTENSION_MIGRATION.md).
 
 ## Selection and aliases
 
@@ -23,9 +23,9 @@ Launch-only runtime arguments use repeatable `--runtime-arg <value>`. MPX bounds
 
 ## Execution gates
 
-**Current implementation:** Docker selection uses the pinned standalone-sbx backend only when its live diagnostics, launch-plan export, packaged inventories, and proof report match. Missing or stale proof returns `EXECUTOR_GATE_UNVERIFIED` with no host fallback. Pi Docker launch and resume additionally return `PI_DOCKER_UNAVAILABLE` at the shared production launch boundary before projection or child execution. MPX does not run host Pi under a Docker-labelled descriptor and does not inject a worker bridge, generated extension, status-file environment, extension-disable flags, or explicit extension path. Native project trust remains Pi-owned under the approved ADR.
+**Current implementation:** Optional whole-agent sandbox integration is pending. Any real launch or resume selecting Docker fails with `EXECUTOR_UNAVAILABLE` before status access, executor preparation, projection, or process execution. There is no host fallback, and a Docker-labelled descriptor never authorizes a host process. Read-only sandbox diagnostics remain available for future integration work but do not enable execution. Native project trust remains Pi-owned under the approved ADR.
 
-Gate 5 will run Pi, its canonical native extensions, tools, and subprocesses inside `sbx`. Until that whole-agent route is implemented and accepted, Pi Docker is unavailable. Host Pi remains an explicit elevated compatibility path and is not sandbox isolation.
+Until the whole-agent route is implemented and accepted, Docker execution is unavailable. Host execution remains an explicit elevated compatibility path and is not sandbox isolation.
 
 Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where required, a nonempty reason, and exact one-use launch-bound approval. Approval is either fresh direct-TTY confirmation or the explicit argv-scoped `--approve-host` flag; the latter is accepted only for an explicit host launch with a reason and is never read from durable configuration or the environment. Interactive runtime processes have no artificial 120-second lifetime; finite readiness and diagnostic probes remain bounded.
 
@@ -41,4 +41,4 @@ The child receives immutable launch bindings including the logical artifact and 
 
 Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime, executor, and a short launch key without private roots. Audit output paths are hardened and records are bounded safe projections of outcome and error code. Records do not authorize a later launch. Any policy or artifact change requires relaunch and process restart; in-process rights expansion is rejected.
 
-This surface does not claim F2 isolation, Phase I provisioning or installation, or Phase J legacy retirement. Session continuation/resume is delivered by the separate Phase G lifecycle and sessions components, not by the immutable runtime projection itself.
+This surface does not claim whole-agent sandbox isolation, Phase I provisioning or installation, or Phase J legacy retirement. Session continuation/resume is delivered by the separate Phase G lifecycle and sessions components, not by the immutable runtime projection itself.

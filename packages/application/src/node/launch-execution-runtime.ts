@@ -79,8 +79,6 @@ export interface LaunchProjectionBuildInput {
 
 export interface LaunchExecutionContext {
   launchExecutorAdapters?: readonly ExecutorAdapter[];
-  /** Trusted provenance for adapters admitted by production composition; unmarked arrays are injected. */
-  launchExecutorAdapterSource?: 'production-admission' | 'injected';
   launchRuntimeAdapters?: readonly RuntimeAdapter[];
   launchRoutes?: {
     materialize(
