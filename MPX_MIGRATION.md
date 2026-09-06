@@ -231,6 +231,14 @@ This is not a host-release gate. Run the same native runtime package and compile
 
 ### Phase 10 — Documentation and context pruning
 
+**State: in progress.**
+
+Completed:
+
+- deleted the obsolete Phase-F manual rollback guide now superseded by internal automatic installer recovery and current launch documentation;
+- updated the compiler architecture to document native Pi `/skill:<name>` invocation without transitional aliases and corrected the active content CLI prose;
+- removed external `mpx-pi` deployment authority wording from runtime-tools provenance while preserving its dated package provenance.
+
 Keep the README, AGENTS instructions, short operating guides, durable ADRs, compiler architecture, native Pi ownership, and generated CLI references. Delete or archive temporary handoffs, gate narratives, TDD journals, F2 proofs, Phase-J documents, obsolete installer prose, historical source-repository instructions, and generated evidence with no consumer.
 
 ## Acceptance
