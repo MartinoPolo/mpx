@@ -28,7 +28,6 @@ const baseRequest = (): InstallIntentRequestV1 => ({
     claude: [{ path: 'content/claude', role: 'plugin' }],
     pi: [{ path: 'content/pi', role: 'profile' }],
   },
-  external: { gitRemotes: [] },
 });
 
 describe('InstallIntentRequestV1', () => {
@@ -47,106 +46,6 @@ describe('InstallIntentRequestV1', () => {
       },
     };
     expect(() => parseInstallIntentRequestV1(duplicate)).toThrowError(/unique|sorted/i);
-
-    const unsorted = {
-      ...baseRequest(),
-      external: {
-        ...baseRequest().external,
-        gitRemotes: [
-          {
-            id: 'z',
-            request: {
-              repository: 'C:\\z',
-              proposals: [{ action: 'add' as const, remote: 'origin', url: 'x' }],
-            },
-          },
-          {
-            id: 'a',
-            request: {
-              repository: 'C:\\a',
-              proposals: [{ action: 'add' as const, remote: 'origin', url: 'x' }],
-            },
-          },
-        ],
-      },
-    };
-    expect(() => parseInstallIntentRequestV1(unsorted)).toThrowError(/unique|sorted/i);
-  });
-});
-
-const completePlan = (overrides: Record<string, unknown> = {}): Record<string, unknown> => {
-  const repository = path.resolve('fixture-repository'),
-    commands: unknown[] = [],
-    config = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-  return {
-    kind: 'git-remotes',
-    classification: 'confirmation-required',
-    repository,
-    commands,
-    preservedRemotes: [],
-    expectedRemotes: [],
-    confirmation: {
-      required: true,
-      scope: repository,
-      digest: installerDigest({ repository, config, commands }),
-    },
-    rollback: {
-      automatic: false,
-      snapshot: {
-        path: path.join(repository, '.git', 'config'),
-        encoding: 'base64',
-        bytes: '',
-        sha256: config,
-      },
-      steps: ['restore'],
-    },
-    ...overrides,
-  };
-};
-
-describe('InstallIntentBuildResultV1', () => {
-  it('binds every strict external plan record to its intent entry', () => {
-    const plan = completePlan();
-    const planDigest = installerDigest(plan);
-    const verifierRef = `git-remotes:settings:${planDigest}`;
-    const intent = {
-      schemaVersion: 1,
-      kind: 'install-intent',
-      releaseKey: sha('a'),
-      convergenceHash: sha('a'),
-      components: ['cli'],
-      externalIntegrations: [
-        {
-          id: 'settings',
-          adapter: 'git-remotes',
-          classification: 'confirmation-required',
-          planDigest,
-          verifierRef,
-        },
-      ],
-    } as const;
-    const envelope = {
-      schemaVersion: 1,
-      kind: 'install-intent-build-result',
-      intent,
-      externalPlans: [
-        {
-          id: 'settings',
-          adapter: 'git-remotes',
-          classification: 'confirmation-required',
-          planDigest,
-          verifierRef,
-          plan,
-        },
-      ],
-    };
-    expect(parseInstallIntentBuildResultV1(envelope)).toEqual(envelope);
-    expect(() =>
-      parseInstallIntentBuildResultV1({
-        ...envelope,
-        externalPlans: [{ ...envelope.externalPlans[0], id: 'other' }],
-      }),
-    ).toThrowError(/bound|match/i);
   });
 });
 
@@ -236,17 +135,15 @@ async function createBuildFixture() {
       pi: roles.pi.map((role, index) => ({ path: `pi/${index}`, role })),
     },
   };
-  const never = { inspect: vi.fn(), plan: vi.fn() };
   const builder = new InstallIntentBuilder({
     releases,
     environment: { MPX_PROJECTS: path.join(root, 'projects'), MPX_WORK: path.join(root, 'work') },
-    gitRemotes: never as never,
   });
-  return { builder, configSource, never, releases, request };
+  return { builder, configSource, releases, request };
 }
 
 it('builds a deterministic four-registration intent without publishing or external mutation', async () => {
-  const { builder, configSource, never, releases, request } = await createBuildFixture();
+  const { builder, configSource, releases, request } = await createBuildFixture();
   const first = await builder.build(request),
     second = await builder.build(request);
   expect(first).toEqual(second);
@@ -295,7 +192,6 @@ it('builds a deterministic four-registration intent without publishing or extern
   ]);
   expect(first.intent.userConfigArtifact?.content).toBe(configSource);
   expect(releases.publish).not.toHaveBeenCalled();
-  expect(never.inspect).not.toHaveBeenCalled();
 });
 
 it('accepts a regular non-symlink executable at the current Claude Code size', async () => {
@@ -316,49 +212,4 @@ it('rejects an executable above the bounded security limit', async () => {
   await expect(builder.build(request)).rejects.toMatchObject({
     code: 'INSTALL_EXECUTABLE_INVALID',
   });
-});
-
-it('verifies a retained Git plan through its digest-bound adapter', async () => {
-  const verify = vi.fn(async () => ({ healthy: true, issues: [] }));
-  const plan = completePlan(),
-    planDigest = installerDigest(plan),
-    verifierRef = `git-remotes:git:${planDigest}`;
-  const built = parseInstallIntentBuildResultV1({
-    schemaVersion: 1,
-    kind: 'install-intent-build-result',
-    intent: {
-      schemaVersion: 1,
-      kind: 'install-intent',
-      releaseKey: sha('a'),
-      convergenceHash: sha('a'),
-      components: ['cli'],
-      externalIntegrations: [
-        {
-          id: 'git',
-          adapter: 'git-remotes',
-          classification: 'confirmation-required',
-          planDigest,
-          verifierRef,
-        },
-      ],
-    },
-    externalPlans: [
-      {
-        id: 'git',
-        adapter: 'git-remotes',
-        classification: 'confirmation-required',
-        planDigest,
-        verifierRef,
-        plan,
-      },
-    ],
-  });
-  const builder = new InstallIntentBuilder({
-    releases: {} as CurrentReleaseBuilder,
-    gitRemotes: { inspect: vi.fn(), plan: vi.fn(), verify },
-  });
-  await expect(builder.verify(built)).resolves.toMatchObject({
-    integrations: [{ id: 'git', healthy: true }],
-  });
-  expect(verify).toHaveBeenCalledExactlyOnceWith(built.externalPlans[0]!.plan);
 });

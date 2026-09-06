@@ -47,14 +47,11 @@ import {
 } from '@mpx/sessions';
 import {
   activateRelease,
-  GitRemotePlanningAdapter,
   InstallIntentBuilder,
   InstallOrchestrator,
   NodeCurrentReleaseBuilder,
-  NodeGitCommandPort,
   NodeTransactionStore,
   ProductionInstallerOperationAdapter,
-  removeActiveRelease,
   type InstallerOperationAdapter,
   type TransactionStore,
 } from '@mpx/installer';
@@ -220,18 +217,9 @@ export function installIntentBuilder(context: CliContext): InstallIntentBuilder 
       message: 'MPX_APPS must be an absolute path.',
     });
   }
-  const approvedRoots = [
-    context.env.MPX_PROJECTS,
-    context.env.MPX_WORK,
-    context.env.MPX_CLONED,
-  ].filter((root): root is string => Boolean(root && path.isAbsolute(root)));
   return new InstallIntentBuilder({
     releases: new NodeCurrentReleaseBuilder({ repositoryRoot: installerSourceRoot(), appsRoot }),
     environment: context.env,
-    gitRemotes: new GitRemotePlanningAdapter({
-      allowedRoots: approvedRoots,
-      git: new NodeGitCommandPort(context.env),
-    }),
   });
 }
 
@@ -280,7 +268,6 @@ export function immutableInstaller(context: CliContext): InstallOrchestrator {
     releases: new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot: appsRoot! }),
     activate: (releaseKey, expectedPriorReleaseKey) =>
       activateRelease(localAppData!, expectedPriorReleaseKey, releaseKey),
-    deactivate: (releaseKey) => removeActiveRelease(localAppData!, releaseKey),
   });
 }
 

@@ -208,7 +208,7 @@ Exit requires personal and work host routes to behave like native installations 
 ### Phase 5 — Idempotent setup
 
 - retain atomic writes, owned-path checks, and foreign-path refusal;
-- replace installer intent, plan, digest, apply, rollback, and uninstall ceremony with `mpx setup` preview and `mpx setup --confirm`;
+- replace installer intent, plan, digest, apply, rollback, uninstall, and external-action ceremony with one bare `mpx setup`; failed applies roll back automatically;
 - make reruns idempotent;
 - allow MPX-local state reset without permanent legacy readers;
 - install the stable Node entry and `-mpx` aliases;
@@ -237,7 +237,7 @@ Completed:
 - made Docker launch and resume fail closed without host fallback while retaining only optional whole-agent sandbox planning primitives;
 - regenerated the CLI references and bundles without retaining hidden migration aliases.
 
-Remaining work includes generated Pi feature source, duplicate Pi vendor trees, old installer protocol, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
+Completed work includes deletion of the public installer uninstall/rollback and external-integration protocol; `mpx setup` is bare and idempotent, with receipt-safe upgrades and automatic failed-apply rollback retained internally. Remaining work includes generated Pi feature source, duplicate Pi vendor trees, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
 
 ### Phase 9 — Optional sandbox
 

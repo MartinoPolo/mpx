@@ -14,14 +14,13 @@ const built = {
   schemaVersion: 1,
   kind: 'install-intent-build-result',
   intent,
-  externalPlans: [],
 } as InstallIntentBuildResultV1;
 const plan = {
   schemaVersion: 1,
   kind: 'install-plan',
   intent,
   confirmationDigest: digest,
-  classifications: { automatic: [], confirmationRequired: [], manualOnly: [] },
+  classifications: { automatic: [], confirmationRequired: [] },
 } as unknown as InstallPlanV1;
 
 it('builds before detach, then plans, applies exact digest, and strictly verifies exact build', async () => {
@@ -51,15 +50,6 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
         order.push('build');
         return built;
       }),
-      verify: vi.fn(async (actual) => {
-        expect(actual).toBe(built);
-        order.push('builder.verify');
-        return {
-          schemaVersion: 1,
-          kind: 'install-external-verification',
-          integrations: [],
-        } as const;
-      }),
     },
     orchestrator: {
       plan: vi.fn(async (actual) => {
@@ -73,10 +63,9 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
         order.push('apply');
         return {} as never;
       }),
-      verify: vi.fn(async (strict, external) => {
+      verify: vi.fn(async (strict) => {
         expect(strict).toBe(true);
         order.push('verify');
-        await external?.();
         return verification as never;
       }),
     },
@@ -88,16 +77,7 @@ it('builds before detach, then plans, applies exact digest, and strictly verifie
     releaseKey: digest,
     verification: { healthy: true, issues: [] },
   });
-  expect(order).toEqual([
-    'request',
-    'build',
-    'reset',
-    'detach',
-    'plan',
-    'apply',
-    'verify',
-    'builder.verify',
-  ]);
+  expect(order).toEqual(['request', 'build', 'reset', 'detach', 'plan', 'apply', 'verify']);
 });
 
 it('throws a typed failure instead of reporting success when strict verification is unhealthy', async () => {
@@ -107,8 +87,6 @@ it('throws a typed failure instead of reporting success when strict verification
     detach: { run: async () => undefined },
     builder: {
       build: async () => built,
-      verify: async () =>
-        ({ schemaVersion: 1, kind: 'install-external-verification', integrations: [] }) as const,
     },
     orchestrator: {
       plan: async () => plan,
@@ -137,8 +115,8 @@ it('does not reset local state when setup request construction fails', async () 
     },
     localReset: { run: localReset },
     detach: { run: vi.fn() },
-    builder: { build: vi.fn(), verify: vi.fn() },
-    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
+    builder: { build: vi.fn() },
+    orchestrator: { plan: vi.fn(), apply: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(localReset).not.toHaveBeenCalled();
@@ -156,9 +134,8 @@ it('does not detach when immutable intent construction fails', async () => {
       build: async () => {
         throw failure;
       },
-      verify: vi.fn(),
     },
-    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
+    orchestrator: { plan: vi.fn(), apply: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(localReset).not.toHaveBeenCalled();
@@ -176,8 +153,8 @@ it('does not detach when obsolete local-state reset fails', async () => {
       },
     },
     detach: { run: detach },
-    builder: { build: async () => built, verify: vi.fn() },
-    orchestrator: { plan: vi.fn(), apply: vi.fn(), verify: vi.fn() },
+    builder: { build: async () => built },
+    orchestrator: { plan: vi.fn(), apply: vi.fn() },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(detach).not.toHaveBeenCalled();
@@ -195,8 +172,8 @@ it('does not plan or apply when legacy detachment fails', async () => {
         throw failure;
       },
     },
-    builder: { build: async () => built, verify: vi.fn() },
-    orchestrator: { plan: planOperation, apply, verify: vi.fn() },
+    builder: { build: async () => built },
+    orchestrator: { plan: planOperation, apply },
   });
   await expect(service.execute()).rejects.toBe(failure);
   expect(planOperation).not.toHaveBeenCalled();
@@ -211,7 +188,7 @@ it('does not apply or verify when planning fails', async () => {
     requestFactory: { create: async () => ({}) },
     localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
-    builder: { build: async () => built, verify: vi.fn() },
+    builder: { build: async () => built },
     orchestrator: {
       plan: async () => {
         throw failure;
@@ -232,7 +209,7 @@ it('does not verify when apply fails', async () => {
     requestFactory: { create: async () => ({}) },
     localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
-    builder: { build: async () => built, verify: vi.fn() },
+    builder: { build: async () => built },
     orchestrator: {
       plan: async () => plan,
       apply: async () => {
@@ -252,7 +229,7 @@ it('propagates strict verify failure only after apply', async () => {
     requestFactory: { create: async () => ({}) },
     localReset: { run: async () => undefined },
     detach: { run: async () => undefined },
-    builder: { build: async () => built, verify: vi.fn() },
+    builder: { build: async () => built },
     orchestrator: {
       plan: async () => plan,
       apply: async () => {
@@ -283,8 +260,6 @@ it('can execute twice through idempotent dependency ports', async () => {
     detach: { run: detach },
     builder: {
       build,
-      verify: async () =>
-        ({ schemaVersion: 1, kind: 'install-external-verification', integrations: [] }) as const,
     },
     orchestrator: { plan: planOperation, apply, verify },
   });
@@ -295,32 +270,4 @@ it('can execute twice through idempotent dependency ports', async () => {
   for (const operation of [create, build, detach, planOperation, apply, verify]) {
     expect(operation).toHaveBeenCalledTimes(2);
   }
-});
-
-it('rejects a manual-only plan without applying it', async () => {
-  const apply = vi.fn();
-  const service = new SetupApplicationService({
-    requestFactory: { create: async () => ({}) },
-    localReset: { run: async () => undefined },
-    detach: { run: async () => undefined },
-    builder: {
-      build: async () => built,
-      verify: async () =>
-        ({ schemaVersion: 1, kind: 'install-external-verification', integrations: [] }) as const,
-    },
-    orchestrator: {
-      plan: async () => ({
-        ...plan,
-        classifications: {
-          automatic: [],
-          confirmationRequired: [],
-          manualOnly: [{ id: 'external', planDigest: digest, verifierRef: 'x' }],
-        },
-      }),
-      apply,
-      verify: vi.fn(),
-    },
-  });
-  await expect(service.execute()).rejects.toMatchObject({ code: 'SETUP_MANUAL_ACTION_REQUIRED' });
-  expect(apply).not.toHaveBeenCalled();
 });

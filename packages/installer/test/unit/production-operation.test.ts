@@ -347,67 +347,6 @@ it('fails closed without overwriting a concurrent post-apply user-config change 
   expect(await files.read(target)).toEqual(concurrent);
 });
 
-it('rejects forged user-config retention through the production adapter', async () => {
-  const adapter = new ProductionInstallerOperationAdapter(
-    {
-      MPX_APPS: 'C:\\Apps',
-      APPDATA: 'C:\\Roaming',
-      LOCALAPPDATA: 'C:\\Local',
-      USERPROFILE: 'C:\\Users\\me',
-      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
-    },
-    'me',
-    { files: new FakeBinaryFileSystem(), resources: new FakeJsonResourceStore() },
-  );
-  const attempts = [
-    {
-      operation: {
-        id: '01-user-config',
-        adapter: adapter.name,
-        action: 'ensure' as const,
-        target: 'C:\\Roaming\\arbitrary.json',
-        desiredDigest: 'b'.repeat(64),
-      },
-      spec: { kind: 'user-config', retention: 'user-owned' },
-    },
-    {
-      operation: {
-        id: '01-user-config',
-        adapter: adapter.name,
-        action: 'ensure' as const,
-        target: 'C:\\Roaming\\mpx\\config.json',
-        desiredDigest: 'b'.repeat(64),
-      },
-      spec: { kind: 'user-config', retention: 'altered' },
-    },
-  ];
-  for (const { operation, spec } of attempts) {
-    const store = new MemoryTransactionStore();
-    await store.writeReceipt({
-      schemaVersion: 2,
-      kind: 'ownership-receipt',
-      releaseKey: 'a'.repeat(64),
-      convergenceHash: 'a'.repeat(64),
-      files: [],
-      operations: [operation],
-      operationLocators: [
-        {
-          operationId: operation.id,
-          adapter: operation.adapter,
-          spec,
-          bindingDigest: installerDigest({ operation, spec }),
-        },
-      ],
-      installedAt: '2025-01-01T00:00:00.000Z',
-    });
-    await expect(
-      new ImmutableInstallerService({ adapters: [adapter], store }).planUninstall(),
-    ).rejects.toMatchObject({
-      code: expect.stringMatching(/^INSTALL_RECEIPT_(FORGED|AMBIGUOUS)$/u),
-    });
-  }
-});
-
 it('rejects legacy Terminal receipt locators without inspecting their target', async () => {
   const target =
       'C:\\Local\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json',

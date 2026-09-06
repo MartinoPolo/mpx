@@ -827,27 +827,15 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     while (this.entries.size > 2_048) {
       this.entries.delete(this.entries.keys().next().value!);
     }
-    const references = (intent.externalIntegrations ?? []).map((integration) => ({
-        id: integration.id,
-        planDigest: integration.planDigest,
-        verifierRef: integration.verifierRef,
-      })),
-      automaticOperations = [
-        ...automatic.map((entry) => entry.operation),
-        ...piSettingsOperations,
-      ].sort((left, right) => left.id.localeCompare(right.id));
+    const automaticOperations = [
+      ...automatic.map((entry) => entry.operation),
+      ...piSettingsOperations,
+    ].sort((left, right) => left.id.localeCompare(right.id));
     return {
       automatic: automaticOperations,
       classifications: {
         automatic: automaticOperations.map((operation) => operation.id),
-        confirmationRequired: references.filter(
-          (_reference, index) =>
-            intent.externalIntegrations![index]!.classification === 'confirmation-required',
-        ),
-        manualOnly: references.filter(
-          (_reference, index) =>
-            intent.externalIntegrations![index]!.classification === 'manual-only',
-        ),
+        confirmationRequired: [],
       },
     };
   }

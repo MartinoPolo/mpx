@@ -40,13 +40,6 @@ export interface ReleaseManifestV1 {
   readonly convergenceHash: string;
   readonly files: readonly ReleaseFileV1[];
 }
-export interface InstallExternalIntegrationV1 {
-  readonly id: string;
-  readonly adapter: 'git-remotes';
-  readonly classification: 'confirmation-required' | 'manual-only';
-  readonly planDigest: string;
-  readonly verifierRef: string;
-}
 export interface UserConfigArtifactV1 {
   readonly target: '%APPDATA%/mpx/config.json';
   readonly content: string;
@@ -61,7 +54,6 @@ export interface InstallIntentV1 {
   readonly userConfigArtifact?: UserConfigArtifactV1;
   readonly runtimeRegistrations?: RuntimeRegistrationMatrixV1;
   readonly staticMcpRegistrations?: readonly StaticMcpRegistrationV1[];
-  readonly externalIntegrations?: readonly InstallExternalIntegrationV1[];
 }
 export interface MachineObservationV1 {
   readonly id: string;
@@ -82,7 +74,6 @@ export interface InstallPlanReferenceV1 {
 export interface InstallOperationClassificationsV1 {
   readonly automatic: readonly string[];
   readonly confirmationRequired: readonly InstallPlanReferenceV1[];
-  readonly manualOnly: readonly InstallPlanReferenceV1[];
 }
 export interface InstallPlanV1 {
   readonly schemaVersion: 1;
@@ -115,12 +106,6 @@ export interface InstallVerificationComponentV1 {
   readonly automatic: true;
   readonly status: 'actual-state-verified' | 'unhealthy';
 }
-export interface InstallVerificationExternalV1 {
-  readonly id: string;
-  readonly classification: 'confirmation-required' | 'manual-only';
-  readonly status: 'verification-required' | 'unhealthy' | 'verified';
-  readonly verifierRef: string;
-}
 export interface InstallVerificationV1 {
   readonly schemaVersion: 1;
   readonly kind: 'install-verification';
@@ -129,8 +114,6 @@ export interface InstallVerificationV1 {
   readonly issues: readonly string[];
   readonly checkedAt: string;
   readonly components?: readonly InstallVerificationComponentV1[];
-  readonly externalIntegrations?: readonly InstallVerificationExternalV1[];
-  readonly manualOnly?: readonly string[];
 }
 export interface MachineSnapshotV1 {
   readonly schemaVersion: 1;
@@ -244,8 +227,7 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
   const record = value as Record<string, unknown> | null;
   const has = (key: string): boolean =>
     Boolean(record && Object.prototype.hasOwnProperty.call(record, key));
-  const hasExternal = has('externalIntegrations'),
-    hasRuntime = has('runtimeRegistrations'),
+  const hasRuntime = has('runtimeRegistrations'),
     hasMcp = has('staticMcpRegistrations'),
     hasUserConfig = has('userConfigArtifact');
   const intent = exact(value, [
@@ -257,33 +239,7 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
     ...(hasUserConfig ? ['userConfigArtifact'] : []),
     ...(hasRuntime ? ['runtimeRegistrations'] : []),
     ...(hasMcp ? ['staticMcpRegistrations'] : []),
-    ...(hasExternal ? ['externalIntegrations'] : []),
   ]);
-  const external = intent.externalIntegrations;
-  const integrationsValid =
-    !hasExternal ||
-    (Array.isArray(external) &&
-      external.every((entry, index, all) => {
-        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-          return false;
-        }
-        const item = entry as Record<string, unknown>;
-        return (
-          Object.keys(item).sort().join('\0') ===
-            ['adapter', 'classification', 'id', 'planDigest', 'verifierRef'].sort().join('\0') &&
-          typeof item.id === 'string' &&
-          /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(item.id) &&
-          item.adapter === 'git-remotes' &&
-          item.classification === 'confirmation-required' &&
-          typeof item.planDigest === 'string' &&
-          SHA.test(item.planDigest) &&
-          typeof item.verifierRef === 'string' &&
-          /^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$/u.test(item.verifierRef) &&
-          (index === 0 || (all[index - 1] as { id: string }).id.localeCompare(item.id) < 0)
-        );
-      }) &&
-      new Set((external as { id: string }[]).map((entry) => entry.id)).size ===
-        (external as unknown[]).length);
   if (
     intent.schemaVersion !== 1 ||
     intent.kind !== 'install-intent' ||
@@ -293,8 +249,7 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
     !Array.isArray(intent.components) ||
     intent.components.some((x) => typeof x !== 'string' || !x) ||
     new Set(intent.components).size !== intent.components.length ||
-    intent.components.some((x, i, a) => i > 0 && a[i - 1].localeCompare(x) >= 0) ||
-    !integrationsValid
+    intent.components.some((x, i, a) => i > 0 && a[i - 1].localeCompare(x) >= 0)
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid install intent.');
   }
@@ -348,7 +303,6 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
     ...(userConfigArtifact ? { userConfigArtifact } : {}),
     ...(runtimeRegistrations ? { runtimeRegistrations } : {}),
     ...(staticMcpRegistrations ? { staticMcpRegistrations } : {}),
-    ...(hasExternal ? { externalIntegrations: external as InstallExternalIntegrationV1[] } : {}),
   };
 }
 function parseObservation(value: unknown): MachineObservationV1 {
@@ -388,7 +342,7 @@ function orderedUnique<T extends { id: string }>(values: T[]): boolean {
   );
 }
 function parseReferences(value: unknown): InstallOperationClassificationsV1 {
-  const record = exact(value, ['automatic', 'confirmationRequired', 'manualOnly']);
+  const record = exact(value, ['automatic', 'confirmationRequired']);
   const references = (items: unknown): InstallPlanReferenceV1[] => {
     if (!Array.isArray(items)) {
       fail('INSTALL_SCHEMA_INVALID', 'Plan references must be arrays.');
@@ -417,14 +371,7 @@ function parseReferences(value: unknown): InstallOperationClassificationsV1 {
   const parsed = {
     automatic: record.automatic as string[],
     confirmationRequired: references(record.confirmationRequired),
-    manualOnly: references(record.manualOnly),
   };
-  if (
-    new Set([...parsed.confirmationRequired, ...parsed.manualOnly].map((item) => item.id)).size !==
-    parsed.confirmationRequired.length + parsed.manualOnly.length
-  ) {
-    fail('INSTALL_SCHEMA_INVALID', 'Plan references must be unique.');
-  }
   return parsed;
 }
 export function parseInstallPlanV1(value: unknown): InstallPlanV1 {
@@ -595,7 +542,7 @@ export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
 }
 export function parseInstallVerificationV1(value: unknown): InstallVerificationV1 {
   const source = value as Record<string, unknown> | null;
-  const optional = ['components', 'externalIntegrations', 'manualOnly'].filter((key) =>
+  const optional = ['components'].filter((key) =>
     Boolean(source && Object.prototype.hasOwnProperty.call(source, key)),
   );
   const verification = exact(value, [
@@ -645,74 +592,6 @@ export function parseInstallVerificationV1(value: unknown): InstallVerificationV
       }))
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid install verification components.');
-  }
-  if (optional.includes('externalIntegrations')) {
-    if (
-      !Array.isArray(verification.externalIntegrations) ||
-      verification.externalIntegrations.some((item) => {
-        const external = item as Record<string, unknown>;
-        return (
-          !external ||
-          typeof external !== 'object' ||
-          Array.isArray(external) ||
-          Object.keys(external).sort().join('\0') !==
-            ['id', 'classification', 'status', 'verifierRef'].sort().join('\0') ||
-          typeof external.id !== 'string' ||
-          !external.id ||
-          !['confirmation-required', 'manual-only'].includes(external.classification as string) ||
-          !['verification-required', 'unhealthy', 'verified'].includes(external.status as string) ||
-          typeof external.verifierRef !== 'string' ||
-          !external.verifierRef
-        );
-      })
-    ) {
-      fail('INSTALL_SCHEMA_INVALID', 'Invalid install verification integrations.');
-    }
-    const external = verification.externalIntegrations as { id: string }[];
-    if (!orderedUnique(external)) {
-      fail(
-        'INSTALL_SCHEMA_INVALID',
-        'Install verification integrations must be unique and sorted.',
-      );
-    }
-  }
-  if (
-    optional.includes('manualOnly') &&
-    (!Array.isArray(verification.manualOnly) ||
-      verification.manualOnly.some((item) => typeof item !== 'string' || !item) ||
-      new Set(verification.manualOnly).size !== verification.manualOnly.length ||
-      verification.manualOnly.some(
-        (item, index, all) =>
-          index > 0 && (all[index - 1] as string).localeCompare(item as string) >= 0,
-      ))
-  ) {
-    fail('INSTALL_SCHEMA_INVALID', 'Invalid manual-only verification evidence.');
-  }
-  const external = (verification.externalIntegrations ?? []) as {
-      id: string;
-      classification: string;
-      status: string;
-    }[],
-    issues = verification.issues as string[];
-  for (const item of external) {
-    const required = `external-verification-required:${item.id}`,
-      prefix = `external-verification:${item.id}:`;
-    if (
-      item.status === 'verification-required'
-        ? !issues.includes(required)
-        : item.status === 'unhealthy'
-          ? !issues.some((issue) => issue.startsWith(prefix))
-          : issues.includes(required) || issues.some((issue) => issue.startsWith(prefix))
-    ) {
-      fail('INSTALL_SCHEMA_INVALID', 'External verification status and issues are inconsistent.');
-    }
-  }
-  const manualOnly = (verification.manualOnly ?? []) as string[],
-    expectedManual = external
-      .filter((item) => item.classification === 'manual-only')
-      .map((item) => item.id);
-  if (canonicalJson(manualOnly) !== canonicalJson(expectedManual)) {
-    fail('INSTALL_SCHEMA_INVALID', 'Manual-only verification evidence is inconsistent.');
   }
   return verification as unknown as InstallVerificationV1;
 }

@@ -23,7 +23,7 @@ export interface SetupApplicationDependencies {
   readonly requestFactory: SetupRequestFactory;
   readonly localReset: { run(): Promise<void> };
   readonly detach: { run(): Promise<void> };
-  readonly builder: Pick<InstallIntentBuilder, 'build' | 'verify'>;
+  readonly builder: Pick<InstallIntentBuilder, 'build'>;
   readonly orchestrator: Pick<InstallOrchestrator, 'plan' | 'apply' | 'verify'>;
 }
 
@@ -36,16 +36,8 @@ export class SetupApplicationService {
     await this.dependencies.localReset.run();
     await this.dependencies.detach.run();
     const plan = await this.dependencies.orchestrator.plan(built.intent);
-    if ((plan.classifications?.manualOnly.length ?? 0) !== 0) {
-      throw new MpxError({
-        code: 'SETUP_MANUAL_ACTION_REQUIRED',
-        message: 'Setup cannot apply a plan containing manual-only external actions.',
-      });
-    }
     await this.dependencies.orchestrator.apply(plan, plan.confirmationDigest);
-    const verified: InstallVerificationV1 = await this.dependencies.orchestrator.verify(true, () =>
-      this.dependencies.builder.verify(built),
-    );
+    const verified: InstallVerificationV1 = await this.dependencies.orchestrator.verify(true);
     if (!verified.healthy) {
       throw new MpxError({
         code: 'SETUP_VERIFICATION_FAILED',

@@ -74,7 +74,6 @@ it('derives identities, provider route keys, resolved detach roots and fixed pro
     claude: { path: claude, version: 'Claude 1.2' },
     pi: { path: pi, version: 'Pi 2.3' },
   });
-  expect(request.external.gitRemotes).toEqual([]);
   expect(request.projections.claude).toEqual([
     { path: 'content/agents/metadata.json', role: 'agents' },
     { path: 'content/output-styles/mpx-terse.md', role: 'canonical-content' },

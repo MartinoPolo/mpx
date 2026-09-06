@@ -15,4 +15,6 @@ Pi discovery and resume verify the exact configured real directory and invoke na
 
 `mpx session resurrect-export` is an executable internal route omitted from public help and generated references. It consumes pending lifecycle events and exports only bounded normalized resurrection metadata; it does not trigger broad discovery. Resurrection execution requires explicit one-use authority.
 
+Installation is one bare, idempotent `mpx setup` operation. Receipt-safe upgrades preserve exact ownership, failed applies roll back automatically from durable journals and snapshots, and restart recovery remains internal. No public uninstall, rollback, or external-integration action protocol is exposed.
+
 Legacy import, branch, public reconcile, show, inbox, mark, capture, handoff, and completion routes are not session operations.

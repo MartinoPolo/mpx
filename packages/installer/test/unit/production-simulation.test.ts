@@ -20,7 +20,6 @@ import {
   type ProjectionFileV1,
 } from '../../src/runtime-registration.js';
 import { ImmutableInstallerService, NodeTransactionStore } from '../../src/transaction.js';
-import type { InstallExternalVerificationResultV1 } from '../../src/install-intent-builder.js';
 import {
   createPiNativePackageRegistration,
   type PiNativePackageRegistrationV1,
@@ -34,18 +33,6 @@ function required<T>(value: T | undefined, label: string): T {
 }
 
 const sha = (value: string) => installerDigest(value);
-const externalVerification = (intent: InstallIntentV1): InstallExternalVerificationResultV1 => ({
-  schemaVersion: 1,
-  kind: 'install-external-verification',
-  integrations: (intent.externalIntegrations ?? []).map((item) => ({
-    id: item.id,
-    adapter: item.adapter,
-    planDigest: item.planDigest,
-    verifierRef: item.verifierRef,
-    healthy: true,
-    issues: [],
-  })),
-});
 const roles = (runtime: 'claude' | 'pi') =>
   runtime === 'claude'
     ? ([
@@ -291,15 +278,6 @@ async function simulation(existing: boolean) {
       sha256: createHash('sha256').update(userConfigContent, 'utf8').digest('hex'),
     },
     runtimeRegistrations,
-    externalIntegrations: [
-      {
-        id: 'git',
-        adapter: 'git-remotes',
-        classification: 'confirmation-required',
-        planDigest: sha('git'),
-        verifierRef: 'git:repo',
-      },
-    ],
   };
   return {
     root,
@@ -376,7 +354,7 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
     });
   }
   expect(writePiSettings).toHaveBeenCalledTimes(2);
-  await expect(orchestrator.verify(false, externalVerification(f.intent))).resolves.toMatchObject({
+  await expect(orchestrator.verify(false)).resolves.toMatchObject({
     healthy: true,
     releaseKey: receipt.releaseKey,
   });
@@ -474,24 +452,6 @@ it('upgrades an exact pre-node-entry v2 receipt and owned environment state', as
       JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8')).packages,
     ).toEqual(['foreign', packageB]);
   }
-  const uninstallPlan = await orchestrator.planUninstall();
-  await orchestrator.uninstall(uninstallPlan.confirmationDigest);
-  const packageA = path.join(
-    f.appsRoot,
-    'mpx',
-    'releases',
-    receiptA.releaseKey,
-    'runtimes',
-    'pi',
-    'extensions',
-    'dist',
-    'package',
-  );
-  for (const nativeRoot of f.fixtureRoots.slice(2)) {
-    expect(
-      JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8')).packages,
-    ).toEqual(['foreign', packageA]);
-  }
 }, 30_000);
 
 it('restores the prior Pi package when upgrade selector activation fails', async () => {
@@ -548,52 +508,6 @@ it('restores the prior Pi package when upgrade selector activation fails', async
   }
 }, 30_000);
 
-it('keeps the stable Node entry ownership-safe across release upgrades and uninstall', async () => {
-  const f = await simulation(false),
-    orchestrator = new InstallOrchestrator({
-      adapter: f.adapter,
-      store: f.store,
-      releases: f.releases,
-    });
-  const planA = await orchestrator.plan(f.intent);
-  const receiptA = await orchestrator.apply(planA, planA.confirmationDigest);
-  const nodeEntry = path.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs');
-  const ownedEntry = await readFile(nodeEntry);
-  expect(receiptA.operations).toContainEqual(
-    expect.objectContaining({ id: '06-node-entry', target: nodeEntry }),
-  );
-
-  await writeFile(path.join(f.repositoryRoot, 'bin', 'mpx.mjs'), 'export const next = true;\n');
-  const manifestB = await f.releases.build();
-  const intentB = {
-    ...f.intent,
-    releaseKey: manifestB.releaseKey,
-    convergenceHash: manifestB.convergenceHash,
-  };
-  const foreign = Buffer.from('foreign stable entry');
-  await writeFile(nodeEntry, foreign);
-  await expect(orchestrator.plan(intentB)).rejects.toMatchObject({
-    code: 'INSTALL_FOREIGN_OR_DRIFTED',
-  });
-  expect(await readFile(nodeEntry)).toEqual(foreign);
-
-  await writeFile(nodeEntry, ownedEntry);
-  const planB = await orchestrator.plan(intentB);
-  const receiptB = await orchestrator.apply(planB, planB.confirmationDigest);
-  expect(receiptB.releaseKey).toBe(manifestB.releaseKey);
-  expect(receiptB.operations).toContainEqual(
-    expect.objectContaining({ id: '06-node-entry', target: nodeEntry }),
-  );
-  expect(await readFile(nodeEntry)).toEqual(ownedEntry);
-
-  await writeFile(nodeEntry, foreign);
-  const uninstall = await orchestrator.planUninstall();
-  await expect(orchestrator.uninstall(uninstall.confirmationDigest)).rejects.toMatchObject({
-    code: 'INSTALL_FOREIGN_OR_DRIFTED',
-  });
-  expect(await readFile(nodeEntry)).toEqual(foreign);
-}, 30_000);
-
 it('rolls back an apply transaction when Pi settings fail before the temporary write', async () => {
   const f = await simulation(true);
   const orchestrator = new InstallOrchestrator({
@@ -622,39 +536,6 @@ it('rolls back an apply transaction when Pi settings fail before the temporary w
   }
 }, 30_000);
 
-it('rolls back an uninstall transaction when Pi settings fail before rename', async () => {
-  const f = await simulation(true);
-  const orchestrator = new InstallOrchestrator({
-    adapter: f.adapter,
-    store: f.store,
-    releases: f.releases,
-  });
-  const installPlan = await orchestrator.plan(f.intent);
-  const receipt = await orchestrator.apply(installPlan, installPlan.confirmationDigest);
-  const uninstallPlan = await orchestrator.planUninstall();
-  const installedSettings = await Promise.all(
-    f.fixtureRoots.slice(2).map((nativeRoot) => readFile(path.join(nativeRoot, 'settings.json'))),
-  );
-  (f.adapter as unknown as { piNativeSettings: NodePiNativeSettingsPort }).piNativeSettings =
-    new NodePiNativeSettingsPort({
-      rename: async () => {
-        throw new Error('injected pre-rename failure');
-      },
-    });
-
-  await expect(orchestrator.uninstall(uninstallPlan.confirmationDigest)).rejects.toMatchObject({
-    code: 'INSTALL_PI_SETTINGS_UNAVAILABLE',
-    cause: expect.objectContaining({ message: 'injected pre-rename failure' }),
-  });
-  expect((await f.store.readTransaction())?.journal.phase).toBe('rolled-back');
-  expect(await f.store.readReceipt()).toEqual(receipt);
-  for (const [index, nativeRoot] of f.fixtureRoots.slice(2).entries()) {
-    expect(await readFile(path.join(nativeRoot, 'settings.json'))).toEqual(
-      required(installedSettings[index], `installed Pi settings ${index}`),
-    );
-  }
-}, 30_000);
-
 it('runs clean and existing-machine production-backed simulations without live writes', async () => {
   let successfulSimulations = 0,
     rollbackSimulations = 0;
@@ -668,8 +549,7 @@ it('runs clean and existing-machine production-backed simulations without live w
       now: () => new Date('2024-12-31T23:59:59.000Z'),
     });
     const plan = await orchestrator.plan(f.intent);
-    expect(plan.classifications?.confirmationRequired.map((item) => item.id)).toEqual(['git']);
-    expect(plan.classifications?.manualOnly).toEqual([]);
+    expect(plan.classifications?.confirmationRequired).toEqual([]);
     await orchestrator.apply(plan, plan.confirmationDigest);
     const repeatWrites = vi.spyOn(f.piNativeSettings, 'atomicWrite');
     const second = await orchestrator.plan(f.intent);
@@ -680,9 +560,8 @@ it('runs clean and existing-machine production-backed simulations without live w
       expect((await stat(f.userConfigTarget)).mtimeMs).toBe(originalConfigMtime);
     }
     await rm(f.repositoryRoot, { recursive: true });
-    expect(await orchestrator.verify(false, externalVerification(f.intent))).toMatchObject({
+    expect(await orchestrator.verify(false)).toMatchObject({
       healthy: true,
-      manualOnly: [],
       components: [
         { id: 'system', status: 'actual-state-verified' },
         { id: 'claude-personal', status: 'actual-state-verified' },
@@ -724,41 +603,6 @@ it('runs clean and existing-machine production-backed simulations without live w
         store: restartedStore,
       }).verify(),
     ).resolves.toMatchObject({ healthy: true, issues: [] });
-    let uninstallPlan = await restarted.planUninstall();
-    if (!existing) {
-      const selector = path.join(f.appsRoot, 'mpx', 'bin', 'mpx.cmd'),
-        ownedSelector = await readFile(selector);
-      await writeFile(selector, 'foreign\n');
-      uninstallPlan = await restarted.planUninstall();
-      await expect(restarted.uninstall(uninstallPlan.confirmationDigest)).rejects.toMatchObject({
-        code: 'INSTALL_FOREIGN_OR_DRIFTED',
-      });
-      await writeFile(selector, ownedSelector);
-      uninstallPlan = await restarted.planUninstall();
-    }
-    await restarted.uninstall(uninstallPlan.confirmationDigest);
-    for (const nativeRoot of f.fixtureRoots.slice(2)) {
-      expect(JSON.parse(await readFile(path.join(nativeRoot, 'settings.json'), 'utf8'))).toEqual(
-        f.piSettingsBefore,
-      );
-    }
-    await expect(
-      readFile(path.join(f.appsRoot, 'mpx', 'bin', 'mpx-node.mjs')),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-    expect(await readFile(f.userConfigTarget, 'utf8')).toBe(f.userConfigContent);
-    if (existing) {
-      expect((await stat(f.userConfigTarget)).mtimeMs).toBe(originalConfigMtime);
-    }
-    expect(await orchestrator.verify()).toMatchObject({
-      healthy: false,
-      issues: ['receipt-missing'],
-    });
-    expect(
-      await readFile(
-        path.join(f.appsRoot, 'mpx', 'releases', f.intent.releaseKey, 'bin', 'mpx.mjs'),
-        'utf8',
-      ),
-    ).toBe('export {};\n');
     successfulSimulations += 1;
   }
   const baseline = await simulation(true);

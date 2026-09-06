@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -9,15 +8,8 @@ import {
   canonicalJson,
   installerDigest,
   parseInstallIntentV1,
-  type InstallExternalIntegrationV1,
   type InstallIntentV1,
 } from './immutable-core.js';
-import {
-  GitRemotePlanningAdapter,
-  type GitCommandPort,
-  type GitRemotePlan,
-  type GitRemoteRequest,
-} from './external-integrations.js';
 import {
   createRuntimeRegistrationMatrix,
   type ProjectionRole,
@@ -110,10 +102,6 @@ export interface InstallProjectionRequestV1 {
   readonly path: string;
   readonly role: ProjectionRole;
 }
-export interface InstallGitRemoteRequestV1 {
-  readonly id: string;
-  readonly request: GitRemoteRequest;
-}
 export interface InstallIntentRequestV1 {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent-request';
@@ -127,9 +115,6 @@ export interface InstallIntentRequestV1 {
   readonly projections: {
     readonly claude: readonly InstallProjectionRequestV1[];
     readonly pi: readonly InstallProjectionRequestV1[];
-  };
-  readonly external: {
-    readonly gitRemotes: readonly InstallGitRemoteRequestV1[];
   };
 }
 
@@ -165,55 +150,6 @@ function parseProjection(value: unknown, label: string): InstallProjectionReques
   sortedUnique(result, (item) => item.path, label);
   return result;
 }
-function parseGitRequest(value: unknown): GitRemoteRequest {
-  const request = exact(value, ['repository', 'proposals'], 'Git remote request'),
-    proposals = array(request.proposals, 'Git proposals').map<
-      GitRemoteRequest['proposals'][number]
-    >((value) => {
-      const source = value as Record<string, unknown> | null,
-        rename = source?.action === 'rename';
-      const proposal = exact(
-        value,
-        rename ? ['action', 'remote', 'newName'] : ['action', 'remote', 'url'],
-        'Git proposal',
-      );
-      if (proposal.action === 'rename') {
-        return {
-          action: 'rename' as const,
-          remote: id(proposal.remote, 'Git remote'),
-          newName: id(proposal.newName, 'Git remote name'),
-        };
-      }
-      if (proposal.action !== 'add' && proposal.action !== 'set-url') {
-        fail('Git proposal action is invalid.');
-      }
-      return {
-        action: proposal.action,
-        remote: id(proposal.remote, 'Git remote'),
-        url: text(proposal.url, 'Git remote URL'),
-      };
-    });
-  if (proposals.length === 0) {
-    fail('Git proposals are required.');
-  }
-  sortedUnique(proposals, canonicalJson, 'Git proposals');
-  return { repository: absolute(request.repository, 'Git repository'), proposals };
-}
-function parseExternal<T>(
-  value: unknown,
-  child: string,
-  parse: (value: unknown) => T,
-  label: string,
-): ({ id: string } & Record<string, T>)[] {
-  const result = array(value, label).map((value) => {
-    const item = exact(value, ['id', child], `${label} item`);
-    return { id: id(item.id, `${label} ID`), [child]: parse(item[child]) } as {
-      id: string;
-    } & Record<string, T>;
-  });
-  sortedUnique(result, (item) => item.id, label);
-  return result;
-}
 export function parseInstallIntentRequestV1(value: unknown): InstallIntentRequestV1 {
   const request = exact(
     value,
@@ -225,7 +161,6 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
       'providers',
       'executables',
       'projections',
-      'external',
     ],
     'Install intent request',
   );
@@ -233,8 +168,7 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
     fail('Install intent request header is invalid.');
   }
   const executables = exact(request.executables, ['claude', 'pi'], 'Executables'),
-    projections = exact(request.projections, ['claude', 'pi'], 'Projections'),
-    external = exact(request.external, ['gitRemotes'], 'External requests');
+    projections = exact(request.projections, ['claude', 'pi'], 'Projections');
   const parsed: InstallIntentRequestV1 = {
     schemaVersion: 1,
     kind: 'install-intent-request',
@@ -249,290 +183,25 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
       claude: parseProjection(projections.claude, 'Claude projections'),
       pi: parseProjection(projections.pi, 'Pi projections'),
     },
-    external: {
-      gitRemotes: parseExternal(
-        external.gitRemotes,
-        'request',
-        parseGitRequest,
-        'Git remote requests',
-      ) as unknown as InstallGitRemoteRequestV1[],
-    },
   };
-  const allIds = parsed.external.gitRemotes.map((item) => item.id);
-  if (new Set(allIds).size !== allIds.length) {
-    fail('External request IDs must be globally unique.');
-  }
   return parsed;
 }
 
-export type InstallExternalPlanV1 = {
-  readonly id: string;
-  readonly adapter: InstallExternalIntegrationV1['adapter'];
-  readonly classification: InstallExternalIntegrationV1['classification'];
-  readonly planDigest: string;
-  readonly verifierRef: string;
-  readonly plan: GitRemotePlan;
-};
 export interface InstallIntentBuildResultV1 {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent-build-result';
   readonly intent: InstallIntentV1;
-  readonly externalPlans: readonly InstallExternalPlanV1[];
-}
-export interface InstallExternalVerificationIntegrationV1 {
-  readonly id: string;
-  readonly adapter: InstallExternalIntegrationV1['adapter'];
-  readonly planDigest: string;
-  readonly verifierRef: string;
-  readonly healthy: boolean;
-  readonly issues: readonly string[];
-}
-export interface InstallExternalVerificationResultV1 {
-  readonly schemaVersion: 1;
-  readonly kind: 'install-external-verification';
-  readonly integrations: readonly InstallExternalVerificationIntegrationV1[];
-}
-
-export function parseInstallExternalVerificationResultV1(
-  value: unknown,
-): InstallExternalVerificationResultV1 {
-  const result = exact(
-    value,
-    ['schemaVersion', 'kind', 'integrations'],
-    'External verification result',
-  );
-  if (result.schemaVersion !== 1 || result.kind !== 'install-external-verification') {
-    fail('External verification result header is invalid.');
-  }
-  const integrations = array(result.integrations, 'External verification integrations').map(
-    (value) => {
-      const item = exact(
-        value,
-        ['id', 'adapter', 'planDigest', 'verifierRef', 'healthy', 'issues'],
-        'External verification integration',
-      );
-      const issues = array(item.issues, 'External verification issues').map((issue) =>
-        text(issue, 'External verification issue'),
-      );
-      sortedUnique(issues, (issue) => issue, 'External verification issues');
-      if (
-        typeof item.adapter !== 'string' ||
-        item.adapter !== 'git-remotes' ||
-        typeof item.planDigest !== 'string' ||
-        !SHA.test(item.planDigest) ||
-        typeof item.verifierRef !== 'string' ||
-        item.verifierRef.length > 256 ||
-        typeof item.healthy !== 'boolean' ||
-        item.healthy !== (issues.length === 0)
-      ) {
-        fail('External verification integration is invalid.');
-      }
-      return {
-        id: id(item.id, 'External verification integration ID'),
-        adapter: item.adapter as InstallExternalIntegrationV1['adapter'],
-        planDigest: item.planDigest,
-        verifierRef: item.verifierRef,
-        healthy: item.healthy,
-        issues,
-      };
-    },
-  );
-  sortedUnique(integrations, (item) => item.id, 'External verification integrations');
-  return { schemaVersion: 1, kind: 'install-external-verification', integrations };
 }
 function strings(value: unknown, label: string): string[] {
   return array(value, label).map((item) => text(item, label));
 }
-function confirmation(
-  value: unknown,
-  scope: string,
-  digestValue: string,
-): { required: true; scope: string; digest: string } {
-  const item = exact(value, ['required', 'scope', 'digest'], 'External confirmation');
-  if (item.required !== true || item.scope !== scope || item.digest !== digestValue) {
-    fail('External confirmation binding is invalid.');
-  }
-  return { required: true, scope, digest: digestValue };
-}
-function snapshot(
-  value: unknown,
-  expectedPath?: string,
-): { path: string; encoding: 'base64'; bytes: string; sha256: string | null } {
-  const item = exact(value, ['path', 'encoding', 'bytes', 'sha256'], 'File snapshot'),
-    snapshotPath = absolute(item.path, 'Snapshot path');
-  if (
-    (expectedPath !== undefined && path.normalize(expectedPath) !== snapshotPath) ||
-    item.encoding !== 'base64' ||
-    typeof item.bytes !== 'string' ||
-    item.bytes.length > 349_528 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(item.bytes)
-  ) {
-    fail('File snapshot is invalid.');
-  }
-  const bytes = Buffer.from(item.bytes, 'base64'),
-    sha256 = item.sha256;
-  if (
-    (sha256 !== null &&
-      (typeof sha256 !== 'string' ||
-        !SHA.test(sha256) ||
-        sha256 !== createHash('sha256').update(bytes).digest('hex'))) ||
-    (sha256 === null && item.bytes !== '')
-  ) {
-    fail('File snapshot digest is invalid.');
-  }
-  return { path: snapshotPath, encoding: 'base64', bytes: item.bytes, sha256: sha256 };
-}
-function parseGitPlan(value: unknown): GitRemotePlan {
-  const item = exact(
-    value,
-    [
-      'kind',
-      'classification',
-      'repository',
-      'commands',
-      'preservedRemotes',
-      'expectedRemotes',
-      'confirmation',
-      'rollback',
-    ],
-    'Git plan',
-  );
-  if (item.kind !== 'git-remotes' || item.classification !== 'confirmation-required') {
-    fail('Git plan header is invalid.');
-  }
-  const repository = absolute(item.repository, 'Git repository');
-  const commands = array(item.commands, 'Git commands').map((value) => {
-    const command = exact(value, ['executable', 'cwd', 'argv'], 'Git command'),
-      argv = strings(command.argv, 'Git argv');
-    if (
-      command.executable !== 'git' ||
-      command.cwd !== repository ||
-      argv.length < 3 ||
-      argv[0] !== 'remote' ||
-      !(
-        (argv[1] === 'rename' &&
-          argv.length === 4 &&
-          argv.slice(2).every((arg) => SAFE_ID.test(arg))) ||
-        (['add', 'set-url'].includes(argv[1]!) &&
-          argv.length === 4 &&
-          SAFE_ID.test(argv[2]!) &&
-          safeRelativeOrUrl(argv[3]!))
-      )
-    ) {
-      fail('Git command is invalid.');
-    }
-    return { executable: 'git' as const, cwd: repository, argv };
-  });
-  sortedUnique(commands, (command) => command.argv.join('\0'), 'Git commands');
-  const preservedRemotes = strings(item.preservedRemotes, 'Preserved remotes');
-  if (preservedRemotes.some((remote) => !SAFE_ID.test(remote))) {
-    fail('Preserved remote is invalid.');
-  }
-  sortedUnique(preservedRemotes, (remote) => remote, 'Preserved remotes');
-  const expectedRemotes = array(item.expectedRemotes, 'Expected remotes').map<
-    GitRemotePlan['expectedRemotes'][number]
-  >((value) => {
-    const remote = exact(value, ['remote', 'url', 'direction'], 'Expected remote');
-    if (
-      typeof remote.remote !== 'string' ||
-      !SAFE_ID.test(remote.remote) ||
-      typeof remote.url !== 'string' ||
-      !safeRelativeOrUrl(remote.url) ||
-      (remote.direction !== 'fetch' && remote.direction !== 'push')
-    ) {
-      fail('Expected remote is invalid.');
-    }
-    return { remote: remote.remote, url: remote.url, direction: remote.direction };
-  });
-  sortedUnique(expectedRemotes, canonicalJson, 'Expected remotes');
-  const rollbackValue = exact(item.rollback, ['automatic', 'snapshot', 'steps'], 'Git rollback'),
-    configPath = path.join(repository, '.git', 'config'),
-    config = snapshot(rollbackValue.snapshot, configPath),
-    steps = strings(rollbackValue.steps, 'Git rollback steps');
-  if (rollbackValue.automatic !== false || steps.length === 0) {
-    fail('Git rollback is invalid.');
-  }
-  const digestValue = installerDigest({ repository, config: config.sha256, commands });
-  return {
-    kind: 'git-remotes',
-    classification: 'confirmation-required',
-    repository,
-    commands,
-    preservedRemotes,
-    expectedRemotes,
-    confirmation: confirmation(item.confirmation, repository, digestValue),
-    rollback: { automatic: false, snapshot: config, steps },
-  };
-}
-function safeRelativeOrUrl(value: string): boolean {
-  return value.length > 0 && value.length <= MAX_TEXT && !/[\0\r\n]/u.test(value);
-}
 export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBuildResultV1 {
-  const result = exact(
-    value,
-    ['schemaVersion', 'kind', 'intent', 'externalPlans'],
-    'Install intent build result',
-  );
+  const result = exact(value, ['schemaVersion', 'kind', 'intent'], 'Install intent build result');
   if (result.schemaVersion !== 1 || result.kind !== 'install-intent-build-result') {
     fail('Install intent build result header is invalid.');
   }
-  const intent = parseInstallIntentV1(result.intent),
-    integrations = intent.externalIntegrations ?? [];
-  const externalPlans = array(result.externalPlans, 'External plans').map((value) => {
-    const item = exact(
-      value,
-      ['id', 'adapter', 'classification', 'planDigest', 'verifierRef', 'plan'],
-      'External plan',
-    );
-    const plan =
-      item.adapter === 'git-remotes'
-        ? parseGitPlan(item.plan)
-        : fail('External plan adapter is invalid.');
-    if (
-      typeof item.planDigest !== 'string' ||
-      !SHA.test(item.planDigest) ||
-      item.planDigest !== installerDigest(plan) ||
-      typeof item.verifierRef !== 'string' ||
-      item.verifierRef !== `${item.adapter}:${item.id}:${item.planDigest}`
-    ) {
-      fail('External plan digest or verifier is not bound.');
-    }
-    if (
-      !SAFE_ID.test(item.id as string) ||
-      item.adapter !== 'git-remotes' ||
-      !['confirmation-required', 'manual-only'].includes(item.classification as string)
-    ) {
-      fail('External plan binding is invalid.');
-    }
-    if (plan.kind !== item.adapter || plan.classification !== item.classification) {
-      fail('External plan adapter or classification binding is invalid.');
-    }
-    return {
-      id: item.id,
-      adapter: item.adapter,
-      classification: item.classification,
-      planDigest: item.planDigest,
-      verifierRef: item.verifierRef,
-      plan,
-    } as InstallExternalPlanV1;
-  });
-  sortedUnique(externalPlans, (item) => item.id, 'External plans');
-  if (
-    externalPlans.length !== integrations.length ||
-    externalPlans.some(
-      (plan, index) =>
-        canonicalJson({
-          id: plan.id,
-          adapter: plan.adapter,
-          classification: plan.classification,
-          planDigest: plan.planDigest,
-          verifierRef: plan.verifierRef,
-        }) !== canonicalJson(integrations[index]),
-    )
-  ) {
-    fail('External plans must match and be bound to intent integrations.');
-  }
-  return { schemaVersion: 1, kind: 'install-intent-build-result', intent, externalPlans };
+  const intent = parseInstallIntentV1(result.intent);
+  return { schemaVersion: 1, kind: 'install-intent-build-result', intent };
 }
 
 async function regularFileEvidence(
@@ -573,43 +242,9 @@ function selectedIdentity(config: UserConfig, name: string, domain: 'personal' |
 export interface InstallIntentBuilderOptions {
   readonly releases: CurrentReleaseBuilder;
   readonly environment?: NodeJS.ProcessEnv;
-  readonly gitRemotes: Pick<GitRemotePlanningAdapter, 'inspect' | 'plan' | 'verify'>;
 }
 export class InstallIntentBuilder {
   constructor(private readonly options: InstallIntentBuilderOptions) {}
-  async verify(
-    buildValue: InstallIntentBuildResultV1 | unknown,
-  ): Promise<InstallExternalVerificationResultV1> {
-    const build = parseInstallIntentBuildResultV1(buildValue);
-    const integrations: InstallExternalVerificationIntegrationV1[] = [];
-    for (const external of build.externalPlans) {
-      let verification: { readonly healthy: boolean; readonly issues: readonly string[] };
-      try {
-        verification = await this.options.gitRemotes.verify(external.plan);
-      } catch {
-        verification = { healthy: false, issues: ['external-verifier-failed'] };
-      }
-      const issues = [...new Set(verification.issues)].sort((a, b) => a.localeCompare(b));
-      integrations.push({
-        id: external.id,
-        adapter: external.adapter,
-        planDigest: external.planDigest,
-        verifierRef: external.verifierRef,
-        healthy: issues.length === 0 && verification.healthy,
-        issues:
-          verification.healthy && issues.length === 0
-            ? []
-            : issues.length
-              ? issues
-              : ['external-verifier-unhealthy'],
-      });
-    }
-    return parseInstallExternalVerificationResultV1({
-      schemaVersion: 1,
-      kind: 'install-external-verification',
-      integrations,
-    });
-  }
   async build(value: InstallIntentRequestV1 | unknown): Promise<InstallIntentBuildResultV1> {
     const request = parseInstallIntentRequestV1(value),
       info = await lstat(request.userConfigPath).catch(() =>
@@ -686,100 +321,23 @@ export class InstallIntentBuilder {
         }),
       ),
     );
-    const plans: InstallExternalPlanV1[] = [];
-    const add = (
-      idValue: string,
-      adapter: InstallExternalIntegrationV1['adapter'],
-      plan: GitRemotePlan,
-    ): void => {
-      const planDigest = installerDigest(plan),
-        verifierRef = `${adapter}:${idValue}:${planDigest}`;
-      plans.push({
-        id: idValue,
-        adapter,
-        classification: plan.classification,
-        planDigest,
-        verifierRef,
-        plan,
-      });
-    };
-    for (const item of request.external.gitRemotes) {
-      add(
-        item.id,
-        'git-remotes',
-        await this.options.gitRemotes.plan(await this.options.gitRemotes.inspect(item.request)),
-      );
-    }
-    plans.sort((a, b) => a.id.localeCompare(b.id));
-    const externalIntegrations = plans.map(({ plan: _plan, ...integration }) => integration),
-      intent = parseInstallIntentV1({
-        schemaVersion: 1,
-        kind: 'install-intent',
-        releaseKey: manifest.releaseKey,
-        convergenceHash: manifest.convergenceHash,
-        components: ['cli', 'runtime-registrations', 'user-config'],
-        userConfigArtifact: {
-          target: '%APPDATA%/mpx/config.json',
-          content: raw,
-          sha256: createHash('sha256').update(raw, 'utf8').digest('hex'),
-        },
-        runtimeRegistrations: matrix,
-        ...(externalIntegrations.length ? { externalIntegrations } : {}),
-      });
+    const intent = parseInstallIntentV1({
+      schemaVersion: 1,
+      kind: 'install-intent',
+      releaseKey: manifest.releaseKey,
+      convergenceHash: manifest.convergenceHash,
+      components: ['cli', 'runtime-registrations', 'user-config'],
+      userConfigArtifact: {
+        target: '%APPDATA%/mpx/config.json',
+        content: raw,
+        sha256: createHash('sha256').update(raw, 'utf8').digest('hex'),
+      },
+      runtimeRegistrations: matrix,
+    });
     return parseInstallIntentBuildResultV1({
       schemaVersion: 1,
       kind: 'install-intent-build-result',
       intent,
-      externalPlans: plans,
     });
-  }
-}
-
-export class NodeGitCommandPort implements GitCommandPort {
-  constructor(
-    private readonly environment: NodeJS.ProcessEnv = process.env,
-    private readonly timeoutMilliseconds = 10_000,
-    private readonly maxOutputBytes = 1024 * 1024,
-  ) {}
-  run(
-    cwd: string,
-    argv: readonly string[],
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    if (argv.length !== 2 || argv[0] !== 'remote' || argv[1] !== '-v' || !path.isAbsolute(cwd)) {
-      fail('Git command port permits only argv-only git remote -v.', 'GIT_COMMAND_INVALID');
-    }
-    const env = Object.fromEntries(
-      ['SYSTEMROOT', 'WINDIR', 'PATH', 'PATHEXT', 'TEMP', 'TMP'].flatMap((name) =>
-        this.environment[name] === undefined ? [] : [[name, this.environment[name]!]],
-      ),
-    );
-    return new Promise((resolve, reject) =>
-      execFile(
-        'git',
-        [...argv],
-        {
-          cwd,
-          env,
-          shell: false,
-          windowsHide: true,
-          timeout: this.timeoutMilliseconds,
-          maxBuffer: this.maxOutputBytes,
-          encoding: 'utf8',
-        },
-        (error, stdout, stderr) => {
-          const code =
-            error && typeof (error as { code?: unknown }).code === 'number'
-              ? (error as { code: number }).code
-              : error
-                ? undefined
-                : 0;
-          if (code === undefined) {
-            reject(error);
-          } else {
-            resolve({ stdout, stderr, exitCode: code });
-          }
-        },
-      ),
-    );
   }
 }

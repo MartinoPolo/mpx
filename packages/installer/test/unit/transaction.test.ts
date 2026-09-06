@@ -431,81 +431,6 @@ describe('installer transactions', () => {
     ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_FORGED' });
   });
 
-  it('hydrates signed locators before retaining user-owned state and removes other owned operations', async () => {
-    const adapter = new RetainingAdapter(),
-      store = new MemoryTransactionStore(),
-      manifest = {
-        schemaVersion: 1 as const,
-        kind: 'release-manifest' as const,
-        releaseKey: 'a'.repeat(64),
-        convergenceHash: 'a'.repeat(64),
-        files: [],
-      };
-    const service = new ImmutableInstallerService({ adapters: [adapter], store, manifest });
-    const operations: InstallOperationV1[] = [
-      {
-        id: 'config',
-        adapter: adapter.name,
-        action: 'ensure',
-        target: 'C:\\Roaming\\mpx\\config.json',
-        desiredDigest: 'b'.repeat(64),
-      },
-      {
-        id: 'native',
-        adapter: adapter.name,
-        action: 'ensure',
-        target: 'C:\\native',
-        desiredDigest: 'c'.repeat(64),
-      },
-    ];
-    const install = await service.plan(intent, operations);
-    await service.apply(install, install.confirmationDigest);
-    await service.finalize();
-    const restarted = new RetainingAdapter();
-    restarted.values.set('C:\\Roaming\\mpx\\config.json', 'b'.repeat(64));
-    restarted.values.set('C:\\native', 'c'.repeat(64));
-    const uninstalling = new ImmutableInstallerService({ adapters: [restarted], store });
-    const plan = await uninstalling.planUninstall();
-    expect(plan.operations.map((operation) => operation.id)).toEqual(['native']);
-    expect([...restarted.hydrated].sort()).toEqual(['config', 'native']);
-    await uninstalling.uninstall(plan, plan.confirmationDigest);
-    expect(restarted.values.get('C:\\Roaming\\mpx\\config.json')).toBe('b'.repeat(64));
-    expect(restarted.values.has('C:\\native')).toBe(false);
-  });
-
-  it('refuses a recomputed locator that forges retention for an arbitrary resource', async () => {
-    const adapter = new RetainingAdapter(),
-      store = new MemoryTransactionStore(),
-      operation: InstallOperationV1 = {
-        id: 'config',
-        adapter: adapter.name,
-        action: 'ensure',
-        target: 'C:\\Roaming\\arbitrary.json',
-        desiredDigest: 'b'.repeat(64),
-      },
-      spec = { kind: 'user-owned' };
-    await store.writeReceipt({
-      schemaVersion: 2,
-      kind: 'ownership-receipt',
-      releaseKey: 'a'.repeat(64),
-      convergenceHash: 'a'.repeat(64),
-      files: [],
-      operations: [operation],
-      operationLocators: [
-        {
-          operationId: operation.id,
-          adapter: operation.adapter,
-          spec,
-          bindingDigest: installerDigest({ operation, spec }),
-        },
-      ],
-      installedAt: '2025-01-01T00:00:00.000Z',
-    });
-    await expect(
-      new ImmutableInstallerService({ adapters: [adapter], store }).planUninstall(),
-    ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_FORGED' });
-  });
-
   it('does not let a direct caller authorize an upgrade with a receipt hash argument', async () => {
     const store = new MemoryTransactionStore(),
       adapter = new RetainingAdapter(),
@@ -706,53 +631,6 @@ describe('installer transactions', () => {
     expect(failure.message).toBe('injected');
     expect(failure.errors.map((error: unknown) => errorMessage(error))).toEqual([
       'injected',
-      'restore failed',
-    ]);
-    expect(failure.cause).toBe(failure.errors[0]);
-    expect((await store.readTransaction())?.journal).toMatchObject({
-      phase: 'applying',
-      inFlightOperationId: 'write',
-    });
-  });
-
-  it('retains uninstall transaction state and both failures when rollback fails', async () => {
-    const values = new Map<string, Buffer>(),
-      adapter = new BytesAdapter(values),
-      store = new MemoryTransactionStore(),
-      service = new ImmutableInstallerService({
-        adapters: [adapter],
-        store,
-        manifest: {
-          schemaVersion: 1,
-          kind: 'release-manifest',
-          releaseKey: 'a'.repeat(64),
-          convergenceHash: 'a'.repeat(64),
-          files: [],
-        },
-      });
-    const installPlan = await service.plan(intent, [
-      {
-        id: 'write',
-        adapter: 'files',
-        action: 'ensure',
-        target: 'owned',
-        desiredDigest: 'b'.repeat(64),
-      },
-    ]);
-    await service.apply(installPlan, installPlan.confirmationDigest);
-    await service.finalize();
-    adapter.observe = async (operation) => (values.has(operation.target) ? 'b'.repeat(64) : null);
-    const uninstallPlan = await service.planUninstall();
-    adapter.apply = async () => {
-      values.delete('owned');
-      throw new Error('uninstall failed');
-    };
-    adapter.restoreFailure = new Error('restore failed');
-    const failure = await captureAggregateError(() =>
-      service.uninstall(uninstallPlan, uninstallPlan.confirmationDigest),
-    );
-    expect(failure.errors.map((error: unknown) => errorMessage(error))).toEqual([
-      'uninstall failed',
       'restore failed',
     ]);
     expect(failure.cause).toBe(failure.errors[0]);

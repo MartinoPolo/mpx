@@ -24,10 +24,6 @@ import {
   type SideEffectAdapter,
   type TransactionStore,
 } from './transaction.js';
-import {
-  parseInstallExternalVerificationResultV1,
-  type InstallExternalVerificationResultV1,
-} from './install-intent-builder.js';
 import { aggregateInstallerFailure } from './failure.js';
 
 function fail(code: string, message: string): never {
@@ -169,23 +165,8 @@ export interface InstallOrchestratorOptions {
     releaseKey: string,
     expectedPriorReleaseKey: string | null,
   ) => Promise<() => Promise<void>>;
-  /** Removes the mutable stable selector only after owned resources uninstall. */
-  readonly deactivate?: (releaseKey: string) => Promise<void>;
   readonly now?: () => Date;
 }
-export interface RollbackResultV1 {
-  readonly schemaVersion: 1;
-  readonly kind: 'install-rollback';
-  readonly transactionId: string;
-  readonly rolledBack: true;
-}
-export interface UninstallResultV1 {
-  readonly schemaVersion: 1;
-  readonly kind: 'install-uninstall';
-  readonly releaseKey: string;
-  readonly removed: true;
-}
-
 const RECEIPT_MIGRATION_ID = 'ownership-receipt-v1-migration';
 const RELEASE_UPGRADE_ID = 'ownership-release-upgrade';
 export class InstallOrchestrator {
@@ -331,7 +312,6 @@ export class InstallOrchestrator {
     const classifications: InstallOperationClassificationsV1 = current.classifications ?? {
       automatic: base.operations.map((operation) => operation.id),
       confirmationRequired: [],
-      manualOnly: [],
     };
     const merged = migration
       ? {
@@ -396,7 +376,6 @@ export class InstallOrchestrator {
       const baseClassifications = current.classifications ?? {
         automatic: current.operations.map((operation) => operation.id),
         confirmationRequired: [],
-        manualOnly: [],
       };
       effectiveClassifications = {
         ...baseClassifications,
@@ -419,7 +398,6 @@ export class InstallOrchestrator {
       const baseClassifications = current.classifications ?? {
         automatic: current.operations.map((operation) => operation.id),
         confirmationRequired: [],
-        manualOnly: [],
       };
       effectiveClassifications = {
         ...baseClassifications,
@@ -498,64 +476,16 @@ export class InstallOrchestrator {
       throw failure;
     }
   }
-  async verify(
-    strict = false,
-    externalSource?:
-      InstallExternalVerificationResultV1 | (() => Promise<InstallExternalVerificationResultV1>),
-  ): Promise<InstallVerificationV1> {
+  async verify(strict = false): Promise<InstallVerificationV1> {
     const receipt = await this.options.store.readReceipt();
     const base = await this.service().verify();
     const issues = [
       ...base.issues,
       ...(receipt ? await this.options.releases.verify(receipt, strict) : []),
-    ];
+    ].sort((a, b) => a.localeCompare(b));
     if (!receipt?.installIntent) {
-      issues.sort((a, b) => a.localeCompare(b));
       return { ...base, healthy: issues.length === 0, issues };
     }
-    const automaticIssues = [...issues];
-    const expectedExternal = receipt.installIntent.externalIntegrations ?? [];
-    const supplied =
-      expectedExternal.length > 0 && externalSource
-        ? parseInstallExternalVerificationResultV1(
-            typeof externalSource === 'function' ? await externalSource() : externalSource,
-          )
-        : undefined;
-    const suppliedById = new Map(supplied?.integrations.map((item) => [item.id, item]) ?? []);
-    const externalIntegrations = expectedExternal.map((integration) => {
-      const live = suppliedById.get(integration.id);
-      const matching =
-        live?.adapter === integration.adapter &&
-        live.planDigest === integration.planDigest &&
-        live.verifierRef === integration.verifierRef;
-      if (!matching) {
-        issues.push(`external-verification-required:${integration.id}`);
-        return {
-          id: integration.id,
-          classification: integration.classification,
-          status: 'verification-required' as const,
-          verifierRef: integration.verifierRef,
-        };
-      }
-      if (!live.healthy) {
-        for (const issue of live.issues) {
-          issues.push(`external-verification:${integration.id}:${issue}`);
-        }
-        return {
-          id: integration.id,
-          classification: integration.classification,
-          status: 'unhealthy' as const,
-          verifierRef: integration.verifierRef,
-        };
-      }
-      return {
-        id: integration.id,
-        classification: integration.classification,
-        status: 'verified' as const,
-        verifierRef: integration.verifierRef,
-      };
-    });
-    issues.sort((a, b) => a.localeCompare(b));
     const runtimeIds =
       receipt.installIntent.runtimeRegistrations?.registrations.map(
         (registration) => registration.identity,
@@ -563,7 +493,7 @@ export class InstallOrchestrator {
     const components = ['system', ...runtimeIds].map((id) => ({
       id,
       automatic: true as const,
-      status: automaticIssues.some((issue) =>
+      status: issues.some((issue) =>
         id === 'system'
           ? !issue.includes('registration-') &&
             !runtimeIds.some((runtimeId) => issue.includes(runtimeId))
@@ -572,40 +502,6 @@ export class InstallOrchestrator {
         ? ('unhealthy' as const)
         : ('actual-state-verified' as const),
     }));
-    return {
-      ...base,
-      healthy: issues.length === 0,
-      issues,
-      components,
-      externalIntegrations,
-      manualOnly: externalIntegrations
-        .filter((item) => item.classification === 'manual-only')
-        .map((item) => item.id),
-    };
-  }
-  async rollback(transactionId: string, confirmation: string): Promise<RollbackResultV1> {
-    const stored = await this.options.store.readTransaction();
-    if (!stored || stored.journal.transactionId !== transactionId) {
-      fail('INSTALL_TRANSACTION_UNAVAILABLE', 'Transaction is unavailable.');
-    }
-    if (confirmation !== installerDigest(stored.journal.snapshot)) {
-      fail('INSTALL_CONFIRMATION_MISMATCH', 'Exact transaction confirmation is required.');
-    }
-    await this.service().rollback();
-    return { schemaVersion: 1, kind: 'install-rollback', transactionId, rolledBack: true };
-  }
-  async planUninstall(): Promise<InstallPlanV1> {
-    return this.service().planUninstall();
-  }
-  async uninstall(confirmation: string): Promise<UninstallResultV1> {
-    const plan = await this.planUninstall();
-    await this.service().uninstall(plan, confirmation);
-    await this.options.deactivate?.(plan.intent.releaseKey);
-    return {
-      schemaVersion: 1,
-      kind: 'install-uninstall',
-      releaseKey: plan.intent.releaseKey,
-      removed: true,
-    };
+    return { ...base, healthy: issues.length === 0, issues, components };
   }
 }

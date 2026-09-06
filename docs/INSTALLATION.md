@@ -8,7 +8,7 @@ mpx setup
 
 `mpx setup` builds and validates the current immutable release before changing native state, durably detaches recognized legacy Pi links, then plans, applies, and strictly verifies that exact release. It derives identity and provider selections from configuration route keys and never reads credentials. Re-running it reuses the immutable release, installer receipt, and legacy-detachment receipt. If installation fails after detachment, retry `mpx setup`; legacy external authority is intentionally not restored.
 
-Installer planning, confirmation, verification, rollback, and recovery remain internal components composed exclusively by `mpx setup`; they are not separate CLI routes.
+Installer planning, verification, automatic rollback after a failed apply, and restart recovery are internal components composed exclusively by `mpx setup`; there are no public installer rollback, uninstall, or external-action routes.
 
 Production builds use the workspace-pinned `esbuild` version to bundle the CLI and all workspace/runtime dependencies into `bin/mpx.mjs`. Releases copy that bundle; they do not import a source checkout. `%MPX_APPS%\mpx\bin\mpx.cmd` is the owned stable selector used by managed shell launchers and shortcuts. It reads `%LOCALAPPDATA%\mpx\active-release` and dispatches through the registered absolute Node executable to the selected immutable release bundle.
 
@@ -20,6 +20,6 @@ Managed shell aliases use an explicit `-mpx` suffix and never redefine the nativ
 
 The managed user environment derives `MPX_CLAUDE_EXECUTABLE` and `MPX_PI_EXECUTABLE` from the verified runtime-registration matrix. Both identities for a runtime must bind identical executable evidence; installation fails closed if they disagree.
 
-Run `mpx setup` to verify and converge receipt, resource, selector, immutable-file, and retained external-integration health. Drifted or foreign owned targets fail closed rather than being overwritten. Internal rollback and removal protocols preserve unrelated native data and do not inspect or remove Windows Terminal settings, profiles, or scheduled tasks.
+Run the same bare `mpx setup` to idempotently verify and converge receipt, resource, selector, and immutable-file health. Receipt-safe upgrades validate exact prior ownership; drifted or foreign owned targets fail closed rather than being overwritten. A failed apply rolls back automatically from its durable journal and snapshots.
 
 Production changes are performed only by the setup-owned confirmed application flow. Tests and simulations use temporary filesystems and OS-bound fakes; they must not apply to the live user profile, registry, shortcuts, or Task Scheduler. Windows Terminal settings are outside the production installer boundary even for inspection.

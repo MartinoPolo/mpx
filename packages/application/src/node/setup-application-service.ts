@@ -327,14 +327,13 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
           { path: 'runtimes/pi/runtime-pi/src/profile.ts', role: 'profile' },
         ],
       },
-      external: { gitRemotes: [] },
     };
   }
 }
 
 export function createNodeSetupApplicationService(dependencies: {
   readonly environment: NodeJS.ProcessEnv;
-  readonly builder: Pick<InstallIntentBuilder, 'build' | 'verify'>;
+  readonly builder: Pick<InstallIntentBuilder, 'build'>;
   readonly orchestrator: Pick<InstallOrchestrator, 'plan' | 'apply' | 'verify'>;
   readonly processPort?: SetupProcessPort;
 }): SetupApplicationService {
