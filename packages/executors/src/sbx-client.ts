@@ -1,6 +1,9 @@
 import path from 'node:path';
-import type { BoundedProcessRunner, ProcessResult } from './index.js';
-import { ExecutionError } from './index.js';
+import {
+  ExecutionError,
+  type BoundedProcessRunner,
+  type ProcessResult,
+} from './execution-process.js';
 
 export const SBX_V0_39_0_PIN = Object.freeze({
   version: '0.39.0',
