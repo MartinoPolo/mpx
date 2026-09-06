@@ -24,17 +24,15 @@ export async function preparePiExtensionBuildFixture(
     );
   }
 
-  const compilerDestination = path.join(extensionRoot, 'node_modules', '@mpx', 'content-compiler');
-  await mkdir(path.dirname(compilerDestination), { recursive: true });
-  await cp(
-    path.join(sourceExtensionRoot, 'node_modules', '@mpx', 'content-compiler'),
-    compilerDestination,
-    {
+  for (const dependency of ['content-compiler', 'runtime-contracts']) {
+    const destination = path.join(extensionRoot, 'node_modules', '@mpx', dependency);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await cp(path.join(sourceExtensionRoot, 'node_modules', '@mpx', dependency), destination, {
       recursive: true,
       dereference: true,
       filter: (source) => !['node_modules', 'test', 'tests'].includes(path.basename(source)),
-    },
-  );
+    });
+  }
 
   const release = (await import(
     `${pathToFileURL(path.join(extensionRoot, 'scripts', 'release.mjs')).href}?fixture=${importKey}`

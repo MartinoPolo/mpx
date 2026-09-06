@@ -9,6 +9,8 @@ import type {
   SessionResurrectionExportV1,
 } from '@mpx/sessions';
 
+export type SessionDiscoveryScope = Pick<SessionListFilter, 'runtime' | 'identity'>;
+
 export interface SessionDiscoveryInput {
   readonly scanner: RuntimeDiscovery;
   readonly context?: {
@@ -55,7 +57,9 @@ export interface SessionApplicationDependencies {
     plan: ResumePlanV1,
     execution: { readonly approveHost?: boolean },
   ) => Promise<unknown>;
-  readonly discoveries?: () => Promise<readonly SessionDiscoveryInput[]>;
+  readonly discoveries?: (
+    scope?: SessionDiscoveryScope,
+  ) => Promise<readonly SessionDiscoveryInput[]>;
 }
 
 export interface SessionApplication {
@@ -89,6 +93,12 @@ export class SessionApplicationService implements SessionApplication {
   async list(request: { filter?: SessionListFilter; limit?: number } = {}) {
     await this.#dependencies.consumePending();
     const diagnostics: SessionListDiagnostic[] = [];
+    const scope: SessionDiscoveryScope | undefined = request.filter
+      ? {
+          ...(request.filter.runtime !== undefined ? { runtime: request.filter.runtime } : {}),
+          ...(request.filter.identity !== undefined ? { identity: request.filter.identity } : {}),
+        }
+      : undefined;
     let discoveries: readonly SessionDiscoveryInput[] = [];
     if (!this.#dependencies.discoveries) {
       diagnostics.push({
@@ -99,7 +109,7 @@ export class SessionApplicationService implements SessionApplication {
       });
     } else {
       try {
-        discoveries = await this.#dependencies.discoveries();
+        discoveries = await this.#dependencies.discoveries(scope);
       } catch {
         diagnostics.push({
           runtime: null,
@@ -111,6 +121,18 @@ export class SessionApplicationService implements SessionApplication {
     }
     const instrumented: SessionDiscoveryInput[] = [];
     for (const item of discoveries) {
+      if (
+        (scope?.runtime !== undefined && item.scanner.runtime !== scope.runtime) ||
+        (scope?.identity !== undefined &&
+          (item.context?.identity.domain !== scope.identity.domain ||
+            item.context?.identity.name !== scope.identity.name)) ||
+        (scope !== undefined &&
+          (scope.runtime !== undefined || scope.identity !== undefined) &&
+          item.context !== undefined &&
+          item.context.runtime !== item.scanner.runtime)
+      ) {
+        continue;
+      }
       let result;
       try {
         result = await item.scanner.scan();

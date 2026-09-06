@@ -30,6 +30,7 @@ test('package manifest exposes only the static composition entry point', () => {
   assert.deepEqual(pi.extensions, ['./index.ts']);
   assert.deepEqual(dependencies, {
     '@mpx/content-compiler': 'workspace:*',
+    '@mpx/runtime-contracts': 'workspace:*',
     croner: '10.0.1',
     nanoid: '5.1.16',
   });

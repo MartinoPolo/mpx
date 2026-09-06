@@ -14,6 +14,7 @@ export interface SessionCommandContext {
 export interface SessionCommandResult {
   readonly data: unknown;
   readonly warnings: readonly Diagnostic[];
+  readonly exitCode?: number;
 }
 
 const text = (input: SessionCommandInput, name: string): string | undefined => {
@@ -124,13 +125,28 @@ export async function executeSessionCommand(
   ) {
     usage('--approve-resurrection cannot be combined with --confirm-plan or --dry-run');
   }
+  const data = await application.resume({
+    id: input.args[0]!,
+    ...(text(input, 'confirm-plan') ? { confirmation: text(input, 'confirm-plan')! } : {}),
+    ...(approveResurrection ? { approveResurrection: true } : {}),
+    dryRun: input.options.get('dry-run') === true,
+  });
+  const result =
+    typeof data === 'object' &&
+    data !== null &&
+    'kind' in data &&
+    data.kind === 'session-resume' &&
+    'result' in data
+      ? data.result
+      : undefined;
   return {
-    data: await application.resume({
-      id: input.args[0]!,
-      ...(text(input, 'confirm-plan') ? { confirmation: text(input, 'confirm-plan')! } : {}),
-      ...(approveResurrection ? { approveResurrection: true } : {}),
-      dryRun: input.options.get('dry-run') === true,
-    }),
+    data,
     warnings: [],
+    ...(typeof result === 'object' &&
+    result !== null &&
+    'exitCode' in result &&
+    typeof result.exitCode === 'number'
+      ? { exitCode: result.exitCode }
+      : {}),
   };
 }

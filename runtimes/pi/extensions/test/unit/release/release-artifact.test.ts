@@ -51,6 +51,9 @@ const productionSourceInputs = [
   '../../../packages/content-compiler/src/index.ts',
   '../../../packages/content-compiler/src/persisted-manifest.ts',
   '../../../packages/content-compiler/src/versions.ts',
+  '../../../packages/runtime-contracts/package.json',
+  '../../../packages/runtime-contracts/src/capabilities.ts',
+  '../../../packages/runtime-contracts/src/index.ts',
   'agent-resurrect.ts',
   'auto-title.ts',
   'canonical-skills.ts',
@@ -86,6 +89,7 @@ const productionSourceInputs = [
   'notifications.ts',
   'package.json',
   'scripts/release.mjs',
+  'session-lifecycle.ts',
   'subagents/LICENSE',
   'subagents/abortable.ts',
   'subagents/agent-file-policy.ts',
@@ -178,6 +182,23 @@ test('source digest tracks the persisted content loader source bytes', () => {
         : bytes;
     }),
   );
+});
+
+test('source digest tracks the lifecycle producer and its contract source bytes', () => {
+  const digest = recomputeSourceTreeDigest();
+  for (const changed of [
+    'session-lifecycle.ts',
+    '../../../packages/runtime-contracts/src/capabilities.ts',
+    '../../../packages/runtime-contracts/src/index.ts',
+  ]) {
+    assert.notEqual(
+      digest,
+      recomputeSourceTreeDigest((relativePath) => {
+        const bytes = readFileSync(path.join(packageRoot, relativePath));
+        return relativePath === changed ? Buffer.concat([bytes, Buffer.from('changed')]) : bytes;
+      }),
+    );
+  }
 });
 
 function runRelease(action: 'build' | 'verify', cwd = packageRoot): void {

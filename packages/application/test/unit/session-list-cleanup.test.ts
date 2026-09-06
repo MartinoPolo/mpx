@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   SessionApplicationService,
   type SessionDiscoveryInput,
+  type SessionApplicationDependencies,
 } from '../../src/session-application-service.js';
 
 const record = (id: string) => ({ recordId: id }) as never;
 
-function dependencies(discoveries?: () => Promise<readonly SessionDiscoveryInput[]>) {
+function dependencies(discoveries?: SessionApplicationDependencies['discoveries']) {
   return {
     sessions: {
       list: vi.fn(async () => [record('durable')]),
@@ -23,6 +24,99 @@ function dependencies(discoveries?: () => Promise<readonly SessionDiscoveryInput
 }
 
 describe('SessionApplicationService list recovery', () => {
+  it('forwards only discovery scope and skips every out-of-scope scanner before reconciliation', async () => {
+    const identity = { domain: 'personal', name: 'main' };
+    const makeDiscovery = (
+      runtime: 'claude' | 'pi',
+      domain: string,
+      name = 'main',
+    ): SessionDiscoveryInput => ({
+      scanner: {
+        runtime,
+        scan: vi.fn(async () => ({ status: 'available' as const, sessions: [], diagnostic: null })),
+      },
+      context: {
+        identity: { domain, name },
+        nativeBindingRef: `${domain}-${name}-${runtime}`,
+        runtime,
+      },
+    });
+    const selected = makeDiscovery('pi', 'personal');
+    const excluded = [
+      makeDiscovery('claude', 'personal'),
+      makeDiscovery('pi', 'work'),
+      makeDiscovery('pi', 'personal', 'other'),
+      { scanner: makeDiscovery('pi', 'personal').scanner },
+      { ...makeDiscovery('pi', 'personal'), context: makeDiscovery('claude', 'personal').context! },
+    ];
+    const discoveries = vi.fn(async () => [...excluded, selected]);
+    const input = dependencies(discoveries);
+    const filter = { runtime: 'pi' as const, identity, liveness: 'active' as const };
+
+    await new SessionApplicationService(input).list({ filter, limit: 1 });
+
+    expect(discoveries).toHaveBeenCalledExactlyOnceWith({ runtime: 'pi', identity });
+    expect(selected.scanner.scan).toHaveBeenCalledOnce();
+    for (const item of excluded) {
+      expect(item.scanner.scan).not.toHaveBeenCalled();
+    }
+    expect(input.sessions.reconcile).toHaveBeenCalledWith(
+      [expect.objectContaining({ context: selected.context })],
+      [],
+    );
+    expect(input.sessions.list).toHaveBeenCalledWith(filter);
+  });
+
+  it.each(['unavailable', 'malformed', 'throw'] as const)(
+    'retains sanitized per-route %s diagnostics for a scoped request',
+    async (status) => {
+      const identity = { domain: 'personal', name: 'main' };
+      const excludedScan = vi.fn(async () => ({
+        status: 'available' as const,
+        sessions: [],
+        diagnostic: null,
+      }));
+      const input = dependencies(async () => [
+        { scanner: { runtime: 'claude', scan: excludedScan } },
+        {
+          scanner: {
+            runtime: 'pi',
+            scan: async () => {
+              if (status === 'throw') {
+                throw new Error('private root and credentials');
+              }
+              return { status, sessions: [], diagnostic: 'private root and credentials' };
+            },
+          },
+          context: { identity, runtime: 'pi', nativeBindingRef: 'binding' },
+        },
+      ]);
+
+      const result = await new SessionApplicationService(input).list({ filter: { runtime: 'pi' } });
+
+      expect(excludedScan).not.toHaveBeenCalled();
+      expect(result.records.map((item) => item.recordId)).toEqual(['durable']);
+      expect(result.diagnostics).toEqual([
+        {
+          runtime: 'pi',
+          identity,
+          status: status === 'malformed' ? 'malformed' : 'unavailable',
+          code:
+            status === 'malformed'
+              ? 'SESSION_DISCOVERY_MALFORMED'
+              : 'SESSION_DISCOVERY_UNAVAILABLE',
+        },
+      ]);
+      expect(JSON.stringify(result)).not.toContain('private');
+    },
+  );
+
+  it('leaves discovery unscoped when no filter is requested', async () => {
+    const discoveries = vi.fn(async () => []);
+    await new SessionApplicationService(dependencies(discoveries)).list();
+    expect(discoveries).toHaveBeenCalledExactlyOnceWith(undefined);
+  });
+
   it.each([
     {
       name: 'no discovery factory',

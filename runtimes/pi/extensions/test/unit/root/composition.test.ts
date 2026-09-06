@@ -16,6 +16,7 @@ import mpxPiExtensions, {
 } from '../../../index.js';
 
 const EXPECTED_COMPONENTS = [
+  'session-lifecycle',
   'agent-resurrect',
   'auto-title',
   'compact-instructions',

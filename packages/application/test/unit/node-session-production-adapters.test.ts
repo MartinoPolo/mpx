@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
+import type { UserConfig } from '@mpx/config';
 import { canonicalNativeRootDigest } from '@mpx/launch';
 import { deriveNativeBindingRef, SessionStore } from '@mpx/sessions';
 import {
@@ -55,6 +56,174 @@ it('saves deterministic native tuples and admits Pi discovery after exact-root a
   expect(
     (await discoveries.find((item) => item.context.runtime === 'pi')!.scanner.scan()).status,
   ).toBe('available');
+});
+
+it('restricts Pi discovery before touching Claude roots or creating Claude bindings and scanners', async () => {
+  const f = await fixture();
+  const store = new SessionStore(f.state);
+  const claudeRoot = vi.fn(() => {
+    throw new Error('Claude root must not be resolved');
+  });
+  const verifyRoot = vi.fn(async () => undefined);
+  const verifyAuth = vi.fn(async () => undefined);
+  const discoveries = await productionSessionDiscoveries({
+    user: {
+      identities: {
+        main: {
+          domain: 'personal',
+          runtimeRoots: {
+            get claude() {
+              return claudeRoot();
+            },
+            pi: f.pi,
+          },
+        },
+      },
+    } as unknown as UserConfig,
+    store,
+    environment: {},
+    scope: { runtime: 'pi' },
+    options: {
+      exactNativeRootVerifier: { verify: verifyRoot },
+      piAuthVerifier: { verify: verifyAuth },
+    },
+  });
+
+  expect(claudeRoot).not.toHaveBeenCalled();
+  expect(discoveries.map((item) => item.scanner.runtime)).toEqual(['pi']);
+  expect((await store.listNativeBindings()).map((binding) => binding.runtime)).toEqual(['pi']);
+  expect(verifyRoot).toHaveBeenCalledExactlyOnceWith(f.pi);
+  expect(verifyAuth).toHaveBeenCalledExactlyOnceWith(f.pi);
+});
+
+it('restricts Claude discovery before Pi root resolution and preflight', async () => {
+  const f = await fixture();
+  const piRoot = vi.fn(() => {
+    throw new Error('Pi root must not be resolved');
+  });
+  const verifyRoot = vi.fn(async () => undefined);
+  const verifyAuth = vi.fn(async () => undefined);
+  const discoveries = await productionSessionDiscoveries({
+    user: {
+      identities: {
+        main: {
+          domain: 'personal',
+          runtimeRoots: {
+            claude: f.claude,
+            get pi() {
+              return piRoot();
+            },
+          },
+        },
+      },
+    } as unknown as UserConfig,
+    store: new SessionStore(f.state),
+    environment: {},
+    scope: { runtime: 'claude' },
+    options: {
+      exactNativeRootVerifier: { verify: verifyRoot },
+      piAuthVerifier: { verify: verifyAuth },
+    },
+  });
+
+  expect(discoveries.map((item) => item.scanner.runtime)).toEqual(['claude']);
+  expect(piRoot).not.toHaveBeenCalled();
+  expect(verifyRoot).not.toHaveBeenCalled();
+  expect(verifyAuth).not.toHaveBeenCalled();
+});
+
+it.each(['personal', 'work'] as const)(
+  'matches both identity name and %s domain before touching any other roots',
+  async (domain) => {
+    const f = await fixture();
+    const store = new SessionStore(f.state);
+    const otherRoots = vi.fn(() => {
+      throw new Error('Unselected identity roots must not be resolved');
+    });
+    const verifyRoot = vi.fn(async () => undefined);
+    const verifyAuth = vi.fn(async () => undefined);
+    const discoveries = await productionSessionDiscoveries({
+      user: {
+        identities: {
+          main: { domain: 'personal', runtimeRoots: { claude: f.claude, pi: f.pi } },
+          other: {
+            domain,
+            get runtimeRoots() {
+              return otherRoots();
+            },
+          },
+        },
+      } as unknown as UserConfig,
+      store,
+      environment: {},
+      scope: { identity: { domain, name: 'main' } },
+      options: {
+        exactNativeRootVerifier: { verify: verifyRoot },
+        piAuthVerifier: { verify: verifyAuth },
+      },
+    });
+
+    expect(otherRoots).not.toHaveBeenCalled();
+    if (domain === 'personal') {
+      expect(discoveries.map((item) => item.context)).toEqual([
+        expect.objectContaining({ identity: { domain, name: 'main' }, runtime: 'claude' }),
+        expect.objectContaining({ identity: { domain, name: 'main' }, runtime: 'pi' }),
+      ]);
+      expect(verifyRoot).toHaveBeenCalledExactlyOnceWith(f.pi);
+      expect(verifyAuth).toHaveBeenCalledExactlyOnceWith(f.pi);
+    } else {
+      expect(discoveries).toEqual([]);
+      expect(await store.listNativeBindings()).toEqual([]);
+      expect(verifyRoot).not.toHaveBeenCalled();
+      expect(verifyAuth).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it('keeps unfiltered discovery across every identity and runtime when one Pi route fails preflight', async () => {
+  const f = await fixture();
+  const otherPi = path.join(f.state, 'other-pi');
+  await mkdir(otherPi);
+  const verifyRoot = vi.fn(async (root: string) => {
+    if (root === f.pi) {
+      throw new Error('private root failure');
+    }
+  });
+  const verifyAuth = vi.fn(async () => undefined);
+  const store = new SessionStore(f.state);
+  const discoveries = await productionSessionDiscoveries({
+    user: {
+      identities: {
+        other: {
+          domain: 'work',
+          runtimeRoots: { claude: path.join(f.state, 'other-claude'), pi: otherPi },
+        },
+        main: { domain: 'personal', runtimeRoots: { claude: f.claude, pi: f.pi } },
+      },
+    } as unknown as UserConfig,
+    store,
+    environment: {},
+    options: {
+      exactNativeRootVerifier: { verify: verifyRoot },
+      piAuthVerifier: { verify: verifyAuth },
+    },
+  });
+
+  expect(discoveries.map(({ context }) => [context.identity.name, context.runtime])).toEqual([
+    ['main', 'claude'],
+    ['main', 'pi'],
+    ['other', 'claude'],
+    ['other', 'pi'],
+  ]);
+  expect(await store.listNativeBindings()).toHaveLength(4);
+  expect(verifyRoot.mock.calls).toEqual([[f.pi], [otherPi]]);
+  expect(verifyAuth).toHaveBeenCalledExactlyOnceWith(otherPi);
+  expect(await discoveries[1]!.scanner.scan()).toEqual({
+    status: 'unavailable',
+    sessions: [],
+    diagnostic: 'PI_DISCOVERY_UNAVAILABLE',
+  });
+  expect((await discoveries[3]!.scanner.scan()).status).toBe('available');
 });
 
 it('returns sanitized unavailable Pi discovery without scanning when live preflight fails', async () => {

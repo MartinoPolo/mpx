@@ -565,6 +565,9 @@ importers:
       '@mpx/content-compiler':
         specifier: workspace:*
         version: link:../../../packages/content-compiler
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/runtime-contracts
       '@sinclair/typebox':
         specifier: '*'
         version: 0.34.52

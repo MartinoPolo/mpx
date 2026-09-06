@@ -9,6 +9,7 @@ import fullscreenScrollSpeed from './fullscreen-scroll-speed.js';
 import guardHooks from './guard-hooks.js';
 import devServer from './dev-server/index.js';
 import subagents from './subagents/index.js';
+import sessionLifecycle from './session-lifecycle.js';
 import terminalProgress from './terminal-progress/index.js';
 
 export { resolveCompactInstructionsFile } from './compact-instructions.js';
@@ -20,6 +21,7 @@ export interface ExtensionComponent {
 }
 
 export const DEFAULT_EXTENSION_COMPONENTS: readonly ExtensionComponent[] = [
+  { name: 'session-lifecycle', register: sessionLifecycle },
   { name: 'agent-resurrect', register: agentResurrect },
   { name: 'auto-title', register: autoTitle },
   { name: 'compact-instructions', register: compactInstructions },

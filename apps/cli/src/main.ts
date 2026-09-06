@@ -472,8 +472,9 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
               context.sessionProcessInspector ?? productionSessionProcessInspector(),
             discoveries:
               context.sessionDiscoveries ??
-              (() =>
+              ((scope) =>
                 productionSessionDiscoveries({
+                  ...(scope ? { scope } : {}),
                   user,
                   store: sessionStore,
                   environment: context.env,
@@ -500,7 +501,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       { action, args, options: parsed.options },
       { application, resolveIdentity },
     );
-    return { data: result.data, warnings: [...result.warnings] };
+    return { ...result, warnings: [...result.warnings] };
   }
   if (group === 'setup') {
     if (action || args.length) {

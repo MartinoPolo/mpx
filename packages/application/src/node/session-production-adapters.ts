@@ -16,6 +16,7 @@ import {
 } from '@mpx/sessions';
 import { PiResumeTargetError, verifyPiResumeTarget } from '@mpx/runtime-pi';
 import { WindowsProcessCapabilities } from '@mpx/windows';
+import type { SessionDiscoveryScope } from '../session-application-service.js';
 import { ExactNativeRootVerifier } from './exact-native-root.js';
 import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-availability.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
@@ -178,13 +179,14 @@ export async function productionSessionDiscoveries(input: {
   environment: NodeJS.ProcessEnv;
   cwd?: string;
   options?: ProductionSessionDiscoveryOptions;
+  scope?: SessionDiscoveryScope;
 }): Promise<
   readonly {
     scanner: RuntimeDiscovery;
     context: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
   }[]
 > {
-  const { user, store, environment, options = {} } = input;
+  const { user, store, environment, options = {}, scope } = input;
   const cwd = input.cwd ?? process.cwd();
   const exactRoot = options.exactNativeRootVerifier ?? new ExactNativeRootVerifier();
   const auth =
@@ -213,8 +215,17 @@ export async function productionSessionDiscoveries(input: {
   for (const [name, configured] of Object.entries(user.identities).sort(([a], [b]) =>
     a.localeCompare(b),
   )) {
+    if (
+      scope?.identity !== undefined &&
+      (scope.identity.name !== name || scope.identity.domain !== configured.domain)
+    ) {
+      continue;
+    }
     const identity = { domain: configured.domain, name };
     for (const runtime of ['claude', 'pi'] as const) {
+      if (scope?.runtime !== undefined && scope.runtime !== runtime) {
+        continue;
+      }
       const root = configured.runtimeRoots[runtime];
       const recordedRootDigest = canonicalNativeRootDigest(root);
       const ref = deriveNativeBindingRef(identity, runtime, recordedRootDigest);

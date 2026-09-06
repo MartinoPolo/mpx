@@ -246,16 +246,21 @@ async function productionInputs() {
       ignoredTopLevelDirectories: sourceIgnoredDirectories,
     })
   ).filter((file) => file.endsWith('.ts'));
-  const compilerRoot = await dependencyPackageRoot('@mpx/content-compiler');
-  const compilerPrefix = path.relative(packageRoot, compilerRoot).replaceAll('\\', '/');
-  const compilerSourceFiles = (await walkRegularFiles(path.join(compilerRoot, 'src')))
-    .filter((file) => file.endsWith('.ts'))
-    .map((file) => `${compilerPrefix}/src/${file}`);
+  const workspaceInputs = [];
+  for (const packageName of ['@mpx/content-compiler', '@mpx/runtime-contracts']) {
+    const dependencyRoot = await dependencyPackageRoot(packageName);
+    const prefix = path.relative(packageRoot, dependencyRoot).replaceAll('\\', '/');
+    workspaceInputs.push(
+      `${prefix}/package.json`,
+      ...(await walkRegularFiles(path.join(dependencyRoot, 'src')))
+        .filter((file) => file.endsWith('.ts'))
+        .map((file) => `${prefix}/src/${file}`),
+    );
+  }
   return [
     ...new Set([
       ...sourceFiles,
-      ...compilerSourceFiles,
-      `${compilerPrefix}/package.json`,
+      ...workspaceInputs,
       'package.json',
       'scripts/release.mjs',
       ...PACKAGE_ASSETS,

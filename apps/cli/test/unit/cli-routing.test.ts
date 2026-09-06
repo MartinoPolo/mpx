@@ -340,6 +340,54 @@ describe('canonical CLI dispatch', () => {
     expect(executor.mock.calls[0]![0].confirmationDigest).toBe(confirmation);
   });
 
+  it.each([0, 7])(
+    'returns completed resume child exit code %s without changing the envelope',
+    async (exitCode) => {
+      const fixture = await resumableCliFixture();
+      const childResult = { exitCode, stdout: '', stderr: '', truncated: false };
+      const executor = vi.fn(async () => childResult);
+      const context = {
+        env: { LOCALAPPDATA: fixture.localAppData },
+        sessionStore: fixture.store,
+        sessionResumeDependencies: fixture.dependencies,
+        sessionResumeExecutor: executor,
+      };
+      const dryRunIo = captureIo();
+
+      expect(
+        await run(
+          ['session', 'resume', 'record-confirm', '--dry-run', '--json'],
+          dryRunIo,
+          context,
+        ),
+      ).toBe(0);
+      expect(executor).not.toHaveBeenCalled();
+      const planned = JSON.parse(dryRunIo.out.join(''));
+      expect(planned.ok).toBe(true);
+      const confirmedIo = captureIo();
+
+      expect(
+        await run(
+          [
+            'session',
+            'resume',
+            'record-confirm',
+            '--confirm-plan',
+            planned.data.confirmationDigest,
+            '--json',
+          ],
+          confirmedIo,
+          context,
+        ),
+      ).toBe(exitCode);
+      expect(executor).toHaveBeenCalledOnce();
+      expect(JSON.parse(confirmedIo.out.join(''))).toMatchObject({
+        ok: true,
+        data: { kind: 'session-resume', result: childResult },
+      });
+    },
+  );
+
   it('passes the exact prepared resume plan and resurrection authority to the injected executor', async () => {
     const localAppData = await mkdtemp(path.join(tmpdir(), 'mpx-cli-resume-'));
     const nativeRoot = path.join(localAppData, 'native');

@@ -5,6 +5,7 @@ import {
   type LifecycleDevService,
   type LifecycleWorktreeService,
   type SetupApplicationService,
+  type SessionDiscoveryScope,
   type WorkspaceApplicationService,
 } from '@mpx/application';
 import {
@@ -118,7 +119,7 @@ export interface CliContext extends LaunchExecutionContext {
   }>;
   sessionStore?: SessionStore;
   sessionStoreFactory?: (stateRoot: string) => SessionStore;
-  sessionDiscoveries?: () => Promise<
+  sessionDiscoveries?: (scope?: SessionDiscoveryScope) => Promise<
     readonly {
       scanner: RuntimeDiscovery;
       context?: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
