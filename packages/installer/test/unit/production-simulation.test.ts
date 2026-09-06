@@ -611,37 +611,41 @@ it('runs clean and existing-machine production-backed simulations without live w
       required(baselinePlan.observations[index], `operation observation ${index}`).digest !==
       operation.desiredDigest,
   );
-  for (let failedIndex = 0; failedIndex < mutatingOperations.length; failedIndex++) {
-    const f = await simulation(true),
-      original = f.adapter.apply.bind(f.adapter);
-    let calls = 0;
-    f.adapter.apply = async (operation) => {
-      await original(operation);
-      if (calls++ === failedIndex) {
-        throw new Error(`injected:${operation.id}`);
-      }
-    };
-    const orchestrator = new InstallOrchestrator({
-        adapter: f.adapter,
-        store: f.store,
-        releases: f.releases,
-      }),
-      plan = await orchestrator.plan(f.intent);
-    const targetSnapshots = await Promise.all(
-      plan.operations.map((operation) => f.adapter.capture(operation)),
+  const originalApply = baseline.adapter.apply.bind(baseline.adapter),
+    targetSnapshots = await Promise.all(
+      baselinePlan.operations.map((operation) => baseline.adapter.capture(operation)),
     );
-    await expect(orchestrator.apply(plan, plan.confirmationDigest)).rejects.toThrow(
-      `injected:${required(mutatingOperations[failedIndex], `mutating operation ${failedIndex}`).id}`,
+  let injectedIndex = 0,
+    calls = 0;
+  baseline.adapter.apply = async (operation) => {
+    await originalApply(operation);
+    if (calls++ === injectedIndex) {
+      throw new Error(`injected:${operation.id}`);
+    }
+  };
+  const rollbackOrchestrator = new InstallOrchestrator({
+    adapter: baseline.adapter,
+    store: baseline.store,
+    releases: baseline.releases,
+  });
+  for (injectedIndex = 0; injectedIndex < mutatingOperations.length; injectedIndex++) {
+    calls = 0;
+    await expect(
+      rollbackOrchestrator.apply(baselinePlan, baselinePlan.confirmationDigest),
+    ).rejects.toThrow(
+      `injected:${required(mutatingOperations[injectedIndex], `mutating operation ${injectedIndex}`).id}`,
     );
     expect(
-      await Promise.all(plan.operations.map((operation) => f.adapter.capture(operation))),
-      `rollback after mutating operation ${failedIndex} (${required(mutatingOperations[failedIndex], `mutating operation ${failedIndex}`).id})`,
+      await Promise.all(
+        baselinePlan.operations.map((operation) => baseline.adapter.capture(operation)),
+      ),
+      `rollback after mutating operation ${injectedIndex} (${required(mutatingOperations[injectedIndex], `mutating operation ${injectedIndex}`).id})`,
     ).toEqual(targetSnapshots);
-    expect(await f.store.readReceipt()).toBeUndefined();
+    expect(await baseline.store.readReceipt()).toBeUndefined();
     expect(
-      await f.native.read(
+      await baseline.native.read(
         path.win32.join(
-          f.localAppData,
+          baseline.localAppData,
           'Packages',
           'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
           'LocalState',
@@ -655,10 +659,10 @@ it('runs clean and existing-machine production-backed simulations without live w
       ],
       theme: 'native',
     });
-    for (let index = 0; index < f.fixtureFiles.length; index++) {
-      expect(await readFile(required(f.fixtureFiles[index], `fixture file ${index}`))).toEqual(
-        required(f.before[index], `fixture snapshot ${index}`),
-      );
+    for (let index = 0; index < baseline.fixtureFiles.length; index++) {
+      expect(
+        await readFile(required(baseline.fixtureFiles[index], `fixture file ${index}`)),
+      ).toEqual(required(baseline.before[index], `fixture snapshot ${index}`));
     }
     rollbackSimulations += 1;
   }
