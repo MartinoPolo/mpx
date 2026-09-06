@@ -1,10 +1,10 @@
 # MPX migration execution guide
 
-**Temporary companion:** Keep this file beside `MPX_MIGRATION.md` until Gate 8 completes, then delete it. `MPX_MIGRATION.md` remains the status and evidence authority; this file preserves the recovered execution rationale and acceptance instructions that should survive session compaction.
+**Historical companion:** This file preserves recovered execution rationale as non-operative history; `MPX_MIGRATION.md` remains the status and evidence authority.
 
 **Recovery source:** The original autonomous handoff is preserved in Git at `3f719e0:MPX_MIGRATION.md`. This guide restores its operational instructions without restoring the superseded legacy migration record.
 
-## How to continue in a fresh session
+## Historical continuation instructions (non-operative)
 
 1. Read `AGENTS.md`, this file, and `MPX_MIGRATION.md` completely.
 2. Treat the first unchecked gate in `MPX_MIGRATION.md` as the only active gate.
@@ -184,7 +184,7 @@ The orchestrator alone integrates generated files and migration evidence.
 - Port allocation, lease, conflict, release, and reconciliation behavior.
 - Explicit user-invoked Windows Terminal project registration without installer ownership.
 
-### Gate 8 — replacement cleanup and final cutover
+### Gate 8 — replacement cleanup and final cutover (historical plan)
 
 **Purpose:** Remove the second wave of legacy compatibility only after live replacements and rollback are proven.
 
@@ -193,7 +193,7 @@ The orchestrator alone integrates generated files and migration evidence.
 **Final acceptance:**
 
 1. Verify installation, route behavior, providers, utilities, migration observation, rollback, and native continuity.
-2. Run `pnpm test`, `pnpm run typecheck`, `pnpm run check`, `pnpm run convergence:verify`, `pnpm run validate:generated`, and `git diff --check`.
+2. Run `pnpm test`, `pnpm run typecheck`, `pnpm run check`, `pnpm run validate:generated`, and `git diff --check`.
 3. Delete every completed worktree and branch.
 4. Confirm clean, pushed `main` is the sole worktree and `sbx ls --json` is empty.
 5. Delete this temporary guide and reduce `MPX_MIGRATION.md` to durable final documentation/evidence.

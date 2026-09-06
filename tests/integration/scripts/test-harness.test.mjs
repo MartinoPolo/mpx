@@ -333,14 +333,10 @@ describe('final workspace and root command contracts', () => {
     expect(manifest.scripts.test).not.toContain('pnpm -r test');
   });
 
-  test('retains convergence as an explicit real migration command outside normal tests', async () => {
+  test('does not retain obsolete convergence migration commands', async () => {
     const manifest = await json('package.json');
-    expect(manifest.scripts['test:convergence']).toBe('node scripts/required-convergence.mjs');
-    expect(manifest.scripts['convergence:verify']).toBe(
-      'node scripts/generate-convergence-manifest.mjs --check',
-    );
-    expect(await readFile(path.join(root, 'scripts/required-convergence.mjs'), 'utf8')).toContain(
-      'generate-convergence-manifest.mjs',
+    expect(Object.keys(manifest.scripts).filter((name) => name.includes('convergence'))).toEqual(
+      [],
     );
     expect(manifest.scripts.test).not.toContain('convergence');
   });

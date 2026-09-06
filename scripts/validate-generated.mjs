@@ -1,13 +1,7 @@
-import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  buildConvergenceManifest,
-  compareConvergenceManifests,
-  validateConvergenceManifest,
-} from './convergence-manifest.mjs';
 
 const TEXT =
   /(?:\.(?:c?js|mjs|ts|tsx|json|md|html|ya?ml|toml|ps1|bash|sh|py|txt)|(?:^|\/)LICENSE)$/iu;
@@ -31,7 +25,6 @@ const GENERATED_CLI_BUNDLES = new Set(['bin/mpx.mjs', 'bin/claude-gateway.js']);
 const FILE_READ_CONCURRENCY = 8;
 
 const diagnostic = (code, file, message) => ({ code, file, message });
-const digest = (value) => createHash('sha256').update(value).digest('hex');
 const normalized = (value) => value.replaceAll('\\', '/');
 
 function isHistorical(file) {
@@ -271,56 +264,6 @@ export function validateCanonicalScriptSyntax(root, names) {
   return diagnostics;
 }
 
-export function validateConvergenceArtifacts(manifest, files) {
-  const diagnostics = [];
-  for (const entry of manifest?.entries ?? []) {
-    if (entry.completion === 'reviewed' && entry.phase === 'Phase I') {
-      continue;
-    }
-    if (
-      !['canonicalized', 'Claude-specific', 'Pi-specific', 'externalized'].includes(
-        entry.disposition,
-      )
-    ) {
-      continue;
-    }
-    if (!files.has(entry.destination)) {
-      diagnostics.push(
-        diagnostic(
-          'CONVERGENCE_DESTINATION_MISSING',
-          `${entry.source}:${entry.path}`,
-          `destination is absent: ${entry.destination}`,
-        ),
-      );
-      continue;
-    }
-    for (const evidence of entry.evidence ?? []) {
-      if (!['behavior-test', 'generated-artifact'].includes(evidence.kind)) {
-        continue;
-      }
-      const artifact = files.get(evidence.reference);
-      if (artifact === undefined) {
-        diagnostics.push(
-          diagnostic(
-            'CONVERGENCE_ARTIFACT_MISSING',
-            `${entry.source}:${entry.path}`,
-            `evidence artifact is absent: ${evidence.reference}`,
-          ),
-        );
-      } else if (digest(artifact) !== evidence.sha256) {
-        diagnostics.push(
-          diagnostic(
-            'CONVERGENCE_ARTIFACT_HASH_MISMATCH',
-            `${entry.source}:${entry.path}`,
-            `evidence artifact hash does not match: ${evidence.reference}`,
-          ),
-        );
-      }
-    }
-  }
-  return diagnostics;
-}
-
 async function validateGeneratedRepository({ tracked, files }) {
   return [
     ...validateFiles(files, { trackedFiles: tracked }),
@@ -441,7 +384,6 @@ export async function repositoryFiles(root, names, options = {}) {
 }
 
 async function run() {
-  const verifySources = process.argv.includes('--verify-sources');
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const output = execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z'], {
     cwd: root,
@@ -495,49 +437,10 @@ async function run() {
             cliDocs.stderr.trim() || cliDocs.stdout.trim() || 'generated CLI references are stale',
           ),
         ];
-  const convergenceName = 'docs/history/CONVERGENCE_MANIFEST.json';
-  let convergence;
-  const convergenceDiagnostics = [];
-  try {
-    convergence = JSON.parse(files.get(convergenceName)?.toString('utf8') ?? '');
-  } catch {
-    convergenceDiagnostics.push(
-      diagnostic(
-        'CONVERGENCE_MANIFEST_INVALID',
-        convergenceName,
-        'committed convergence manifest is missing or invalid JSON',
-      ),
-    );
-  }
-  if (convergence) {
-    convergenceDiagnostics.push(
-      ...validateConvergenceManifest(convergence),
-      ...validateConvergenceArtifacts(convergence, files),
-    );
-  }
-  if (verifySources && convergence && process.env.MPX_PROJECTS) {
-    const current = await buildConvergenceManifest({
-      sources: [
-        {
-          id: 'claude',
-          root: path.join(process.env.MPX_PROJECTS, 'mpx-claude-code'),
-          symbolicRoot: '${MPX_PROJECTS}/mpx-claude-code',
-        },
-        {
-          id: 'pi',
-          root: path.join(process.env.MPX_PROJECTS, 'mpx-pi'),
-          symbolicRoot: '${MPX_PROJECTS}/mpx-pi',
-        },
-      ],
-    });
-    convergenceDiagnostics.push(...compareConvergenceManifests(convergence, current));
-  }
-
   const diagnostics = [
     ...files.diagnostics,
     ...bundleDiagnostics,
     ...cliDocDiagnostics,
-    ...convergenceDiagnostics,
     ...validateCanonicalScriptSyntax(root, names),
     ...(await validateGeneratedRepository({
       root,
@@ -553,9 +456,7 @@ async function run() {
     }
     process.exitCode = 1;
   } else {
-    console.log(
-      `Validated ${files.size} active/generated files and ${convergence.entries.length} convergence entries.`,
-    );
+    console.log(`Validated ${files.size} active/generated files.`);
   }
 }
 

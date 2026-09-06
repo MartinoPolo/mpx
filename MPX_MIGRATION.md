@@ -1,6 +1,6 @@
 # MPX cleanup execution authority
 
-**Status:** Cleanup execution is active. The obsolete Phase-J command slice has been removed. The repository baseline is not yet accepted because the clean `mpx-pi` migration source has advanced beyond the reviewed convergence manifest. Do not hide that drift; resolve it by moving retained Pi source into the canonical static extension package.
+**Status:** Cleanup execution is active. The obsolete Phase-J command slice and external-source convergence scaffold have been removed. Canonical Pi extension source now lives under `runtimes/pi/extensions`.
 
 **Authority:** This file is the sole active migration status and evidence authority. User instructions override it. Durable architecture remains in [CONTENT_COMPILER_ARCHITECTURE.md](docs/CONTENT_COMPILER_ARCHITECTURE.md), [ADR 0004](docs/adr/0004-canonical-native-pi-extensions.md), and [PI_EXTENSION_MIGRATION.md](docs/PI_EXTENSION_MIGRATION.md).
 
@@ -142,21 +142,7 @@ Evidence:
 
 ### Phase 1 — Trustworthy baseline
 
-**State: in progress.**
-
-Completed:
-
-- the neutral application root no longer imports a runtime value from `@mpx/sessions`;
-- Node composition injects the session-resurrection projector;
-- application architecture and session tests pass;
-- full tests and typecheck pass;
-- lint is clean.
-
-Open acceptance item:
-
-- `convergence:verify` reports legitimate drift because clean `mpx-pi` source changed after the reviewed manifest. A generated refresh would mark retained source as semantically incomplete, so it was not committed. Resolve this through canonical Pi-extension migration, not a baseline refresh that conceals missing mappings.
-
-Exit requires one clean main worktree, a clean build from source, and the complete repository gate passing.
+**Historical state: superseded.** The baseline work established application/session boundaries and clean tests, typechecking, and lint. Its former external-source drift blocker is no longer operative because Pi extension source is canonical in this repository.
 
 ### Phase 2 — Characterize retained behavior
 
@@ -237,7 +223,7 @@ Completed:
 - made Docker launch and resume fail closed without host fallback while retaining only optional whole-agent sandbox planning primitives;
 - regenerated the CLI references and bundles without retaining hidden migration aliases.
 
-Completed work includes deletion of the public installer uninstall/rollback and external-integration protocol; `mpx setup` is bare and idempotent, with receipt-safe upgrades and automatic failed-apply rollback retained internally. Remaining work includes generated Pi feature source, duplicate Pi vendor trees, dead services, superseded tests and docs, and dependencies used only by removed behavior. Convergence checks and their manifest remain until their final migration-source consumer is deleted. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
+Completed work includes deletion of the public installer uninstall/rollback and external-integration protocol; `mpx setup` is bare and idempotent, with receipt-safe upgrades and automatic failed-apply rollback retained internally. The external-source convergence checks and manifest were deleted after their final migration-source consumer. Remaining work includes dead services, superseded tests and docs, and dependencies used only by removed behavior. Run dead-code and cycle analysis after deletion instead of preserving theoretical APIs.
 
 ### Phase 9 — Optional sandbox
 
@@ -263,12 +249,9 @@ Repository gate:
 pnpm test
 pnpm run typecheck
 pnpm run check
-pnpm run convergence:verify
 pnpm run validate:generated
 git diff --check
 ```
-
-Remove convergence checks only when their final migration-source consumer is deleted.
 
 Stop and redesign if:
 
@@ -289,4 +272,4 @@ Safe now:
 
 Do not create separate Claude and Pi copies.
 
-Wait until the static Pi package exists before major nested-subagent or Pi-extension production work. Requirements, failure models, parent-child protocol, depth and concurrency limits, cancellation semantics, UI mockups, and characterization tests are safe now. Avoid significant work in deprecated `mpx-pi`; final Pi-specific implementation belongs in `runtimes/pi/extensions`.
+Pi-specific implementation belongs in the canonical static package under `runtimes/pi/extensions`; external repositories are not runtime or test authorities.
