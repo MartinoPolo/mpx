@@ -21,9 +21,15 @@ function semverCompare(a, b) {
   const parse = (v) => v.split('.').map((n) => parseInt(n, 10) || 0);
   const [aMajor, aMinor, aPatch] = parse(a);
   const [bMajor, bMinor, bPatch] = parse(b);
-  if (aMajor !== bMajor) return aMajor < bMajor ? -1 : 1;
-  if (aMinor !== bMinor) return aMinor < bMinor ? -1 : 1;
-  if (aPatch !== bPatch) return aPatch < bPatch ? -1 : 1;
+  if (aMajor !== bMajor) {
+    return aMajor < bMajor ? -1 : 1;
+  }
+  if (aMinor !== bMinor) {
+    return aMinor < bMinor ? -1 : 1;
+  }
+  if (aPatch !== bPatch) {
+    return aPatch < bPatch ? -1 : 1;
+  }
   return 0;
 }
 
@@ -74,7 +80,9 @@ async function main() {
   }
 
   const cmd = input?.tool_input?.command ?? '';
-  if (!GIT_COMMIT_OR_PUSH.test(cmd)) process.exit(0);
+  if (!GIT_COMMIT_OR_PUSH.test(cmd)) {
+    process.exit(0);
+  }
 
   // Resolve fallow runner.
   let runner;

@@ -85,8 +85,11 @@ export async function createDefaultSbxDiagnostics(
               error && typeof (error as { code?: unknown }).code === 'number'
                 ? (error as { code: number }).code
                 : 0;
-            if (error && typeof (error as { code?: unknown }).code !== 'number') reject(error);
-            else resolve({ exitCode: code, stdout, stderr, truncated: false });
+            if (error && typeof (error as { code?: unknown }).code !== 'number') {
+              reject(error);
+            } else {
+              resolve({ exitCode: code, stdout, stderr, truncated: false });
+            }
           },
         );
       }),

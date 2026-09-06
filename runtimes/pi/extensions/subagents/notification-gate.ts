@@ -49,7 +49,9 @@ export class ParentRunNotificationGate {
       isUnread: () => records.some((record) => !record.resultConsumed),
       send: (triggerTurn) => {
         const unread = records.filter((record) => !record.resultConsumed);
-        if (unread.length > 0) send(unread, triggerTurn);
+        if (unread.length > 0) {
+          send(unread, triggerTurn);
+        }
       },
     });
   }
@@ -60,18 +62,24 @@ export class ParentRunNotificationGate {
   }
 
   onParentAgentStart(): void {
-    if (!this.disposed) this.parentRunActive = true;
+    if (!this.disposed) {
+      this.parentRunActive = true;
+    }
   }
 
   onParentAgentSettled(): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
 
     this.parentRunActive = false;
     this.flushIfReady();
   }
 
   onBackgroundAgentsActiveChanged(active: boolean): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
     this.backgroundAgentsActive = active;
     this.flushIfReady();
   }
@@ -82,14 +90,18 @@ export class ParentRunNotificationGate {
   }
 
   private schedule(key: string, notification: PendingNotification): void {
-    if (this.disposed) return;
+    if (this.disposed) {
+      return;
+    }
 
     this.pendingNotifications.set(key, notification);
     this.flushIfReady();
   }
 
   private flushIfReady(): void {
-    if (this.parentRunActive || this.backgroundAgentsActive) return;
+    if (this.parentRunActive || this.backgroundAgentsActive) {
+      return;
+    }
 
     const unreadNotifications = [...this.pendingNotifications.values()].filter((notification) =>
       notification.isUnread(),

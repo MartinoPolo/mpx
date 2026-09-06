@@ -66,15 +66,21 @@ export class SubagentScheduler {
     this.store = store;
 
     for (const job of store.list()) {
-      if (job.enabled) this.scheduleJob(job);
+      if (job.enabled) {
+        this.scheduleJob(job);
+      }
     }
   }
 
   /** Stop all timers; drop refs. Safe to call repeatedly. */
   stop(): void {
-    for (const cron of this.jobs.values()) cron.stop();
+    for (const cron of this.jobs.values()) {
+      cron.stop();
+    }
     this.jobs.clear();
-    for (const t of this.intervals.values()) clearTimeout(t);
+    for (const t of this.intervals.values()) {
+      clearTimeout(t);
+    }
     this.intervals.clear();
     this.store = undefined;
     this.pi = undefined;
@@ -125,17 +131,23 @@ export class SubagentScheduler {
     }
     const job = this.buildJob(input);
     store.add(job);
-    if (job.enabled) this.scheduleJob(job);
+    if (job.enabled) {
+      this.scheduleJob(job);
+    }
     this.emit({ type: 'added', job });
     return job;
   }
 
   removeJob(id: string): boolean {
     const store = this.requireStore();
-    if (!store.get(id)) return false;
+    if (!store.get(id)) {
+      return false;
+    }
     this.unscheduleJob(id);
     const ok = store.remove(id);
-    if (ok) this.emit({ type: 'removed', jobId: id });
+    if (ok) {
+      this.emit({ type: 'removed', jobId: id });
+    }
     return ok;
   }
 
@@ -143,9 +155,13 @@ export class SubagentScheduler {
   updateJob(id: string, patch: Partial<ScheduledSubagent>): ScheduledSubagent | undefined {
     const store = this.requireStore();
     const updated = store.update(id, patch);
-    if (!updated) return undefined;
+    if (!updated) {
+      return undefined;
+    }
     this.unscheduleJob(id);
-    if (updated.enabled) this.scheduleJob(updated);
+    if (updated.enabled) {
+      this.scheduleJob(updated);
+    }
     this.emit({ type: 'updated', job: updated });
     return updated;
   }
@@ -153,10 +169,16 @@ export class SubagentScheduler {
   /** Next-run time as ISO, or undefined if not currently armed. */
   getNextRun(jobId: string): string | undefined {
     const cron = this.jobs.get(jobId);
-    if (cron) return cron.nextRun()?.toISOString();
+    if (cron) {
+      return cron.nextRun()?.toISOString();
+    }
     const job = this.store?.get(jobId);
-    if (!job?.enabled) return undefined;
-    if (job.scheduleType === 'once') return job.schedule;
+    if (!job?.enabled) {
+      return undefined;
+    }
+    if (job.scheduleType === 'once') {
+      return job.schedule;
+    }
     if (job.scheduleType === 'interval' && job.intervalMs) {
       // Before the first fire there's no `lastRun`, so fall back to "now" —
       // accurate at create time (setInterval was just armed) and within
@@ -171,7 +193,9 @@ export class SubagentScheduler {
 
   private scheduleJob(job: ScheduledSubagent): void {
     const store = this.store;
-    if (!store) return;
+    if (!store) {
+      return;
+    }
     try {
       if (job.scheduleType === 'interval' && job.intervalMs) {
         const t = setInterval(() => this.executeJob(job.id), job.intervalMs);
@@ -185,7 +209,9 @@ export class SubagentScheduler {
             // Auto-disable one-shots after they fire (mirrors pi-cron-schedule)
             store.update(job.id, { enabled: false });
             const updated = store.get(job.id);
-            if (updated) this.emit({ type: 'updated', job: updated });
+            if (updated) {
+              this.emit({ type: 'updated', job: updated });
+            }
           }, delay);
           this.intervals.set(job.id, t);
         } else {
@@ -234,9 +260,13 @@ export class SubagentScheduler {
     const pi = this.pi;
     const ctx = this.ctx;
     const manager = this.manager;
-    if (!store || !pi || !ctx || !manager) return;
+    if (!store || !pi || !ctx || !manager) {
+      return;
+    }
     const job = store.get(id);
-    if (!job?.enabled) return;
+    if (!job?.enabled) {
+      return;
+    }
 
     store.update(id, { lastStatus: 'running' });
 
@@ -246,7 +276,9 @@ export class SubagentScheduler {
     let resolvedModel: any | undefined;
     if (job.model) {
       const r = resolveModel(job.model, ctx.modelRegistry);
-      if (typeof r !== 'string') resolvedModel = r;
+      if (typeof r !== 'string') {
+        resolvedModel = r;
+      }
     }
 
     let agentId: string;
@@ -301,11 +333,15 @@ export class SubagentScheduler {
   }
 
   private emit(event: ScheduleChangeEvent): void {
-    if (this.pi) this.pi.events.emit('subagents:scheduled', event);
+    if (this.pi) {
+      this.pi.events.emit('subagents:scheduled', event);
+    }
   }
 
   private requireStore(): ScheduleStore {
-    if (!this.store) throw new Error('Scheduler not started — no active session.');
+    if (!this.store) {
+      throw new Error('Scheduler not started — no active session.');
+    }
     return this.store;
   }
 
@@ -324,10 +360,14 @@ export class SubagentScheduler {
     const trimmed = s.trim();
     // "+10m" — relative one-shot
     const rel = SubagentScheduler.parseRelativeTime(trimmed);
-    if (rel !== null) return { type: 'once', normalized: rel };
+    if (rel !== null) {
+      return { type: 'once', normalized: rel };
+    }
     // "5m" — interval
     const ivl = SubagentScheduler.parseInterval(trimmed);
-    if (ivl !== null) return { type: 'interval', intervalMs: ivl, normalized: trimmed };
+    if (ivl !== null) {
+      return { type: 'interval', intervalMs: ivl, normalized: trimmed };
+    }
     // ISO timestamp — one-shot. Reject past timestamps upfront so we never
     // create a dead-on-arrival record (scheduleJob's safety net still catches
     // micro-races from `+0s`-style relatives).
@@ -342,7 +382,9 @@ export class SubagentScheduler {
     }
     // Cron — 6-field
     const cronCheck = SubagentScheduler.validateCronExpression(trimmed);
-    if (cronCheck.valid) return { type: 'cron', normalized: trimmed };
+    if (cronCheck.valid) {
+      return { type: 'cron', normalized: trimmed };
+    }
     throw new Error(
       `Invalid schedule "${s}". Use 6-field cron (e.g. "0 0 9 * * 1" — 9am every Monday), interval ("5m"/"1h"), or one-shot ("+10m" / ISO).`,
     );
@@ -369,7 +411,9 @@ export class SubagentScheduler {
   /** "+10s"/"+5m"/"+1h"/"+2d" → ISO timestamp. */
   static parseRelativeTime(s: string): string | null {
     const m = s.match(/^\+(\d+)(s|m|h|d)$/);
-    if (!m) return null;
+    if (!m) {
+      return null;
+    }
     const ms =
       parseInt(m[1], 10) *
       { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'];
@@ -379,7 +423,9 @@ export class SubagentScheduler {
   /** "10s"/"5m"/"1h"/"2d" → milliseconds. */
   static parseInterval(s: string): number | null {
     const m = s.match(/^(\d+)(s|m|h|d)$/);
-    if (!m) return null;
+    if (!m) {
+      return null;
+    }
     return (
       parseInt(m[1], 10) *
       { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd']

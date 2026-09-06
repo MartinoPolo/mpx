@@ -59,10 +59,14 @@ export function checkModelScope(args: {
   modelInput?: string;
 }): ModelScopeVerdict {
   const { model, cwd, modelRegistry, callerSupplied, agentLabel, modelInput } = args;
-  if (!scopeModelsEnabled || !model) return { kind: 'ok' };
+  if (!scopeModelsEnabled || !model) {
+    return { kind: 'ok' };
+  }
 
   const allowed = resolveEnabledModels(readEnabledModels(cwd), modelRegistry, cwd);
-  if (!allowed || isModelInScope(model, allowed)) return { kind: 'ok' };
+  if (!allowed || isModelInScope(model, allowed)) {
+    return { kind: 'ok' };
+  }
 
   if (callerSupplied) {
     const list = [...allowed]

@@ -26,7 +26,9 @@ const MAX_MEMORY_LINES = 200;
  * Uses a whitelist: only alphanumeric, hyphens, underscores, and dots (no leading dot).
  */
 export function isUnsafeName(name: string): boolean {
-  if (!name || name.length > 128) return true;
+  if (!name || name.length > 128) {
+    return true;
+  }
   return !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name);
 }
 
@@ -46,8 +48,12 @@ export function isSymlink(filePath: string): boolean {
  * Returns undefined if the file doesn't exist, is a symlink, or can't be read.
  */
 export function safeReadFile(filePath: string): string | undefined {
-  if (!existsSync(filePath)) return undefined;
-  if (isSymlink(filePath)) return undefined;
+  if (!existsSync(filePath)) {
+    return undefined;
+  }
+  if (isSymlink(filePath)) {
+    return undefined;
+  }
   try {
     return readFileSync(filePath, 'utf-8');
   } catch {
@@ -93,11 +99,15 @@ export function ensureMemoryDir(memoryDir: string): void {
  */
 export function readMemoryIndex(memoryDir: string): string | undefined {
   // Reject symlinked memory directories
-  if (isSymlink(memoryDir)) return undefined;
+  if (isSymlink(memoryDir)) {
+    return undefined;
+  }
 
   const memoryFile = join(memoryDir, 'MEMORY.md');
   const content = safeReadFile(memoryFile);
-  if (content === undefined) return undefined;
+  if (content === undefined) {
+    return undefined;
+  }
 
   const lines = content.split('\n');
   if (lines.length > MAX_MEMORY_LINES) {

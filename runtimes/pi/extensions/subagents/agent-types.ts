@@ -46,9 +46,13 @@ export function setDefaultsDisabled(b: boolean): void {
 export function buildAgentRegistry(userAgents: Map<string, AgentConfig>): Map<string, AgentConfig> {
   const registry = new Map<string, AgentConfig>();
   if (!disableDefaults) {
-    for (const [name, config] of DEFAULT_AGENTS) registry.set(name, config);
+    for (const [name, config] of DEFAULT_AGENTS) {
+      registry.set(name, config);
+    }
   }
-  for (const [name, config] of userAgents) registry.set(name, config);
+  for (const [name, config] of userAgents) {
+    registry.set(name, config);
+  }
   return registry;
 }
 
@@ -66,10 +70,14 @@ export function registerAgents(userAgents: Map<string, AgentConfig>): void {
 
 /** Case-insensitive key resolution within a registry. */
 function resolveKeyIn(registry: Map<string, AgentConfig>, name: string): string | undefined {
-  if (registry.has(name)) return name;
+  if (registry.has(name)) {
+    return name;
+  }
   const lower = name.toLowerCase();
   for (const key of registry.keys()) {
-    if (key.toLowerCase() === lower) return key;
+    if (key.toLowerCase() === lower) {
+      return key;
+    }
   }
   return undefined;
 }
@@ -99,14 +107,16 @@ export function getAgentConfigIn(
 /** Check if a type is valid and enabled (case-insensitive) in a registry. */
 export function isValidTypeIn(registry: Map<string, AgentConfig>, type: string): boolean {
   const key = resolveKeyIn(registry, type);
-  if (!key) return false;
+  if (!key) {
+    return false;
+  }
   return registry.get(key)?.enabled !== false;
 }
 
 /** Get all enabled type names in a registry (for spawning and tool descriptions). */
 export function getAvailableTypesIn(registry: Map<string, AgentConfig>): string[] {
   return [...registry.entries()]
-    .filter(([_, config]) => config.enabled !== false)
+    .filter(([, config]) => config.enabled !== false)
     .map(([name]) => name);
 }
 
@@ -133,14 +143,14 @@ export function getAllTypes(): string[] {
 /** Get names of default agents currently in the registry. */
 export function getDefaultAgentNames(): string[] {
   return [...agents.entries()]
-    .filter(([_, config]) => config.isDefault === true)
+    .filter(([, config]) => config.isDefault === true)
     .map(([name]) => name);
 }
 
 /** Get names of user-defined agents (non-defaults) currently in the registry. */
 export function getUserAgentNames(): string[] {
   return [...agents.entries()]
-    .filter(([_, config]) => config.isDefault !== true)
+    .filter(([, config]) => config.isDefault !== true)
     .map(([name]) => name);
 }
 

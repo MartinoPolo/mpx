@@ -129,7 +129,13 @@ export function createNodeSessionResumeLaunchApplicationService(
         },
         { inventoryCanonical, inventoryProjectSkills },
       ),
-    prepareExecutor: async ({ plan, userConfig, project, repositoryId, selection }) => {
+    prepareExecutor: async ({
+      plan,
+      userConfig: _userConfig,
+      project,
+      repositoryId,
+      selection: _selection,
+    }) => {
       const resumeContext = context;
       const evidence = await collectNodeExecutorEvidence(resumeContext, plan.launch.executor.kind);
       return {

@@ -18,8 +18,11 @@ test('resolves relative Pi agent directories from the session cwd and falls back
     delete process.env.PI_CODING_AGENT_DIR;
     assert.equal(resolvePiCodingAgentDir(cwd), join(homedir(), '.pi', 'agent'));
   } finally {
-    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
-    else process.env.PI_CODING_AGENT_DIR = previous;
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
   }
 });
 

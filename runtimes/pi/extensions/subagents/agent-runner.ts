@@ -95,13 +95,17 @@ function extensionPackageName(extPath: string): string | undefined {
   let dir = dirname(extPath);
   for (;;) {
     // Climbing into node_modules means we've left the owning package's tree.
-    if (basename(dir) === 'node_modules') return undefined;
+    if (basename(dir) === 'node_modules') {
+      return undefined;
+    }
     let pkg: { name?: unknown; pi?: { extensions?: unknown } };
     try {
       pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
     } catch {
       const parent = dirname(dir);
-      if (parent === dir) return undefined; // walked to the filesystem root
+      if (parent === dir) {
+        return undefined;
+      } // walked to the filesystem root
       dir = parent;
       continue;
     }
@@ -152,7 +156,9 @@ export function parseExtensionsSpec(
   const paths: string[] = [];
   let wildcard = false;
   for (const entry of entries) {
-    if (!entry) continue;
+    if (!entry) {
+      continue;
+    }
     if (entry === '*') {
       wildcard = true;
       continue;
@@ -190,18 +196,26 @@ export function parseExtSelectors(entries: string[]): {
   const extNames = new Set<string>();
   const narrowing = new Map<string, Set<string>>();
   for (const raw of entries) {
-    if (!raw) continue;
+    if (!raw) {
+      continue;
+    }
     const body = raw.slice('ext:'.length);
     const slash = body.indexOf('/');
     // Extension name matches case-insensitively (matches the loader-side canonical
     // name). Tool names are case-preserved — they're matched against pi-mono's
     // registered identifiers, which are case-sensitive.
     const name = (slash === -1 ? body : body.slice(0, slash)).trim().toLowerCase();
-    if (!name) continue;
+    if (!name) {
+      continue;
+    }
     extNames.add(name);
-    if (slash === -1) continue;
+    if (slash === -1) {
+      continue;
+    }
     const tool = body.slice(slash + 1).trim();
-    if (!tool) continue;
+    if (!tool) {
+      continue;
+    }
     let set = narrowing.get(name);
     if (!set) {
       set = new Set();
@@ -260,22 +274,32 @@ export function installExtensionToolScope(
     const optInActive = extNames.size > 0;
     for (const extension of loader.getExtensions().extensions) {
       const canons = extensionCanonicalNames(extension.path);
-      if (optInActive && !canons.some((c) => extNames.has(c))) continue;
+      if (optInActive && !canons.some((c) => extNames.has(c))) {
+        continue;
+      }
       // First alias that carries a narrowing set — a user won't narrow one
       // extension under two different names, so first-match is correct.
       const narrowed = canons.map((c) => narrowing.get(c)).find(Boolean);
       for (const name of extension.tools.keys()) {
-        if (narrowed && !narrowed.has(name)) continue;
-        if (disallowedSet?.has(name)) continue;
+        if (narrowed && !narrowed.has(name)) {
+          continue;
+        }
+        if (disallowedSet?.has(name)) {
+          continue;
+        }
         keep.add(name);
       }
     }
-    for (const name of EXCLUDED_TOOL_NAMES) keep.delete(name);
+    for (const name of EXCLUDED_TOOL_NAMES) {
+      keep.delete(name);
+    }
     // Opt-in nested delegation tools share EXCLUDED_TOOL_NAMES' names but are
     // legitimately active for this agent — re-admit them so the renarrow keeps
     // them in the active set and beforeToolCall doesn't block them.
     for (const name of nestedToolNames) {
-      if (!disallowedSet?.has(name)) keep.add(name);
+      if (!disallowedSet?.has(name)) {
+        keep.add(name);
+      }
     }
     return keep;
   };
@@ -299,7 +323,9 @@ export function installExtensionToolScope(
   renarrow();
 
   session.subscribe((event: AgentSessionEvent) => {
-    if (event.type === 'turn_end') renarrow();
+    if (event.type === 'turn_end') {
+      renarrow();
+    }
   });
 
   const priorBeforeToolCall = session.agent.beforeToolCall;
@@ -319,7 +345,9 @@ let defaultMaxTurns: number | undefined;
 
 /** Normalize max turns. undefined or 0 = unlimited, otherwise minimum 1. */
 export function normalizeMaxTurns(n: number | undefined): number | undefined {
-  if (n == null || n === 0) return undefined;
+  if (n == null || n === 0) {
+    return undefined;
+  }
   return Math.max(1, n);
 }
 
@@ -456,9 +484,13 @@ function collectResponseText(session: AgentSession) {
 function getLastAssistantText(session: AgentSession, startIndex = 0): string {
   for (let i = session.messages.length - 1; i >= startIndex; i--) {
     const msg = session.messages[i];
-    if (msg.role !== 'assistant') continue;
+    if (msg.role !== 'assistant') {
+      continue;
+    }
     const text = extractText(msg.content).trim();
-    if (text) return text;
+    if (text) {
+      return text;
+    }
   }
   return '';
 }
@@ -480,7 +512,9 @@ function getLastAssistantText(session: AgentSession, startIndex = 0): string {
 function finalTurnError(session: AgentSession, startIndex = 0): string | undefined {
   for (let i = session.messages.length - 1; i >= startIndex; i--) {
     const msg = session.messages[i];
-    if (msg.role !== 'assistant') continue;
+    if (msg.role !== 'assistant') {
+      continue;
+    }
     if (msg.stopReason === 'error') {
       return (
         (msg as { errorMessage?: string }).errorMessage?.trim() || 'provider error with no output'
@@ -499,7 +533,9 @@ function finalTurnError(session: AgentSession, startIndex = 0): string | undefin
  * Returns a cleanup function to remove the listener.
  */
 function forwardAbortSignal(session: AgentSession, signal?: AbortSignal): () => void {
-  if (!signal) return () => {};
+  if (!signal) {
+    return () => {};
+  }
   const onAbort = () => session.abort();
   signal.addEventListener('abort', onAbort, { once: true });
   return () => signal.removeEventListener('abort', onAbort);
@@ -509,10 +545,15 @@ function resolveConfiguredSessionDir(
   sessionDir: string | undefined,
   cwd: string,
 ): string | undefined {
-  if (!sessionDir) return undefined;
-  if (sessionDir === '~' || sessionDir.startsWith('~/'))
+  if (!sessionDir) {
+    return undefined;
+  }
+  if (sessionDir === '~' || sessionDir.startsWith('~/')) {
     return resolve(homedir(), sessionDir.slice(2));
-  if (isAbsolute(sessionDir)) return sessionDir;
+  }
+  if (isAbsolute(sessionDir)) {
+    return sessionDir;
+  }
   return resolve(cwd, sessionDir);
 }
 
@@ -561,8 +602,12 @@ export function resolveMemoryScopePolicy(
   projectTrusted: boolean,
   configuredScope: MemoryScope | undefined,
 ): MemoryScope | undefined {
-  if (!configuredScope || projectTrusted) return configuredScope;
-  if (source === 'project') return undefined;
+  if (!configuredScope || projectTrusted) {
+    return configuredScope;
+  }
+  if (source === 'project') {
+    return undefined;
+  }
   return configuredScope === 'user' ? 'user' : undefined;
 }
 
@@ -630,12 +675,16 @@ export async function runAgent(
     if (hasWriteTools) {
       // Read-write memory: add any missing memory tool names (read/write/edit)
       const extraNames = getMemoryToolNames(existingNames);
-      if (extraNames.length > 0) toolNames = [...toolNames, ...extraNames];
+      if (extraNames.length > 0) {
+        toolNames = [...toolNames, ...extraNames];
+      }
       extras.memoryBlock = buildMemoryBlock(agentConfig.name, memoryScope, configCwd);
     } else {
       // Read-only memory: only add read tool name, use read-only prompt
       const extraNames = getReadOnlyMemoryToolNames(existingNames);
-      if (extraNames.length > 0) toolNames = [...toolNames, ...extraNames];
+      if (extraNames.length > 0) {
+        toolNames = [...toolNames, ...extraNames];
+      }
       extras.memoryBlock = buildReadOnlyMemoryBlock(agentConfig.name, memoryScope, configCwd);
     }
   }
@@ -648,7 +697,9 @@ export async function runAgent(
     // Unknown type fallback: spread the canonical general-purpose config (defensive —
     // unreachable in practice since index.ts resolves unknown types before calling runAgent).
     const fallback = DEFAULT_AGENTS.get('general-purpose');
-    if (!fallback) throw new Error(`No fallback config available for unknown type "${type}"`);
+    if (!fallback) {
+      throw new Error(`No fallback config available for unknown type "${type}"`);
+    }
     systemPrompt = buildAgentPrompt(
       { ...fallback, name: type },
       effectiveCwd,
@@ -717,7 +768,9 @@ export async function runAgent(
             ...base,
             extensions: base.extensions.filter((e) => {
               const canons = extensionCanonicalNames(e.path);
-              if (canons.some((n) => excludeNames.has(n))) return false; // exclude wins
+              if (canons.some((n) => excludeNames.has(n))) {
+                return false;
+              } // exclude wins
               return loadAll || canons.some((n) => keepNames.has(n));
             }),
           };
@@ -903,11 +956,15 @@ export async function runAgent(
     const denyTools = new Set<string>(EXCLUDED_TOOL_NAMES.filter((t) => !nestedToolNames.has(t)));
     // Keep only the built-ins the agent asked for — deny the rest.
     for (const name of BUILTIN_TOOL_NAMES) {
-      if (!builtinToolNameSet.has(name)) denyTools.add(name);
+      if (!builtinToolNameSet.has(name)) {
+        denyTools.add(name);
+      }
     }
     if (disallowedSet) {
       // disallowed_tools wins even over an opt-in nested tool of the same name.
-      for (const name of disallowedSet) denyTools.add(name);
+      for (const name of disallowedSet) {
+        denyTools.add(name);
+      }
     }
     sessionExcludeTools = [...denyTools];
   }
@@ -1028,12 +1085,13 @@ export async function runAgent(
     }
     if (event.type === 'message_end' && event.message.role === 'assistant') {
       const u = (event.message as any).usage;
-      if (u)
+      if (u) {
         options.onAssistantUsage?.({
           input: u.input ?? 0,
           output: u.output ?? 0,
           cacheWrite: u.cacheWrite ?? 0,
         });
+      }
     }
     if (event.type === 'compaction_end' && !event.aborted && event.result) {
       options.onCompaction?.({ reason: event.reason, tokensBefore: event.result.tokensBefore });
@@ -1099,18 +1157,21 @@ export async function resumeAgent(
   const unsubEvents =
     options.onToolActivity || options.onAssistantUsage || options.onCompaction
       ? session.subscribe((event: AgentSessionEvent) => {
-          if (event.type === 'tool_execution_start')
+          if (event.type === 'tool_execution_start') {
             options.onToolActivity?.({ type: 'start', toolName: event.toolName });
-          if (event.type === 'tool_execution_end')
+          }
+          if (event.type === 'tool_execution_end') {
             options.onToolActivity?.({ type: 'end', toolName: event.toolName });
+          }
           if (event.type === 'message_end' && event.message.role === 'assistant') {
             const u = (event.message as any).usage;
-            if (u)
+            if (u) {
               options.onAssistantUsage?.({
                 input: u.input ?? 0,
                 output: u.output ?? 0,
                 cacheWrite: u.cacheWrite ?? 0,
               });
+            }
           }
           if (event.type === 'compaction_end' && !event.aborted && event.result) {
             options.onCompaction?.({
@@ -1152,17 +1213,25 @@ export function getAgentConversation(session: AgentSession): string {
   for (const msg of session.messages) {
     if (msg.role === 'user') {
       const text = typeof msg.content === 'string' ? msg.content : extractText(msg.content);
-      if (text.trim()) parts.push(`[User]: ${text.trim()}`);
+      if (text.trim()) {
+        parts.push(`[User]: ${text.trim()}`);
+      }
     } else if (msg.role === 'assistant') {
       const textParts: string[] = [];
       const toolCalls: string[] = [];
       for (const c of msg.content) {
-        if (c.type === 'text' && c.text) textParts.push(c.text);
-        else if (c.type === 'toolCall')
+        if (c.type === 'text' && c.text) {
+          textParts.push(c.text);
+        } else if (c.type === 'toolCall') {
           toolCalls.push(`  Tool: ${(c as any).name ?? (c as any).toolName ?? 'unknown'}`);
+        }
       }
-      if (textParts.length > 0) parts.push(`[Assistant]: ${textParts.join('\n')}`);
-      if (toolCalls.length > 0) parts.push(`[Tool Calls]:\n${toolCalls.join('\n')}`);
+      if (textParts.length > 0) {
+        parts.push(`[Assistant]: ${textParts.join('\n')}`);
+      }
+      if (toolCalls.length > 0) {
+        parts.push(`[Tool Calls]:\n${toolCalls.join('\n')}`);
+      }
     } else if (msg.role === 'toolResult') {
       const text = extractText(msg.content);
       const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;

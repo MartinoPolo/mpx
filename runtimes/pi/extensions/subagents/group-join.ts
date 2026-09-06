@@ -61,10 +61,14 @@ export class GroupJoinManager {
    */
   onAgentComplete(record: AgentRecord): 'delivered' | 'held' | 'pass' {
     const groupId = this.agentToGroup.get(record.id);
-    if (!groupId) return 'pass';
+    if (!groupId) {
+      return 'pass';
+    }
 
     const group = this.groups.get(groupId);
-    if (!group || group.delivered) return 'pass';
+    if (!group || group.delivered) {
+      return 'pass';
+    }
 
     group.completedRecords.set(record.id, record);
 
@@ -88,17 +92,23 @@ export class GroupJoinManager {
   /** VENDOR EDIT (mpx-pi): remove a canceled agent without delivering its record. */
   cancelAgent(agentId: string): void {
     const groupId = this.agentToGroup.get(agentId);
-    if (!groupId) return;
+    if (!groupId) {
+      return;
+    }
 
     const group = this.groups.get(groupId);
     this.agentToGroup.delete(agentId);
-    if (!group || group.delivered) return;
+    if (!group || group.delivered) {
+      return;
+    }
 
     group.agentIds.delete(agentId);
     group.completedRecords.delete(agentId);
 
     if (group.agentIds.size === 0) {
-      if (group.timeoutHandle) clearTimeout(group.timeoutHandle);
+      if (group.timeoutHandle) {
+        clearTimeout(group.timeoutHandle);
+      }
       this.cleanupGroup(groupId);
       return;
     }
@@ -109,13 +119,17 @@ export class GroupJoinManager {
   }
 
   private onTimeout(group: AgentGroup): void {
-    if (group.delivered) return;
+    if (group.delivered) {
+      return;
+    }
     group.timeoutHandle = undefined;
 
     // Partial delivery — some agents still running
     const remaining = new Set<string>();
     for (const id of group.agentIds) {
-      if (!group.completedRecords.has(id)) remaining.add(id);
+      if (!group.completedRecords.has(id)) {
+        remaining.add(id);
+      }
     }
 
     // Clean up agentToGroup for delivered agents (they won't complete again)
@@ -145,7 +159,9 @@ export class GroupJoinManager {
 
   private cleanupGroup(groupId: string): void {
     const group = this.groups.get(groupId);
-    if (!group) return;
+    if (!group) {
+      return;
+    }
     for (const id of group.agentIds) {
       this.agentToGroup.delete(id);
     }
@@ -159,7 +175,9 @@ export class GroupJoinManager {
 
   dispose(): void {
     for (const group of this.groups.values()) {
-      if (group.timeoutHandle) clearTimeout(group.timeoutHandle);
+      if (group.timeoutHandle) {
+        clearTimeout(group.timeoutHandle);
+      }
     }
     this.groups.clear();
     this.agentToGroup.clear();

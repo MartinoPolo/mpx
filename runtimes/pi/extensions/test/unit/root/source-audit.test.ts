@@ -19,16 +19,22 @@ const forbiddenActiveLiterals = [
 
 function filesUnder(directory: string, include: (file: string) => boolean): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.name === 'dist' || entry.name === 'node_modules' || entry.name === 'test') return [];
+    if (entry.name === 'dist' || entry.name === 'node_modules' || entry.name === 'test') {
+      return [];
+    }
     const target = join(directory, entry.name);
-    if (entry.isDirectory()) return filesUnder(target, include);
+    if (entry.isDirectory()) {
+      return filesUnder(target, include);
+    }
     return include(target) ? [target] : [];
   });
 }
 
 function packageFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.name === 'dist' || entry.name === 'node_modules') return [];
+    if (entry.name === 'dist' || entry.name === 'node_modules') {
+      return [];
+    }
     const target = join(directory, entry.name);
     return entry.isDirectory() ? packageFiles(target) : [target];
   });
@@ -85,7 +91,9 @@ function childProcessViolations(source: ts.SourceFile): string[] {
       const functionName = node.expression.text;
       if (childProcessFunctions.has(functionName)) {
         for (const argument of node.arguments) {
-          if (!ts.isObjectLiteralExpression(argument)) continue;
+          if (!ts.isObjectLiteralExpression(argument)) {
+            continue;
+          }
           for (const property of argument.properties) {
             if (
               ts.isPropertyAssignment(property) &&

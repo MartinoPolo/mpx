@@ -15,7 +15,6 @@ import type { PreparationPlan } from '@mpx/config';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   catalogPath,
-  defaultContext,
   immutableInstaller,
   installerSourceRoot,
   preparationRuntime,

@@ -32,7 +32,9 @@ test('formatter and linter receive malicious filenames as exact argv without a s
     process.execPath,
     [path.join(projectRoot, 'eslint.mjs'), '--fix', maliciousFile],
   ]);
-  for (const call of execute.mock.calls) assert.equal(call[2].shell, false);
+  for (const call of execute.mock.calls) {
+    assert.equal(call[2].shell, false);
+  }
 });
 
 test('native Biome receives malicious filenames as exact argv without a shell', () => {
@@ -52,19 +54,25 @@ test('native Biome receives malicious filenames as exact argv without a shell', 
       [biomeBinary, ['lint', '--fix', maliciousFile]],
     ],
   );
-  for (const call of execute.mock.calls) assert.equal(call[2].shell, false);
+  for (const call of execute.mock.calls) {
+    assert.equal(call[2].shell, false);
+  }
 });
 
 test('staged malicious filenames are passed after git pathspec separator as exact argv', () => {
   const secondFile = `semi; ampersand& command$(touch owned).js`;
   const execute = vi.fn((_executable, args) => {
-    if (args.includes('--name-only')) return `${maliciousFile}\0${secondFile}\0`;
+    if (args.includes('--name-only')) {
+      return `${maliciousFile}\0${secondFile}\0`;
+    }
     return 'diff';
   });
   const projectRoot = path.resolve('project');
 
   const stagedFiles = readStagedFiles(projectRoot, execute);
-  for (const file of stagedFiles) readStagedFileDiff(projectRoot, file, execute);
+  for (const file of stagedFiles) {
+    readStagedFileDiff(projectRoot, file, execute);
+  }
 
   assert.deepEqual(stagedFiles, [maliciousFile, secondFile]);
   assert.deepEqual(
@@ -75,5 +83,7 @@ test('staged malicious filenames are passed after git pathspec separator as exac
       ['git', ['diff', '--cached', '--', secondFile]],
     ],
   );
-  for (const call of execute.mock.calls) assert.equal(call[2].shell, false);
+  for (const call of execute.mock.calls) {
+    assert.equal(call[2].shell, false);
+  }
 });

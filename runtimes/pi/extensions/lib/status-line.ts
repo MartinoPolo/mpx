@@ -46,9 +46,13 @@ export interface WorktreePaths {
 }
 
 function basename(input: string): string {
-  if (input === '') return '';
+  if (input === '') {
+    return '';
+  }
   const trimmed = input.replace(/[/\\]+$/, '');
-  if (trimmed === '') return input[0] === '/' ? '/' : '\\';
+  if (trimmed === '') {
+    return input[0] === '/' ? '/' : '\\';
+  }
   const lastSeparator = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
   return lastSeparator === -1 ? trimmed : trimmed.slice(lastSeparator + 1);
 }
@@ -68,9 +72,13 @@ function numericPrefix(value: string): number {
 
 function remoteWebRoot(remote: string): string {
   let url = remote.trim();
-  if (url === '') return '';
+  if (url === '') {
+    return '';
+  }
   const scpLike = url.match(/^[\w.+-]+@([^:/]+):(.+)$/);
-  if (scpLike) url = `https://${scpLike[1]}/${scpLike[2]}`;
+  if (scpLike) {
+    url = `https://${scpLike[1]}/${scpLike[2]}`;
+  }
   url = url
     .replace(/^(?:ssh|git):\/\/(?:[\w.+-]+@)?/, 'https://')
     .replace(/^https:\/\/([^/:]+):\d+\//, 'https://$1/')
@@ -90,12 +98,16 @@ function webViewPath(webRoot: string, view: 'tree' | 'compare'): string {
 
 export function buildBranchUrl(remote: string, branch: string): string {
   const webRoot = remoteWebRoot(remote);
-  if (webRoot === '' || branch === '') return '';
+  if (webRoot === '' || branch === '') {
+    return '';
+  }
   return webRoot + webViewPath(webRoot, 'tree') + encodeBranchPath(branch);
 }
 
 export function buildCiUrl(mergeRequest: MrFields): string {
-  if (mergeRequest.url === '') return '';
+  if (mergeRequest.url === '') {
+    return '';
+  }
   return mergeRequest.provider === 'github'
     ? `${mergeRequest.url}/checks`
     : `${mergeRequest.url}/pipelines`;
@@ -103,16 +115,26 @@ export function buildCiUrl(mergeRequest: MrFields): string {
 
 export function buildCompareUrl(remote: string, base: string, head: string): string {
   const webRoot = remoteWebRoot(remote);
-  if (webRoot === '' || base === '' || head === '' || base === head) return '';
+  if (webRoot === '' || base === '' || head === '' || base === head) {
+    return '';
+  }
   return `${webRoot}${webViewPath(webRoot, 'compare')}${encodeBranchPath(base)}...${encodeBranchPath(head)}`;
 }
 
 export function humanAge(seconds: number | string): string {
-  if (!isNonNegativeInt(seconds)) return '?';
+  if (!isNonNegativeInt(seconds)) {
+    return '?';
+  }
   const value = Number(seconds);
-  if (value >= 86400) return `${Math.trunc(value / 86400)}d`;
-  if (value >= 3600) return `${Math.trunc(value / 3600)}h`;
-  if (value >= 60) return `${Math.trunc(value / 60)}m`;
+  if (value >= 86400) {
+    return `${Math.trunc(value / 86400)}d`;
+  }
+  if (value >= 3600) {
+    return `${Math.trunc(value / 3600)}h`;
+  }
+  if (value >= 60) {
+    return `${Math.trunc(value / 60)}m`;
+  }
   return `${value}s`;
 }
 
@@ -153,15 +175,21 @@ export function parsePorcelainV2(output: string): GitStatus {
       status.behind = numericPrefix((fields[3] ?? '').replace(/^-/, ''));
     } else if (line.startsWith('1 ') || line.startsWith('2 ')) {
       const xy = line.trim().split(/\s+/)[1] ?? '';
-      if (xy.slice(0, 1) !== '.') status.staged++;
-      if (xy.slice(1, 2) !== '.') status.unstaged++;
+      if (xy.slice(0, 1) !== '.') {
+        status.staged++;
+      }
+      if (xy.slice(1, 2) !== '.') {
+        status.unstaged++;
+      }
     } else if (line.startsWith('u ')) {
       status.conflicts++;
     } else if (line.startsWith('? ')) {
       status.untracked++;
     }
   }
-  if (status.branch === '(detached)') status.branch = 'detached';
+  if (status.branch === '(detached)') {
+    status.branch = 'detached';
+  }
   return status;
 }
 
@@ -181,9 +209,13 @@ export function resolveProjectLocation(
     worktreeUrl: '',
     projectDir: cwd,
   };
-  if (worktree === undefined) return plain;
+  if (worktree === undefined) {
+    return plain;
+  }
   const mainProjectDir = path.dirname(worktree.commonDir);
-  if (samePath(mainProjectDir, worktree.toplevel)) return plain;
+  if (samePath(mainProjectDir, worktree.toplevel)) {
+    return plain;
+  }
   return {
     projectName: basename(mainProjectDir),
     projectUrl: `${toFileUrl(mainProjectDir)}/`,
@@ -194,22 +226,32 @@ export function resolveProjectLocation(
 }
 
 export function timeUntil(value: string, now: number = nowSeconds()): string {
-  if (value === '' || value === 'null') return '';
+  if (value === '' || value === 'null') {
+    return '';
+  }
   let resetEpoch: number;
   if (/^[0-9]+(\.[0-9]+)?$/.test(value)) {
     resetEpoch = Number(value.replace(/\.[^.]*$/, ''));
   } else {
     const parsed = Date.parse(value);
-    if (Number.isNaN(parsed)) return '';
+    if (Number.isNaN(parsed)) {
+      return '';
+    }
     resetEpoch = Math.floor(parsed / 1000);
   }
   const difference = resetEpoch - now;
-  if (difference <= 0) return '';
+  if (difference <= 0) {
+    return '';
+  }
   const days = Math.trunc(difference / 86400);
   const hours = Math.trunc((difference % 86400) / 3600);
   const minutes = Math.trunc((difference % 3600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
   return `${minutes}m`;
 }
 

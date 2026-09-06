@@ -14,26 +14,42 @@ import type { ScheduledSubagent } from '../types.js';
 
 /** Format an ISO timestamp as relative time ("in 4h", "2d ago", "—"). */
 function relTime(iso: string | undefined, now = Date.now()): string {
-  if (!iso) return '—';
+  if (!iso) {
+    return '—';
+  }
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '—';
+  if (Number.isNaN(t)) {
+    return '—';
+  }
   const diff = t - now;
   const abs = Math.abs(diff);
   const future = diff > 0;
-  if (abs < 60_000) return future ? 'in <1m' : '<1m ago';
+  if (abs < 60_000) {
+    return future ? 'in <1m' : '<1m ago';
+  }
   const m = Math.round(abs / 60_000);
-  if (m < 60) return future ? `in ${m}m` : `${m}m ago`;
+  if (m < 60) {
+    return future ? `in ${m}m` : `${m}m ago`;
+  }
   const h = Math.round(abs / 3_600_000);
-  if (h < 24) return future ? `in ${h}h` : `${h}h ago`;
+  if (h < 24) {
+    return future ? `in ${h}h` : `${h}h ago`;
+  }
   const d = Math.round(abs / 86_400_000);
   return future ? `in ${d}d` : `${d}d ago`;
 }
 
 /** One-line status icon. */
 function statusIcon(j: ScheduledSubagent): string {
-  if (!j.enabled) return '✗';
-  if (j.lastStatus === 'error') return '!';
-  if (j.lastStatus === 'running') return '⋯';
+  if (!j.enabled) {
+    return '✗';
+  }
+  if (j.lastStatus === 'error') {
+    return '!';
+  }
+  if (j.lastStatus === 'running') {
+    return '⋯';
+  }
   return '✓';
 }
 
@@ -87,14 +103,20 @@ export async function showSchedulesMenu(
 
   const labels = jobs.map((j) => formatJob(j, scheduler));
   const choice = await ctx.ui.select(`Scheduled jobs (${jobs.length}) — select to cancel`, labels);
-  if (!choice) return;
+  if (!choice) {
+    return;
+  }
 
   const idx = labels.indexOf(choice);
-  if (idx < 0) return;
+  if (idx < 0) {
+    return;
+  }
   const job = jobs[idx];
 
   const ok = await ctx.ui.confirm(`Cancel "${job.name}"?`, formatDetails(job, scheduler));
-  if (!ok) return;
+  if (!ok) {
+    return;
+  }
 
   scheduler.removeJob(job.id);
   ctx.ui.notify(`Cancelled "${job.name}".`, 'info');

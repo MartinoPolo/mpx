@@ -111,8 +111,12 @@ export function fgPreservingNestedStyles(theme: Theme, color: string, text: stri
 
 /** Format a token count compactly: "33.8k token", "1.2M token". */
 export function formatTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M token`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k token`;
+  if (count >= 1_000_000) {
+    return `${(count / 1_000_000).toFixed(1)}M token`;
+  }
+  if (count >= 1_000) {
+    return `${(count / 1_000).toFixed(1)}k token`;
+  }
   return `${count} token`;
 }
 
@@ -141,7 +145,9 @@ export function formatSessionTokens(
   if (compactions > 0) {
     annot.push(theme.fg('dim', `⇊${compactions}`));
   }
-  if (annot.length === 0) return tokenStr;
+  if (annot.length === 0) {
+    return tokenStr;
+  }
   return `${tokenStr} (${annot.join(' · ')})`;
 }
 
@@ -157,7 +163,9 @@ export function formatMs(ms: number): string {
 
 /** Format duration from start/completed timestamps. */
 export function formatDuration(startedAt: number, completedAt?: number): string {
-  if (completedAt) return formatMs(completedAt - startedAt);
+  if (completedAt) {
+    return formatMs(completedAt - startedAt);
+  }
   return `${formatMs(Date.now() - startedAt)} (running)`;
 }
 
@@ -178,13 +186,27 @@ export function buildInvocationTags(invocation: AgentInvocation | undefined): {
   tags: string[];
 } {
   const tags: string[] = [];
-  if (!invocation) return { tags };
-  if (invocation.thinking) tags.push(`thinking: ${invocation.thinking}`);
-  if (invocation.isolated) tags.push('isolated');
-  if (invocation.isolation === 'worktree') tags.push('worktree');
-  if (invocation.inheritContext) tags.push('inherit context');
-  if (invocation.runInBackground) tags.push('background');
-  if (invocation.maxTurns != null) tags.push(`max turns: ${invocation.maxTurns}`);
+  if (!invocation) {
+    return { tags };
+  }
+  if (invocation.thinking) {
+    tags.push(`thinking: ${invocation.thinking}`);
+  }
+  if (invocation.isolated) {
+    tags.push('isolated');
+  }
+  if (invocation.isolation === 'worktree') {
+    tags.push('worktree');
+  }
+  if (invocation.inheritContext) {
+    tags.push('inherit context');
+  }
+  if (invocation.runInBackground) {
+    tags.push('background');
+  }
+  if (invocation.maxTurns != null) {
+    tags.push(`max turns: ${invocation.maxTurns}`);
+  }
   return { modelName: invocation.modelName, tags };
 }
 
@@ -203,8 +225,12 @@ export function buildModelThinkingCells(
   theme: Theme,
 ): string[] {
   const cells: string[] = [];
-  if (invocation?.modelName) cells.push(theme.fg('accent', invocation.modelName));
-  if (invocation?.thinking) cells.push(theme.fg('dim', thinkingGauge(invocation.thinking)));
+  if (invocation?.modelName) {
+    cells.push(theme.fg('accent', invocation.modelName));
+  }
+  if (invocation?.thinking) {
+    cells.push(theme.fg('dim', thinkingGauge(invocation.thinking)));
+  }
   return cells;
 }
 
@@ -215,7 +241,9 @@ function truncateLine(text: string, len = 60): string {
       .split('\n')
       .find((l) => l.trim())
       ?.trim() ?? '';
-  if (line.length <= len) return line;
+  if (line.length <= len) {
+    return line;
+  }
   return line.slice(0, len) + '…';
 }
 
@@ -389,8 +417,12 @@ export class AgentWidget {
     // they line up with the running rows and with the main footer's agent bar.
     const parts: string[] = buildModelThinkingCells(a.invocation, theme);
     const activity = this.agentActivity.get(a.id);
-    if (activity) parts.push(formatTurns(activity.turnCount, activity.maxTurns));
-    if (a.toolUses > 0) parts.push(`${a.toolUses} tool use${a.toolUses === 1 ? '' : 's'}`);
+    if (activity) {
+      parts.push(formatTurns(activity.turnCount, activity.maxTurns));
+    }
+    if (a.toolUses > 0) {
+      parts.push(`${a.toolUses} tool use${a.toolUses === 1 ? '' : 's'}`);
+    }
     parts.push(duration);
 
     const modeTag = modeLabel ? ` ${theme.fg('dim', `(${modeLabel})`)}` : '';
@@ -417,7 +449,9 @@ export class AgentWidget {
     const hasFinished = finished.length > 0;
 
     // Nothing to show — return empty (widget will be unregistered by update())
-    if (!hasActive && !hasFinished) return [];
+    if (!hasActive && !hasFinished) {
+      return [];
+    }
 
     const w = tui.terminal.columns;
     const truncate = (line: string) => truncateToWidth(line, w);
@@ -449,9 +483,15 @@ export class AgentWidget {
 
       // VENDOR EDIT (mpx-pi, Phase 7 row 11): model and thinking columns.
       const parts: string[] = buildModelThinkingCells(a.invocation, theme);
-      if (bg) parts.push(formatTurns(bg.turnCount, bg.maxTurns));
-      if (toolUses > 0) parts.push(`${toolUses} tool use${toolUses === 1 ? '' : 's'}`);
-      if (tokenText) parts.push(tokenText);
+      if (bg) {
+        parts.push(formatTurns(bg.turnCount, bg.maxTurns));
+      }
+      if (toolUses > 0) {
+        parts.push(`${toolUses} tool use${toolUses === 1 ? '' : 's'}`);
+      }
+      if (tokenText) {
+        parts.push(tokenText);
+      }
       parts.push(elapsed);
       const statsText = parts.join(' · ');
 
@@ -485,8 +525,12 @@ export class AgentWidget {
     if (totalBody <= maxBody) {
       // Everything fits — add all lines and fix up connectors for the last item.
       lines.push(...finishedLines);
-      for (const pair of runningLines) lines.push(...pair);
-      if (queuedLine) lines.push(queuedLine);
+      for (const pair of runningLines) {
+        lines.push(...pair);
+      }
+      if (queuedLine) {
+        lines.push(queuedLine);
+      }
 
       // Fix last connector: swap ├─ → └─ and │ → space for activity lines.
       if (lines.length > 1) {
@@ -537,8 +581,12 @@ export class AgentWidget {
 
       // Overflow summary
       const overflowParts: string[] = [];
-      if (hiddenRunning > 0) overflowParts.push(`${hiddenRunning} running`);
-      if (hiddenFinished > 0) overflowParts.push(`${hiddenFinished} finished`);
+      if (hiddenRunning > 0) {
+        overflowParts.push(`${hiddenRunning} running`);
+      }
+      if (hiddenFinished > 0) {
+        overflowParts.push(`${hiddenFinished} finished`);
+      }
       const overflowText = overflowParts.join(', ');
       lines.push(
         truncate(
@@ -553,7 +601,9 @@ export class AgentWidget {
 
   /** Force an immediate widget update. */
   update() {
-    if (!this.uiCtx) return;
+    if (!this.uiCtx) {
+      return;
+    }
     const allAgents = this.widgetAgents();
 
     // Lightweight existence checks — full categorization happens in renderWidget()
@@ -588,7 +638,9 @@ export class AgentWidget {
       }
       // Clean up stale entries
       for (const [id] of this.finishedTurnAge) {
-        if (!allAgents.some((a) => a.id === id)) this.finishedTurnAge.delete(id);
+        if (!allAgents.some((a) => a.id === id)) {
+          this.finishedTurnAge.delete(id);
+        }
       }
       return;
     }
@@ -597,8 +649,12 @@ export class AgentWidget {
     let newStatusText: string | undefined;
     if (hasActive) {
       const statusParts: string[] = [];
-      if (runningCount > 0) statusParts.push(`${runningCount} running`);
-      if (queuedCount > 0) statusParts.push(`${queuedCount} queued`);
+      if (runningCount > 0) {
+        statusParts.push(`${runningCount} running`);
+      }
+      if (queuedCount > 0) {
+        statusParts.push(`${queuedCount} queued`);
+      }
       const total = runningCount + queuedCount;
       newStatusText = `${statusParts.join(', ')} agent${total === 1 ? '' : 's'}`;
     }

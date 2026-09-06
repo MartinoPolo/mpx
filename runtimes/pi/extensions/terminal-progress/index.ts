@@ -21,7 +21,9 @@ export function registerTerminalProgress(
 
   pi.on('session_start', (_event, ctx) => {
     dispose();
-    if (ctx.mode !== 'tui') return;
+    if (ctx.mode !== 'tui') {
+      return;
+    }
     controller = new TerminalProgressController(dependencies);
     unsubscribeBlocked = pi.events.on(BLOCKED_EVENT, (payload) => {
       if (

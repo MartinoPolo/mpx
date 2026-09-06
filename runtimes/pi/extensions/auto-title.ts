@@ -74,7 +74,7 @@ export function normalizeGeneratedTitle(value: string): string | undefined {
 
 export function fallbackTitle(prompt: string): string {
   const words = prompt
-    .replace(/[`*_#>\[\](){}]/g, ' ')
+    .replace(/[`*_#>[\](){}]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .split(' ')

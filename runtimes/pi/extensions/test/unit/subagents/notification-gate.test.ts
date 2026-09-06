@@ -125,7 +125,9 @@ test('drops a grouped completion when every result is consumed', () => {
   gate.scheduleGroup('group:agent-1,agent-2', records, (unread) => {
     delivered.push(unread.map((record) => record.id));
   });
-  for (const record of records) gate.consume(record);
+  for (const record of records) {
+    gate.consume(record);
+  }
   gate.onParentAgentSettled();
 
   assert.deepEqual(delivered, []);

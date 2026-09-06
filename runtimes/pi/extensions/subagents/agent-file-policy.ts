@@ -164,18 +164,23 @@ export function ensureAgentDirectory(
   try {
     return resolveAgentDirectory(directoryPath, fileSystem);
   } catch (error) {
-    if (!isMissing(error)) throw error;
+    if (!isMissing(error)) {
+      throw error;
+    }
   }
 
   const parentPath = dirname(directoryPath);
-  if (parentPath === directoryPath)
+  if (parentPath === directoryPath) {
     throw new Error(`Cannot create agent directory: "${directoryPath}"`);
+  }
   ensureAgentDirectory(parentPath, fileSystem);
 
   try {
     fileSystem.mkdir(directoryPath);
   } catch (error) {
-    if (!hasErrorCode(error, 'EEXIST')) throw error;
+    if (!hasErrorCode(error, 'EEXIST')) {
+      throw error;
+    }
   }
   return resolveAgentDirectory(directoryPath, fileSystem);
 }
@@ -188,7 +193,9 @@ export function resolveSafeAgentFile(targetDirectory: string, name: string): str
 
   const directoryPath = resolve(targetDirectory);
   const targetPath = resolve(directoryPath, `${name}.md`);
-  if (dirname(targetPath) !== directoryPath) throw new Error(`Unsafe agent name: "${name}"`);
+  if (dirname(targetPath) !== directoryPath) {
+    throw new Error(`Unsafe agent name: "${name}"`);
+  }
   return targetPath;
 }
 
@@ -240,7 +247,9 @@ export function inspectAgentFileDestination(
   try {
     return { path, existing: resolveExistingAgentFile(targetDirectory, name, fileSystem) };
   } catch (error) {
-    if (isMissing(error)) return { path };
+    if (isMissing(error)) {
+      return { path };
+    }
     throw error;
   }
 }
@@ -320,7 +329,9 @@ export function writeAgentFile(
 ): string {
   const destination = inspectAgentFileDestination(targetDirectory, name, fileSystem);
   if (destination.existing) {
-    if (!allowExisting) throw new Error(`Agent file already exists: "${destination.path}"`);
+    if (!allowExisting) {
+      throw new Error(`Agent file already exists: "${destination.path}"`);
+    }
     writeExistingAgentFile(destination.existing, content, fileSystem);
     return destination.path;
   }
@@ -330,7 +341,9 @@ export function writeAgentFile(
     fileSystem.lstat(destination.path);
     throw new Error(`Agent file already exists: "${destination.path}"`);
   } catch (error) {
-    if (!isMissing(error)) throw error;
+    if (!isMissing(error)) {
+      throw error;
+    }
   }
 
   const currentDirectory = inspectDirectory(targetDirectory, fileSystem);

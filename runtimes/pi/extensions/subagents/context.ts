@@ -19,7 +19,9 @@ export function extractText(content: unknown[]): string {
  */
 export function buildParentContext(ctx: ExtensionContext): string {
   const entries = ctx.sessionManager.getBranch();
-  if (!entries || entries.length === 0) return '';
+  if (!entries || entries.length === 0) {
+    return '';
+  }
 
   const parts: string[] = [];
 
@@ -28,10 +30,14 @@ export function buildParentContext(ctx: ExtensionContext): string {
       const msg = entry.message;
       if (msg.role === 'user') {
         const text = typeof msg.content === 'string' ? msg.content : extractText(msg.content);
-        if (text.trim()) parts.push(`[User]: ${text.trim()}`);
+        if (text.trim()) {
+          parts.push(`[User]: ${text.trim()}`);
+        }
       } else if (msg.role === 'assistant') {
         const text = extractText(msg.content);
-        if (text.trim()) parts.push(`[Assistant]: ${text.trim()}`);
+        if (text.trim()) {
+          parts.push(`[Assistant]: ${text.trim()}`);
+        }
       }
       // Skip toolResult messages — too verbose for context
     } else if (entry.type === 'compaction') {
@@ -42,7 +48,9 @@ export function buildParentContext(ctx: ExtensionContext): string {
     }
   }
 
-  if (parts.length === 0) return '';
+  if (parts.length === 0) {
+    return '';
+  }
 
   return `# Parent Conversation Context
 The following is the conversation history from the parent session that spawned you.

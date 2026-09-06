@@ -74,9 +74,13 @@ export function formatFleetElapsed(ms: number): string {
 /** `↓ 13.1k tokens` — down-arrow prefix, compact magnitude, plural "tokens". */
 export function formatFleetTokens(count: number): string {
   let compact: string;
-  if (count >= 1_000_000) compact = `${(count / 1_000_000).toFixed(1)}M`;
-  else if (count >= 1_000) compact = `${(count / 1_000).toFixed(1)}k`;
-  else compact = `${count}`;
+  if (count >= 1_000_000) {
+    compact = `${(count / 1_000_000).toFixed(1)}M`;
+  } else if (count >= 1_000) {
+    compact = `${(count / 1_000).toFixed(1)}k`;
+  } else {
+    compact = `${count}`;
+  }
   return `↓ ${compact} tokens`;
 }
 
@@ -117,15 +121,21 @@ export class FleetList {
   // ---- Lifecycle ----
 
   setEnabled(enabled: boolean): void {
-    if (enabled === this.enabled) return;
+    if (enabled === this.enabled) {
+      return;
+    }
     this.enabled = enabled;
-    if (!enabled) this.active = false;
+    if (!enabled) {
+      this.active = false;
+    }
     this.update();
   }
 
   /** Capture the UI context and (re)register the global input handler. */
   setUICtx(ui: FleetUICtx): void {
-    if (ui === this.ui) return;
+    if (ui === this.ui) {
+      return;
+    }
     this.inputUnsub?.();
     this.ui = ui;
     this.widgetRegistered = false;
@@ -135,7 +145,9 @@ export class FleetList {
 
   /** Ensure the re-render timer is running (called when an agent spawns). */
   ensureTimer(): void {
-    if (!this.timer) this.timer = setInterval(() => this.update(), TICK_MS);
+    if (!this.timer) {
+      this.timer = setInterval(() => this.update(), TICK_MS);
+    }
   }
 
   /**
@@ -158,7 +170,9 @@ export class FleetList {
       this.viewerClose = undefined;
     }
     this.viewingAgentId = undefined;
-    if (this.ui && this.widgetRegistered) this.ui.setWidget(FLEET_KEY, undefined);
+    if (this.ui && this.widgetRegistered) {
+      this.ui.setWidget(FLEET_KEY, undefined);
+    }
     this.widgetRegistered = false;
     this.tui = undefined;
     this.active = false;
@@ -168,7 +182,9 @@ export class FleetList {
 
   /** Re-register/refresh the below-editor widget; clears it when no agents remain. */
   update(): void {
-    if (!this.ui) return;
+    if (!this.ui) {
+      return;
+    }
     const hasAgents = this.enabled && this.agentRecords().length > 0;
 
     if (!hasAgents) {
@@ -245,27 +261,39 @@ export class FleetList {
 
   private clampSelection(): void {
     const max = this.roster().length - 1;
-    if (this.selectedIndex > max) this.selectedIndex = Math.max(0, max);
-    if (this.selectedIndex < 0) this.selectedIndex = 0;
+    if (this.selectedIndex > max) {
+      this.selectedIndex = Math.max(0, max);
+    }
+    if (this.selectedIndex < 0) {
+      this.selectedIndex = 0;
+    }
   }
 
   // ---- Key handling ----
 
   /** Returns `{consume:true}` to swallow a key, or undefined to let it through. */
   handleKey(data: string): { consume?: boolean; data?: string } | undefined {
-    if (!this.enabled || !this.ui) return undefined;
+    if (!this.enabled || !this.ui) {
+      return undefined;
+    }
     // Input listeners receive BOTH key-press and key-release (the kitty protocol
     // emits both, and matchesKey matches either) — act on press only, or every
     // tap would move/fire twice. Repeats still pass through for held-key nav.
-    if (isKeyRelease(data)) return undefined;
+    if (isKeyRelease(data)) {
+      return undefined;
+    }
     // While an overlay is open, let it own all input.
-    if (this.viewerClose) return undefined;
+    if (this.viewerClose) {
+      return undefined;
+    }
     // Input listeners fire BEFORE the focused component, and dialogs
     // (ctx.ui.select/confirm/input, pi's own menus) swap the prompt editor out
     // while getEditorText() still reads the detached — empty — editor. So when
     // anything but the editor owns the keyboard, stay out of its keys (#123).
     if (!this.editorHasFocus()) {
-      if (this.active) this.deactivate();
+      if (this.active) {
+        this.deactivate();
+      }
       return undefined;
     }
 
@@ -338,7 +366,9 @@ export class FleetList {
       return;
     }
     const record = entry.record;
-    if (!this.ui) return;
+    if (!this.ui) {
+      return;
+    }
     if (!record.session) {
       this.ui.notify(`Agent is ${record.status} — no session available.`, 'info');
       return;
@@ -359,8 +389,9 @@ export class FleetList {
             theme,
             done,
             () => {
-              if (this.manager.abort(record.id))
+              if (this.manager.abort(record.id)) {
                 this.ui?.notify(`Stopped "${record.description}".`, 'info');
+              }
             },
             keybindings,
             (message: string) => this.manager.steer(record.id, message),
@@ -387,7 +418,9 @@ export class FleetList {
       const idx = this.roster().findIndex(
         (e) => e.kind === 'agent' && e.record.id === this.viewingAgentId,
       );
-      if (idx >= 0) this.selectedIndex = idx;
+      if (idx >= 0) {
+        this.selectedIndex = idx;
+      }
     }
     this.viewerClose = undefined;
     this.viewingAgentId = undefined;
@@ -398,7 +431,9 @@ export class FleetList {
 
   private renderBar(width: number, theme: Theme): string[] {
     const agents = this.roster().slice(1) as AgentEntry[];
-    if (agents.length === 0) return [];
+    if (agents.length === 0) {
+      return [];
+    }
     // Clamp locally so a render between a roster shrink and the next update()
     // (e.g. on terminal resize) never loses the selection marker.
     const sel = Math.min(this.selectedIndex, agents.length);
@@ -417,12 +452,15 @@ export class FleetList {
     const start = selAgent < visible ? 0 : selAgent - visible + 1;
     const hiddenBelow = agents.length - (start + visible);
 
-    if (start > 0) lines.push(rightAlign('', theme.fg('dim', `↑ ${start} more`), width));
+    if (start > 0) {
+      lines.push(rightAlign('', theme.fg('dim', `↑ ${start} more`), width));
+    }
     for (let a = start; a < start + visible; a++) {
       lines.push(this.renderAgentRow(a + 1, sel, agents[a].record, width, theme));
     }
-    if (hiddenBelow > 0)
+    if (hiddenBelow > 0) {
       lines.push(rightAlign('', theme.fg('dim', `↓ ${hiddenBelow} more`), width));
+    }
 
     return lines;
   }

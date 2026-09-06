@@ -95,8 +95,9 @@ export class RollingLogBuffer {
         // A bare carriage return rewrites the current progress frame.
         state.partial = '';
       }
-      if (character === '\r') state.pendingCr = true;
-      else if (character === '\n') {
+      if (character === '\r') {
+        state.pendingCr = true;
+      } else if (character === '\n') {
         this.emit(stream, state.partial);
         state.partial = '';
       } else {
@@ -109,7 +110,9 @@ export class RollingLogBuffer {
   }
 
   private emit(stream: LogStream, text: string): void {
-    if (text === '') return;
+    if (text === '') {
+      return;
+    }
     const boundedText = text.length > this.#maxCharacters ? text.slice(-this.#maxCharacters) : text;
     const entry = Object.freeze({ run: this.#run, stream, text: boundedText });
     this.#entries.push(entry);

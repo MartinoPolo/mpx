@@ -47,26 +47,36 @@ function loadSkillContent(name: string, cwd: string): string {
   ];
   for (const root of roots) {
     const content = findInRoot(root, name);
-    if (content !== undefined) return content;
+    if (content !== undefined) {
+      return content;
+    }
   }
   return `(Skill "${name}" not found in .pi/skills/, .agents/skills/, or global skill locations)`;
 }
 
 function findInRoot(root: string, name: string): string | undefined {
-  if (isSymlink(root)) return undefined; // reject symlinked roots entirely
+  if (isSymlink(root)) {
+    return undefined;
+  } // reject symlinked roots entirely
   const flat = safeReadFile(join(root, `${name}.md`))?.trim();
-  if (flat !== undefined) return flat;
+  if (flat !== undefined) {
+    return flat;
+  }
   return findSkillDirectory(root, name);
 }
 
 /** BFS under `root` for a directory named `name` containing `SKILL.md`. Pi-conforming filters. */
 function findSkillDirectory(root: string, name: string): string | undefined {
-  if (!existsSync(root)) return undefined;
+  if (!existsSync(root)) {
+    return undefined;
+  }
   const queue: string[] = [root];
 
   while (queue.length > 0) {
     const current = queue.shift();
-    if (current === undefined) continue;
+    if (current === undefined) {
+      continue;
+    }
 
     let entries: Dirent<string>[];
     try {
@@ -79,8 +89,12 @@ function findSkillDirectory(root: string, name: string): string | undefined {
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+        continue;
+      }
 
       // Symlinked dirs already filtered by entry.isDirectory() — Dirent uses lstat semantics.
       const path = join(current, entry.name);
@@ -90,7 +104,9 @@ function findSkillDirectory(root: string, name: string): string | undefined {
       if (isSkillDir) {
         if (entry.name === name) {
           const content = safeReadFile(skillMd)?.trim();
-          if (content !== undefined) return content;
+          if (content !== undefined) {
+            return content;
+          }
         }
         continue; // Pi rule: skills don't nest — don't descend into a skill dir
       }

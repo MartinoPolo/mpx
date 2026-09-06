@@ -65,7 +65,9 @@ export class ConversationViewer implements Component {
   ) {
     this.keys = createViewerKeys(keybindings);
     this.unsubscribe = session.subscribe(() => {
-      if (this.closed) return;
+      if (this.closed) {
+        return;
+      }
       this.tui.requestRender();
     });
   }
@@ -108,7 +110,9 @@ export class ConversationViewer implements Component {
       }
       return;
     }
-    if (this.stopArmed) this.stopArmed = false;
+    if (this.stopArmed) {
+      this.stopArmed = false;
+    }
 
     const totalLines = this.buildContentLines(this.lastInnerW).length;
     const viewportHeight = this.viewportHeight();
@@ -136,7 +140,9 @@ export class ConversationViewer implements Component {
   }
 
   render(width: number): string[] {
-    if (width < 6) return []; // too narrow for any meaningful rendering
+    if (width < 6) {
+      return [];
+    } // too narrow for any meaningful rendering
     const th = this.theme;
     const innerW = width - 4; // border + padding
     this.lastInnerW = innerW;
@@ -173,7 +179,9 @@ export class ConversationViewer implements Component {
 
     const headerParts: string[] = [duration];
     const toolUses = this.activity?.toolUses ?? this.record.toolUses;
-    if (toolUses > 0) headerParts.unshift(`${toolUses} tool${toolUses === 1 ? '' : 's'}`);
+    if (toolUses > 0) {
+      headerParts.unshift(`${toolUses} tool${toolUses === 1 ? '' : 's'}`);
+    }
     const tokens = getLifetimeTotal(this.activity?.lifetimeUsage);
     if (tokens > 0) {
       const percent = getSessionContextPercent(this.activity?.session);
@@ -186,7 +194,9 @@ export class ConversationViewer implements Component {
       ),
     );
     const invocationLine = this.invocationLine();
-    if (invocationLine) lines.push(row(invocationLine));
+    if (invocationLine) {
+      lines.push(row(invocationLine));
+    }
     lines.push(hrMid);
 
     // Content area — rebuild every render (live data, no cache needed)
@@ -223,7 +233,9 @@ export class ConversationViewer implements Component {
       // the right group so "Esc close" is the only part that truncates first.
       const sep = th.fg('dim', ' · ');
       const actions: string[] = [];
-      if (this.canSteer()) actions.push(th.fg('dim', 'Enter steer'));
+      if (this.canSteer()) {
+        actions.push(th.fg('dim', 'Enter steer'));
+      }
       if (this.isStoppable()) {
         actions.push(this.stopArmed ? th.fg('error', 'x again to STOP') : th.fg('dim', 'x stop'));
       }
@@ -267,7 +279,9 @@ export class ConversationViewer implements Component {
     input.onSubmit = (value: string) => {
       const message = value.trim();
       this.composer = undefined;
-      if (message) this.onSteer?.(message);
+      if (message) {
+        this.onSteer?.(message);
+      }
       this.tui.requestRender();
     };
     input.onEscape = () => {
@@ -307,12 +321,16 @@ export class ConversationViewer implements Component {
   private invocationLine(): string | undefined {
     const { modelName, tags } = buildInvocationTags(this.record.invocation);
     const parts = modelName ? [modelName, ...tags] : tags;
-    if (parts.length === 0) return undefined;
+    if (parts.length === 0) {
+      return undefined;
+    }
     return this.theme.fg('dim', `  ↳ ${parts.join(' · ')}`);
   }
 
   private buildContentLines(width: number): string[] {
-    if (width <= 0) return [];
+    if (width <= 0) {
+      return [];
+    }
 
     const th = this.theme;
     const messages = this.session.messages;
@@ -327,8 +345,12 @@ export class ConversationViewer implements Component {
     for (const msg of messages) {
       if (msg.role === 'user') {
         const text = typeof msg.content === 'string' ? msg.content : extractText(msg.content);
-        if (!text.trim()) continue;
-        if (needsSeparator) lines.push(th.fg('dim', '───'));
+        if (!text.trim()) {
+          continue;
+        }
+        if (needsSeparator) {
+          lines.push(th.fg('dim', '───'));
+        }
         lines.push(th.fg('accent', '[User]'));
         for (const line of wrapTextWithAnsi(text.trim(), width)) {
           lines.push(line);
@@ -337,12 +359,15 @@ export class ConversationViewer implements Component {
         const textParts: string[] = [];
         const toolCalls: string[] = [];
         for (const c of msg.content) {
-          if (c.type === 'text' && c.text) textParts.push(c.text);
-          else if (c.type === 'toolCall') {
+          if (c.type === 'text' && c.text) {
+            textParts.push(c.text);
+          } else if (c.type === 'toolCall') {
             toolCalls.push((c as any).name ?? (c as any).toolName ?? 'unknown');
           }
         }
-        if (needsSeparator) lines.push(th.fg('dim', '───'));
+        if (needsSeparator) {
+          lines.push(th.fg('dim', '───'));
+        }
         lines.push(th.bold('[Assistant]'));
         if (textParts.length > 0) {
           for (const line of wrapTextWithAnsi(textParts.join('\n').trim(), width)) {
@@ -355,15 +380,21 @@ export class ConversationViewer implements Component {
       } else if (msg.role === 'toolResult') {
         const text = extractText(msg.content);
         const truncated = text.length > 500 ? text.slice(0, 500) + '... (truncated)' : text;
-        if (!truncated.trim()) continue;
-        if (needsSeparator) lines.push(th.fg('dim', '───'));
+        if (!truncated.trim()) {
+          continue;
+        }
+        if (needsSeparator) {
+          lines.push(th.fg('dim', '───'));
+        }
         lines.push(th.fg('dim', '[Result]'));
         for (const line of wrapTextWithAnsi(truncated.trim(), width)) {
           lines.push(th.fg('dim', line));
         }
       } else if ((msg as any).role === 'bashExecution') {
         const bash = msg as any;
-        if (needsSeparator) lines.push(th.fg('dim', '───'));
+        if (needsSeparator) {
+          lines.push(th.fg('dim', '───'));
+        }
         lines.push(truncateToWidth(th.fg('muted', `  $ ${bash.command}`), width));
         if (bash.output?.trim()) {
           const out =

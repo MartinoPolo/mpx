@@ -92,11 +92,15 @@ export class ScheduleStore {
 
   /** Load from disk into the in-memory cache. Silent on parse errors. */
   private load(): void {
-    if (!existsSync(this.filePath)) return;
+    if (!existsSync(this.filePath)) {
+      return;
+    }
     try {
       const data: ScheduleStoreData = JSON.parse(readFileSync(this.filePath, 'utf-8'));
       this.jobs.clear();
-      for (const j of data.jobs ?? []) this.jobs.set(j.id, j);
+      for (const j of data.jobs ?? []) {
+        this.jobs.set(j.id, j);
+      }
     } catch {
       /* corrupt — start fresh, next save rewrites */
     }
@@ -132,7 +136,9 @@ export class ScheduleStore {
   /** Read-only check — uses the cache. */
   hasName(name: string, exceptId?: string): boolean {
     for (const j of this.jobs.values()) {
-      if (j.id !== exceptId && j.name === name) return true;
+      if (j.id !== exceptId && j.name === name) {
+        return true;
+      }
     }
     return false;
   }
@@ -150,10 +156,14 @@ export class ScheduleStore {
   update(id: string, patch: Partial<ScheduledSubagent>): ScheduledSubagent | undefined {
     // No-op fast path — an unknown id changes nothing, so don't lock or touch
     // disk (which would otherwise lazily create the backing directory).
-    if (!this.jobs.has(id)) return undefined;
+    if (!this.jobs.has(id)) {
+      return undefined;
+    }
     return this.withLock(() => {
       const existing = this.jobs.get(id);
-      if (!existing) return undefined;
+      if (!existing) {
+        return undefined;
+      }
       const updated = { ...existing, ...patch };
       this.jobs.set(id, updated);
       return updated;
@@ -162,7 +172,9 @@ export class ScheduleStore {
 
   remove(id: string): boolean {
     // No-op fast path — see update().
-    if (!this.jobs.has(id)) return false;
+    if (!this.jobs.has(id)) {
+      return false;
+    }
     return this.withLock(() => this.jobs.delete(id));
   }
 

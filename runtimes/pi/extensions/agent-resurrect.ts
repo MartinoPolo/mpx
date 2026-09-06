@@ -43,7 +43,9 @@ async function queryProcessStartedAt(): Promise<string | undefined> {
 
 function processStartedAt(): Promise<string | undefined> {
   processStartedAtPromise ??= queryProcessStartedAt().then((startedAt) => {
-    if (!startedAt) processStartedAtPromise = undefined;
+    if (!startedAt) {
+      processStartedAtPromise = undefined;
+    }
     return startedAt;
   });
   return processStartedAtPromise;
@@ -78,11 +80,17 @@ async function removeRegistrationFile(registration: Registration): Promise<void>
 
 async function writeRegistration(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
   const sessionFileValue = ctx.sessionManager.getSessionFile();
-  if (!sessionFileValue) return;
+  if (!sessionFileValue) {
+    return;
+  }
   const sessionId = ctx.sessionManager.getSessionId();
-  if (!sessionId) return;
+  if (!sessionId) {
+    return;
+  }
   const processStartedAtValue = await processStartedAt();
-  if (!processStartedAtValue) return;
+  if (!processStartedAtValue) {
+    return;
+  }
   const sessionFile = isAbsolute(sessionFileValue)
     ? sessionFileValue
     : resolve(ctx.cwd, sessionFileValue);
@@ -117,11 +125,15 @@ async function writeRegistration(pi: ExtensionAPI, ctx: ExtensionContext): Promi
   }
   // Only after the new record is durably in place: drop the stale one this
   // process owned, so the session is never briefly absent from the registry.
-  if (previous && previous.file !== file) await removeRegistrationFile(previous);
+  if (previous && previous.file !== file) {
+    await removeRegistrationFile(previous);
+  }
 }
 
 async function removeOwnRegistration(): Promise<void> {
-  if (!registered) return;
+  if (!registered) {
+    return;
+  }
   await removeRegistrationFile(registered);
   registered = undefined;
 }

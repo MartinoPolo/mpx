@@ -6,7 +6,9 @@ export const AGENT_DETAIL_ROWS = 5;
 
 export function formatDuration(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.trunc(milliseconds / 1000));
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
   if (totalSeconds < 3600) {
     return `${Math.trunc(totalSeconds / 60)}m${String(totalSeconds % 60).padStart(2, '0')}s`;
   }
@@ -43,7 +45,9 @@ export function countLabel(count: number, name: string): string {
 export function groupMembers(members: readonly GroupMember[]): CountedGroup[] {
   const groups = new Map<string, CountedGroup>();
   for (const member of members) {
-    if (member.label === '') continue;
+    if (member.label === '') {
+      continue;
+    }
     const existing = groups.get(member.label);
     if (existing === undefined) {
       groups.set(member.label, { ...member, count: 1 });
@@ -73,7 +77,9 @@ export function selectDetailRows(
 ): FinishedAgent[] {
   const broken = agents.filter((agent) => agent.status !== COMPLETED);
   const completed = agents.filter((agent) => agent.status === COMPLETED);
-  if (agents.length <= cap) return [...broken, ...completed];
+  if (agents.length <= cap) {
+    return [...broken, ...completed];
+  }
   const slots = Math.max(0, cap - broken.length);
   return [
     ...broken,

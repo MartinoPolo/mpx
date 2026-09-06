@@ -100,7 +100,9 @@ test('package settings retain only portable runtime choices', () => {
     'lastChangelogVersion',
   ];
 
-  for (const key of forbiddenKeys) assert.equal(key in settings, false, key);
+  for (const key of forbiddenKeys) {
+    assert.equal(key in settings, false, key);
+  }
   assert.equal(typeof settings.compaction, 'object');
   assert.equal(typeof settings.terminal, 'object');
   assert.equal(settings.enableSkillCommands, true);
@@ -164,10 +166,16 @@ test('environment path overrides are used by default resolver arguments', () => 
     assert.equal(resolveCompactInstructionsFile(), compactFile);
     assert.equal(resolvePortsConfigPath(resolve('workspace')), portsFile);
   } finally {
-    if (previousCompactFile === undefined) delete process.env.MPX_COMPACT_INSTRUCTIONS_FILE;
-    else process.env.MPX_COMPACT_INSTRUCTIONS_FILE = previousCompactFile;
-    if (previousPortsFile === undefined) delete process.env.MPX_WORKTREE_PORTS_FILE;
-    else process.env.MPX_WORKTREE_PORTS_FILE = previousPortsFile;
+    if (previousCompactFile === undefined) {
+      delete process.env.MPX_COMPACT_INSTRUCTIONS_FILE;
+    } else {
+      process.env.MPX_COMPACT_INSTRUCTIONS_FILE = previousCompactFile;
+    }
+    if (previousPortsFile === undefined) {
+      delete process.env.MPX_WORKTREE_PORTS_FILE;
+    } else {
+      process.env.MPX_WORKTREE_PORTS_FILE = previousPortsFile;
+    }
   }
 });
 
@@ -193,7 +201,9 @@ test('amber and green themes define valid portable palettes', () => {
 
     assert.equal(theme.name, name);
     assert.equal(typeof theme.$schema, 'string');
-    for (const token of REQUIRED_THEME_COLORS) assert.ok(token in colors, `${name}.${token}`);
+    for (const token of REQUIRED_THEME_COLORS) {
+      assert.ok(token in colors, `${name}.${token}`);
+    }
     for (const value of Object.values(colors)) {
       assert.ok(
         value === '' ||
