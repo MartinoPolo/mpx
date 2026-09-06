@@ -1,8 +1,9 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
-import { SessionService, SessionStore } from '@mpx/sessions';
+import { afterEach, expect, it, vi } from 'vitest';
+import { canonicalNativeRootDigest } from '@mpx/launch';
+import { deriveNativeBindingRef, SessionService, SessionStore } from '@mpx/sessions';
 import {
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
@@ -108,6 +109,132 @@ it('discovers enrolled active Pi sessions from only their recorded root and surv
   expect(
     (await restarted.find((item) => item.scanner.runtime === 'pi')!.scanner.scan()).sessions,
   ).toEqual([]);
+});
+
+it('preserves an exact durable account binding and makes Pi unavailable when account resolution fails', async () => {
+  const state = await mkdtemp(path.join(tmpdir(), 'mpx-production-resolution-failure-'));
+  roots.push(state);
+  const piRoot = path.join(state, 'private-pi-root');
+  await mkdir(piRoot);
+  const store = new SessionStore(state);
+  const identity = { domain: 'personal', name: 'main' } as const;
+  const recordedRootDigest = canonicalNativeRootDigest(piRoot);
+  const prior = {
+    schemaVersion: 1 as const,
+    ref: deriveNativeBindingRef(identity, 'pi', recordedRootDigest),
+    identity,
+    runtime: 'pi' as const,
+    recordedRootDigest,
+    accountBindingRef: 'account:durable-authority',
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-02T00:00:00.000Z',
+  };
+  await store.saveNativeBinding(prior);
+  const inspect = vi.fn(async () => ({ startFingerprint: 'unused' }));
+
+  const discoveries = await productionSessionDiscoveries({
+    user: {
+      identities: {
+        main: {
+          domain: 'personal',
+          runtimeRoots: { claude: path.join(state, 'claude'), pi: piRoot },
+        },
+      },
+    } as never,
+    store,
+    environment: {},
+    accountResolver: {
+      resolve: async (_identity, runtime) => {
+        if (runtime === 'pi') {
+          throw new Error(`identity/root mismatch at ${piRoot}; credential=private-token`);
+        }
+        return null;
+      },
+    },
+    options: { piProcessInspector: { inspect } },
+  });
+
+  expect((await store.listNativeBindings()).find((binding) => binding.ref === prior.ref)).toEqual(
+    prior,
+  );
+  const result = await discoveries.find((item) => item.scanner.runtime === 'pi')!.scanner.scan();
+  expect(result).toEqual({
+    status: 'unavailable',
+    sessions: [],
+    diagnostic: 'PI_DISCOVERY_UNAVAILABLE',
+  });
+  expect(JSON.stringify(result)).not.toContain(piRoot);
+  expect(JSON.stringify(result)).not.toContain('private-token');
+  expect(inspect).not.toHaveBeenCalled();
+});
+
+it('does not persist an implicit null when initial account resolution throws', async () => {
+  const state = await mkdtemp(path.join(tmpdir(), 'mpx-production-initial-resolution-failure-'));
+  roots.push(state);
+  const store = new SessionStore(state);
+
+  await productionSessionDiscoveries({
+    user: {
+      identities: {
+        main: {
+          domain: 'personal',
+          runtimeRoots: { claude: path.join(state, 'claude'), pi: path.join(state, 'pi') },
+        },
+      },
+    } as never,
+    store,
+    environment: {},
+    accountResolver: {
+      resolve: async (_identity, runtime) => {
+        if (runtime === 'pi') {
+          throw new Error('temporarily unavailable');
+        }
+        return null;
+      },
+    },
+  });
+
+  expect((await store.listNativeBindings()).map((binding) => binding.runtime)).toEqual(['claude']);
+});
+
+it('persists an explicit null account resolution and intentionally disables Pi discovery', async () => {
+  const state = await mkdtemp(path.join(tmpdir(), 'mpx-production-resolution-null-'));
+  roots.push(state);
+  const piRoot = path.join(state, 'pi');
+  await mkdir(piRoot);
+  const store = new SessionStore(state);
+  const identity = { domain: 'personal', name: 'main' } as const;
+  const recordedRootDigest = canonicalNativeRootDigest(piRoot);
+  const ref = deriveNativeBindingRef(identity, 'pi', recordedRootDigest);
+  await store.saveNativeBinding({
+    schemaVersion: 1,
+    ref,
+    identity,
+    runtime: 'pi',
+    recordedRootDigest,
+    accountBindingRef: 'account:previous',
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  });
+
+  const discoveries = await productionSessionDiscoveries({
+    user: {
+      identities: {
+        main: {
+          domain: 'personal',
+          runtimeRoots: { claude: path.join(state, 'claude'), pi: piRoot },
+        },
+      },
+    } as never,
+    store,
+    environment: {},
+    accountResolver: { resolve: async () => null },
+  });
+
+  expect((await store.readNativeBinding(ref)).accountBindingRef).toBeNull();
+  await expect(
+    discoveries.find((item) => item.scanner.runtime === 'pi')!.scanner.scan(),
+  ).resolves.toMatchObject({ status: 'unavailable', sessions: [] });
 });
 
 it('creates resume dependencies through structural verifier and process seams', async () => {

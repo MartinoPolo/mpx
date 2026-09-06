@@ -229,11 +229,14 @@ export async function productionSessionDiscoveries(input: {
         });
       }
       let resolvedAccountBindingRef = prior?.accountBindingRef ?? null;
+      let accountResolutionUnavailable = false;
       if (accountResolver) {
         try {
           resolvedAccountBindingRef = await accountResolver.resolve(identity, runtime, root);
         } catch {
-          resolvedAccountBindingRef = null;
+          // A transient account lookup cannot revoke previously persisted authority. The
+          // affected scanner still fails closed for this discovery run.
+          accountResolutionUnavailable = true;
         }
       }
       const timestamp = new Date().toISOString();
@@ -251,7 +254,7 @@ export async function productionSessionDiscoveries(input: {
             createdAt: timestamp,
             updatedAt: timestamp,
           };
-      if (!prior || binding !== prior) {
+      if ((!prior && !accountResolutionUnavailable) || (prior && binding !== prior)) {
         await store.saveNativeBinding(binding);
       }
       if (runtime === 'pi') {
@@ -259,7 +262,7 @@ export async function productionSessionDiscoveries(input: {
         // The scanner receives that root directly; it never infers or scans a home directory.
         result.push({
           scanner:
-            binding.accountBindingRef === null
+            accountResolutionUnavailable || binding.accountBindingRef === null
               ? {
                   runtime: 'pi',
                   scan: async () => ({

@@ -154,7 +154,25 @@ export class SessionApplicationService implements SessionApplication {
       schemaVersion: 1 as const,
       kind: 'session-list' as const,
       records,
-      diagnostics: diagnostics.slice(0, 128),
+      diagnostics: diagnostics
+        .sort((left, right) => {
+          const leftKey = [
+            left.runtime ?? '',
+            left.identity?.domain ?? '',
+            left.identity?.name ?? '',
+            left.status,
+            left.code,
+          ].join('\0');
+          const rightKey = [
+            right.runtime ?? '',
+            right.identity?.domain ?? '',
+            right.identity?.name ?? '',
+            right.status,
+            right.code,
+          ].join('\0');
+          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+        })
+        .slice(0, 128),
     };
   }
 

@@ -52,6 +52,46 @@ describe('SessionApplicationService retained operations', () => {
     expect(discoveries).not.toHaveBeenCalled();
   });
 
+  it('rejects a mismatched confirmation before invoking resume execution', async () => {
+    const executeConfirmedResume = vi.fn(async () => 'must-not-execute');
+    const application = service({
+      resumeDependencies: vi.fn(async () => ({}) as never),
+      planResume: vi.fn(async () => ({ confirmationDigest: 'fresh-confirmation' }) as never),
+      verifyResumeConfirmation: vi.fn((_plan, confirmation) => {
+        if (confirmation !== 'fresh-confirmation') {
+          throw new Error('SESSION_RESUME_CONFIRMATION_MISMATCH');
+        }
+      }),
+      executeConfirmedResume,
+    });
+
+    await expect(
+      application.resume({ id: 'record', confirmation: 'wrong-confirmation' }),
+    ).rejects.toThrow('SESSION_RESUME_CONFIRMATION_MISMATCH');
+    expect(executeConfirmedResume).not.toHaveBeenCalled();
+  });
+
+  it('executes only the freshly replanned resume when its exact confirmation is supplied', async () => {
+    const stale = { confirmationDigest: 'stale-confirmation' } as never;
+    const fresh = { confirmationDigest: 'fresh-confirmation', exact: 'fresh-plan' } as never;
+    const executeConfirmedResume = vi.fn(async () => 'executed');
+    const application = service({
+      resumeDependencies: vi.fn(async () => ({}) as never),
+      planResume: vi.fn().mockResolvedValueOnce(stale).mockResolvedValueOnce(fresh),
+      verifyResumeConfirmation: vi.fn((_plan, confirmation) => {
+        if (confirmation !== 'fresh-confirmation') {
+          throw new Error('SESSION_RESUME_CONFIRMATION_MISMATCH');
+        }
+      }),
+      executeConfirmedResume,
+    });
+
+    await expect(
+      application.resume({ id: 'record', confirmation: 'fresh-confirmation' }),
+    ).resolves.toMatchObject({ kind: 'session-resume', result: 'executed' });
+    expect(executeConfirmedResume).toHaveBeenCalledWith(fresh, {});
+  });
+
   it('replans after lifecycle consumption and sends the exact confirmed plan and authority to execution', async () => {
     const first = record({ recordId: 'first' });
     const current = record({ recordId: 'current' });
