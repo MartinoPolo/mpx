@@ -36,9 +36,9 @@ Local commands need no identity/provider authentication route:
 ```text
 mpx issue create --title "Title" --body "Details"
 mpx issue list [--state open|finished]
-mpx issue show --id 12
-mpx issue update --id 12 --title "New" --body "Body" [--revision HASH]
-mpx issue close --id 12 [--revision HASH]
+mpx issue view --id 12
+mpx issue edit --id 12 --title "New" --body "Body" [--revision HASH]
+mpx issue finish --id 12 [--revision HASH]
 mpx issue dependency add --id 12 --dependency-id 7 [--revision HASH]
 mpx issue dependency remove --id 12 --dependency-id 7 [--revision HASH]
 ```

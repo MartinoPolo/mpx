@@ -123,9 +123,7 @@ Use:
 ```bash
 mpx init --cwd . --json
 mpx init --cwd . --confirm --json
-mpx config validate --cwd . --json
-mpx config resolve --cwd . --json
-mpx config explain --cwd . --json
+mpx doctor --cwd . --json
 ```
 
 Unknown versions, providers, packs, fields, dangerous JSON keys, duplicate JSON keys, unknown references, widening declarations, and unsafe route values fail closed. Schema, semantic, and environment/interpolation validation failures are reported as `ConfigValidationError` with stable code `CONFIG_INVALID`. Normal operation never reads legacy MPX configuration.

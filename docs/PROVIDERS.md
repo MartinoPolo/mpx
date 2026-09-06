@@ -26,17 +26,6 @@ Every operational Issue, Review, and CI command requires `--identity NAME`. MPX 
 
 A route is an opaque, identity-owned label passed to the trusted adapter. It is not a path, token, host command, executable, private-key location, or permission grant. Route labels are validated as safe values, and neither CWD classification nor project/content-scope configuration may select or override one. Native provider authentication remains in `gh`, `glab`, `kf`, Git, or SSH; MPX does not copy credentials. Gerrit uses the configured safe Git remote name for uploads and the validated host/project selector from that remote for SSH queries and reviews. Runtime-bound direct SSH receives only the exact launch-owned `MPX_RUNTIME_ROUTE_SSH/config`; outside a runtime it uses native SSH configuration. Git continues to receive the launch-owned `GIT_SSH_COMMAND`.
 
-## Inspection and diagnostics
-
-```bash
-mpx provider list --json
-mpx provider list --role repository --json
-mpx provider list --role issues --json
-mpx provider explain repository --cwd . --json
-mpx provider explain issues --cwd . --json
-mpx provider doctor --cwd . --identity personal --json
-```
-
-`provider explain` reports the configured provider, trusted backend, role-filtered capabilities, and that route selection is identity-required; it does not select or expose a route. `provider doctor` checks both configured roles for an explicit identity and reports each provider as `ready` or `unsupported`; a capable provider without a route fails closed.
+Provider selection is exercised only through the canonical `issue`, `review`, and `ci` operations. Use `mpx doctor --cwd . --json` for project-wide diagnostics; there are no provider inspection CLI routes.
 
 With `--json`, all CLI results use the versioned envelope `{apiVersion:1, ok, data|error, warnings}`. Public errors contain stable `code`, `message`, and `retryable`, and may include `capability`, `remediation`, and safe `details`. Provider failures include configuration/registry codes, `CAPABILITY_UNSUPPORTED`, `EXECUTABLE_MISSING`, `AUTH_FAILURE`, `COMMAND_FAILURE`, `INVALID_RESPONSE`, `MUTATION_OUTCOME_UNKNOWN`, and `WORKFLOW_POLICY_DENIED`. `MUTATION_OUTCOME_UNKNOWN` is non-retryable: a mutating provider process may have succeeded even though MPX could not determine or read back its result, so automatic repetition could duplicate the mutation. Remediation is actionable where the implementation has one (for example, select a capable provider or configure `identity.providerRoutes`); secrets and raw credentials are never included.

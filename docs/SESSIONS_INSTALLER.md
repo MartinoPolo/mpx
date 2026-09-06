@@ -1,7 +1,12 @@
 # Session lifecycle
 
-MPX lifecycle events remain authoritative for sessions they represent. Production reconcile also reads the maintained Pi v2 `agent-resurrect/active-sessions` registry under each exact configured and enrolled Pi account root so an active process missed before lifecycle startup can be reconciled. It never scans a home directory. Registry entries are bounded, root-contained, regular files and are admitted only when the PID start fingerprint is exact; foreign-root and stale/reused processes are denied. Legacy saves outside that exact active registry remain available only through the explicit, confirmation-bound import.
+MPX lifecycle events remain authoritative for sessions they represent. The public CLI exposes only native session listing and resume:
 
-Pi native bindings are account-unenrolled unless the host injects an account-binding enrollment resolver. A verifier does not enroll an account. Both active discovery and resume therefore fail closed when the recorded enrollment is absent; resume additionally requires current verification and fails on unavailable, mismatched, or duplicate verification.
+```text
+mpx session list
+mpx session resume <id>
+```
 
-Ordinary `session reconcile` performs lifecycle reconciliation and native discovery without installer authority.
+Pi native bindings are account-unenrolled unless setup has established an account-binding enrollment. Resume requires current binding verification and fails closed on absent, unavailable, mismatched, or duplicate verification. Resurrection additionally requires its explicit one-use authority; internal bounded resurrection export is not part of public help or generated references.
+
+Legacy discovery, import, branch, reconcile, and workflow-marking routes are not CLI operations.

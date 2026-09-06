@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import { captureIo } from '../../src/io.js';
 import { run } from '../../src/main.js';
 
-it('runs local create/show/update/close and dependency commands without an identity route', async () => {
+it('runs canonical local issue and dependency commands without an identity route', async () => {
   const cwd = await mkdtemp(path.join(tmpdir(), 'mpx-local-cli-')),
     appdata = await mkdtemp(path.join(tmpdir(), 'mpx-local-config-')),
     issues = path.join(appdata, 'issues'),
@@ -58,16 +58,15 @@ it('runs local create/show/update/close and dependency commands without an ident
     id: '1',
   });
   expect(await readFile(path.join(output, '000001-a.md'), 'utf8')).toContain('# 1: A');
-  expect(await command(['view', 'rebuild'])).toMatchObject({ generated: 1, removed: 0 });
   await command(['issue', 'create', '--title', 'Dependency', '--body', '']);
   expect(
     await command(['issue', 'dependency', 'add', '--id', '1', '--dependency-id', '2']),
   ).toMatchObject({ id: '1' });
-  expect(await command(['issue', 'show', '--id', '1'])).toMatchObject({
+  expect(await command(['issue', 'view', '--id', '1'])).toMatchObject({
     providerData: { local: { dependencies: { frontier: ['2'] } } },
   });
   expect(
-    await command(['issue', 'update', '--id', '1', '--title', 'Updated', '--body', 'Body']),
+    await command(['issue', 'edit', '--id', '1', '--title', 'Updated', '--body', 'Body']),
   ).toMatchObject({ title: 'Updated' });
-  expect(await command(['issue', 'close', '--id', '1'])).toMatchObject({ state: 'finished' });
+  expect(await command(['issue', 'finish', '--id', '1'])).toMatchObject({ state: 'finished' });
 }, 5_000);

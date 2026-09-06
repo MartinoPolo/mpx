@@ -8,18 +8,7 @@ mpx setup
 
 `mpx setup` builds and validates the current immutable release before changing native state, durably detaches recognized legacy Pi links, then plans, applies, and strictly verifies that exact release. It derives identity and provider selections from configuration route keys and never reads credentials. Re-running it reuses the immutable release, installer receipt, and legacy-detachment receipt. If installation fails after detachment, retry `mpx setup`; legacy external authority is intentionally not restored.
 
-The standalone protocol below remains available for automation and review. It does not run legacy Pi detachment. Use the guided, read-only flow to construct and review an exact intent:
-
-```bash
-mpx install intent --request ./install-request.json > ./intent-result.json
-mpx install plan --intent ./intent-result.json > ./install-plan.json
-# Or build and plan in one read-only command:
-mpx install prepare --request ./install-request.json
-```
-
-The request shape and retained external collection (`external.gitRemotes[].request`) are documented in [PHASE_I_INSTALLER.md](PHASE_I_INSTALLER.md). Identity names and provider IDs are explicit for personal and work; executable path/version and complete Claude/Pi projection path/role inventories are mandatory. `userConfigPath` is a bounded source artifact and may be outside the absent target during bootstrap. Apply creates `%APPDATA%/mpx/config.json` only when absent and requires exact artifact bytes when it already exists. Uninstall retains this user-owned file.
-
-`mpx install plan` remains the dry-run surface. It reads either a raw exact intent or the strict `install-intent-build-result` envelope, observes every installer target, and returns a deterministic confirmation digest without publishing a release or changing machine or external state. Apply requires that exact plan and digest. When a healthy prior release is installed, this same flow emits a receipt-bound `ownership-release-upgrade` confirmation item and permits only exact prior-owned targets to transition. Drifted or foreign targets fail before mutation; failed upgrades restore the prior receipt and bytes while retaining immutable release content.
+The installer intent, planning, confirmation, verification, rollback, and recovery protocols remain internal application components composed by `mpx setup`; they are not separate CLI routes. Their strict contracts are documented in [PHASE_I_INSTALLER.md](PHASE_I_INSTALLER.md).
 
 Production builds use the workspace-pinned `esbuild` version to bundle the CLI and all workspace/runtime dependencies into `bin/mpx.mjs`. Releases copy that bundle; they do not import a source checkout. `%MPX_APPS%\mpx\bin\mpx.cmd` is the owned stable selector used by managed shell launchers and shortcuts. It reads `%LOCALAPPDATA%\mpx\active-release` and dispatches through the registered absolute Node executable to the selected immutable release bundle.
 
@@ -31,8 +20,6 @@ Managed shell aliases use an explicit `-mpx` suffix and never redefine the nativ
 
 The managed user environment derives `MPX_CLAUDE_EXECUTABLE` and `MPX_PI_EXECUTABLE` from the verified runtime-registration matrix. Both identities for a runtime must bind identical executable evidence; installation fails closed if they disagree.
 
-Use `mpx install verify` for receipt, resource, selector, and immutable-file health; add `--strict` to report foreign release entries. Receipt-bound external integrations fail closed as `verification-required` unless live evidence is supplied with `--external-plan <intent-result.json>`. Git remotes are verified read-only from exact digest-bound plans. Healthy exact bindings report `verified`; drift reports `unhealthy`. Verification never applies an external plan or mutates an external system.
+Run `mpx setup` to verify and converge receipt, resource, selector, immutable-file, and retained external-integration health. Drifted or foreign owned targets fail closed rather than being overwritten. Internal rollback and removal protocols preserve unrelated native data and do not inspect or remove Windows Terminal settings, profiles, or scheduled tasks.
 
-Uninstall requires its exact plan confirmation and refuses foreign or drifted owned targets. It removes managed `.bashrc` and PowerShell startup-profile launcher blocks, user environment values, shortcuts, stable command selector, and active-release selector while preserving unrelated native data. It does not inspect or remove Windows Terminal settings, profiles, or scheduled tasks.
-
-Production changes are performed only by `apply` or confirmed `uninstall`. Tests and simulations use temporary filesystems and OS-bound fakes; they must not apply to the live user profile, registry, shortcuts, or Task Scheduler. Windows Terminal settings are outside the production installer boundary even for inspection.
+Production changes are performed only by the setup-owned confirmed application flow. Tests and simulations use temporary filesystems and OS-bound fakes; they must not apply to the live user profile, registry, shortcuts, or Task Scheduler. Windows Terminal settings are outside the production installer boundary even for inspection.

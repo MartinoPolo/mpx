@@ -295,7 +295,7 @@ The independent Claude agent renderer, Pi agent generator/check path, tracked Pi
 
 ## Active generated content
 
-Every launch currently materializes a persistent readable, content-addressed tree beneath the existing runtime-artifacts root. The selected provider executes this exact published tree, and `mpx content current` is the stable discovery surface regardless of its physical location.
+Every launch currently materializes a persistent readable, content-addressed tree beneath the existing runtime-artifacts root. The selected provider executes this exact published tree, and `mpx content inspect` is the stable inspection surface regardless of its physical location.
 
 A human-readable relocation beneath the following machine-state path is a later optional improvement, not a prerequisite for inspection:
 
@@ -334,10 +334,10 @@ Inspection reads these existing files rather than recompiling them.
 The initial focused content group contains only the common active inspection operations:
 
 ```text
-mpx content current
-mpx content list
-mpx content show skill <identity>
-mpx content show agent <identity-or-projected-name>
+mpx content inspect
+mpx content inspect skill <identity>
+mpx content inspect agent <identity-or-projected-name>
+mpx content check
 mpx content check
 ```
 

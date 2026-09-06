@@ -6,23 +6,17 @@ import {
   ConfigValidationError,
   StrictJsonError,
   discoverProjectConfig,
-  resolveKnownLaunchCwdClassification,
   type DiscoveredConfig,
   type UserConfig,
 } from '@mpx/config';
 import {
   createProjectApplicationService,
-  createSkillApplicationService,
-  currentLaunchTuple,
   executionMpxError,
   type AccountApplicationService,
   type ProjectApplicationService,
-  type SkillApplicationService,
 } from '@mpx/application';
 import {
   createNodeAccountApplicationService,
-  createNodeInstallApplicationService,
-  createNodeLocalIssueViewRebuilder,
   createNodeLaunchApplicationService,
   executeNodeSessionResumeLaunch,
   resolveTrustedRuntimeExecutable,
@@ -34,7 +28,6 @@ import {
   type Diagnostic,
   type JsonValue,
 } from '@mpx/core';
-import type { ShortLaunchAlias } from '@mpx/launch';
 import { ExecutionError } from '@mpx/executors';
 import { expandBranchTemplate } from '@mpx/worktrees';
 import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@mpx/skills';
@@ -42,27 +35,17 @@ import {
   catalogPath,
   configuredProviderApplicationService,
   defaultContext,
-  immutableInstaller,
-  installIntentBuilder,
   ports,
-  productionSessionProcessInspector,
   sessions,
   setupApplication,
   stateRoot,
   status,
   workspaceApplication,
-  worktrees,
   type CliContext,
 } from './context.js';
 import { executeSessionCommand } from './session-command.js';
-import { executeInstallCommand } from './install-command.js';
-import { executeAccountCommand } from './account-command.js';
 import { executeContentCommand } from './content-command.js';
-import {
-  diagnoseNodeSessionBranchAdapters,
-  productionSessionDiscoveries,
-  productionSessionResumeDependencies,
-} from '@mpx/application/node';
+import { productionSessionResumeDependencies } from '@mpx/application/node';
 import { processIo, type CliIo } from './io.js';
 import {
   commandGroup,
@@ -75,8 +58,6 @@ import {
 import {
   createDefaultSbxDiagnostics,
   createNodeSessionApplicationService,
-  createNodeSessionBranchProduction,
-  createNodeSessionLegacyImport,
   diagnoseConfiguredF2Proof,
   executeInternalPreparationWorker,
 } from '@mpx/application/node';
@@ -100,7 +81,6 @@ interface ExecuteResult {
 class UsageError extends Error {}
 const usage = renderRootHelp().trimEnd();
 
-const shortLaunchAliases = new Set<ShortLaunchAlias>(['cc', 'ccw', 'pi', 'piw']);
 function parse(argv: readonly string[]): Parsed {
   const words: string[] = [],
     options = new Map<string, string | boolean | string[]>();
@@ -122,11 +102,7 @@ function parse(argv: readonly string[]): Parsed {
         'all',
         'confirm',
         'machine',
-        'all-active',
-        'strict',
         'dry-run',
-        'acknowledge-shared-risk',
-        'terminal-tab',
         'approve-host',
         'approve-resurrection',
       ].includes(name!)
@@ -135,10 +111,8 @@ function parse(argv: readonly string[]): Parsed {
     } else if (
       [
         'cwd',
-        'role',
         'limit',
         'lines',
-        'artifact-key',
         'identity',
         'skill-policy',
         'runtime',
@@ -151,7 +125,6 @@ function parse(argv: readonly string[]): Parsed {
         'reason',
         'grant',
         'base',
-        'branch',
         'template',
         'slug',
         'author',
@@ -175,24 +148,7 @@ function parse(argv: readonly string[]): Parsed {
         'run-id',
         'state',
         'status',
-        'note',
-        'summary',
-        'disposition',
-        'next-action',
-        'priority',
-        'related-issue',
-        'related-review',
-        'capture',
         'confirm-plan',
-        'import-legacy',
-        'map-account',
-        'map-pi-root',
-        'intent',
-        'request',
-        'plan',
-        'transaction',
-        'external-plan',
-        'terminal-title',
         'runtime-arg',
       ].includes(name!)
     ) {
@@ -204,7 +160,7 @@ function parse(argv: readonly string[]): Parsed {
       ) {
         throw new UsageError(`--${name} requires a value`);
       }
-      if (['grant', 'import-legacy', 'map-account', 'map-pi-root', 'runtime-arg'].includes(name!)) {
+      if (['grant', 'runtime-arg'].includes(name!)) {
         options.set(name!, [...((options.get(name!) as string[] | undefined) ?? []), value]);
       } else {
         options.set(name!, value);
@@ -213,12 +169,8 @@ function parse(argv: readonly string[]): Parsed {
       throw new UsageError(`Unknown option: --${name}`);
     }
   }
-  const command =
-    words.length === 1 && shortLaunchAliases.has(words[0] as ShortLaunchAlias)
-      ? ['launch', words[0]!]
-      : words;
   return {
-    command,
+    command: words,
     cwd: path.resolve(String(options.get('cwd') ?? process.cwd())),
     json: options.get('json') === true,
     help: options.get('help') === true,
@@ -240,20 +192,10 @@ function projectApplication(context: CliContext): ProjectApplicationService {
       : {}),
     inventoryCanonical,
     inventoryProjectSkills,
-    localIssueViewRebuilder: createNodeLocalIssueViewRebuilder(),
     ...(sbxDiagnostics ? { sbxDiagnostics } : {}),
     sbxProofDiagnostics: () => diagnoseConfiguredF2Proof(context.env),
-    branchDiagnostics: () => diagnoseNodeSessionBranchAdapters(context.env),
     statusSnapshot: (request) => status(context, context.portService).snapshot(request),
     ensureProject: (request) => ports(context).ensure(request),
-  });
-}
-function skillApplication(): SkillApplicationService {
-  return createSkillApplicationService({
-    inventoryCanonical,
-    inventoryProjectSkills,
-    discoverProjectConfig,
-    classifyCwd: resolveKnownLaunchCwdClassification,
   });
 }
 async function userConfig(context: CliContext): Promise<UserConfig> {
@@ -294,8 +236,6 @@ function productionAccountApplication(
 function productionAccountServices(user: UserConfig, context: CliContext, cwd: string) {
   const application = productionAccountApplication(user, context, cwd);
   return {
-    application,
-    resolver: { resolve: application.resolveNativeBinding.bind(application) },
     verifier: { verify: application.verifyNativeBinding.bind(application) },
   };
 }
@@ -440,9 +380,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
   const [group, action, ...args] = parsed.command;
   const runtimeArgOption = parsed.options.get('runtime-arg');
   const runtimeArgs = Array.isArray(runtimeArgOption) ? runtimeArgOption : undefined;
-  const runtimeLaunchAction =
-    group === 'launch' &&
-    (action === 'claude' || action === 'pi' || shortLaunchAliases.has(action as ShortLaunchAlias));
+  const runtimeLaunchAction = group === 'launch' && (action === 'claude' || action === 'pi');
   if (runtimeArgs && !runtimeLaunchAction) {
     throw new MpxError({
       code: 'RUNTIME_ARGS_SCOPE_INVALID',
@@ -460,8 +398,8 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     throw new UsageError(usage);
   }
   if (group === 'content') {
-    if (!action || !['current', 'list', 'show', 'check'].includes(action)) {
-      throw new UsageError('content requires current, list, show, or check');
+    if (!action || !['inspect', 'check'].includes(action)) {
+      throw new UsageError('content requires inspect or check');
     }
     const result = await executeContentCommand({ action, args, env: context.env });
     return { ...result, warnings: [] };
@@ -471,86 +409,13 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
   }
   let data: unknown;
   let warnings: Diagnostic[] = [];
-  if (group === 'account') {
-    if (
-      !action ||
-      !['enroll', 're-enroll', 'list', 'status', 'verify'].includes(action) ||
-      args.length !== 0
-    ) {
-      throw new UsageError(
-        'Usage: mpx account <enroll|re-enroll|list|status|verify> [--identity NAME] [--confirm-plan DIGEST]',
-      );
-    }
-    const user = await requiredUserConfig(context);
-    const { application } = productionAccountServices(user, context, parsed.cwd);
-    const identityName = stringOption(parsed, 'identity'),
-      confirmationDigest = stringOption(parsed, 'confirm-plan');
-    data = await executeAccountCommand(
-      {
-        action: action as 'enroll' | 're-enroll' | 'list' | 'status' | 'verify',
-        ...(identityName ? { identityName } : {}),
-        ...(confirmationDigest ? { confirmationDigest } : {}),
-      },
-      application,
-    );
-    return { data, warnings };
-  }
   if (group === 'session') {
     const user = await userConfig(context);
     const sessionStore = sessions(context);
-    const account = context.env.LOCALAPPDATA
-      ? productionAccountServices(user, context, parsed.cwd)
-      : undefined;
-    const branchProduction = await createNodeSessionBranchProduction({
-      enabled: action === 'branch',
-      cwd: parsed.cwd,
-      user,
-      store: sessionStore,
-      environment: context.env,
-      stateRoot: () => stateRoot(context),
-      worktrees: () => worktrees(context, parsed.cwd),
-      launchContext: context,
-      catalogRoot: (cwd) => catalogPath(context, cwd),
-      status: () => status(context),
-      executionRoots: async () => {
-        const appData = context.env.APPDATA;
-        const localAppData = context.env.LOCALAPPDATA;
-        if (!appData || !localAppData) {
-          throw new MpxError({
-            code: 'STATE_ROOT_UNAVAILABLE',
-            message: 'APPDATA and LOCALAPPDATA are required for resume execution.',
-          });
-        }
-        return {
-          artifactsRoot: path.join(appData, 'mpx', 'runtime-artifacts'),
-          stateRoot: path.join(localAppData, 'mpx'),
-        };
-      },
-      ...(context.sessionBranchService ? { branchService: context.sessionBranchService } : {}),
-      ...(context.sessionBranchRuntimeAdapter
-        ? { runtimeAdapter: context.sessionBranchRuntimeAdapter }
-        : {}),
-      ...(context.sessionBranchTerminalAdapter
-        ? { terminalAdapter: context.sessionBranchTerminalAdapter }
-        : {}),
-      ...(context.sessionDockerResumeAdmission
-        ? { dockerAdmission: context.sessionDockerResumeAdmission }
-        : {}),
-      ...(context.sessionProcessInspector
-        ? { processInspector: context.sessionProcessInspector }
-        : {}),
-      ...(context.rootAttestationService
-        ? { rootAttestationService: context.rootAttestationService }
-        : {}),
-      ...(context.accountAuthVerifier ? { accountAuthVerifier: context.accountAuthVerifier } : {}),
-      ...(context.nativeAccountBindingResolver
-        ? { nativeAccountBindingResolver: context.nativeAccountBindingResolver }
-        : {}),
-      ...(context.launchExecutableResolver
-        ? { launchExecutableResolver: context.launchExecutableResolver }
-        : {}),
-    });
-    const branchService = branchProduction.branchService;
+    const account =
+      action === 'resume' && context.env.LOCALAPPDATA
+        ? productionAccountServices(user, context, parsed.cwd)
+        : undefined;
     const resolveIdentity = async (name: string) => {
       const identity = user.identities[name];
       if (!identity) {
@@ -559,45 +424,32 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       return { domain: identity.domain, name };
     };
     const resumeDependencies =
-      context.sessionResumeDependencies ??
-      productionSessionResumeDependencies({
-        user,
-        store: sessionStore,
-        ...((context.nativeAccountBindingVerifier ?? account?.verifier)
-          ? { verifier: (context.nativeAccountBindingVerifier ?? account?.verifier)! }
-          : {}),
-        environment: context.env,
-      });
-    const application = createNodeSessionApplicationService({
-      store: sessionStore,
-      processInspector: context.sessionProcessInspector ?? productionSessionProcessInspector(),
-      resumeDependencies,
-      executeConfirmedResume:
-        context.sessionResumeExecutor ??
-        ((plan, authority) => executeProductionSessionResume(plan, user, context, authority)),
-      resolveIdentity,
-      discoveries:
-        context.sessionDiscoveries ??
-        (() =>
-          productionSessionDiscoveries({
+      action === 'resume'
+        ? (context.sessionResumeDependencies ??
+          productionSessionResumeDependencies({
             user,
             store: sessionStore,
-            environment: context.env,
-            ...((context.nativeAccountBindingResolver ?? account?.resolver)
-              ? { accountResolver: (context.nativeAccountBindingResolver ?? account?.resolver)! }
+            ...((context.nativeAccountBindingVerifier ?? account?.verifier)
+              ? { verifier: (context.nativeAccountBindingVerifier ?? account?.verifier)! }
               : {}),
-          })),
-      legacyImport: createNodeSessionLegacyImport({ store: sessionStore, resolveIdentity }),
-      ...(branchService ? { branchService } : {}),
+            environment: context.env,
+          }))
+        : undefined;
+    const application = createNodeSessionApplicationService({
+      store: sessionStore,
+      ...(resumeDependencies ? { resumeDependencies } : {}),
+      ...(action === 'resume'
+        ? {
+            executeConfirmedResume:
+              context.sessionResumeExecutor ??
+              ((plan, authority) => executeProductionSessionResume(plan, user, context, authority)),
+          }
+        : {}),
+      resolveIdentity,
     });
     const result = await executeSessionCommand(
       { action, args, options: parsed.options },
-      {
-        application,
-        ...(branchProduction.terminalExecutable
-          ? { terminalExecutable: branchProduction.terminalExecutable }
-          : {}),
-      },
+      { application },
     );
     return { data: result.data, warnings: [...result.warnings] };
   }
@@ -617,36 +469,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       warnings,
       ...(parsed.json ? {} : { rawOutput: `Setup complete (${data.releaseKey}).\n` }),
     };
-  }
-  if (group === 'install') {
-    const application = createNodeInstallApplicationService({
-      orchestrator: immutableInstaller(context),
-      builder: () => installIntentBuilder(context),
-    });
-    const result = await executeInstallCommand(
-      { action, args, options: parsed.options },
-      { application },
-    );
-    return { data: result.data, warnings };
-  }
-  if (
-    ['identity', 'mode', 'skill-policy', 'preset'].includes(group) &&
-    ['list', 'show'].includes(action ?? '')
-  ) {
-    const user = await requiredUserConfig(context);
-    if (action === 'list' && args.length) {
-      throw new UsageError(`${group} list accepts no arguments`);
-    }
-    if (action === 'show' && args.length !== 1) {
-      throw new UsageError(`${group} show requires exactly one name`);
-    }
-    const result = projectApplication(context).configurationItem({
-      kind: group as 'identity' | 'mode' | 'skill-policy' | 'preset',
-      action: action as 'list' | 'show',
-      user,
-      ...(args[0] ? { name: args[0] } : {}),
-    });
-    return { ...result, warnings };
   }
   if (group === 'workspace') {
     if (
@@ -763,34 +585,10 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     });
     return { data, warnings, ...(parsed.json ? {} : { rawOutput: workspaceHuman(action, data) }) };
   }
-  if (group === 'view') {
-    if (action !== 'rebuild' || args.length) {
-      throw new UsageError('view requires rebuild');
-    }
-    const result = await projectApplication(context).rebuildLocalIssueView({
-      cwd: parsed.cwd,
-      ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
-      environment: context.env,
-    });
-    return { ...result, warnings };
-  }
   if (['issue', 'review', 'ci'].includes(group)) {
     const actions =
       group === 'issue'
-        ? [
-            'list',
-            'view',
-            'show',
-            'create',
-            'edit',
-            'update',
-            'comment',
-            'label',
-            'move',
-            'finish',
-            'close',
-            'dependency',
-          ]
+        ? ['list', 'view', 'create', 'edit', 'comment', 'label', 'move', 'finish', 'dependency']
         : group === 'review'
           ? ['view', 'create', 'update', 'comment', 'ready', 'merge']
           : ['status', 'watch', 'logs', 'retry'];
@@ -807,15 +605,8 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     ) {
       throw new UsageError('issue dependency requires add or remove');
     }
-    const normalizedAction =
-      group === 'issue'
-        ? (({ show: 'view', update: 'edit', close: 'finish' } as Record<string, string>)[action] ??
-          action)
-        : action;
     const capability =
-      action === 'dependency'
-        ? `issue.dependency.${dependencyAction}`
-        : `${group}.${normalizedAction}`;
+      action === 'dependency' ? `issue.dependency.${dependencyAction}` : `${group}.${action}`;
     const role = group === 'issue' ? 'issues' : 'repository';
     const found = await project(parsed, context);
     const identityName = stringOption(parsed, 'identity');
@@ -840,12 +631,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
           throw new UsageError('--state must be open or finished');
         }
         input = state === undefined ? {} : { state };
-      } else if (
-        action === 'view' ||
-        action === 'show' ||
-        action === 'finish' ||
-        action === 'close'
-      ) {
+      } else if (action === 'view' || action === 'finish') {
         input = {
           id: requiredOption(parsed, 'id'),
           ...(stringOption(parsed, 'revision')
@@ -854,7 +640,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         };
       } else if (action === 'create') {
         input = { title: requiredOption(parsed, 'title'), body: requiredOption(parsed, 'body') };
-      } else if (action === 'edit' || action === 'update') {
+      } else if (action === 'edit') {
         input = {
           id: requiredOption(parsed, 'id'),
           title: requiredOption(parsed, 'title'),
@@ -919,56 +705,17 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     const result = await applicationService.invokePrepared(prepared, asJson(input));
     return { ...result, warnings };
   }
-  if (group === 'launch' && action === 'resolve') {
-    throw new UsageError("launch resolve was replaced by 'mpx launch explain'");
-  }
-  if (group === 'launch' && action === 'current') {
-    if (args.length) {
-      throw new UsageError('launch current accepts no arguments');
-    }
-    return { data: currentLaunchTuple(context.env), warnings };
-  }
-  if (group === 'runtime' && (action === 'claude' || action === 'pi')) {
-    if (args.length) {
-      throw new UsageError(`runtime ${action} accepts no arguments`);
-    }
-    const tuple = currentLaunchTuple(context.env),
-      bound = JSON.parse(context.env.MPX_RUNTIME_CONTEXT!) as {
-        runtimeArtifact?: { runtime?: string };
-      };
-    if (bound.runtimeArtifact?.runtime !== action) {
-      throw new MpxError({
-        code: 'RUNTIME_CONTEXT_MISMATCH',
-        message: 'The process-bound runtime does not match the requested runtime entry.',
-        remediation: 'Relaunch and restart the runtime process.',
-      });
-    }
-    return { data: tuple, warnings };
-  }
-  if (
-    group === 'launch' &&
-    (action === 'explain' ||
-      action === 'sbx-plan-export' ||
-      action === 'claude' ||
-      action === 'pi' ||
-      shortLaunchAliases.has(action as ShortLaunchAlias))
-  ) {
+  if (group === 'launch' && (action === 'claude' || action === 'pi')) {
     if (args.length) {
       throw new UsageError(`launch ${action} accepts no positional arguments`);
     }
-    const alias = shortLaunchAliases.has(action as ShortLaunchAlias)
-      ? (action as ShortLaunchAlias)
-      : undefined;
     const user = await requiredUserConfig(context);
     const projectDiscovery = context.discoverProjectConfig ?? discoverProjectConfig;
     const stringOption = (name: string): string | undefined => {
       const value = parsed.options.get(name);
       return typeof value === 'string' ? value : undefined;
     };
-    const runtimeOption = action === 'claude' || action === 'pi' ? action : stringOption('runtime');
-    if (runtimeOption !== undefined && runtimeOption !== 'claude' && runtimeOption !== 'pi') {
-      throw new MpxError({ code: 'RUNTIME_INVALID', message: "Runtime must be 'claude' or 'pi'." });
-    }
+    const runtime = action;
     const identityOption = stringOption('identity'),
       modeOption = stringOption('mode'),
       skillPolicyOption = stringOption('skill-policy');
@@ -985,13 +732,7 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         message: `Executor '${executorOption}' is unavailable.`,
       });
     }
-    if (
-      approveHost &&
-      (action === 'explain' ||
-        action === 'sbx-plan-export' ||
-        executorOption !== 'host' ||
-        !reasonOption?.trim())
-    ) {
+    if (approveHost && (executorOption !== 'host' || !reasonOption?.trim())) {
       throw new MpxError({
         code: 'HOST_APPROVAL_SCOPE_INVALID',
         message: '--approve-host requires an explicit host launch and a nonempty --reason.',
@@ -1008,94 +749,11 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         message: `Workspace strategy '${workspaceOption}' is invalid.`,
       });
     }
-    if (action === 'explain' && !identityOption) {
-      if (
-        modeOption ||
-        skillPolicyOption ||
-        contentScopeOption ||
-        executorOption ||
-        workspaceOption ||
-        networkPolicyOption ||
-        presetOption ||
-        parsed.options.has('grant') ||
-        reasonOption
-      ) {
-        throw new MpxError({
-          code: 'IDENTITY_REQUIRED',
-          message:
-            'Direct launch overrides require --identity; candidate explanation never infers one.',
-        });
-      }
-      const candidateService = createNodeLaunchApplicationService({
-        cwd: parsed.cwd,
-        userConfig: user,
-        environment: context.env,
-        context,
-        interaction: { json: parsed.json },
-        discoverProjectConfig: projectDiscovery,
-        status: () => status(context),
-        sessions: () => sessions(context),
-        stateRoot: () => stateRoot(context),
-      });
-      const result = await candidateService.prepareCandidates({
-        operation: 'explain',
-        cwd: parsed.cwd,
-        userConfig: user,
-        ...(runtimeOption ? { runtime: runtimeOption } : {}),
-      });
-      return { data: result.data, warnings };
-    }
-    if (!identityOption && !alias) {
+    if (!identityOption) {
       throw new MpxError({
         code: 'IDENTITY_REQUIRED',
         message: 'Launch identity must be supplied explicitly.',
       });
-    }
-    if (action === 'sbx-plan-export' && runtimeOption === undefined) {
-      throw new MpxError({
-        code: 'RUNTIME_REQUIRED',
-        message: 'A sandbox plan export requires an explicit runtime.',
-      });
-    }
-    if (action === 'sbx-plan-export' && executorOption === 'host') {
-      throw new MpxError({
-        code: 'EXECUTOR_UNAVAILABLE',
-        message: 'A sandbox plan export is always bound to the Docker executor.',
-      });
-    }
-    const runtime = runtimeOption ?? (alias ? undefined : 'pi');
-    if (action === 'explain' && runtimeOption === undefined) {
-      const selectionService = createNodeLaunchApplicationService({
-        cwd: parsed.cwd,
-        userConfig: user,
-        environment: context.env,
-        context,
-        interaction: { json: parsed.json },
-        discoverProjectConfig: projectDiscovery,
-        status: () => status(context),
-        sessions: () => sessions(context),
-        stateRoot: () => stateRoot(context),
-      });
-      const result = await selectionService.explainSelection({
-        userConfig: user,
-        cwd: parsed.cwd,
-        ...(identityOption ? { identity: identityOption } : {}),
-        ...(alias ? { alias } : {}),
-        ...(modeOption ? { mode: modeOption } : {}),
-        ...(skillPolicyOption ? { skillPolicy: skillPolicyOption } : {}),
-        ...(contentScopeOption ? { contentScope: contentScopeOption } : {}),
-        ...(executorOption === 'host' || executorOption === 'docker'
-          ? { executor: executorOption }
-          : {}),
-        ...(workspaceOption === 'clone' ||
-        workspaceOption === 'host-worktree' ||
-        workspaceOption === 'direct'
-          ? { workspace: workspaceOption }
-          : {}),
-        ...(networkPolicyOption ? { networkPolicy: networkPolicyOption } : {}),
-        ...(presetOption ? { preset: presetOption } : {}),
-      });
-      return { data: result.data, warnings: [...warnings, ...result.warnings] };
     }
     const canonicalRoot = await catalogPath(context, parsed.cwd);
     const service = createNodeLaunchApplicationService({
@@ -1114,31 +772,21 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       status: () => status(context),
       sessions: () => sessions(context),
       stateRoot: () => stateRoot(context),
-      ...(action !== 'explain' && action !== 'sbx-plan-export' && context.sbxDiagnostics
-        ? { sbxDiagnostics: context.sbxDiagnostics }
-        : {}),
+      ...(context.sbxDiagnostics ? { sbxDiagnostics: context.sbxDiagnostics } : {}),
     });
     const prepared = await service.prepare({
-      operation:
-        action === 'explain'
-          ? 'explain'
-          : action === 'sbx-plan-export'
-            ? 'sbx-plan-export'
-            : 'launch',
+      operation: 'launch',
       cwd: parsed.cwd,
       catalogRoot: canonicalRoot,
       userConfig: user,
-      ...(runtime ? { runtime } : {}),
+      runtime,
       ...(identityOption ? { identity: identityOption } : {}),
-      ...(alias ? { alias } : {}),
       ...(modeOption ? { mode: modeOption } : {}),
       ...(skillPolicyOption ? { skillPolicy: skillPolicyOption } : {}),
       ...(contentScopeOption ? { contentScope: contentScopeOption } : {}),
-      ...(action === 'sbx-plan-export'
-        ? { executor: 'docker' as const }
-        : executorOption === 'host' || executorOption === 'docker'
-          ? { executor: executorOption }
-          : {}),
+      ...(executorOption === 'host' || executorOption === 'docker'
+        ? { executor: executorOption }
+        : {}),
       ...(workspaceOption === 'clone' ||
       workspaceOption === 'host-worktree' ||
       workspaceOption === 'direct'
@@ -1163,125 +811,11 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
     });
     return { data: result.data, warnings: [...(result.warnings ?? [])] };
   }
-  if (group === 'config' && ['show', 'resolve', 'explain', 'validate'].includes(action ?? '')) {
-    const service = projectApplication(context);
-    const result =
-      action === 'resolve' || action === 'explain'
-        ? await service.config({ cwd: parsed.cwd, action, user: await userConfig(context) })
-        : action === 'show'
-          ? await service.config({ cwd: parsed.cwd, action })
-          : await service.config({ cwd: parsed.cwd, action: 'validate' });
-    return { ...result, warnings };
-  }
   if (group === 'doctor' && !action) {
     const result = await projectApplication(context).doctor({
       cwd: parsed.cwd,
       ...(context.env.APPDATA ? { appdata: context.env.APPDATA } : {}),
       environment: context.env,
-    });
-    return { ...result, warnings };
-  }
-  if (group === 'provider' && ['list', 'explain', 'doctor'].includes(action ?? '')) {
-    if (action === 'list') {
-      const role = parsed.options.get('role');
-      if (role !== undefined && role !== 'repository' && role !== 'issues') {
-        throw new UsageError('--role must be repository or issues');
-      }
-      const result = configuredProviderApplicationService(context).list(
-        role === undefined ? {} : { role },
-      );
-      return { ...result, warnings };
-    }
-    if (action === 'doctor') {
-      if (args.length) {
-        throw new UsageError('provider doctor accepts no arguments');
-      }
-      const identityName = stringOption(parsed, 'identity');
-      const found = await project(parsed, context);
-      const identity =
-        identityName === undefined
-          ? undefined
-          : (await requiredUserConfig(context)).identities[identityName];
-      const result = await configuredProviderApplicationService(context).doctor({
-        project: found.config,
-        ...(identityName === undefined ? {} : { identityName }),
-        ...(identity === undefined ? {} : { identity }),
-        cwd: found.root,
-      });
-      return { ...result, warnings };
-    }
-    const role = args[0];
-    if (role !== 'repository' && role !== 'issues') {
-      throw new UsageError('provider explain requires repository or issues');
-    }
-    const found = await project(parsed, context);
-    const result = configuredProviderApplicationService(context).explain({
-      project: found.config,
-      role,
-    });
-    return { ...result, warnings };
-  }
-  if (
-    group === 'skill' &&
-    ['list', 'search', 'show', 'explain', 'complete'].includes(action ?? '')
-  ) {
-    const identityOption = parsed.options.get('identity');
-    if (typeof identityOption !== 'string') {
-      throw new MpxError({
-        code: 'IDENTITY_REQUIRED',
-        message: 'Skill resolution requires an explicit launch identity.',
-      });
-    }
-    const user = await requiredUserConfig(context);
-    const service = skillApplication();
-    service.assertConfiguredBindings({ user, identity: identityOption });
-    const runtimeOption = parsed.options.get('runtime');
-    if (runtimeOption === undefined) {
-      throw new MpxError({
-        code: 'SKILL_RUNTIME_REQUIRED',
-        message: 'Skill resolution requires an explicit runtime.',
-      });
-    }
-    if (runtimeOption !== 'claude' && runtimeOption !== 'pi') {
-      throw new MpxError({
-        code: 'SKILL_RUNTIME_INVALID',
-        message: "Skill runtime must be 'claude' or 'pi'.",
-      });
-    }
-    const skillPolicyOption = parsed.options.get('skill-policy');
-    if (typeof skillPolicyOption !== 'string') {
-      throw new MpxError({
-        code: 'SKILL_POLICY_REQUIRED',
-        message: 'Skill resolution requires an explicit skill policy.',
-      });
-    }
-    service.assertConfiguredBindings({ user, skillPolicy: skillPolicyOption });
-    if (action === 'list' && args.length) {
-      throw new UsageError('skill list accepts no arguments');
-    }
-    if (action !== 'list' && !args[0]) {
-      throw new UsageError(
-        `skill ${action} requires ${action === 'search' ? 'a query' : action === 'complete' ? 'a prefix' : 'an id'}`,
-      );
-    }
-    const limit = Number(parsed.options.get('limit') ?? 20);
-    if (action === 'search' && !Number.isInteger(limit)) {
-      throw new UsageError('--limit must be an integer');
-    }
-    const contentScope = parsed.options.get('content-scope');
-    const artifactKey = parsed.options.get('artifact-key');
-    const result = await service.execute({
-      action: action as 'list' | 'search' | 'show' | 'explain' | 'complete',
-      cwd: parsed.cwd,
-      catalogRoot: await catalogPath(context, parsed.cwd),
-      user,
-      identity: identityOption,
-      runtime: runtimeOption,
-      skillPolicy: skillPolicyOption,
-      ...(typeof contentScope === 'string' ? { contentScope } : {}),
-      ...(args.length ? { value: args.join(' ') } : {}),
-      ...(action === 'search' ? { limit } : {}),
-      ...(typeof artifactKey === 'string' ? { artifactKey } : {}),
     });
     return { ...result, warnings };
   }

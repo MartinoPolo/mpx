@@ -59,57 +59,6 @@ const config = (repository = 'github', issues = 'kanbanflow') => ({
 });
 
 describe('provider CLI', () => {
-  it('delegates provider list role filtering into one success envelope', async () => {
-    const io = captureIo();
-    expect(await run(['--json', 'provider', 'list', '--role', 'issues'], io, { env: {} })).toBe(0);
-    expect(io.out).toHaveLength(1);
-    const envelope = JSON.parse(io.out[0]!);
-    expect(envelope).toMatchObject({ apiVersion: 1, ok: true, warnings: [] });
-    expect(envelope.data.map((item: { id: string }) => item.id)).toEqual([
-      'github',
-      'gitlab',
-      'kanbanflow',
-      'local',
-      'none',
-    ]);
-    expect(envelope.data.every((item: { roles: string[] }) => item.roles.includes('issues'))).toBe(
-      true,
-    );
-  });
-
-  it('delegates provider explain project selection into one success envelope', async () => {
-    const cwd = await project(config('github', 'kanbanflow')),
-      io = captureIo();
-    expect(
-      await run(['--json', '--cwd', cwd, 'provider', 'explain', 'repository'], io, { env: {} }),
-    ).toBe(0);
-    expect(io.out).toHaveLength(1);
-    expect(JSON.parse(io.out[0]!)).toEqual({
-      apiVersion: 1,
-      ok: true,
-      data: {
-        role: 'repository',
-        provider: 'github',
-        adapter: 'gh',
-        capabilities: [
-          'review.view',
-          'review.create',
-          'review.update',
-          'review.comment',
-          'review.ready',
-          'review.merge',
-          'ci.status',
-          'ci.watch',
-          'ci.logs',
-          'ci.retry',
-        ],
-        route: null,
-        routeSelection: 'identity-required',
-      },
-      warnings: [],
-    });
-  });
-
   it('selects the strict issues role and delegates with the explicit identity route', async () => {
     const cwd = await project(config()),
       env = await identityEnv(cwd, { kanbanflow: 'work-kf' }),
@@ -169,53 +118,16 @@ describe('provider CLI', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['issue command', ['issue', 'list']],
-    ['provider doctor', ['provider', 'doctor']],
-  ] as const)(
-    'returns IDENTITY_UNKNOWN for an unknown named identity through %s',
-    async (_label, argv) => {
-      const cwd = await project(config('github', 'github')),
-        env = await identityEnv(cwd, { github: 'work-gh' }),
-        io = captureIo();
-      expect(
-        await run(['--json', '--cwd', cwd, ...argv, '--identity', 'missing'], io, { env }),
-      ).toBe(1);
-      expect(io.out).toHaveLength(1);
-      expect(JSON.parse(io.out[0]!)).toMatchObject({
-        ok: false,
-        error: { code: 'IDENTITY_UNKNOWN', message: "Unknown identity 'missing'." },
-      });
-    },
-  );
-
-  it('retains provider doctor JSON when one probe fails and exits one', async () => {
+  it('returns IDENTITY_UNKNOWN for an unknown named identity through issue command', async () => {
     const cwd = await project(config('github', 'github')),
       env = await identityEnv(cwd, { github: 'work-gh' }),
       io = captureIo();
-    const execute = vi
-      .fn()
-      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'auth', failure: 'auth' })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
     expect(
-      await run(['--json', '--cwd', cwd, 'provider', 'doctor', '--identity', 'work'], io, {
-        env,
-        providerProcessExecutor: { execute },
-      }),
+      await run(['--json', '--cwd', cwd, 'issue', 'list', '--identity', 'missing'], io, { env }),
     ).toBe(1);
-    expect(io.out).toHaveLength(1);
     expect(JSON.parse(io.out[0]!)).toMatchObject({
-      apiVersion: 1,
-      ok: true,
-      data: {
-        schemaVersion: 1,
-        identity: 'work',
-        providers: [
-          { role: 'issues', provider: 'github', status: 'error' },
-          { role: 'repository', provider: 'github', status: 'ready' },
-        ],
-      },
-      warnings: [],
+      ok: false,
+      error: { code: 'IDENTITY_UNKNOWN', message: "Unknown identity 'missing'." },
     });
   });
 
@@ -844,81 +756,4 @@ describe('provider CLI', () => {
       ]);
     },
   );
-
-  it('diagnoses default incapable providers without requiring identity routes', async () => {
-    const cwd = await project(config('generic', 'none')),
-      env = await identityEnv(cwd, {}),
-      io = captureIo(),
-      execute = vi.fn();
-
-    expect(
-      await run(['--json', '--cwd', cwd, 'provider', 'doctor', '--identity', 'work'], io, {
-        env,
-        providerProcessExecutor: { execute },
-      }),
-    ).toBe(0);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({
-      ok: true,
-      data: {
-        providers: [
-          { role: 'issues', provider: 'none', route: null, status: 'unsupported' },
-          { role: 'repository', provider: 'generic', route: null, status: 'unsupported' },
-        ],
-      },
-    });
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it('diagnoses the trusted providers selected by strict project roles with real redacted probes', async () => {
-    const cwd = await project(config()),
-      env = await identityEnv(cwd, { github: 'work-gh', kanbanflow: 'work-kf' }),
-      io = captureIo();
-    const execute = vi.fn(async (request: ProviderProcessRequest) => ({
-      exitCode: 0,
-      stderr: 'token=secret',
-      stdout: request.argv[0] === 'kf' ? '[]' : '',
-    }));
-    expect(
-      await run(['--json', '--cwd', cwd, 'provider', 'doctor', '--identity', 'work'], io, {
-        env,
-        providerProcessExecutor: { execute },
-      }),
-    ).toBe(0);
-    expect(JSON.parse(io.out[0]!)).toMatchObject({
-      ok: true,
-      data: {
-        schemaVersion: 1,
-        identity: 'work',
-        providers: [
-          {
-            role: 'issues',
-            provider: 'kanbanflow',
-            backend: 'kf',
-            route: 'work-kf',
-            status: 'ready',
-          },
-          {
-            role: 'repository',
-            provider: 'github',
-            backend: 'gh',
-            route: 'work-gh',
-            status: 'ready',
-          },
-        ],
-      },
-    });
-    expect(
-      execute.mock.calls.map(([request]) => ({
-        argv: request.argv,
-        route: request.route,
-        cwd: request.cwd,
-      })),
-    ).toEqual([
-      { argv: ['kf', 'issue', 'list', '--json'], route: 'work-kf', cwd },
-      { argv: ['gh', 'auth', 'status'], route: 'work-gh', cwd },
-    ]);
-    expect(io.err).toEqual([]);
-    expect(JSON.parse(io.out[0]!)).toHaveProperty('warnings', []);
-    expect(io.out[0]).not.toContain('secret');
-  });
 });
