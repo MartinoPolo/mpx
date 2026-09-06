@@ -173,7 +173,7 @@ class EnvironmentLaunchAuditStore implements LaunchAuditStore {
   }
 }
 
-export function stateRoot(context: CliContext): string {
+function stateRoot(context: CliContext): string {
   const localAppData = context.env.LOCALAPPDATA;
   if (!localAppData || !path.isAbsolute(localAppData)) {
     throw new MpxError({
@@ -206,7 +206,7 @@ export function installerSourceRoot(moduleFile = fileURLToPath(import.meta.url))
     : path.resolve(moduleDirectory, '../../..');
 }
 
-export function installIntentBuilder(context: CliContext): InstallIntentBuilder {
+function installIntentBuilder(context: CliContext): InstallIntentBuilder {
   if (context.installIntentBuilder) {
     return context.installIntentBuilder;
   }
