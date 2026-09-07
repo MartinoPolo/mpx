@@ -4,13 +4,13 @@ import {
   installerDigest,
   parseReleaseManifestV1,
   type ReleaseManifestV1,
-} from './immutable-core.js';
+} from './release-manifest.js';
 import {
   createPiNativePackageRegistration,
   parsePiNativePackageRegistration,
   type PiNativePackageRegistrationV1,
 } from './pi-native-package.js';
-export { installerDigest } from './immutable-core.js';
+export { installerDigest } from './release-manifest.js';
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 export type RuntimeIdentity = 'claude-personal' | 'claude-work' | 'pi-personal' | 'pi-work';

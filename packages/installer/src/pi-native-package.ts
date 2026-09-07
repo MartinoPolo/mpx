@@ -4,7 +4,7 @@ import {
   installerDigest,
   parseReleaseManifestV1,
   type ReleaseManifestV1,
-} from './immutable-core.js';
+} from './release-manifest.js';
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 const FORBIDDEN_PATH =
@@ -122,7 +122,7 @@ export function parsePiNativePackageRegistration(value: unknown): PiNativePackag
     ) ||
     !files.some((file) => file.path === 'package.json') ||
     !files.some((file) => file.path === 'build-metadata.json') ||
-    !files.some((file) => file.path === 'mpx-extension.mjs') ||
+    !files.some((file) => ['index.mjs', 'mpx-extension.mjs'].includes(file.path)) ||
     installerDigest(files) !== record.artifactRootDigest
   ) {
     fail('PI_NATIVE_INVENTORY_INVALID', 'Pi native package inventory is incomplete or changed.');
