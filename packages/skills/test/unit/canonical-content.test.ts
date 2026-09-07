@@ -31,8 +31,9 @@ describe('canonical content safety', () => {
       for (const file of await files(identity)) {
         const content = await readFile(file, 'utf8');
         for (const [kind, pattern] of forbidden) {
-          if (pattern.test(content))
+          if (pattern.test(content)) {
             violations.push(`${path.relative(canonicalRoot, file)}: ${kind}`);
+          }
         }
       }
     }

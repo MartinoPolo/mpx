@@ -43,17 +43,21 @@ export default function (pi: ExtensionAPI): void {
 
   function cancel(): void {
     pending = undefined;
-    if (dispatch !== undefined) clearImmediate(dispatch);
+    if (dispatch !== undefined) {
+      clearImmediate(dispatch);
+    }
     dispatch = undefined;
     preparation?.abort();
   }
 
   async function handoff(request: WorktreeRequest, ctx: ExtensionCommandContext): Promise<void> {
     requireSession(ctx);
-    if (!ctx.isIdle() || ctx.hasPendingMessages())
+    if (!ctx.isIdle() || ctx.hasPendingMessages()) {
       throw new Error('Wait for Pi to finish, or stop it before using /worktree.');
-    if (busy)
+    }
+    if (busy) {
       throw new Error('A worktree handoff is already running. Use /worktree cancel to cancel it.');
+    }
     busy = true;
     const controller = new AbortController();
     preparation = controller;
@@ -68,14 +72,17 @@ export default function (pi: ExtensionAPI): void {
         controller.signal,
       );
       controller.signal.throwIfAborted();
-      if (!ctx.isIdle() || ctx.hasPendingMessages())
+      if (!ctx.isIdle() || ctx.hasPendingMessages()) {
         throw new Error('Pi became busy; retry with /worktree --enter and the created path.');
+      }
       destinationFile = forkWorktreeSession(ctx, target);
       const task = request.task;
       ctx.ui.notify(`Entering ${target}`, 'info');
       const result = await ctx.switchSession(destinationFile, {
         withSession: async (replacement) => {
-          if (task !== undefined) await replacement.sendUserMessage(task);
+          if (task !== undefined) {
+            await replacement.sendUserMessage(task);
+          }
         },
       });
       if (result.cancelled) {
@@ -95,7 +102,9 @@ export default function (pi: ExtensionAPI): void {
         target === undefined
           ? 'If creation partially succeeded, inspect git worktree list and use /worktree --enter <path>; no worktrees or branches were removed.'
           : `Worktree preserved at ${target}.${destinationFile ? ` Replacement session: ${destinationFile}.` : ''}`;
-      if (disposed) throw error;
+      if (disposed) {
+        throw error;
+      }
       pi.sendMessage({
         customType: 'worktree-error',
         content: `${reason}\n${recovery}`,
@@ -104,7 +113,9 @@ export default function (pi: ExtensionAPI): void {
     } finally {
       busy = false;
       preparation = undefined;
-      if (!disposed) ctx.ui.setStatus('worktree', undefined);
+      if (!disposed) {
+        ctx.ui.setStatus('worktree', undefined);
+      }
     }
   }
 
@@ -143,8 +154,9 @@ export default function (pi: ExtensionAPI): void {
         await handoff(request.request, ctx);
         return;
       }
-      if (pending)
+      if (pending) {
         throw new Error('A worktree handoff is already pending. Use /worktree cancel first.');
+      }
       await handoff(parseCommand(text), ctx);
     },
   });
@@ -196,7 +208,9 @@ export default function (pi: ExtensionAPI): void {
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       requireSession(ctx);
       signal?.throwIfAborted();
-      if (pending || busy) throw new Error('A worktree handoff is already pending or running.');
+      if (pending || busy) {
+        throw new Error('A worktree handoff is already pending or running.');
+      }
       const request = validateRequest(params as WorktreeRequest);
       pending = { id: randomUUID(), sessionId: ctx.sessionManager.getSessionId(), request, signal };
       ctx.ui.setStatus('worktree', 'Worktree handoff pending…');
@@ -227,12 +241,13 @@ export default function (pi: ExtensionAPI): void {
         };
       }
     }
-    if (pending || busy)
+    if (pending || busy) {
       return {
         block: true,
         terminate: true,
         reason: 'Worktree handoff pending. Do not execute tools in the old checkout.',
       };
+    }
   });
 
   pi.on('input', (event, ctx) => {
@@ -251,11 +266,15 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.on('agent_settled', (_event, ctx) => {
-    if (!pending || dispatch !== undefined) return;
+    if (!pending || dispatch !== undefined) {
+      return;
+    }
     // Command dispatch is immediate even with deliverAs: followUp; leave the event drain before replacing its runtime.
     dispatch = setImmediate(() => {
       dispatch = undefined;
-      if (disposed || !pending || !ctx.isIdle() || ctx.hasPendingMessages()) return;
+      if (disposed || !pending || !ctx.isIdle() || ctx.hasPendingMessages()) {
+        return;
+      }
       if (pending.signal?.aborted) {
         pending = undefined;
         ctx.ui.setStatus('worktree', undefined);

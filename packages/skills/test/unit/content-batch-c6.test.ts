@@ -43,7 +43,9 @@ describe('personal skill safety', () => {
             { encoding: 'utf8' },
           );
         }
-        if (result && result.status !== 0) failures.push(path.relative(root, file));
+        if (result && result.status !== 0) {
+          failures.push(path.relative(root, file));
+        }
       }
     }
     expect(failures).toEqual([]);
@@ -68,7 +70,9 @@ describe('personal skill safety', () => {
       for (const file of await files(identity)) {
         const content = await readFile(file, 'utf8');
         for (const [kind, pattern] of forbidden) {
-          if (pattern.test(content)) violations.push(`${path.relative(root, file)}: ${kind}`);
+          if (pattern.test(content)) {
+            violations.push(`${path.relative(root, file)}: ${kind}`);
+          }
         }
       }
     }

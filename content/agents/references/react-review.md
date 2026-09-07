@@ -214,7 +214,10 @@ function BadForm() {
 ### useOptimistic — instant UI feedback
 
 ```tsx
-const [optimisticLikes, addOptimisticLike] = useOptimistic(likes, (current, increment: number) => current + increment);
+const [optimisticLikes, addOptimisticLike] = useOptimistic(
+  likes,
+  (current, increment: number) => current + increment,
+);
 
 const handleLike = async () => {
   addOptimisticLike(1); // immediate UI update

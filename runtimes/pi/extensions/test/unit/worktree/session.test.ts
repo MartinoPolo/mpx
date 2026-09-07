@@ -48,8 +48,11 @@ test('destination-bound fork retains history and continues from the active leaf'
     assert.equal(handoff.parentId, activeLeaf);
     assert.equal(handoff.details.cwd, targetCwd);
   } finally {
-    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
-    else process.env.PI_CODING_AGENT_DIR = previous;
+    if (previous === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previous;
+    }
     await rm(root, { recursive: true, force: true });
   }
 });

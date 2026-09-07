@@ -24,9 +24,14 @@ export function forkWorktreeSession(context: ExtensionContext, target: string): 
     destination = SessionManager.open(file);
   }
   const leaf = source.getLeafId();
-  if (leaf === null) destination.resetLeaf();
-  else destination.branch(leaf);
-  if (context.model) destination.appendModelChange(context.model.provider, context.model.id);
+  if (leaf === null) {
+    destination.resetLeaf();
+  } else {
+    destination.branch(leaf);
+  }
+  if (context.model) {
+    destination.appendModelChange(context.model.provider, context.model.id);
+  }
   if (context.thinkingLevel !== undefined) {
     destination.appendThinkingLevelChange(context.thinkingLevel);
   }

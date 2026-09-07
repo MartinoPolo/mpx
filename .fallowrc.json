@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "scripts/**/*.{js,mjs,ts}",
+    "content/skills/*/scripts/*.{js,mjs}",
     "apps/cli/src/main.ts",
     "tests/contract/**/*.{test,spec}.ts",
     "tests/integration/**/*.{test,spec}.{js,mjs,ts}"

@@ -33,21 +33,30 @@ function report(kind, quicklink, detail) {
 
 /** Turn a quicklink `link` into a local filesystem path, or null when it is not one. */
 function resolveLocalPath(link) {
-  const expanded = link.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (match, name) => process.env[name] ?? match);
+  const expanded = link.replace(
+    /%([A-Za-z_][A-Za-z0-9_]*)%/g,
+    (match, name) => process.env[name] ?? match,
+  );
   if (/^file:\/\/\//i.test(expanded)) {
     return decodeURIComponent(expanded.replace(/^file:\/\/\//i, '')).split(/[?#]/)[0];
   }
-  if (/^[A-Za-z]:[\\/]/.test(expanded)) return expanded.split(/[?#]/)[0];
+  if (/^[A-Za-z]:[\\/]/.test(expanded)) {
+    return expanded.split(/[?#]/)[0];
+  }
   return null;
 }
 
 /** The vault root that `obsidian://open?vault=NAME` would resolve to, or null. */
 function resolveObsidianVault(link) {
   const match = /^obsidian:\/\/open\?(.*)$/i.exec(link);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   const vaultName = new URLSearchParams(match[1]).get('vault');
   const activeVault = process.env.MPX_OBSIDIAN_VAULT;
-  if (!vaultName || !activeVault) return null;
+  if (!vaultName || !activeVault) {
+    return null;
+  }
   return { vaultName, vaultPath: join(dirname(activeVault), vaultName) };
 }
 
@@ -67,7 +76,10 @@ for (const quicklink of quicklinks) {
   }
 
   // A command line rather than a link: only the executable's existence is checkable.
-  const commandMatch = /^(?:cmd\s+\/c\s+)?["']?([A-Za-z]:[\\/][^"']+?\.(?:cmd|bat|ps1|exe))["']?/i.exec(quicklink.link);
+  const commandMatch =
+    /^(?:cmd\s+\/c\s+)?["']?([A-Za-z]:[\\/][^"']+?\.(?:cmd|bat|ps1|exe))["']?/i.exec(
+      quicklink.link,
+    );
   if (commandMatch && !existsSync(commandMatch[1])) {
     report('dead-script', quicklink, `${commandMatch[1]} does not exist`);
   }
@@ -78,12 +90,22 @@ for (const quicklink of quicklinks) {
 const idsSeen = new Set();
 for (const quicklink of quicklinks) {
   if (!ULID_PATTERN.test(quicklink.id)) {
-    report('invalid-id', quicklink, `"${quicklink.id}" is not a valid ULID — import rejects the category`);
+    report(
+      'invalid-id',
+      quicklink,
+      `"${quicklink.id}" is not a valid ULID — import rejects the category`,
+    );
   }
-  if (idsSeen.has(quicklink.id)) report('duplicate-id', quicklink, 'two quicklinks share this id');
+  if (idsSeen.has(quicklink.id)) {
+    report('duplicate-id', quicklink, 'two quicklinks share this id');
+  }
   idsSeen.add(quicklink.id);
   if (Boolean(quicklink.openWith) !== Boolean(quicklink.applicationId)) {
-    report('unpaired-openwith', quicklink, 'openWith and applicationId must both be set, to the same value');
+    report(
+      'unpaired-openwith',
+      quicklink,
+      'openWith and applicationId must both be set, to the same value',
+    );
   }
 }
 
@@ -92,15 +114,23 @@ const namesSeen = new Map();
 for (const quicklink of quicklinks) {
   const linkKey = quicklink.link.trim().toLowerCase();
   const nameKey = quicklink.name.trim().toLowerCase();
-  if (linksSeen.has(linkKey)) report('duplicate-link', quicklink, `same link as "${linksSeen.get(linkKey)}"`);
-  else linksSeen.set(linkKey, quicklink.name);
-  if (namesSeen.has(nameKey)) report('duplicate-name', quicklink, 'another quicklink has this name');
-  else namesSeen.set(nameKey, quicklink.name);
+  if (linksSeen.has(linkKey)) {
+    report('duplicate-link', quicklink, `same link as "${linksSeen.get(linkKey)}"`);
+  } else {
+    linksSeen.set(linkKey, quicklink.name);
+  }
+  if (namesSeen.has(nameKey)) {
+    report('duplicate-name', quicklink, 'another quicklink has this name');
+  } else {
+    namesSeen.set(nameKey, quicklink.name);
+  }
 }
 
 const quicklinkIds = new Set(quicklinks.map((quicklink) => quicklink.id));
 for (const setting of commandSettings) {
-  if (!setting.id.startsWith(QUICKLINK_COMMAND_PREFIX)) continue;
+  if (!setting.id.startsWith(QUICKLINK_COMMAND_PREFIX)) {
+    continue;
+  }
   const targetId = setting.id.slice(QUICKLINK_COMMAND_PREFIX.length);
   const target = quicklinks.find((quicklink) => quicklink.id === targetId);
   if (!quicklinkIds.has(targetId)) {
@@ -134,7 +164,9 @@ if (flags.includes('--json')) {
 } else {
   const byKind = new Map();
   for (const finding of findings) {
-    if (!byKind.has(finding.kind)) byKind.set(finding.kind, []);
+    if (!byKind.has(finding.kind)) {
+      byKind.set(finding.kind, []);
+    }
     byKind.get(finding.kind).push(finding);
   }
   console.log(
@@ -142,7 +174,9 @@ if (flags.includes('--json')) {
   );
   for (const [kind, group] of byKind) {
     console.log(`## ${kind} (${group.length})`);
-    for (const finding of group) console.log(`  ${finding.name ?? finding.id} — ${finding.detail}`);
+    for (const finding of group) {
+      console.log(`  ${finding.name ?? finding.id} — ${finding.detail}`);
+    }
     console.log();
   }
 }

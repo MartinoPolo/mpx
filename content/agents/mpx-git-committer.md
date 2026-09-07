@@ -1,7 +1,6 @@
 ---
 name: mpx-git-committer
-description:
-  'Stages, commits, and optionally pushes git changes with conventional commit format. Returns structured JSON result.'
+description: 'Stages, commits, and optionally pushes git changes with conventional commit format. Returns structured JSON result.'
 ---
 
 # Git Committer Agent

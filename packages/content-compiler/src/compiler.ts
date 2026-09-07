@@ -136,9 +136,15 @@ function renderedSkill(
   const lines = ['---', `name: ${entry.identity}`, `description: ${quote(effectiveDescription)}`];
   if (entry.author || entry.version || entry.category) {
     lines.push('metadata:');
-    if (entry.author) lines.push(`  author: ${quoteBookkeeping(entry.author)}`);
-    if (entry.version) lines.push(`  version: ${quoteBookkeeping(entry.version)}`);
-    if (entry.category) lines.push(`  category: ${quoteBookkeeping(entry.category)}`);
+    if (entry.author) {
+      lines.push(`  author: ${quoteBookkeeping(entry.author)}`);
+    }
+    if (entry.version) {
+      lines.push(`  version: ${quoteBookkeeping(entry.version)}`);
+    }
+    if (entry.category) {
+      lines.push(`  category: ${quoteBookkeeping(entry.category)}`);
+    }
   }
   if (entry.argumentHint) {
     if (runtimeProfile.argumentHint === 'supported') {

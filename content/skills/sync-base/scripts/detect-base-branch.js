@@ -32,10 +32,14 @@ function remoteBranchExists(branch, remote, execFile) {
 function commitsAhead(branch, remote, execFile) {
   const remoteRef = `refs/remotes/${remote}/${branch}`;
   const mergeBase = gitExec(['merge-base', remoteRef, 'HEAD'], execFile);
-  if (mergeBase === null) return null;
+  if (mergeBase === null) {
+    return null;
+  }
 
   const count = gitExec(['rev-list', '--count', `${mergeBase}..HEAD`], execFile);
-  if (count === null) return null;
+  if (count === null) {
+    return null;
+  }
 
   const parsed = Number.parseInt(count, 10);
   return Number.isNaN(parsed) ? null : parsed;
@@ -52,7 +56,9 @@ export function detectBaseBranch(explicitBranch, options = {}) {
   let bestBranch = null;
   let bestCount = Infinity;
   for (const branch of CANDIDATE_BRANCHES) {
-    if (!remoteBranchExists(branch, remote, execFile)) continue;
+    if (!remoteBranchExists(branch, remote, execFile)) {
+      continue;
+    }
     const ahead = commitsAhead(branch, remote, execFile);
     if (ahead !== null && ahead < bestCount) {
       bestCount = ahead;

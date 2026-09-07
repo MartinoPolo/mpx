@@ -13,7 +13,9 @@ const POLL_INTERVAL_MS = 3000;
 const DEFAULT_WAIT_TIMEOUT_SECONDS = 540;
 
 function sessionsRoot() {
-  return process.env.MPX_VOICE_GRILL_ROOT || path.join(os.homedir(), '.mpx-voice-grill', 'sessions');
+  return (
+    process.env.MPX_VOICE_GRILL_ROOT || path.join(os.homedir(), '.mpx-voice-grill', 'sessions')
+  );
 }
 
 function fail(message) {
@@ -97,7 +99,11 @@ function commandPublish(positional) {
   if (round.sessionId !== sessionId) {
     fail(`Round file sessionId '${round.sessionId}' does not match '${sessionId}'`);
   }
-  if (!Number.isInteger(round.round) || !Array.isArray(round.questions) || round.questions.length === 0) {
+  if (
+    !Number.isInteger(round.round) ||
+    !Array.isArray(round.questions) ||
+    round.questions.length === 0
+  ) {
     fail('Round file needs an integer "round" and a non-empty "questions" array — see CONTRACT.md');
   }
   for (const question of round.questions) {

@@ -94,9 +94,12 @@ function parseJsonOrNull(text) {
  */
 async function fetchVideoMetadata(youtubeUrl) {
   try {
-    const response = await fetch(`${OEMBED_ENDPOINT}?url=${encodeURIComponent(youtubeUrl)}&format=json`, {
-      signal: AbortSignal.timeout(OEMBED_TIMEOUT_MS),
-    });
+    const response = await fetch(
+      `${OEMBED_ENDPOINT}?url=${encodeURIComponent(youtubeUrl)}&format=json`,
+      {
+        signal: AbortSignal.timeout(OEMBED_TIMEOUT_MS),
+      },
+    );
     if (!response.ok) {
       return null;
     }
@@ -116,11 +119,16 @@ async function requestSheet({ geminiApiKey, model, youtubeUrl, focus, mediaResol
   let response;
   for (let attempt = 1; ; attempt += 1) {
     try {
-      response = await fetch(`${GENERATE_CONTENT_ENDPOINT}/${model}:generateContent?key=${geminiApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildExtractionRequest(youtubeUrl, focus, { mediaResolution, mode })),
-      });
+      response = await fetch(
+        `${GENERATE_CONTENT_ENDPOINT}/${model}:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            buildExtractionRequest(youtubeUrl, focus, { mediaResolution, mode }),
+          ),
+        },
+      );
       break;
     } catch (networkError) {
       if (attempt === NETWORK_ATTEMPTS) {
@@ -197,7 +205,11 @@ async function main() {
   const sheet = parseSheet(readSheetText(responseBody));
   const slug = slugify(sheet.title);
   const folderName = composeFolderName(videoMetadata, slug);
-  const outputDirectory = resolveOutputDirectory(process.env.MPX_AI_GENERATED, options.outputDirectory, folderName);
+  const outputDirectory = resolveOutputDirectory(
+    process.env.MPX_AI_GENERATED,
+    options.outputDirectory,
+    folderName,
+  );
   await mkdir(outputDirectory, { recursive: true });
 
   // One file, pasted whole: every line in it is material the image model should read, so a

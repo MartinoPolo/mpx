@@ -28,7 +28,9 @@ for (let directory = process.cwd(); ; directory = path.dirname(directory)) {
     console.error('Error: current directory is already inside a Git repository.');
     process.exit(1);
   }
-  if (path.dirname(directory) === directory) break;
+  if (path.dirname(directory) === directory) {
+    break;
+  }
 }
 
 const repositoryCheck = spawnSync('git', ['rev-parse', '--git-dir'], {

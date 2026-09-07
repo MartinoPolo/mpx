@@ -1,7 +1,6 @@
 ---
 name: mpx-scanner-architecture
-description:
-  'Lightweight architecture scanner for epic-end review. Flags structural concerns without designing solutions.'
+description: 'Lightweight architecture scanner for epic-end review. Flags structural concerns without designing solutions.'
 ---
 
 # Scanner: Architecture

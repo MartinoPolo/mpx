@@ -36,7 +36,9 @@ describe('canonical support assets', () => {
   it('keeps every JavaScript support script syntactically valid', async () => {
     for (const identity of await identities()) {
       for (const file of await files(identity)) {
-        if (!/\.(?:m?js)$/u.test(file)) continue;
+        if (!/\.(?:m?js)$/u.test(file)) {
+          continue;
+        }
         const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
         expect(result.status, `${path.relative(root, file)}: ${result.stderr}`).toBe(0);
       }
@@ -47,13 +49,17 @@ describe('canonical support assets', () => {
     const violations: string[] = [];
     for (const identity of await identities()) {
       for (const file of await files(identity)) {
-        if (!file.endsWith('.md')) continue;
+        if (!file.endsWith('.md')) {
+          continue;
+        }
         const content = await readFile(file, 'utf8');
         for (const match of content.matchAll(
           /\[[^\]]*\]\((?!https?:|file:|#)([^)#]+)(?:#[^)]+)?\)/gu,
         )) {
           const reference = match[1];
-          if (!reference) continue;
+          if (!reference) {
+            continue;
+          }
           const candidate = projectedReference(file, reference);
           if (!candidate) {
             violations.push(`${path.relative(root, file)} -> ${reference}: path escape`);

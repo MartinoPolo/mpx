@@ -567,7 +567,9 @@ async function readInstruction(
     let offset = 0;
     while (offset < bytes.length) {
       const result = await handle.read(bytes, offset, bytes.length - offset, offset);
-      if (result.bytesRead === 0) throw new Error('instruction changed while reading');
+      if (result.bytesRead === 0) {
+        throw new Error('instruction changed while reading');
+      }
       offset += result.bytesRead;
     }
     if ((await handle.read(Buffer.alloc(1), 0, 1, bytes.length)).bytesRead !== 0) {
@@ -596,12 +598,16 @@ async function projectContext(
   cwdInput: string,
 ): Promise<Array<{ file: string; bytes: Uint8Array }>> {
   const cwd = path.resolve(cwdInput);
-  if (cwd !== cwdInput) throw new Error('cwd must be absolute');
+  if (cwd !== cwdInput) {
+    throw new Error('cwd must be absolute');
+  }
   const root = path.parse(cwd).root;
   const directories: string[] = [];
   for (let current = cwd; ; current = path.dirname(current)) {
     directories.push(current);
-    if (current === root) break;
+    if (current === root) {
+      break;
+    }
   }
   directories.reverse();
   const selected: Array<{ file: string; bytes: Uint8Array }> = [];
@@ -611,7 +617,9 @@ async function projectContext(
       try {
         await lstat(file);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          continue;
+        }
         throw error;
       }
       selected.push({ file, bytes: await readInstruction(file, { containmentRoot: root }) });

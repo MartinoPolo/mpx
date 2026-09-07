@@ -24,8 +24,12 @@ const registration = () =>
   createPiNativePackageRegistration({
     schemaVersion: 1,
     kind: 'release-manifest',
-    releaseKey: installerDigest(files(['build-metadata.json', 'mpx-extension.mjs', 'package.json'])),
-    convergenceHash: installerDigest(files(['build-metadata.json', 'mpx-extension.mjs', 'package.json'])),
+    releaseKey: installerDigest(
+      files(['build-metadata.json', 'mpx-extension.mjs', 'package.json']),
+    ),
+    convergenceHash: installerDigest(
+      files(['build-metadata.json', 'mpx-extension.mjs', 'package.json']),
+    ),
     files: files(['build-metadata.json', 'mpx-extension.mjs', 'package.json']),
   });
 

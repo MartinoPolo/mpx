@@ -10,10 +10,21 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-const VALID_CATEGORIES = ['frontend', 'backend', 'database', 'build', 'typecheck', 'lint', 'test', 'other'];
+const VALID_CATEGORIES = [
+  'frontend',
+  'backend',
+  'database',
+  'build',
+  'typecheck',
+  'lint',
+  'test',
+  'other',
+];
 
 function usage() {
-  console.log('Usage: node detect-project-scripts.mjs [project_dir] [--recursive] [--category <name>] [--json]');
+  console.log(
+    'Usage: node detect-project-scripts.mjs [project_dir] [--recursive] [--category <name>] [--json]',
+  );
   console.log('  --recursive, -r   Scan nested package.json files');
   console.log('  --category, -c    Filter by category');
   console.log('  --json            Output JSON (for automation)');
@@ -67,7 +78,9 @@ const rootDir = path.resolve(projectDir);
 
 if (!existsSync(path.join(rootDir, 'package.json'))) {
   if (jsonMode) {
-    console.log('{"error":"no-root-package-json","message":"No package.json found at project root."}');
+    console.log(
+      '{"error":"no-root-package-json","message":"No package.json found at project root."}',
+    );
   } else {
     console.log('Error: No package.json found at project root.');
   }
@@ -99,7 +112,16 @@ function detectPackageManager() {
 }
 
 function walkForPackageJsons(startDir, results = []) {
-  const ignore = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage', '.turbo', '.cache']);
+  const ignore = new Set([
+    'node_modules',
+    '.git',
+    '.next',
+    'dist',
+    'build',
+    'coverage',
+    '.turbo',
+    '.cache',
+  ]);
   const entries = readdirSync(startDir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(startDir, entry.name);
@@ -132,7 +154,10 @@ function inferScriptCategory(scriptName, commandText) {
   ) {
     return 'frontend';
   }
-  if (/db|migrate|migration|seed|prisma/.test(script) || /prisma|knex|typeorm|sequelize/.test(command)) {
+  if (
+    /db|migrate|migration|seed|prisma/.test(script) ||
+    /prisma|knex|typeorm|sequelize/.test(command)
+  ) {
     return 'database';
   }
   if (/test/.test(script)) {
@@ -256,7 +281,9 @@ if (jsonMode) {
 function printPackage(packageDetails) {
   for (const script of packageDetails.scripts) {
     const portText = script.port !== undefined ? ` :${script.port}` : '';
-    process.stdout.write(`${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`);
+    process.stdout.write(
+      `${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`,
+    );
   }
 }
 
@@ -271,7 +298,9 @@ function printPackageCategorized(packageDetails) {
     process.stdout.write(`  ${category}:\n`);
     for (const script of scripts) {
       const portText = script.port !== undefined ? ` :${script.port}` : '';
-      process.stdout.write(`    ${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`);
+      process.stdout.write(
+        `    ${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`,
+      );
     }
   }
 }

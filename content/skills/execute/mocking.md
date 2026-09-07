@@ -32,7 +32,11 @@ function createOrderService(dependencies: { emailSender: EmailSender }) {
   return {
     async placeOrder(order: Order) {
       const saved = await saveOrder(order);
-      await dependencies.emailSender.send(order.email, 'Order confirmed', `Order #${saved.id} placed.`);
+      await dependencies.emailSender.send(
+        order.email,
+        'Order confirmed',
+        `Order #${saved.id} placed.`,
+      );
       return saved;
     },
   };

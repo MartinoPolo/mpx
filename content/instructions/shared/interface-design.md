@@ -10,7 +10,10 @@ fakes at system boundaries.
 **Testable:**
 
 ```typescript
-function createNotificationService(dependencies: { emailSender: EmailSender; clock: () => number }) {
+function createNotificationService(dependencies: {
+  emailSender: EmailSender;
+  clock: () => number;
+}) {
   return {
     async sendReminder(userId: string, message: string) {
       const timestamp = dependencies.clock();

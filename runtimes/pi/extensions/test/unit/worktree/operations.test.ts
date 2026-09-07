@@ -214,7 +214,9 @@ test('create fails closed when the workspace hub is unavailable', async () => {
         killed: false,
       };
     }
-    if (command === 'git') return { stdout: '', stderr: '', code: 0, killed: false };
+    if (command === 'git') {
+      return { stdout: '', stderr: '', code: 0, killed: false };
+    }
     return { stdout: '', stderr: 'mpx not found', code: 1, killed: false };
   };
   await assert.rejects(

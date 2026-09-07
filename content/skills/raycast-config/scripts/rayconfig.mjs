@@ -38,7 +38,9 @@ async function decode(inputPath, outputPath, password) {
 
   let compressedPayload;
   if (envelope.encryption) {
-    if (!password) throw new Error('This export is encrypted — a password is required.');
+    if (!password) {
+      throw new Error('This export is encrypted — a password is required.');
+    }
     const { iv, salt, authTag } = envelope.encryption;
     const key = await deriveKey(password, Buffer.from(salt, 'hex'), KEY_LENGTH);
     const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'), {});
@@ -60,7 +62,9 @@ async function decode(inputPath, outputPath, password) {
 }
 
 function summarise(value) {
-  if (Array.isArray(value)) return `${value.length} entries`;
+  if (Array.isArray(value)) {
+    return `${value.length} entries`;
+  }
   if (value && typeof value === 'object') {
     return Object.entries(value)
       .map(([key, inner]) => (Array.isArray(inner) ? `${key}=${inner.length}` : key))
@@ -103,9 +107,11 @@ async function encode(inputPath, outputPath, password) {
 }
 
 const [command, inputPath, outputPath, password] = process.argv.slice(2);
-if (command === 'decode') await decode(inputPath, outputPath, password);
-else if (command === 'encode') await encode(inputPath, outputPath, password);
-else {
+if (command === 'decode') {
+  await decode(inputPath, outputPath, password);
+} else if (command === 'encode') {
+  await encode(inputPath, outputPath, password);
+} else {
   console.error('usage: node rayconfig.mjs decode|encode <input> <output> [password]');
   process.exit(1);
 }

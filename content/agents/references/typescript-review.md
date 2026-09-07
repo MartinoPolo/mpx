@@ -107,7 +107,9 @@ const users = await Promise.all(ids.map(fetchUser));
 
 // ✅ Promise.allSettled — get all results, handle failures individually
 const results = await Promise.allSettled(ids.map(fetchUser));
-const users = results.filter((r): r is PromiseFulfilledResult<User> => r.status === 'fulfilled').map((r) => r.value);
+const users = results
+  .filter((r): r is PromiseFulfilledResult<User> => r.status === 'fulfilled')
+  .map((r) => r.value);
 ```
 
 ## Race Condition Handling

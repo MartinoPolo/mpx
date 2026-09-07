@@ -35,8 +35,9 @@ export function validateRequest(request: WorktreeRequest): WorktreeRequest {
     ) {
       throw new Error('Supply a literal Git branch name for the new worktree.');
     }
-    if (request.path !== undefined)
+    if (request.path !== undefined) {
       throw new Error('Use action enter for an existing worktree path.');
+    }
     if (
       request.base !== undefined &&
       (!request.base.trim() || request.base.startsWith('-') || /[\r\n]/u.test(request.base))
@@ -67,9 +68,14 @@ export function parseCommand(argumentsText: string): WorktreeRequest {
   for (let index = 0; index <= argumentsText.length; index += 1) {
     const character = argumentsText[index];
     if (quote) {
-      if (character === undefined) throw new Error('Unclosed quote in worktree command.');
-      if (character === quote) quote = '';
-      else token += character;
+      if (character === undefined) {
+        throw new Error('Unclosed quote in worktree command.');
+      }
+      if (character === quote) {
+        quote = '';
+      } else {
+        token += character;
+      }
     } else if (character === '"' || character === "'") {
       quote = character;
     } else if (character === undefined || /\s/u.test(character)) {
@@ -77,7 +83,9 @@ export function parseCommand(argumentsText: string): WorktreeRequest {
         task = argumentsText.slice(index).trim();
         break;
       }
-      if (token) tokens.push(token);
+      if (token) {
+        tokens.push(token);
+      }
       token = '';
     } else {
       token += character;
@@ -88,12 +96,15 @@ export function parseCommand(argumentsText: string): WorktreeRequest {
     const current = tokens[index]!;
     if (['--enter', '--base'].includes(current)) {
       const value = tokens[++index];
-      if (!value || value.startsWith('--'))
+      if (!value || value.startsWith('--')) {
         throw new Error(`${current} needs a value. ${COMMAND_USAGE}`);
+      }
       if (current === '--enter') {
         request.action = 'enter';
         request.path = value;
-      } else request.base = value;
+      } else {
+        request.base = value;
+      }
     } else if (!request.name && !current.startsWith('-')) {
       request.name = current;
     } else {
@@ -199,7 +210,9 @@ export async function prepareWorktree(
   if (sourceCommonDirectory !== targetCommonDirectory) {
     throw new Error('The destination belongs to a different Git repository.');
   }
-  if (sourceRoot === targetRoot) throw new Error('Pi is already in that worktree.');
+  if (sourceRoot === targetRoot) {
+    throw new Error('Pi is already in that worktree.');
+  }
   signal.throwIfAborted();
   return targetRoot;
 }

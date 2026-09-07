@@ -60,7 +60,9 @@ export function resolveOutputDirectory(configuredRoot, requestedDirectory, folde
   const root = path.resolve(rootValue);
   const assertContained = (candidate) => {
     const child = path.relative(root, candidate);
-    if (child === '' || (!child.startsWith('..') && !path.isAbsolute(child))) return candidate;
+    if (child === '' || (!child.startsWith('..') && !path.isAbsolute(child))) {
+      return candidate;
+    }
     throw new Error(`Output must stay under MPX_AI_GENERATED: ${candidate}`);
   };
   const parent = requestedDirectory
@@ -261,7 +263,8 @@ const SHEET_MODES = {
     schema: sheetSchema('exercises', EXERCISE_ITEM_SCHEMA),
     instruction: EXERCISE_INSTRUCTION,
     styleBlock: EXERCISE_STYLE_BLOCK,
-    tableLeadIn: 'For reference, the exercises restated exactly — use these names verbatim as the labels.',
+    tableLeadIn:
+      'For reference, the exercises restated exactly — use these names verbatim as the labels.',
     // A sheet where no exercise was prescribed anything would print a column of blanks, so
     // the Amount column only appears when at least one exercise carries one.
     columns: [
@@ -284,7 +287,9 @@ const SHEET_MODES = {
       // Two figures per panel rather than one: a single drawn position cannot distinguish
       // movements that share a start, and the arrow between them carries the direction.
       const arrow = describeArrow(exercise);
-      const arrowClause = arrow ? `, with ${arrow} drawn between them to show the direction of the movement` : '';
+      const arrowClause = arrow
+        ? `, with ${arrow} drawn between them to show the direction of the movement`
+        : '';
       return (
         `Panel ${index + 1} — ${exercise.name}${describeAmount(exercise)}: two figures side by side, ` +
         `first a person ${exercise.startPose}, then a person ${exercise.endPose}${arrowClause}.`
@@ -319,8 +324,10 @@ const SHEET_MODES = {
     gridOpeningSentence: (sheet, count) =>
       `A highly organized infographic titled "${sheet.title}" displaying ${count} points in a grid. ` +
       `Each tile features a minimalist, colorful icon of the point paired with a very short 2-5 word label underneath it.`,
-    panelEntry: (point, index) => `Panel ${index + 1} — ${point.label}: an illustration of ${describeVisual(point)}.`,
-    gridEntry: (point, index) => `${index + 1}. ${point.label} — an illustration of ${describeVisual(point)}.`,
+    panelEntry: (point, index) =>
+      `Panel ${index + 1} — ${point.label}: an illustration of ${describeVisual(point)}.`,
+    gridEntry: (point, index) =>
+      `${index + 1}. ${point.label} — an illustration of ${describeVisual(point)}.`,
     performerLead: 'Wherever a panel shows a person, draw the same person throughout',
     panelCaption: () => "Number each panel and label it with the point's name.",
   },
@@ -335,7 +342,9 @@ export function resolveMode(mode) {
   }
   const modeList = Object.keys(SHEET_MODES).join(', ');
   throw new Error(
-    mode ? `Unknown --mode "${mode}". Use one of: ${modeList}.` : `--mode is required. Use one of: ${modeList}.`,
+    mode
+      ? `Unknown --mode "${mode}". Use one of: ${modeList}.`
+      : `--mode is required. Use one of: ${modeList}.`,
   );
 }
 
@@ -468,7 +477,9 @@ function composePanelPrompt(sheet, descriptor, items, performerSentence) {
   // items. A video that titles every item separately yields one section per item, where
   // naming the rows just repeats the panel labels.
   const groupingSections = (sheet.sections ?? []).filter((section) => section.name);
-  const gathersItems = groupingSections.some((section) => (section[descriptor.itemsKey] ?? []).length > 1);
+  const gathersItems = groupingSections.some(
+    (section) => (section[descriptor.itemsKey] ?? []).length > 1,
+  );
   const grouping =
     groupingSections.length > 1 && gathersItems
       ? ` Group the panels into labelled rows: ${groupingSections.map((section) => section.name).join(', ')}.`
@@ -487,7 +498,12 @@ function composePanelPrompt(sheet, descriptor, items, performerSentence) {
 function composeGridPrompt(sheet, descriptor, items, performerSentence) {
   const tiles = items.map((item, index) => descriptor.gridEntry(item, index));
 
-  return [descriptor.gridOpeningSentence(sheet, items.length), tiles.join(' '), performerSentence, GRID_STYLE_BLOCK]
+  return [
+    descriptor.gridOpeningSentence(sheet, items.length),
+    tiles.join(' '),
+    performerSentence,
+    GRID_STYLE_BLOCK,
+  ]
     .filter(Boolean)
     .join(' ');
 }
