@@ -67,12 +67,12 @@ type AgentEntry = { kind: 'agent'; record: AgentRecord };
 type FleetEntry = MainEntry | AgentEntry;
 
 /** `11s` — integer seconds, no decimal/suffix (matches Claude Code, unlike formatMs). */
-export function formatFleetElapsed(ms: number): string {
+function formatFleetElapsed(ms: number): string {
   return `${Math.max(0, Math.round(ms / 1000))}s`;
 }
 
 /** `↓ 13.1k tokens` — down-arrow prefix, compact magnitude, plural "tokens". */
-export function formatFleetTokens(count: number): string {
+function formatFleetTokens(count: number): string {
   let compact: string;
   if (count >= 1_000_000) {
     compact = `${(count / 1_000_000).toFixed(1)}M`;

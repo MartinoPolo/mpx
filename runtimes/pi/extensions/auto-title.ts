@@ -51,7 +51,7 @@ function firstUserPrompt(ctx: ExtensionContext): string | undefined {
   return undefined;
 }
 
-export function normalizeGeneratedTitle(value: string): string | undefined {
+function normalizeGeneratedTitle(value: string): string | undefined {
   const firstLine = value
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -72,7 +72,7 @@ export function normalizeGeneratedTitle(value: string): string | undefined {
   return title.slice(0, MAX_TITLE_CHARACTERS).trimEnd();
 }
 
-export function fallbackTitle(prompt: string): string {
+function fallbackTitle(prompt: string): string {
   const words = prompt
     .replace(/[`*_#>[\](){}]/g, ' ')
     .replace(/\s+/g, ' ')

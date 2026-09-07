@@ -33,6 +33,7 @@ function freeze<T>(value: T): T {
 }
 
 export class PiRuntimeProfileError extends TypeError {
+  // fallow-ignore-next-line unused-class-member -- consumed by runtime projection validation.
   readonly code = 'PI_RUNTIME_PROFILE_INVALID' as const;
 
   constructor() {

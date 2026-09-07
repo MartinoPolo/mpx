@@ -11,8 +11,6 @@ import { DEV_SERVERS_CHANGED_EVENT, type DevServerSnapshot } from './contract.js
 import { DevServerManager } from './manager.js';
 import { createSystemRuntime } from './system-runtime.js';
 
-export { DEV_SERVERS_CHANGED_EVENT } from './contract.js';
-
 interface ToolParams {
   action: 'start' | 'status' | 'logs' | 'restart' | 'stop';
   id?: string;

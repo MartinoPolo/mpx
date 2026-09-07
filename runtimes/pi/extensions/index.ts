@@ -13,7 +13,9 @@ import worktree from './worktree/index.js';
 import sessionLifecycle from './session-lifecycle.js';
 import terminalProgress from './terminal-progress/index.js';
 
+// fallow-ignore-next-line unused-export -- Pi extension package facade contract.
 export { resolveCompactInstructionsFile } from './compact-instructions.js';
+// fallow-ignore-next-line unused-export -- Pi extension package facade contract.
 export { resolveGuardsDirectory } from './guard-hooks.js';
 
 export interface ExtensionComponent {

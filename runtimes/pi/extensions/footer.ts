@@ -106,7 +106,7 @@ export interface FooterPalette {
 }
 
 /** Minimal shape of pi's `Theme` this file needs; keeps the renderer mockable. */
-export interface FooterTheme {
+interface FooterTheme {
   getFgAnsi(color: string): string;
   bold?(text: string): string;
 }
@@ -128,7 +128,7 @@ function themeColor(theme: FooterTheme, color: string, fallback: string): string
   }
 }
 
-export function resolveFooterPalette(theme: FooterTheme): FooterPalette {
+function resolveFooterPalette(theme: FooterTheme): FooterPalette {
   const gray = themeColor(theme, 'muted', ansi256(245));
   return {
     reset: RESET,
@@ -173,7 +173,7 @@ function separator(palette: FooterPalette): string {
 }
 
 /** Joins pre-coloured segments, dropping empties so no separator dangles. */
-export function joinSegments(segments: string[], palette: FooterPalette): string {
+function joinSegments(segments: string[], palette: FooterPalette): string {
   return segments.filter((segment) => segment !== '').join(separator(palette));
 }
 
@@ -182,11 +182,11 @@ export function joinSegments(segments: string[], palette: FooterPalette): string
  * to re-open across wrapped physical lines. Argument order is pi-tui's
  * (text, url), the reverse of the mpx `hyperlink(url, label)`.
  */
-export function link(label: string, url: string): string {
+function link(label: string, url: string): string {
   return url === '' ? label : osc8Hyperlink(label, url);
 }
 
-export function renderProgressBar(
+function renderProgressBar(
   percent: number,
   width: number,
   filled: string,
@@ -206,7 +206,7 @@ export function renderProgressBar(
 }
 
 /** `1234` -> `1.2k`, `1234567` -> `1.2M`. Compact enough for a token column. */
-export function formatTokenCount(tokens: number): string {
+function formatTokenCount(tokens: number): string {
   if (!Number.isFinite(tokens) || tokens < 0) {
     return '0';
   }
@@ -221,7 +221,7 @@ export function formatTokenCount(tokens: number): string {
 
 // --- Row 1: thinking gauge ---------------------------------------------------
 
-export const THINKING_GAUGE_SLOTS = 6;
+const THINKING_GAUGE_SLOTS = 6;
 
 /**
  * pi has seven thinking levels: `off` plus six increasing effort levels. Six
@@ -281,14 +281,14 @@ export function resolveFooterSessionIdentity(
   };
 }
 
-export interface CompactionSettingsSnapshot {
+interface CompactionSettingsSnapshot {
   enabled: boolean;
   reserveTokens: number;
   defaultThinkingLevel: string;
 }
 
 /** pi's documented defaults (docs/compaction.md), pinned so a change is visible. */
-export const DEFAULT_COMPACTION_SETTINGS: CompactionSettingsSnapshot = {
+const DEFAULT_COMPACTION_SETTINGS: CompactionSettingsSnapshot = {
   enabled: true,
   reserveTokens: 16384,
   defaultThinkingLevel: '',
@@ -307,7 +307,7 @@ function readJsonFile(file: string): Record<string, unknown> | undefined {
 }
 
 /** Project settings win over global, matching pi's own resolution order. */
-export function readCompactionSettings(agentDir: string, cwd: string): CompactionSettingsSnapshot {
+function readCompactionSettings(agentDir: string, cwd: string): CompactionSettingsSnapshot {
   const merged = { ...DEFAULT_COMPACTION_SETTINGS };
   for (const file of [
     path.join(agentDir, 'settings.json'),
@@ -341,7 +341,7 @@ export function readCompactionSettings(agentDir: string, cwd: string): Compactio
  * no bar — nothing happens at the window edge, so a bar creeping toward it
  * would measure a threshold nobody acts on.
  */
-export function compactionTriggerTokens(
+function compactionTriggerTokens(
   contextWindow: number,
   settings: CompactionSettingsSnapshot,
 ): number {
@@ -361,7 +361,7 @@ export interface SessionUsageTotals {
   costUsd: number;
 }
 
-export const EMPTY_SESSION_USAGE: SessionUsageTotals = {
+const EMPTY_SESSION_USAGE: SessionUsageTotals = {
   input: 0,
   output: 0,
   cacheRead: 0,
@@ -370,7 +370,7 @@ export const EMPTY_SESSION_USAGE: SessionUsageTotals = {
 };
 
 /** Session-wide totals, summed over the assistant messages on the active branch. */
-export function collectSessionUsage(
+function collectSessionUsage(
   entries: readonly { type: string; message?: unknown }[],
 ): SessionUsageTotals {
   const totals: SessionUsageTotals = { ...EMPTY_SESSION_USAGE };
@@ -411,7 +411,7 @@ export interface FooterCompactionEvent {
  * the whole incremental-scan machinery in `lib/compaction.mts` is unused here —
  * only its formatters are.
  */
-export function compactionEventsFromEntries(
+function compactionEventsFromEntries(
   entries: readonly { type: string; id?: string; timestamp?: string; tokensBefore?: number }[],
   reasonByEntryId: ReadonlyMap<string, string>,
 ): FooterCompactionEvent[] {
@@ -456,7 +456,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
  * One porcelain-v2 call carries the branch and the worktree paths plus remote
  * URL provide the two footer links. All process work stays off the render path.
  */
-export async function readGitSnapshot(cwd: string): Promise<GitSnapshot | undefined> {
+async function readGitSnapshot(cwd: string): Promise<GitSnapshot | undefined> {
   if (cwd === '') {
     return undefined;
   }
@@ -502,7 +502,7 @@ export interface CodexQuota {
   observedAtEpochSeconds: number;
 }
 
-export const CODEX_USAGE_ENDPOINT = 'https://chatgpt.com/backend-api/wham/usage';
+const CODEX_USAGE_ENDPOINT = 'https://chatgpt.com/backend-api/wham/usage';
 const CODEX_PROVIDER = 'openai-codex';
 
 /** JWT claim the ChatGPT account id hides under, per pi-ai's own codex API layer. */
@@ -534,7 +534,7 @@ function headerNumber(headers: Record<string, string>, name: string): number | u
  * so this is the primary source; the endpoint poll corrects lagging headers once
  * a minute. Header names verified against `mtrojnar/pi-usage`'s `src/codex.ts`.
  */
-export function parseCodexQuotaHeaders(
+function parseCodexQuotaHeaders(
   headers: Record<string, string>,
   nowSeconds: number,
 ): CodexQuota | undefined {
@@ -575,7 +575,7 @@ export function parseCodexQuotaHeaders(
  * and `mtrojnar/pi-usage` read, which returns plan plus both windows without
  * spending a model request.
  */
-export function parseCodexUsageResponse(body: unknown, nowSeconds: number): CodexQuota | undefined {
+function parseCodexUsageResponse(body: unknown, nowSeconds: number): CodexQuota | undefined {
   if (body === null || typeof body !== 'object') {
     return undefined;
   }
@@ -624,7 +624,7 @@ export function parseCodexUsageResponse(body: unknown, nowSeconds: number): Code
 }
 
 /** `300` -> `5h`, `10080` -> `7d`. The label is the window, not a guess. */
-export function formatQuotaWindowLabel(minutes: number | undefined, fallback: string): string {
+function formatQuotaWindowLabel(minutes: number | undefined, fallback: string): string {
   if (minutes === undefined || !Number.isFinite(minutes) || minutes <= 0) {
     return fallback;
   }
@@ -638,7 +638,7 @@ export function formatQuotaWindowLabel(minutes: number | undefined, fallback: st
 }
 
 /** The ChatGPT account id the usage endpoint scopes to, decoded from the bearer. */
-export function accountIdFromBearerToken(token: string): string | undefined {
+function accountIdFromBearerToken(token: string): string | undefined {
   try {
     const payload = token.split('.')[1];
     if (payload === undefined) {
@@ -682,7 +682,7 @@ const MERGE_REQUEST_STALE_NOTE_SECONDS = 600;
 /** Same 10 s cap the shell script gave `timeout`. */
 const MERGE_REQUEST_TIMEOUT_MS = 10_000;
 
-export const EMPTY_MERGE_REQUEST: MrFields = {
+const EMPTY_MERGE_REQUEST: MrFields = {
   timestamp: '',
   provider: '',
   iid: '',
@@ -698,7 +698,7 @@ export const EMPTY_MERGE_REQUEST: MrFields = {
   fetchEpoch: '',
 };
 
-export interface RemoteIdentity {
+interface RemoteIdentity {
   host: string;
   /** `owner/repo` on GitHub, the full path on GitLab. */
   project: string;
@@ -708,7 +708,7 @@ export interface RemoteIdentity {
  * Host and project out of an `origin` URL, for the three forms git writes:
  * `git@host:path`, `ssh://[user@]host[:port]/path`, `http(s)://[user@]host/path`.
  */
-export function parseRemoteIdentity(remoteUrl: string): RemoteIdentity | undefined {
+function parseRemoteIdentity(remoteUrl: string): RemoteIdentity | undefined {
   const url = remoteUrl.trim();
   let host = '';
   let projectPath = '';
@@ -747,7 +747,7 @@ export function parseRemoteIdentity(remoteUrl: string): RemoteIdentity | undefin
 }
 
 /** Only the two hosts either CLI can talk to; anything else leaves row 9 absent. */
-export function providerForHost(host: string): 'github' | 'gitlab' | '' {
+function providerForHost(host: string): 'github' | 'gitlab' | '' {
   const lower = host.toLowerCase();
   if (lower.includes('gitlab')) {
     return 'gitlab';
@@ -770,7 +770,7 @@ function jsonField(value: unknown, key: string): unknown {
  * whole rollup, an incomplete check keeps it running, and an empty rollup means
  * the branch has no CI rather than a passing one.
  */
-export function rollupCheckState(checks: readonly unknown[]): string {
+function rollupCheckState(checks: readonly unknown[]): string {
   if (checks.length === 0) {
     return '';
   }
@@ -789,7 +789,7 @@ export function rollupCheckState(checks: readonly unknown[]): string {
 }
 
 /** GitLab spells five extra pipeline states that all mean "not finished yet". */
-export function normalizeGitlabPipelineState(raw: string): string {
+function normalizeGitlabPipelineState(raw: string): string {
   const state = raw.toUpperCase();
   if (['PENDING', 'CREATED', 'WAITING_FOR_RESOURCE', 'PREPARING'].includes(state)) {
     return 'RUNNING';
@@ -798,10 +798,7 @@ export function normalizeGitlabPipelineState(raw: string): string {
 }
 
 /** `gh pr list --json ...` output to the shared field contract. */
-export function reduceGithubPullRequest(
-  payload: unknown,
-  observedAtEpochSeconds: number,
-): MrFields {
+function reduceGithubPullRequest(payload: unknown, observedAtEpochSeconds: number): MrFields {
   const base: MrFields = {
     ...EMPTY_MERGE_REQUEST,
     timestamp: String(observedAtEpochSeconds),
@@ -832,10 +829,7 @@ export function reduceGithubPullRequest(
 }
 
 /** `glab api graphql` output to the shared field contract. */
-export function reduceGitlabMergeRequest(
-  payload: unknown,
-  observedAtEpochSeconds: number,
-): MrFields {
+function reduceGitlabMergeRequest(payload: unknown, observedAtEpochSeconds: number): MrFields {
   const base: MrFields = {
     ...EMPTY_MERGE_REQUEST,
     timestamp: String(observedAtEpochSeconds),
@@ -882,7 +876,7 @@ const GITLAB_MERGE_REQUEST_QUERY =
  * that is not installed or not authenticated, a malformed response - returns
  * undefined, and an undefined snapshot renders nothing at all.
  */
-export async function readMergeRequest(cwd: string, branch: string): Promise<MrFields | undefined> {
+async function readMergeRequest(cwd: string, branch: string): Promise<MrFields | undefined> {
   if (cwd === '' || branch === '') {
     return undefined;
   }
@@ -963,7 +957,7 @@ const CI_STATE_BY_PIPELINE: Readonly<Record<string, { text: string; tone: keyof 
  * in the Claude renderer's precedence: a draft's conflicts and approvals are
  * noise until it is marked ready.
  */
-export function buildMergeRequestState(mergeRequest: MrFields, palette: FooterPalette): string {
+function buildMergeRequestState(mergeRequest: MrFields, palette: FooterPalette): string {
   if (mergeRequest.draft === 'true') {
     return `${palette.local}draft${palette.reset}`;
   }
@@ -997,7 +991,7 @@ export function buildMergeRequestState(mergeRequest: MrFields, palette: FooterPa
  * than a speech-bubble emoji, which font-falls back to Segoe UI Emoji and draws
  * double-width into a single reserved cell.
  */
-export function buildMergeRequestBlock(
+function buildMergeRequestBlock(
   mergeRequest: MrFields | undefined,
   ageSeconds: number,
   palette: FooterPalette,
@@ -1077,7 +1071,7 @@ export function devServerPortsFor(configPath: string): number[] {
  * means https, one it rejects or ignores means a plain http server received a
  * ClientHello it could not parse.
  */
-export function probeDevServerPort(
+function probeDevServerPort(
   port: number,
   timeoutMs: number = PORT_PROBE_TIMEOUT_MS,
 ): Promise<PortScheme | ''> {
@@ -1109,9 +1103,7 @@ export function probeDevServerPort(
 }
 
 /** A port that is down is simply missing from the map, exactly as it is on disk. */
-export async function probeDevServerPorts(
-  ports: readonly number[],
-): Promise<Map<number, PortScheme>> {
+async function probeDevServerPorts(ports: readonly number[]): Promise<Map<number, PortScheme>> {
   const schemes = new Map<number, PortScheme>();
   const results = await Promise.all(ports.map((port) => probeDevServerPort(port)));
   ports.forEach((port, index) => {
@@ -1135,7 +1127,7 @@ export async function probeDevServerPorts(
  * A bare pencil closes a configured list; a project with no ports at all gets a
  * dim `pencil ports` hint instead, so the config is one click away either way.
  */
-export function buildDevServerSegments(
+function buildDevServerSegments(
   ports: readonly number[],
   portSchemes: ReadonlyMap<number, PortScheme>,
   configUrl: string,
@@ -1154,7 +1146,7 @@ export function buildDevServerSegments(
 }
 
 /** Pure presentation over event-fed snapshots; no process or port I/O occurs here. */
-export function buildManagedDevServerSegments(
+function buildManagedDevServerSegments(
   servers: readonly ManagedFooterSnapshot[],
   palette: FooterPalette,
 ): string[] {
@@ -1209,7 +1201,7 @@ export interface FinishedSubagent {
  * events report the actual resolved model; `sessionModel` is only a compatibility
  * fallback when an older or external event omits `model`.
  */
-export function subagentFromLifecycleEvent(
+function subagentFromLifecycleEvent(
   payload: unknown,
   sessionModel: string,
 ): FinishedSubagent | undefined {
@@ -1249,7 +1241,7 @@ function subagentStatusStyle(
  * counts keep the accent because that is the one comparison worth making at a
  * glance.
  */
-export const buildSubagentTallyRow: FooterRowBuilder = (snapshot) => {
+const buildSubagentTallyRow: FooterRowBuilder = (snapshot) => {
   const { palette, subagents } = snapshot;
   if (subagents.length === 0) {
     return [];
@@ -1378,7 +1370,7 @@ export type FooterRowBuilder = (snapshot: FooterSnapshot) => string[];
  * Adds a secondary hint at the far right without competing with essential left
  * status. Narrow terminals retain the status and drop the optional hint.
  */
-export function appendRightAlignedFooterHint(
+function appendRightAlignedFooterHint(
   line: string,
   hint: string,
   width: number | undefined,
@@ -1391,7 +1383,7 @@ export function appendRightAlignedFooterHint(
 }
 
 /** The high-frequency editor controls, ordered in the six rows they occupy. */
-export const FOOTER_SHORTCUT_PAIRS: readonly (readonly [string, string])[] = [
+const FOOTER_SHORTCUT_PAIRS: readonly (readonly [string, string])[] = [
   ['Alt+P   model picker', 'Shift+Tab  cycle effort'],
   ['Ctrl+C  clear input', 'Ctrl+Shift+Down  next prompt'],
   ['Ctrl+D  exit (empty)', 'Alt+Enter  queue follow-up'],
@@ -1410,7 +1402,7 @@ const FOOTER_SHORTCUT_BLOCK_WIDTH = Math.max(
 );
 
 /** Formats a fixed-width, two-column shortcut reference in the footer's dimmest weight. */
-export function buildFooterShortcutRows(palette: FooterPalette): string[] {
+function buildFooterShortcutRows(palette: FooterPalette): string[] {
   return FOOTER_SHORTCUT_PAIRS.map(([left, right]) => {
     const row = `${left.padEnd(FOOTER_SHORTCUT_COLUMN_WIDTH)}${right}`;
     return `${palette.dim}${row.padEnd(FOOTER_SHORTCUT_BLOCK_WIDTH)}${palette.reset}`;
@@ -1422,7 +1414,7 @@ export function buildFooterShortcutRows(palette: FooterPalette): string[] {
  * footer. Missing left-side rows become blank spacer rows so the reference
  * remains a stable two-column, six-row block.
  */
-export function appendFooterShortcutRows(
+function appendFooterShortcutRows(
   lines: readonly string[],
   palette: FooterPalette,
   width: number,
@@ -1475,7 +1467,7 @@ export const buildIdentityRow: FooterRowBuilder = (snapshot) => {
 };
 
 /** Row 3 — model and the thinking gauge. */
-export const buildModelRow: FooterRowBuilder = (snapshot) => {
+const buildModelRow: FooterRowBuilder = (snapshot) => {
   const { palette } = snapshot;
   const gauge = thinkingGauge(snapshot.thinkingLevel);
   const line = joinSegments(
@@ -1497,7 +1489,7 @@ export const buildModelRow: FooterRowBuilder = (snapshot) => {
  * The dev-server ports and the MR/PR block ride here rather than on rows of
  * their own because all four fields answer "where is this work".
  */
-export const buildLocationRow: FooterRowBuilder = (snapshot) => {
+const buildLocationRow: FooterRowBuilder = (snapshot) => {
   const { palette, location } = snapshot;
   const project = link(location.projectName, location.projectUrl);
   const name =
@@ -1536,7 +1528,7 @@ const CONTEXT_YELLOW_FRACTION = 0.5;
 const CONTEXT_ORANGE_FRACTION = 0.7;
 const CONTEXT_RED_FRACTION = 0.9;
 
-export function contextEscalationColor(
+function contextEscalationColor(
   tokens: number | undefined,
   trigger: number,
   palette: FooterPalette,
@@ -1565,7 +1557,7 @@ export function contextEscalationColor(
  * LLM response, where pi reports `tokens: null`; the whole context segment drops
  * out rather than rendering a zero that would read as "context emptied".
  */
-export const buildUsageRow: FooterRowBuilder = (snapshot) => {
+const buildUsageRow: FooterRowBuilder = (snapshot) => {
   const { palette } = snapshot;
   const color = contextEscalationColor(snapshot.contextTokens, snapshot.compactionTrigger, palette);
 
@@ -1619,7 +1611,7 @@ function compactionReasonLabel(reason: string): string {
  * not available and the row states the trigger point alone rather than inventing
  * the other half.
  */
-export const buildCompactionRows: FooterRowBuilder = (snapshot) => {
+const buildCompactionRows: FooterRowBuilder = (snapshot) => {
   const { palette, compactions } = snapshot;
   if (compactions.length === 0) {
     return [];
@@ -1654,7 +1646,7 @@ export const buildCompactionRows: FooterRowBuilder = (snapshot) => {
  * the selected model is not using the `openai-codex` account whose limits these
  * windows describe.
  */
-export const buildQuotaRow: FooterRowBuilder = (snapshot) => {
+const buildQuotaRow: FooterRowBuilder = (snapshot) => {
   const { palette, quota } = snapshot;
   if (quota === undefined || snapshot.modelProvider !== CODEX_PROVIDER) {
     return [];
@@ -1692,7 +1684,7 @@ export const buildQuotaRow: FooterRowBuilder = (snapshot) => {
  * and compaction history, quota, then the sub-agent ledger. Merge request and
  * dev-server details compose into the location row.
  */
-export const FOOTER_ROW_BUILDERS: readonly FooterRowBuilder[] = [
+const FOOTER_ROW_BUILDERS: readonly FooterRowBuilder[] = [
   buildSessionRow,
   buildIdentityRow,
   buildModelRow,

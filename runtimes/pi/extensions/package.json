@@ -25,6 +25,8 @@
     "nanoid": "5.1.16"
   },
   "devDependencies": {
+    "@mpx/application": "workspace:*",
+    "@mpx/sessions": "workspace:*",
     "@types/node": "^22.15.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.8.3",

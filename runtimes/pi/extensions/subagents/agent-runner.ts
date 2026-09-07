@@ -62,7 +62,7 @@ const EXCLUDED_TOOL_NAMES: string[] = Object.values(SUBAGENT_TOOL_NAMES);
  * Directory extensions (`foo/index.ts`) resolve to the parent directory name;
  * single-file extensions to the basename minus `.ts`/`.js`.
  */
-export function extensionCanonicalName(extPath: string): string {
+function extensionCanonicalName(extPath: string): string {
   const base = basename(extPath);
   const name =
     base === 'index.ts' || base === 'index.js'
@@ -131,7 +131,7 @@ function extensionPackageName(extPath: string): string | undefined {
  * otherwise only ever match as `src` (the source directory), never by its
  * package name. The path-derived name is preserved, so it keeps matching too.
  */
-export function extensionCanonicalNames(extPath: string): string[] {
+function extensionCanonicalNames(extPath: string): string[] {
   const canonical = extensionCanonicalName(extPath);
   const pkg = extensionPackageName(extPath);
   return pkg && pkg !== canonical ? [canonical, pkg] : [canonical];
@@ -148,7 +148,7 @@ export function extensionCanonicalNames(extPath: string): string[] {
  * everything by canonical name, so path-loaded extensions are matched via their name
  * rather than their post-staging `Extension.path`.
  */
-export function parseExtensionsSpec(
+function parseExtensionsSpec(
   entries: string[],
   cwd: string,
 ): { names: Set<string>; paths: string[]; wildcard: boolean } {
@@ -189,7 +189,7 @@ export function parseExtensionsSpec(
  * `ext:foo` alongside `ext:foo/bar` leaves narrowing in effect (narrowing wins).
  * The split is on the first `/`; extension canonical names never contain `/`.
  */
-export function parseExtSelectors(entries: string[]): {
+function parseExtSelectors(entries: string[]): {
   extNames: Set<string>;
   narrowing: Map<string, Set<string>>;
 } {
@@ -251,7 +251,7 @@ export function parseExtSelectors(entries: string[]): {
  * Only meaningful when extensions are loaded — under `noExtensions`/`isolated` the
  * static `allowedToolNames` allowlist already gates the registry itself.
  */
-export function installExtensionToolScope(
+function installExtensionToolScope(
   session: AgentSession,
   ctx: {
     loader: DefaultResourceLoader;

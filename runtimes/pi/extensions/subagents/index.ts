@@ -147,7 +147,7 @@ function textResult(msg: string, details?: AgentDetails) {
   return { content: [{ type: 'text' as const, text: msg }], details: details as any };
 }
 
-export function renderRunningAgentStatus(
+function renderRunningAgentStatus(
   frame: string,
   statsText: string,
   activity: string,

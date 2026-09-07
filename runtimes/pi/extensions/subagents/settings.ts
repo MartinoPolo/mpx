@@ -232,7 +232,7 @@ function readSettingsFile(path: string): SubagentsSettings {
 }
 
 /** Load merged settings: global provides defaults, project overrides. */
-export function loadSettings(cwd: string = process.cwd()): SubagentsSettings {
+function loadSettings(cwd: string = process.cwd()): SubagentsSettings {
   return { ...readSettingsFile(globalPath()), ...readSettingsFile(projectPath(cwd)) };
 }
 
@@ -241,7 +241,7 @@ export function loadSettings(cwd: string = process.cwd()): SubagentsSettings {
  * Returns `true` on success, `false` if the write (or mkdir) failed so the
  * caller can surface a warning — persistence isn't fatal but isn't silent.
  */
-export function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()): boolean {
+function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()): boolean {
   const path = projectPath(cwd);
   try {
     mkdirSync(dirname(path), { recursive: true });
@@ -253,7 +253,7 @@ export function saveSettings(s: SubagentsSettings, cwd: string = process.cwd()):
 }
 
 /** Apply persisted settings to the in-memory state via caller-supplied setters. */
-export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers): void {
+function applySettings(s: SubagentsSettings, appliers: SettingsAppliers): void {
   if (typeof s.maxConcurrent === 'number') {
     appliers.setMaxConcurrent(s.maxConcurrent);
   }
@@ -297,7 +297,7 @@ export function applySettings(s: SubagentsSettings, appliers: SettingsAppliers):
  * routes the success/failure of `saveSettings` into the right message + level
  * so the UI layer (index.ts) stays a thin wire between input and notification.
  */
-export function persistToastFor(
+function persistToastFor(
   successMsg: string,
   persisted: boolean,
 ): { message: string; level: 'info' | 'warning' } {

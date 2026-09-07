@@ -21,6 +21,7 @@ const PACKAGE_COMPACT_INSTRUCTIONS_FILE = fileURLToPath(
   new URL('./config/COMPACT.md', import.meta.url),
 );
 
+/** @public */
 export function resolveCompactInstructionsFile(
   configured = process.env.MPX_COMPACT_INSTRUCTIONS_FILE,
 ): string {

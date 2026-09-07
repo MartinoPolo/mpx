@@ -3,7 +3,7 @@
  *
  * Mirrors the engine shape of pi-cron-schedule/src/scheduler.ts:
  *   - two-Map split (jobs = croner Cron, intervals = setInterval/setTimeout)
- *   - addJob/removeJob/updateJob/scheduleJob/unscheduleJob/executeJob
+ *   - addJob/removeJob/scheduleJob/unscheduleJob/executeJob
  *   - static parsers for cron / "+10m" / "5m" / ISO formats
  *
  * Differences vs pi-cron-schedule:
@@ -24,7 +24,7 @@ import type { ScheduleStore } from './schedule-store.js';
 import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from './types.js';
 
 /** Event emitted on `pi.events` for cross-extension consumers. */
-export type ScheduleChangeEvent =
+type ScheduleChangeEvent =
   | { type: 'added'; job: ScheduledSubagent }
   | { type: 'removed'; jobId: string }
   | { type: 'updated'; job: ScheduledSubagent }
@@ -149,21 +149,6 @@ export class SubagentScheduler {
       this.emit({ type: 'removed', jobId: id });
     }
     return ok;
-  }
-
-  /** Toggle / mutate a job. Re-arms based on the new `enabled` state. */
-  updateJob(id: string, patch: Partial<ScheduledSubagent>): ScheduledSubagent | undefined {
-    const store = this.requireStore();
-    const updated = store.update(id, patch);
-    if (!updated) {
-      return undefined;
-    }
-    this.unscheduleJob(id);
-    if (updated.enabled) {
-      this.scheduleJob(updated);
-    }
-    this.emit({ type: 'updated', job: updated });
-    return updated;
   }
 
   /** Next-run time as ISO, or undefined if not currently armed. */

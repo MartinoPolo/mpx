@@ -28,7 +28,7 @@ const MAX_WIDGET_LINES = 12;
 export const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /** Statuses that indicate an error/non-success outcome (used for linger behavior and icon rendering). */
-export const ERROR_STATUSES = new Set(['error', 'aborted', 'steered', 'stopped']);
+const ERROR_STATUSES = new Set(['error', 'aborted', 'steered', 'stopped']);
 
 /** Tool name → human-readable action for activity descriptions. */
 const TOOL_DISPLAY: Record<string, string> = {
@@ -220,10 +220,7 @@ export function buildInvocationTags(invocation: AgentInvocation | undefined): {
  * including agents that inherit the main session model. The widget therefore
  * never requires the user to infer a running agent's model from parent state.
  */
-export function buildModelThinkingCells(
-  invocation: AgentInvocation | undefined,
-  theme: Theme,
-): string[] {
+function buildModelThinkingCells(invocation: AgentInvocation | undefined, theme: Theme): string[] {
   const cells: string[] = [];
   if (invocation?.modelName) {
     cells.push(theme.fg('accent', invocation.modelName));

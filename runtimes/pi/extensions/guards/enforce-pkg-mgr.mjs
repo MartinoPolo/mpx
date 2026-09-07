@@ -61,7 +61,7 @@ function warnToolRedirects(command) {
   }
 }
 
-export function getToolRedirectWarnings(command) {
+function getToolRedirectWarnings(command) {
   const warnings = [];
   // Match commands at start of line or after && / ; but NOT after |
   // Split on pipes first, only check the first segment for "starts with" patterns

@@ -78,7 +78,7 @@ const nodeBuiltinSpecifiers = new Set(
 const fileSystem = { lstat, readdir };
 let verifiedReleaseFingerprint;
 
-export const BUNDLER_OPTIONS = Object.freeze({
+const BUNDLER_OPTIONS = Object.freeze({
   bundle: true,
   conditions: ['mpx-source'],
   external: HOST_EXTERNALS,
@@ -89,7 +89,7 @@ export const BUNDLER_OPTIONS = Object.freeze({
   sourcemap: false,
   target: 'node22',
 });
-export const BUNDLER_CONFIG = Object.freeze({
+const BUNDLER_CONFIG = Object.freeze({
   entryPoint: 'index.ts',
   outputFile: 'mpx-extension.mjs',
   esbuildVersion,
@@ -116,7 +116,7 @@ function isApprovedImportSpecifier(specifier) {
   return nodeBuiltinSpecifiers.has(specifier) || HOST_EXTERNALS.includes(specifier);
 }
 
-export function analyzeImportSpecifiers(source) {
+function analyzeImportSpecifiers(source) {
   const sourceFile = ts.createSourceFile(
     'mpx-extension.mjs',
     source,
@@ -487,6 +487,7 @@ async function recoverInterruptedPublish() {
   await rm(stagingRoot, { recursive: true, force: true });
 }
 
+// fallow-ignore-next-line unused-export -- invoked through a dynamically imported release module.
 export async function buildRelease() {
   await mkdir(distRoot, { recursive: true });
   await recoverInterruptedPublish();

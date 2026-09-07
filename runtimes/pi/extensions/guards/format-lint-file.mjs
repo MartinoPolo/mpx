@@ -88,7 +88,7 @@ function resolveProjectPackageRoot(projectRoot, packageName) {
   }
 }
 
-export function resolveProjectPackageBinary(projectRoot, packageName, binaryName) {
+function resolveProjectPackageBinary(projectRoot, packageName, binaryName) {
   try {
     const packageRoot = resolveProjectPackageRoot(projectRoot, packageName);
     if (!packageRoot) {
@@ -107,7 +107,7 @@ export function resolveProjectPackageBinary(projectRoot, packageName, binaryName
   }
 }
 
-export function resolveBiomeBinary(projectRoot) {
+function resolveBiomeBinary(projectRoot) {
   const libc =
     process.platform === 'linux' && !process.report?.getReport?.().header?.glibcVersionRuntime
       ? '-musl'
@@ -126,7 +126,7 @@ export function resolveBiomeBinary(projectRoot) {
   }
 }
 
-export function resolveExecutable(executable) {
+function resolveExecutable(executable) {
   const pathEntries = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
   const extensions = process.platform === 'win32' ? ['.EXE', '.COM'] : [''];
   for (const directory of pathEntries) {

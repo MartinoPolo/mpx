@@ -177,15 +177,4 @@ export class ScheduleStore {
     }
     return this.withLock(() => this.jobs.delete(id));
   }
-
-  /** Delete the backing file (used when no jobs remain, optional cleanup). */
-  deleteFileIfEmpty(): void {
-    if (this.jobs.size === 0 && existsSync(this.filePath)) {
-      try {
-        unlinkSync(this.filePath);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
 }

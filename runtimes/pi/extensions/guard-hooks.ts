@@ -14,6 +14,7 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import { registerNotifications } from './notifications.js';
 
+/** @public */
 export function resolveGuardsDirectory(): string {
   return fileURLToPath(new URL('./guards/', import.meta.url));
 }
@@ -69,7 +70,7 @@ interface BashGuardScript {
  * string with no I/O, so the only way it fails is a broken harness — and an unvetted destructive
  * command is worse than a false block, which the user can always run by hand with `!`.
  */
-export const BASH_GUARD_SCRIPTS: readonly BashGuardScript[] = [
+const BASH_GUARD_SCRIPTS: readonly BashGuardScript[] = [
   {
     fileName: 'enforce-pkg-mgr.mjs',
     timeoutMilliseconds: 5000,
@@ -312,7 +313,7 @@ export async function evaluateBashGuards(
  * `<output>\n\nCommand exited with code N` — which becomes the error result's text content
  * (`dist/core/tools/bash.js:343-344`).
  */
-export function deriveBashExitCode(outputText: string, isError: boolean): number {
+function deriveBashExitCode(outputText: string, isError: boolean): number {
   if (!isError) {
     return 0;
   }
@@ -321,7 +322,7 @@ export function deriveBashExitCode(outputText: string, isError: boolean): number
 }
 
 /** Pull `hookSpecificOutput.additionalContext` out of a PostToolUse script's stdout. */
-export function extractAdditionalContext(stdout: string): string | null {
+function extractAdditionalContext(stdout: string): string | null {
   const trimmed = stdout.trim();
   if (!trimmed) {
     return null;

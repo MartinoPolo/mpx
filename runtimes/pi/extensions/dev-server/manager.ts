@@ -136,6 +136,7 @@ export class DevServerManager {
     return this.require(id).logs.present(options);
   }
 
+  // fallow-ignore-next-line unused-class-member -- unit-test inspection API for buffered log entries.
   logEntries(id: string): readonly LogEntry[] {
     return this.require(id).logs.entries();
   }

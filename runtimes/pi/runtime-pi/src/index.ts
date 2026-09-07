@@ -784,9 +784,3 @@ export async function buildPiProjection(
     await rm(staging, { recursive: true, force: true });
   }
 }
-
-export async function createPiRuntimeProjection(
-  input: PiProjectionBuildInput,
-): Promise<PiPublishedProjection> {
-  return buildPiProjection(input);
-}

@@ -17,7 +17,7 @@ interface StreamState {
 const TERMINAL_CONTROLS =
   /(?:\u001b\][^\u0007]*(?:\u0007|\u001b\\)|\u001bP[\s\S]*?\u001b\\|\u001b\[[0-?]*[ -/]*[@-~]|\u001b[@-_])/g;
 
-export function stripTerminalControls(text: string): string {
+function stripTerminalControls(text: string): string {
   return text.replace(TERMINAL_CONTROLS, '');
 }
 

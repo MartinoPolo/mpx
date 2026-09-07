@@ -1,19 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const LOCKFILE_MAP = {
+const LOCKFILE_MAP = {
   'bun.lockb': 'bun',
   'bun.lock': 'bun',
   'pnpm-lock.yaml': 'pnpm',
   'yarn.lock': 'yarn',
   'package-lock.json': 'npm',
-};
-
-export const RUNNER_MAP = {
-  bun: 'bunx',
-  pnpm: 'pnpm exec',
-  yarn: 'yarn exec',
-  npm: 'npx',
 };
 
 export function detectPackageManager(dir) {
@@ -46,11 +39,6 @@ export function findProjectRoot(startDir, markers = ['package.json']) {
     dir = path.dirname(dir);
   }
   return null;
-}
-
-export function getRunner(projectRoot) {
-  const pm = detectPackageManager(projectRoot);
-  return pm ? (RUNNER_MAP[pm] ?? 'npx') : 'npx';
 }
 
 /**

@@ -65,7 +65,7 @@ export function safeReadFile(filePath: string): string | undefined {
  * Resolve the memory directory path for a given agent + scope + cwd.
  * Throws if agentName contains path traversal characters.
  */
-export function resolveMemoryDir(agentName: string, scope: MemoryScope, cwd: string): string {
+function resolveMemoryDir(agentName: string, scope: MemoryScope, cwd: string): string {
   if (isUnsafeName(agentName)) {
     throw new Error(`Unsafe agent name for memory directory: "${agentName}"`);
   }
@@ -97,7 +97,7 @@ export function ensureMemoryDir(memoryDir: string): void {
  * Read the first N lines of MEMORY.md from the memory directory, if it exists.
  * Returns undefined if no MEMORY.md exists or if the path is a symlink.
  */
-export function readMemoryIndex(memoryDir: string): string | undefined {
+function readMemoryIndex(memoryDir: string): string | undefined {
   // Reject symlinked memory directories
   if (isSymlink(memoryDir)) {
     return undefined;

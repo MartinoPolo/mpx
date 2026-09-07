@@ -7,7 +7,7 @@
 import { readStdin } from './shared.mjs';
 import { fileURLToPath } from 'node:url';
 
-export const RM_RF_ALLOWED_TARGETS = new Set([
+const RM_RF_ALLOWED_TARGETS = new Set([
   'node_modules',
   'dist',
   'build',

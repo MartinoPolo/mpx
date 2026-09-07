@@ -132,7 +132,7 @@ export function readStagedFileDiff(projectRoot, file, execute = execFileSync) {
   });
 }
 
-export function scanForSecrets(diffContent, filename) {
+function scanForSecrets(diffContent, filename) {
   const findings = [];
   const addedLines = diffContent
     .split('\n')
@@ -155,7 +155,7 @@ export function scanForSecrets(diffContent, filename) {
  * Matches based on the opening quote character to handle apostrophes
  * inside double quotes and double quotes inside single quotes.
  */
-export function extractCommitMessage(command) {
+function extractCommitMessage(command) {
   // Try $(cat <<'EOF'...) pattern first (used in skills)
   const catHeredocMatch = command.match(/\$\(cat\s+<<-?['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF/);
   if (catHeredocMatch) {
@@ -193,7 +193,7 @@ export function extractCommitMessage(command) {
  * Validate commit message against conventional format.
  * Returns { valid, warnings } — never blocks, only warns.
  */
-export function validateCommitFormat(message) {
+function validateCommitFormat(message) {
   const warnings = [];
   const firstLine = message.split('\n')[0];
 

@@ -140,25 +140,6 @@ export function getAllTypes(): string[] {
   return [...agents.keys()];
 }
 
-/** Get names of default agents currently in the registry. */
-export function getDefaultAgentNames(): string[] {
-  return [...agents.entries()]
-    .filter(([, config]) => config.isDefault === true)
-    .map(([name]) => name);
-}
-
-/** Get names of user-defined agents (non-defaults) currently in the registry. */
-export function getUserAgentNames(): string[] {
-  return [...agents.entries()]
-    .filter(([, config]) => config.isDefault !== true)
-    .map(([name]) => name);
-}
-
-/** Check if a type is valid and enabled (case-insensitive). */
-export function isValidType(type: string): boolean {
-  return isValidTypeIn(agents, type);
-}
-
 /** Tool names required for memory management. */
 const MEMORY_TOOL_NAMES = ['read', 'write', 'edit'];
 

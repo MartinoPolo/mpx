@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
  * @param {object} [options] - Dependency injection (e.g. { execSync })
  * @returns {string|null} Context message or null
  */
-export function determineContext(command, response, cwd, options = {}) {
+function determineContext(command, response, cwd, options = {}) {
   const exec = options.execSync || execSync;
   const exitCode = response.exit_code ?? null;
   const stdout = response.stdout ?? '';
