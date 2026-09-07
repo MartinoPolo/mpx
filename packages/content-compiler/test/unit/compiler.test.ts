@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -254,10 +254,20 @@ describe('shared content compiler', () => {
       'issue-create',
       'review',
     ]);
-    expect(text(result, 'skills/shared/providers/GITHUB.md')).toContain(
-      'gh issue view <id> --repo <target>',
-    );
-    expect(text(result, 'skills/shared/providers/LOCAL.md')).toContain('schemaVersion: 2');
+    for (const provider of ['GITHUB', 'LOCAL']) {
+      const canonicalGuide = await readFile(
+        path.join(
+          repositoryRoot,
+          'content',
+          'instructions',
+          'shared',
+          'providers',
+          `${provider}.md`,
+        ),
+        'utf8',
+      );
+      expect(text(result, `skills/shared/providers/${provider}.md`)).toBe(canonicalGuide);
+    }
   });
 
   it.each([

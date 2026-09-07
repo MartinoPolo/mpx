@@ -128,6 +128,9 @@ const productionSourceInputs = [
   'subagents/worktree.ts',
   'terminal-progress/index.ts',
   'terminal-progress/state.ts',
+  'worktree/index.ts',
+  'worktree/operations.ts',
+  'worktree/session.ts',
 ] as const;
 
 function canonicalJson(value: unknown): string {
@@ -188,6 +191,19 @@ test('source digest tracks the lifecycle producer and its contract source bytes'
     '../../../packages/runtime-contracts/src/capabilities.ts',
     '../../../packages/runtime-contracts/src/index.ts',
   ]) {
+    assert.notEqual(
+      digest,
+      recomputeSourceTreeDigest((relativePath) => {
+        const bytes = readFileSync(path.join(packageRoot, relativePath));
+        return relativePath === changed ? Buffer.concat([bytes, Buffer.from('changed')]) : bytes;
+      }),
+    );
+  }
+});
+
+test('source digest tracks the worktree source bytes', () => {
+  const digest = recomputeSourceTreeDigest();
+  for (const changed of ['worktree/index.ts', 'worktree/operations.ts', 'worktree/session.ts']) {
     assert.notEqual(
       digest,
       recomputeSourceTreeDigest((relativePath) => {

@@ -382,10 +382,14 @@ it.each([false, true])(
       );
       await rm(path.join(upgradeSource, 'release-manifest.json'));
       const request = await new NodeSetupRequestFactory(fixture.environment).create();
-      const oldClaudeInstruction = 'content/instructions/runtime/claude/CLAUDE.md';
+      const oldClaudeInstruction = 'content/instructions/runtime/claude/LEGACY.md';
       const oldPiProfile = 'content/runtime-profiles.json';
       const oldLicense = 'runtimes/pi/extensions/dist/package/subagents/LICENSE';
       const retiredPaths = [oldClaudeInstruction, oldPiProfile, oldLicense];
+      await cp(
+        path.join(upgradeSource, 'content/instructions/runtime/claude/CLAUDE.md'),
+        path.join(upgradeSource, oldClaudeInstruction),
+      );
       await mkdir(path.dirname(path.join(upgradeSource, oldLicense)), { recursive: true });
       await cp(
         path.join(upgradeSource, 'runtimes/pi/extensions/subagents/LICENSE'),
@@ -551,7 +555,12 @@ it.each([false, true])(
       );
       expect(
         priorReceipt.operations.filter((operation) => operation.id.startsWith('61-projection-')),
-      ).toHaveLength(24);
+      ).toHaveLength(
+        priorBuilt.intent.runtimeRegistrations!.registrations.reduce(
+          (count, registration) => count + registration.projection.files.length,
+          0,
+        ),
+      );
       expect(
         pendingOperations.automatic.filter((operation) =>
           retainedProjectionTargets.includes(operation.target),

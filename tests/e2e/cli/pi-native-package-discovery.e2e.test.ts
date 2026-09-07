@@ -188,8 +188,12 @@ it('discovers the release once and separates MPX commands from native project sk
     {
       cwd,
       env: {
-        ...process.env,
-        ...sanitizedEnvironment({}, skillEnvironment),
+        ...sanitizedEnvironment(
+          Object.fromEntries(
+            Object.entries(process.env).filter(([name]) => !/^(?:MPX_|PI_)/u.test(name)),
+          ),
+          skillEnvironment,
+        ),
         PI_CODING_AGENT_DIR: agentRoot,
       },
       shell: false,

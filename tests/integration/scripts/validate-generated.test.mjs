@@ -37,6 +37,7 @@ describe('generated repository validation', () => {
       new Set([
         'AUTHORING.md',
         'BOARD_CONVENTION.md',
+        'CONTENT_PATHS.md',
         'deep-modules.md',
         'DESIGN_PIPELINE.md',
         'DOCUMENTATION_STRATEGY.md',
@@ -49,6 +50,7 @@ describe('generated repository validation', () => {
         'MPX_CLI_REFERENCE.md',
         'PLAYWRIGHT_TESTING.md',
         'PROJECT_DOC_TEMPLATES.md',
+        'PROVIDER_ROUTING.md',
         'REVIEWER_PROTOCOL.md',
         'SENTRY.md',
         'SUBAGENT_PROTOCOL.md',
