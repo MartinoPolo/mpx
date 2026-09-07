@@ -1,5 +1,8 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type UserConfig } from 'vitest/config';
+
+const TEST_TEMP_SETUP = fileURLToPath(new URL('./scripts/test-temp.mjs', import.meta.url));
 
 export const TEST_CATEGORIES = ['unit', 'payload', 'contract', 'integration', 'e2e'] as const;
 export type TestCategory = (typeof TEST_CATEGORIES)[number];
@@ -74,6 +77,7 @@ function categoryConfig(category: TestCategory, maxWorkers?: number): UserConfig
   return {
     test: {
       environment: 'node',
+      globalSetup: TEST_TEMP_SETUP,
       testTimeout: 30_000,
       hookTimeout: 30_000,
       include: [...CATEGORY_INCLUDES[category]],
@@ -94,6 +98,7 @@ export function createWorkspaceUnitConfig(
   return defineConfig({
     test: {
       environment: 'node',
+      globalSetup: TEST_TEMP_SETUP,
       passWithNoTests: true,
       include: ['test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}'],
       exclude: [
