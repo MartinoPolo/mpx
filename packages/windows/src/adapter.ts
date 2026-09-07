@@ -222,6 +222,8 @@ export interface WindowsProcessCapabilitiesOptions {
 
 /** Narrow Windows-native process identity and tree termination boundary. */
 export class WindowsProcessCapabilities {
+  static readonly inspectionBatchLimit = 2_048;
+
   private readonly runner: PowerShellRunner;
   constructor(options: WindowsProcessCapabilitiesOptions = {}) {
     this.runner = options.runner ?? new NativePowerShellRunner();
@@ -279,7 +281,7 @@ export class WindowsProcessCapabilities {
       return new Map();
     }
     if (
-      requested.size > 2_048 ||
+      requested.size > WindowsProcessCapabilities.inspectionBatchLimit ||
       [...requested].some((pid) => !Number.isInteger(pid) || pid < 1 || pid > 2_147_483_647)
     ) {
       throw new MpxError({
@@ -313,6 +315,50 @@ export class WindowsProcessCapabilities {
       processes.set(pid, { pid, startFingerprint: startedAt });
     }
     return processes;
+  }
+
+  asProcessInspector() {
+    return {
+      inspect: async (pid: number) => {
+        try {
+          return (await this.inspect(pid)) ?? null;
+        } catch {
+          return null;
+        }
+      },
+      inspectMany: async (pids: readonly number[]) => {
+        const requested = [...new Set(pids)];
+        const inspections = new Map<
+          number,
+          ({ status: 'present' } & OwnedWindowsProcess) | { status: 'absent' | 'unknown' }
+        >();
+        for (
+          let offset = 0;
+          offset < requested.length;
+          offset += WindowsProcessCapabilities.inspectionBatchLimit
+        ) {
+          const batch = requested.slice(
+            offset,
+            offset + WindowsProcessCapabilities.inspectionBatchLimit,
+          );
+          try {
+            const processes = await this.inspectMany(batch);
+            for (const pid of batch) {
+              const process = processes.get(pid);
+              inspections.set(
+                pid,
+                process ? { status: 'present', ...process } : { status: 'absent' },
+              );
+            }
+          } catch {
+            for (const pid of batch) {
+              inspections.set(pid, { status: 'unknown' });
+            }
+          }
+        }
+        return inspections;
+      },
+    };
   }
 
   async terminate(process: OwnedWindowsProcess): Promise<void> {

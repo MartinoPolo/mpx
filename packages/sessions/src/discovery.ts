@@ -1,6 +1,12 @@
 import { lstat, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { DiscoveryResult, DiscoveredSession, RuntimeDiscovery } from './service.js';
+import type {
+  DiscoveryResult,
+  DiscoveredSession,
+  ProcessInspection,
+  RuntimeDiscovery,
+  SessionProcessInspector,
+} from './service.js';
 import { SessionError } from './schemas.js';
 
 export interface CommandOutput {
@@ -91,9 +97,61 @@ function contained(root: string, candidate: string): boolean {
     (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
   );
 }
-export interface ProcessInspector {
+export interface ProcessInspector extends Pick<SessionProcessInspector, 'inspectMany'> {
   inspect(pid: number): Promise<{ startFingerprint: string } | null>;
 }
+
+async function inspectRegistryProcesses(
+  inspector: ProcessInspector,
+  pids: readonly number[],
+): Promise<ReadonlyMap<number, ProcessInspection>> {
+  if (pids.length === 0) {
+    return new Map();
+  }
+  if (inspector.inspectMany) {
+    const processes = await inspector.inspectMany(pids);
+    const requested = new Set(pids);
+    if (
+      !(processes instanceof Map) ||
+      [...processes].some(
+        ([pid, process]) =>
+          !requested.has(pid) ||
+          !isObject(process) ||
+          (process.status !== 'absent' &&
+            process.status !== 'unknown' &&
+            !(
+              process.status === 'present' &&
+              Number.isSafeInteger(process.pid) &&
+              typeof process.startFingerprint === 'string'
+            )),
+      )
+    ) {
+      throw new SessionError(
+        'PI_PROCESS_INSPECTION_MALFORMED',
+        'Pi process inspection returned malformed batch information',
+      );
+    }
+    return processes;
+  }
+  const processes = new Map<number, ProcessInspection>();
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(8, pids.length) }, async () => {
+      while (next < pids.length) {
+        const pid = pids[next++]!;
+        const process = await inspector.inspect(pid);
+        processes.set(
+          pid,
+          process
+            ? { status: 'present', pid, startFingerprint: process.startFingerprint }
+            : { status: 'absent' },
+        );
+      }
+    }),
+  );
+  return processes;
+}
+
 interface PiEntry {
   sessionId: string;
   sessionFile: string;
@@ -181,10 +239,23 @@ export class PiV2ActiveRegistryScanner implements RuntimeDiscovery {
         newest.set(entry.sessionId, entry);
       }
     }
+    const pids = [...new Set([...newest.values()].map((entry) => entry.pid))];
+    const processes = await inspectRegistryProcesses(this.inspector, pids);
+    if (pids.some((pid) => !processes.has(pid) || processes.get(pid)?.status === 'unknown')) {
+      return {
+        status: 'unavailable',
+        sessions: [],
+        diagnostic: 'PI_PROCESS_INSPECTION_UNAVAILABLE',
+      };
+    }
     const sessions: DiscoveredSession[] = [];
     for (const entry of newest.values()) {
-      const process = await this.inspector.inspect(entry.pid);
-      if (!process || process.startFingerprint !== entry.processStartedAt) {
+      const process = processes.get(entry.pid);
+      if (
+        process?.status !== 'present' ||
+        process.pid !== entry.pid ||
+        process.startFingerprint !== entry.processStartedAt
+      ) {
         continue;
       }
       const candidate = path.resolve(entry.sessionFile);

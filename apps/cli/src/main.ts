@@ -16,7 +16,7 @@ import {
 } from '@mpx/application';
 import {
   createNodeLaunchApplicationService,
-  executeNodeSessionResumeLaunch,
+  createNodeSessionResumeLaunchApplicationService,
 } from '@mpx/application/node';
 import {
   errorEnvelope,
@@ -60,7 +60,6 @@ import {
   createNodeSessionApplicationService,
   executeInternalPreparationWorker,
 } from '@mpx/application/node';
-import type { ResumePlanV1 } from '@mpx/sessions';
 
 interface Parsed {
   command: string[];
@@ -374,19 +373,24 @@ function usageGuidance(parsed: Parsed | undefined): string {
   return renderRootHelp();
 }
 
-async function executeProductionSessionResume(
-  plan: ResumePlanV1,
-  user: UserConfig,
+function productionSessionResumeLaunch(
   context: CliContext,
-  authority: { readonly approveHost?: boolean },
-): Promise<unknown> {
-  return executeNodeSessionResumeLaunch(
+  authority: { readonly approveHost?: boolean } = {},
+) {
+  return createNodeSessionResumeLaunchApplicationService(
     {
       store: sessions(context),
       environment: context.env,
       context,
       catalogRoot: (cwd) => catalogPath(context, cwd),
       status: () => status(context),
+      readUserConfig: () => userConfig(context),
+      ...(context.sessionResumeDependencies
+        ? { resumeDependencies: context.sessionResumeDependencies }
+        : {}),
+      ...(context.discoverProjectConfig
+        ? { discoverProjectConfig: context.discoverProjectConfig }
+        : {}),
       executionRoots: async () => {
         const appData = context.env.APPDATA;
         const localAppData = context.env.LOCALAPPDATA;
@@ -402,8 +406,6 @@ async function executeProductionSessionResume(
         };
       },
     },
-    plan,
-    user,
     authority,
   );
 }
@@ -466,6 +468,9 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         : undefined;
     const application = createNodeSessionApplicationService({
       store: sessionStore,
+      planCurrentResume:
+        context.sessionResumePlanner ??
+        ((seed) => productionSessionResumeLaunch(context).plan(seed, user)),
       ...(action === 'list'
         ? {
             processInspector:
@@ -493,7 +498,10 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
         ? {
             executeConfirmedResume:
               context.sessionResumeExecutor ??
-              ((plan, authority) => executeProductionSessionResume(plan, user, context, authority)),
+              (async (plan, authority) => {
+                const launch = productionSessionResumeLaunch(context, authority);
+                return launch.execute(await launch.prepare(plan, user));
+              }),
           }
         : {}),
     });

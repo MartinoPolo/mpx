@@ -46,6 +46,11 @@ describe('Windows process batch inspection', () => {
     await expect(
       new WindowsProcessCapabilities({ runner: runner(result(stdout)) }).inspectMany([42]),
     ).rejects.toMatchObject({ code: 'WINDOWS_POWERSHELL_MALFORMED' });
+    expect(
+      await new WindowsProcessCapabilities({ runner: runner(result(stdout)) })
+        .asProcessInspector()
+        .inspectMany([42]),
+    ).toEqual(new Map([[42, { status: 'unknown' }]]));
   });
 
   it('accepts only a successful explicit empty array as an empty snapshot', async () => {
@@ -67,13 +72,121 @@ describe('Windows process batch inspection', () => {
       [1.5],
       [Number.NaN],
       [2_147_483_648],
-      Array.from({ length: 2_049 }, (_, index) => index + 1),
+      Array.from(
+        { length: WindowsProcessCapabilities.inspectionBatchLimit + 1 },
+        (_, index) => index + 1,
+      ),
     ]) {
       await expect(capabilities.inspectMany(pids)).rejects.toMatchObject({
         code: 'PROCESS_FINGERPRINT_INVALID',
       });
     }
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe('Windows discovery process inspector', () => {
+  it('exposes fresh bounded batches with exact identities and explicit absence for unique PIDs', async () => {
+    const startedAt = '2025-01-01T00:00:00.000Z';
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(result(JSON.stringify([{ ProcessId: 42, StartedAt: startedAt }])))
+      .mockResolvedValueOnce(result('[]'));
+    const inspector = new WindowsProcessCapabilities({ runner: { run } }).asProcessInspector();
+    const { inspectMany } = inspector;
+    expect(await inspectMany([42, 43, 42])).toEqual(
+      new Map([
+        [42, { status: 'present', pid: 42, startFingerprint: startedAt }],
+        [43, { status: 'absent' }],
+      ]),
+    );
+    expect(run).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Get-CimInstance Win32_Process -Property ProcessId,CreationDate'),
+      { PidsJson: '[42,43]' },
+      { timeoutMs: 10_000 },
+    );
+    expect(await inspectMany([42])).toEqual(new Map([[42, { status: 'absent' }]]));
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(await inspectMany([])).toEqual(new Map());
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['malformed', 'failed', 'throwing'])(
+    'chunks unique PIDs sequentially and preserves other batches when one is %s',
+    async (failure) => {
+      const limit = WindowsProcessCapabilities.inspectionBatchLimit;
+      const pids = Array.from({ length: limit * 2 + 1 }, (_, index) => index + 1);
+      const startedAt = '2025-01-01T00:00:00.000Z';
+      const batches: number[][] = [];
+      let active = 0;
+      let maximumActive = 0;
+      const run = vi.fn<PowerShellRunner['run']>(async (_script, parameters) => {
+        const batch = JSON.parse(parameters!.PidsJson!) as number[];
+        batches.push(batch);
+        active++;
+        maximumActive = Math.max(maximumActive, active);
+        await Promise.resolve();
+        active--;
+        if (batch[0] === limit + 1) {
+          if (failure === 'throwing') {
+            throw new Error('native query failed');
+          }
+          return failure === 'malformed' ? result('{') : result('[]', 1);
+        }
+        return result(JSON.stringify([{ ProcessId: batch[0], StartedAt: startedAt }]));
+      });
+      const inspector = new WindowsProcessCapabilities({ runner: { run } }).asProcessInspector();
+      for (let scan = 0; scan < 2; scan++) {
+        const inspections = await inspector.inspectMany([...pids, ...pids]);
+        expect(inspections.size).toBe(pids.length);
+        for (const pid of pids) {
+          expect(inspections.get(pid)).toEqual(
+            pid > limit && pid <= limit * 2
+              ? { status: 'unknown' }
+              : pid === 1 || pid === limit * 2 + 1
+                ? { status: 'present', pid, startFingerprint: startedAt }
+                : { status: 'absent' },
+          );
+        }
+        expect(run).toHaveBeenCalledTimes((scan + 1) * Math.ceil(pids.length / limit));
+      }
+      expect(maximumActive).toBe(1);
+      expect(batches.every((batch) => batch.length <= limit)).toBe(true);
+      expect(batches.flat()).toEqual([...pids, ...pids]);
+    },
+  );
+
+  it('reports failed and throwing native batches as unknown, never absent', async () => {
+    for (const run of [
+      vi.fn().mockResolvedValue(result('[]', 1)),
+      vi.fn().mockRejectedValue(new Error('timeout')),
+    ]) {
+      const inspector = new WindowsProcessCapabilities({ runner: { run } }).asProcessInspector();
+      expect(await inspector.inspectMany([42, 43, 42])).toEqual(
+        new Map([
+          [42, { status: 'unknown' }],
+          [43, { status: 'unknown' }],
+        ]),
+      );
+      expect(run).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('keeps the legacy single-process adapter compatible and bound to its capabilities', async () => {
+    const startedAt = '2025-01-01T00:00:00.000Z';
+    const capabilities = new WindowsProcessCapabilities({
+      runner: runner(
+        result(JSON.stringify({ ProcessId: 42, StartedAt: startedAt })),
+        result('null'),
+        result('malformed'),
+        result('[]', 1),
+      ),
+    });
+    const { inspect } = capabilities.asProcessInspector();
+    expect(await inspect(42)).toEqual({ pid: 42, startFingerprint: startedAt });
+    expect(await inspect(42)).toBeNull();
+    expect(await inspect(42)).toBeNull();
+    expect(await inspect(42)).toBeNull();
   });
 });
 

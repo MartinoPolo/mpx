@@ -40,6 +40,7 @@ import {
 import {
   SessionStore,
   type IdentityV1,
+  type NativeVerifiedResumeSeedV1,
   type ResumeDependencies,
   type ResumePlanV1,
   type RuntimeDiscovery,
@@ -129,6 +130,7 @@ export interface CliContext extends LaunchExecutionContext {
   sessionResumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
   exactNativeRootVerifier?: { verify(root: string): Promise<void> };
   piAuthVerifier?: { verify(root: string): Promise<void> };
+  sessionResumePlanner?: (seed: NativeVerifiedResumeSeedV1) => Promise<ResumePlanV1>;
   sessionResumeExecutor?: (
     plan: ResumePlanV1,
     execution: { readonly approveHost?: boolean },

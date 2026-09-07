@@ -3,7 +3,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { canonicalNativeRootDigest } from '@mpx/launch';
-import { deriveNativeBindingRef, SessionStore, type ResumePlanV1 } from '@mpx/sessions';
+import type { UserConfig } from '@mpx/config';
+import type { ProspectiveSessionResumePlanV1 } from '@mpx/application';
+import { createNodeSessionResumeLaunchApplicationService } from '@mpx/application/node';
+import {
+  deriveNativeBindingRef,
+  SessionStore,
+  stableDigest,
+  type NativeVerifiedResumeSeedV1,
+  type ResumePlanV1,
+} from '@mpx/sessions';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
 
@@ -46,6 +55,19 @@ const deletedRoutes = [
   ['pi'],
   ['piw'],
 ] as const;
+
+async function prospectivePlan(seed: NativeVerifiedResumeSeedV1): Promise<ResumePlanV1> {
+  const unsigned = {
+    ...seed,
+    approval: {
+      schemaVersion: 1 as const,
+      selectedConfigDigest: stableDigest({ selected: 'test' }),
+      recordedLaunchDigest: stableDigest(seed.launch),
+      resurrection: 'unchanged' as const,
+    },
+  };
+  return { ...unsigned, confirmationDigest: stableDigest(unsigned) };
+}
 
 async function resumableCliFixture() {
   const localAppData = await mkdtemp(path.join(tmpdir(), 'mpx-cli-confirmation-'));
@@ -296,6 +318,7 @@ describe('canonical CLI dispatch', () => {
     const dryRunIo = captureIo();
     expect(
       await run(['session', 'resume', 'record-confirm', '--dry-run', '--json'], dryRunIo, {
+        sessionResumePlanner: prospectivePlan,
         env: { LOCALAPPDATA: fixture.localAppData },
         sessionStore: fixture.store,
         sessionResumeDependencies: fixture.dependencies,
@@ -310,6 +333,7 @@ describe('canonical CLI dispatch', () => {
         ['session', 'resume', 'record-confirm', '--confirm-plan', 'wrong-digest', '--json'],
         wrongIo,
         {
+          sessionResumePlanner: prospectivePlan,
           env: { LOCALAPPDATA: fixture.localAppData },
           sessionStore: fixture.store,
           sessionResumeDependencies: fixture.dependencies,
@@ -329,6 +353,7 @@ describe('canonical CLI dispatch', () => {
         ['session', 'resume', 'record-confirm', '--confirm-plan', confirmation, '--json'],
         confirmedIo,
         {
+          sessionResumePlanner: prospectivePlan,
           env: { LOCALAPPDATA: fixture.localAppData },
           sessionStore: fixture.store,
           sessionResumeDependencies: fixture.dependencies,
@@ -347,6 +372,7 @@ describe('canonical CLI dispatch', () => {
       const childResult = { exitCode, stdout: '', stderr: '', truncated: false };
       const executor = vi.fn(async () => childResult);
       const context = {
+        sessionResumePlanner: prospectivePlan,
         env: { LOCALAPPDATA: fixture.localAppData },
         sessionStore: fixture.store,
         sessionResumeDependencies: fixture.dependencies,
@@ -454,6 +480,7 @@ describe('canonical CLI dispatch', () => {
 
     expect(
       await run(['session', 'resume', 'record-abc', '--approve-resurrection', '--json'], io, {
+        sessionResumePlanner: prospectivePlan,
         env: { LOCALAPPDATA: localAppData },
         sessionStore: store,
         sessionResumeDependencies: async () => ({
@@ -480,6 +507,220 @@ describe('canonical CLI dispatch', () => {
       ok: true,
       data: { kind: 'session-resume', result: { digest: prepared.confirmationDigest } },
     });
+  });
+
+  it('requires a fresh explicit confirmation for changed release evidence, including on dry-run', async () => {
+    const fixture = await resumableCliFixture();
+    const before = await fixture.store.read({ domain: 'personal', name: 'main' }, 'claude');
+    let artifactKey = 'relocated-release-artifact';
+    const sessionResumePlanner = vi.fn(
+      async (seed: NativeVerifiedResumeSeedV1): Promise<ResumePlanV1> => {
+        const proposal = await prospectivePlan(seed);
+        const { confirmationDigest: ignored, ...unsigned } = proposal;
+        void ignored;
+        const current = {
+          ...unsigned,
+          launch: { ...seed.launch, artifactKey },
+          approval: { ...unsigned.approval, resurrection: 'confirmation-required' as const },
+        };
+        return { ...current, confirmationDigest: stableDigest(current) };
+      },
+    );
+    const sessionResumeExecutor = vi.fn(async () => ({ exitCode: 0 }));
+    const context = {
+      env: { LOCALAPPDATA: fixture.localAppData },
+      sessionStore: fixture.store,
+      sessionResumeDependencies: fixture.dependencies,
+      sessionResumePlanner,
+      sessionResumeExecutor,
+    };
+    const dryRun = captureIo();
+    expect(
+      await run(['session', 'resume', 'record-confirm', '--dry-run', '--json'], dryRun, context),
+    ).toBe(0);
+    const approved = JSON.parse(dryRun.out.join('')).data as ResumePlanV1;
+    expect(approved.launch.artifactKey).toBe(artifactKey);
+    const automatic = captureIo();
+    expect(
+      await run(
+        ['session', 'resume', 'record-confirm', '--approve-resurrection', '--json'],
+        automatic,
+        context,
+      ),
+    ).toBe(1);
+    expect(JSON.parse(automatic.out.join('')).error.code).toBe(
+      'SESSION_RESUME_CONFIRMATION_REQUIRED',
+    );
+    artifactKey = 'changed-again';
+    for (const extra of [[], ['--dry-run']]) {
+      const stale = captureIo();
+      expect(
+        await run(
+          [
+            'session',
+            'resume',
+            'record-confirm',
+            '--confirm-plan',
+            approved.confirmationDigest,
+            ...extra,
+            '--json',
+          ],
+          stale,
+          context,
+        ),
+      ).toBe(1);
+      expect(JSON.parse(stale.out.join('')).error.code).toBe(
+        'SESSION_RESUME_CONFIRMATION_MISMATCH',
+      );
+    }
+    expect(sessionResumeExecutor).not.toHaveBeenCalled();
+    expect(await fixture.store.read({ domain: 'personal', name: 'main' }, 'claude')).toEqual(
+      before,
+    );
+    const fresh = captureIo();
+    expect(
+      await run(['session', 'resume', 'record-confirm', '--dry-run', '--json'], fresh, context),
+    ).toBe(0);
+    const freshPlan = JSON.parse(fresh.out.join('')).data as ResumePlanV1;
+    expect(
+      await run(
+        [
+          'session',
+          'resume',
+          'record-confirm',
+          '--confirm-plan',
+          freshPlan.confirmationDigest,
+          '--json',
+        ],
+        captureIo(),
+        context,
+      ),
+    ).toBe(0);
+    expect(sessionResumeExecutor).toHaveBeenCalledExactlyOnceWith(freshPlan, { approveHost: true });
+  });
+
+  it('uses real production resolution for visible authority and the unchanged resurrection shortcut', async () => {
+    const fixture = await resumableCliFixture();
+    const record = (await fixture.store.read({ domain: 'personal', name: 'main' }, 'claude'))
+      .records[0]!;
+    const cwd = record.location.cwd;
+    await mkdir(cwd, { recursive: true });
+    await fixture.store.put({
+      ...record,
+      location: { ...record.location, repository: 'sample/app' },
+    });
+    let catalogRoot = path.join(fixture.localAppData, 'catalog');
+    const writeCatalog = async () => {
+      await mkdir(path.join(catalogRoot, 'review'), { recursive: true });
+      await writeFile(
+        path.join(catalogRoot, 'review', 'SKILL.md'),
+        '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nSECRET SKILL BODY\n',
+      );
+    };
+    await writeCatalog();
+    const user: UserConfig = {
+      identities: {
+        main: {
+          domain: 'personal',
+          runtimeRoots: { claude: cwd, pi: cwd },
+          gitAuthorRoute: 'personal',
+        },
+      },
+      domains: { personal: [cwd] },
+      contentScopes: { repo: { roots: [cwd], skillPacks: ['core'] } },
+      modes: { interactive: { resources: { 'selected-project': 'read-only' } } },
+      skillPolicies: { standard: { skillExposure: { default: 'explicit-only' } } },
+      networkPolicies: { restricted: { preset: 'deny-all' } },
+      presets: {},
+      launchDefaults: { projects: {}, scopes: {} },
+      executors: { host: {} },
+    };
+    const service = createNodeSessionResumeLaunchApplicationService({
+      store: fixture.store,
+      environment: {},
+      context: {},
+      readUserConfig: async () => user,
+      resumeDependencies: fixture.dependencies,
+      catalogRoot: async () => catalogRoot,
+      discoverProjectConfig: async () => undefined,
+      status: vi.fn(),
+      executionRoots: async () => ({
+        stateRoot: fixture.localAppData,
+        artifactsRoot: fixture.localAppData,
+      }),
+    });
+    const executor = vi.fn(async (plan: ResumePlanV1) => {
+      await service.prepare(plan, user);
+      const current = (await fixture.store.read(record.identity, record.runtime)).records[0]!;
+      await fixture.store.put({
+        ...current,
+        launch: plan.launch,
+        process: { pid: 456, startFingerprint: 'replayed-completed-child' },
+        workflow: { ...current.workflow, status: 'completed' },
+      });
+      return { exitCode: 0 };
+    });
+    const context = {
+      env: { LOCALAPPDATA: fixture.localAppData },
+      sessionStore: fixture.store,
+      sessionResumeDependencies: fixture.dependencies,
+      sessionResumePlanner: (seed: NativeVerifiedResumeSeedV1) => service.plan(seed, user),
+      sessionResumeExecutor: executor,
+    };
+    const invoke = async (...options: string[]) => {
+      const io = captureIo();
+      const code = await run(
+        ['session', 'resume', record.recordId, ...options, '--json'],
+        io,
+        context,
+      );
+      return { code, envelope: JSON.parse(io.out.join('')) };
+    };
+    const initial = await invoke('--dry-run');
+    expect(initial.code).toBe(0);
+    const first = initial.envelope.data as ProspectiveSessionResumePlanV1;
+    expect(first.approval.resurrection).toBe('confirmation-required');
+    expect(first.effectiveAuthority.resources).toContainEqual({
+      selector: 'selected-project',
+      access: 'read-only',
+    });
+    expect(JSON.stringify(first)).not.toContain('SECRET SKILL BODY');
+    expect((await invoke('--approve-resurrection')).envelope.error.code).toBe(
+      'SESSION_RESUME_CONFIRMATION_REQUIRED',
+    );
+    expect((await invoke('--confirm-plan', first.confirmationDigest)).code).toBe(0);
+    const repeated = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    expect(repeated.launch).toEqual(first.launch);
+    expect(repeated.approval.resurrection).toBe('unchanged');
+    expect(repeated.confirmationDigest).not.toBe(first.confirmationDigest);
+    expect((await invoke('--approve-resurrection')).code).toBe(0);
+
+    user.modes.interactive!.resources['identity-domain'] = 'read-write';
+    const expanded = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    expect(expanded.launch.mode).toBe(first.launch.mode);
+    expect(expanded.effectiveAuthority.resources).toContainEqual({
+      selector: 'identity-domain',
+      access: 'read-write',
+    });
+    expect(expanded.confirmationDigest).not.toBe(repeated.confirmationDigest);
+    expect((await invoke('--approve-resurrection')).envelope.error.code).toBe(
+      'SESSION_RESUME_CONFIRMATION_REQUIRED',
+    );
+    const calls = executor.mock.calls.length;
+    user.modes.interactive!.resources.host = 'read-write';
+    expect((await invoke('--confirm-plan', expanded.confirmationDigest)).envelope.error.code).toBe(
+      'SESSION_RESUME_CONFIRMATION_MISMATCH',
+    );
+    expect(executor).toHaveBeenCalledTimes(calls);
+    const current = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    expect((await invoke('--confirm-plan', current.confirmationDigest)).code).toBe(0);
+    catalogRoot = path.join(fixture.localAppData, 'relocated-catalog');
+    await writeCatalog();
+    const relocated = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    expect(relocated.launch.artifactKey).not.toBe(current.launch.artifactKey);
+    expect((await invoke('--approve-resurrection')).envelope.error.code).toBe(
+      'SESSION_RESUME_CONFIRMATION_REQUIRED',
+    );
   });
 
   it('executes internal resurrection without revealing it in direct help', async () => {

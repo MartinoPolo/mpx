@@ -1,3 +1,5 @@
+import { lstat, open, realpath } from 'node:fs/promises';
+import path from 'node:path';
 import type { NativeSessionRefV1, RuntimeName } from '@mpx/runtime-contracts';
 import { SessionStore } from './store.js';
 import {
@@ -23,7 +25,7 @@ export interface ResumeDependencies {
     runtimeQualifiedId: string,
   ): Promise<{ valid: boolean; activity: 'active' | 'inactive' | 'unavailable' }>;
 }
-export interface ResumePlanV1 {
+export interface NativeVerifiedResumeSeedV1 {
   readonly schemaVersion: 1;
   /** Resume is always a visible relaunch with fresh approval/audit evidence. */
   readonly newLaunchRequired: true;
@@ -34,18 +36,98 @@ export interface ResumePlanV1 {
   readonly identity: IdentityV1;
   readonly nativeBindingRef: string;
   readonly nativeSessionRef: NativeSessionRefV1;
+  readonly nativeVerificationDigest: string;
   readonly cwd: string;
   readonly projectId: string | null;
   readonly repositoryId: string | null;
   readonly launch: LaunchSnapshotV1;
+}
+
+export interface HistoricalResumePlanV1 extends NativeVerifiedResumeSeedV1 {
   readonly confirmationDigest: string;
 }
 
-async function buildResumePlan(
+export interface ResumeApprovalV1 {
+  readonly schemaVersion: 1;
+  readonly selectedConfigDigest: string;
+  readonly recordedLaunchDigest: string;
+  readonly resurrection: 'unchanged' | 'confirmation-required';
+}
+
+export interface ResumePlanV1 extends HistoricalResumePlanV1 {
+  readonly approval: ResumeApprovalV1;
+}
+
+async function verifyPiHeader(root: string, record: SessionRecordV1): Promise<string> {
+  const invalid = () =>
+    new SessionError(
+      'SESSION_RESUME_NATIVE_TARGET_INVALID',
+      'The native Pi session header or file binding differs from the recorded session.',
+    );
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    if (record.nativeSessionRef.kind !== 'root-relative-file') {
+      throw invalid();
+    }
+    const rootStat = await lstat(root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      throw invalid();
+    }
+    const canonicalRoot = await realpath(root);
+    const file = path.join(canonicalRoot, ...record.nativeSessionRef.value.split('/'));
+    handle = await open(file, 'r');
+    const opened = await handle.stat();
+    const named = await lstat(file);
+    const relative = path.relative(canonicalRoot, await realpath(file));
+    if (
+      !opened.isFile() ||
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      opened.dev !== named.dev ||
+      opened.ino !== named.ino ||
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
+      throw invalid();
+    }
+    const maximumHeaderBytes = 64 * 1024;
+    const bytes = Buffer.alloc(maximumHeaderBytes + 1);
+    const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+    const newline = bytes.subarray(0, bytesRead).indexOf(10);
+    if (newline < 0 || newline > maximumHeaderBytes) {
+      throw invalid();
+    }
+    const header: unknown = JSON.parse(bytes.subarray(0, newline).toString('utf8'));
+    if (header === null || typeof header !== 'object' || Array.isArray(header)) {
+      throw invalid();
+    }
+    const fields = header as { type?: unknown; version?: unknown; id?: unknown; cwd?: unknown };
+    const normalizedPath = (value: string) =>
+      process.platform === 'win32' ? path.normalize(value).toLowerCase() : path.normalize(value);
+    if (
+      fields.type !== 'session' ||
+      fields.version !== 3 ||
+      fields.id !== record.runtimeQualifiedId.slice('pi:'.length) ||
+      typeof fields.cwd !== 'string' ||
+      !path.isAbsolute(fields.cwd) ||
+      normalizedPath(fields.cwd) !== normalizedPath(record.location.cwd)
+    ) {
+      throw invalid();
+    }
+    return stableDigest(header);
+  } catch {
+    throw invalid();
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+export async function verifyNativeResumeSeed(
   store: SessionStore,
   input: SessionRecordV1,
   dependencies: ResumeDependencies,
-): Promise<ResumePlanV1> {
+): Promise<NativeVerifiedResumeSeedV1> {
   const record = parseSessionRecordV1(input);
   if (record.launch === null) {
     throw new SessionError(
@@ -101,6 +183,8 @@ async function buildResumePlan(
   if (target.activity === 'active') {
     throw new SessionError('SESSION_RESUME_ACTIVE', 'native session is still active');
   }
+  const headerDigest =
+    record.runtime === 'pi' ? await verifyPiHeader(configured.root, record) : null;
   const unsigned = {
     schemaVersion: 1 as const,
     newLaunchRequired: true as const,
@@ -114,12 +198,17 @@ async function buildResumePlan(
     identity: record.identity,
     nativeBindingRef: record.nativeBindingRef,
     nativeSessionRef: record.nativeSessionRef,
+    nativeVerificationDigest: stableDigest({
+      recordedRootDigest: recorded.recordedRootDigest,
+      process: record.process,
+      headerDigest,
+    }),
     cwd: record.location.cwd,
     projectId: record.location.project,
     repositoryId: record.location.repository,
     launch: record.launch,
   };
-  return { ...unsigned, confirmationDigest: stableDigest(unsigned) };
+  return unsigned;
 }
 
 async function persistResumeVerification(
@@ -156,11 +245,12 @@ export async function planResume(
   store: SessionStore,
   input: SessionRecordV1,
   dependencies: ResumeDependencies,
-): Promise<ResumePlanV1> {
+): Promise<HistoricalResumePlanV1> {
   const record = parseSessionRecordV1(input);
-  let plan: ResumePlanV1;
+  let plan: HistoricalResumePlanV1;
   try {
-    plan = await buildResumePlan(store, record, dependencies);
+    const seed = await verifyNativeResumeSeed(store, record, dependencies);
+    plan = { ...seed, confirmationDigest: stableDigest(seed) };
   } catch (error) {
     const code = error instanceof SessionError ? error.code : 'SESSION_RESUME_FAILED';
     const state =
@@ -176,7 +266,10 @@ export async function planResume(
   return plan;
 }
 
-export function verifyResumeConfirmation(plan: ResumePlanV1, confirmationDigest: string): void {
+export function verifyResumeConfirmation(
+  plan: HistoricalResumePlanV1,
+  confirmationDigest: string,
+): void {
   const { confirmationDigest: ignored, ...unsigned } = plan;
   void ignored;
   if (

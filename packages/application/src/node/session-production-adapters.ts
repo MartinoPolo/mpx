@@ -198,16 +198,8 @@ export async function productionSessionDiscoveries(input: {
         resolveTrustedRuntimeExecutable({ runtime: 'pi', cwd, environment }),
     });
   const existing = await store.listNativeBindings();
-  const piProcessInspector = options.piProcessInspector ?? {
-    inspect: async (pid: number) => {
-      try {
-        const inspected = await new WindowsProcessCapabilities().inspect(pid);
-        return inspected ? { startFingerprint: inspected.startFingerprint } : null;
-      } catch {
-        return null;
-      }
-    },
-  };
+  const piProcessInspector =
+    options.piProcessInspector ?? new WindowsProcessCapabilities().asProcessInspector();
   const result: {
     scanner: RuntimeDiscovery;
     context: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };

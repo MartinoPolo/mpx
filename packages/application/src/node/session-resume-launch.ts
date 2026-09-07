@@ -2,7 +2,16 @@ import path from 'node:path';
 import { discoverProjectConfig, type UserConfig } from '@mpx/config';
 import { sha256Canonical, type JsonValue } from '@mpx/core';
 import { resolveLaunch } from '@mpx/launch';
-import { SessionError, type ResumePlanV1, type SessionStore } from '@mpx/sessions';
+import {
+  SessionError,
+  SessionService,
+  stableDigest,
+  verifyNativeResumeSeed,
+  type ResumeDependencies,
+  type ResumePlanV1,
+  type SessionRecordV1,
+  type SessionStore,
+} from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
 import { parseStatusSnapshotV1, type StatusProvider, type StatusSnapshotV1 } from '@mpx/status';
 import {
@@ -20,6 +29,7 @@ import { directProcessTty } from './launch-execution-runtime.js';
 import { executeResolvedNodeLaunch } from './launch-execution.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
 import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
+import { productionSessionResumeDependencies } from './session-production-adapters.js';
 
 export interface NodeSessionResumeLaunchContext extends LaunchExecutionContext {
   readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
@@ -35,6 +45,8 @@ export interface NodeSessionResumeLaunchInput {
   status(): StatusProvider;
   executionRoots(): Promise<ResumeExecutionRoots>;
   readonly discoverProjectConfig?: typeof discoverProjectConfig;
+  readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
+  readonly readUserConfig: () => Promise<UserConfig>;
 }
 
 function piAuth(input: NodeSessionResumeLaunchInput, cwd: string): PiAuthVerifier {
@@ -71,6 +83,25 @@ export function createNodeSessionResumeLaunchApplicationService(
 ): SessionResumeLaunchApplicationService {
   const { store, context, environment } = input;
   return new SessionResumeLaunchApplicationService({
+    confirmationDigest: stableDigest,
+    readUserConfig: input.readUserConfig,
+    verifySeed: async (seed) => {
+      const record = await new SessionService(store).show(seed.recordId);
+      const user = await input.readUserConfig();
+      const dependencies =
+        input.resumeDependencies ??
+        productionSessionResumeDependencies({
+          user,
+          store,
+          environment,
+          cwd: seed.cwd,
+          ...(context.exactNativeRootVerifier
+            ? { exactNativeRootVerifier: context.exactNativeRootVerifier }
+            : {}),
+          ...(context.piAuthVerifier ? { piAuthVerifier: context.piAuthVerifier } : {}),
+        });
+      return verifyNativeResumeSeed(store, record, await dependencies(record));
+    },
     piPreflight: async (plan, userConfig) => {
       let nativeBinding: Awaited<ReturnType<SessionStore['readNativeBinding']>>;
       try {
@@ -188,7 +219,15 @@ export function createNodeSessionResumeLaunchApplicationService(
         },
       };
     },
-    resolveDescriptor: async ({ plan, userConfig, projectId, repositoryId, skills, evidence }) =>
+    resolveDescriptor: async ({
+      plan,
+      userConfig,
+      projectId,
+      repositoryId,
+      skills,
+      evidence,
+      selectedConfigDigest,
+    }) =>
       resolveLaunch({
         userConfig,
         cwd: plan.cwd,
@@ -206,8 +245,29 @@ export function createNodeSessionResumeLaunchApplicationService(
               reason: 'confirmed session resume',
               hostApproval: {
                 reason: 'confirmed session resume',
+                // Bind the current proposal to its native target, not prior launch/process audit history.
+                // Human confirmation and one-shot execution authority are checked separately.
                 approvalKey: sha256Canonical({
-                  confirmationDigest: plan.confirmationDigest,
+                  schemaVersion: 1,
+                  purpose: 'session-resume-proposal',
+                  runtimeQualifiedId: plan.runtimeQualifiedId,
+                  runtime: plan.runtime,
+                  identity: plan.identity,
+                  nativeBindingRef: plan.nativeBindingRef,
+                  nativeSessionRef: plan.nativeSessionRef,
+                  cwd: plan.cwd,
+                  projectId: plan.projectId,
+                  repositoryId: plan.repositoryId,
+                  mode: plan.launch.mode,
+                  skillPolicy: plan.launch.skillPolicy,
+                  contentScope: plan.launch.contentScope,
+                  executor: plan.launch.executor,
+                  workspace: plan.launch.workspace,
+                  networkPolicy: plan.launch.networkPolicy,
+                  grants: plan.launch.grants,
+                  runtimeArtifactKey: skills.artifact.reference.artifactKey,
+                  manifestKey: skills.manifest.manifestKey,
+                  selectedConfigDigest,
                 } as unknown as JsonValue),
               },
             }

@@ -1,6 +1,7 @@
 import { MpxError } from '@mpx/core';
 import type {
   IdentityV1,
+  NativeVerifiedResumeSeedV1,
   ResumeDependencies,
   ResumePlanV1,
   RuntimeDiscovery,
@@ -52,7 +53,8 @@ export interface SessionApplicationDependencies {
   readonly planResume: (
     record: SessionRecordV1,
     dependencies: ResumeDependencies,
-  ) => Promise<ResumePlanV1>;
+  ) => Promise<NativeVerifiedResumeSeedV1>;
+  readonly planCurrentResume: (seed: NativeVerifiedResumeSeedV1) => Promise<ResumePlanV1>;
   readonly verifyResumeConfirmation: (plan: ResumePlanV1, confirmation: string) => void;
   readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
   readonly executeConfirmedResume?: (
@@ -221,7 +223,7 @@ export class SessionApplicationService implements SessionApplication {
     dryRun?: boolean;
     approveResurrection?: boolean;
   }) {
-    if (!this.#dependencies.resumeDependencies) {
+    if (!this.#dependencies.resumeDependencies || !this.#dependencies.planCurrentResume) {
       throw applicationError(
         'SESSION_RESUME_NOT_CONFIGURED',
         'Production resume dependencies are unavailable.',
@@ -232,14 +234,28 @@ export class SessionApplicationService implements SessionApplication {
     await planner(initial, await this.#dependencies.resumeDependencies(initial));
     await this.#dependencies.consumePending();
     const current = await this.#sessions.show(request.id);
-    const replanned = await planner(current, await this.#dependencies.resumeDependencies(current));
-    const confirmation = request.approveResurrection
-      ? replanned.confirmationDigest
-      : request.confirmation;
-    if (confirmation === undefined || request.dryRun) {
+    const seed = await planner(current, await this.#dependencies.resumeDependencies(current));
+    const replanned = await this.#dependencies.planCurrentResume(seed);
+    if (request.confirmation !== undefined) {
+      this.#dependencies.verifyResumeConfirmation(replanned, request.confirmation);
+    }
+    if (request.dryRun || (!request.approveResurrection && request.confirmation === undefined)) {
       return replanned;
     }
-    this.#dependencies.verifyResumeConfirmation(replanned, confirmation);
+    if (
+      request.approveResurrection &&
+      request.confirmation === undefined &&
+      replanned.approval.resurrection !== 'unchanged'
+    ) {
+      throw applicationError(
+        'SESSION_RESUME_CONFIRMATION_REQUIRED',
+        'Current launch evidence requires a fresh dry-run and explicit --confirm-plan confirmation.',
+      );
+    }
+    this.#dependencies.verifyResumeConfirmation(
+      replanned,
+      request.confirmation ?? replanned.confirmationDigest,
+    );
     if (!this.#dependencies.executeConfirmedResume) {
       throw applicationError(
         'SESSION_RESUME_EXECUTION_UNAVAILABLE',
@@ -251,7 +267,7 @@ export class SessionApplicationService implements SessionApplication {
       kind: 'session-resume' as const,
       result: await this.#dependencies.executeConfirmedResume(
         replanned,
-        request.approveResurrection ? { approveHost: true } : {},
+        replanned.launch.executor.kind === 'host' ? { approveHost: true } : {},
       ),
     };
   }

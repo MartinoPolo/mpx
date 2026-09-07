@@ -28,6 +28,7 @@ import {
   parseNativeBindingRecordV1,
   parseSessionRecordV1,
   planResume,
+  verifyNativeResumeSeed,
   type LaunchSnapshotV1,
   type NativeBindingRecordV1,
   type ProcessInspection,
@@ -980,6 +981,40 @@ it('allows concurrent lifecycle consumers to durably consume one event once', as
   expect((await store.read(identity, 'claude')).records).toHaveLength(1);
 });
 
+it('verifies a native resume seed without persisting successful or failed verification', async () => {
+  const store = new SessionStore(await temporary());
+  await store.saveNativeBinding(nativeBinding());
+  await store.put(record());
+  const before = await store.read(identity, 'claude');
+  const transaction = vi.spyOn(store, 'transaction');
+  const dependencies = {
+    resolveConfiguredRoot: async () => ({
+      root: 'C:/native',
+      canonicalRootDigest: digest,
+      identity,
+      runtime: 'claude' as const,
+    }),
+    verifyNativeTarget: async () => ({ valid: true, activity: 'inactive' as const }),
+  };
+  const seed = await verifyNativeResumeSeed(store, record(), dependencies);
+  expect(seed.launch).toEqual(launch);
+  expect(seed).not.toHaveProperty('confirmationDigest');
+  for (const target of [
+    { valid: false, activity: 'inactive' as const },
+    { valid: true, activity: 'active' as const },
+    { valid: true, activity: 'unavailable' as const },
+  ]) {
+    await expect(
+      verifyNativeResumeSeed(store, record(), {
+        ...dependencies,
+        verifyNativeTarget: async () => target,
+      }),
+    ).rejects.toThrow();
+  }
+  expect(transaction).not.toHaveBeenCalled();
+  expect(await store.read(identity, 'claude')).toEqual(before);
+});
+
 it('plans successful Claude resume and rejects root mismatch', async () => {
   const store = new SessionStore(await temporary());
   await store.saveNativeBinding(nativeBinding());
@@ -1127,6 +1162,12 @@ it('propagates resumable-state persistence failures without attempting a blocked
 });
 
 it('plans Pi resume from the exact native binding tuple without account authority', async () => {
+  const nativeRoot = await temporary();
+  await mkdir(path.join(nativeRoot, 'sessions'));
+  await writeFile(
+    path.join(nativeRoot, 'sessions', 'abc.jsonl'),
+    `${JSON.stringify({ type: 'session', version: 3, id: 'abc', cwd: process.cwd() })}\n`,
+  );
   const store = new SessionStore(await temporary()),
     piIdentity = { domain: 'local', name: 'pi' };
   await store.saveNativeBinding(nativeBinding({ runtime: 'pi', identity: piIdentity }));
@@ -1136,11 +1177,12 @@ it('plans Pi resume from the exact native binding tuple without account authorit
       runtime: 'pi',
       runtimeQualifiedId: 'pi:abc',
       identity: piIdentity,
+      location: { ...record().location, cwd: process.cwd() },
       nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/abc.jsonl' },
     }),
     {
       resolveConfiguredRoot: async () => ({
-        root: 'C:/pi',
+        root: nativeRoot,
         canonicalRootDigest: digest,
         identity: piIdentity,
         runtime: 'pi',

@@ -1,7 +1,7 @@
 import {
   LifecycleEventDirectoryConsumer,
   SessionService,
-  planResume,
+  verifyNativeResumeSeed,
   projectSessionResurrectionRecordV1,
   verifyResumeConfirmation,
   type SessionProcessInspector,
@@ -45,7 +45,8 @@ export function createNodeSessionApplicationService(
       return consumed;
     },
     projectResurrectionRecord: projectSessionResurrectionRecordV1,
-    planResume: (record, resumeDependencies) => planResume(store, record, resumeDependencies),
+    planResume: (record, resumeDependencies) =>
+      verifyNativeResumeSeed(store, record, resumeDependencies),
     verifyResumeConfirmation,
   });
 }

@@ -17,9 +17,11 @@ Other checkout payloads are byte-verified in `${MPX_PROJECTS}/mpx-recovery/workt
 - Use Astra primarily for implementation, review and acceptance; Luna for exploration. Keep one build/test owner.
 - Preserve credentials, sessions, native launchers and unrelated settings. Stop on ambiguous resource ownership.
 
-## Next acceptance work
+## Verified acceptance and remaining work
 
-See the current checkpoint in `MPX_MIGRATION.md`. Repository test success does not prove that the installed release or the real personal/work Pi and Claude routes work. The reported `prejemesi` launch and native fallback are required acceptance cases.
+See the latest installed acceptance in `MPX_MIGRATION.md`. Personal and work Pi launches, fast listing, explicit cross-release resume and subsequent unchanged resume passed on the installed release. Native histories were preserved. The setup before-image qualification is explicit; do not turn it into a claim of pristine protocol compliance.
+
+Finish clean-main consolidation and retire only the inactive, fully integrated acceptance checkout. Personal Claude login, provider authentication/configuration and interactive visual/keybinding/audio checks remain separate. Fallow and optional sandbox work remain deferred. Keep recovery archives and the original-main stash.
 
 ## Durable references
 

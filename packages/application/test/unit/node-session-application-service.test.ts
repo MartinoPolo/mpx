@@ -19,6 +19,7 @@ it('scopes the initial Node lifecycle consumption before opening excluded event 
   const reconcile = vi.fn(async () => []);
   const application = createNodeSessionApplicationService({
     store: store as never,
+    planCurrentResume: vi.fn(),
     sessionService: { list: async () => [], reconcile } as never,
     discoveries: async () => [],
   });

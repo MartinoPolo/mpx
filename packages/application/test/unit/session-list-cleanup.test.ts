@@ -19,6 +19,7 @@ function dependencies(discoveries?: SessionApplicationDependencies['discoveries'
     ...(discoveries ? { discoveries } : {}),
     projectResurrectionRecord: vi.fn(),
     planResume: vi.fn(),
+    planCurrentResume: vi.fn(),
     verifyResumeConfirmation: vi.fn(),
   };
 }
@@ -274,6 +275,7 @@ describe('SessionApplicationService list recovery', () => {
       ]),
       projectResurrectionRecord: vi.fn(),
       planResume: vi.fn(),
+      planCurrentResume: vi.fn(),
       verifyResumeConfirmation: vi.fn(),
     });
 
