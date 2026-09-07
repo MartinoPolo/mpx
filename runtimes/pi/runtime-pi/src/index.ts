@@ -434,7 +434,7 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
             profile.tuiMode,
           ]
         : []),
-      '--theme',
+      '--use-theme',
       profile.theme,
       ...(resumeFile ? ['--session', resumeFile] : []),
     ],
