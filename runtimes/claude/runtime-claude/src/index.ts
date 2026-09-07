@@ -60,6 +60,8 @@ export interface ClaudeBuildInput {
   readonly skillPlan: SkillProjectionPlan;
   readonly compiledContent: CompiledContentTree;
   readonly outputStyle: string;
+  readonly globalInstructions: string;
+  readonly claudeInstructions: string;
   readonly outputRoot: string;
   readonly statusSnapshot: StatusSnapshotV1;
   readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
@@ -96,6 +98,76 @@ function pluginJson() {
   return `${JSON.stringify({ name: 'mpx', version: '0.0.0', description: 'MPX Claude runtime projection' }, null, 2)}\n`;
 }
 const MAX_OUTPUT_STYLE_BYTES = 1024 * 1024;
+async function canonicalInstruction(
+  file: string,
+  expectedTail: readonly string[],
+): Promise<Uint8Array> {
+  const absolute = path.resolve(file);
+  const actualTail = absolute.split(path.sep).slice(-expectedTail.length);
+  if (absolute !== file || actualTail.join('/') !== expectedTail.join('/')) {
+    throw new ClaudeRuntimeError(
+      'INSTRUCTION_ESCAPE',
+      'canonical instruction path must be absolute and contained by its expected instructions directory',
+    );
+  }
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(absolute, 'r');
+    const initial = await handle.stat(),
+      named = await lstat(absolute);
+    if (
+      !initial.isFile() ||
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      initial.dev !== named.dev ||
+      initial.ino !== named.ino ||
+      initial.size > MAX_OUTPUT_STYLE_BYTES
+    ) {
+      throw new ClaudeRuntimeError(
+        'INSTRUCTION_INVALID',
+        'canonical instruction must be a bounded regular non-symlink file',
+      );
+    }
+    const bytes = Buffer.alloc(initial.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesRead === 0) {
+        throw new ClaudeRuntimeError('INSTRUCTION_CHANGED', 'canonical instruction changed');
+      }
+      offset += result.bytesRead;
+    }
+    if ((await handle.read(Buffer.alloc(1), 0, 1, bytes.length)).bytesRead !== 0) {
+      throw new ClaudeRuntimeError('INSTRUCTION_CHANGED', 'canonical instruction changed');
+    }
+    const final = await handle.stat(),
+      finalNamed = await lstat(absolute),
+      resolved = await realpath(absolute);
+    if (
+      resolved !== absolute ||
+      final.dev !== initial.dev ||
+      final.ino !== initial.ino ||
+      final.size !== initial.size ||
+      final.mtimeMs !== initial.mtimeMs ||
+      finalNamed.isSymbolicLink()
+    ) {
+      throw new ClaudeRuntimeError('INSTRUCTION_CHANGED', 'canonical instruction changed');
+    }
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+      throw new ClaudeRuntimeError('INSTRUCTION_MALFORMED', 'canonical instruction must be UTF-8');
+    }
+    return bytes;
+  } catch (error) {
+    if (error instanceof ClaudeRuntimeError) {
+      throw error;
+    }
+    throw new ClaudeRuntimeError('INSTRUCTION_INVALID', 'canonical instruction cannot be read');
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
 async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
   const absolute = path.resolve(file);
   if (
@@ -366,6 +438,17 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     Uint8Array.from(file.bytes),
   ]);
   const outputStyle = await canonicalOutputStyle(input.outputStyle);
+  const globalInstructions = await canonicalInstruction(input.globalInstructions, [
+    'instructions',
+    'global',
+    'AGENTS.md',
+  ]);
+  const claudeInstructions = await canonicalInstruction(input.claudeInstructions, [
+    'instructions',
+    'runtime',
+    'claude',
+    'CLAUDE.md',
+  ]);
   const runtimeContext = parseRuntimeContextV1(input.runtimeContext),
     runtimeStatus = input.runtimeStatusEnvelope
       ? parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope)
@@ -384,6 +467,8 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
   const runtimeOwned = new Set(
     [
       '.claude-plugin/plugin.json',
+      'CLAUDE.md',
+      'instructions/global/AGENTS.md',
       'output-styles/mpx-terse.md',
       'hooks/hooks.json',
       'hooks/dangerous-command-policy.mjs',
@@ -409,6 +494,8 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     for (const [relative, text] of projected) {
       await write(input.outputRoot, relative, text, files);
     }
+    await write(input.outputRoot, 'CLAUDE.md', claudeInstructions, files);
+    await write(input.outputRoot, 'instructions/global/AGENTS.md', globalInstructions, files);
     await write(input.outputRoot, 'output-styles/mpx-terse.md', outputStyle, files);
     await write(input.outputRoot, 'hooks/hooks.json', hooksJson, files);
     await write(

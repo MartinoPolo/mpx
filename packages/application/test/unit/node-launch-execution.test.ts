@@ -225,6 +225,8 @@ describe('Node launch execution runtime adapters', () => {
   });
   it('appends Pi runtime arguments as separate argv values after MPX-owned arguments', async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-pi-runtime-args-'));
+    const projectCwd = path.join(stateRoot, 'project', 'nested');
+    await mkdir(projectCwd, { recursive: true });
     const launchKey = 'a'.repeat(64);
     const runtimeArgs = ['--no-session', '--print', 'Reply with only: verified'];
     const binding = {
@@ -268,7 +270,7 @@ describe('Node launch execution runtime adapters', () => {
     try {
       const [adapter] = productionRuntimeAdapters({
         descriptor,
-        cwd: 'C:/project',
+        cwd: projectCwd,
         environment: {},
         nativeRuntimeRoot: 'C:/native/pi',
         stateRoot,
@@ -297,7 +299,7 @@ describe('Node launch execution runtime adapters', () => {
             launchKey,
             runtime: 'pi',
             identity: { name: 'work', domain: 'work' },
-            worktreeRoot: 'C:/project',
+            worktreeRoot: projectCwd,
             executor: 'host',
             assignedPorts: [],
           },
@@ -305,7 +307,7 @@ describe('Node launch execution runtime adapters', () => {
         launchBanner: 'launch',
         initialSnapshot: {
           schemaVersion: 1,
-          project: { id: 'sample/app', cwd: 'C:/project' },
+          project: { id: 'sample/app', cwd: projectCwd },
           worktree: { id: null, path: null, role: null, branch: null },
           portResolution: 'valid',
           services: [],
@@ -417,11 +419,27 @@ describe('Node launch execution runtime adapters', () => {
         statusMaterializer: { materialize: async () => undefined },
         runtimeStatusMaterializer: { materialize: async () => 'C:/state/runtime.json' },
         trustedExecutable: { executable: process.execPath, argvPrefix: [] },
-        builder: async (input) => ({
-          directory: stateRoot,
-          pluginDirectory: stateRoot,
-          reference: publishedReference(input),
-        }),
+        builder: async (input) => {
+          expect(input.cwd).toBe('C:/project');
+          expect(input.globalInstructions).toBe(
+            path.resolve(content.agentsRoot, '..', 'instructions', 'global', 'AGENTS.md'),
+          );
+          expect(input.claudeInstructions).toBe(
+            path.resolve(
+              content.agentsRoot,
+              '..',
+              'instructions',
+              'runtime',
+              'claude',
+              'CLAUDE.md',
+            ),
+          );
+          return {
+            directory: stateRoot,
+            pluginDirectory: stateRoot,
+            reference: publishedReference(input),
+          };
+        },
         validator: async () => undefined,
       });
       const invocation = await adapter!.prepare({ routes: {} } as never);

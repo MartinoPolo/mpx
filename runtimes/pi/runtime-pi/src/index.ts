@@ -280,6 +280,24 @@ function projectionFilesForInvocation(
   }
 }
 
+function managedPromptFile(directory: string, files: readonly PiProjectionFile[]): string {
+  const relative = 'instructions/pi/MANAGED_PROMPT.md';
+  const matches = files.filter((entry) => entry.path === relative);
+  if (matches.length !== 1) {
+    throw new Error('published Pi projection does not uniquely bind managed prompt');
+  }
+  const file = path.join(directory, ...relative.split('/'));
+  const stat = lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== matches[0]!.bytes) {
+    throw new Error('published Pi managed prompt is missing or changed');
+  }
+  const bytes = readFileSync(file);
+  if (createHash('sha256').update(bytes).digest('hex') !== matches[0]!.sha256) {
+    throw new Error('published Pi managed prompt is missing or changed');
+  }
+  return absolute(file, 'managed prompt');
+}
+
 function compiledAgentsDirectory(directory: string, files: readonly PiProjectionFile[]): string {
   const normalized = new Set<string>();
   let agentFileCount = 0;
@@ -360,6 +378,7 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
     projectionReference,
   );
   const agentsDirectory = compiledAgentsDirectory(activeContentRoot, projectionFiles);
+  const managedPrompt = managedPromptFile(activeContentRoot, projectionFiles);
   const manifestFileMatches = projectionFiles.filter(
     (entry) => entry.path === 'active-content.json',
   );
@@ -416,6 +435,9 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
     cwd: absolute(input.cwd, 'cwd'),
     args: [
       '--no-skills',
+      '--no-context-files',
+      '--append-system-prompt',
+      managedPrompt,
       ...[
         ...managedSkillDirectories,
         ...projectInventory.nativeSkillDirectories.map((directory) =>
@@ -474,9 +496,126 @@ export interface PiProjectionBuildInput {
   readonly currentBinding: RuntimeBinding;
   readonly artifactsRoot: string;
   readonly piRuntimeProfile: PiRuntimeProfileV1;
+  readonly globalInstructions: string;
+  readonly piAppendInstructions: string;
+  readonly cwd: string;
   readonly artifactRevalidator?: Parameters<typeof publishRuntimeArtifact>[0]['revalidate'];
 }
 
+const MAX_INSTRUCTION_BYTES = 1024 * 1024;
+const PROJECT_CONTEXT_CANDIDATES = [
+  'AGENTS.override.md',
+  'AGENTS.md',
+  'AGENTS.MD',
+  'CLAUDE.md',
+  'CLAUDE.MD',
+] as const;
+async function readInstruction(
+  file: string,
+  options: { readonly expectedTail?: readonly string[]; readonly containmentRoot?: string } = {},
+): Promise<Uint8Array> {
+  const absoluteFile = path.resolve(file);
+  if (absoluteFile !== file) {
+    throw new Error('instruction path must be absolute');
+  }
+  if (options.expectedTail) {
+    const tail = absoluteFile.split(path.sep).slice(-options.expectedTail.length).join('/');
+    if (tail !== options.expectedTail.join('/')) {
+      throw new Error('canonical instruction escaped its expected source directory');
+    }
+  }
+  if (options.containmentRoot) {
+    const relative = path.relative(options.containmentRoot, absoluteFile);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error('project instruction escaped cwd ancestry');
+    }
+  }
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(absoluteFile, 'r');
+    const initial = await handle.stat(),
+      named = await lstat(absoluteFile);
+    if (
+      !initial.isFile() ||
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      initial.dev !== named.dev ||
+      initial.ino !== named.ino ||
+      initial.size > MAX_INSTRUCTION_BYTES
+    ) {
+      throw new Error('instruction must be a bounded regular non-symlink file');
+    }
+    const bytes = Buffer.alloc(initial.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesRead === 0) throw new Error('instruction changed while reading');
+      offset += result.bytesRead;
+    }
+    if ((await handle.read(Buffer.alloc(1), 0, 1, bytes.length)).bytesRead !== 0) {
+      throw new Error('instruction changed while reading');
+    }
+    const final = await handle.stat(),
+      finalNamed = await lstat(absoluteFile),
+      resolved = await realpath(absoluteFile);
+    if (
+      resolved !== absoluteFile ||
+      final.dev !== initial.dev ||
+      final.ino !== initial.ino ||
+      final.size !== initial.size ||
+      final.mtimeMs !== initial.mtimeMs ||
+      finalNamed.isSymbolicLink()
+    ) {
+      throw new Error('instruction changed or escaped while reading');
+    }
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return bytes;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+async function projectContext(
+  cwdInput: string,
+): Promise<Array<{ file: string; bytes: Uint8Array }>> {
+  const cwd = path.resolve(cwdInput);
+  if (cwd !== cwdInput) throw new Error('cwd must be absolute');
+  const root = path.parse(cwd).root;
+  const directories: string[] = [];
+  for (let current = cwd; ; current = path.dirname(current)) {
+    directories.push(current);
+    if (current === root) break;
+  }
+  directories.reverse();
+  const selected: Array<{ file: string; bytes: Uint8Array }> = [];
+  for (const directory of directories) {
+    for (const candidate of PROJECT_CONTEXT_CANDIDATES) {
+      const file = path.join(directory, candidate);
+      try {
+        await lstat(file);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
+      selected.push({ file, bytes: await readInstruction(file, { containmentRoot: root }) });
+      break;
+    }
+  }
+  return selected;
+}
+function composeManagedPrompt(
+  globalInstructions: Uint8Array,
+  piAppendInstructions: Uint8Array,
+  project: readonly { readonly file: string; readonly bytes: Uint8Array }[],
+): Uint8Array {
+  const sections = [Buffer.from(globalInstructions), Buffer.from(piAppendInstructions)];
+  for (const entry of project) {
+    sections.push(Buffer.from(`\n\n## Project context: ${entry.file}\n\n`, 'utf8'));
+    sections.push(Buffer.from(entry.bytes));
+  }
+  return Buffer.concat(
+    sections.flatMap((section, index) => (index ? [Buffer.from('\n\n'), section] : [section])),
+  );
+}
 function jsonFile(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
@@ -556,6 +695,17 @@ export async function buildPiProjection(
       `RESTART_REQUIRED: ${validation.diagnostics.map((item) => item.code).join(',')}`,
     );
   }
+  const globalInstructions = await readInstruction(input.globalInstructions, {
+    expectedTail: ['instructions', 'global', 'AGENTS.md'],
+  });
+  const piAppendInstructions = await readInstruction(input.piAppendInstructions, {
+    expectedTail: ['instructions', 'runtime', 'pi', 'APPEND_SYSTEM.md'],
+  });
+  const managedPrompt = composeManagedPrompt(
+    globalInstructions,
+    piAppendInstructions,
+    await projectContext(input.cwd),
+  );
   const descriptor = {
     schemaVersion: 1,
     runtime: 'pi',
@@ -577,6 +727,9 @@ export async function buildPiProjection(
       'projection.json',
       'runtime-context.json',
       'runtime-profile.json',
+      'instructions/global/agents.md',
+      'instructions/runtime/pi/append_system.md',
+      'instructions/pi/managed_prompt.md',
     ]);
     for (const file of compiledFiles) {
       if (runtimeOwned.has(file.relativePath.toLowerCase())) {
@@ -584,6 +737,9 @@ export async function buildPiProjection(
       }
       await emit(staging, file.relativePath, file.bytes);
     }
+    await emit(staging, 'instructions/global/AGENTS.md', globalInstructions);
+    await emit(staging, 'instructions/runtime/pi/APPEND_SYSTEM.md', piAppendInstructions);
+    await emit(staging, 'instructions/pi/MANAGED_PROMPT.md', managedPrompt);
     const launchBinding = {
       launchKey: context.launchKey,
       descriptorDigest: context.launchDescriptor.digest,

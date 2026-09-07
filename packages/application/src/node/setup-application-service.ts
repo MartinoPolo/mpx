@@ -319,6 +319,11 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
       projections: {
         claude: [
           { path: 'content/agents/metadata.json', role: 'agents' },
+          { path: 'content/instructions/global/AGENTS.md', role: 'canonical-content' },
+          {
+            path: 'content/instructions/runtime/claude/CLAUDE.md',
+            role: 'canonical-content',
+          },
           { path: 'content/output-styles/mpx-terse.md', role: 'canonical-content' },
           { path: 'runtimes/claude/runtime-claude/COMPATIBILITY.md', role: 'settings' },
           { path: 'runtimes/claude/runtime-claude/package.json', role: 'status' },
@@ -328,6 +333,7 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
         ],
         pi: [
           { path: 'content/agents/metadata.json', role: 'agents' },
+          { path: 'content/instructions/global/AGENTS.md', role: 'canonical-content' },
           { path: 'content/instructions/runtime/pi/APPEND_SYSTEM.md', role: 'canonical-content' },
           { path: 'runtimes/pi/extensions/subagents/LICENSE', role: 'licenses' },
           { path: 'runtimes/pi/runtime-pi/src/profile.ts', role: 'profile' },

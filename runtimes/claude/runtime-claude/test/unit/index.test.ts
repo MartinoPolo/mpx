@@ -24,7 +24,7 @@ import {
 } from '../../src/index.js';
 import { renderClaudePortSegment } from '@mpx/status';
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@mpx/runtime-hooks';
-import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
+import { createRuntimeContextV1, revalidateRuntimeArtifact } from '@mpx/runtime-contracts';
 import { loadRuntimeProfilesV1, parseRuntimeProfilesV1 } from '@mpx/config';
 import { compileContent } from '@mpx/content-compiler';
 
@@ -80,11 +80,18 @@ async function fixture() {
   const canonical = path.join(root, 'skills'),
     agents = path.join(root, 'agents'),
     shared = path.join(root, 'shared'),
+    instructions = path.join(root, 'instructions'),
+    globalInstructions = path.join(instructions, 'global', 'AGENTS.md'),
+    claudeInstructions = path.join(instructions, 'runtime', 'claude', 'CLAUDE.md'),
     outputStyle = path.join(root, 'output-styles', 'mpx-terse.md');
   await mkdir(canonical);
   await mkdir(shared);
   await mkdir(agents);
   await mkdir(path.dirname(outputStyle));
+  await mkdir(path.dirname(globalInstructions), { recursive: true });
+  await mkdir(path.dirname(claudeInstructions), { recursive: true });
+  await writeFile(globalInstructions, 'GLOBAL café\n');
+  await writeFile(claudeInstructions, '@instructions/global/AGENTS.md\n');
   await writeFile(
     outputStyle,
     '---\nname: mpx-terse\ndescription: Concise, structured, action-first output\n---\n\n# Response style\n\nAnswer first.\n',
@@ -171,6 +178,8 @@ async function fixture() {
     canonical,
     agents,
     outputStyle,
+    globalInstructions,
+    claudeInstructions,
     catalog,
     manifest,
     artifact,
@@ -342,8 +351,13 @@ function guardEnvironment(
   f: Awaited<ReturnType<typeof fixture>>,
   reference: unknown,
 ): NodeJS.ProcessEnv {
+  const {
+    MPX_SESSION_LIFECYCLE_EVENT_DIR: _eventDirectory,
+    MPX_SESSION_LIFECYCLE_BINDING_ID: _bindingId,
+    ...environment
+  } = process.env;
   return {
-    ...process.env,
+    ...environment,
     MPX_RUNTIME_CONTEXT: JSON.stringify(f.runtimeContext),
     MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(reference),
   };
@@ -400,9 +414,11 @@ describe('Claude projection', () => {
       '.claude-plugin/plugin.json',
       'active-content.json',
       'agents/Explore.md',
+      'CLAUDE.md',
       'hooks/dangerous-command-policy.mjs',
       'hooks/hooks.json',
       'hooks/runtime-guard.mjs',
+      'instructions/global/AGENTS.md',
       'output-styles/mpx-terse.md',
       'runtime-context.json',
       'settings.json',
@@ -439,20 +455,42 @@ describe('Claude projection', () => {
     expect(
       Object.fromEntries(
         Object.entries(projected)
-          .filter(([name]) => name !== 'runtime-context.json' && name !== 'settings.json')
+          .filter(
+            ([name]) =>
+              name !== 'runtime-context.json' &&
+              name !== 'settings.json' &&
+              name !== 'CLAUDE.md' &&
+              !name.startsWith('instructions/'),
+          )
           .map(([name, value]) => [name, value.sha256]),
       ),
     ).toMatchSnapshot();
   });
-  it('copies every compiler-owned file byte-for-byte into the plugin', async () => {
+  it('projects managed Claude instructions while preserving canonical and compiled bytes', async () => {
     const f = await fixture();
     const outputRoot = path.join(f.root, 'compiler-pass-through');
     await buildClaudePlugin({ ...f, outputRoot });
+    expect(await readFile(path.join(outputRoot, 'instructions/global/AGENTS.md'))).toEqual(
+      await readFile(f.globalInstructions),
+    );
+    const wrapper = await readFile(path.join(outputRoot, 'CLAUDE.md'), 'utf8');
+    expect(wrapper.match(/@instructions\/global\/AGENTS\.md/gu)).toHaveLength(1);
     for (const file of f.compiledContent.files) {
       expect(await readFile(path.join(outputRoot, ...file.relativePath.split('/')))).toEqual(
         Buffer.from(file.bytes),
       );
     }
+    const published = await publishClaudeProjection({
+      ...f,
+      artifactsRoot: path.join(f.root, 'managed-instruction-artifacts'),
+    });
+    expect(published.files).toEqual(
+      expect.arrayContaining(['CLAUDE.md', 'instructions/global/AGENTS.md']),
+    );
+    await writeFile(path.join(published.directory, 'instructions/global/AGENTS.md'), 'changed\n');
+    await expect(
+      revalidateRuntimeArtifact(published.directory, published.reference),
+    ).resolves.toMatchObject({ valid: false });
   });
 
   it('rejects unsafe or malformed canonical output styles before publication', async () => {
