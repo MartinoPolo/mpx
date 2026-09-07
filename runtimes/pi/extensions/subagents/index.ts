@@ -764,6 +764,7 @@ export default function (pi: ExtensionAPI) {
     // VENDOR EDIT (mpx-pi): dispose before abort callbacks can announce shutdown completions.
     notificationGate.dispose();
     manager.abortAll();
+    widget.dispose();
     fleet.dispose();
     manager.dispose();
   });

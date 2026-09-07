@@ -72,6 +72,7 @@ export class ConversationViewer implements Component {
     });
   }
 
+  // fallow-ignore-next-line unused-class-member -- Pi Component input callback.
   handleInput(data: string): void {
     // While composing a steer message, the input owns all keys (Enter sends,
     // Esc cancels — both wired in openComposer()). Editing keys flow through.
@@ -82,7 +83,7 @@ export class ConversationViewer implements Component {
     }
 
     if (matchesKey(data, 'escape') || matchesKey(data, 'q')) {
-      this.closed = true;
+      this.dispose();
       this.done(undefined);
       return;
     }
@@ -292,6 +293,7 @@ export class ConversationViewer implements Component {
     this.tui.requestRender();
   }
 
+  // fallow-ignore-next-line unused-class-member -- Pi Component invalidation callback.
   invalidate(): void {
     /* no cached state to clear */
   }
