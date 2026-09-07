@@ -6,9 +6,10 @@ import compactInstructions from './compact-instructions.js';
 import canonicalSkills from './canonical-skills.js';
 import footer from './footer.js';
 import fullscreenScrollSpeed from './fullscreen-scroll-speed.js';
-import guardHooks from './guard-hooks.js';
+import guardHooks, { canonicalNotifications } from './guard-hooks.js';
 import devServer from './dev-server/index.js';
 import subagents from './subagents/index.js';
+import worktree from './worktree/index.js';
 import sessionLifecycle from './session-lifecycle.js';
 import terminalProgress from './terminal-progress/index.js';
 
@@ -29,8 +30,10 @@ export const DEFAULT_EXTENSION_COMPONENTS: readonly ExtensionComponent[] = [
   { name: 'footer', register: footer },
   { name: 'fullscreen-scroll-speed', register: fullscreenScrollSpeed },
   { name: 'guard-hooks', register: guardHooks },
+  { name: 'notifications', register: canonicalNotifications },
   { name: 'dev-server', register: devServer },
   { name: 'subagents', register: subagents },
+  { name: 'worktree', register: worktree },
   { name: 'terminal-progress', register: terminalProgress },
 ];
 

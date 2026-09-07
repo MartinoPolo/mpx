@@ -24,8 +24,10 @@ const EXPECTED_COMPONENTS = [
   'footer',
   'fullscreen-scroll-speed',
   'guard-hooks',
+  'notifications',
   'dev-server',
   'subagents',
+  'worktree',
   'terminal-progress',
 ];
 
@@ -107,10 +109,10 @@ test('default entry point provides every required public registration and lifecy
   for (const event of requiredLifecycleEvents) {
     assert.ok(registrations.events.has(event), `missing ${event} lifecycle registration`);
   }
-  for (const tool of ['Agent', 'dev_server', 'get_subagent_result', 'steer_subagent']) {
+  for (const tool of ['Agent', 'dev_server', 'get_subagent_result', 'steer_subagent', 'worktree']) {
     assert.ok(registrations.tools.includes(tool), `missing ${tool} tool`);
   }
-  for (const command of ['agents', 'dev-servers']) {
+  for (const command of ['agents', 'dev-servers', 'worktree']) {
     assert.ok(registrations.commands.includes(command), `missing ${command} command`);
   }
   assert.ok(registrations.messageRenderers.includes('subagent-notification'));

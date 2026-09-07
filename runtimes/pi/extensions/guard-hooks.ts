@@ -489,7 +489,9 @@ export default function (pi: ExtensionAPI) {
       'guard-hooks-machine-paths',
     );
   });
+}
 
+export function canonicalNotifications(pi: ExtensionAPI): void {
   registerNotifications(pi, async (ctx) => {
     if (process.platform !== 'win32') {
       return;

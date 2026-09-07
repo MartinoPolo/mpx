@@ -56,7 +56,15 @@ test('skips executable guards when untrusted and dispatches them when trusted', 
   const trustedScripts = runner.mock.calls.map(([scriptPath]) => basename(scriptPath));
 
   assert.equal(trustedFormatResult, 'Formatting and linting completed.');
-  for (const fileName of executableGuardScripts) {
-    assert.equal(trustedScripts.includes(fileName), true, fileName);
-  }
+  assert.deepEqual(
+    new Set(trustedScripts),
+    new Set([
+      'enforce-pkg-mgr.mjs',
+      'pre-commit-gate.mjs',
+      'dangerous-command-guard.mjs',
+      'fallow-gate.mjs',
+      'format-lint-file.mjs',
+      'post-bash-context.mjs',
+    ]),
+  );
 });
