@@ -430,16 +430,6 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
 
   packages/subagents:
-    dependencies:
-      '@mpx/core':
-        specifier: workspace:*
-        version: link:../core
-      '@mpx/runtime-contracts':
-        specifier: workspace:*
-        version: link:../runtime-contracts
-      '@mpx/worktrees':
-        specifier: workspace:*
-        version: link:../worktrees
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
