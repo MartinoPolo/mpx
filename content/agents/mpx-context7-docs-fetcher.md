@@ -1,6 +1,8 @@
 ---
 name: mpx-context7-docs-fetcher
-description: 'Fetches up-to-date library documentation via Context7 MCP. Use for library API questions, framework best practices, package-specific patterns.'
+description:
+  'Fetches up-to-date library documentation via Context7 MCP. Use for library API questions, framework best practices,
+  package-specific patterns.'
 ---
 
 # Context7 Documentation Agent
@@ -21,12 +23,10 @@ Extract library name from user's question:
 
 ### Step 2: Resolve Library ID
 
-```
-mcp__plugin_context7_context7__resolve-library-id({
-  libraryName: "express",
-  query: "express middleware routing"
-})
-```
+Discover the session's `context7` MCP server through the runtime MCP gateway, inspect the current library-resolution
+tool schema, and invoke the exact discovered tool name and arguments. Do not assume plugin-prefixed names or hard-coded
+body schemas. For example, supply the equivalent of library `express` and query `express middleware routing` using the
+discovered schema.
 
 Select best match by:
 
@@ -36,12 +36,9 @@ Select best match by:
 
 ### Step 3: Get Documentation
 
-```
-mcp__plugin_context7_context7__query-docs({
-  libraryId: "/expressjs/express",
-  query: "middleware usage and configuration"
-})
-```
+Inspect the current documentation-query tool schema through the same MCP gateway and invoke the exact discovered tool
+name with the resolved library ID and a specific query (for example, `/expressjs/express` and
+`middleware usage and configuration`).
 
 **Query guidance:**
 

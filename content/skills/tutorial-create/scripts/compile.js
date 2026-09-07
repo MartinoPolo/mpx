@@ -8,15 +8,7 @@
  * the OneDrive tutorials index. Zero runtime dependencies in the output.
  */
 
-import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  readdirSync,
-  statSync,
-  mkdirSync,
-  rmSync,
-} from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -31,11 +23,7 @@ const SHIKI_THEME = 'one-dark-pro';
 /* ---------------- helpers ---------------- */
 
 function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function fail(message) {
@@ -59,19 +47,7 @@ function assertOutputContainment(candidate, label) {
   fail(`${label} must stay under MPX_AI_GENERATED/_TUTORIALS: ${candidate}`);
 }
 
-const NUMBER_WORDS = [
-  'zero',
-  'one',
-  'two',
-  'three',
-  'four',
-  'five',
-  'six',
-  'seven',
-  'eight',
-  'nine',
-  'ten',
-];
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 /* ---------------- inline markup ---------------- */
 
@@ -128,6 +104,9 @@ function parseSource(raw) {
     if (!meta[field]) {
       fail(`frontmatter missing required field: ${field}`);
     }
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(meta.slug))) {
+    fail(`slug must be kebab-case, got: ${meta.slug}`);
   }
   if (!['topic', 'code-showcase'].includes(meta.type)) {
     fail(`type must be topic|code-showcase, got: ${meta.type}`);
@@ -326,15 +305,11 @@ function validatePlaygroundTarget(scope, controls, target, challengeTitle) {
   for (const [prop, value] of Object.entries(target || {})) {
     const control = controls[prop];
     if (!control) {
-      fail(
-        `playground challenge "${challengeTitle}": target uses undeclared ${scope} control "${prop}"`,
-      );
+      fail(`playground challenge "${challengeTitle}": target uses undeclared ${scope} control "${prop}"`);
     }
     if (control.type === 'enum') {
       if (!control.values.includes(String(value))) {
-        fail(
-          `playground challenge "${challengeTitle}": ${prop}: ${value} is not among declared values`,
-        );
+        fail(`playground challenge "${challengeTitle}": ${prop}: ${value} is not among declared values`);
       }
       out[prop] = String(value);
     } else {
@@ -393,8 +368,7 @@ function parsePlayground(inner) {
       fail(`playground challenge ${index + 1}: needs title and target`);
     }
     const target = challenge.target;
-    const nested =
-      Boolean(target.container) || Object.keys(target).some((k) => /^item-\d+$/.test(k));
+    const nested = Boolean(target.container) || Object.keys(target).some((k) => /^item-\d+$/.test(k));
     const targetContainer = validatePlaygroundTarget(
       'container',
       container,
@@ -515,11 +489,7 @@ function highlightLines(code, lang) {
       return ' ';
     }
     return lineTokens
-      .map((t) =>
-        t.color
-          ? `<span style="color:${t.color}">${escapeHtml(t.content)}</span>`
-          : escapeHtml(t.content),
-      )
+      .map((t) => (t.color ? `<span style="color:${t.color}">${escapeHtml(t.content)}</span>` : escapeHtml(t.content)))
       .join('');
   });
 }
@@ -593,9 +563,7 @@ async function renderMermaidVariant(renderer, code, workDir, variant) {
 async function renderMermaid(code) {
   const renderer = await getMermaidRenderer();
   if (!renderer) {
-    console.warn(
-      '[compile] WARNING: diagram skipped — install @mermaid-js/mermaid-cli to render mermaid blocks',
-    );
+    console.warn('[compile] WARNING: diagram skipped — install @mermaid-js/mermaid-cli to render mermaid blocks');
     return '<!-- mermaid diagram skipped: @mermaid-js/mermaid-cli not installed -->';
   }
   mermaidCounter++;
@@ -659,9 +627,7 @@ function renderAnnotatedCode(block) {
 
 function renderWalkthrough(block) {
   const lines = highlightLines(block.code.code, block.code.lang);
-  const codeHtml = lines
-    .map((h, i) => `<span class="cl" data-wtline="${i + 1}">${h}</span>`)
-    .join('');
+  const codeHtml = lines.map((h, i) => `<span class="cl" data-wtline="${i + 1}">${h}</span>`).join('');
   const total = block.steps.length;
   const cards = block.steps
     .map(
@@ -914,8 +880,7 @@ async function renderBlock(block, nextBlock, sectionSlug) {
   switch (block.kind) {
     case 'p': {
       const introNext =
-        nextBlock &&
-        ['annotated-code', 'code', 'walkthrough', 'mermaid', 'playground'].includes(nextBlock.kind);
+        nextBlock && ['annotated-code', 'code', 'walkthrough', 'mermaid', 'playground'].includes(nextBlock.kind);
       return `<p${introNext ? ' class="intro-line"' : ''}>${renderInline(block.text)}</p>`;
     }
     case 'code':
@@ -990,6 +955,21 @@ function renderVideos(videos) {
   return `\n      <div class="videos">\n${cards}\n      </div>`;
 }
 
+function resolveFileReference(file) {
+  const literal = String(file);
+  const resolved = literal.replace(/\$([A-Z][A-Z0-9_]*)/g, (_match, name) => {
+    const value = process.env[name]?.trim();
+    if (!value) {
+      fail(`reference file uses unset environment variable: ${name}`);
+    }
+    return value;
+  });
+  if (/\$[A-Z][A-Z0-9_]*/.test(resolved)) {
+    fail(`reference file contains unresolved environment placeholder: ${literal}`);
+  }
+  return resolve(resolved);
+}
+
 function renderReferences(references) {
   if (!references || !references.length) {
     return '';
@@ -1011,8 +991,9 @@ function renderReferences(references) {
           }
           return `            <li><a class="ref-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer"><span class="rl-mark">\u{1F4C4}</span><span class="rl-body"><span class="rl-title">${escapeHtml(r.title)}</span><span class="rl-sub">${escapeHtml(sub)}</span></span><span class="rl-arrow" aria-hidden="true">↗</span></a></li>`;
         }
-        const fileUrl = 'file:///' + String(r.file).replace(/\\/g, '/').replace(/^\/+/, '');
-        const sub = String(r.file).replace(/\\/g, '/').split('/').slice(-2).join('/');
+        const resolvedFile = resolveFileReference(r.file);
+        const fileUrl = 'file:///' + resolvedFile.replace(/\\/g, '/').replace(/^\/+/, '');
+        const sub = resolvedFile.replace(/\\/g, '/').split('/').slice(-2).join('/');
         return `            <li><a class="ref-link" href="${escapeHtml(fileUrl)}"><span class="rl-mark">\u{1F4C1}</span><span class="rl-body"><span class="rl-title">${escapeHtml(r.title)}</span><span class="rl-sub">${escapeHtml(sub)}</span></span></a></li>`;
       })
       .join('\n');
@@ -1189,9 +1170,7 @@ ${cards}
     })
     .join('\n');
 
-  const empty = tutorials.length
-    ? ''
-    : '    <p class="empty">No tutorials yet. Compile one with tutorial-create.</p>';
+  const empty = tutorials.length ? '' : '    <p class="empty">No tutorials yet. Compile one with tutorial-create.</p>';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1370,9 +1349,7 @@ function lintAuthoring(meta, sections, format) {
     }
     const words = sectionProseWords(section);
     if (words > format.words) {
-      warn(
-        `${section.slug}: ${words} prose words (format: ${meta.format} budget is ${format.words})`,
-      );
+      warn(`${section.slug}: ${words} prose words (format: ${meta.format} budget is ${format.words})`);
     }
     if (!format.reveals && section.blocks.some((b) => b.kind === 'reveal')) {
       warn(`${section.slug}: :::reveal is not used in format: ${meta.format}`);
@@ -1488,7 +1465,8 @@ async function main() {
 
   const targetDir = outDir || dirname(sourcePath);
   mkdirSync(targetDir, { recursive: true });
-  const outPath = join(targetDir, `${meta.slug}.html`);
+  const outPath = resolve(targetDir, `${meta.slug}.html`);
+  assertOutputContainment(outPath, 'final output');
   writeFileSync(outPath, html, 'utf8');
   console.log(`[compile] wrote ${outPath}`);
 

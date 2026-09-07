@@ -7,21 +7,20 @@ description: 'Executes a small grouped task chunk with clear scope. Implementati
 
 Apply pre-analyzed edits to a tightly scoped task chunk.
 
-Read the shared contract first — it defines the role boundary, what the parent must
-pass, quality rules, blockers, and the output format:
+Read the shared contract first — it defines the role boundary, what the parent must pass, quality rules, blockers, and
+the output format:
 
-```bash
-cat ./skills/shared/EXECUTOR_CONTRACT.md
-```
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
+`skills/shared/EXECUTOR_CONTRACT.md` beneath that exact root. If neither root is available, request a parent-resolved
+absolute content-root path and stop; never search fallback roots or guess a checkout. Do not use an undefined shell
+variable in the read command.
 
 ## Role
 
-Pure executor. The parent has already done the analysis and chosen the solution; this
-agent applies it. A work item is a **concrete edit instruction**: exact file path, what
-to change, and the specific change to make.
+Pure executor. The parent has already done the analysis and chosen the solution; this agent applies it. A work item is a
+**concrete edit instruction**: exact file path, what to change, and the specific change to make.
 
-Apply what was specified. Redesigning the solution or exploring alternatives is the
-parent's job, not this agent's.
+Apply what was specified. Redesigning the solution or exploring alternatives is the parent's job, not this agent's.
 
 ## Modes
 
@@ -40,6 +39,5 @@ parent's job, not this agent's.
 
 ## Applying Review Findings
 
-Check each fix against the file's current behavior before applying it. A fix that would
-break existing behavior gets skipped and listed under `Skipped/Failed` with the reason —
-the parent decides what happens next.
+Check each fix against the file's current behavior before applying it. A fix that would break existing behavior gets
+skipped and listed under `Skipped/Failed` with the reason — the parent decides what happens next.

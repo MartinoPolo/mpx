@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Detect package manager and check scripts from package.json
-// Outputs key=value pairs for use by /mp-check-fix skill
-// Usage: node $HOME/.claude/scripts/detect-check-scripts.mjs [project_dir] [package_manager]
+// Outputs key=value pairs for use by /mpx:check-fix
+// Usage: node ./scripts/detect-check-scripts.mjs [project_dir] [package_manager]
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
@@ -34,10 +34,7 @@ function detectPackageManager(dir) {
   if (existsSync(path.join(dir, 'pnpm-lock.yaml'))) {
     return 'pnpm';
   }
-  if (
-    existsSync(path.join(dir, 'package-lock.json')) ||
-    existsSync(path.join(dir, 'npm-shrinkwrap.json'))
-  ) {
+  if (existsSync(path.join(dir, 'package-lock.json')) || existsSync(path.join(dir, 'npm-shrinkwrap.json'))) {
     return 'npm';
   }
   return '';
@@ -80,13 +77,7 @@ function scanPackage(pkgJsonPath, pm, prefix) {
     outputLines.push(`${keyPrefix}CHECK_ALL=${pm} run ${checkAllScript}`);
     outputLines.push(`${keyPrefix}CHECK_ALL_DIR=${dir}`);
   } else {
-    const typecheckScript = findScript(pkgJsonPath, [
-      'check',
-      'typecheck',
-      'type-check',
-      'tsc',
-      'check:types',
-    ]);
+    const typecheckScript = findScript(pkgJsonPath, ['check', 'typecheck', 'type-check', 'tsc', 'check:types']);
     if (typecheckScript) {
       outputLines.push(`${keyPrefix}TYPECHECK=${pm} run ${typecheckScript}`);
       outputLines.push(`${keyPrefix}TYPECHECK_DIR=${dir}`);
@@ -105,12 +96,7 @@ function scanPackage(pkgJsonPath, pm, prefix) {
     }
   }
 
-  const testUnitScript = findScript(pkgJsonPath, [
-    'test:unit',
-    'test-unit',
-    'unit-test',
-    'unit:test',
-  ]);
+  const testUnitScript = findScript(pkgJsonPath, ['test:unit', 'test-unit', 'unit-test', 'unit:test']);
   if (testUnitScript) {
     outputLines.push(`${keyPrefix}TEST_UNIT=${pm} run ${testUnitScript}`);
     outputLines.push(`${keyPrefix}TEST_UNIT_DIR=${dir}`);
@@ -122,13 +108,7 @@ function scanPackage(pkgJsonPath, pm, prefix) {
     }
   }
 
-  const testE2eScript = findScript(pkgJsonPath, [
-    'test:e2e',
-    'test-e2e',
-    'e2e',
-    'test:browser',
-    'test:integration',
-  ]);
+  const testE2eScript = findScript(pkgJsonPath, ['test:e2e', 'test-e2e', 'e2e', 'test:browser', 'test:integration']);
   if (testE2eScript) {
     outputLines.push(`${keyPrefix}TEST_E2E=${pm} run ${testE2eScript}`);
     outputLines.push(`${keyPrefix}TEST_E2E_DIR=${dir}`);

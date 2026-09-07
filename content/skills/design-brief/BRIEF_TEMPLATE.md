@@ -1,7 +1,7 @@
 # Design Brief Template
 
-Structure for `designs/<component-name>/DESIGN_BRIEF_<COMPONENT_NAME>.md`. Every section is
-mandatory unless marked optional.
+Structure for `designs/<component-name>/DESIGN_BRIEF_<COMPONENT_NAME>.md`. Every section is mandatory unless marked
+optional.
 
 ```markdown
 # <Component Name> — Design Brief
@@ -14,8 +14,8 @@ mandatory unless marked optional.
 
 ## 1. Purpose
 
-[Expanded purpose. What workflow does this enable? What is the user's mental model? What question
-does this UI answer at a glance? Why does it deserve careful design?]
+[Expanded purpose. What workflow does this enable? What is the user's mental model? What question does this UI answer at
+a glance? Why does it deserve careful design?]
 
 **Key value**: [one sentence — the elevator pitch for this component's existence]
 
@@ -27,13 +27,13 @@ The mockup **must** show the full viewport with all chrome at correct proportion
 
 ### Full viewport structure
 
-[Exhaustive description of every element visible alongside this component, top to bottom and left
-to right, with real proportions in percentages or pixels. For each, say whether it is in FINAL
-state — reproduce faithfully — or still being designed.]
+[Exhaustive description of every element visible alongside this component, top to bottom and left to right, with real
+proportions in percentages or pixels. For each, say whether it is in FINAL state — reproduce faithfully — or still being
+designed.]
 
-**What the parent provides**: [nav, tab bar, panel border, resizer, layout shell]
-**What this component fills**: [e.g. "content area below the active tab, full width × remaining height"]
-**Excluded — belongs to the parent**: [e.g. tab bar, panel header, outer border]
+**What the parent provides**: [nav, tab bar, panel border, resizer, layout shell] **What this component fills**: [e.g.
+"content area below the active tab, full width × remaining height"] **Excluded — belongs to the parent**: [e.g. tab bar,
+panel header, outer border]
 
 **Mockup rendering instructions**:
 
@@ -154,15 +154,13 @@ From `designs/tokens.css` (or the project's global stylesheet when no tokens fil
 
 ## Writing rules
 
-1. **Name components, not appearances.** "Use `Button variant='ghost'` size='icon'", never
-   "a ghost-styled icon button". Use the real variant names read from the component source.
+1. **Name components, not appearances.** "Use `Button variant='ghost'` size='icon'", never "a ghost-styled icon button".
+   Use the real variant names read from the component source.
 2. **Proportions are load-bearing.** A region that occupies 75% of the height must look like it.
-3. **Human decisions outrank code.** A grilling session or issue comment saying "do X" overrides
-   what the current implementation does.
+3. **Human decisions outrank code.** A grilling session or issue comment saying "do X" overrides what the current
+   implementation does.
 4. **Enumerate every state.** A missing state is a state the designer invents inconsistently.
-5. **Container context is mandatory.** Always name the parent, reproduce it faithfully, and keep
-   the component from duplicating parent chrome.
-6. **Reproduce settled elements exactly.** Anything already in final state gets copied, not
-   reinvented.
-7. **Explain WHY.** "Shows the worktree path because developers need to know which folder to cd
-   into."
+5. **Container context is mandatory.** Always name the parent, reproduce it faithfully, and keep the component from
+   duplicating parent chrome.
+6. **Reproduce settled elements exactly.** Anything already in final state gets copied, not reinvented.
+7. **Explain WHY.** "Shows the worktree path because developers need to know which folder to cd into."

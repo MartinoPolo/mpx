@@ -1,14 +1,14 @@
 # NotebookLM Backend Flow
 
-The generation path, validated end to end on 2026-07-24 (Shadow DOM, 33.5 min, zero manual
-browser steps) with `notebooklm-py` 0.7.3.
+The generation path, validated end to end on 2026-07-24 (Shadow DOM, 33.5 min, zero manual browser steps) with
+`notebooklm-py` 0.7.3.
 
 Full CLI surface — every command, flag and JSON schema — lives in
-[`../../notebooklm/SKILL.md`](../../notebooklm/SKILL.md). This file covers only the podcast
-path and the quirks the test run exposed.
+[`../../notebooklm/SKILL.md`](../../notebooklm/SKILL.md). This file covers only the podcast path and the quirks the test
+run exposed.
 
-Pass `-n <notebook_id>` (or `--notebook`) on every command. Relying on the CLI's implicit
-context breaks the moment two agents run at once.
+Pass `-n <notebook_id>` (or `--notebook`) on every command. Relying on the CLI's implicit context breaks the moment two
+agents run at once.
 
 ## The sequence
 
@@ -38,40 +38,73 @@ Step 5 returns immediately with `status: pending`. Audio takes 10-20 minutes.
 
 ## Waiting without blocking
 
-Hand the wait to a background `general-purpose` sub-agent with `model: "appropriate runtime class"` — it declares
-no model of its own ([`../../shared/SUBAGENT_PROTOCOL.md`](../../shared/SUBAGENT_PROTOCOL.md)
-§ 1). Give it the notebook id, the task id, the output path, and this instruction:
+Hand the wait to a background `general-purpose` sub-agent with `model: "appropriate runtime class"` — it declares no
+model of its own ([Sub-agent Protocol](../../shared/SUBAGENT_PROTOCOL.md) § 1). Give it the notebook id, the task id,
+the output path, and this instruction:
 
-> Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr
-> saying `Timeout after Ns`, means still rendering — re-check with
-> `notebooklm artifact list -n <nb> --json`, and when that artifact's `status` is `pending` or
-> `in_progress`, wait again. Treat it as failed only when `artifact list` reports an error
-> status or the artifact has vanished. Once `status` is `completed`, run
-> `notebooklm download audio <path> -a <task_id> -n <nb>` and report the file path and size.
+> Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr saying `Timeout after Ns`,
+> means still rendering — re-check with `notebooklm artifact list -n <nb> --json`, and when that artifact's `status` is
+> `pending` or `in_progress`, wait again. Treat it as failed only when `artifact list` reports an error status or the
+> artifact has vanished. Once `status` is `completed`, run `notebooklm download audio <path> -a <task_id> -n <nb>` and
+> report the file path and size.
 
 ## Quirks the test run exposed
 
-| Quirk                                                                               | What to do                                                                                       |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `artifact wait` exits 1 with `Timeout after Ns` while the artifact is still pending | Confirm with `artifact list --json` and wait again — a timeout is a status report, not a failure |
-| `download audio` rejects `--yes` (no such flag)                                     | Call it without the flag                                                                         |
-| Partial UUIDs go ambiguous once a few notebooks exist                               | Pass full UUIDs everywhere in automation                                                         |
-| `--length` is a hint                                                                | `long` plus a 15-minute prompt line produced 33.5 minutes; overshoot is fine                     |
-| `notebooklm status` reports notebook context, not auth                              | Verify auth only with `auth check --test --json`                                                 |
+#### Quirk: `artifact wait` exits 1 with `Timeout after Ns` while the artifact is still pending
+
+- **What to do:** Confirm with `artifact list --json` and wait again — a timeout is a status report, not a failure
+
+#### Quirk: `download audio` rejects `--yes` (no such flag)
+
+- **What to do:** Call it without the flag
+
+#### Quirk: Partial UUIDs go ambiguous once a few notebooks exist
+
+- **What to do:** Pass full UUIDs everywhere in automation
+
+#### Quirk: `--length` is a hint
+
+- **What to do:** `long` plus a 15-minute prompt line produced 33.5 minutes; overshoot is fine
+
+#### Quirk: `notebooklm status` reports notebook context, not auth
+
+- **What to do:** Verify auth only with `auth check --test --json`
 
 ## Failure handling
 
-| Symptom                                        | Cause                                      | Action                                                                                                        |
-| ---------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `auth check --test` gives `token_fetch: false` | Google rotated the session cookies         | `notebooklm auth refresh`; still failing → ask the user for one interactive `notebooklm login`, then re-check |
-| `No result found for RPC ID`                   | Rate limiting                              | Wait 5-10 minutes, retry once                                                                                 |
-| `GENERATION_FAILED`                            | Google-side rate limit                     | `--retry 3` already backs off; on repeat failure switch backends                                              |
-| Third generation of the day refused            | Free tier allows 3 audio overviews per day | Offer [`GEMINI_TTS.md`](GEMINI_TTS.md) now, or tomorrow's quota                                               |
-| `notebooklm` not found on PATH                 | Shell predates the install                 | Use `$LOCALAPPDATA\Python\pythoncore-3.14-64\Scripts\notebooklm.exe`                                          |
-| Download fails right after generation          | Artifact incomplete                        | Check `artifact list --json` before retrying                                                                  |
+#### Symptom: `auth check --test` gives `token_fetch: false`
 
-Every one of these gets reported to the user as a plain sentence naming the cause and the
-concrete next command — including which backend to switch to.
+- **Cause:** Google rotated the session cookies
+- **Action:** `notebooklm auth refresh` ; still failing → ask the user for one interactive `notebooklm login` , then
+  re-check
+
+#### Symptom: `No result found for RPC ID`
+
+- **Cause:** Rate limiting
+- **Action:** Wait 5-10 minutes, retry once
+
+#### Symptom: `GENERATION_FAILED`
+
+- **Cause:** Google-side rate limit
+- **Action:** `--retry 3` already backs off; on repeat failure switch backends
+
+#### Symptom: Third generation of the day refused
+
+- **Cause:** Free tier allows 3 audio overviews per day
+- **Action:** Offer [`GEMINI_TTS.md`](GEMINI_TTS.md) now, or tomorrow's quota
+
+#### Symptom: `notebooklm` not found on PATH
+
+- **Cause:** Shell predates the install
+- **Action:** Use `$LOCALAPPDATA\Python\pythoncore-3.14-64\Scripts\notebooklm.exe`
+
+#### Symptom: Download fails right after generation
+
+- **Cause:** Artifact incomplete
+- **Action:** Check `artifact list --json` before retrying
+
+Every one of these gets reported to the user as a plain sentence naming the cause and the concrete next command —
+including which backend to switch to.
 
 ## Post-processing
 
@@ -80,11 +113,11 @@ mkdir -p "$MPX_AI_GENERATED/_PODCASTS/<slug>"
 ffmpeg -i <slug>-raw.mp3 -codec:a libmp3lame -b:a 64k -ac 1 "$MPX_AI_GENERATED/_PODCASTS/<slug>/<slug>.mp3"
 ```
 
-`<slug>-raw.mp3` is a scratchpad staging file; the per-slug folder receives only the re-encoded
-MP3 plus `script.txt` and `sources.md`.
+`<slug>-raw.mp3` is a scratchpad staging file; the per-slug folder receives only the re-encoded MP3 plus `script.txt`
+and `sources.md`.
 
-NotebookLM ships a high-bitrate stereo file; a 33-minute episode measured 62 MB and came out at
-about 15 MB after this re-encode. Two voices in a dialogue carry fine at 64 kbps mono.
+NotebookLM ships a high-bitrate stereo file; a 33-minute episode measured 62 MB and came out at about 15 MB after this
+re-encode. Two voices in a dialogue carry fine at 64 kbps mono.
 
-Delete the raw download once the re-encode verifies, unless it is within 20% of the original
-size — then the re-encode bought nothing and the original stays.
+Delete the raw download once the re-encode verifies, unless it is within 20% of the original size — then the re-encode
+bought nothing and the original stays.

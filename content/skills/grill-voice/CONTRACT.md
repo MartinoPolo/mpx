@@ -1,13 +1,13 @@
 # Voice Grilling File Contract
 
-The interface between a grilling session (this skill, running in the active runtime on the
-laptop) and the companion mobile voice app. Both sides read and write plain JSON files
-in a shared sessions root; neither calls the other directly.
+The interface between a grilling session (this skill, running in the active runtime on the laptop) and the companion
+mobile voice app. Both sides read and write plain JSON files in a shared sessions root; neither calls the other
+directly.
 
 ## Sessions root
 
-`MPX_VOICE_GRILL_ROOT` when set, otherwise `<home>/.mpx-voice-grill/sessions`
-(the script derives home itself). One folder per session:
+`MPX_VOICE_GRILL_ROOT` when set, otherwise `<home>/.mpx-voice-grill/sessions` (the script derives home itself). One
+folder per session:
 
 ```
 <root>/
@@ -23,8 +23,8 @@ in a shared sessions root; neither calls the other directly.
 
 `sessionId` = `<project-slug>--<topic-slug>--<yyyymmdd-hhmm>`.
 
-The app builds its multi-session hub by scanning `<root>/*/session.json`; a session
-with `status: awaiting_answers` is ready to be answered.
+The app builds its multi-session hub by scanning `<root>/*/session.json`; a session with `status: awaiting_answers` is
+ready to be answered.
 
 ## session.json (skill-owned)
 
@@ -42,10 +42,9 @@ with `status: awaiting_answers` is ready to be answered.
 }
 ```
 
-`status` lifecycle: `evaluating` (skill is composing the next round or digesting
-answers) → `awaiting_answers` (a round is published) → back to `evaluating` →
-finally `completed`. The app treats `evaluating` as "check back later" and may move
-the user to another session. `completedAt` appears only on completed sessions.
+`status` lifecycle: `evaluating` (skill is composing the next round or digesting answers) → `awaiting_answers` (a round
+is published) → back to `evaluating` → finally `completed`. The app treats `evaluating` as "check back later" and may
+move the user to another session. `completedAt` appears only on completed sessions.
 
 ## round-N.json (skill-owned)
 
@@ -69,8 +68,8 @@ the user to another session. `completedAt` appears only on completed sessions.
 ```
 
 - `announcement` is spoken first — it orients a user switching between sessions.
-- `text` and `recommendation` are written to be **heard**: short sentences, no
-  markdown, no code blocks; spell out identifiers ("dot env file", not `.env`).
+- `text` and `recommendation` are written to be **heard**: short sentences, no markdown, no code blocks; spell out
+  identifiers ("dot env file", not `.env`).
 - `recommendation` is read only when the user asks for it.
 - `context` is optional per-question orientation, also voice-friendly.
 - Question ids are `r<round>q<n>` and unique within the session.
@@ -94,17 +93,16 @@ the user to another session. `completedAt` appears only on completed sessions.
 }
 ```
 
-- The app writes the file **once, complete** (write to a temp name, then rename) after
-  the whole round is answered — the skill's `wait` command treats existence as done.
+- The app writes the file **once, complete** (write to a temp name, then rename) after the whole round is answered — the
+  skill's `wait` command treats existence as done.
 - `transcript` is the Whisper transcription; it is the authoritative answer.
 - `audioFile` is an optional session-relative path kept for re-transcription.
-- `skipped: true` means the user declined or deferred; the skill re-asks or drops the
-  question explicitly in a later round.
+- `skipped: true` means the user declined or deferred; the skill re-asks or drops the question explicitly in a later
+  round.
 
 ## App-side responsibilities (informative)
 
-Playback loop per round: speak `announcement`, then per question speak `title` + `text`,
-listen, transcribe, confirm on request; support "repeat" (re-speak from the start of the
-question), barge-in interruption, "recommendation" on demand, and "skip". Earbud
-media-button press toggles listening; a silence timeout ends an answer. No AI calls
-happen between questions — the round is pure playback and capture.
+Playback loop per round: speak `announcement`, then per question speak `title` + `text`, listen, transcribe, confirm on
+request; support "repeat" (re-speak from the start of the question), barge-in interruption, "recommendation" on demand,
+and "skip". Earbud media-button press toggles listening; a silence timeout ends an answer. No AI calls happen between
+questions — the round is pure playback and capture.

@@ -1,22 +1,20 @@
 # Gemini TTS Fallback Backend
 
-Used when the NotebookLM free tier's 3 audio overviews per day are spent, when generation
-keeps failing, or when `--backend gemini-tts` asks for it directly.
+Used when the NotebookLM free tier's 3 audio overviews per day are spent, when generation keeps failing, or when
+`--backend gemini-tts` asks for it directly.
 
-**The division of labour inverts.** NotebookLM writes the dialogue from the brief; this
-backend does not. Here you write every spoken line yourself, and the API only performs it.
-The brief and the customize prompt become your inputs rather than NotebookLM's.
+**The division of labour inverts.** NotebookLM writes the dialogue from the brief; this backend does not. Here you write
+every spoken line yourself, and the API only performs it. The brief and the customize prompt become your inputs rather
+than NotebookLM's.
 
 ## Step 1: Write the full dialogue script
 
-Convert the brief into a two-host conversation, keeping the customize prompt's rules — direct
-technical language, syntax spelled out for speech, no metaphors, the personalization segment
-included as its own stretch of conversation.
+Convert the brief into a two-host conversation, keeping the customize prompt's rules — direct technical language, syntax
+spelled out for speech, no metaphors, the personalization segment included as its own stretch of conversation.
 
 Budget **150 words per minute**: 10 minutes ≈ 1500 words, 15 ≈ 2250, 25 ≈ 3750.
 
-Format — one turn per line, `Speaker: text`, exactly two speakers whose names match what you
-pass on the command line:
+Format — one turn per line, `Speaker: text`, exactly two speakers whose names match what you pass on the command line:
 
 ```
 Alex: Shadow DOM is one of the three web component specifications, next to custom elements
@@ -24,39 +22,39 @@ Sam: And the encapsulation runs in both directions, which is the part people mis
 Alex: In your own dashboard repo, src/lib/panel.ts line 214 calls attachShadow with mode open.
 ```
 
-Write it as real conversation: one host explains, the other pushes on the part that is
-actually subtle. Interruptions and follow-up questions are what make it listenable — filler
-agreement is what makes it hollow.
+Write it as real conversation: one host explains, the other pushes on the part that is actually subtle. Interruptions
+and follow-up questions are what make it listenable — filler agreement is what makes it hollow.
 
 ## Step 2: Render
 
-Run `scripts/gemini-tts-podcast.py` from this skill's own directory — reference files are read
-verbatim, so resolve that path yourself rather than expecting `.` to expand
-here:
+Run `scripts/gemini-tts-podcast.py` from this skill's own directory — reference files are read verbatim, so resolve that
+path yourself rather than expecting `.` to expand here:
 
 ```bash
 pip install -U google-genai   # first run only
 mkdir -p "$MPX_AI_GENERATED/_PODCASTS/<slug>"
 python <skill-dir>/scripts/gemini-tts-podcast.py \
-  <slug>-script.txt "$MPX_AI_GENERATED/_PODCASTS/<slug>/<slug>.mp3" \
+  <scratch-dir>/<slug>-script.txt "$MPX_AI_GENERATED/_PODCASTS/<slug>/<slug>.mp3" \
   --speakers Alex,Sam --voices Kore,Puck
 ```
 
-Copy the dialogue script into the same folder as `script.txt`; the input `<slug>-script.txt`
-itself stays in the scratchpad.
+Copy the dialogue script into the same folder as `script.txt`; the input `<slug>-script.txt` itself stays in the
+explicit `<scratch-dir>` created by the parent workflow. Also write and promote `sources.md` from the research URLs,
+repository/note `file:line` evidence, and skipped roots; the fallback has the same three final deliverables as
+NotebookLM.
 
-The script chunks the dialogue on turn boundaries, calls multi-speaker TTS per chunk, writes
-each result as a WAV, and stitches them with ffmpeg straight into 64 kbps mono MP3 — so the
-Step 6 re-encode is already applied and needs no repeat.
+The script chunks the dialogue on turn boundaries, calls multi-speaker TTS per chunk, writes each result as a WAV, and
+stitches them with ffmpeg straight into 64 kbps mono MP3 — so the Step 6 re-encode is already applied and needs no
+repeat.
 
-Read `GEMINI_API_KEY` from the environment; the script exits with an instruction when it is
-absent. Keep the value out of logs, command lines and committed files.
+Read `GEMINI_API_KEY` from the environment; the script exits with an instruction when it is absent. Keep the value out
+of logs, command lines and committed files.
 
 ## API facts the script depends on
 
-Sourced from the official docs (legacy `generate_content` speech-generation page,
-2026-07-25). The newer Interactions API path exists and is now recommended by Google; this
-script stays on the documented `generate_content` path until the newer one is verified here.
+Sourced from the official docs (legacy `generate_content` speech-generation page, 2026-07-25). The newer Interactions
+API path exists and is now recommended by Google; this script stays on the documented `generate_content` path until the
+newer one is verified here.
 
 | Fact             | Value                                                                         |
 | ---------------- | ----------------------------------------------------------------------------- |
@@ -71,15 +69,27 @@ script stays on the documented `generate_content` path until the newer one is ve
 
 ## Failure handling
 
-| Symptom                                       | Action                                                                                            |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `google-genai is missing`                     | `pip install -U google-genai`                                                                     |
-| `Set the GEMINI_API_KEY environment variable` | The variable is set at user scope; a shell that predates it needs a fresh Windows Terminal window |
-| Rate limit or transport error mid-run         | The script already retries 4 times with exponential backoff before giving up                      |
-| Free-tier daily limit reached                 | Report it and offer tomorrow's NotebookLM quota instead                                           |
-| Audio quality worse than NotebookLM           | Expected — this backend trades dialogue quality for availability. Say so when delivering.         |
+#### Symptom: `google-genai is missing`
+
+- **Action:** `pip install -U google-genai`
+
+#### Symptom: `Set the GEMINI_API_KEY environment variable`
+
+- **Action:** The variable is set at user scope; a shell that predates it needs a fresh Windows Terminal window
+
+#### Symptom: Rate limit or transport error mid-run
+
+- **Action:** The script already retries 4 times with exponential backoff before giving up
+
+#### Symptom: Free-tier daily limit reached
+
+- **Action:** Report it and offer tomorrow's NotebookLM quota instead
+
+#### Symptom: Audio quality worse than NotebookLM
+
+- **Action:** Expected — this backend trades dialogue quality for availability. Say so when delivering.
 
 ## Status
 
-Written against the current documented API and syntax-checked, and not yet exercised against
-a live key. The first real run is the verification.
+Written against the current documented API and syntax-checked, and not yet exercised against a live key. The first real
+run is the verification.

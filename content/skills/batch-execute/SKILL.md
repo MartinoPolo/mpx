@@ -1,8 +1,11 @@
 ---
 name: batch-execute
-description: Execute an approved batch of small Issues with isolated progress and one Review
-triggers: implementing a range, list, label selection, or board batch
+description: Execute a selected batch of small Issues on one shared branch and publish one PR
+argument-hint: '<range|list|label:<x>|board> [size:S|M|L] [--parallel] [--full-review|--no-review]'
 metadata:
+  author: MartinoPolo
+  version: '0.11'
+  category: project-management
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -11,23 +14,76 @@ metadata:
 
 # Batch Execute
 
-Orchestrate the batch in one isolated worktree. Default to one worker at a time on its shared batch branch. See [REFERENCE.md](REFERENCE.md).
+Here, PR means a GitHub pull request, GitLab merge request, or Gerrit change, as applicable.
 
-## Launch identity
+Read [REFERENCE](REFERENCE.md), [Provider Routing](../shared/PROVIDER_ROUTING.md), and
+[Content Paths](../shared/CONTENT_PATHS.md). Independently resolve `issues.provider` and `repository.provider` from
+`mpxconfig.json`; load each selected native provider guide from `../shared/providers/`. Never invent MPX facade provider
+actions. Preserve immutable launch identity.
 
-`<launch-identity>` is the immutable identity selected when MPX launched. Use it for every provider operation. If the launch identity is unavailable, stop and ask the user; never infer or substitute one.
+## Rules
 
-## Workflow
+Default is one Issue at a time on one shared `batch/<slug>` branch in a dedicated batch worktree. Separate per-Issue
+worktrees are allowed only when the user explicitly requests `--parallel`. Gate `HITL` and `design needed`. Never alter
+a correct test merely to pass. Commands come from repository policy/check discovery and are propagated exactly.
 
-1. Resolve the explicit Issue range/list or label preferably with `mpx issue list --identity <launch-identity> --json`. Read repository instructions and understand requirements and acceptance criteria. Stop at the HITL gate for unresolved product decisions.
-2. **HITL gate:** if an Issue has `HITL` or `design needed` and the selection did not explicitly request that label, ask whether to skip, include, or complete design first. Record skipped and blocked items.
-3. Establish a dedicated isolated worktree for the batch before creating its branch or editing files. If the session is already in that batch's dedicated worktree, continue there; otherwise create and enter one through the runtime's worktree operation.
-4. Require a clean tree, create `batch/<slug>` in the dedicated worktree, and create visible progress entries.
-5. Execute one Issue per `mp-executor`, sequential by default. Give each worker exact acceptance criteria, target context, checks, and commit message. Confirm each commit before starting the next. Never change a test merely to pass it.
-6. Run repository-prescribed static checks and tests once over the integrated branch. Fix failures at most three times, then stop as a hard blocker.
-7. Unless review is disabled, run the canonical `review` skill over the complete batch. Apply its review loop up to three iterations, commit accepted fixes, then rerun checks. For changed UI, run assertion-based visual checks per surface; unresolved failures block publication.
-8. Move successful board items to `# Manual testing`, retaining `- [ ]` because only the user records manual verification. This board writeback applies to Issue and board-direct modes.
-9. Push only with authorization. Create exactly one Review using `mpx review create --title <title> --body <body> --source-branch <source> --target-branch <target> --identity <launch-identity> --json`. Capture its explicit Review ID and URL; do not rediscover it.
-10. Report Issue-to-commit mappings, skips, checks, review findings, visual results, board moves, and Review ID.
+## Selection
 
-# Structured failures are reported without claiming success.
+Parse range, comma list, `label:<x>`, or `board`, plus optional size and flags. In Issue mode, use the selected issues
+provider's native broad open-Issue listing, then filter client-side by requested range/list/label. Keep `AFK`; before
+filtering, route `HITL` or `design needed` through the gate unless that exact label was explicitly selected. Parse
+`## Blocking Relationships`/body links and drop Issues with open blockers. Apply size last while preserving provider
+order.
+
+In board-direct mode, read `.mpx/BOARD.md`; select every item under `# To Process` regardless of checkbox and read
+linked files under `.mpx/board-files/`. In Issue mode board entries live under `# Ready to implement`. Create a visible
+progress entry for every selected and skipped item using the runtime task facility when available; mark each selected
+item in progress before its worker starts and completed only after its commit is confirmed, while skipped items retain
+their recorded reason.
+
+## Worktree and branch
+
+Before code inspection or editing, establish or reuse one dedicated batch worktree through the runtime worktree
+operation. Require a clean tree there, then create/reuse `batch/<slug>` from the configured base. Preserve unrelated
+worktrees.
+
+## Execution
+
+Sequentially invoke one `mpx-tdd-executor` per Issue, providing exact Issue/board text,
+body-linked artifacts, acceptance criteria as REQ-1..N, target context, exact discovered check/test commands, and exact
+conventional commit message with provider-appropriate Issue reference. Each executor edits and commits only the shared
+batch branch; confirm its commit before advancing. If a worker exits or returns partial work, inspect that item's edits
+and contract, then finish the same bounded item or retry it; commit and mark progress complete only after all REQs pass.
+Never discard useful partial work or leave a half-applied item.
+
+With explicit `--parallel`, create a real isolated worktree per Issue, run only disjoint items concurrently, confirm
+each commit, and integrate each onto the batch branch. Resolve conflicts before verification. See
+[REFERENCE](REFERENCE.md).
+
+## Integrated verification
+
+Run once on the integrated branch. Invoke `mpx-check-fixer` with exact static/test commands
+and default four reviewers; add security/performance/error-handling for `--full-review`; use no reviewers for
+`--no-review` but still run checks/tests. E2E and assertion-based browser verification apply to changed
+UI/source/config/dependency surfaces and run in selected fix-list order, with stale-server/worktree sanity first and
+explicit PASS/FAIL per surface. Route bounded JSON: `clean`; `issues_remaining` to `mpx-unresolved-issue-tracker`;
+`blocked` stops publication. Maximum three repair iterations. Commit accepted review fixes through `mpx-git-committer`,
+then rerun exact checks.
+
+## Board writeback
+
+Move every successful item to `# Manual testing`, creating the heading if needed. Leave `- [ ]`; only the user marks
+manual verification. Match Issue-mode entries by their native `issue:<id>` annotation or body link and board-direct
+entries by exact text. Do not lose attached image links.
+
+## Publish
+
+Push only as authorized by invocation/repository policy. Use the selected repository provider's native commands to
+create exactly one PR containing the commit→Issue table, parent/child body links, provider closing references, and
+unresolved findings. Capture explicit PR ID and URL. Run native CI status/watch and delegate failures to
+`mpx-ci-fixer` (bounded JSON, maximum three attempts); never read raw logs in the orchestrator. Green CI completes batch
+publication; merge only when separately requested or unambiguously authorized by repository policy—batch execution does
+not require automatic merge.
+
+Report Issue→commit mappings, skips and gate decisions, exact checks, review fixes/findings, visual PASS/FAIL per
+surface, board moves, PR ID/URL, CI, merge state, and blockers.

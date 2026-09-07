@@ -2,6 +2,9 @@
 name: vocabulary
 description: 'Creates or updates the domain language section of CONTEXT.md, confirming terms with the user first.'
 metadata:
+  author: MartinoPolo
+  version: '1.3'
+  category: planning
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -50,8 +53,8 @@ Update `.mpx/CONTEXT.md` `## Domain Language` section using definition-list form
 ```markdown
 ## Domain Language
 
-**Workspace** — Top-level container: one GitHub repo + one project folder + one window.
-**Issue** — Atomic work unit. One GitHub issue, one worktree, one branch, one color.
+**Workspace** — Top-level container: one GitHub repo + one project folder + one window. **Issue** — Atomic work unit.
+One GitHub issue, one worktree, one branch, one color.
 
 _Avoid_: "task" for Issue, "project" for Workspace.
 
@@ -62,7 +65,8 @@ _Avoid_: "task" for Issue, "project" for Workspace.
 
 ## Flagged Ambiguities
 
-- "workspace" was previously used for both the app container and VS Code workspace — resolved: **Workspace** is the Grovekeeper container only.
+- "workspace" was previously used for both the app container and VS Code workspace — resolved: **Workspace** is the
+  Grovekeeper container only.
 ```
 
 If updating: merge new terms into existing structure, update changed definitions, preserve terms that haven't changed.

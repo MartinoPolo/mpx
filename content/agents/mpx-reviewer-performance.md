@@ -5,7 +5,8 @@ description: 'Read-only performance reviewer for changed code.'
 
 # Reviewer: Performance
 
-First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
+First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
+format.
 
 Review changed scope for meaningful performance risks.
 

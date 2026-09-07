@@ -9,7 +9,8 @@ applyTo: '**/src/routes/**/*.ts,**/src/hooks*.ts'
 
 # SvelteKit Type-Safe Paths — Server & Runtime Matching
 
-Supplements `sveltekit-paths.md` for projects with a SvelteKit server runtime (SSR, server load functions, API routes, hooks). Do not link this rule in `adapter-static` SPA projects — they have no server at runtime.
+Supplements `sveltekit-paths.md` for projects with a SvelteKit server runtime (SSR, server load functions, API routes,
+hooks). Do not link this rule in `adapter-static` SPA projects — they have no server at runtime.
 
 ## `resolve` in server code
 

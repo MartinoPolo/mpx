@@ -1,7 +1,10 @@
 ---
 name: check-fix
-description: "Detects the project's check scripts, runs them, and fixes what fails. Use when asked to run checks, fix lint or type errors, or get the build green."
+description: "Detects the project's check scripts, runs them, and fixes what fails. Use when asked to run checks,..."
 metadata:
+  author: MartinoPolo
+  version: '0.6'
+  category: code-review
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -10,14 +13,18 @@ metadata:
 
 # Check & Fix
 
-Deterministic check execution and fix loop based on `detect-check-scripts.mjs`.
+Deterministic check execution and fix loop based on the bundled `detect-check-scripts.mjs`.
 
 This skill accepts no arguments. Ignore argument-based filtering and follow detector output only.
 
 ## Step 1: Detect Available Checks
 
+Read [content paths](../shared/CONTENT_PATHS.md). Resolve `skills/check-fix/scripts/detect-check-scripts.mjs` beneath
+`MPX_ACTIVE_CONTENT_ROOT` as instructed there, validate it, and store its literal absolute path as `<detector>`. Do not
+run a caller-checkout `./scripts` path.
+
 ```bash
-node ./scripts/detect-check-scripts.mjs
+node <detector>
 ```
 
 Handle all outputs explicitly:
@@ -26,7 +33,7 @@ Handle all outputs explicitly:
 - `PM_UNKNOWN=true`: ask user which package manager to use (`npm`, `pnpm`, `yarn`, `bun`), then re-run:
 
 ```bash
-node ./scripts/detect-check-scripts.mjs . <chosen_pm>
+node <detector> . <chosen_pm>
 ```
 
 - `PM=<pm>`: continue with detected scripts.
@@ -39,24 +46,27 @@ Possible script keys per scope (root or prefixed package):
 - `<prefix>LINT`, `<prefix>LINT_DIR`
 - `<prefix>FORMAT`, `<prefix>FORMAT_DIR`
 - `<prefix>BUILD`, `<prefix>BUILD_DIR`
+- `<prefix>TEST_UNIT` or `<prefix>TEST`, with the matching `_DIR`
+- `<prefix>TEST_E2E`, `<prefix>TEST_E2E_DIR`
 
 If no runnable script keys are present after `PM=...`, report "No scripts detected" and stop.
 
 ## Step 2: Build Run Plan (No Arguments)
 
-Per scope:
+Per scope, build two tiers from detector output:
 
-- If `CHECK_ALL` exists: run `CHECK_ALL`, then `BUILD` (if present).
-- If `CHECK_ALL` does not exist: run detected `TYPECHECK`, `LINT`, `FORMAT`, then `BUILD`.
+- Fast tier: `CHECK_ALL` when present; otherwise detected `TYPECHECK`, `LINT`, and `FORMAT`.
+- Full tier: the fast tier, then `BUILD`, `TEST_UNIT` or `TEST`, and `TEST_E2E` when present.
 
-Run exactly what the detector output specifies, regardless of any user arguments.
+Run exactly what the detector output specifies, regardless of any user arguments. Use fast-tier commands for feedback
+while fixing; after all planned fixes, run the full tier once as final verification.
 
 ## Step 3: Run Checks
 
-Run planned commands in deterministic order.
+Run fast-tier commands in deterministic order.
 
-- `CHECK_ALL` mode: `CHECK_ALL` -> `BUILD`
-- Individual mode: `TYPECHECK` -> `LINT` -> `FORMAT` -> `BUILD`
+- `CHECK_ALL` mode: `CHECK_ALL`
+- Individual mode: `TYPECHECK` -> `LINT` -> `FORMAT`
 
 For monorepo keys, run from `*_DIR`:
 
@@ -82,9 +92,12 @@ If a check fails:
 
 Repeat up to **3 iterations** per failed command. If still failing, mark as `Failed` and continue.
 
-## Step 5: Continue Remaining Checks
+## Step 5: Continue and Run Final Verification
 
-Continue through remaining planned commands. Each command has its own 3-iteration fix budget.
+Continue through remaining fast-tier commands. Each command has its own 3-iteration fix budget. Then run the full tier
+once in this order: `CHECK_ALL` or `TYPECHECK` -> `LINT` -> `FORMAT`, followed by `BUILD` -> `TEST_UNIT` or `TEST` ->
+`TEST_E2E`. Stop final verification at the first failure and report it; do not start another fix loop that duplicates
+the completed feedback phase.
 
 ## Step 6: Report Results
 

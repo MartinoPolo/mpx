@@ -9,16 +9,30 @@ paths:
 applyTo: '**/*.svelte,**/*.svelte.ts,**/*.svelte.js, **/*.context.**'
 ---
 
-Use the **reactivity classes** in `src/lib/reactivity/` with Svelte's **Context API** for shared state. Never use raw Svelte stores (`writable`, `readable`) — use these classes instead.
+Use the **reactivity classes** in `src/lib/reactivity/` with Svelte's **Context API** for shared state. Never use raw
+Svelte stores (`writable`, `readable`) — use these classes instead.
 
 ## Reactivity Classes (`src/lib/reactivity/`)
 
-| Class              | Backed by            | Use case                                                                          |
-| ------------------ | -------------------- | --------------------------------------------------------------------------------- |
-| `StateRaw<T>`      | `$state.raw()`       | Mutable reactive state. Supports custom equality checks and value transforms.     |
-| `Derived<T>`       | `$derived.by()`      | Computed reactive value. Supports mutable override.                               |
-| `Persisted<T>`     | `localStorage`       | Persistent state with cross-tab sync via `storage` events. Requires a `Serde<T>`. |
-| `ReadonlyState<T>` | wraps `MutableState` | Read-only accessor. Created via `state.readonly()`.                               |
+#### Class: `StateRaw<T>`
+
+- **Backed by:** `$state.raw()`
+- **Use case:** Mutable reactive state. Supports custom equality checks and value transforms.
+
+#### Class: `Derived<T>`
+
+- **Backed by:** `$derived.by()`
+- **Use case:** Computed reactive value. Supports mutable override.
+
+#### Class: `Persisted<T>`
+
+- **Backed by:** `localStorage`
+- **Use case:** Persistent state with cross-tab sync via `storage` events. Requires a `Serde<T>` .
+
+#### Class: `ReadonlyState<T>`
+
+- **Backed by:** wraps `MutableState`
+- **Use case:** Read-only accessor. Created via `state.readonly()` .
 
 ## Context Pattern
 
@@ -59,7 +73,8 @@ function createMyFeatureContext() {
 4. Compose state from `StateRaw`, `Derived`, `Persisted` inside the `create*` factory function.
 5. `type <Feature>Context = ReturnType<typeof create*>`.
 6. Files named `<feature>.context.svelte.ts`.
-7. File ordering: imports → type alias + `createContext` destructuring → `set*Context()` → `create*` factory (last, so the return is the final thing in the file).
+7. File ordering: imports → type alias + `createContext` destructuring → `set*Context()` → `create*` factory (last, so
+   the return is the final thing in the file).
 
 ## Persisted State Example
 

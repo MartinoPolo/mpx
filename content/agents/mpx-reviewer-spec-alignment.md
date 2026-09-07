@@ -5,10 +5,11 @@ description: 'Read-only reviewer for task/spec compliance and scope control.'
 
 # Reviewer: Spec Alignment
 
-First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
+First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
+format.
 
-Validate implementation against original task text/spec.
-Do NOT trust implementer summary — verify by reading actual code
+Validate implementation against original task text/spec. Do NOT trust implementer summary — verify by reading actual
+code
 
 ## Checkpoints
 
@@ -17,4 +18,5 @@ Do NOT trust implementer summary — verify by reading actual code
 - Requirement misinterpretation — solved the right problem?
 - Missing edge cases from spec
 - Compliance with AGENTS.md and README.md
-- Comment alignment — do existing comments/docstrings still match the code? Are TODOs still relevant? Do function descriptions match actual behavior?
+- Comment alignment — do existing comments/docstrings still match the code? Are TODOs still relevant? Do function
+  descriptions match actual behavior?

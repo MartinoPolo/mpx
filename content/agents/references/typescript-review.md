@@ -1,7 +1,7 @@
 # TypeScript Review Reference
 
-Judgment-based patterns not caught by linting or type-checking.
-Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
+Judgment-based patterns not caught by linting or type-checking. Adapted from
+[awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 
@@ -107,9 +107,7 @@ const users = await Promise.all(ids.map(fetchUser));
 
 // ✅ Promise.allSettled — get all results, handle failures individually
 const results = await Promise.allSettled(ids.map(fetchUser));
-const users = results
-  .filter((r): r is PromiseFulfilledResult<User> => r.status === 'fulfilled')
-  .map((r) => r.value);
+const users = results.filter((r): r is PromiseFulfilledResult<User> => r.status === 'fulfilled').map((r) => r.value);
 ```
 
 ## Race Condition Handling

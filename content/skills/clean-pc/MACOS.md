@@ -1,8 +1,11 @@
 # macOS Commands
 
-> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat everything here as a starting point: dry-run each command, confirm paths exist, and prefer reporting over deleting until a run has proven itself.
+> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat
+> everything here as a starting point: dry-run each command, confirm paths exist, and prefer reporting over deleting
+> until a run has proven itself.
 
-Domain rules live in [DOMAINS.md](DOMAINS.md). The bundled `scripts/*.ps1` are Windows-only; on macOS the shell commands below replace them.
+Domain rules live in [DOMAINS.md](DOMAINS.md). The bundled `scripts/*.ps1` are Windows-only; on macOS the shell commands
+below replace them.
 
 ## Scan boundary
 
@@ -49,7 +52,8 @@ brew cleanup -s
 rm -rf ~/Library/Caches/ms-playwright/<superseded-build>
 ```
 
-Cache roots: `~/Library/Caches`, `~/.npm`, `~/.cache`, `~/.gradle/caches`, `~/Library/Developer/Xcode/DerivedData`, `~/Library/Developer/CoreSimulator/Devices`.
+Cache roots: `~/Library/Caches`, `~/.npm`, `~/.cache`, `~/.gradle/caches`, `~/Library/Developer/Xcode/DerivedData`,
+`~/Library/Developer/CoreSimulator/Devices`.
 
 Xcode DerivedData and unused simulator runtimes are usually the largest single win on a Mac.
 
@@ -62,7 +66,8 @@ docker builder prune -f
 docker image prune -f
 ```
 
-The Docker Desktop disk image lives at `~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw`. It does not shrink on its own; Docker Desktop's own "Clean / Purge data" is the supported path.
+The Docker Desktop disk image lives at `~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw`. It does not
+shrink on its own; Docker Desktop's own "Clean / Purge data" is the supported path.
 
 ### 3. Stale build output
 
@@ -80,7 +85,8 @@ ls /Applications
 mdls -name kMDItemLastUsedDate "/Applications/<App>.app"   # usage signal
 ```
 
-Leftovers after an app is removed: `~/Library/Application Support`, `~/Library/Preferences`, `~/Library/Caches`, `~/Library/Logs`, `~/Library/Containers`.
+Leftovers after an app is removed: `~/Library/Application Support`, `~/Library/Preferences`, `~/Library/Caches`,
+`~/Library/Logs`, `~/Library/Containers`.
 
 Dragging an app to the Trash leaves all of those behind — that is the macOS equivalent of the orphaned-AppData sweep.
 
@@ -118,7 +124,8 @@ sudo tmutil deletelocalsnapshots <date>
 sudo rm -rf /Library/Caches/*
 ```
 
-Local Time Machine snapshots are the macOS analogue of shadow copies: removing them removes rollback ability. Collect these into one `sudo` script rather than prompting repeatedly.
+Local Time Machine snapshots are the macOS analogue of shadow copies: removing them removes rollback ability. Collect
+these into one `sudo` script rather than prompting repeatedly.
 
 ## Visual review
 

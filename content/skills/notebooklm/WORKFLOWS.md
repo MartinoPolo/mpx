@@ -11,7 +11,8 @@ Use the workflow matching the requested outcome and account for every source and
 1. `notebooklm create "Research: [topic]"` — _if fails: check auth with `notebooklm login`_
 2. `notebooklm source add` for each URL/document — _if one fails: log warning, continue with others_
 3. Wait for sources: `notebooklm source list --json` until all status=READY — _required before generation_
-4. `notebooklm generate audio "Focus on [specific angle]"` (confirm when asked) — _if rate limited: wait 5 min, retry once_
+4. `notebooklm generate audio "Focus on [specific angle]"` (confirm when asked) — _if rate limited: wait 5 min, retry
+   once_
 5. Note the artifact ID returned
 6. Check `notebooklm artifact list` later for status
 7. `notebooklm download audio ./podcast.mp3` when complete (confirm when asked)
@@ -25,7 +26,8 @@ When user wants full automation (generate and download when ready):
 1. Create notebook and add sources as usual
 2. Wait for sources to be ready (use `source wait` or check `source list --json`)
 3. Run `notebooklm generate audio "..." --json` → parse `task_id` from output
-4. **Spawn a background `general-purpose` agent using the mechanical model class.** Pass the retained IDs and these exact commands in its prompt:
+4. **Spawn a background `general-purpose` agent using the mechanical model class.** Pass the retained IDs and these
+   exact commands in its prompt:
    ```bash
    notebooklm artifact wait <task-id> -n <notebook-id> --timeout 1200
    notebooklm download audio ./podcast.mp3 -a <task-id> -n <notebook-id>
@@ -34,7 +36,9 @@ When user wants full automation (generate and download when ready):
 
 **Error handling in subagent:**
 
-- If `artifact wait` returns exit code 2 (timeout): Report timeout, suggest checking `artifact list`
+- After any nonzero `artifact wait`, inspect `artifact list -n <notebook-id> --json`. Continue waiting only when that
+  exact artifact is still `pending` or `in_progress`; report a timeout only when the command/status actually indicates
+  one. Preserve and report all other CLI stderr and exit codes as real errors rather than relabeling them as timeouts.
 - If download fails: Check if artifact status is COMPLETED first
 
 **Benefits:** Non-blocking, user can do other work, automatic download on completion
@@ -62,8 +66,10 @@ When user wants full automation (generate and download when ready):
    ```
 3. `notebooklm source list` to verify
 
-**Source limits:** Varies by plan—Standard: 50, Plus: 100, Pro: 300, Ultra: 600 sources per notebook. See [NotebookLM plans](https://support.google.com/notebooklm/answer/16213268) for details. The CLI does not enforce these limits; they are applied by your NotebookLM account.
-**Supported types:** PDFs, YouTube URLs, web URLs, Google Docs, text files, Markdown, Word docs, EPUB, audio files, video files, images
+**Source limits:** Varies by plan—Standard: 50, Plus: 100, Pro: 300, Ultra: 600 sources per notebook. See
+[NotebookLM plans](https://support.google.com/notebooklm/answer/16213268) for details. The CLI does not enforce these
+limits; they are applied by your NotebookLM account. **Supported types:** PDFs, YouTube URLs, web URLs, Google Docs,
+text files, Markdown, Word docs, EPUB, audio files, video files, images
 
 ### Bulk Import with Source Waiting (Subagent Pattern)
 
@@ -76,11 +82,14 @@ When adding multiple sources and needing to wait for processing before chat/gene
    notebooklm source add "https://url1.com" --json  # → {"source": {"id": "abc...", ...}}
    notebooklm source add "https://url2.com" --json  # → {"source": {"id": "def...", ...}}
    ```
-2. **Spawn a background `general-purpose` agent using the mechanical model class.** Pass every retained source ID and notebook ID. Instruct it to run `notebooklm source wait <source-id> -n <notebook-id> --timeout 600` for each source and report every ready or failed result.
+2. **Spawn a background `general-purpose` agent using the mechanical model class.** Pass every retained source ID and
+   notebook ID. Instruct it to run `notebooklm source wait <source-id> -n <notebook-id> --timeout 600` for each source
+   and report every ready or failed result.
 3. Main conversation continues while agent waits
 4. Once sources are ready, proceed with chat or generation
 
-**Why wait for sources?** Sources must be indexed before chat or generation. Takes ~30 seconds to several minutes per source (see the processing-times table below).
+**Why wait for sources?** Sources must be indexed before chat or generation. Takes ~30 seconds to several minutes per
+source (see the processing-times table below).
 
 ### Deep Web Research (Subagent Pattern)
 
@@ -93,9 +102,17 @@ Deep research finds and analyzes web sources on a topic:
    ```bash
    notebooklm source add-research "topic query" --mode deep --no-wait
    ```
-3. **Spawn a background `general-purpose` agent using the mechanical model class.** Pass the retained notebook ID and instruct it to run `notebooklm research wait -n <notebook-id> --import-all --timeout 1800`, then report how many sources were imported.
-4. Main conversation continues while agent waits
-5. When agent completes, sources are imported automatically
+3. **Spawn a background `general-purpose` agent using the mechanical model class.** Pass the retained notebook ID and
+   instruct it to run `notebooklm research wait -n <notebook-id> --import-all --timeout 1800`, then report the imported
+   source IDs.
+4. For every imported source ID, run `notebooklm source wait <source-id> -n <notebook-id> --timeout 600`. Research
+   completion/import does not mean source indexing is complete.
+5. Main conversation continues while the agent waits. Proceed to chat or generation only after every imported source is
+   ready; report failed sources individually.
+
+For any nonzero `research wait` or `source wait`, inspect `research status -n <notebook-id>` and
+`source list --notebook <notebook-id> --json` respectively before classifying the result. Retry only statuses that are
+still processing. Preserve other nonzero exit codes and stderr as real CLI errors.
 
 **Alternative (blocking):** For simple cases, omit `--no-wait`:
 

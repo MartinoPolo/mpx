@@ -1,13 +1,14 @@
 # Svelte 5 Review Reference
 
-Judgment-based patterns for Svelte 5 with runes — not caught by linting.
-Built from [Svelte 5 documentation](https://svelte.dev/docs).
+Judgment-based patterns for Svelte 5 with runes — not caught by linting. Built from
+[Svelte 5 documentation](https://svelte.dev/docs).
 
 ---
 
 ## Runes Overview
 
-Svelte 5 replaces implicit reactivity with explicit runes. All old patterns (`$:`, `export let`, `$$props`, `$$restProps`) are deprecated.
+Svelte 5 replaces implicit reactivity with explicit runes. All old patterns (`$:`, `export let`, `$$props`,
+`$$restProps`) are deprecated.
 
 | Old (Svelte 4)             | New (Svelte 5)                      |
 | -------------------------- | ----------------------------------- |
@@ -76,7 +77,8 @@ Svelte 5 replaces implicit reactivity with explicit runes. All old patterns (`$:
 
 ### Key rule: $derived must be side-effect free
 
-The expression inside `$derived()` should only compute and return a value. No mutations, no API calls, no DOM manipulation.
+The expression inside `$derived()` should only compute and return a value. No mutations, no API calls, no DOM
+manipulation.
 
 ## $effect — Side Effects Only
 
@@ -156,7 +158,8 @@ const countStore = toStore(
 
 ## Component Structure Ordering
 
-Strong convention — flag deviations in review but don't block if justified. Only enforce for components with **30+ lines of script**. Same order for all component types (page components naturally skip props/types sections).
+Strong convention — flag deviations in review but don't block if justified. Only enforce for components with **30+ lines
+of script**. Same order for all component types (page components naturally skip props/types sections).
 
 ```svelte
 <script lang="ts">
@@ -200,9 +203,11 @@ Strong convention — flag deviations in review but don't block if justified. On
 
 ### Key distinctions
 
-- **Constants vs instance-computed values**: `const LIMIT = 50` is a constant (section 3). `const input_id = props.id ?? props.name` depends on reactive inputs — goes in section 6.
+- **Constants vs instance-computed values**: `const LIMIT = 50` is a constant (section 3).
+  `const input_id = props.id ?? props.name` depends on reactive inputs — goes in section 6.
 - **Page components**: Typically skip Types/Props sections, lean on context setup. Same order otherwise.
-- **`onMount`/`onDestroy`**: Group with `$effect` in section 8 — same purpose (wiring side effects). Prefer `$effect` over `onMount` where possible.
+- **`onMount`/`onDestroy`**: Group with `$effect` in section 8 — same purpose (wiring side effects). Prefer `$effect`
+  over `onMount` where possible.
 
 ## Common Review Patterns
 

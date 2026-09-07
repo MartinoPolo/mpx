@@ -1,7 +1,10 @@
 ---
 name: continue
-description: 'Recovers interrupted child work and managed development services, then continues the active task.'
+description: 'Recovers interrupted child work and managed development services after a session-limit hit, crash, or...'
 metadata:
+  author: MartinoPolo
+  version: '0.4'
+  category: utility
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -10,55 +13,96 @@ metadata:
 
 # Continue and Recover
 
-Recover work after a runtime interruption without repeating work that is already durable. If the invocation input names a focus or task, assess and recover it first.
+On resume after an interruption, first restore interrupted child and background work, then continue. If the invocation
+input names a focus or task, recover it first. If nothing was interrupted, continue the latest task normally.
 
-## 1. Detect an interruption
+A session-limit hit can terminate every running child and managed shell at once, including work in other worktrees. A
+child may leave only a limit result, while a development service may stop or become unhealthy. This workflow restores
+that work without repeating durable progress.
 
-Use the runtime Agent contract to inspect children launched by this session and retrieve their latest structured states and results. Treat a child as interrupted only when its state or result reports an interruption, runtime or capacity error, lost execution, or an unfinished child with no active execution. Also inspect managed services only when the active work depends on them.
+## 1. Detect whether recovery is needed (self-gate)
 
-Conversation wording by itself is not proof of an interruption. A completed child, an ordinary failed check, or an idle service that the task does not need does not trigger recovery.
+Use the runtime Agent contract to inspect children launched by this session and retrieve their latest structured states
+and results. Real interruption signals include:
 
-**No interruption:** continue the most recent task normally and stop this workflow. Do not run the recovery steps below.
+- a child's last result containing only a capacity/runtime failure such as `hit your session limit`, `usage limit`,
+  `rate limit`, `overloaded`, an API error, or `[Request interrupted]`;
+- an unfinished child with no active execution; or
+- runtime task state showing work stuck in progress with no matching completion result.
 
-## 2. Assess durable work first
+Conversation wording alone is not proof. A completed child, an ordinary failed check, or an idle service the task does
+not need does not trigger recovery.
 
-Before steering or respawning anything:
+**No interruption:** continue the most recent task normally and stop this workflow. Skip the recovery steps below.
+
+## 2. Assess durable work before redoing anything
+
+A killed child may have finished most of its brief. Before steering or respawning:
+
+```bash
+git status
+git diff --stat
+```
 
 1. Inspect repository status and the current diff without changing them.
-2. Inventory durable artifacts already produced, such as changed files, generated evidence, test results, handoff notes, and project-defined scratch artifacts.
-3. Run only a quick check that the repository already defines or the user supplied. Do not invent a command.
-4. For every interrupted child, record its original brief, its latest structured result, what exists durably, and only the remaining scope.
+2. Inventory durable artifacts: changed/generated files, numbered evidence, screenshots or scripts under
+   `test-results/`, test results, `HANDOFF.md`, memory notes, and project-defined scratch artifacts.
+3. Run only a quick check the repository already defines or the user supplied. Do not invent a command.
+4. For every interrupted child, record its original brief, latest structured result, what exists on disk, and only the
+   remaining scope.
 
-Durable artifacts are the recovery substrate. Never restart a child from zero merely because its conversational result is incomplete.
+**Disk artifacts are the reliable recovery substrate.** Never restart from zero merely because the conversational result
+is incomplete. For future long runs, have children write numbered evidence as they go and keep `HANDOFF.md` current.
 
-## 3. Recover children
+## 3. Recover each interrupted child
 
-Handle each interrupted child through the runtime Agent contract:
+For each interrupted child ID, in priority order:
 
-1. Retrieve each child's latest structured result and current state before acting.
-2. When the child remains addressable, steer it using the same child ID. Tell it what artifacts survived and ask it to continue only the remaining scope.
-3. Retrieve the resulting child result and verify it against the original brief.
-4. If the runtime reports a missing transcript or other unavailable recovery context, says that the child cannot be resumed, or rejects steering, respawn a matching child with only the remaining scope. Treat that report only as a capability result; do not locate or interpret native transcript storage. Point the new child at the durable artifacts and require it to inventory them before editing.
-5. If the runtime cannot launch a replacement, keep the remaining scope in the report and continue with independent work.
+1. Retrieve its latest structured result and current state.
+2. If it remains addressable, steer the original ID. Tell it which artifacts survived and ask it to resume only the
+   remaining scope.
+3. If steering succeeds (for example, the runtime reports `resumed from transcript...`), retrieve the new result and
+   verify it against the original brief.
+4. If the runtime reports `No transcript found for agent ID`, another missing-transcript result, an unresumable child,
+   or rejected steering, spawn a fresh matching canonical agent for only the remaining work. Point it at surviving
+   artifacts and require it to inventory them before editing.
+5. If replacement launch is unavailable, preserve the remaining scope in the report and continue independent work.
 
-Do not depend on a provider's private message API, task-list UI, account storage, or transcript representation. The child result and steering operations above are capabilities of the runtime Agent contract, not assumptions about how a runtime persists conversations.
+Match the replacement to the original task, for example `mpx-executor` for pre-analyzed edits or the canonical
+browser-testing agent for an interactive browser loop. Use `mpx-explorer` for repository search. If a generic agent is unavoidable,
+select the canonical class through structured runtime configuration: `advanced` for implementation/orchestration,
+`standard` for review or bounded judgment, `exploration` for search, and `mechanical` for polling or one deterministic
+command. Never embed vendor model IDs in instructions.
+
+Do not depend on a provider's private message API, task-list UI, account storage, or transcript representation. Agent
+result, steering, and launch are runtime capabilities; do not locate or interpret native transcript files.
 
 ## 4. Recover managed development services
 
-Use the runtime `dev_server` contract; do not inspect native processes or assume a network address.
+Use the runtime `dev_server` contract; do not inspect or kill arbitrary native processes and do not assume a fixed
+network address.
 
-1. Query `status` for each configured service ID required by the recovered work.
+1. Query `status` for every configured service ID required by recovered work.
 2. Leave a ready service alone.
-3. For a stopped, crashed, or unresponsive managed service, use `restart` with the configured service ID and its existing launch-bound assignment.
-4. Confirm readiness through `status`. If the service remains unhealthy, report it instead of changing its command, executor, working root, or assigned endpoints.
+3. For a stopped, crashed, or unresponsive service, call `restart` with its existing service ID and launch-bound
+   assignment.
+4. Confirm readiness through `status`.
+5. If it remains unhealthy, report it instead of changing its command, executor, working root, or assigned endpoints.
 
-The runtime owns process trees, readiness probes, endpoint assignments, and orphan cleanup. Recovery must not kill arbitrary processes or substitute a fixed endpoint.
+The runtime owns complete process trees, readiness probes, endpoint assignments, and orphan cleanup. This avoids the
+native failure mode where a zombie holds the old port and a replacement silently starts on another one, breaking scripts
+that target the original endpoint.
 
-## 5. Continue and report
+## 5. Delegate recovery busy-work
 
-Continue the active task after dependencies are restored. Summarize:
+Preserve the original delegation intent. Re-running suites, inventorying artifacts, and retesting flows belong in
+resumed or matching canonical children; the main session coordinates, validates results, and continues the active task.
 
-- children steered with their original context;
+## 6. Continue and report
+
+After dependencies are restored, continue the active task. Report:
+
+- children resumed with original context;
 - children respawned and the bounded remaining scope assigned to each;
 - interrupted work with no recoverable context or artifacts;
 - managed services restarted and their final state;

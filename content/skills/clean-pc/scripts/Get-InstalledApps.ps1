@@ -23,9 +23,9 @@ Set-StrictMode -Version Latest
 $idleCutoff = (Get-Date).AddMonths(-$IdleMonths)
 
 $uninstallKey = @(
-    'HKL<drive>:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKL<drive>:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKC<drive>:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
 )
 
 $apps = foreach ($keyPath in $uninstallKey) {

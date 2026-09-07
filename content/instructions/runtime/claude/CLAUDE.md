@@ -1,1 +1,1 @@
-@../../global/AGENTS.md
+@instructions/global/AGENTS.md

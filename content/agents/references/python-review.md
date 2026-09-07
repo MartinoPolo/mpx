@@ -1,7 +1,7 @@
 # Python Review Reference
 
-Judgment-based patterns not caught by linting or type-checking.
-Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
+Judgment-based patterns not caught by linting or type-checking. Adapted from
+[awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 

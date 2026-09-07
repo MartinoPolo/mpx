@@ -5,26 +5,15 @@
 // Optional: --category <name> to filter scripts by category.
 // Optional: --json for machine-readable output.
 // Categories: frontend, backend, database, build, typecheck, lint, test, other
-// Usage: node $HOME/.claude/scripts/detect-project-scripts.mjs [project_dir] [--recursive] [--category <name>] [--json]
+// Usage: node detect-project-scripts.mjs [project_dir] [--recursive] [--category <name>] [--json]
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-const VALID_CATEGORIES = [
-  'frontend',
-  'backend',
-  'database',
-  'build',
-  'typecheck',
-  'lint',
-  'test',
-  'other',
-];
+const VALID_CATEGORIES = ['frontend', 'backend', 'database', 'build', 'typecheck', 'lint', 'test', 'other'];
 
 function usage() {
-  console.log(
-    'Usage: node $HOME/.claude/scripts/detect-project-scripts.mjs [project_dir] [--recursive] [--category <name>] [--json]',
-  );
+  console.log('Usage: node detect-project-scripts.mjs [project_dir] [--recursive] [--category <name>] [--json]');
   console.log('  --recursive, -r   Scan nested package.json files');
   console.log('  --category, -c    Filter by category');
   console.log('  --json            Output JSON (for automation)');
@@ -78,9 +67,7 @@ const rootDir = path.resolve(projectDir);
 
 if (!existsSync(path.join(rootDir, 'package.json'))) {
   if (jsonMode) {
-    console.log(
-      '{"error":"no-root-package-json","message":"No package.json found at project root."}',
-    );
+    console.log('{"error":"no-root-package-json","message":"No package.json found at project root."}');
   } else {
     console.log('Error: No package.json found at project root.');
   }
@@ -112,16 +99,7 @@ function detectPackageManager() {
 }
 
 function walkForPackageJsons(startDir, results = []) {
-  const ignore = new Set([
-    'node_modules',
-    '.git',
-    '.next',
-    'dist',
-    'build',
-    'coverage',
-    '.turbo',
-    '.cache',
-  ]);
+  const ignore = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage', '.turbo', '.cache']);
   const entries = readdirSync(startDir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(startDir, entry.name);
@@ -143,21 +121,18 @@ function inferScriptCategory(scriptName, commandText) {
   const script = scriptName.toLowerCase();
   const command = String(commandText || '').toLowerCase();
   if (
-    /^(dev|start|serve|preview)(:|$)/.test(script) ||
-    /vite|next\s+dev|nuxt\s+dev|webpack\s+serve|react-scripts\s+start/.test(command)
-  ) {
-    return 'frontend';
-  }
-  if (
     /api|server|backend/.test(script) ||
     /express|fastify|nest\s+start|node\s+.*server|uvicorn|gunicorn/.test(command)
   ) {
     return 'backend';
   }
   if (
-    /db|migrate|migration|seed|prisma/.test(script) ||
-    /prisma|knex|typeorm|sequelize/.test(command)
+    /^(dev|start|serve|preview)(:|$)/.test(script) ||
+    /vite|next\s+dev|nuxt\s+dev|webpack\s+serve|react-scripts\s+start/.test(command)
   ) {
+    return 'frontend';
+  }
+  if (/db|migrate|migration|seed|prisma/.test(script) || /prisma|knex|typeorm|sequelize/.test(command)) {
     return 'database';
   }
   if (/test/.test(script)) {
@@ -178,7 +153,7 @@ function inferScriptCategory(scriptName, commandText) {
 function inferPort(commandText) {
   const text = String(commandText || '');
   const patterns = [
-    /(?:--port|-p)\s+(\d{2,5})/i,
+    /(?:--port(?:=|\s+)|-p\s+)(\d{2,5})/i,
     /PORT\s*=\s*(\d{2,5})/i,
     /(?:localhost|127\.0\.0\.1):(\d{2,5})/i,
   ];
@@ -267,7 +242,6 @@ if (jsonMode) {
     recursive,
     categoryFilter: categoryFilter || null,
     categoryOptions: VALID_CATEGORIES,
-    generatedAt: new Date().toISOString(),
     packageCount: packages.length,
     packages,
     frontendCandidates,
@@ -282,9 +256,7 @@ if (jsonMode) {
 function printPackage(packageDetails) {
   for (const script of packageDetails.scripts) {
     const portText = script.port !== undefined ? ` :${script.port}` : '';
-    process.stdout.write(
-      `${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`,
-    );
+    process.stdout.write(`${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`);
   }
 }
 
@@ -299,9 +271,7 @@ function printPackageCategorized(packageDetails) {
     process.stdout.write(`  ${category}:\n`);
     for (const script of scripts) {
       const portText = script.port !== undefined ? ` :${script.port}` : '';
-      process.stdout.write(
-        `    ${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`,
-      );
+      process.stdout.write(`    ${packageDetails.packageManager} ${script.name} (${script.command})${portText}\n`);
     }
   }
 }

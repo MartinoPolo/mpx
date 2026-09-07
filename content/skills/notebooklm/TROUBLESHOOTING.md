@@ -12,31 +12,54 @@ Use this reference after a failed or long-running operation. Resolve each failur
 
 **Error decision tree:**
 
-| Error                        | Cause                 | Action                                                                                      |
-| ---------------------------- | --------------------- | ------------------------------------------------------------------------------------------- |
-| Auth/cookie error            | Session expired       | Run `notebooklm auth check` then `notebooklm login`                                         |
-| "No notebook context"        | Context not set       | Use `-n <id>` or `--notebook <id>` flag (parallel), or `notebooklm use <id>` (single-agent) |
-| "No result found for RPC ID" | Rate limiting         | Wait 5-10 min, retry                                                                        |
-| `GENERATION_FAILED`          | Google rate limit     | Wait and retry later                                                                        |
-| Download fails               | Generation incomplete | Check `artifact list` for status                                                            |
-| Invalid notebook/source ID   | Wrong ID              | Run `notebooklm list` to verify                                                             |
-| RPC protocol error           | Google changed APIs   | May need CLI update                                                                         |
+#### Error: Auth/cookie error
+
+- **Cause:** Session expired
+- **Action:** Run `notebooklm auth check` then `notebooklm login`
+
+#### Error: "No notebook context"
+
+- **Cause:** Context not set
+- **Action:** Use `-n <id>` or `--notebook <id>` flag (parallel), or `notebooklm use <id>` (single-agent)
+
+#### Error: "No result found for RPC ID"
+
+- **Cause:** Rate limiting
+- **Action:** Wait 5-10 min, retry
+
+#### Error: `GENERATION_FAILED`
+
+- **Cause:** Google rate limit
+- **Action:** Wait and retry later
+
+#### Error: Download fails
+
+- **Cause:** Generation incomplete
+- **Action:** Check `artifact list` for status
+
+#### Error: Invalid notebook/source ID
+
+- **Cause:** Wrong ID
+- **Action:** Run `notebooklm list` to verify
+
+#### Error: RPC protocol error
+
+- **Cause:** Google changed APIs
+- **Action:** May need CLI update
 
 ## Exit Codes
 
-All commands use consistent exit codes:
+Exit codes must be interpreted with stderr and the corresponding status command; observed CLI versions have not used one
+timeout code consistently.
 
-| Code | Meaning                              | Action                                  |
-| ---- | ------------------------------------ | --------------------------------------- |
-| 0    | Success                              | Continue                                |
-| 1    | Error (not found, processing failed) | Check stderr, see Error Handling        |
-| 2    | Timeout (wait commands only)         | Extend timeout or check status manually |
+| Code | Meaning                                     | Action                                                         |
+| ---- | ------------------------------------------- | -------------------------------------------------------------- |
+| 0    | Success                                     | Continue                                                       |
+| 1+   | Timeout or real error, depending on command | Preserve stderr, then inspect the exact source/artifact status |
 
-**Examples:**
-
-- `source wait` returns 1 if source not found or processing failed
-- `artifact wait` returns 2 if timeout reached before completion
-- `generate` returns 1 if rate limited (check stderr for details)
+For a nonzero wait, use `source list`, `artifact list`, or `research status` with the retained full IDs. Retry only when
+the object still reports a processing state. A missing/failed object, rate limit, authentication failure, or other
+stderr remains a real CLI error; do not convert every nonzero result into a timeout.
 
 ## Long Prompts
 
@@ -48,13 +71,16 @@ notebooklm generate report --prompt-file ./custom_report_prompt.txt
 notebooklm source add-research --prompt-file ./research_query.txt --mode deep
 ```
 
-`--prompt-file` is mutually exclusive with the positional text argument. The file is read as UTF-8 with trailing whitespace stripped. Supported on: `ask`, all `generate` subcommands (except `mind-map`), and `source add-research`.
+`--prompt-file` is mutually exclusive with the positional text argument. The file is read as UTF-8 with trailing
+whitespace stripped. Supported on: `ask`, all `generate` subcommands (except `mind-map`), and `source add-research`.
 
-> **Note:** `--prompt-file` reads a _prompt/query text file_, not a source document. To upload a file as a notebook source, use `source add ./file.pdf`.
+> **Note:** `--prompt-file` reads a _prompt/query text file_, not a source document. To upload a file as a notebook
+> source, use `source add ./file.pdf`.
 
 ## Known Limitations
 
-**Rate limiting:** Audio, video, quiz, flashcards, infographic, and slide deck generation may fail due to Google's rate limits. This is an API limitation, not a bug.
+**Rate limiting:** Audio, video, quiz, flashcards, infographic, and slide deck generation may fail due to Google's rate
+limits. This is an API limitation, not a bug.
 
 **Reliable operations:** These always work:
 
@@ -106,7 +132,6 @@ notebooklm download --help     # Download content
 notebooklm language --help     # Language settings
 ```
 
-**Diagnose auth:** `notebooklm auth check` - shows cookie domains, storage path, validation status
-**Re-authenticate:** `notebooklm login`
-**Check version:** `notebooklm --version`
-**Refresh a CLI-managed install:** `notebooklm skill install`
+**Diagnose auth:** `notebooklm auth check` - shows cookie domains, storage path, validation status **Re-authenticate:**
+`notebooklm login` **Check version:** `notebooklm --version` **Refresh a CLI-managed install:**
+`notebooklm skill install`

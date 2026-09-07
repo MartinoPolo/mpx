@@ -2,6 +2,9 @@
 name: code-clean
 description: 'Deduplicates code, removes repetition, and deletes dead code in a given scope.'
 metadata:
+  author: MartinoPolo
+  version: '0.5'
+  category: code-review
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -10,7 +13,8 @@ metadata:
 
 # Code Clean
 
-Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition, and dead/unused code. the invocation input
+Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition, and dead/unused code.
+Use the invocation input as the requested scope.
 
 ## Objectives
 
@@ -23,7 +27,7 @@ Run focused code-quality cleanup and apply easy wins immediately. Target duplica
 
 ### Step 1: Resolve Scope and Build File Groups
 
-Parse `the invocation input` as file/s or folder/s scope, then build meaningful module groups.
+Parse the invocation input as file/s or folder/s scope, then build meaningful module groups.
 
 - Group by feature/module boundaries (example: full dashboard module)
 - Preserve relationships between files in each group
@@ -37,7 +41,8 @@ Rules:
 
 ### Step 2: Spawn Review Subagents per Group
 
-For each file group, spawn a `general-purpose` review sub-agent with the standard model class (finding duplication and judging risk needs judgment).
+For each file group, spawn the named `mpx-reviewer-code-quality` agent using its declared review model policy (finding
+duplication and judging risk needs judgment).
 
 Use this exact review prompt shape:
 
@@ -67,7 +72,10 @@ Required output:
 
 ### Step 3: Spawn Fix Subagents per Group
 
-For each reviewed group, spawn an `mp-executor` sub-agent with approved findings. The prompt must carry the full pre-analyzed plan with exact files and concrete changes, leaving only mechanical application — `mp-executor` applies, it does not decide. If a finding still needs judgment (unclear plan, cross-module tradeoffs), use a `general-purpose` sub-agent with the advanced model class for that group instead, telling it to reason through the tradeoff before editing.
+For each reviewed group, spawn the named `mpx-executor` agent with approved findings. The prompt must carry the full
+pre-analyzed plan with exact files and concrete changes, leaving only mechanical application — `mpx-executor` applies,
+it does not decide. If a finding still needs judgment (unclear plan, cross-module tradeoffs), return it to
+`mpx-reviewer-code-quality` for a concrete decision and plan before dispatching `mpx-executor`.
 
 Use this exact fix prompt shape:
 

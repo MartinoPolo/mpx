@@ -1,97 +1,148 @@
 ---
 name: skill-audit
-description: 'Audits one skill or every active skill root for portable discovery, authoring conventions, hierarchy, workflow endpoints, tool integrity, and stale or ineffective instructions; safely fixes mechanical drift.'
+description: 'Audits one skill or every active skill root for portable discovery, authoring conventions, hierarchy,...'
+argument-hint: '[skill name or path]'
+triggers: audit skill; audit all active skill roots; fix mechanical skill-authoring drift
 metadata:
+  author: MartinoPolo
+  version: '1.0'
+  category: utility
   mpx:
     schemaVersion: 1
+    contentVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
+    capabilities: [delegate, read, search, shell, write]
 ---
 
 # Skill Audit
 
-Read [`../shared/AUTHORING.md`](../shared/AUTHORING.md),
-[`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL.md), and
-[`../shared/EXPLORATION.md`](../shared/EXPLORATION.md) before auditing. With
-`the invocation input`, audit only the named skill or path.
+Read [Authoring Conventions](../shared/AUTHORING.md), [Writing for Agents](../shared/WRITING_FOR_AGENTS.md),
+[Sub-Agent Protocol](../shared/SUBAGENT_PROTOCOL.md), and [Exploration](../shared/EXPLORATION.md) completely before
+auditing. With `the invocation input`, audit only the named skill or path; without it, audit every active root.
+
+Resolve assets relative to this loaded skill; follow [Content Paths](../shared/CONTENT_PATHS.md) when a tool requires an
+absolute path.
 
 ## Workflow
 
-1. **Discover active roots.** Identify the repository root, then inspect repository
-   manifests, plugin manifests, package configuration, and top-level layout for every
-   configured skill root; include conventional nested `skills/**/SKILL.md` locations and
-   exclude `deprecated`, fixtures, generated output, dependencies, and worktree metadata.
-   Resolve `the invocation input` against an inventory that states each active root's discovery
-   source and assigns every included `SKILL.md` to exactly one root.
+1. **Discover active roots.** Identify the repository root and inspect repository manifests, content/compiler manifests,
+   runtime-profile configuration, package configuration, and top-level layout for every configured canonical or project
+   skill root. Include conventional nested `skills/**/SKILL.md` locations. Exclude deprecated content, fixtures,
+   generated projections, dependencies, and worktree metadata. Resolve `the invocation input` against an inventory that
+   states every root's discovery source and assigns each included `SKILL.md` to exactly one root.
 
-2. **Read complete inputs.** Read every selected `SKILL.md`, its directly linked local
-   references, and relevant manifests fully. Batch 3–5 skills per parallel
-   `general-purpose` spawn with the standard model class; keep repo-wide checks in the main
-   session. Assign every selected file once and require each auditor to confirm full-file
-   reads.
+2. **Read complete inputs.** Read every selected `SKILL.md`, every directly linked local reference or script, relevant
+   manifests, and the runtime profiles that translate its metadata. Prefer a named existing audit agent when its
+   documented role matches the assigned checks. Otherwise use the documented runtime `general-purpose` built-in: inspect
+   the existing runtime profiles, resolve the standard class to a concrete model that is actually available, and pass
+   that resolved value through the runtime's real `model` argument with medium effort; `model="advanced"` and other
+   prose class names are not executable model values. Batch three to five skills per parallel sub-agent, keep
+   repository-wide checks in the main session, assign every selected file exactly once, and require each auditor to
+   confirm complete-file reads and list the files read.
 
-3. **Apply all checks.** For each skill evaluate every check below, cite file and evidence
-   for each finding, record pass, finding, or not-applicable for every check, and run each
-   repo-wide check once.
+3. **Apply all checks.** Evaluate every check below for every selected skill. Record **pass**, **finding**, or **not
+   applicable** for every check and cite file, line or section, and evidence for every finding. Run each repository-wide
+   check once. Preserve findings even when a later mechanical fix resolves them so the report can distinguish found,
+   fixed, and remaining.
 
-4. **Fix mechanical drift.** Auto-fix only deterministic changes: safe positive
-   reframing, missing bookkeeping fields with known values, category casing, and verified
-   legacy-link replacements. Preserve intent and bump `metadata.version` once per changed
-   skill. Reread each applied edit; retain unsafe automation as a manual finding with its
-   reason.
+4. **Fix mechanical drift.** Auto-fix only deterministic changes: safe positive reframing, missing canonical bookkeeping
+   fields with known values, category or pack casing where the schema defines it, and verified legacy-link replacements.
+   Preserve intent and update `metadata.mpx.contentVersion` only according to the canonical schema's versioning policy;
+   never invent an unsupported version value. Do not edit generated runtime projections directly. Reread every applied
+   edit and re-run affected checks. Keep unsafe automation as a manual finding with the reason it requires judgment.
 
-5. **Report.** Output a table of skill, issues, fixed, and remaining, then group remaining
-   findings by skill and check number. Account for every selected skill and active root,
-   include every finding and modified file exactly once, and report unresolved manual no-op
-   tests as behavioral judgments.
+5. **Report complete accounting.** Output the required summary table, then group remaining findings by skill and check
+   number. Account for every selected skill and active root, include every finding and modified file exactly once,
+   identify runtime-profile translations inspected, and report unresolved no-op tests as behavioral judgments rather
+   than textual certainty.
 
 ## Checks
 
-1. **Positive targets:** inspect negative phrasing; reframe when equivalent, retaining
-   surprising or irreversible guardrails paired with the desired behavior.
-2. **Size and split rationale:** flag `SKILL.md` over 200 lines, plus splits justified
-   only by line count or unsplit material with distinct branch/sequence boundaries.
-3. **Frontmatter:** require `name`, portable `description`, `allowed-tools`, and valid
-   `metadata.author`, two-part `version`, and category; normalize category casing only.
-4. **Portable context pointer:** description states purpose and every distinct trigger
-   branch in at most two concise sentences. `when_to_use`, if present, adds no unique
-   routing information. Flag combined runtime listing metadata over 1,536 characters and ask
-   whether implicit invocation earns its context cost.
-5. **Legacy docs:** find obsolete `REQUIREMENTS.md`, `VOCABULARY.md`, `ARCHITECTURE.md`,
-   `legacy`, and fallback references; replace only when the current target is verified.
-6. **Explicit tools:** exact spawned agent types, `gh` commands, scripts, and delegated
-   search breadth are named wherever used.
-7. **Vocabulary confirmation:** writers to `.mpx/CONTEXT.md` Domain Language show the
-   complete proposed text and obtain user confirmation before writing.
-8. **Description behavior:** every claimed capability exists and every delegation or
-   invocation branch in the body is represented by the description.
-9. **Agent types:** each spawn names an existing `agents/<type>.md` or documented built-in.
-10. **Grant paths:** every path-like allowlist entry resolves after supported root
-    expansion and wildcard handling.
-11. **Dead grants:** every allowed tool has corresponding body behavior; flag grants with
-    no use and uses with no grant.
-12. **README sync (repo-wide):** compare all discovered active skill roots, agents, and
-    hooks with their README tables; report drift for manual edits.
-13. **Model mechanics:** flag prose-only model selection, redundant or missing real model
-    parameters per SUBAGENT_PROTOCOL, unsupported models, and call-site `effort`.
-14. **Shared integrity (repo-wide):** resolve shared links from every active root and flag
-    copied shared rules that should be pointers.
-15. **Exploration:** broad discovery uses `Explore` with quick, medium, or very thorough
-    breadth; exempt deterministic inventories of fixed known patterns.
-16. **Personal paths:** scan all skill files and assets for personal roots or usernames;
-    require `MPX_*` resolution and loud failure, exempting supported runtime variables and
-    genuine system paths.
-17. **Semantic completion:** assess whether each procedural step has an unambiguous
-    endpoint in its imperative wording and behavior. Flag plausible premature or false
-    completion, no-op completion restatements, detached validation or stop conditions,
-    and standalone gates outside the approved ambiguous or risky transitions. Do not
-    search for or require literal completion phrases.
-18. **Hierarchy and disclosure:** classify procedural, reference, or mixed structure;
-    verify steps precede supporting detail, concepts are co-located, and branch-only
-    material is disclosed through precise one-level pointers.
-19. **Single source and caches:** flag duplicated meanings and environment facts cheaply
-    discoverable from config, layout, scripts, or `--help`; retain reasons and hidden
-    conventions.
-20. **Relevance and no-ops:** flag stale or unrelated sentences. Treat suspected no-ops as
-    manual behavioral comparisons against the target model's default; never auto-delete
-    them solely from textual heuristics.
+1. **Positive targets:** Inspect negative phrasing. Reframe when behavior remains equivalent; retain surprising,
+   irreversible, security, identity, or false-success guardrails paired with the desired behavior.
+2. **Size and split rationale:** Flag `SKILL.md` over 200 lines, splits justified only by line count, and unsplit
+   material with genuine branch or sequence boundaries. Treat line count as a guardrail, not a rule that overrides
+   hierarchy.
+3. **Canonical frontmatter:** Require `name`, portable `description`, and `metadata.mpx` fields accepted by the current
+   canonical schema: `schemaVersion`, `skillPacks`, and `defaultExposure`; validate optional `contentVersion`,
+   `capabilities`, `argument-hint`, and `triggers` when present. Reject runtime-native fields in canonical source and
+   verify compiler-owned translation rather than requiring legacy `author`, `version`, `category`, or `allowed-tools`
+   fields.
+4. **Portable context pointer:** Ensure the description states purpose and every distinct trigger branch in at most two
+   concise sentences. `triggers` may improve search but must not be the only copy of a routing branch. Flag excessive
+   combined listing metadata and ask whether broader exposure earns its context cost.
+5. **Legacy docs and paths:** Find obsolete `REQUIREMENTS.md`, `VOCABULARY.md`, `ARCHITECTURE.md`, `legacy`, fallback
+   references, old absolute roots, and runtime-only source paths. Replace only when the current canonical target is
+   verified. Require compiled-relative references plus the `CONTENT_PATHS` runtime-read procedure.
+6. **Explicit capabilities:** Name exact canonical agent identities, semantic model classes, MPX capabilities,
+   repository-relative scripts, and delegated exploration breadth wherever used. Verify runtime profiles translate
+   semantic capabilities and model classes to concrete tools/models.
+7. **Vocabulary confirmation:** Skills writing the Domain Language section of `.mpx/CONTEXT.md` show the complete
+   proposed text and obtain user confirmation before writing.
+8. **Description behavior:** Verify every claimed capability exists and every delegation or invocation branch in the
+   body is represented by the description.
+9. **Agent identities:** Verify each spawn names an existing canonical `content/agents/<type>.md`, a documented
+   runtime-neutral built-in, or a named runtime capability with an explicit unsupported handoff. Ensure runtime
+   projections translate identities without changing semantics.
+10. **Grant paths and projection:** Resolve every path-like capability/allowlist entry after supported root expansion
+    and wildcard handling. Compile or inspect projection plans to verify direct references remain correct relative to
+    emitted files and use `CONTENT_PATHS` only when relocation requires an absolute runtime read.
+11. **Dead grants:** Match every canonical capability to body behavior and every capability use to a grant. Then inspect
+    runtime translation for unintended widening, missing tools, or unsupported omissions.
+12. **README sync (repository-wide):** Compare all discovered active skill roots, agents, hooks, packs, and public
+    identities with README tables or generated inventories. Report drift for the owning documentation workflow rather
+    than editing out-of-scope files.
+13. **Model mechanics:** Flag prose-only model selection, concrete vendor model IDs in canonical content, redundant or
+    missing structured model classes/effort per Sub-Agent Protocol, unsupported classes, and runtime profiles that fail
+    to record translation. Call-site effort is valid only where the canonical protocol and adapter support it.
+14. **Shared integrity (repository-wide):** Resolve shared links from every active root. Flag copied shared rules that
+    should be precise pointers and direct links that do not survive compiled-relative projection.
+15. **Exploration:** Require broad discovery to use `mpx-explorer` or the documented exploration capability with quick,
+    medium, or very-thorough breadth and a stopping condition. Exempt deterministic inventories of fixed known patterns.
+16. **Personal paths:** Scan selected skill files and assets for personal roots or usernames. Require runtime resolution
+    through named `MPX_*` environment variables and loud failure when unset. Exempt documented runtime variables and
+    genuine system paths; reject guessed fallbacks.
+17. **Semantic completion:** Assess whether every procedural step has an unambiguous behavioral endpoint. Flag plausible
+    premature or false completion, no-op completion restatements, detached validation or stop conditions, and standalone
+    gates outside approved ambiguous or risky transitions. Do not search for or require literal completion phrases.
+18. **Hierarchy and disclosure:** Classify procedural, reference, or mixed structure. Verify actions precede supporting
+    detail, concepts are co-located, and branch-only material is disclosed through precise one-level pointers.
+19. **Single source and caches:** Flag duplicated meanings and environment facts cheaply discoverable from manifests,
+    config, layout, scripts, runtime profiles, or `--help`. Retain reasons, policy, and hidden conventions that cannot
+    be safely rediscovered.
+20. **Relevance and no-ops:** Flag stale or unrelated sentences. Compare suspected no-ops behaviorally against the
+    target model/runtime default and preserve them as manual findings when behavior cannot be measured; never
+    auto-delete solely from textual heuristics.
+
+## Output contract
+
+```markdown
+| Skill      | Checks with findings |   Fixed | Remaining |
+| ---------- | -------------------: | ------: | --------: |
+| [identity] |         [count/list] | [count] |   [count] |
+
+Active Roots:
+
+- [root -> discovery source -> selected skills]
+
+Fixed:
+
+- [skill, check number, file, deterministic change]
+
+Remaining Findings:
+
+- [skill, check number, evidence, required decision]
+
+Runtime Translation Evidence:
+
+- [profile/compiler result]
+
+Files Modified:
+
+- [path]
+
+Manual No-op Tests:
+
+- [none or behavioral finding]
+```

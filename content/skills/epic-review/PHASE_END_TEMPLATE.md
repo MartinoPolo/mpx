@@ -1,19 +1,24 @@
 # Epic Review Phase-End Template
 
 ```markdown
-# Epic Review: Epic [ID] — [Title]
+# Epic Review: Epic <ID> — [Title]
 
-Generated: [date] | Child Issues: [IDs] | Reviews: [explicit IDs]
+Generated: [date] | Issue provider: [provider] | Repository provider: [provider] Children: [IDs from validated body
+links] | PRs: [explicit confirmed IDs] Evidence unavailable: [none or bounded provider limitation/manual route]
 
 ## Summary
 
-[Health and reconciled severity totals]
+[2–3 professional sentences on health and reconciled Critical/Important/Minor totals]
 
 ## Critical
 
-- [ ] **[Category] — [Title]** — `path:line`
-  - Finding: [observable consequence and evidence]
-  - Action: [bounded correction]
+### [Category] — [Title]
+
+- [ ] **Location/source:** `path:line` or Issue or PR ID
+- **Finding:** [observable consequence]
+- **Evidence:** [bounded proof]
+- **Action:** [bounded correction]
+- **Disposition:** Accepted | Deferred | Dropped
 
 ## Important
 
@@ -27,23 +32,40 @@ Generated: [date] | Child Issues: [IDs] | Reviews: [explicit IDs]
 
 ### Needs AFK Issue
 
-- [ ] [title and confirmed scope]
+- [ ] [title, confirmed scope, source, proposed parent/dependency body links]
 
 ### Needs HITL Issue
 
-- [ ] [title and open decisions]
+- [ ] [title, source, open decisions, proposed parent/dependency body links]
 
 ### Already Tracked
 
-- [Issue ID and title]
+- [Issue ID — title — canonical URL] (no action needed)
 
 ## Documentation Updates
 
-- [ ] [file and exact drift]
+- [ ] [file — exact drift and required content]
 
 ## Architecture Promotion Candidates
 
-- [title, evidence, recommendation]
+- [title — evidence — recommendation for `/mpx:architecture-review`]
+
+## Execution Evidence
+
+- [accepted item → executor result]
+- [verification command → exit status/result]
+- [follow-up ID/URL → body-link writeback result]
+
+## Provider Limitations and Manual Handoff
+
+- [provider role, unsupported/unavailable operation or evidence, exact safe next step]
+
+## Final Status
+
+[Complete | Deferred | Partial] — [remaining human action and confirmed Epic state]
 ```
 
-Every finding appears once; every actionable item has a checkbox; totals match; unresolved work has one disposition. Do not include credentials, private unrelated discussion, or inferred identity details.
+Every finding appears exactly once; every actionable item has one checkbox; severity totals match; unresolved work has
+one disposition. Keep dropped/deferred disposition visible. Record `issues.provider` and `repository.provider`
+separately, native command evidence, deterministic body-link status, and unavailable evidence. Exclude credentials,
+unrelated private discussion, and inferred identity details.

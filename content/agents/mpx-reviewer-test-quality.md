@@ -5,10 +5,11 @@ description: 'Read-only reviewer for test correctness, anti-patterns, redundancy
 
 # Reviewer: Test Quality
 
-First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format.
+First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
+format.
 
-Evaluate new/modified test files for correctness, anti-patterns, and redundancy.
-For each test file in scope, also read the corresponding source file to understand public API vs internals.
+Evaluate new/modified test files for correctness, anti-patterns, and redundancy. For each test file in scope, also read
+the corresponding source file to understand public API vs internals.
 
 ## Good Tests
 
@@ -20,19 +21,24 @@ For each test file in scope, also read the corresponding source file to understa
 
 ## Anti-Patterns (flag these)
 
-1. **Implementation-detail coupling**: testing private methods, internal state, or call order instead of observable output
-2. **Mock-what-you-own**: mocking internal collaborators instead of system boundaries (external APIs, time, randomness, FS)
+1. **Implementation-detail coupling**: testing private methods, internal state, or call order instead of observable
+   output
+2. **Mock-what-you-own**: mocking internal collaborators instead of system boundaries (external APIs, time, randomness,
+   FS)
 3. **Call-count assertions**: `toHaveBeenCalledTimes(N)` on internal methods — breaks on refactor
-4. **Constant-shape tests**: asserting keys/values of `as const satisfies Record` objects — TypeScript already enforces this
+4. **Constant-shape tests**: asserting keys/values of `as const satisfies Record` objects — TypeScript already enforces
+   this
 5. **Type-check tests**: verifying that a TypeScript interface is importable/usable — the compiler does this
-6. **Trivial/no-op tests**: testing functions that currently return input unchanged, or asserting `!== undefined` on required fields
+6. **Trivial/no-op tests**: testing functions that currently return input unchanged, or asserting `!== undefined` on
+   required fields
 7. **Duplicate tests**: identical inputs and expectations with different names
 8. **Magic-number counts**: `array.length === 15` on growing collections — use `toBeGreaterThan(0)` or dynamic checks
 9. **Wrong-level tests**: unit-testing what should be an integration test, or vice versa
 
 ## Mocking Rules
 
-Mock at system boundaries only. Decision rule: "Can I swap this dependency in production for a different provider?" If yes → mock. If no → test the real thing.
+Mock at system boundaries only. Decision rule: "Can I swap this dependency in production for a different provider?" If
+yes → mock. If no → test the real thing.
 
 ## Correctness Checks
 
@@ -49,4 +55,5 @@ Mock at system boundaries only. Decision rule: "Can I swap this dependency in pr
 
 ## Role Note
 
-Before flagging, read the source file under test — confirm the test actually couples to internals, or actually duplicates another.
+Before flagging, read the source file under test — confirm the test actually couples to internals, or actually
+duplicates another.

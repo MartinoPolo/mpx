@@ -5,7 +5,8 @@ selector: shadcn-svelte
 
 # shadcn-svelte Component Catalog
 
-Reference lookup — not auto-loaded. Consult when choosing which component to reach for; linked from the `shadcn-svelte.md` rule.
+Reference lookup — not auto-loaded. Consult when choosing which component to reach for; linked from the
+`shadcn-svelte.md` rule.
 
 ## Prefer Built-in Components
 
@@ -20,17 +21,50 @@ Reference lookup — not auto-loaded. Consult when choosing which component to r
 
 ## Component Selection
 
-| Need               | Use                                                                                                 |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| Button/action      | `Button` with variant                                                                               |
-| Form inputs        | `Input`, `Select`, `Combobox`, `Switch`, `Checkbox`, `RadioGroup`, `Textarea`, `InputOTP`, `Slider` |
-| Toggle 2–5 options | `ToggleGroup.Root` + `ToggleGroup.Item`                                                             |
-| Data display       | `Table`, `Card`, `Badge`, `Avatar`                                                                  |
-| Navigation         | `Sidebar`, `Tabs`, `Breadcrumb`, `Pagination`                                                       |
-| Overlays           | `Dialog` (modal), `Sheet` (side), `Drawer` (bottom), `AlertDialog` (confirm)                        |
-| Feedback           | `svelte-sonner` (toast), `Alert`, `Progress`, `Skeleton`, `Spinner`                                 |
-| Command palette    | `Command` inside `Dialog`                                                                           |
-| Layout             | `Card`, `Separator`, `Resizable`, `ScrollArea`, `Accordion`, `Collapsible`                          |
-| Empty states       | `Empty`                                                                                             |
-| Menus              | `DropdownMenu`, `ContextMenu`, `Menubar`                                                            |
-| Tooltips/info      | `Tooltip`, `HoverCard`, `Popover`                                                                   |
+#### Need: Button/action
+
+- **Use:** `Button` with variant
+
+#### Need: Form inputs
+
+- **Use:** `Input` , `Select` , `Combobox` , `Switch` , `Checkbox` , `RadioGroup` , `Textarea` , `InputOTP` , `Slider`
+
+#### Need: Toggle 2–5 options
+
+- **Use:** `ToggleGroup.Root` + `ToggleGroup.Item`
+
+#### Need: Data display
+
+- **Use:** `Table` , `Card` , `Badge` , `Avatar`
+
+#### Need: Navigation
+
+- **Use:** `Sidebar` , `Tabs` , `Breadcrumb` , `Pagination`
+
+#### Need: Overlays
+
+- **Use:** `Dialog` (modal), `Sheet` (side), `Drawer` (bottom), `AlertDialog` (confirm)
+
+#### Need: Feedback
+
+- **Use:** `svelte-sonner` (toast), `Alert` , `Progress` , `Skeleton` , `Spinner`
+
+#### Need: Command palette
+
+- **Use:** `Command` inside `Dialog`
+
+#### Need: Layout
+
+- **Use:** `Card` , `Separator` , `Resizable` , `ScrollArea` , `Accordion` , `Collapsible`
+
+#### Need: Empty states
+
+- **Use:** `Empty`
+
+#### Need: Menus
+
+- **Use:** `DropdownMenu` , `ContextMenu` , `Menubar`
+
+#### Need: Tooltips/info
+
+- **Use:** `Tooltip` , `HoverCard` , `Popover`

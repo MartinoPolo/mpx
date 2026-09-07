@@ -2,6 +2,9 @@
 name: fallow-fix
 description: 'Diagnoses and fixes fallow dead-code audit failures, suppressing or baselining findings when justified.'
 metadata:
+  author: MartinoPolo
+  version: '0.3'
+  category: code-quality
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -10,7 +13,7 @@ metadata:
 
 # Fallow Fix
 
-Diagnose and resolve fallow code-quality failures. the invocation input
+Diagnose and resolve fallow code-quality failures. Use the invocation input as diagnostic context.
 
 ## Step 1: Identify the Failure
 
@@ -35,26 +38,43 @@ For each issue, determine the correct action:
 
 ### Suppress (only when the code is intentionally unused)
 
-| Situation                                         | Suppression                                                                  |
-| ------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Public API export consumed by external packages   | `/** @public */` above the export                                            |
-| Intentionally pre-exported for planned use        | `/** @expected-unused */` above the export (becomes stale warning when used) |
-| Framework lifecycle method (mount, destroy, etc.) | `// fallow-ignore-next-line unused-class-member`                             |
-| Interface implementation method                   | `// fallow-ignore-next-line unused-class-member`                             |
-| High-complexity function that can't be split now  | `// fallow-ignore-next-line complexity`                                      |
-| Entire generated file                             | `// fallow-ignore-file` at top                                               |
+#### Situation: Public API export consumed by external packages
+
+- **Suppression:** `/** @public */` above the export
+
+#### Situation: Intentionally pre-exported for planned use
+
+- **Suppression:** `/** @expected-unused */` above the export (becomes stale warning when used)
+
+#### Situation: Framework lifecycle method (mount, destroy, etc.)
+
+- **Suppression:** `// fallow-ignore-next-line unused-class-member`
+
+#### Situation: Interface implementation method
+
+- **Suppression:** `// fallow-ignore-next-line unused-class-member`
+
+#### Situation: High-complexity function that can't be split now
+
+- **Suppression:** `// fallow-ignore-next-line complexity`
+
+#### Situation: Entire generated file
+
+- **Suppression:** `// fallow-ignore-file` at top
 
 **Always** specify the suppression kind in `// fallow-ignore-next-line`.
 
 ### Available suppression kinds
 
-`unused-export`, `unused-type`, `unused-class-member`, `unused-enum-member`, `unresolved-import`, `unlisted-dependency`, `duplicate-export`, `circular-dependency`, `complexity`, `code-duplication`, `coverage-gaps`
+`unused-export`, `unused-type`, `unused-class-member`, `unused-enum-member`, `unresolved-import`, `unlisted-dependency`,
+`duplicate-export`, `circular-dependency`, `complexity`, `code-duplication`, `coverage-gaps`
 
 ## Step 3: Apply Fixes
 
-1. Fix or suppress each issue
-2. Re-run the failing command to verify
-3. If dead-code count legitimately changed (new public API, refactored exports): update the baseline
+1. Fix or suppress each issue.
+2. After each fix, use the narrowest available form of the original diagnostic as incremental feedback. Do not treat
+   this per-fix rerun as final verification.
+3. If dead-code count legitimately changed (new public API, refactored exports), update the baseline:
 
 ```bash
 pnpm fallow:save-baseline
@@ -62,12 +82,15 @@ pnpm fallow:save-baseline
 
 Commit the updated `fallow-baselines/dead-code-regression.json` alongside your code changes.
 
-## Step 4: Verify
+## Step 4: Final Verification
 
-Re-run the original failing check:
+After all fixes and any baseline update, run the original failing check once as final verification:
 
 - `pnpm check:fallow` — must exit 0
 - `pnpm fallow:audit` — verdict must be `pass` or `warn`
+
+If both commands were part of the original failure path, run each once. Do not rerun a command solely to duplicate
+successful final evidence.
 
 ## Rules
 

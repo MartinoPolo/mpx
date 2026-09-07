@@ -4,31 +4,102 @@ The verified platform path. Domain rules live in [DOMAINS.md](DOMAINS.md).
 
 ## Two rules that govern everything here
 
-**1. Run every deletion through the PowerShell tool.** The `dangerous-command-guard.mjs` hook is registered `PreToolUse` with `matcher: "Bash"`, so it inspects Bash only. It blocks `rmdir /s`, `del /f /q /s`, and `rm -rf <single-component-name>` outside its allowlist. The PowerShell tool is not intercepted, and PowerShell is the right tool for this work anyway. Route deletions through `scripts/Invoke-Removal.ps1`.
+**1. Run every deletion through the PowerShell tool.** The `dangerous-command-guard.mjs` hook is registered `PreToolUse`
+with `matcher: "Bash"`, so it inspects Bash only. It blocks `rmdir /s`, `del /f /q /s`, and
+`rm -rf <single-component-name>` outside its allowlist. The PowerShell tool is not intercepted, and PowerShell is the
+right tool for this work anyway. Route deletions through `scripts/Invoke-Removal.ps1`.
 
-**2. Keep the trailing backslash on drive roots.** `"<drive>:\".TrimEnd('\')` yields `"C:"`, which in .NET means _the current directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5 GB, twice in a row, with no error. `Get-NormalizedRoot` in `scripts/_Common.ps1` handles it.
+**2. Keep the trailing backslash on drive roots.** `"C:\".TrimEnd('\')` yields `"C:"`, which in .NET means _the current
+directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5 GB, twice in a row, with no error.
+`Get-NormalizedRoot` in `scripts/_Common.ps1` handles it.
 
 ## Footguns encoded in the bundled scripts
 
-| Footgun                                                                                                                                                                                      | Handling                                                                                                                                                          |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bare `C:` resolves to the process working directory on that drive                                                                                                                            | `Get-NormalizedRoot` restores the trailing backslash                                                                                                              |
-| `.Attributes` on a child dir throws on locked junctions (`<drive>:\Documents and Settings`) and aborts the whole sibling loop, silently truncating the scan                                  | `Get-ChildDirectoryPath` returns plain strings; `Test-ReparsePoint` checks per item                                                                               |
-| Junctions get followed and double-counted                                                                                                                                                    | Every walker skips reparse points **tagged as name surrogates**                                                                                                   |
-| Skipping every reparse point drops the whole OneDrive tree: Files-On-Demand tags each folder, so scanners report zero findings there with no error                                           | `Get-ReparsePointKind` reads the reparse **tag** via `FindFirstFileW` and skips only the name-surrogate bit `0x20000000`; cloud/dedup/WIM placeholders get walked |
-| The cloud attribute flags (`RECALL_ON_OPEN`, `PINNED`) do **not** identify a OneDrive folder — most carry `ReparsePoint` with none of them set                                               | Classify by tag, never by attributes                                                                                                                              |
-| A fully dehydrated placeholder enumerates as **empty** with no error, indistinguishable from a genuinely empty folder                                                                        | Collected into `-UnscannedPlaceholderPath`; every scanner prints `Write-UnscannedPlaceholderWarning` so an under-scan is never read as a clean result             |
-| `Remove-Item -Recurse` on a junction can delete the target's contents in PowerShell 5.1                                                                                                      | `Invoke-Removal.ps1` calls `.Delete()` to unlink instead, and only for `Link` — placeholders take the normal path                                                 |
-| pnpm-hardlinked `node_modules` free far less than logical size                                                                                                                               | Report the `Get-FreeSpaceSnapshot` delta, never the sum of sizes                                                                                                  |
-| Cache deletion returns exit code 5 and reclaims nothing while a browser is open                                                                                                              | Failures are logged per item and surfaced, not swallowed                                                                                                          |
-| `wsl --manage --set-sparse` is refused as potentially corrupting                                                                                                                             | Never pass `--allow-unsafe` on a disk holding live data                                                                                                           |
-| Registry UserAssist launch history is too sparse to judge usage                                                                                                                              | `Get-InstalledApps.ps1` uses data-folder `LastWriteTime`                                                                                                          |
-| Matching an app to its data folder on the first word filed **Auto Dark Mode → Autodesk**, **Fast Node Manager → FastStone**, **VLC → JellyfinMediaPlayer**, making ten active apps look idle | Token containment both ways, one name wholly inside the other, ignoring generic vendor words; the `MatchedOn` column shows what the verdict rests on              |
-| `Import-Csv` in 5.1 ignores the UTF-8 BOM `Export-Csv` writes, so non-ASCII paths come back mangled and every row logs as `Missing` — a silent no-op that reads like success                 | `Read-ScanCsv` in `_Common.ps1`; never call `Import-Csv` directly                                                                                                 |
-| `Measure-Object -Sum` over an empty set has no `Sum` property, which throws under `Set-StrictMode` instead of returning zero                                                                 | Read it through `Get-PropertyValue ... 'Sum' 0`                                                                                                                   |
-| `@($list)` on a `List[object]` throws `ArgumentException` and yields an **empty** array in PowerShell 5.1                                                                                    | Use `.ToArray()`; `Write-ScanCsv` takes an untyped `$Row` and normalises internally                                                                               |
-| A single-element array unrolls to a bare string on return or assignment, so `.Count` throws                                                                                                  | Wrap call sites and whole `if` expressions in `@()`                                                                                                               |
-| Missing registry properties (`Publisher`, `DisplayVersion`) throw under `Set-StrictMode`                                                                                                     | Read them via `Get-PropertyValue`                                                                                                                                 |
+#### Footgun: Bare `C:` resolves to the process working directory on that drive
+
+- **Handling:** `Get-NormalizedRoot` restores the trailing backslash
+
+#### Record 2
+
+- **Footgun:** `.Attributes` on a child dir throws on locked junctions (`C:\Documents and Settings`) and aborts the
+  whole sibling loop, silently truncating the scan
+- **Handling:** `Get-ChildDirectoryPath` returns plain strings; `Test-ReparsePoint` checks per item
+
+#### Footgun: Junctions get followed and double-counted
+
+- **Handling:** Every walker skips reparse points **tagged as name surrogates**
+
+#### Record 4
+
+- **Footgun:** Skipping every reparse point drops the whole OneDrive tree: Files-On-Demand tags each folder, so scanners
+  report zero findings there with no error
+- **Handling:** `Get-ReparsePointKind` reads the reparse **tag** via `FindFirstFileW` and skips only the name-surrogate
+  bit `0x20000000` ; cloud/dedup/WIM placeholders get walked
+
+#### Record 5
+
+- **Footgun:** The cloud attribute flags (`RECALL_ON_OPEN`, `PINNED` ) do **not** identify a OneDrive folder — most
+  carry `ReparsePoint` with none of them set
+- **Handling:** Classify by tag, never by attributes
+
+#### Record 6
+
+- **Footgun:** A fully dehydrated placeholder enumerates as **empty** with no error, indistinguishable from a genuinely
+  empty folder
+- **Handling:** Collected into `-UnscannedPlaceholderPath` ; every scanner prints `Write-UnscannedPlaceholderWarning` so
+  an under-scan is never read as a clean result
+
+#### Footgun: `Remove-Item -Recurse` on a junction can delete the target's contents in PowerShell 5.1
+
+- **Handling:** `Invoke-Removal.ps1` calls `.Delete()` to unlink instead, and only for `Link` — placeholders take the
+  normal path
+
+#### Footgun: pnpm-hardlinked `node_modules` free far less than logical size
+
+- **Handling:** Report the `Get-FreeSpaceSnapshot` delta, never the sum of sizes
+
+#### Footgun: Cache deletion returns exit code 5 and reclaims nothing while a browser is open
+
+- **Handling:** Failures are logged per item and surfaced, not swallowed
+
+#### Footgun: `wsl --manage --set-sparse` is refused as potentially corrupting
+
+- **Handling:** Never pass `--allow-unsafe` on a disk holding live data
+
+#### Footgun: Registry UserAssist launch history is too sparse to judge usage
+
+- **Handling:** `Get-InstalledApps.ps1` uses data-folder `LastWriteTime`
+
+#### Record 12
+
+- **Footgun:** Matching an app to its data folder on the first word filed **Auto Dark Mode → Autodesk**, **Fast Node
+  Manager → FastStone**, **VLC → JellyfinMediaPlayer**, making ten active apps look idle
+- **Handling:** Token containment both ways, one name wholly inside the other, ignoring generic vendor words; the
+  `MatchedOn` column shows what the verdict rests on
+
+#### Record 13
+
+- **Footgun:** `Import-Csv` in 5.1 ignores the UTF-8 BOM `Export-Csv` writes, so non-ASCII paths come back mangled and
+  every row logs as `Missing` — a silent no-op that reads like success
+- **Handling:** `Read-ScanCsv` in `_Common.ps1` ; never call `Import-Csv` directly
+
+#### Record 14
+
+- **Footgun:** `Measure-Object -Sum` over an empty set has no `Sum` property, which throws under `Set-StrictMode`
+  instead of returning zero
+- **Handling:** Read it through `Get-PropertyValue ... 'Sum' 0`
+
+#### Footgun: `@($list)` on a `List[object]` throws `ArgumentException` and yields an **empty** array in PowerShell 5.1
+
+- **Handling:** Use `.ToArray()` ; `Write-ScanCsv` takes an untyped `$Row` and normalises internally
+
+#### Footgun: A single-element array unrolls to a bare string on return or assignment, so `.Count` throws
+
+- **Handling:** Wrap call sites and whole `if` expressions in `@()`
+
+#### Footgun: Missing registry properties (`Publisher`, `DisplayVersion`) throw under `Set-StrictMode`
+
+- **Handling:** Read them via `Get-PropertyValue`
 
 ## Scan boundary
 
@@ -40,7 +111,7 @@ Get-CimInstance Win32_LogicalDisk -Filter 'DriveType = 3'   # 3 = local fixed di
 
 ```powershell
 $wizTree = Get-Command wiztree -ErrorAction SilentlyContinue
-if (-not $wizTree) { $wizTree = Get-ChildItem '<drive>:\Program Files\WizTree\WizTree64.exe' -ErrorAction SilentlyContinue }
+if (-not $wizTree) { $wizTree = Get-ChildItem 'C:\Program Files\WizTree\WizTree64.exe' -ErrorAction SilentlyContinue }
 Get-Command du -ErrorAction SilentlyContinue        # Sysinternals
 Get-Command TreeSizeFree -ErrorAction SilentlyContinue
 ```
@@ -48,7 +119,7 @@ Get-Command TreeSizeFree -ErrorAction SilentlyContinue
 WizTree reads the NTFS MFT directly and maps a full drive in seconds:
 
 ```powershell
-& "<drive>:\Program Files\WizTree\WizTree64.exe" "<drive>:\" /export="$env:TEMP\wiztree-c.csv" /admin=1
+& "C:\Program Files\WizTree\WizTree64.exe" "C:\" /export="$env:TEMP\wiztree-c.csv" /admin=1
 ```
 
 Offer once when absent, then fall back without asking again:
@@ -60,7 +131,7 @@ winget install --id AntibodySoftware.WizTree --silent --accept-package-agreement
 The bundled fallback, used when no fast scanner is present:
 
 ```powershell
-powershell -NoProfile -File scripts/Scan-FolderMap.ps1 -Root "<drive>:\" -Depth 3 -MinGB 0.5 -OutCsv "<scratch>\map-c.csv"
+powershell -NoProfile -File scripts/Scan-FolderMap.ps1 -Root "C:\" -Depth 3 -MinGB 0.5 -OutCsv "<scratch>\map-c.csv"
 ```
 
 ## Domain commands
@@ -118,7 +189,9 @@ Optimize-VHD -Path "<vhdx>" -Mode Full        # needs Hyper-V module
 ### 3. Stale build output
 
 ```powershell
-powershell -NoProfile -File scripts/Find-BuildArtifacts.ps1 -Root $env:MPX_PROJECTS,$env:MPX_WORK,$env:MPX_CLONED -OutCsv "<scratch>\build.csv"
+powershell -NoProfile -File scripts/Find-BuildArtifacts.ps1 `
+    -Root $env:MPX_PROJECTS,$env:MPX_WORK,$env:MPX_CLONED `
+    -OutCsv "<scratch>\build.csv"
 ```
 
 ### 4. Apps and orphaned app data
@@ -139,7 +212,10 @@ Orphaned app data lives in `$env:APPDATA` and `$env:LOCALAPPDATA` immediate subf
 ### 5. Screenshots
 
 ```powershell
-powershell -NoProfile -File scripts/Find-Screenshots.ps1 -Root $env:USERPROFILE,$env:MPX_ONEDRIVE -OlderThanMonths 3 -OutCsv "<scratch>\shots.csv"
+powershell -NoProfile -File scripts/Find-Screenshots.ps1 `
+    -Root $env:USERPROFILE,$env:MPX_ONEDRIVE `
+    -OlderThanMonths 3 `
+    -OutCsv "<scratch>\shots.csv"
 ```
 
 ### 6. Duplicates and empty items
@@ -153,12 +229,15 @@ powershell -NoProfile -File scripts/Find-EmptyItems.ps1 -Root $env:USERPROFILE -
 
 ```powershell
 Get-ChildItem "$env:USERPROFILE\Downloads" -File -Recurse -ErrorAction SilentlyContinue |
-    Where-Object { $_.Extension -match '^\.(exe|msi|iso|zip|7z|rar)$' -and $_.LastWriteTime -lt (Get-Date).AddMonths(-6) } |
+    Where-Object { `
+        $_.Extension -match '^\.(exe|msi|iso|zip|7z|rar)$' -and `
+        $_.LastWriteTime -lt (Get-Date).AddMonths(-6)
+    } |
     Sort-Object Length -Descending |
     Select-Object FullName, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}, LastWriteTime
 ```
 
-Vendor unpack folders worth checking: `<drive>:\NVIDIA`, `<drive>:\AMD`, `<drive>:\Intel`.
+Vendor unpack folders worth checking: `C:\NVIDIA`, `C:\AMD`, `C:\Intel`.
 
 ### 8. System reclaim (elevated script only)
 
@@ -173,23 +252,32 @@ Delivery Optimization: Delete-DeliveryOptimizationCache -Force
 vssadmin list shadowstorage
 ```
 
-`<drive>:\Windows.old` removal is one-way and forfeits OS rollback — state that in the approval question.
+`C:\Windows.old` removal is one-way and forfeits OS rollback — state that in the approval question.
 
 ## Visual review
 
 ```powershell
-powershell -NoProfile -File scripts/New-VisualStaging.ps1 -InputCsv "<scratch>\shots.csv" -StagingRoot "<scratch>\stage\screenshots" -Open
+powershell -NoProfile -File scripts/New-VisualStaging.ps1 `
+    -InputCsv "<scratch>\shots.csv" `
+    -StagingRoot "<scratch>\stage\screenshots" `
+    -Open
 ```
 
-Hardlinks when the candidate is on the staging volume, `.lnk` shortcuts across volumes. Thumbnails render either way. Ask the group's approval after the window opens, then delete the staging folder.
+Hardlinks when the candidate is on the staging volume, `.lnk` shortcuts across volumes. Thumbnails render either way.
+Ask the group's approval after the window opens, then delete the staging folder.
 
 ## Execution
 
 ```powershell
 powershell -NoProfile -File scripts/Invoke-Removal.ps1 -InputCsv "<scratch>\shots.csv" -Destination Quarantine -DryRun
-powershell -NoProfile -File scripts/Invoke-Removal.ps1 -InputCsv "<scratch>\shots.csv" -Destination Quarantine -LogCsv "<scratch>\removed.csv"
+powershell -NoProfile -File scripts/Invoke-Removal.ps1 `
+    -InputCsv "<scratch>\shots.csv" `
+    -Destination Quarantine `
+    -LogCsv "<scratch>\removed.csv"
 ```
 
-`-DryRun` is an explicit switch, not `SupportsShouldProcess`/`-WhatIf`: `-WhatIf` sets `$WhatIfPreference` for the whole script scope, which leaks into module auto-loading and buries the report under `What if: Set Alias` lines.
+`-DryRun` is an explicit switch, not `SupportsShouldProcess`/`-WhatIf`: `-WhatIf` sets `$WhatIfPreference` for the whole
+script scope, which leaks into module auto-loading and buries the report under `What if: Set Alias` lines.
 
-`-Destination Fast` is for regenerable caches only. Quarantine lands in `<drive>:\_cleanup_quarantine\<YYYY-MM-DD>\`, one root per drive so every move stays same-volume and instant.
+`-Destination Fast` is for regenerable caches only. Quarantine lands in `<drive>:\_cleanup_quarantine\<YYYY-MM-DD>\`,
+one root per drive so every move stays same-volume and instant.

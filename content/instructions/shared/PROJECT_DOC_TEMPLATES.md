@@ -1,7 +1,7 @@
 # Project Documentation Scaffolds
 
-Create both files with these headings when a setup workflow initializes `.mpx/` documentation.
-Replace `[Project Name]` when known.
+Create both files with these headings when a setup workflow initializes `.mpx/` documentation. Replace `[Project Name]`
+when known.
 
 ## `.mpx/CONTEXT.md`
 
@@ -44,10 +44,8 @@ Settled architectural and design decisions, updated only after user confirmation
 
 ### [Decision title]
 
-Decided: YYYY-MM-DD
-What: [One sentence describing the choice.]
-Why: [One sentence explaining the rationale.]
-Rejected: [Alternatives considered and why they lost.]
+Decided: YYYY-MM-DD What: [One sentence describing the choice.] Why: [One sentence explaining the rationale.] Rejected:
+[Alternatives considered and why they lost.]
 ```
 
 Roles, boundaries, formatting, and splitting policy are canonical in

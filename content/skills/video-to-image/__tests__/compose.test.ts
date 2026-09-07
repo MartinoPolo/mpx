@@ -11,6 +11,7 @@ import {
   composePerformerSentence,
   countItems,
   resolveMode,
+  resolveOutputDirectory,
 } from '../scripts/lib/compose.mjs';
 
 const YOUTUBE_URL = 'https://www.youtube.com/watch?v=abc123';
@@ -60,9 +61,7 @@ describe('composeFolderName', () => {
 
   it('falls back to the slug when the metadata lookup returned nothing', () => {
     expect(composeFolderName(null, 'daily-mobility-routine')).toBe('daily-mobility-routine');
-    expect(composeFolderName({ title: '   ' }, 'daily-mobility-routine')).toBe(
-      'daily-mobility-routine',
-    );
+    expect(composeFolderName({ title: '   ' }, 'daily-mobility-routine')).toBe('daily-mobility-routine');
   });
 
   it('replaces the characters Windows refuses in a path', () => {
@@ -75,9 +74,7 @@ describe('composeFolderName', () => {
   });
 
   it('straightens curly apostrophes, which break file:// links to the folder', () => {
-    expect(composeFolderName({ title: 'You Can’t Fix It (Here’s Why)' }, 'slug')).toBe(
-      "You Can't Fix It (Here's Why)",
-    );
+    expect(composeFolderName({ title: 'You Can’t Fix It (Here’s Why)' }, 'slug')).toBe("You Can't Fix It (Here's Why)");
   });
 
   it('collapses the whitespace a newline in the title would leave behind', () => {
@@ -89,10 +86,7 @@ describe('composeFolderName', () => {
   });
 
   it('caps the name so the files inside stay under the path limit', () => {
-    const folder = composeFolderName(
-      { title: 'Mobility '.repeat(40), channel: 'A Very Long Channel Name' },
-      'slug',
-    );
+    const folder = composeFolderName({ title: 'Mobility '.repeat(40), channel: 'A Very Long Channel Name' }, 'slug');
     expect(folder.length).toBeLessThanOrEqual(120);
   });
 
@@ -106,9 +100,29 @@ describe('composeFolderName', () => {
   });
 });
 
+describe('resolveOutputDirectory', () => {
+  const root = 'C:/generated';
+
+  it('uses the standard sheets folder when no override is supplied', () => {
+    expect(resolveOutputDirectory(root, '', 'run')).toMatch(/[\\/]_VIDEO_SHEETS[\\/]run$/);
+  });
+
+  it('accepts an output directory contained by the configured root', () => {
+    expect(resolveOutputDirectory(root, 'C:/generated/custom', 'run')).toMatch(/[\\/]custom[\\/]run$/);
+  });
+
+  it('rejects an output directory outside the configured root', () => {
+    expect(() => resolveOutputDirectory(root, 'C:/elsewhere', 'run')).toThrow(/must stay under/);
+  });
+
+  it('rejects a folder name that escapes the selected output directory', () => {
+    expect(() => resolveOutputDirectory(root, 'C:/generated/custom', '../../escape')).toThrow(/must stay under/);
+  });
+});
+
 describe('assertApiKey', () => {
   it('returns the key when it is present', () => {
-    expect(assertApiKey({ GEMINI_API_KEY: 'abc123' })).toBe('abc123');
+    expect(assertApiKey({ GEMINI_API_KEY: '<test-api-key>' })).toBe('<test-api-key>');
   });
 
   it('throws when the key is absent', () => {
@@ -168,9 +182,9 @@ describe('describeApiError', () => {
 
 describe('buildExtractionRequest', () => {
   it('passes the YouTube URL as the only file_data part', () => {
-    const fileDataParts = partsOf(
-      buildExtractionRequest(YOUTUBE_URL, '', { mode: 'exercise' }),
-    ).filter((part) => part.file_data);
+    const fileDataParts = partsOf(buildExtractionRequest(YOUTUBE_URL, '', { mode: 'exercise' })).filter(
+      (part) => part.file_data,
+    );
     expect(fileDataParts).toHaveLength(1);
     expect(fileDataParts[0].file_data.file_uri).toBe(YOUTUBE_URL);
   });
@@ -184,15 +198,11 @@ describe('buildExtractionRequest', () => {
 
   it('includes the focus instruction verbatim when a focus is given', () => {
     const focus = 'only the shoulder mobility drills';
-    expect(textPartOf(buildExtractionRequest(YOUTUBE_URL, focus, { mode: 'exercise' }))).toContain(
-      focus,
-    );
+    expect(textPartOf(buildExtractionRequest(YOUTUBE_URL, focus, { mode: 'exercise' }))).toContain(focus);
   });
 
   it('omits the focus sentence when no focus is given', () => {
-    expect(textPartOf(buildExtractionRequest(YOUTUBE_URL, '', { mode: 'exercise' }))).not.toMatch(
-      /focus/i,
-    );
+    expect(textPartOf(buildExtractionRequest(YOUTUBE_URL, '', { mode: 'exercise' }))).not.toMatch(/focus/i);
   });
 
   it('requests JSON output against the exercise schema', () => {
@@ -206,9 +216,14 @@ describe('buildExtractionRequest', () => {
       mode: 'exercise',
     }).generationConfig;
     expect(responseSchema.propertyOrdering).toEqual(['title', 'summary', 'performer', 'sections']);
-    expect(
-      responseSchema.properties.sections.items.properties.exercises.items.propertyOrdering,
-    ).toEqual(['name', 'amount', 'startPose', 'endPose', 'movementDirection', 'formCue']);
+    expect(responseSchema.properties.sections.items.properties.exercises.items.propertyOrdering).toEqual([
+      'name',
+      'amount',
+      'startPose',
+      'endPose',
+      'movementDirection',
+      'formCue',
+    ]);
   });
 
   it('asks for drawable start and end positions separate from the coaching cue', () => {
@@ -255,9 +270,7 @@ describe('buildExtractionRequest', () => {
     const { responseSchema } = buildExtractionRequest(YOUTUBE_URL, '', {
       mode: 'exercise',
     }).generationConfig;
-    expect(
-      responseSchema.properties.sections.items.properties.exercises.items.required,
-    ).not.toContain('amount');
+    expect(responseSchema.properties.sections.items.properties.exercises.items.required).not.toContain('amount');
   });
 
   it('leaves performer optional so an absent presenter is not invented', () => {
@@ -271,17 +284,14 @@ describe('buildExtractionRequest', () => {
   it('swaps in the point schema and instruction in generic mode', () => {
     const request = buildExtractionRequest(YOUTUBE_URL, '', { mode: 'generic' });
     expect(
-      request.generationConfig.responseSchema.properties.sections.items.properties.points.items
-        .propertyOrdering,
+      request.generationConfig.responseSchema.properties.sections.items.properties.points.items.propertyOrdering,
     ).toEqual(['label', 'detail', 'visual']);
     expect(textPartOf(request)).toMatch(/an illustration of/i);
     expect(textPartOf(request)).not.toMatch(/startPose/);
   });
 
   it('rejects an unknown mode rather than silently extracting the wrong shape', () => {
-    expect(() => buildExtractionRequest(YOUTUBE_URL, '', { mode: 'poster' })).toThrow(
-      /Unknown --mode/,
-    );
+    expect(() => buildExtractionRequest(YOUTUBE_URL, '', { mode: 'poster' })).toThrow(/Unknown --mode/);
   });
 });
 
@@ -306,8 +316,7 @@ const PANEL_SHEET = {
           name: "Runner's Lunge",
           amount: '30 seconds each side',
           startPose: 'standing in a high lunge with one foot forward and both hands on the ground',
-          endPose:
-            'in a lunge with the opposite hand on the ground, reaching the other arm up to the sky',
+          endPose: 'in a lunge with the opposite hand on the ground, reaching the other arm up to the sky',
           movementDirection: 'sweeping from the floor upward past the shoulder',
           formCue: 'Keep the front knee stacked over the ankle',
         },
@@ -430,9 +439,7 @@ describe('renderSectionTables', () => {
   });
 
   it('keeps the Amount column when at least one exercise carries one', () => {
-    expect(renderSectionTables(PANEL_SHEET, 'exercise')).toContain(
-      '| Exercise | Amount | Form cue |',
-    );
+    expect(renderSectionTables(PANEL_SHEET, 'exercise')).toContain('| Exercise | Amount | Form cue |');
   });
 
   it('escapes pipe characters so a cell cannot break the table', () => {
@@ -669,18 +676,13 @@ describe('composePerformerSentence', () => {
   });
 
   it('skips the traits the model could not see', () => {
-    const sentence = composePerformerSentence(
-      { performer: { clothing: 'a blue apron' } },
-      'generic',
-    );
+    const sentence = composePerformerSentence({ performer: { clothing: 'a blue apron' } }, 'generic');
     expect(sentence).toContain('a blue apron');
     expect(sentence).not.toMatch(/setting/i);
   });
 
   it('conditions the figure on a person appearing at all in generic mode', () => {
-    expect(composePerformerSentence(PERFORMER_SHEET, 'generic')).toMatch(
-      /Wherever a panel shows a person/i,
-    );
+    expect(composePerformerSentence(PERFORMER_SHEET, 'generic')).toMatch(/Wherever a panel shows a person/i);
   });
 });
 
@@ -798,9 +800,7 @@ describe('generic mode', () => {
 
   it('restates the points verbatim in the tables rather than in the prompt body', () => {
     const document = renderPromptDocument(GENERIC_SHEET, 'generic');
-    expect(document).toContain(
-      'For reference, the points restated exactly — use these labels verbatim.',
-    );
+    expect(document).toContain('For reference, the points restated exactly — use these labels verbatim.');
     for (const point of everyPoint(GENERIC_SHEET)) {
       expect(document).toContain(point.detail);
     }
@@ -826,9 +826,7 @@ describe('generic mode', () => {
   });
 
   it('renders a document without throwing when no points were found', () => {
-    expect(() =>
-      renderPromptDocument({ title: 'Nothing', summary: '', sections: [] }, 'generic'),
-    ).not.toThrow();
+    expect(() => renderPromptDocument({ title: 'Nothing', summary: '', sections: [] }, 'generic')).not.toThrow();
   });
 });
 

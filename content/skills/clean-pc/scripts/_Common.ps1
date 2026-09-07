@@ -138,7 +138,7 @@ function Write-UnscannedPlaceholderWarning {
 
 # Enumerate child directories as plain path strings.
 # Reading .Attributes on each child during enumeration throws UnauthorizedAccessException
-# on locked junctions (for example "<drive>:\Documents and Settings") and aborts the whole
+# on locked junctions (for example "C:\Documents and Settings") and aborts the whole
 # sibling loop, silently truncating the scan. Return strings here and let the caller
 # check each item individually via Get-ReparsePointKind.
 function Get-ChildDirectoryPath {

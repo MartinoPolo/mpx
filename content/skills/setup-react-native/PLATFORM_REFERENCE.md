@@ -1,24 +1,46 @@
-# React Native Platform Reference
-
-The generated monorepo contains `apps/web` (React), `apps/mobile` (Expo and React Native), `apps/api`, and shared `packages/shared`, `packages/ui`, and `packages/config`. Use pnpm and `git -C <project-path>` consistently.
+# React Native Setup Platform Reference
 
 ## Framework rule link
 
-Resolve the central React framework rule only from an authorized MPX content root or an explicit user-provided path. Destination: `<project-path>/.mpx/rules/react.md`.
+The source is `rules-per-project/react.md` beneath an authorized MPX content/repository root. Resolve it relative to
+known compiled content first, then through [CONTENT_PATHS](../shared/CONTENT_PATHS.md). Do not probe guessed checkout
+locations. Destination: `<project-path>/.claude/rules/react.md`.
 
-- Linux/macOS: create a symbolic link with `ln -s <central-react-rule> <destination>`.
-- Windows: create a real file symbolic link with `cmd.exe /c mklink "<destination>" "<central-react-rule>"`. Git-emulated links may copy instead. If permission is denied, recommend Developer Mode or an elevated terminal and provide the exact manual command.
+Create the parent directory first:
 
-Verify that the destination is a symbolic link resolving to the expected source. If linking fails, record the manual command and continue; never copy mutable central rules while claiming they remain linked.
+```bash
+mkdir -p <project-path>/.claude/rules
+```
+
+### Linux and macOS
+
+```bash
+ln -s "<resolved-react-rule>" "<project-path>/.claude/rules/react.md"
+```
+
+### Windows
+
+Git Bash `ln -s` may create a copied or emulated link. Create a real file symbolic link:
+
+```bat
+cmd.exe /c mklink "<project-path>\.claude\rules\react.md" "<resolved-react-rule>"
+```
+
+If permission is denied, recommend Windows Developer Mode or an elevated terminal and provide the exact resolved
+command. Continue without copying the mutable central rule while claiming it is linked.
+
+Verify that the destination is a symbolic link and resolves to the expected source.
 
 ## Failure handling
 
-| Failure                                      | Outcome                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------ |
-| Template absent or repository creation fails | Stop remote setup and report structured remediation.               |
-| Default branch fails                         | Preserve pushed branches; report manual handoff.                   |
-| Protection fails                             | Record full error and unprotected branch; continue.                |
-| Install/check fails                          | Preserve command/output and continue only if setup remains viable. |
-| Push fails                                   | Preserve local commits and report remediation.                     |
+| Problem                   | Outcome                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| Template absent           | Name the expected account/template and stop               |
+| Repository creation fails | Preserve native provider error and stop                   |
+| Default branch fails      | Preserve pushed branches; manual handoff                  |
+| Protection fails          | Record complete error and branch as unprotected; continue |
+| Install/check fails       | Record command/output and impact; continue only if viable |
+| Rule link fails           | Record exact manual command; continue                     |
+| Push fails                | Preserve local commits and report remediation             |
 
-Never print credentials or private repository data in diagnostics. The final report records success or accepted exception for repository creation, default branch, both protection branches, checks, push, and framework rule link.
+Always use pnpm and `git -C <project-path>`. Never print credentials or unrelated private paths.

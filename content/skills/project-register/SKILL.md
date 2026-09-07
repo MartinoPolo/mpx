@@ -1,7 +1,10 @@
 ---
 name: project-register
-description: 'Registers an existing project with the workstation — one colour driving its Windows Terminal profile and icon and its VS Code Peacock theme.'
+description: 'Registers an existing project with the workstation — one colour driving its Windows Terminal profile...'
 metadata:
+  author: MartinoPolo
+  version: '0.7'
+  category: setup
   mpx:
     schemaVersion: 1
     skillPacks: [personal]
@@ -10,15 +13,18 @@ metadata:
 
 # Register a project with the workstation
 
-Give a project one colour and one icon, then wire both into every surface that opens
-it. The project comes from the invocation input.
+Give a project one colour and one icon, then wire both into every surface that opens it. The project comes from the
+invocation input.
 
-This registers a project that already exists on disk. If it has no git repo yet, step 2
-initializes one automatically — see that step for what it covers and where it still stops
-to ask.
+This registers a project that already exists on disk. If it has no git repo yet, step 2 initializes one automatically —
+see that step for what it covers and where it still stops to ask.
 
-Skills referenced below (`repository-setup`, `board-setup`) are
-read-and-follow, per the global "Cross-skill references" rule in `instructions/AGENTS.md`.
+Skills referenced below (`init-github-repo`, `board-setup`) are read-and-follow, per the global "Cross-skill references"
+rule in `instructions/AGENTS.md`.
+
+Resolve links and scripts relative to this loaded skill. For absolute reads, follow
+[Content Paths](../shared/CONTENT_PATHS.md). Use the loaded skill directory in every script command below;
+`./scripts/...` means that directory, not the caller's working directory.
 
 Scripts live in `./scripts/`:
 
@@ -30,21 +36,31 @@ Scripts live in `./scripts/`:
 
 ## Process
 
-1. Resolve the project
-2. Initialize the repo if needed
-3. Choose the colour
-4. Draw the icon
-5. Add the Windows Terminal profile
-6. Write the VS Code Peacock block
-7. Optionally register the project in the Obsidian task overview
-8. Offer the remaining setup skills
+1. Gate on the Raycast export
+2. Resolve the project
+3. Initialize the repo if needed
+4. Choose the colour
+5. Draw the icon
+6. Add the Windows Terminal profile
+7. Write the VS Code Peacock block
+8. Register dev-server ports
+9. Hand quicklinks to `raycast-config`
+10. Optionally register the project in the Obsidian task overview
+11. Offer the remaining setup skills
 
-### Step 1: Resolve the project
+### Step 1: Gate on the Raycast export
 
-Resolve `MPX_PROJECTS` and `MPX_WORK` with `env | grep '^MPX_'` — written in prose they are
-literal text, not paths to search. Take the folder from `the invocation input`. A bare name is
-resolved against the machine roots `MPX_PROJECTS` then `MPX_WORK`; confirm the match when
-both contain it. Fail with the variable's name when neither resolves.
+Before changing another surface, tell the user: **Raycast → `Ctrl+,` → Advanced → Export Settings & Data**, choose a
+passphrase of 8+ characters, and save to Desktop. Resolve the home directory from the environment. Find
+`Raycast-*.rayconfig` candidates under Desktop and Downloads, offer the newest with modified times, and also offer an
+explicit Raycast skip. Carry a current selected export to step 9; if it predates this session's work, request a fresh
+export.
+
+### Step 2: Resolve the project
+
+Resolve `MPX_PROJECTS` and `MPX_WORK` with `env | grep '^MPX_'` — written in prose they are literal text, not paths to
+search. Take the folder from `the invocation input`. A bare name is resolved against the machine roots `MPX_PROJECTS`
+then `MPX_WORK`; confirm the match when both contain it. Fail with the variable's name when neither resolves.
 
 Report what is already registered, so a re-run repairs rather than duplicates:
 
@@ -54,31 +70,28 @@ node "./scripts/peacock.mjs" used
 ls "<project>/.vscode/settings.json"
 ```
 
-### Step 2: Initialize the repo if needed
+### Step 3: Initialize the repo if needed
 
 Check `git -C "<project>" rev-parse --git-dir`. When the project has no repository, read
-[REPOSITORY_INIT.md](REPOSITORY_INIT.md) and follow that branch. It invokes the canonical
-`repository-setup` skill and preserves its confirmation gates. When the check succeeds,
-preserve the existing repository and continue.
+[REPOSITORY_INIT.md](REPOSITORY_INIT.md) and follow that branch. It invokes the personal `init-github-repo` skill, including GitHub publication and branch setup,
+and preserves its confirmation gates. When the check succeeds, preserve the existing repository and continue.
 
-### Step 3: Choose the colour
+### Step 4: Choose the colour
 
-One colour drives the Windows Terminal tab, the VS Code chrome and the icon plate, so the
-project reads the same in every window.
+One colour drives the Windows Terminal tab, the VS Code chrome and the icon plate, so the project reads the same in
+every window.
 
-Propose a colour that fits what the project _is_ — read its `README.md` for the domain
-rather than reaching for the next unused hue. Check it against both lists from step 1 and
-pick again when it is close enough to an existing one to be confused at a glance;
-neighbouring shades of the same hue are the common trap.
+Propose a colour that fits what the project _is_ — read its `README.md` for the domain rather than reaching for the next
+unused hue. Check it against both lists from step 1 and pick again when it is close enough to an existing one to be
+confused at a glance; neighbouring shades of the same hue are the common trap.
 
 Confirm the choice with `AskUserQuestion`, offering the suggestion plus two alternatives.
 
-### Step 4: Draw the icon
+### Step 5: Draw the icon
 
-Icons live beside the Windows Terminal settings — `node "./scripts/wt-profile.mjs" icons-dir`
-prints the folder. Render to the session scratchpad first, **show it to the user with
-`Read`**, and copy it into that folder only once they accept it. `make-icon.py` refuses to
-overwrite an existing file, so a rejected draft is written under a new name.
+Icons live beside the Windows Terminal settings — `node "./scripts/wt-profile.mjs" icons-dir` prints the folder. Render
+to the session scratchpad first, **show it to the user with `Read`**, and copy it into that folder only once they accept
+it. `make-icon.py` refuses to overwrite an existing file, so a rejected draft is written under a new name.
 
 A glyph covers most projects:
 
@@ -87,69 +100,84 @@ python "./scripts/make-icon.py" --color '#0F766E' \
   --glyph 'π' --font cambriab.ttf --glyph-scale 0.78 --out '<scratchpad>/<project>.png'
 ```
 
-When no character carries the meaning, write a motif file defining
-`draw_motif(draw, size, ink, plate)` — Pillow drawing calls on a plate already filled,
-with `size` the supersampled canvas — and pass `--motif <file>`. Keep the shape readable
-at 16px: solid silhouettes, few parts, no thin outlines.
+When no character carries the meaning, write a motif file defining `draw_motif(draw, size, ink, plate)` — Pillow drawing
+calls on a plate already filled, with `size` the supersampled canvas — and pass `--motif <file>`. Keep the shape
+readable at 16px: solid silhouettes, few parts, no thin outlines.
 
-### Step 5: Add the Windows Terminal profile
+### Step 6: Add the Windows Terminal profile
 
 ```bash
 node "./scripts/wt-profile.mjs" add \
   --name '<project>' --dir '<project path>' --icon '<icons dir>/<project>.png' --color '#RRGGBB'
 ```
 
-The script backs the settings file up beside itself, copies the shell commandline from the
-profiles already there, generates the GUID, and re-parses the result before writing, so a
-malformed edit never reaches Windows Terminal. Report the backup path. Windows Terminal
-picks the profile up on its own — no restart.
+The script backs the settings file up beside itself, copies the shell commandline from the profiles already there,
+generates the GUID, and re-parses the result before writing, so a malformed edit never reaches Windows Terminal. Report
+the backup path. Windows Terminal picks the profile up on its own — no restart.
 
 Keep the profile name identical to the folder name for predictable terminal automation.
 
-The new-tab dropdown is a grouped `newTabMenu` in the same settings file — general shells,
-mpx tooling, work repositories, a `remainingProfiles` catch-all, then admin shells, with
-`separator` entries between groups. A freshly added profile lands in the catch-all until its
-GUID is placed explicitly. Use `AskUserQuestion` to ask which group the project belongs to
-(mpx tooling, work repositories, or leave it in the catch-all), then `Edit` the settings
-file to insert `{ "type": "profile", "profile": "<guid>" }` at the end of the chosen group.
-Two rules the menu depends on: keep every GUID comment-free JSON (Windows Terminal rejects
-trailing commas), and remember that the `ctrl+shift+<digit>` bindings target dropdown
-_positions_ — inserting into a group above the work section shifts every number below it,
-so tell the user when the numbering moves.
+The new-tab dropdown is a grouped `newTabMenu` in the same settings file — general shells, mpx tooling, work
+repositories, a `remainingProfiles` catch-all, then admin shells, with `separator` entries between groups. A freshly
+added profile lands in the catch-all until its GUID is placed explicitly. Use `AskUserQuestion` to ask which group the
+project belongs to (mpx tooling, work repositories, or leave it in the catch-all), then `Edit` the settings file to
+insert `{ "type": "profile", "profile": "<guid>" }` at the end of the chosen group. Two rules the menu depends on: keep
+every GUID comment-free JSON (Windows Terminal rejects trailing commas), and remember that the `ctrl+shift+<digit>`
+bindings target dropdown _positions_ — inserting into a group above the work section shifts every number below it, so
+tell the user when the numbering moves.
 
-### Step 6: Write the VS Code Peacock colour
+### Step 7: Write the VS Code Peacock colour
 
 ```bash
 node "./scripts/peacock.mjs" write '<project path>' '#RRGGBB'
 ```
 
-This merges into any existing `.vscode/settings.json` and writes **only** `peacock.color`,
-set to the same value as the tab, which is what makes the two windows match. One property is
-the single source of truth: Peacock regenerates the activity bar, status bar, title bar and
-badge colours itself the first time VS Code opens the folder. Any stale derived keys left in
-`workbench.colorCustomizations` by an earlier colour are cleared in the same write.
+This merges into any existing `.vscode/settings.json` and writes **only** `peacock.color`, set to the same value as the
+tab, which is what makes the two windows match. One property is the single source of truth: Peacock regenerates the
+activity bar, status bar, title bar and badge colours itself the first time VS Code opens the folder. Any stale derived
+keys left in `workbench.colorCustomizations` by an earlier colour are cleared in the same write.
 
-### Step 7: Register the project in the Obsidian task overview
+### Step 8: Optionally register dev-server ports
 
-Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user
-uses, read [OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch.
-Do not infer or reconstruct the vault root from a home or sync-directory path. When the
-variable is unavailable or the user keeps no such vault, skip this surface and record why.
+When the project serves on localhost, read ports from its own scripts, Vite configuration, or compose files; do not
+assume framework defaults. First resolve whether the active runtime exposes a **documented writable status-line project
+registry capability**. Use its resolved runtime-owned path and update interface only when that capability exists.
+`content/plugins/mp/statusline-projects.json` is not a guaranteed integration point and generated content must never be
+mutated. If no writable capability is available, provide the project key and discovered ports as a manual handoff and
+report the surface as unsupported; skip projects with no server and report why.
 
-### Step 8: Offer the remaining setup skills
+### Step 9: Hand quicklinks to `raycast-config`
 
-`repository-setup` is no longer in this list — step 2 already ran it if the project needed it.
-Name the ones that still apply and let the user pick — neither runs unless chosen:
+Propose a quicklink family, then resolve and read `../raycast-config/SKILL.md` and its referenced material. Carry out
+that skill in this conversation using the export (or skip) from step 1. It owns the export format, identifiers, aliases,
+and import wording. Inputs are: folder = project path; code = `file:///<project path>` with VS Code `openWith`; term =
+`wt -p "<profile name>"`; and remote links are resolved independently: **repo** and **reviews/PRs** come from the
+selected repository provider's native guide, while **issues** comes from the selected Issue provider's native guide.
+Include only links each provider actually exposes when the corresponding repository or project exists. If a provider
+cannot return a browser URL, omit that quicklink and record a manual handoff; do not derive Issue URLs from repository
+URLs, conflate PR/MR and Issue routes, or invent provider commands. Batch multiple projects before the import
+round-trip when appropriate.
+
+### Step 10: Register the project in the Obsidian task overview
+
+Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user uses, read
+[OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch. Do not infer or reconstruct the vault root
+from a home or sync-directory path. When the variable is unavailable or the user keeps no such vault, skip this surface
+and record why.
+
+### Step 11: Offer the remaining setup skills
+
+`init-github-repo` is no longer in this list — step 3 already ran it if the project needed it. Name the ones that still
+apply and let the user pick — neither runs unless chosen:
 
 - [`board-setup`](../board-setup/SKILL.md) — Obsidian board and its `BOARD.md` symlink
 - [`design-init`](../design-init/SKILL.md) — palette, fonts, `designs/tokens.css`
 
-If the user picks one, read its `SKILL.md` and carry out its steps yourself in this
-conversation — this applies to `design-init` too for consistency even though its
-invocation isn't blocked.
+If the user picks one, read its `SKILL.md` and carry out its steps yourself in this conversation — this applies to
+`design-init` too for consistency even though its invocation isn't blocked.
 
 ## Report
 
-Close with a table of surfaces touched — Windows Terminal, VS Code and Obsidian
-`Tasks.md` — each with the file written and the value used. Name the Windows Terminal backup path, and
-state plainly which steps were skipped and why.
+Close with a table of surfaces touched — Windows Terminal, VS Code, optional status-line capability, Raycast, and
+Obsidian `Tasks.md` — each with the file written and the value used. Name the Windows Terminal backup path, and state
+plainly which steps were skipped and why.

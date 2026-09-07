@@ -1,7 +1,10 @@
 ---
 name: handoff
-description: 'Writes or updates HANDOFF.md with session progress and open threads. Use for a handoff or to save progress at the end of a session.'
+description: 'Writes or updates HANDOFF.md with session progress and open threads. Use for a handoff or to save...'
 metadata:
+  author: MartinoPolo
+  version: '0.8'
+  category: project-management
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -10,51 +13,54 @@ metadata:
 
 # Session Handoff
 
-Creates or updates `HANDOFF.md` in the project root — a general session summary for continuity.
+Create or update `HANDOFF.md` in the project root — a general session summary for continuity.
 
 ## Purpose
 
-Capture accumulated knowledge, context, and insights that would be lost when starting a new conversation. HANDOFF.md persists in the project root and is updated at the end of each session.
+Capture accumulated knowledge, context, and insights that would be lost when starting a new conversation. `HANDOFF.md`
+persists in the project root and is updated at the end of each session.
 
 ## Workflow
 
-### Step 1: Gather Context
+### Step 1: Gather context
 
-Review the current conversation to extract:
+Review the current conversation and durable work to extract:
 
-- What was accomplished (progress)
-- Decisions made and their reasoning
-- Problems encountered and how they were solved
-- Dead ends discovered (what NOT to do)
-- Files modified or discovered
-- Patterns and relationships identified
+- what was accomplished;
+- decisions and their reasoning;
+- problems encountered and how they were solved;
+- dead ends discovered — what not to repeat;
+- files modified or discovered; and
+- patterns and relationships identified.
 
-### Step 2: Check Task List
+### Step 2: Check task state
 
-Use `TaskList` to see current task status:
+Use the runtime task-state contract to inspect:
 
-- Completed tasks
-- In-progress tasks
-- Pending tasks
+- completed work;
+- in-progress work; and
+- pending work.
 
-### Step 3: Identify Project Context (Optional)
+If task-state access is unavailable, derive only what the conversation and durable artifacts support and say so in
+Working Memory; do not invent status.
 
-1. Check if `.mpx/` exists
-2. If yes, read `.mpx/CONTEXT.md` for domain language and feature context
-3. Read `.mpx/DECISIONS.md` for settled decisions
-4. This context enriches the handoff but is not required
+### Step 3: Identify project context (optional)
 
-### Step 4: Create or Update HANDOFF.md
+1. Check whether `.mpx/` exists.
+2. If it does, read `.mpx/CONTEXT.md` for domain language and feature context.
+3. Read `.mpx/DECISIONS.md` for settled decisions.
+4. Use these as authoritative enrichment, not as content to duplicate wholesale.
 
-1. Check if `HANDOFF.md` already exists in the project root
-2. If exists: read it, merge previous context with current session context (preserve still-relevant items, update/replace stale ones)
-3. If not: create new from scratch
+### Step 4: Create or update HANDOFF.md
 
-Write `HANDOFF.md` to the **project root**.
+1. Check whether `HANDOFF.md` already exists in the project root.
+2. If it exists, read it and merge current context: preserve still-relevant items and update or replace stale ones.
+3. Otherwise create it from scratch.
 
-**Target 20-200 lines. Be thorough — this is the only context the next agent gets.**
+Write only `HANDOFF.md` in the **project root**.
 
-Write as if briefing a developer who has zero context. Every section should contain enough detail that the reader can continue work without re-investigating.
+**Target 20–200 lines. Be thorough — this is the only context the next agent gets.** Write as if briefing a developer
+with zero context. Every section must contain enough detail to continue without re-investigating.
 
 ```markdown
 # Session Handoff
@@ -64,49 +70,46 @@ Date: [Today's date]
 ## Progress This Session
 
 - [For each completed item: what was done and how]
-- [Include file paths, function names, specific changes]
-- [Not just "implemented X" — describe the approach taken]
+- [Include file paths, function names, and specific changes]
+- [Not just "implemented X" — describe the approach]
 
 ## Key Decisions
 
-- [Each decision: what was decided, alternatives considered, why this choice]
-- [Include technical trade-offs and constraints that influenced the decision]
+- [What was decided, alternatives considered, and why]
+- [Include technical trade-offs and constraints]
 
 ## Dead Ends & Mistakes
 
-- [Failed approaches with WHY they failed — error messages, wrong assumptions]
-- [Paths that looked promising but weren't — save the next agent from repeating]
-- [Include specific error messages, stack traces, or symptoms encountered]
+- [Failed approaches and why: errors, symptoms, wrong assumptions]
+- [Promising-looking paths that should not be repeated]
 
 ## Bugs Found
 
-- [Any bugs discovered during work, whether fixed or not]
-- [Include reproduction steps and file locations]
+- [Fixed or open bugs, reproduction steps, and file locations]
 
 ## Next Steps
 
-1. [Prioritized, with enough context to start immediately]
-2. [Include file paths, function names, what specifically needs doing]
-3. [Note any prerequisites or ordering constraints]
+1. [Prioritized action with enough context to begin immediately]
+2. [File paths, symbols, and exact remaining work]
+3. [Prerequisites and ordering constraints]
 
 ## Critical Files
 
-- `path/to/file` — what it does, why it matters for this work
-- [Every file the next agent will need to read or modify]
+- `path/to/file` — what it does and why it matters
+- [Every file the next agent needs to read or modify]
 
 ## Working Memory
 
-- [Implicit knowledge: "X depends on Y", "don't change Z because..."]
-- [Patterns discovered, architectural constraints]
-- [Environment quirks, config gotchas, version-specific behavior]
-- [Relationships between components that aren't obvious from code]
+- [Implicit dependencies and architectural constraints]
+- [Environment quirks, configuration gotchas, and version behavior]
+- [Non-obvious component relationships]
 ```
 
 ### Step 5: Confirm
 
 Show the user what was created:
 
-> "Session handoff created:
+> Session handoff created:
 >
 > - `HANDOFF.md` (project root)
 >
@@ -114,12 +117,13 @@ Show the user what was created:
 >
 > - [x] items of progress
 > - [x] decisions
-> - [x] next steps"
+> - [x] next steps
 
 ## Notes
 
-- HANDOFF.md persists in the project root — updated each session, not deleted
-- This skill only writes HANDOFF.md — use `mpx grill` or `mpx harvest-decisions` to persist decisions to `.mpx/DECISIONS.md`
-- Focus on "why" not just "what" — reasoning is crucial
-- Capture implicit knowledge that isn't documented elsewhere
-- If HANDOFF.md already exists, it is read and merged with current session context (update-or-create)
+- `HANDOFF.md` is updated each session, not deleted.
+- This skill writes only `HANDOFF.md`; use `mpx grill` or `mpx harvest-decisions` to persist settled decisions to
+  `.mpx/DECISIONS.md`.
+- Focus on why, not only what — reasoning is crucial.
+- Capture implicit knowledge not documented elsewhere.
+- Existing handoffs are merged, not blindly overwritten.

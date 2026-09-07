@@ -1,109 +1,101 @@
 ---
 name: mpx-review-manager
-description: 'Creates or updates GitHub PRs with conventional title/body format. Detects base branch, composes structured PR description.'
+description: >-
+  Creates or updates a configured-provider PR, GitLab MR, or Gerrit change with conventional title and body, base detection, and bounded output.
 ---
 
-# Review Manager Agent
+# PR Manager Agent
 
-Create or update a GitHub PR from existing commits. Return structured result for parent to parse.
+Create or update a PR from existing commits. Use `git` locally and the configured repository provider natively.
 
-**Tool preference:** Use `git` and `gh` CLI via Bash tool for all operations.
+## Provider setup (required)
+
+Resolve the loaded content root and read Provider Routing, then load `mpxconfig.json`, resolve `repository.provider` and
+`repository.remote`, and explicitly select `skills/shared/providers/GITHUB.md`, `GITLAB.md`, or `GERRIT.md`. Validate
+the configured remote with `git remote get-url -- <repository.remote>` and preserve the immutable launch identity and
+authenticated environment.
+
+- **GitHub:** bind operations to the validated repository. Edit only the supplied immutable PR ID with
+  `gh pr edit <id> ... --body-file <file>`, or create once with the guide.
+- **GitLab:** bind operations to validated project/host. Update only the supplied immutable PR ID, and follow the
+  guide's `glab api` create/update commands with `--field description=@<body-file>`; do not depend on unsupported
+  description-file flags.
+- **Gerrit:** require the supplied positive change ID for updates. Follow `GERRIT.md`: validate project/change, require
+  the commit's unique `Change-Id`, and upload the exact commit SHA as a new patch set through the configured remote/ref;
+  read back and verify the returned change and commit. Creation without an established Change-Id/validated target is a
+  bounded handoff.
+
+Do not fall back between providers. Update only an immutable ID supplied by the caller (including one returned by an
+earlier create). A source-branch or Change-Id lookup is read-only conflict detection, never authority to update. An
+unavailable identity, CLI, or unsupported operation is a bounded failure.
 
 ## Input
 
-You receive:
-
-1. **issue_number** — GitHub issue number for `#N` prefix and `Closes #N` (optional)
-2. **base_branch** — explicit base branch (optional, auto-detects if omitted)
-3. **draft** — `true` for draft PR (optional, defaults to false)
-4. **description_hint** — parent-provided context about changes (optional)
+- `repository_target` and `source_branch` — validated repository identity and exact source branch
+- `issue_id` (optional) — verified selected-provider Issue identifier
+- `issue_provider`, `issue_target`, and `issue_reference` (required when an Issue is linked) — verified identity and
+  canonical URL/reference needed to determine whether repository-native closing syntax is safe
+- `review_id` / `change_id` (optional) — immutable PR identity for the selected provider; when supplied,
+  update only this verified ID
+- `base_branch` (optional) — caller-confirmed target branch
+- `draft` (optional, default false)
+- `description_hint` (optional)
 
 ## Process
 
-### Step 1: Detect Base Branch
+1. Use the caller-confirmed `base_branch`; otherwise resolve it from `refs/remotes/<validated-remote>/HEAD`. If remote
+   HEAD is unavailable or ambiguous, return a bounded failure requesting the base branch; never guess `main` or another
+   branch.
+2. If an immutable PR ID was supplied, fetch and verify that exact ID. Otherwise perform an exact
+   source-branch or Change-Id lookup only to detect conflicts. If an existing candidate is found, do not update or
+   create: return its immutable ID and URL with `status: "selection_required"` so the parent can explicitly select it.
+   Create only when conflict detection verifies that no PR exists.
+3. Read all changes with `git log <validated-remote>/<base>..HEAD --oneline` and
+   `git diff <validated-remote>/<base>..HEAD --stat`.
+4. Compose a title under 72 characters. Use `#N type(scope): Description` only when the verified Issue provider and
+   target match the repository provider/target and that provider's guide confirms numeric closing semantics; otherwise
+   use `type(scope): Description` and preserve the canonical Issue reference in the body.
+5. Compose the body in a temporary file:
 
-If `base_branch` not provided:
-
-```bash
-git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed "s#^origin/##"
-```
-
-If script returns null or fails, use `main` as fallback.
-
-### Step 2: Check Existing PR
-
-```bash
-gh pr view --json number,title,body,url,state 2>/dev/null
-```
-
-- **OPEN PR exists** → update mode (Step 5a)
-- **No PR or not OPEN** → create mode (Step 5b)
-
-### Step 3: Review Changes
-
-```bash
-git log origin/<base>..HEAD --oneline
-git diff origin/<base>..HEAD --stat
-```
-
-### Step 4: Compose PR Content
-
-**Title:** `#N type(scope): Description` when issue_number provided. Without: `type(scope): Description`.
-
-**Body template:**
-
-```
+```markdown
 ## Description
-- 1-6 concise bullets summarizing full scope of changes
+
+- 1-6 concise bullets covering the full branch
 
 ## Resolves
+
 Closes #N
 
 ## Testing (Optional)
+
 - [ ] Tests added/modified
 ```
 
-Use commit messages, diff summary, and description_hint to compose the description bullets. Use `None` for Resolves section if no issue_number.
+Use `Closes #N` only under the same verified provider/target condition as the numeric title. For a cross-provider or
+cross-target Issue, replace it with the verified canonical Issue URL/reference without a closing keyword. Use `None`
+when there is no Issue. User-approved Issue body links are allowed; never use native parent/sub-Issue APIs.
 
-### Step 5a: Update Existing PR
+6. Update only the caller-supplied immutable PR ID. If no update ID was supplied and conflict detection found
+   none, create once and retain the returned verified ID. For Gerrit, upload the exact patch set as specified above. Do
+   not retry a failed create/update.
 
-```bash
-gh pr edit --title "<title>" --body "$(cat <<'EOF'
-<composed body>
-EOF
-)"
-```
-
-### Step 5b: Create PR
-
-```bash
-gh pr create --base <base> --title "<title>" --body "$(cat <<'EOF'
-<composed body>
-EOF
-)"
-```
-
-Add `--draft` flag if `draft` is true.
-
-## Output
+## Output (ONLY JSON)
 
 ```json
 {
-  "status": "OK | FAIL",
-  "pr_url": "https://github.com/owner/repo/pull/55",
-  "pr_number": 55,
-  "pr_action": "created | updated",
-  "base_branch": "main",
-  "error": null
+  "status": "OK | FAIL | selection_required",
+  "provider": "github | gitlab | gerrit",
+  "review_id": "55 | Iabc123... | null",
+  "review_number": 55,
+  "review_url": "https://... | null",
+  "review_action": "created | updated | none",
+  "base_branch": "<confirmed-base>",
+  "error": "null or <=3 lines"
 }
 ```
 
-## Constraints
+`review_id` is canonical for every provider. Include `review_number` only for compatibility when the verified ID is
+numeric; otherwise omit it. For `selection_required`, return the conflict candidate in `review_id`/`review_url` with
+`review_action: "none"`.
 
-- When `issue_number` is provided the title MUST start with `#N `, before the conventional-commit
-  type: `#2 feat(skills): add video-to-image skill`. Benchmarked arms dropped this prefix 1 run in 3
-  when it was stated only in Step 4.
-- Never use destructive git commands
-- If `gh pr create` or `gh pr edit` fails, report error — do NOT retry
-- PR title under 72 characters
-- Review ALL commits between base and HEAD, not just the latest
+Never use destructive git commands. Inspect every commit between base and HEAD, not only the latest.

@@ -1,101 +1,74 @@
+#!/usr/bin/env node
 /**
  * Deterministic base-branch detector.
- * Usage: node detect-base-branch.js [explicit-branch]
+ * Usage: node detect-base-branch.js [explicit-branch] [remote]
  *
- * Returns a single branch name to stdout.
- * Priority order: dev > develop > main > master
- * Fallback: "main"
+ * Returns a single branch name to stdout. Existing candidates are scored by
+ * fewest commits HEAD is ahead of their merge-base; priority order breaks ties:
+ * dev > develop > main > master. Fallback: "main".
  */
 
-const { execSync: defaultExecSync } = require('child_process');
+import { execFileSync as defaultExecFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const CANDIDATE_BRANCHES = ['dev', 'develop', 'main', 'master'];
 
-/**
- * Run a git command, return trimmed stdout or null on failure.
- */
-function gitExec(command, exec) {
+function gitExec(args, execFile) {
   try {
-    return exec(command, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execFile('git', args, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
   } catch {
     return null;
   }
 }
 
-/**
- * Check whether origin/<branch> exists on the remote.
- */
-function remoteBranchExists(branch, exec) {
-  return gitExec(`git rev-parse --verify origin/${branch}`, exec) !== null;
+function remoteBranchExists(branch, remote, execFile) {
+  return gitExec(['rev-parse', '--verify', `refs/remotes/${remote}/${branch}`], execFile) !== null;
 }
 
-/**
- * Count how many commits HEAD is ahead of the merge-base with origin/<branch>.
- * Returns the count, or null if the commands fail.
- */
-function commitsAhead(branch, exec) {
-  const mergeBase = gitExec(`git merge-base origin/${branch} HEAD`, exec);
-  if (mergeBase === null) {
-    return null;
-  }
-  const count = gitExec(`git rev-list --count ${mergeBase}..HEAD`, exec);
-  if (count === null) {
-    return null;
-  }
-  const parsed = parseInt(count, 10);
+function commitsAhead(branch, remote, execFile) {
+  const remoteRef = `refs/remotes/${remote}/${branch}`;
+  const mergeBase = gitExec(['merge-base', remoteRef, 'HEAD'], execFile);
+  if (mergeBase === null) return null;
+
+  const count = gitExec(['rev-list', '--count', `${mergeBase}..HEAD`], execFile);
+  if (count === null) return null;
+
+  const parsed = Number.parseInt(count, 10);
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-/**
- * Core detection logic.
- * @param {string|undefined} explicitBranch - Optional branch passed as CLI arg
- * @param {{ execSync?: Function }} options - Optional overrides for testing
- * @returns {string} The detected base branch name
- */
-function detectBaseBranch(explicitBranch, options = {}) {
-  const exec = options.execSync || defaultExecSync;
+export function detectBaseBranch(explicitBranch, options = {}) {
+  const execFile = options.execFileSync || defaultExecFileSync;
+  const remote = options.remote || 'origin';
 
-  // 1. Explicit branch — verify it exists on remote
-  if (explicitBranch) {
-    if (remoteBranchExists(explicitBranch, exec)) {
-      return explicitBranch;
-    }
-    // Doesn't exist → fall through to auto-detection
+  if (explicitBranch && remoteBranchExists(explicitBranch, remote, execFile)) {
+    return explicitBranch;
   }
 
-  // 2. Score each candidate
   let bestBranch = null;
   let bestCount = Infinity;
-
   for (const branch of CANDIDATE_BRANCHES) {
-    if (!remoteBranchExists(branch, exec)) {
-      continue;
-    }
-
-    const ahead = commitsAhead(branch, exec);
-    if (ahead === null) {
-      continue;
-    }
-
-    // Strict less-than keeps the first (higher-priority) winner on ties
-    if (ahead < bestCount) {
+    if (!remoteBranchExists(branch, remote, execFile)) continue;
+    const ahead = commitsAhead(branch, remote, execFile);
+    if (ahead !== null && ahead < bestCount) {
       bestCount = ahead;
       bestBranch = branch;
     }
   }
 
-  // 3. Return best match or fallback
   return bestBranch ?? 'main';
 }
 
 function main() {
   const explicitBranch = process.argv[2] || undefined;
-  const result = detectBaseBranch(explicitBranch);
-  process.stdout.write(result + '\n');
+  const remote = process.argv[3] || 'origin';
+  process.stdout.write(`${detectBaseBranch(explicitBranch, { remote })}\n`);
 }
 
-if (require.main === module) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   main();
 }
-
-module.exports = { detectBaseBranch };

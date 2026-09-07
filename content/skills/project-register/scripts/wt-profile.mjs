@@ -12,13 +12,7 @@ function settingsPath() {
   if (!localAppData) {
     throw new Error('LOCALAPPDATA is not set — cannot locate Windows Terminal settings.');
   }
-  return join(
-    localAppData,
-    'Packages',
-    'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
-    'LocalState',
-    'settings.json',
-  );
+  return join(localAppData, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json');
 }
 
 export function iconsDirectory() {
@@ -82,9 +76,7 @@ function commonCommandline(settings) {
   }
   const ranked = [...counts.entries()].sort((left, right) => right[1] - left[1]);
   if (ranked.length === 0) {
-    throw new Error(
-      'No existing profile carries a commandline to copy — add the first one by hand.',
-    );
+    throw new Error('No existing profile carries a commandline to copy — add the first one by hand.');
   }
   return ranked[0][0];
 }
@@ -164,8 +156,6 @@ if (command === 'colors') {
 } else if (command === 'icons-dir') {
   console.log(iconsDirectory());
 } else {
-  console.error(
-    'Usage: wt-profile.mjs colors | icons-dir | add --name <n> --dir <d> --icon <i> --color <#RRGGBB>',
-  );
+  console.error('Usage: wt-profile.mjs colors | icons-dir | add --name <n> --dir <d> --icon <i> --color <#RRGGBB>');
   process.exit(1);
 }

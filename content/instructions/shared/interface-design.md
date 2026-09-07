@@ -4,15 +4,13 @@ Three rules that make code naturally testable — no test-specific hacks needed.
 
 ## Rule 1: Accept Dependencies, Don't Create Them
 
-When a function creates its own dependencies, tests can't substitute them. Pass dependencies in so tests can inject fakes at system boundaries.
+When a function creates its own dependencies, tests can't substitute them. Pass dependencies in so tests can inject
+fakes at system boundaries.
 
 **Testable:**
 
 ```typescript
-function createNotificationService(dependencies: {
-  emailSender: EmailSender;
-  clock: () => number;
-}) {
+function createNotificationService(dependencies: { emailSender: EmailSender; clock: () => number }) {
   return {
     async sendReminder(userId: string, message: string) {
       const timestamp = dependencies.clock();
@@ -45,7 +43,9 @@ function createNotificationService() {
 
 ## Rule 2: Return Results, Don't Produce Side Effects
 
-Functions that return values are trivially testable — call them and assert on the output. Functions that only produce side effects (write to DB, fire events, mutate global state) force tests to observe those side effects through back channels.
+Functions that return values are trivially testable — call them and assert on the output. Functions that only produce
+side effects (write to DB, fire events, mutate global state) force tests to observe those side effects through back
+channels.
 
 **Testable:**
 

@@ -1,7 +1,7 @@
 # Rust Review Reference
 
-Judgment-based patterns not caught by the compiler or clippy.
-Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
+Judgment-based patterns not caught by the compiler or clippy. Adapted from
+[awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 
@@ -80,10 +80,8 @@ fn normalize(name: &str) -> Cow<'_, str> {
 // ❌ No justification — red flag
 unsafe { *slice.get_unchecked(index) }
 
-// ✅ SAFETY comment explains WHY it's safe
-debug_assert!(index < slice.len());
-// SAFETY: bounds check performed above via debug_assert
-unsafe { *slice.get_unchecked(index) }
+// ✅ Ordinary safe access preserves the bounds check in every build
+slice[index]
 ```
 
 ### Every unsafe fn needs # Safety docs

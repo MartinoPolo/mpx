@@ -3,7 +3,7 @@
 Depth-limited folder size map for one or more roots. Fallback when WizTree/TreeSize/du are absent.
 
 .EXAMPLE
-powershell -NoProfile -File Scan-FolderMap.ps1 -Root "<drive>:\" -Depth 3 -MinGB 0.5 -OutCsv "$env:TEMP\map-c.csv"
+powershell -NoProfile -File Scan-FolderMap.ps1 -Root "C:\" -Depth 3 -MinGB 0.5 -OutCsv "$env:TEMP\map-c.csv"
 #>
 [CmdletBinding()]
 param(

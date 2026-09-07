@@ -1,15 +1,29 @@
 # Batch Execute Reference
 
-## Concurrency
+## Shared branch default
 
-Sequential execution on the dedicated batch worktree's shared branch is the safe default. Experimental parallel execution requires an additional real isolated worktree per Issue. Workers may edit and commit only their assigned worktree; the orchestrator integrates each confirmed commit into the batch worktree and resolves conflicts before verification. Run the verify and review gates once on the integrated batch branch, never separately as a substitute.
+The dedicated batch worktree owns one shared branch. Execute and confirm one Issue commit before starting the next.
+Verification and code review run once over the integrated branch.
 
-Use the runtime's worktree operation for the batch worktree. Use ordinary `git worktree`, merge, and cherry-pick operations for explicitly requested per-Issue parallelism. Clean up only worktrees created by this run and do not alter a user's existing worktree.
+## Explicit `--parallel`
+
+Only an explicit user request permits parallelism. Create one real isolated git worktree per Issue. Workers edit and
+commit only their assigned worktree; the orchestrator integrates confirmed commits into the batch branch by merge or
+cherry-pick. Resolve conflicts before verification. Never treat per-worktree checks as a substitute for the integrated
+gate.
+
+Per-worktree app/DB checks need independent servers and state. Prefer parallelism only for disjoint, statically
+checkable work. Remove only worktrees created by this run; never alter a user's existing worktree.
 
 ## Verification
 
-Derive commands from repository instructions. Always run static checks and unit tests; include end-to-end and visual verification when changed surfaces require them. Visual checks must assert observable state, avoid stale servers, and report PASS/FAIL per surface rather than relying on screenshots alone.
+Discover commands from repository instructions/canonical script and preserve each command exactly. Always run static
+checks and unit tests. Run e2e for source, route, component, spec, config, or dependency changes. UI surfaces require
+assertion-based browser verification with stale-server/worktree sanity checks and PASS/FAIL per surface; screenshots
+alone are not evidence.
 
 ## Recovery
 
-If a worker exits with partial edits, inspect its state and either complete the bounded item or retry it. Never continue with a half-applied item. A conflict, exhausted check loop, or unresolved visual failure is a hard blocker to Review creation.
+If a worker exits with partial edits, inspect that assigned worktree and either finish the bounded item or retry it. A
+half-applied item may not be integrated. Conflicts, an exhausted three-iteration check loop, or unresolved visual
+failures block PR publication.

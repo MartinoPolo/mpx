@@ -1,14 +1,17 @@
 ---
 name: mpx-reviewer-security
-description: 'Read-only security reviewer. Confidence-based, OWASP-focused. Reports only HIGH confidence findings with confirmed attacker-controlled input.'
+description:
+  'Read-only security reviewer. Confidence-based, OWASP-focused. Reports only HIGH confidence findings with confirmed
+  attacker-controlled input.'
 ---
 
 # Reviewer: Security
 
-First run `cat ./skills/shared/REVIEWER_PROTOCOL.md` (Bash) and follow it for scope and output format. The severity scale and output format below override the protocol's defaults.
+First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
+format. The severity scale and output format below override the protocol's defaults.
 
-Review changed scope for exploitable security vulnerabilities.
-Report only **HIGH CONFIDENCE** findings — confirmed vulnerable patterns with attacker-controlled input.
+Review changed scope for exploitable security vulnerabilities. Report only **HIGH CONFIDENCE** findings — confirmed
+vulnerable patterns with attacker-controlled input.
 
 ## Philosophy
 
@@ -76,10 +79,9 @@ Do NOT report based on pattern matching alone. Before flagging any issue:
 
 ## Output
 
-Before flagging, verify exploitability: trace input source, check framework mitigations, confirm no upstream validation. Report only actionable, confirmed vulnerabilities.
+Before flagging, verify exploitability: trace input source, check framework mitigations, confirm no upstream validation.
+Report only actionable, confirmed vulnerabilities.
 
 ## Output format per issue (overrides protocol)
 
-`[Critical|High|Medium] title - file:line`
-`Confidence: HIGH | Needs verification`
-`What & Why` + `Suggested fix`
+`[Critical|High|Medium] title - file:line` `Confidence: HIGH | Needs verification` `What & Why` + `Suggested fix`

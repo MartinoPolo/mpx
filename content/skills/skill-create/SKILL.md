@@ -1,84 +1,118 @@
 ---
 name: skill-create
-description: 'Creates or restructures a portable skill for supported runtimes when a user asks to add skill behavior, invocation branches, procedures, or reference material, then audits the result.'
+description: 'Creates or restructures a portable skill for supported runtimes when a user needs skill behavior,...'
+argument-hint: '[skill name or description]'
+triggers: create skill; restructure skill; add skill branch, procedure, reference, script, or runtime packaging
 metadata:
+  author: MartinoPolo
+  version: '0.8'
+  category: utility
   mpx:
     schemaVersion: 1
+    contentVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
+    capabilities: [delegate, read, search, shell, write]
 ---
 
 # Skill Create
 
-Create a portable skill that follows this repository's conventions.
+Create a portable skill following the target repository's canonical content and compiler conventions. Use
+`the invocation input` for known requirements.
 
-Read [`../shared/AUTHORING.md`](../shared/AUTHORING.md). If the skill
-spawns agents, also read
-[`../shared/SUBAGENT_PROTOCOL.md`](../shared/SUBAGENT_PROTOCOL.md). These are the
-single sources for writing, invocation, naming, paths, grants, and versioning.
+Read [Authoring Conventions](../shared/AUTHORING.md) and [Writing for Agents](../shared/WRITING_FOR_AGENTS.md)
+completely. When the skill delegates, also read [Sub-Agent Protocol](../shared/SUBAGENT_PROTOCOL.md). These are the
+authoritative sources for writing, invocation, naming, paths, capabilities, model classes, and versioning.
+
+Resolve assets relative to this loaded skill; follow [Content Paths](../shared/CONTENT_PATHS.md) when a tool requires an
+absolute path.
 
 ## Workflow
 
-1. **Fetch current platform mechanics.** Spawn `runtime-code-guide` with the prompt:
-   “Return current the active runtime skill frontmatter, packaging, invocation, and tool-grant
-   mechanics; separate platform requirements from writing advice.” Classify fetched
-   claims as platform mechanics and omit writing advice from the draft.
+1. **Fetch current runtime mechanics.** For runtime or library documentation available through Context7, spawn the
+   existing `mpx-context7-docs-fetcher` and ask for the active runtime's current skill frontmatter, packaging,
+   invocation, capability-grant, reload, and discovery mechanics with runtime-source citations. For installed-runtime
+   mechanics that Context7 does not cover, return a bounded handoff asking the parent to read the installed runtime
+   documentation and provide the cited findings. Treat only cited runtime facts as platform mechanics, and keep writing
+   advice in shared references.
 
-2. **Gather requirements.** In one numbered request, ask for purpose; explicit and
-   implicit invocation policy per target harness; distinct trigger branches; inputs and
-   outputs; ordered actions; points where premature or false completion is plausible;
-   procedural, reference, or mixed structure; branch-specific references and examples;
-   deterministic script candidates; and target packaging, including Codex
-   `agents/openai.yaml` policy when applicable. Use `the invocation input` to fill known items and
-   have every remaining item answered or marked not applicable.
+2. **Gather requirements.** In one numbered request, ask for every item not supplied by `the invocation input`:
+   1. purpose and skill identity;
+   2. explicit and implicit invocation policy for each target runtime;
+   3. distinct trigger branches and routing phrases;
+   4. inputs and outputs for every branch;
+   5. ordered actions and semantic endpoints;
+   6. points where premature or false completion is plausible;
+   7. procedural, reference, or mixed structure;
+   8. branch-specific references and examples;
+   9. deterministic script candidates;
+   10. target packaging and runtime-profile policy, including Codex `agents/openai.yaml` only when the target compiler
+       profile requires it.
 
-3. **Design the hierarchy.** Map every requirement to exactly one authoritative location:
-   shared actions in `SKILL.md`, branch-only facts in linked references, and deterministic
-   repeated operations in scripts. Reach each reference through a precise pointer no more
-   than one level deep. Split by branch or sequence when that changes what a run must load;
-   use 200 lines as a guardrail, not the sole split reason.
+   Require every field to be answered or marked not applicable. Resolve contradictory requirements before drafting.
 
-4. **Draft the files.** Create `skills/<skill-name>/SKILL.md` plus only needed
-   `REFERENCE.md`, `EXAMPLES.md`, `scripts/`, and packaging files. Use this minimal
-   frontmatter shape and add optional fields only when behavior requires them:
+3. **Design the hierarchy.** Map every requirement to one authoritative location: shared actions in `SKILL.md`,
+   branch-only facts in a linked reference, examples in `EXAMPLES.md`, deterministic repeated operations in scripts, and
+   runtime-only fields in compiler/runtime profiles. Reach each reference through a precise one-level pointer. Split
+   when a branch or sequence changes what a run must load; use 200 lines as a guardrail rather than the sole reason.
+
+4. **Draft canonical files.** Discover the configured canonical skill root from repository manifests; in this repository
+   use `content/skills/<skill-name>/`. Create `SKILL.md` plus only the needed `REFERENCE.md`, `EXAMPLES.md`, `scripts/`,
+   assets, and compiler-owned packaging inputs. Use portable canonical frontmatter rather than a runtime-native header:
 
    ```yaml
    ---
    name: <skill-name>
    description: '<portable purpose plus every distinct trigger branch>'
-   argument-hint: '[arguments]'
-   disable-model-invocation: true # omit for autonomous runtime discovery
-   allowed-tools: <tools actually used>
+   argument-hint: '[arguments]' # omit when no invocation input is accepted
+   triggers: <concise searchable routing phrases>
    metadata:
-     author: MartinoPolo
-     version: '0.1'
-     category: <valid AUTHORING.md category>
+     author: <author>
+     version: '<existing or initial version>'
+     category: <category>
+     mpx:
+       schemaVersion: 1
+       contentVersion: 1
+       skillPacks: [<configured pack>]
+       defaultExposure: <explicit-only|name-only|summary|full>
+       capabilities: [<semantic capabilities actually used>]
    ---
    ```
 
-   Prefer no `when_to_use`; if retained for runtime enrichment, ensure it contains no
-   unique trigger. For Codex explicit-only packaging set
-   `policy.allow_implicit_invocation: false` in `agents/openai.yaml`. Implement every
-   requested branch, use concise imperatives with semantic endpoints, integrate needed
-   validation or stop conditions into their actions, and ensure grants and referenced
-   paths correspond to body behavior. Add a standalone gate only under the shared policy.
+   For a port, preserve the original author, version, and category and continue its version lineage; do not reset
+   bookkeeping. The compiler translates `defaultExposure`, `argument-hint`, and semantic capabilities into each
+   supported runtime's native invocation policy, frontmatter, tools, and packaging. Put Codex `policy.allow_implicit_invocation: false` in
+   generated `agents/openai.yaml` only through the owning runtime profile; do not hand-maintain generated projection
+   output. Keep runtime-only `when_to_use`, concrete model IDs, and vendor tool names out of canonical content unless
+   the compiler schema explicitly owns them.
 
-5. **Validate and prune.** Compare the draft with the fetched mechanics and both shared
-   references. Run the single-source, environment-cache, relevance, no-op, and semantic-
-   completion pass. Treat uncertain no-ops as manual behavioral findings; record any
-   unmet canonical rule with a concrete reason.
+   Implement every requested branch. Use concise imperatives with semantic endpoints. Integrate relevant validation and
+   stop conditions into their actions, grant every used capability and no unused one, and ensure every linked path
+   exists in canonical source and survives compiled-relative projection. Add a standalone gate only under shared policy.
 
-6. **Audit.** Spawn `general-purpose` with the standard model class and prompt it to run
-   `mpx skill-audit skills/<skill-name>/SKILL.md`; apply safe mechanical fixes and list
-   remaining behavioral findings with their owning file and required decision.
+5. **Validate and prune.** Compare all drafts with fetched mechanics and shared references. Run compiler/frontmatter
+   validation and relevant repository-provided checks when their exact commands are available. Apply single-source,
+   environment-cache, relevance, positive-target, no-op, hierarchy, path-resolution, grant-integrity, and
+   semantic-completion passes. Treat uncertain no-ops as manual behavioral findings and record unmet rules with concrete
+   reasons. Reread every changed file completely.
 
-7. **Review with the user.** Present created files, invocation behavior by harness,
-   branch hierarchy, guideline-driven changes, unresolved findings, and optional
-   improvements. Apply requested changes, revalidate them, and iterate until the user
+6. **Audit.** Use the documented runtime `general-purpose` built-in. Inspect the existing runtime profiles, resolve the
+   standard class to a concrete model that is actually available, and pass that resolved value through the runtime's
+   real `model` argument with medium effort; `model="advanced"` and other prose class names are not executable model
+   values. Prompt it to run the canonical `skill-audit` behavior against `content/skills/<skill-name>/SKILL.md`, passing
+   all direct references and the target runtime profiles. Apply only safe mechanical fixes. List remaining behavioral
+   findings with owning file, check number, evidence, and required owner decision.
+
+7. **Review with the user.** Present created files, explicit invocation syntax, autonomous-discovery behavior by runtime
+   profile, branch hierarchy, compiler translations, guideline-driven changes, audit results, unresolved findings, and
+   optional improvements. Apply requested revisions, revalidate and re-audit affected checks, and iterate until the user
    approves.
 
 ## Final report
 
-Report files created, explicit invocation syntax, autonomous-discovery policy, validation
-results, audit results, unresolved manual no-op tests, and an accounting of every gathered
-requirement and changed artifact.
+```markdown
+Files Created/Changed: [paths] Explicit Invocation: [canonical syntax and profile translations] Autonomous Discovery:
+[policy by runtime] Branches: [branch -> owning file] Validation: [compiler and behavioral results] Audit: [fixed and
+remaining findings] Manual No-op Tests: [none or findings] Requirement Accounting: [requirement -> owning artifact]
+Approval: [approved or pending]
+```

@@ -10,8 +10,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Git must preserve real symlinks on Windows (default core.symlinks=false turns them into text files).
-git config --global core.symlinks true
+# This repository must preserve real symlinks on Windows. Do not alter the user's global Git config.
+git -C $Repo config --local core.symlinks true
 
 $boardsDir = Join-Path $Vault 'Boards'
 $filesDir  = Join-Path $Vault 'Files'
@@ -82,7 +82,16 @@ $entries   = @('.mpx/BOARD.md', '.mpx/board-files/')
 $existing  = if (Test-Path $gitignore) { Get-Content $gitignore } else { @() }
 $toAdd     = $entries | Where-Object { $existing -notcontains $_ }
 if ($toAdd) {
-  Add-Content -Path $gitignore -Value $toAdd
+  $separator = [Environment]::NewLine
+  $prefix = ''
+  if (Test-Path $gitignore) {
+    $raw = [IO.File]::ReadAllText($gitignore)
+    if ($raw.Length -gt 0 -and -not ($raw.EndsWith("`n") -or $raw.EndsWith("`r"))) {
+      $prefix = $separator
+    }
+  }
+  $text = $prefix + ($toAdd -join $separator) + $separator
+  [IO.File]::AppendAllText($gitignore, $text, [Text.UTF8Encoding]::new($false))
   Write-Host "gitignored: $($toAdd -join ', ')"
 }
 

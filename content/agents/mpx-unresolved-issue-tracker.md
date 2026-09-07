@@ -1,170 +1,83 @@
 ---
 name: mpx-unresolved-issue-tracker
-description: 'Routes unresolved items from execution to sibling GitHub issues or a epic-level tracking issue. Spawned by skills that discover non-blocking issues during implementation.'
+description:
+  'Routes unresolved execution items to sibling Issues or an epic tracking Issue using configured Issue-provider body
+  links.'
 ---
 
 # Unresolved Triage Agent
 
-You receive a source GitHub issue number and a list of unresolved items discovered during its implementation. Your job: route each item to the right place in GitHub so nothing gets lost.
+Given a source Issue and unresolved items (`summary`, `reasoning`, `description`), route every item without losing it.
+Modify Issue bodies, never comments.
 
-**Tool preference:** Use `gh` CLI via Bash tool for all GitHub operations.
+## Provider setup (required)
 
-## Input
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
+`skills/shared/PROVIDER_ROUTING.md` and the matching provider guide beneath that exact root, then load `mpxconfig.json`
+and resolve `issues.provider`. If no loaded root is available, request a parent-resolved absolute content-root path and
+stop; never search fallback roots or guess a checkout.
 
-You receive:
+- **GitHub:** use native `gh issue view/list/edit/create`, with `--repo` when required by the launch identity.
+- **GitLab:** use native `glab issue view/list/update/create --repo <namespace/project>` as documented by the guide.
+- **KanbanFlow:** obtain board id, columns, labels/tags, and credentials only from `mpxconfig.json` and `KANBANFLOW.md`;
+  do not infer them.
+- **Local:** use the managed local operations documented by `LOCAL.md`; these may use `mpx` CLI.
 
-1. **Source issue number** — the issue being implemented when items were discovered
-2. **Unresolved items** — each with: summary, reasoning (why unresolved), description
+Never switch providers. Never use native parent/sub-Issue APIs. Relationships are body links encoded in Issue bodies.
+Mutating sibling, tracking, or epic bodies and creating a tracking Issue requires caller authorization; an existing
+authorization to execute this triage is sufficient, so do not add an unconditional confirmation prompt. Without mutation
+authorization, return a bounded blocked result. If the source body has no explicit epic link that can be parsed and
+fetched, report every item under `could_not_route`.
 
 ## Process
 
-### Step 1: Identify Epic and Siblings
-
-```bash
-OWNER_REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
-OWNER=$(echo $OWNER_REPO | cut -d'/' -f1)
-REPO=$(echo $OWNER_REPO | cut -d'/' -f2)
-
-# Get source issue title for later use
-SOURCE_TITLE=$(gh issue view <SOURCE_NUMBER> --json title --jq '.title')
-
-# Get parent epic
-EPIC_DATA=$(gh api graphql -f query='
-  query {
-    repository(owner: "'"$OWNER"'", name: "'"$REPO"'") {
-      issue(number: <SOURCE_NUMBER>) {
-        parentIssue { number title id }
-      }
-    }
-  }
-' --jq '.data.repository.issue.parentIssue')
-```
-
-If no parent epic found → report that items could not be triaged (no epic context) and exit.
-
-Extract `EPIC_NUMBER`, `EPIC_TITLE`, and `EPIC_NODE_ID` from the response.
-
-### Step 2: Fetch Open Sub-Issues
-
-```bash
-gh api graphql -f query='
-  query {
-    repository(owner: "'"$OWNER"'", name: "'"$REPO"'") {
-      issue(number: '"$EPIC_NUMBER"') {
-        subIssues(first: 50, filter: {states: [OPEN]}) {
-          nodes { number title body labels(first: 10) { nodes { name } } }
-        }
-        milestone { title }
-      }
-    }
-  }
-'
-```
-
-Separate sub-issues into:
-
-- **Sibling issues** — open sub-issues excluding the source issue and any issue labeled `unresolved`
-- **Existing tracking issue** — open sub-issue labeled `unresolved` (at most one)
-
-### Step 3: Route Each Item
-
-For each unresolved item:
-
-#### 3a: Scan Siblings for Scope Match
-
-Check each sibling issue's `## Description` and `## Acceptance Criteria`. The item fits a sibling if it directly relates to that sibling's stated scope and would naturally be addressed during that sibling's implementation.
-
-**If the item fits a sibling** → append to that sibling's issue body:
-
-```bash
-# Fetch current body
-CURRENT_BODY=$(gh issue view <SIBLING_NUMBER> --json body --jq '.body')
-# Append and update
-gh issue edit <SIBLING_NUMBER> --body "$UPDATED_BODY"
-```
-
-Appended format — if the sibling already has an `## Unresolved from #<source>` section, append the new item to it. Otherwise create the section:
+1. Fetch source title/body. Parse its explicit epic Issue link/identifier. Fetch the epic body.
+2. Parse sibling and tracking Issue links from the epic body. Fetch open linked Issues. Siblings exclude source and any
+   Issue labeled/tagged `unresolved`; at most one open linked tracking Issue may be reused.
+3. For each item, compare sibling `## Description` and `## Acceptance Criteria`. If directly in scope, append (or
+   idempotently merge) this section:
 
 ```markdown
-## Unresolved from #<source_issue>
+## Unresolved from <source-link>
 
 ### <Item summary>
 
-**Why unresolved:** <reasoning>
-**Summary:** <description>
+**Why unresolved:** <reasoning> **Summary:** <description>
 ```
 
-#### 3b: Route to Tracking Issue
-
-If the item doesn't fit any sibling:
-
-**If tracking issue exists** → update its body, adding items under a `## From #<source> — <source_title>` group. If that group already exists (re-run), append to it.
-
-**If no tracking issue exists** → create one:
-
-```bash
-gh label create "unresolved" --description "Tracks unresolved items from implementation" --color "D93F0B" --force
-
-MILESTONE=$(gh issue view $EPIC_NUMBER --json milestone --jq '.milestone.title')
-
-ISSUE_URL=$(gh issue create \
-  --title "Unresolved: $EPIC_TITLE" \
-  --label "task,HITL,unresolved" \
-  --milestone "$MILESTONE" \
-  --body "$(cat <<'BODY'
-Tracks unresolved issues discovered during implementation of Epic #<EPIC_NUMBER>.
-
-## From #<source_issue> — <source_title>
-
-### <Item summary>
-**Source:** #<source_issue>
-**Why unresolved:** <reasoning>
-**Summary:** <description>
-BODY
-)")
-
-# Link as sub-issue of epic
-gh api graphql -f query="
-  mutation {
-    addSubIssue(input: {
-      issueId: \"$EPIC_NODE_ID\",
-      subIssueUrl: \"$ISSUE_URL\"
-    }) {
-      issue { number }
-      subIssue { number }
-    }
-  }
-"
-```
-
-## Output
-
-Report what was routed where:
+4. Otherwise append under `## From <source-link> — <source title>` in the existing tracking Issue. If none exists,
+   create `Unresolved: <epic title>` with the provider-equivalent `task`, `HITL`, and `unresolved` labels/tags when
+   supported, preserving the epic milestone/column when supported. Its body begins:
 
 ```markdown
-## Unresolved Triage Results
+Tracks unresolved items discovered during implementation of <epic-link>.
 
-**Source:** #<number> — <title>
-**Epic:** #<number> — <title>
+## From <source-link> — <source title>
 
-### Routed to Sibling Issues
+### <Item summary>
 
-- **<item summary>** → #<sibling> (<sibling title>)
-
-### Routed to Tracking Issue
-
-- **<item summary>** → #<tracking> (Unresolved: <epic title>)
-  - [created | updated]
-
-### Could Not Route
-
-- [any items that failed, with reason]
+**Source:** <source-link> **Why unresolved:** <reasoning> **Summary:** <description>
 ```
 
-## Constraints
+5. Add the tracking Issue link to the epic body using the epic's existing linked-Issues section/style. This body edit is
+   the relationship; do not call parent/sub-Issue APIs.
 
-- Append to issue **body**, not comments — body content is read during execution
-- Do not create duplicate sections — check for existing `## Unresolved from #N` or `## From #N` before appending
-- Do not create tracking issue if all items were routed to siblings
-- Tracking issue always gets `HITL` label — human must decide on each item
-- One tracking issue per epic — reuse existing, never create a second one
+Check existing headings and item summaries before every append. Do not create a tracking Issue if all items fit
+siblings. Never create a second tracking Issue for one epic. On partial provider failure, continue independent items and
+record exact failures.
+
+## Output (ONLY JSON)
+
+```json
+{
+  "status": "routed | partial | blocked",
+  "provider": "github | gitlab | kanbanflow | local",
+  "source": { "id": "42", "title": "..." },
+  "epic": { "id": "7", "title": "..." },
+  "routed_to_siblings": [{ "summary": "...", "issue_id": "9", "issue_title": "..." }],
+  "routed_to_tracking": [{ "summary": "...", "issue_id": "18", "action": "created | updated" }],
+  "could_not_route": [{ "summary": "...", "reason": "<=2 lines" }]
+}
+```
+
+Arrays contain at most one entry per input item. Return no provider command output or prose outside JSON.

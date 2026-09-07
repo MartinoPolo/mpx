@@ -1,44 +1,48 @@
-# MPX Issue, Review, and CI Contracts
+# Issue, PR, and CI Interfaces
 
-Canonical skills use provider-neutral MPX contracts. They do not detect hosting providers or invoke
-provider CLIs. The immutable launch identity selects an approved adapter and account.
+Here, PR means a GitHub pull request, GitLab merge request, or Gerrit change, as applicable. Canonical workflows have two
+approved interfaces. The calling workflow selects one explicitly:
 
-## Identity
+1. the typed provider-neutral `mpx issue`, `mpx review`, and `mpx ci` APIs; or
+2. a native provider guide governed by [PROVIDER_ROUTING.md](PROVIDER_ROUTING.md).
 
-Pass `--identity <launch-identity>` and `--json` on every operation. Reuse the identity selected at
-launch; never infer an account or repository from remotes. If identity is unavailable or ambiguous,
-stop and ask the user.
+Native workflows use their guide directly and do not require a typed facade. Never use an unselected provider CLI as
+fallback.
 
-## Capabilities
+## Typed MPX interface
 
-| Intent         | Contract                                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| Create work    | `mpx issue create --identity <launch-identity> --json` with title, body, semantic labels |
-| Read work      | `mpx issue view --identity <launch-identity> --json --id <issue-id>`                     |
-| Update/comment | `mpx issue update --identity <launch-identity> --json --id <issue-id>`                   |
-| Open review    | `mpx review create --identity <launch-identity> --json` with source and target branches  |
-| Read review    | `mpx review view --identity <launch-identity> --json --id <review-id>`                   |
-| Update review  | `mpx review update --identity <launch-identity> --json --id <review-id>`                 |
-| Inspect CI     | `mpx ci status --identity <launch-identity> --json` with explicit review or pipeline ID  |
+Pass `--identity <launch-identity>` and `--json` on every operation. Reuse the immutable launch identity; never infer an
+account. Read exact actions and flags from generated [basic](MPX_CLI_BASIC.md) or [complete](MPX_CLI_REFERENCE.md) help.
+Use returned structured IDs for later operations, preserve schema/version fields, and fail closed on unknown versions.
+Do not invent an action absent from installed help.
 
-Use structured response IDs for every later operation. There is no implicit issue, review, or CI
-discovery. Preserve schema/version fields and fail closed on an unknown response version.
+The typed interface remains valid when its stable structured envelope is required and for managed Local Markdown
+storage. Local always uses the existing managed MPX installation.
+
+## Native interface
+
+Read the nearest project configuration, select only the needed role, validate an explicit target, and load the matching
+[GitHub](providers/GITHUB.md), [GitLab](providers/GITLAB.md), [KanbanFlow](providers/KANBANFLOW.md),
+[Gerrit](providers/GERRIT.md), or [Local](providers/LOCAL.md) guide. Issue work uses only the Issue provider; PR and
+CI use only the repository provider. Native authentication remains unchanged.
+
+Guides define supported list/view/create/edit/comment/label, milestone, PR, merge, and CI operations. Their
+limitations are contractual. Use body links rather than native sub-Issue hierarchy.
 
 ## Unsupported operations
 
-Adapters may not support every field or operation. Preserve the structured error and return a
-manual handoff containing:
+Stop only the affected branch and return a manual handoff containing:
 
-- launch identity (opaque ID only, no credentials);
-- requested capability and target ID;
-- unsupported field/operation code;
-- safe remaining steps and the user decision needed.
+- selected interface, role/provider, and explicit target ID;
+- immutable launch identity as an opaque label only when the typed interface or launch binding supplied one;
+- requested operation and exact unsupported/configuration/tooling condition;
+- safe remaining steps and the decision needed.
 
-Do not fall back to provider CLIs, copy tokens between tools, silently omit fields, or reinterpret an
-unsupported operation.
+Never switch providers, copy tokens, silently omit fields, reinterpret an unsupported operation, or repeat an uncertain
+mutation.
 
-## Semantic labels
+## Labels and milestones
 
-Submit labels as semantic requests such as `bug`, `task`, `enhancement`, `Design needed`, `HITL`, or
-`AFK`. The adapter maps or rejects them. Do not create provider-native labels, reinterpret them, or
-silently continue without a rejected label. Ask whether to proceed without it.
+Inspect existing labels and milestones first. Typed operations use only documented semantic requests. Native operations
+use exact provider values. Create a label or milestone only when supported and explicitly authorized. A missing or
+rejected required value is a decision point, not permission to continue silently.

@@ -1,74 +1,59 @@
 ---
 name: mpx-ci-fixer
-description: 'Fixes a failing CI run on a PR branch. Fetches logs, diagnoses, fixes, pushes, re-watches. Returns bounded JSON.'
+description:
+  'Fixes failing configured-provider CI on a PR branch: fetches logs, diagnoses, fixes, pushes, and re-watches.
+  Returns bounded JSON.'
 ---
 
 # CI Fixer Agent
 
-Fix a failing CI run on a PR branch. The caller passes: PR number, branch, failing run id
-(discover it if omitted), and optionally local verify commands. **The caller never reads CI
-logs** — the bounded JSON return below is the only channel back.
+The caller passes PR number, branch, optional failing run/pipeline id, optional local verification commands, and
+immutable launch identity. The caller never sees raw logs. You may spawn `mpx-executor`, `mpx-checker`, and
+`mpx-git-committer`.
 
-You may spawn: `mpx-executor`, `mpx-checker`, `mpx-git-committer`.
+## Provider setup (required)
 
-## Attempt loop (max 3 attempts)
+Resolve the loaded content root, read Provider Routing and `mpxconfig.json`, resolve `repository.provider`, then select
+and follow its explicit native guide. Require the validated repository target and PR ID plus the caller-supplied or
+provider-returned positive run/pipeline/job ID before every inspect, retry, or poll operation; never infer IDs from an
+unbounded "latest" result or switch providers.
 
-### 1. Fetch failure details yourself
+- **GitHub:** with the validated repo, inspect `gh run view <run-id> --repo <repo> --log-failed`; rerun an
+  infrastructure flake with `gh run rerun <run-id> --repo <repo> --failed`; watch
+  `gh pr checks <review-id> --repo <repo> --watch`.
+- **GitLab:** with validated project/host and explicit pipeline/job IDs, use the API pipeline/job commands,
+  `glab ci trace <job-id> --repo <target>`, and `glab ci retry <job-id> --repo <target>` documented by the selected
+  guide; poll only those IDs boundedly.
+- **Gerrit:** CI operations are unsupported. Return a bounded manual handoff naming the validated project,
+  change/patch-set, and CI evidence needed; do not attempt another provider.
 
-```bash
-gh run list --branch <branch> --limit 1 --json databaseId,conclusion --jq '.[0]'   # if run id not given
-gh run view <run_id> --log-failed
-```
+Unavailable identity/CLI or unsupported CI operation is immediately blocked; do not invent an `mpx ci` facade.
 
-### 2. Diagnose root cause
+## Attempt loop (maximum 3)
 
-Extract file:line, error message, failing test/job name. Classify:
+1. Fetch failed job details. Extract file:line, error, test/job name.
+2. Diagnose: lint/format/type/build; test failure; infrastructure flake; or environment difference. Never weaken a
+   correct test. Treat intermittent tests as flaky and harden their synchronization. Missing secrets/outages are
+   blocked.
+3. Apply a tiny obvious fix directly. For larger/multi-file fixes spawn `mpx-executor` with exact file, root cause,
+   current behavior, and concrete edit per failure.
+4. If local commands were supplied, run relevant ones through `mpx-checker`; fix regressions before push.
+5. Spawn `mpx-git-committer` with `push: true` and `commit_hint: "fix: CI failure — <summary>"`; watch selected-provider
+   CI. Green ends the loop; otherwise retry, up to three total attempts.
 
-- **Lint/format/type/build error** → concrete code fix.
-- **Test failure** → decide whether implementation or test is wrong relative to acceptance
-  criteria. Never weaken a correct test to make it pass. A test that only fails intermittently
-  is **flaky** — harden it (focus/settle guards, generous `waitFor` timeouts); a green rerun of
-  a flaky test is not a fix.
-- **Infrastructure/environment flake** (runner setup, network, quota) → `gh run rerun <run_id> --failed`,
-  then skip to step 5's watch.
-- **Environment difference vs local** (OS, headless browser, missing secret, build flag) → fix
-  code/config where possible; a missing secret or infra outage is unfixable → return `"blocked"`
-  immediately with the root cause.
-
-### 3. Apply fix
-
-- Small, clearly-scoped fix → apply directly with Edit.
-- Larger or multi-file fix → spawn `mpx-executor` with pre-analyzed instructions: per failure, file
-  path, root cause, exact change to apply. Never vague "fix the CI".
-
-### 4. Verify locally
-
-If the caller passed local verify commands, spawn `mpx-checker` with the ones relevant to the fix.
-Fix regressions before pushing.
-
-### 5. Commit, push, re-watch
-
-1. Spawn `mpx-git-committer`: push: true, commit_hint: "fix: CI failure — <summary>".
-2. Watch: `gh pr checks <pr_number> --watch`
-3. **All green** → return `"clean"`. **Still failing** → next attempt (max 3 total).
-
-## Return contract (STRICT)
-
-After success or exhausting 3 attempts, return ONLY this JSON — no logs, no prose outside it:
+## Return contract (ONLY JSON)
 
 ```json
 {
-  "status": "clean" | "issues_remaining" | "blocked",
+  "status": "clean | issues_remaining | blocked",
+  "provider": "github | gitlab | gerrit",
   "iterations_used": 1,
   "files_changed": ["src/foo.ts"],
-  "summary": "≤10 lines: root causes found, fixes applied, commits pushed",
-  "blockers": [],
-  "unresolved_findings": []
+  "summary": "<=10 lines",
+  "blockers": [{ "job": "name", "root_cause": "<=2 lines" }],
+  "unresolved_findings": [{ "summary": "...", "reason": "...", "description": "..." }]
 }
 ```
 
-- `"clean"` — CI fully green; fixes (if any) committed and pushed.
-- `"blocked"` — 3 attempts exhausted, or the failure is unfixable from the repo (missing secret,
-  infra outage). Each `blockers` entry: check/job name + root cause in ≤2 lines.
-- `"issues_remaining"` — CI green but secondary out-of-scope issues surfaced; list them in
-  `unresolved_findings` as `{"summary", "reason", "description"}`.
+`iterations_used` is 0-3. `clean` means all CI is green; `blocked` means unfixable or attempts exhausted;
+`issues_remaining` means CI is green but secondary out-of-scope issues surfaced. No logs or prose outside JSON.

@@ -1,7 +1,7 @@
 # React Review Reference
 
-Judgment-based patterns not caught by linting.
-Adapted from [awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
+Judgment-based patterns not caught by linting. Adapted from
+[awesome-skills/code-review-skill](https://github.com/awesome-skills/code-review-skill).
 
 ---
 
@@ -141,15 +141,22 @@ function Good() {
 function BadServerComponent() {
   const [count, setCount] = useState(0); // Error — no hooks in RSC
 }
+```
 
-// ✅ Extract interactive logic to 'use client' leaf components
-('use client');
-function Counter() {
+Keep interactive leaves in their own client module:
+
+```tsx
+'use client';
+
+export function Counter() {
   const [count, setCount] = useState(0);
   return <button onClick={() => setCount((c) => c + 1)}>{count}</button>;
 }
+```
 
-// Server Component fetches data, delegates interaction
+A separate Server Component fetches data and delegates interaction:
+
+```tsx
 async function Page() {
   const data = await fetchData();
   return (
@@ -159,12 +166,10 @@ async function Page() {
     </div>
   );
 }
-
-// ❌ 'use client' too high — entire tree becomes client
-('use client'); // in layout.tsx — makes ALL children client components
-
-// ✅ Push 'use client' to leaf components that need interactivity
 ```
+
+Keep `'use client'` in the interactive leaf module rather than a shared layout; placing it high in the import tree
+expands the client boundary.
 
 ## React 19 Actions
 
@@ -209,10 +214,7 @@ function BadForm() {
 ### useOptimistic — instant UI feedback
 
 ```tsx
-const [optimisticLikes, addOptimisticLike] = useOptimistic(
-  likes,
-  (current, increment: number) => current + increment,
-);
+const [optimisticLikes, addOptimisticLike] = useOptimistic(likes, (current, increment: number) => current + increment);
 
 const handleLike = async () => {
   addOptimisticLike(1); // immediate UI update

@@ -1,7 +1,10 @@
 ---
 name: bug-report
-description: "Investigates a bug's root cause, designs a TDD fix plan, and opens an issue/task labelled bug in the project's tracker."
+description: "Investigates a bug's root cause, designs a TDD fix plan, and opens an issue/task labelled bug in the..."
 metadata:
+  author: MartinoPolo
+  version: '0.6'
+  category: issue-management
   mpx:
     schemaVersion: 1
     skillPacks: [work]
@@ -10,72 +13,82 @@ metadata:
 
 # Bug Report
 
-Investigate bug root cause, design TDD fix plan, log an issue/task in the project's tracker.
-Resolve which tracker CLI and how to run each verb via
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md). the invocation input
+Investigate each bug from the invocation input to its root cause, design a TDD fix plan, and create or update an Issue
+through the selected Issue provider.
 
-## Input Resolution
+## Provider routing
 
-- If `the invocation input` provided: parse as bug description(s). Split on double newlines (`\n\n`) for multiple bugs — each block becomes a separate investigation.
-- If no arguments: ask user to describe the bug(s).
-- Single bug = single investigation. Multiple bugs = parallel investigations.
+Read the nearest committed `mpxconfig.json`, resolve `issues.provider`, and follow
+[provider routing](../shared/PROVIDER_ROUTING.md). Load only the selected [GitHub](../shared/providers/GITHUB.md),
+[GitLab](../shared/providers/GITLAB.md), [KanbanFlow](../shared/providers/KANBANFLOW.md), or
+[Local Markdown](../shared/providers/LOCAL.md) guide. Preserve launch-bound authentication and explicit target identity.
+Never infer from remotes, switch providers, or invent commands. Local Markdown uses only its documented MPX Issue
+interface. Resolve canonical tool paths through [content paths](../shared/CONTENT_PATHS.md).
 
-## Process (per bug)
+## Input resolution
 
-### Step 1: Capture Problem
+- If the invocation input is present, parse it as one or more bug descriptions. Blocks separated by blank lines are
+  separate bugs only when each block describes a distinct failure.
+- If it is absent, ask the user to describe actual behavior, expected behavior, and reproduction.
+- Investigate one bug once. For multiple independent bugs, run separate named investigations in parallel.
 
-Parse bug description for:
+## Process per bug
 
-- **Actual behavior** — what happens now
-- **Expected behavior** — what should happen
-- **Reproduction steps** — how to trigger it
+### 1. Capture the problem
 
-If critical info is missing (can't investigate without it), ask questions. Then move to investigation promptly.
+Extract actual behavior, expected behavior, reproduction steps, environment details relevant to the failure, and
+observed diagnostics. Ask only for critical information without which investigation cannot proceed; then investigate
+promptly. Never publish secrets, machine paths, private identity data, or unrelated logs.
 
-### Step 2: Investigate
+### 2. Investigate root cause
 
-Spawn `mp-issue-analyzer` sub-agent:
+Spawn a named `mpx-issue-analyzer` agent for each bug. For multiple bugs, launch those agents in parallel and keep their
+evidence separate. Give each agent the parsed problem and require it to:
 
-> Explore this codebase to investigate a bug.
->
-> **Bug:** [parsed description]
->
-> Your tasks:
->
-> 1. Find where the bug manifests in the codebase
-> 2. Trace the code path involved
-> 3. Identify the root cause (not just the symptom)
-> 4. Find related code, patterns, and existing tests
->
-> Return your full analysis including root cause, affected modules, and code path description.
+1. locate where the failure manifests;
+2. reproduce or trace the relevant public behavior when feasible;
+3. follow the code and data path across module boundaries;
+4. identify the root cause rather than restating the symptom;
+5. find related patterns, regressions, tests, and likely affected behavior;
+6. return evidence, affected modules, and a durable root-cause explanation.
 
-For multiple bugs: spawn multiple `mp-issue-analyzer` sub-agents in parallel.
+Reconcile the agent result with repository evidence. If the root cause remains uncertain, label it as a hypothesis and
+identify the missing evidence rather than asserting certainty.
 
-### Step 3: Design TDD Fix Plan
+### 3. Design the TDD fix plan
 
-Based on investigation results, design ordered RED-GREEN cycles:
+Create ordered RED-GREEN cycles. Each cycle is a vertical behavioral slice:
 
-- Each cycle is a **vertical slice**: RED (one test capturing broken/missing behavior) then GREEN (minimal code change to pass)
-- Tests verify behavior through **public interfaces**, not implementation details
-- Each test should survive internal refactors
-- Final step: REFACTOR for cleanup after all cycles pass
+- **RED:** add one test through a public interface that demonstrates the broken or missing behavior;
+- **GREEN:** make the smallest production change that satisfies that behavior;
+- repeat for distinct behaviors;
+- **REFACTOR:** clean up only after all cycles pass.
 
-### Step 4: Log the issue/task
+Tests must survive internal refactors. Include regression boundaries and relevant error cases without prescribing
+brittle implementation details.
 
-Ensure the tracker's `bug` type label exists (see
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md) § Label mapping for how `bug` is represented in the
-resolved tracker).
+### 4. Search for duplicates
 
-**Title format:** `bug: [concise description]`
+Before creating anything, search open and closed Issues through the selected provider using the symptom, domain terms,
+diagnostics, and root-cause concepts. View plausible matches.
 
-Log an issue/task in the tracker (verb + concrete CLI in ISSUE_TRACKER.md) with the `bug` label
-plus any area labels detected from codebase exploration, and this body:
+- If an existing Issue describes the same root cause and scope, update its durable body when authorized or add a concise
+  evidence comment; do not create a duplicate.
+- If a similar Issue differs materially, record the relationship in the new Issue body.
+- If provider search, edit, or comment is unsupported, report that limitation and do not claim duplicate resolution.
+
+### 5. Create or update the Issue
+
+Use title format `bug: [concise description]`. Ensure the `bug` label exists using only the selected provider's
+supported label operation, and include relevant existing area labels discovered during investigation. KanbanFlow labels
+must already exist. If label creation is unsupported, report the gap truthfully.
+
+Use this durable body:
 
 ```markdown
 ## Problem
 
-**Actual behavior:** [what happens]
-**Expected behavior:** [what should happen]
+**Actual behavior:** [what happens] **Expected behavior:** [what should happen]
 
 **How to reproduce:**
 
@@ -84,34 +97,38 @@ plus any area labels detected from codebase exploration, and this body:
 
 ## Root Cause Analysis
 
-[Code path description — why it fails, contributing factors]
-[Describe modules, behaviors, and contracts — NO file paths or line numbers]
+[Why the code path fails and contributing contract or state conditions, expressed in durable module and behavior terms]
 
 ## TDD Fix Plan
 
-1. **RED:** [test description — what behavior to verify]
-   **GREEN:** [minimal change to make test pass]
+1. **RED:** [public behavior to verify] **GREEN:** [minimal behavioral change]
 
-2. **RED:** [next test]
-   **GREEN:** [next change]
+2. **RED:** [next public behavior] **GREEN:** [next minimal change]
 
 3. **REFACTOR:** [cleanup after all tests pass]
 
 ## Acceptance Criteria
 
-- [ ] [criterion 1]
-- [ ] [criterion 2]
+- [ ] [independently observable outcome]
+- [ ] [regression boundary]
 ```
 
-### Step 5: Report
+Omit unsupported or unknown details rather than fabricating them. Do not put file paths, line numbers, transient
+implementation details, or machine-specific data in the Issue. Use project domain language, including `.mpx/CONTEXT.md`
+when present. Review multiline content before submission.
 
-- Print the issue/task reference (URL or number) and one-line root cause summary per bug
-- Multiple bugs: list all issue/task references with brief summary each
+Create or update only through the selected guide. Capture the immutable Issue ID and canonical URL from the successful
+response. A successful creation remains valid if a later optional label, assignment, comment, or relationship update
+fails; report the exact capability gap and required manual action.
 
-## Rules
+## Report
 
-- Issue body must be **durable** — no file paths, line numbers, or implementation details that break after refactors
-- Describe modules, behaviors, and contracts instead
-- Use project's domain language (check `.mpx/CONTEXT.md` § Domain Language)
-- Each RED-GREEN cycle is a vertical slice — NOT horizontal
-- Keep investigation thorough but issue body concise
+For each bug, report:
+
+- immutable Issue ID and canonical URL;
+- whether an Issue was created, updated, or identified as a duplicate;
+- one-line root-cause summary and confidence when uncertain;
+- labels actually applied;
+- unsupported, failed, or manually required follow-up.
+
+Never claim creation, update, duplicate linkage, or label application without provider confirmation.

@@ -1,27 +1,48 @@
 ---
 name: commit-push-pr
-description: Commit and push verified changes, then create or update a provider-neutral Review
-triggers: committing, pushing, and publishing a Review together
+description: Stage, commit, and push changes, then create or update a provider pull request (PR), GitLab merge request (MR), or Gerrit change
+argument-hint: '[PR ID or URL] [draft] [base branch] [commit or description hint]'
+triggers: committing, pushing, and publishing a PR together
 metadata:
+  author: MartinoPolo
+  version: '0.6'
+  category: git-workflow
   mpx:
     schemaVersion: 1
     skillPacks: [work]
     defaultExposure: name-only
 ---
 
-# Commit, Push, and PR
+# Commit, Push, and Create or Update a PR
 
-## Launch identity
+Run the shared commit workflow phases in order. `the invocation input`
 
-`<launch-identity>` is the immutable identity selected when MPX launched. Use it for every provider operation. If the launch identity is unavailable, stop and ask the user; never infer or substitute one.
+Before a provider command, read [Provider Routing](../shared/PROVIDER_ROUTING.md), load `mpxconfig.json`, resolve
+`repository.provider`, and read its native guide in `../shared/providers/`. Use only documented native commands and
+preserve the immutable launch identity and account-bound CLI environment. Resolve Markdown links relative to this
+compiled skill; when a literal absolute content path is required, follow [Content Paths](../shared/CONTENT_PATHS.md)
+using the validated `MPX_ACTIVE_CONTENT_ROOT`, without fallback-root searches or guessed checkouts.
 
 ## Workflow
 
-1. Inspect status, full diff, branch, base relationship, and repository instructions. Run required checks and preserve unrelated changes.
-2. Delegate a focused conventional commit to `mp-git-committer` with push authorization. If there is nothing to commit, verify whether the branch is already pushed before continuing.
-3. Resolve a linked Issue only from branch/commit evidence or `mpx issue view --identity <launch-identity> --json`; do not guess.
-4. A trusted Review ID remains immutable for the run: never replace it from branch or provider discovery. With an explicit Review ID, inspect it using `mpx review view --id <review-id> --identity <launch-identity> --json`, then update via `mpx review update --id <review-id> --title <title> --body <body> --identity <launch-identity> --json`.
-5. Without a Review ID, create one using `mpx review create --title <title> --body <body> --source-branch <source> --target-branch <target> --identity <launch-identity> --json`; include draft state when requested and capture the returned explicit Review ID.
-6. Report commit, push, target branch, Review ID/URL/state, created-or-updated status, and skipped steps.
+1. Read [Git Commit Workflow](../shared/GIT_COMMIT_WORKFLOW.md).
+2. Run **Phase A** through `mpx-git-committer` with `push: true` and `commit_hint: the invocation input`. On `SKIP` for
+   nothing to commit, verify the branch is already pushed before continuing.
+3. Run **Phase B** exactly as defined by the shared workflow. Do not duplicate Issue discovery in this skill.
+4. Run **Phase C** through `mpx-review-manager`, passing any explicit PR ID or URL, requested base branch,
+   `draft: true` when requested, and the invocation input or Phase A summary as the description hint. The shared
+   workflow owns PR identity, title, and body handling.
+5. Preserve Phase A and Phase C structured results and escalation. Diagnose failures in the parent and retry the same
+   bounded agent request up to twice. Never switch identity or environment, use undocumented actions, or claim failed
+   push or publication succeeded.
 
-On `CAPABILITY_UNSUPPORTED`, return the structured remediation and stop publication without falling back to a provider CLI. Never claim a failed Review operation succeeded.
+Use provider vocabulary at the command boundary while reporting the result as a PR.
+
+## Output
+
+- Commit hash and message, when committed
+- Push status
+- Base branch used
+- PR URL and provider number/IID
+- Whether created or updated, and draft state
+- Steps skipped, if any

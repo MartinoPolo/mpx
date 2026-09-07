@@ -16,13 +16,13 @@ import {
   renderPromptDocument,
   countItems,
   resolveMode,
+  resolveOutputDirectory,
 } from './lib/compose.mjs';
 
 const DEFAULT_MODEL = 'gemini-3.6-flash';
 const GENERATE_CONTENT_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OEMBED_ENDPOINT = 'https://www.youtube.com/oembed';
 const OEMBED_TIMEOUT_MS = 10_000;
-const SHEETS_FOLDER_NAME = '_VIDEO_SHEETS';
 const RAW_TEXT_PREVIEW_LENGTH = 300;
 const NETWORK_ATTEMPTS = 3;
 const USAGE =
@@ -94,10 +94,9 @@ function parseJsonOrNull(text) {
  */
 async function fetchVideoMetadata(youtubeUrl) {
   try {
-    const response = await fetch(
-      `${OEMBED_ENDPOINT}?url=${encodeURIComponent(youtubeUrl)}&format=json`,
-      { signal: AbortSignal.timeout(OEMBED_TIMEOUT_MS) },
-    );
+    const response = await fetch(`${OEMBED_ENDPOINT}?url=${encodeURIComponent(youtubeUrl)}&format=json`, {
+      signal: AbortSignal.timeout(OEMBED_TIMEOUT_MS),
+    });
     if (!response.ok) {
       return null;
     }
@@ -117,16 +116,11 @@ async function requestSheet({ geminiApiKey, model, youtubeUrl, focus, mediaResol
   let response;
   for (let attempt = 1; ; attempt += 1) {
     try {
-      response = await fetch(
-        `${GENERATE_CONTENT_ENDPOINT}/${model}:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(
-            buildExtractionRequest(youtubeUrl, focus, { mediaResolution, mode }),
-          ),
-        },
-      );
+      response = await fetch(`${GENERATE_CONTENT_ENDPOINT}/${model}:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildExtractionRequest(youtubeUrl, focus, { mediaResolution, mode })),
+      });
       break;
     } catch (networkError) {
       if (attempt === NETWORK_ATTEMPTS) {
@@ -168,37 +162,6 @@ function parseSheet(sheetText) {
   );
 }
 
-/**
- * The run folder, `<root>/_VIDEO_SHEETS/[Channel] Video Title/`. There is deliberately no
- * working-directory fallback: a sheet written into whatever repo the user happened to be
- * standing in is lost work, so an unconfigured machine stops here with the variable to set.
- */
-function assertOutputContainment(root, candidate) {
-  const child = path.relative(root, candidate);
-  if (child === '' || (!child.startsWith('..') && !path.isAbsolute(child))) {
-    return candidate;
-  }
-  throw new Error(`Output must stay under MPX_AI_GENERATED: ${candidate}`);
-}
-
-export function resolveOutputDirectory(requestedDirectory, folderName) {
-  const configuredRoot = (process.env.MPX_AI_GENERATED ?? '').trim();
-  if (!configuredRoot) {
-    throw new Error(
-      'No output location: set the machine environment variable MPX_AI_GENERATED to the ' +
-        'AI-generated assets root.\n' +
-        '  setx MPX_AI_GENERATED "<path-to-AI-GENERATED>"\n' +
-        'Open a new terminal afterwards so the variable is visible.',
-    );
-  }
-
-  const root = path.resolve(configuredRoot);
-  const parent = requestedDirectory
-    ? assertOutputContainment(root, path.resolve(requestedDirectory))
-    : path.join(root, SHEETS_FOLDER_NAME);
-  return assertOutputContainment(root, path.join(parent, folderName));
-}
-
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (!options.youtubeUrl) {
@@ -234,7 +197,7 @@ async function main() {
   const sheet = parseSheet(readSheetText(responseBody));
   const slug = slugify(sheet.title);
   const folderName = composeFolderName(videoMetadata, slug);
-  const outputDirectory = resolveOutputDirectory(options.outputDirectory, folderName);
+  const outputDirectory = resolveOutputDirectory(process.env.MPX_AI_GENERATED, options.outputDirectory, folderName);
   await mkdir(outputDirectory, { recursive: true });
 
   // One file, pasted whole: every line in it is material the image model should read, so a
