@@ -2,6 +2,7 @@ import type { DiscoveredConfig, UserConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
 import {
   canonicalRuntimeArgs,
+  identityDomainMismatchMessage,
   resolveLaunch,
   resolveLaunchSelection,
   serializeLaunchPublic,
@@ -202,7 +203,11 @@ export class LaunchApplicationService {
     if (projectId && selection.identity.domain !== selection.cwdClassification.domain) {
       throw new MpxError({
         code: 'IDENTITY_DOMAIN_MISMATCH',
-        message: `Identity '${selection.identity.name}' cannot launch in domain '${selection.cwdClassification.domain}' without an explicit grant.`,
+        message: identityDomainMismatchMessage(
+          selection.runtime,
+          selection.identity.name,
+          selection.cwdClassification.domain,
+        ),
       });
     }
     return {

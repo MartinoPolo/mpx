@@ -575,11 +575,14 @@ describe('launch resolution', () => {
         enabledPacks: ['core', 'work'],
       }),
     };
-    await expect(resolveLaunch(crossDomainProject)).rejects.toMatchObject({
+    const expectedMismatch = {
       code: 'IDENTITY_DOMAIN_MISMATCH',
-    });
+      message:
+        "Identity 'personal' cannot launch in domain 'work' without an explicit grant. To grant read/write access, run: mpx launch pi --identity personal --grant rw:work --reason \"Allow personal identity in work domain\"",
+    };
+    await expect(resolveLaunch(crossDomainProject)).rejects.toMatchObject(expectedMismatch);
     await expect(resolveLaunch({ ...crossDomainProject, mode: 'developer' })).rejects.toMatchObject(
-      { code: 'IDENTITY_DOMAIN_MISMATCH' },
+      expectedMismatch,
     );
   });
 

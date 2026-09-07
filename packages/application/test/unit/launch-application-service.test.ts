@@ -153,7 +153,11 @@ describe('LaunchApplicationService', () => {
 
     await expect(
       service.explainSelection({ cwd: process.cwd(), userConfig: mismatched, identity: 'work' }),
-    ).rejects.toMatchObject({ code: 'IDENTITY_DOMAIN_MISMATCH' });
+    ).rejects.toMatchObject({
+      code: 'IDENTITY_DOMAIN_MISMATCH',
+      message:
+        "Identity 'work' cannot launch in domain 'work' without an explicit grant. To grant read/write access, run: mpx launch pi --identity work --grant rw:work --reason \"Allow work identity in work domain\"",
+    });
   });
 
   it('threads invocation-scoped runtime arguments through the descriptor into execution', async () => {

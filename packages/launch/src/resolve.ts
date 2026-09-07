@@ -30,6 +30,15 @@ function fail(code: string, message: string, remediation?: string): never {
   throw new MpxError({ code, message, ...(remediation ? { remediation } : {}) });
 }
 
+export function identityDomainMismatchMessage(
+  runtime: 'claude' | 'pi',
+  identityName: string,
+  domain: string,
+): string {
+  const grantCommand = `mpx launch ${runtime} --identity ${identityName} --grant rw:${domain} --reason "Allow ${identityName} identity in ${domain} domain"`;
+  return `Identity '${identityName}' cannot launch in domain '${domain}' without an explicit grant. To grant read/write access, run: ${grantCommand}`;
+}
+
 export function parseGrant(value: string): LaunchGrant {
   const match = /^(?:(ro|rw):)?(.+)$/u.exec(value);
   const access = match?.[1] ?? 'ro';
@@ -418,7 +427,7 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
   if (input.projectId !== undefined && identity.domain !== cwdDomain.domain && !crossDomainGrant) {
     fail(
       'IDENTITY_DOMAIN_MISMATCH',
-      `Identity '${identityName}' cannot launch in domain '${cwdDomain.domain}' without an explicit grant.`,
+      identityDomainMismatchMessage(selection.runtime, identityName, cwdDomain.domain),
     );
   }
   const effectiveResources = structuredClone(modeDeclaration.resources);
