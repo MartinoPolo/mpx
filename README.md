@@ -1,6 +1,6 @@
 # MPX
 
-MPX is a skills-first local control plane for launching Claude and Pi with explicit identity, workspace, skill, network, and executor boundaries. Canonical skill payloads drive verified runtime-neutral plans, while thin runtime and CLI adapters expose them alongside worktrees, development services, sessions, accounts, and local issue workflows without treating private runtime state as repository content.
+MPX is a skills-first local control plane for launching Claude and Pi with explicit identity, workspace, skill, network, and executor boundaries. Canonical skill payloads drive verified runtime-neutral plans, while thin runtime and CLI adapters expose them alongside worktrees, development services, sessions and local issue workflows without treating private runtime state as repository content.
 
 ## Start here
 
@@ -11,6 +11,10 @@ MPX is a skills-first local control plane for launching Claude and Pi with expli
 - **Sessions:** see [Sessions installer](docs/SESSIONS_INSTALLER.md).
 - **Issues:** see [Issues](docs/ISSUES.md) and [local Markdown issues](docs/local-markdown-issues.md).
 - **Migration authority:** [MPX migration status, decisions, and acceptance](MPX_MIGRATION.md), governed structurally by [ADR 0003: Skills-first architecture and test layout](docs/adr/0003-skills-first-test-layout.md) and [ADR 0004: Canonical native Pi extensions](docs/adr/0004-canonical-native-pi-extensions.md).
+
+## Test temporary data
+
+The shared Vitest configuration gives each run a private temporary directory through `TEMP`, `TMP`, and `TMPDIR`, including inherited child processes, and removes it on teardown even when tests fail. Individual fixtures must still clean up their own roots promptly, especially repository-local build snapshots. Forced termination or a machine crash can bypass teardown; cleanup never scans or deletes unrelated host temp directories.
 
 ## Private-state boundary
 

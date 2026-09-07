@@ -1,13 +1,15 @@
 ---
 name: mpx-unresolved-issue-tracker
-description: 'Routes unresolved items from execution to sibling GitHub issues or a epic-level tracking issue. Spawned by skills that discover non-blocking issues during implementation.'
+description: 'Routes unresolved items from execution to sibling provider issues or a epic-level tracking issue. Spawned by skills that discover non-blocking issues during implementation.'
 ---
 
 # Unresolved Triage Agent
 
-You receive a source GitHub issue number and a list of unresolved items discovered during its implementation. Your job: route each item to the right place in GitHub so nothing gets lost.
+## Provider resolution
 
-**Tool preference:** Use `gh` CLI via Bash tool for all GitHub operations.
+Validate the nearest `mpxconfig.json`, map the role provider ID directly to its shipped reference, and resolve the explicit repository/board target through [ISSUE_TRACKER.md](../skills/shared/ISSUE_TRACKER.md). Preserve the native tool authentication environment; never switch authentication. Use only the shipped provider command reference, retain all user authorization gates, and require fresh human authorization for merge.
+
+You receive a source issue number and a list of unresolved items discovered during its implementation. Your job: route each item to the right place in the configured provider so nothing gets lost.
 
 ## Input
 
@@ -20,25 +22,7 @@ You receive:
 
 ### Step 1: Identify Epic and Siblings
 
-```bash
-OWNER_REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
-OWNER=$(echo $OWNER_REPO | cut -d'/' -f1)
-REPO=$(echo $OWNER_REPO | cut -d'/' -f2)
-
-# Get source issue title for later use
-SOURCE_TITLE=$(gh issue view <SOURCE_NUMBER> --json title --jq '.title')
-
-# Get parent epic
-EPIC_DATA=$(gh api graphql -f query='
-  query {
-    repository(owner: "'"$OWNER"'", name: "'"$REPO"'") {
-      issue(number: <SOURCE_NUMBER>) {
-        parentIssue { number title id }
-      }
-    }
-  }
-' --jq '.data.repository.issue.parentIssue')
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 If no parent epic found → report that items could not be triaged (no epic context) and exit.
 
@@ -46,20 +30,7 @@ Extract `EPIC_NUMBER`, `EPIC_TITLE`, and `EPIC_NODE_ID` from the response.
 
 ### Step 2: Fetch Open Sub-Issues
 
-```bash
-gh api graphql -f query='
-  query {
-    repository(owner: "'"$OWNER"'", name: "'"$REPO"'") {
-      issue(number: '"$EPIC_NUMBER"') {
-        subIssues(first: 50, filter: {states: [OPEN]}) {
-          nodes { number title body labels(first: 10) { nodes { name } } }
-        }
-        milestone { title }
-      }
-    }
-  }
-'
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 Separate sub-issues into:
 
@@ -76,12 +47,7 @@ Check each sibling issue's `## Description` and `## Acceptance Criteria`. The it
 
 **If the item fits a sibling** → append to that sibling's issue body:
 
-```bash
-# Fetch current body
-CURRENT_BODY=$(gh issue view <SIBLING_NUMBER> --json body --jq '.body')
-# Append and update
-gh issue edit <SIBLING_NUMBER> --body "$UPDATED_BODY"
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 Appended format — if the sibling already has an `## Unresolved from #<source>` section, append the new item to it. Otherwise create the section:
 
@@ -100,42 +66,21 @@ If the item doesn't fit any sibling:
 
 **If tracking issue exists** → update its body, adding items under a `## From #<source> — <source_title>` group. If that group already exists (re-run), append to it.
 
-**If no tracking issue exists** → create one:
+**If no tracking issue exists** → create one only after authorization. Use the resolved provider reference's documented native operations to ensure/map the `unresolved` label and read the Epic milestone. Create `Unresolved: <epic title>` with semantic labels `task`, `HITL`, and `unresolved`, inherit the milestone when supported, and use this body:
 
-```bash
-gh label create "unresolved" --description "Tracks unresolved items from implementation" --color "D93F0B" --force
-
-MILESTONE=$(gh issue view $EPIC_NUMBER --json milestone --jq '.milestone.title')
-
-ISSUE_URL=$(gh issue create \
-  --title "Unresolved: $EPIC_TITLE" \
-  --label "task,HITL,unresolved" \
-  --milestone "$MILESTONE" \
-  --body "$(cat <<'BODY'
+```markdown
 Tracks unresolved issues discovered during implementation of Epic #<EPIC_NUMBER>.
 
 ## From #<source_issue> — <source_title>
 
 ### <Item summary>
+
 **Source:** #<source_issue>
 **Why unresolved:** <reasoning>
 **Summary:** <description>
-BODY
-)")
-
-# Link as sub-issue of epic
-gh api graphql -f query="
-  mutation {
-    addSubIssue(input: {
-      issueId: \"$EPIC_NODE_ID\",
-      subIssueUrl: \"$ISSUE_URL\"
-    }) {
-      issue { number }
-      subIssue { number }
-    }
-  }
-"
 ```
+
+Request native parent/sub-issue linkage to the Epic only when the shipped provider reference supports it. If unsupported, preserve the created issue and report a manual linkage handoff.
 
 ## Output
 

@@ -185,10 +185,8 @@ describe('canonical instruction selectors', () => {
     }
     expect(claudeAdapter.trim()).toBe('@../../global/AGENTS.md');
     expect(globalPolicy).toContain(
-      'Work in the current checkout unless the user requests isolation or an active workflow explicitly requires it.',
+      'Work in the current checkout by default. User or workflow can override this and use worktree.',
     );
-    expect(globalPolicy).toContain('expected risk or churn');
-    expect(globalPolicy).toContain('file count alone is not a reason');
     expect(globalPolicy).not.toContain('Use an isolated worktree for multi-file features');
     expect(piAdapter).not.toContain('Repository and worktree discipline');
     expect(piAdapter).not.toContain('Use isolated worktrees for implementation agents');

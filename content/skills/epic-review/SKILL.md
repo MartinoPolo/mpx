@@ -11,14 +11,12 @@ metadata:
 
 # Epic Review
 
-## Launch identity
-
-`<launch-identity>` is the immutable identity selected when MPX launched. Use it for every provider operation. If the launch identity is unavailable, stop and ask the user; never infer or substitute one.
+Provider operations follow [the shared provider resolution and native command references](../shared/ISSUE_TRACKER.md).
 
 ## Workflow
 
-1. Fetch the explicit Epic and its children/comments using `mpx issue view --identity <launch-identity> --json` and `mpx issue list --identity <launch-identity> --json`. Warn on open children but continue because invocation is explicit.
-2. Collect only Reviews linked by confirmed Issue/Review data. For each explicit Review ID run `mpx review view --id <review-id> --identity <launch-identity> --json`. An explicit Review ID is immutable: never replace it from branch or provider discovery.
+1. Fetch the explicit Epic and its children/comments using the resolved provider reference’s documented native operation with an explicit target and the resolved provider reference’s documented native operation with an explicit target. Warn on open children but continue because invocation is explicit.
+2. Collect only Reviews linked by confirmed Issue/Review data. For each explicit Review ID run the resolved provider reference’s documented native operation with an explicit target. An explicit Review ID is immutable: never replace it from branch or provider discovery.
 3. Compute the aggregate local diff from the earliest confirmed Epic commit. Build bounded context slices; exclude credentials, private unrelated comments, and unnecessary personal data.
 4. Run ten analysis branches concurrently: six canonical specialists plus architecture, cleanup, documentation, and unresolved-work branches from [analysis branches](ANALYSIS_BRANCHES.md). Require an explicit result from all ten.
 5. Deduplicate and classify Critical/Important/Minor findings across code quality, architecture, decomposition, cleanup, documentation, and unresolved work. Write `.mpx/reviews/PHASE_END_EPIC_<id>.md` using [the template](PHASE_END_TEMPLATE.md); reconcile every count and disposition.

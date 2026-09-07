@@ -88,10 +88,11 @@ After comparing, give your own recommendation: which design you think is stronge
 
 ### 7. Log the refactor RFC
 
-Log a refactor RFC as an issue/task in the project's tracker (verb + concrete CLI in
-[`shared/ISSUE_TRACKER.md`](../shared/ISSUE_TRACKER.md)). Use the body template in
-`./REFERENCE.md`, title `refactor: [module description]`, and apply the
-tracker's `refactor` type label (see ISSUE_TRACKER.md § Label mapping). Log it immediately and
-share the reference — skip a review step first.
+Resolve the tracker and explicit target using
+[`shared/ISSUE_TRACKER.md`](../shared/ISSUE_TRACKER.md), then use the selected provider reference's
+exact native create syntax. Use the body template in `./REFERENCE.md`, title
+`refactor: [module description]`, and apply an existing `refactor` label. If it is absent, ask the
+user to authorize creating it (when the provider reference supports label creation) or proceeding
+without it. Log the RFC immediately and share the reference — skip a review step first.
 
 Print the issue/task reference (URL or number).

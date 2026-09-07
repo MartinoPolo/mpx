@@ -6,7 +6,6 @@ import {
   ConfigValidationError,
   StrictJsonError,
   discoverProjectConfig,
-  type DiscoveredConfig,
   type UserConfig,
 } from '@mpx/config';
 import {
@@ -30,7 +29,6 @@ import { expandBranchTemplate } from '@mpx/worktrees';
 import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@mpx/skills';
 import {
   catalogPath,
-  configuredProviderApplicationService,
   defaultContext,
   ports,
   productionSessionProcessInspector,
@@ -175,70 +173,6 @@ function parse(argv: readonly string[]): Parsed {
     options,
   };
 }
-function providerDiagnostics(context: CliContext) {
-  return async ({
-    cwd,
-    project,
-    user,
-  }: {
-    cwd: string;
-    project: DiscoveredConfig['config'];
-    user: UserConfig;
-  }): Promise<Diagnostic[]> => {
-    const service = configuredProviderApplicationService(context);
-    const diagnostics: Diagnostic[] = [];
-    for (const [identityName, identity] of Object.entries(user.identities).sort(([left], [right]) =>
-      left.localeCompare(right),
-    )) {
-      try {
-        const result = await service.doctor({ project, identityName, identity, cwd });
-        for (const provider of result.data.providers) {
-          const details = {
-            identity: identityName,
-            provider: provider.provider,
-            role: provider.role,
-          };
-          if (provider.status === 'ready') {
-            diagnostics.push({
-              code: 'PROVIDER_READY',
-              message: 'Configured provider authentication is ready.',
-              severity: 'info',
-              details,
-            });
-          } else if (provider.status === 'unsupported') {
-            diagnostics.push({
-              code: 'PROVIDER_PROBE_UNSUPPORTED',
-              message: 'This provider adapter does not support an authentication probe.',
-              severity: 'info',
-              details,
-            });
-          } else {
-            diagnostics.push({
-              code: provider.error.code,
-              message: 'Configured provider authentication probe failed.',
-              severity: 'error',
-              details,
-            });
-          }
-        }
-      } catch {
-        for (const [role, provider] of [
-          ['issues', project.issues?.provider ?? 'none'],
-          ['repository', project.repository.provider],
-        ] as const) {
-          diagnostics.push({
-            code: 'PROVIDER_PROBE_FAILED',
-            message: 'Configured provider diagnostics could not be completed.',
-            severity: 'error',
-            details: { identity: identityName, provider, role },
-          });
-        }
-      }
-    }
-    return diagnostics;
-  };
-}
-
 function projectApplication(context: CliContext): ProjectApplicationService {
   const sbxDiagnostics = context.sbxDiagnostics
     ? async (_request: { cwd: string }) => context.sbxDiagnostics!()
@@ -255,7 +189,6 @@ function projectApplication(context: CliContext): ProjectApplicationService {
     inventoryCanonical,
     inventoryProjectSkills,
     ...(sbxDiagnostics ? { sbxDiagnostics } : {}),
-    providerDiagnostics: providerDiagnostics(context),
     statusSnapshot: (request) => status(context, context.portService).snapshot(request),
     ensureProject: (request) => ports(context).ensure(request),
   });
@@ -272,23 +205,9 @@ async function requiredUserConfig(context: CliContext): Promise<UserConfig> {
     environment: context.env,
   });
 }
-async function project(
-  parsed: Parsed,
-  context: CliContext = defaultContext,
-): Promise<DiscoveredConfig> {
-  return projectApplication(context).discover(parsed.cwd);
-}
-
 function stringOption(parsed: Parsed, name: string): string | undefined {
   const value = parsed.options.get(name);
   return typeof value === 'string' ? value : undefined;
-}
-function requiredOption(parsed: Parsed, name: string): string {
-  const value = stringOption(parsed, name);
-  if (value === undefined) {
-    throw new UsageError(`--${name} is required`);
-  }
-  return value;
 }
 function unexpectedCommandError(error: unknown, context: CliContext): MpxError {
   try {
@@ -642,126 +561,6 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       pid: Number(args[0]),
     });
     return { data, warnings, ...(parsed.json ? {} : { rawOutput: workspaceHuman(action, data) }) };
-  }
-  if (['issue', 'review', 'ci'].includes(group)) {
-    const actions =
-      group === 'issue'
-        ? ['list', 'view', 'create', 'edit', 'comment', 'label', 'move', 'finish', 'dependency']
-        : group === 'review'
-          ? ['view', 'create', 'update', 'comment', 'ready', 'merge']
-          : ['status', 'watch', 'logs', 'retry'];
-    if (!action || !actions.includes(action)) {
-      throw new UsageError(`${group} requires one of: ${actions.join(', ')}`);
-    }
-    if (args.length && action !== 'dependency') {
-      throw new UsageError(`${group} ${action} accepts only explicit flags`);
-    }
-    const dependencyAction = group === 'issue' && action === 'dependency' ? args[0] : undefined;
-    if (
-      action === 'dependency' &&
-      (!dependencyAction || !['add', 'remove'].includes(dependencyAction) || args.length !== 1)
-    ) {
-      throw new UsageError('issue dependency requires add or remove');
-    }
-    const capability =
-      action === 'dependency' ? `issue.dependency.${dependencyAction}` : `${group}.${action}`;
-    const role = group === 'issue' ? 'issues' : 'repository';
-    const found = await project(parsed, context);
-    const identityName = stringOption(parsed, 'identity');
-    const identity =
-      identityName === undefined
-        ? undefined
-        : (await requiredUserConfig(context)).identities[identityName];
-    const applicationService = configuredProviderApplicationService(context);
-    const prepared = applicationService.prepareInvocation({
-      project: found.config,
-      role,
-      capability,
-      ...(identityName === undefined ? {} : { identityName }),
-      ...(identity === undefined ? {} : { identity }),
-      cwd: found.root,
-    });
-    let input: Record<string, unknown> = {};
-    if (group === 'issue') {
-      if (action === 'list') {
-        const state = stringOption(parsed, 'state');
-        if (state !== undefined && state !== 'open' && state !== 'finished') {
-          throw new UsageError('--state must be open or finished');
-        }
-        input = state === undefined ? {} : { state };
-      } else if (action === 'view' || action === 'finish') {
-        input = {
-          id: requiredOption(parsed, 'id'),
-          ...(stringOption(parsed, 'revision')
-            ? { revision: stringOption(parsed, 'revision') }
-            : {}),
-        };
-      } else if (action === 'create') {
-        input = { title: requiredOption(parsed, 'title'), body: requiredOption(parsed, 'body') };
-      } else if (action === 'edit') {
-        input = {
-          id: requiredOption(parsed, 'id'),
-          title: requiredOption(parsed, 'title'),
-          body: requiredOption(parsed, 'body'),
-          ...(stringOption(parsed, 'revision')
-            ? { revision: stringOption(parsed, 'revision') }
-            : {}),
-        };
-      } else if (action === 'comment') {
-        input = { id: requiredOption(parsed, 'id'), body: requiredOption(parsed, 'body') };
-      } else if (action === 'label') {
-        input = { id: requiredOption(parsed, 'id'), label: requiredOption(parsed, 'label') };
-      } else if (action === 'move') {
-        input = {
-          id: requiredOption(parsed, 'id'),
-          destination: requiredOption(parsed, 'destination'),
-        };
-      } else if (action === 'dependency') {
-        input = {
-          id: requiredOption(parsed, 'id'),
-          dependencyId: requiredOption(parsed, 'dependency-id'),
-          ...(stringOption(parsed, 'revision')
-            ? { revision: stringOption(parsed, 'revision') }
-            : {}),
-        };
-      }
-    } else if (group === 'review') {
-      if (action === 'view' || action === 'ready') {
-        input = { id: requiredOption(parsed, 'id') };
-      } else if (action === 'create') {
-        input = {
-          title: requiredOption(parsed, 'title'),
-          body: requiredOption(parsed, 'body'),
-          sourceBranch: requiredOption(parsed, 'source-branch'),
-          targetBranch: requiredOption(parsed, 'target-branch'),
-          draft: found.config.workflow?.codeReview?.openAsDraft ?? false,
-        };
-      } else if (action === 'update') {
-        input = {
-          id: requiredOption(parsed, 'id'),
-          title: requiredOption(parsed, 'title'),
-          body: requiredOption(parsed, 'body'),
-        };
-      } else if (action === 'comment') {
-        input = { id: requiredOption(parsed, 'id'), body: requiredOption(parsed, 'body') };
-      } else if (action === 'merge') {
-        const method = stringOption(parsed, 'method');
-        if (method !== undefined && !['merge', 'squash', 'rebase'].includes(method)) {
-          throw new UsageError('--method must be merge, squash, or rebase');
-        }
-        input = {
-          id: requiredOption(parsed, 'id'),
-          ...(method === undefined ? {} : { method }),
-        };
-      }
-    } else if (action === 'status' || action === 'watch') {
-      input = { id: requiredOption(parsed, 'id') };
-    } else {
-      const id = requiredOption(parsed, 'run-id');
-      input = { id, runId: id };
-    }
-    const result = await applicationService.invokePrepared(prepared, asJson(input));
-    return { ...result, warnings };
   }
   if (group === 'launch' && (action === 'claude' || action === 'pi')) {
     if (args.length) {

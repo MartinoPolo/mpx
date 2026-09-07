@@ -11,17 +11,15 @@ metadata:
 
 # Unified Review
 
+Provider operations follow [the shared provider resolution and native command references](../shared/ISSUE_TRACKER.md).
+
 Review the intended change against its Issue and repository contracts. Run a review phase, then an optional fix phase. Prioritize actionable findings over summary.
-
-## Launch identity
-
-`<launch-identity>` is the immutable identity selected when MPX launched. Use it for every provider operation. If the launch identity is unavailable, stop and ask the user; never infer or substitute one.
 
 ## Parameters
 
 - `scope=branch` reviews `<base>...HEAD`; detect the base from repository refs unless supplied.
 - `scope=changes` reviews both unstaged and staged changes. Report “no changes” and stop when both are empty.
-- `scope=review:<id>` reviews the provider Review returned by `mpx review view --id <review-id> --identity <launch-identity> --json`.
+- `scope=review:<id>` reviews the provider Review returned by the resolved provider reference’s documented native operation with an explicit target.
 - `full` runs all seven specialist reviewers; `partial` or `half` runs the first four. Default to `full`.
 - Explicit `autofix` or `autofix=true` enables fixes; `autofix=false` disables them. When omitted, enable fixes below 10 findings and disable them at 10 or more.
 
@@ -44,10 +42,10 @@ Partial coverage runs the first four.
 ## Workflow
 
 1. Establish the target. For local scopes use ordinary `git` commands. For a provider Review use the explicit command above.
-2. When an Issue identifier is available, run `mpx issue view --identity <launch-identity> --json` and map acceptance criteria to evidence.
+2. When an Issue identifier is available, run the resolved provider reference’s documented native operation with an explicit target and map acceptance criteria to evidence.
 3. Inspect the complete diff, relevant callers, tests, error paths, security boundaries, and compatibility impact.
 4. Spawn the selected reviewers in parallel with the diff, changed files, original task or specification, stack conventions, and resolved scope. Accept high-confidence findings only. Reconcile every reviewer result exactly once.
-5. Run focused repository checks when permitted. Use `mpx ci status --id <review-or-pipeline-id> --identity <launch-identity> --json` for provider CI state and `mpx ci logs --run-id <run-id> --identity <launch-identity> --json` only when failed-check details are needed.
+5. Run focused repository checks when permitted. Use the resolved provider reference’s documented native operation with an explicit target for provider CI state and the resolved provider reference’s documented native operation with an explicit target only when failed-check details are needed.
 6. Merge findings in Critical, Important, then Minor order. Write `REVIEW.md` only when findings exist; otherwise return a clean summary and residual verification gaps.
 7. Decide autofix from the explicit parameter or finding threshold. Keep review read-only when autofix is off or there are no findings.
 8. For autofix, analyze each finding into an exact file, current code, and concrete change, then spawn `mp-executor` with only those pre-analyzed instructions. Re-run the same reviewers in parallel after changes. Repeat up to three iterations or until clean, recording each post-fix result in `REVIEW.md`.

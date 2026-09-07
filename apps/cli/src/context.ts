@@ -9,7 +9,6 @@ import {
   type WorkspaceApplicationService,
 } from '@mpx/application';
 import {
-  createNodeConfiguredProviderApplicationService,
   createNodeSetupApplicationService,
   NodePrivateRouteMaterializer,
   createNodeWorktreeLifecycleService,
@@ -25,10 +24,8 @@ import { MpxError } from '@mpx/core';
 import { discoverProjectConfig } from '@mpx/config';
 import { PortService, RealGitWorktreeAdapter, RegistryStore } from '@mpx/ports';
 import { createStatusProvider, type StatusProvider } from '@mpx/status';
-import type { ProviderProcessExecutor } from '@mpx/providers';
 import { WindowsPortPlatformAdapter, WindowsProcessCapabilities } from '@mpx/windows';
 import { createNodeWorktreeIncludeDependencies, type FileSystemAdapter } from '@mpx/worktrees';
-import type { JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
   FileLaunchAuditStore,
@@ -74,15 +71,6 @@ export type CliPortService = Pick<
 >;
 export type CliWorktreeService = LifecycleWorktreeService;
 
-export interface CliProviderService {
-  invoke(request: {
-    providerId: string;
-    capability: string;
-    route?: string;
-    input: JsonValue;
-  }): Promise<unknown>;
-}
-
 export interface CliRepositorySelectorResolver {
   resolve(request: { root: string; remote: string }): Promise<string>;
 }
@@ -108,9 +96,7 @@ export interface CliContext extends LaunchExecutionContext {
     stateRoot: string,
     environment: NodeJS.ProcessEnv,
   ) => CliPreparationRuntime;
-  providerService?: CliProviderService;
   devService?: LifecycleDevService;
-  providerProcessExecutor?: ProviderProcessExecutor;
   repositorySelectorResolver?: CliRepositorySelectorResolver;
   /** Optional read-only standalone sbx probe. It must never start or reset the daemon. */
   sbxDiagnostics?: () => Promise<{
@@ -145,10 +131,6 @@ export interface CliContext extends LaunchExecutionContext {
   ) => WorkspaceApplicationService;
   installerOperationAdapter?: InstallerOperationAdapter;
   installerTransactionStore?: TransactionStore;
-}
-
-export function configuredProviderApplicationService(context: CliContext) {
-  return createNodeConfiguredProviderApplicationService(context);
 }
 
 class EnvironmentRouteMaterializer implements RouteMaterializer {

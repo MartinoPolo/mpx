@@ -48,8 +48,9 @@ return that need to the parent.
 ## Blockers
 
 Stop expanding the blocked branch, record what was attempted and why it failed, and continue only
-with independent work items. Provider operations use [ISSUE_TRACKER.md](ISSUE_TRACKER.md); an
-unsupported adapter operation becomes a structured manual handoff, never a provider-CLI fallback.
+with independent work items. Provider operations resolve the nearest project configuration and
+trusted native reference through [ISSUE_TRACKER.md](ISSUE_TRACKER.md); unsupported operations become
+a bounded manual handoff, never an invented command or authentication switch.
 
 ## Output
 

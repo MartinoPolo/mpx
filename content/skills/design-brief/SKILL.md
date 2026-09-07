@@ -79,19 +79,21 @@ snake-case filename — following [BRIEF_TEMPLATE.md](BRIEF_TEMPLATE.md).
 ## Step 6: Gate dependent issues
 
 Implementation issues/tasks that cannot proceed without this design get the `Design needed` gate.
-Resolve the tracker and the concrete label/column this maps to via
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md) § Label mapping.
+Resolve the tracker and explicit target using
+[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md), then inspect existing labels/columns with the
+selected provider reference.
 
-1. Ensure the `Design needed` gate exists in the tracker (create it if the tracker needs labels
-   declared up front).
+1. Ensure the `Design needed` gate exists. If the required label/column is absent, ask the user to
+   authorize creating it when the provider supports that operation; otherwise ask how to map the
+   gate. Do not invent a mapping.
 2. Find dependents — search the tracker for open issues/tasks referencing this component, and
    enumerate the epic's child tasks.
 3. Apply the `Design needed` label to each confirmed dependent — skim the body when uncertain, so
    unrelated issues/tasks stay clean.
 4. Report which issues/tasks were labelled and why.
 
-If no tracker resolves (ISSUE_TRACKER.md § Resolution falls through to asking and the user
-declines), skip this step and note it in the report.
+If resolution fails or the user declines to supply/confirm an explicit target, skip this step and
+note it in the report.
 
 ## Step 7: Hand off
 

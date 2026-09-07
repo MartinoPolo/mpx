@@ -3,6 +3,8 @@
 ```markdown
 # Epic Review: Epic [ID] — [Title]
 
+Provider operations follow [the shared provider resolution and native command references](../shared/ISSUE_TRACKER.md).
+
 Generated: [date] | Child Issues: [IDs] | Reviews: [explicit IDs]
 
 ## Summary

@@ -37,7 +37,7 @@ Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToo
 
 ## Runtime context, audit, and banner
 
-The child receives immutable launch bindings including the logical artifact and full published-projection reference. Claude additionally receives only its selected `CLAUDE_CONFIG_DIR`; Pi receives only its selected `PI_CODING_AGENT_DIR`. Other identities' private roots are not propagated.
+The child receives immutable launch bindings including the logical artifact and full published-projection reference. Claude additionally receives only its selected `CLAUDE_CONFIG_DIR`; Pi receives only its selected `PI_CODING_AGENT_DIR`. Pi also receives the selected safe identity and mode labels as `MPX_IDENTITY` and `MPX_MODE` so its footer can identify the launch without reading private lifecycle state. Other identities' private roots are not propagated.
 
 Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime, executor, and a short launch key without private roots. Audit output paths are hardened and records are bounded safe projections of outcome and error code. Records do not authorize a later launch. Any policy or artifact change requires relaunch and process restart; in-process rights expansion is rejected.
 

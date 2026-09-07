@@ -14,7 +14,7 @@ The file inspected through MPX must be the exact file supplied to the runtime. R
 - Claude and Pi receive separate generated projections from the same compiler implementation.
 - Every directory skill is emitted as uppercase `SKILL.md` for both runtimes.
 - Launch-specific content scopes, skill packs, exposure overrides, and project-local skills remain supported.
-- Provider-neutral MPX commands own Issue, Review, and CICI routing. Skills do not translate `mpx issue create` into provider CLIs.
+- Canonical skills resolve provider roles and use only shipped native-command references; MPX exposes no Issue, Review, or CI facade.
 - Runtime and model differences live in one tracked, validated translation profile.
 - Canonical agents use semantic model classes: `mechanical`, `exploration`, `standard`, `advanced`, and `frontier`.
 - Unknown fields, placeholders, model classes, capabilities, references, or required runtime features fail closed.
@@ -218,9 +218,8 @@ Tool names normally come from structured frontmatter, not body substitutions. A 
 
 Provider-neutral commands normally remain literal and unchanged:
 
-- `mpx issue ...`
-- `mpx review ...`
-- `mpx ci ...`
+- native Issue operations selected by `issues.provider`
+- native Review and CI operations selected by `repository.provider`
 - `mpx tool invoke ...`
 
 These commands route through the launch-selected provider. They are not translated to `gh`, `glab`, or another provider CLI.
@@ -241,7 +240,7 @@ Runtime-specific skill or plugin roots may be substituted only where a bundled s
 
 The existing implementation selects packs, exposure, and project skills by launch context. It does not currently select different skill bodies for GitHub or GitLab.
 
-Do not add provider variants merely to route API calls. `mpx issue create` already selects the configured Issue provider and verifies its capabilities.
+Do not add provider variants merely to route API calls. Resolve the configured role and use its shipped native-command reference with an explicit target.
 
 A provider-specific body variant is allowed only when the human workflow materially differs and cannot be expressed through the provider-neutral contract. Variant selection uses a bounded declarative schema with exact provider dimensions and a required default. Free-form expressions and embedded scripts are forbidden.
 

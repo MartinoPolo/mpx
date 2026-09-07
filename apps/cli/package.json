@@ -23,7 +23,6 @@
     "@mpx/installer": "workspace:*",
     "@mpx/launch": "workspace:*",
     "@mpx/ports": "workspace:*",
-    "@mpx/providers": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/sessions": "workspace:*",
     "@mpx/skills": "workspace:*",

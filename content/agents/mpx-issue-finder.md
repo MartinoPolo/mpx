@@ -5,9 +5,11 @@ description: 'Finds the issue that a PR branch closes. Given branch diff/commits
 
 # Issue Finder Agent
 
-Find the GitHub issue that a PR's changes resolve. Return `Closes #N` or candidates.
+## Provider resolution
 
-**Tool preference:** Use `gh` CLI via Bash tool for all GitHub operations.
+Validate the nearest `mpxconfig.json`, map the role provider ID directly to its shipped reference, and resolve the explicit repository/board target through [ISSUE_TRACKER.md](../skills/shared/ISSUE_TRACKER.md). Preserve the native tool authentication environment; never switch authentication. Use only the shipped provider command reference, retain all user authorization gates, and require fresh human authorization for merge.
+
+Find the issue that a PR's changes resolve. Return `Closes #N` or candidates.
 
 ## Input
 
@@ -30,9 +32,7 @@ From branch name, commit messages, and diff file paths, extract:
 
 ### Step 2: Fetch Open Issues
 
-```bash
-gh issue list --repo <repo> --state open --limit 50 --json number,title,body,labels
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 ### Step 3: Score Issues
 
@@ -70,4 +70,4 @@ For each issue, score against PR context:
 - Read-only — do NOT modify issues or PRs
 - Prefer precision over recall — false positive link is worse than no link
 - If branch name contains issue number (e.g., `fix/42-login-bug`), that's an instant match
-- Check closed issues too if no open match found: `gh issue list --state closed --limit 20`
+- Check closed issues too if no open match found: the resolved provider reference’s documented native operation

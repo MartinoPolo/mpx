@@ -1,6 +1,5 @@
 export * from './contracts.js';
 export * from './project-application-service.js';
-export * from './provider-application-service.js';
 export * from './lifecycle-application-service.js';
 export * from './workspace-application-service.js';
 export * from './launch-execution-service.js';

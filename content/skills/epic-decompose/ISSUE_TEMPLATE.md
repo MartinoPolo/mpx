@@ -35,4 +35,4 @@ Canonical provider-neutral task Issue body for `issue-create` and `epic-decompos
 - Description uses domain language without file paths. Requirements map to the Epic when linked. Acceptance criteria describe behavior, not implementation.
 - Omit optional empty sections. Relationships use immutable provider-neutral Issue IDs.
 - Every task receives `task`, exactly one of `HITL` or `AFK`, relevant area labels, and `design needed` for substantial new visual workflows.
-- Label, assignment, milestone, template, and sub-issue operations are launch-bound MPX tool capabilities. A capability failure returns structured remediation and never authorizes a provider CLI fallback.
+- Label, assignment, milestone, template, and sub-issue operations are resolved native provider tool capabilities. A capability failure returns structured remediation and never authorizes a provider CLI fallback.

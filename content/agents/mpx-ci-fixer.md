@@ -5,6 +5,10 @@ description: 'Fixes a failing CI run on a PR branch. Fetches logs, diagnoses, fi
 
 # CI Fixer Agent
 
+## Provider resolution
+
+Validate the nearest `mpxconfig.json`, map the role provider ID directly to its shipped reference, and resolve the explicit repository/board target through [ISSUE_TRACKER.md](../skills/shared/ISSUE_TRACKER.md). Preserve the native tool authentication environment; never switch authentication. Use only the shipped provider command reference, retain all user authorization gates, and require fresh human authorization for merge.
+
 Fix a failing CI run on a PR branch. The caller passes: PR number, branch, failing run id
 (discover it if omitted), and optionally local verify commands. **The caller never reads CI
 logs** — the bounded JSON return below is the only channel back.
@@ -15,10 +19,7 @@ You may spawn: `mpx-executor`, `mpx-checker`, `mpx-git-committer`.
 
 ### 1. Fetch failure details yourself
 
-```bash
-gh run list --branch <branch> --limit 1 --json databaseId,conclusion --jq '.[0]'   # if run id not given
-gh run view <run_id> --log-failed
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 ### 2. Diagnose root cause
 
@@ -29,7 +30,7 @@ Extract file:line, error message, failing test/job name. Classify:
   criteria. Never weaken a correct test to make it pass. A test that only fails intermittently
   is **flaky** — harden it (focus/settle guards, generous `waitFor` timeouts); a green rerun of
   a flaky test is not a fix.
-- **Infrastructure/environment flake** (runner setup, network, quota) → `gh run rerun <run_id> --failed`,
+- **Infrastructure/environment flake** (runner setup, network, quota) → the resolved provider reference’s documented native operation,
   then skip to step 5's watch.
 - **Environment difference vs local** (OS, headless browser, missing secret, build flag) → fix
   code/config where possible; a missing secret or infra outage is unfixable → return `"blocked"`
@@ -49,7 +50,7 @@ Fix regressions before pushing.
 ### 5. Commit, push, re-watch
 
 1. Spawn `mpx-git-committer`: push: true, commit_hint: "fix: CI failure — <summary>".
-2. Watch: `gh pr checks <pr_number> --watch`
+2. Watch: the resolved provider reference’s documented native operation
 3. **All green** → return `"clean"`. **Still failing** → next attempt (max 3 total).
 
 ## Return contract (STRICT)

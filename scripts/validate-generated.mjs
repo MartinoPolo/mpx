@@ -168,7 +168,8 @@ export function validateFiles(files, options = {}) {
     }
     if (
       file.startsWith('content/instructions/shared/') &&
-      (/`(?:gh|glab|kf)\s+(?:issue|pr|mr|label|task|comment|auth)\b/iu.test(text) ||
+      ((!file.startsWith('content/instructions/shared/providers/') &&
+        /`(?:gh|glab|kf)\s+(?:issue|pr|mr|label|task|comment|auth)\b/iu.test(text)) ||
         /(?:^|[\s`'"(])(?:plugins\/mp|mpx-(?:claude-code|pi)\/|~\/\.(?:claude|codex)\/)/imu.test(
           text,
         ) ||

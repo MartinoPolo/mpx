@@ -11,22 +11,20 @@ metadata:
 
 # View an Issue
 
-Retrieve one Issue through MPX and present its current provider-neutral state.
+Provider operations follow [the shared provider resolution and native command references](../shared/ISSUE_TRACKER.md).
 
-## Launch identity
-
-`<launch-identity>` is the immutable identity selected when MPX launched. Use it for every provider operation. If the launch identity is unavailable, stop and ask the user; never infer or substitute one.
+Retrieve one Issue through the resolved trusted provider reference and present its current state.
 
 ## Workflow
 
 1. Resolve the intended Issue identifier from explicit user input or unambiguous conversation context. Ask when multiple identifiers are plausible.
-2. Run `mpx issue view --identity <launch-identity> --json` with that identifier.
+2. Run the resolved provider reference’s documented native operation with an explicit target with that identifier.
 3. Summarize the title, state, description, acceptance criteria, labels, assignees, and recent discussion only when those fields are present.
 4. Distinguish absent fields from empty fields. Preserve links returned by MPX.
 5. Do not infer updates that are not in the structured response.
 
 ## Unsupported capability
 
-If the JSON response has `ok: false` and `error.code: CAPABILITY_UNSUPPORTED`, stop the view operation. Report the unsupported capability and any structured remediation. Do not invoke or suggest a direct provider command as a fallback.
+If the native operation reports `CAPABILITY_UNSUPPORTED`, stop the view operation. Report the unsupported capability and any structured remediation. Do not invent a command outside the shipped provider reference.
 
 For every other structured error, report the code and actionable message, then stop.

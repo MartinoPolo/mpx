@@ -4,14 +4,6 @@ import path from 'node:path';
 import { inventoryCanonical } from '../../src/index.js';
 
 const canonicalRoot = path.resolve(import.meta.dirname, '../../../../content/skills');
-const workflowSkills = [
-  'execute',
-  'issue-create',
-  'issue-refine',
-  'issue-view',
-  'review',
-  'ship',
-] as const;
 const classifiedSkills = {
   'core/full': ['execute', 'issue-view', 'review'],
   'core/name-only': ['issue-create', 'issue-refine', 'ship'],
@@ -68,35 +60,12 @@ const classifiedSkills = {
     'video-to-image',
   ],
 } as const;
-const providerGuidanceMatrix = [
-  ['execute', 'issue'],
-  ['issue-create', 'issue'],
-  ['issue-refine', 'issue'],
-  ['issue-view', 'issue'],
-  ['review', 'issue'],
-  ['review', 'review'],
-  ['review', 'ci'],
-  ['ship', 'review'],
-  ['ship', 'ci'],
-] as const;
-
-function providerOperationCommands(content: string): string[] {
-  return [...content.matchAll(/\bmpx\s+(?:issue|review|ci)\s+[a-z][^`\n]*/gu)].map((match) =>
-    match[0].trim(),
-  );
-}
 
 async function normalizedSkill(identity: string): Promise<string> {
   return (await readFile(path.join(canonicalRoot, identity, 'SKILL.md'), 'utf8')).replace(
     /\r\n/gu,
     '\n',
   );
-}
-
-async function body(identity: string): Promise<string> {
-  const text = await normalizedSkill(identity);
-  const end = text.indexOf('\n---\n', 4);
-  return text.slice(end + 5);
 }
 
 describe('canonical content contracts', () => {
@@ -124,56 +93,44 @@ describe('canonical content contracts', () => {
     );
   });
 
-  it.each(providerGuidanceMatrix)(
-    'includes provider-neutral mpx %s %s guidance',
-    async (identity, commandGroup) => {
-      const commands = providerOperationCommands(await body(identity));
-      expect(commands.some((command) => command.startsWith(`mpx ${commandGroup} `))).toBe(true);
-    },
-  );
-
-  it.each(workflowSkills)(
-    'binds every concrete provider command in %s to the immutable launch identity and JSON output',
-    async (identity) => {
-      const content = await body(identity);
-      const commands = providerOperationCommands(content);
-      expect(commands.length).toBeGreaterThan(0);
-      expect(
-        commands.filter(
-          (command) =>
-            !command.includes('--identity <launch-identity>') || !command.includes('--json'),
-        ),
-      ).toEqual([]);
-    },
-  );
-
-  it('uses explicit Review and CI identifiers and complete Review creation inputs in ship', async () => {
-    const content = await body('ship');
-    const commands = providerOperationCommands(content);
-    for (const action of ['view', 'update', 'ready', 'merge']) {
-      expect(commands.find((command) => command.startsWith(`mpx review ${action} `))).toContain(
-        '--id <review-id>',
-      );
-    }
-    const create = commands.find((command) => command.startsWith('mpx review create '))!;
-    for (const flag of [
-      '--title <title>',
-      '--body <body>',
-      '--source-branch <source-branch>',
-      '--target-branch <target-branch>',
-    ]) {
-      expect(create).toContain(flag);
-    }
-    for (const action of ['status', 'watch']) {
-      expect(commands.find((command) => command.startsWith(`mpx ci ${action} `))).toContain(
-        '--id <review-or-pipeline-id>',
-      );
-    }
-    for (const action of ['logs', 'retry']) {
-      expect(commands.find((command) => command.startsWith(`mpx ci ${action} `))).toContain(
-        '--run-id <run-id>',
-      );
-    }
+  it('ships the trusted provider resolution contract and references', async () => {
+    const shared = path.resolve(canonicalRoot, '../instructions/shared');
+    const contract = await readFile(path.join(shared, 'ISSUE_TRACKER.md'), 'utf8');
+    expect(contract).toContain('stop at the nearest `mpxconfig.json`');
+    expect(contract).toContain('Do not skip an invalid nearer file');
+    expect(contract).toContain('This project-only check must not depend on user identity');
+    expect(contract).toContain('Only for forge-backed GitHub, GitLab, or Gerrit operations');
+    expect(contract).toContain('if the caller supplied a repository target');
+    expect(contract).toContain(
+      'use the remote-derived target without asking the caller to repeat it',
+    );
+    expect(contract).toContain('Non-forge providers do not use steps 3–4');
+    expect(contract).toContain('`issues.provider`');
+    expect(contract).toContain('`repository.provider`');
+    expect(contract).toContain('Git remote **name**, not a forge project');
+    expect(contract).toContain('git remote get-url -- <repository.remote>');
+    expect(contract).toContain('Do not use `project.id` as forge identity');
+    expect(contract).toContain('Merge always requires fresh human authorization');
+    const references = Object.fromEntries(
+      await Promise.all(
+        ['GITHUB.md', 'GITLAB.md', 'KANBANFLOW.md', 'GERRIT.md', 'LOCAL.md'].map(async (name) => [
+          name,
+          await readFile(path.join(shared, 'providers', name), 'utf8'),
+        ]),
+      ),
+    );
+    expect(references['GITHUB.md']).toContain('gh issue view <id> --repo <target>');
+    expect(references['GITHUB.md']).toContain('--json name,state,bucket,link [--watch]');
+    expect(references['GITLAB.md']).toContain(
+      'glab issue view <iid> --repo <TARGET> --output json',
+    );
+    expect(references['GITLAB.md']).toContain('projects/<ENCODED_PROJECT>/pipelines/<pipeline-id>');
+    expect(references['KANBANFLOW.md']).toContain('kf board --json');
+    expect(references['KANBANFLOW.md']).toContain('kf task view <task> --json');
+    expect(references['GERRIT.md']).toContain('gerrit query --format=JSON');
+    expect(references['GERRIT.md']).toContain('git push <configured-remote-name>');
+    expect(references['LOCAL.md']).toContain('createConfiguredNodeLocalIssueStore');
+    expect(references['LOCAL.md']).toContain('schemaVersion: 2');
   });
 
   it('keeps every imported skill free of forbidden namespaces, provider CLIs, paths, and placeholders', async () => {

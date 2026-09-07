@@ -34,13 +34,8 @@ external edit.
 Local commands need no identity/provider authentication route:
 
 ```text
-mpx issue create --title "Title" --body "Details"
-mpx issue list [--state open|finished]
-mpx issue view --id 12
-mpx issue edit --id 12 --title "New" --body "Body" [--revision HASH]
-mpx issue finish --id 12 [--revision HASH]
-mpx issue dependency add --id 12 --dependency-id 7 [--revision HASH]
-mpx issue dependency remove --id 12 --dependency-id 7 [--revision HASH]
+Read: validate .mpx-index.json, then open the indexed Markdown file for the explicit ID.
+Write: acquire .mpx-issues.lock, atomically replace the issue file, then update the index under the same lock.
 ```
 
 `view`/`edit`/`finish` remain supported aliases. Dependency frontiers contain the

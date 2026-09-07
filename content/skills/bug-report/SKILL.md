@@ -62,14 +62,15 @@ Based on investigation results, design ordered RED-GREEN cycles:
 
 ### Step 4: Log the issue/task
 
-Ensure the tracker's `bug` type label exists (see
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md) § Label mapping for how `bug` is represented in the
-resolved tracker).
+Resolve the tracker and explicit target using
+[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md), then inspect its existing labels using the selected
+provider reference. Require the semantic `bug` label and any area labels detected from codebase
+exploration. If a required label is absent, ask the user to authorize creating it when the native
+provider supports that operation, or ask whether to proceed without it.
 
 **Title format:** `bug: [concise description]`
 
-Log an issue/task in the tracker (verb + concrete CLI in ISSUE_TRACKER.md) with the `bug` label
-plus any area labels detected from codebase exploration, and this body:
+Use the provider reference's exact native create syntax to log the issue/task with this body:
 
 ```markdown
 ## Problem

@@ -137,7 +137,6 @@ describe('@mpx/application architecture', () => {
       SessionApplicationService: expect.any(Function),
       SessionResumeLaunchApplicationService: expect.any(Function),
       createProjectApplicationService: expect.any(Function),
-      createProviderApplicationService: expect.any(Function),
     });
     for (const deleted of ['InstallApplicationService', 'createSkillApplicationService']) {
       expect(application).not.toHaveProperty(deleted);
@@ -154,11 +153,7 @@ describe('@mpx/application architecture', () => {
       createNodeLocalIssueViewRebuilder: expect.any(Function),
       createPiAuthAvailabilityProbe: expect.any(Function),
       createDefaultSbxDiagnostics: expect.any(Function),
-      createNodeConfiguredProviderApplicationService: expect.any(Function),
-      createNodeProviderService: expect.any(Function),
       NodePrivateRouteMaterializer: expect.any(Function),
-      NodeProviderProcessExecutor: expect.any(Function),
-      NodeRepositorySelectorResolver: expect.any(Function),
       ProductionSessionLifecycleBridge: expect.any(Function),
       productionSessionDiscoveries: expect.any(Function),
       productionSessionResumeDependencies: expect.any(Function),
@@ -170,11 +165,7 @@ describe('@mpx/application architecture', () => {
       'createNodeLocalIssueViewRebuilder',
       'createPiAuthAvailabilityProbe',
       'createDefaultSbxDiagnostics',
-      'createNodeConfiguredProviderApplicationService',
-      'createNodeProviderService',
       'NodePrivateRouteMaterializer',
-      'NodeProviderProcessExecutor',
-      'NodeRepositorySelectorResolver',
       'ProductionSessionLifecycleBridge',
       'productionSessionDiscoveries',
       'productionSessionResumeDependencies',
@@ -183,16 +174,6 @@ describe('@mpx/application architecture', () => {
     ]) {
       expect(root).not.toHaveProperty(name);
     }
-  });
-
-  it('composes Node providers through the package-owned fixed service factory', async () => {
-    const source = await readFile(
-      path.resolve(import.meta.dirname, '../../src/node/provider-application-service.ts'),
-      'utf8',
-    );
-
-    expect(source).toContain('createBuiltinProviderService');
-    expect(source).not.toMatch(/\b(?:ProviderService|createBuiltinProviderAdapters)\b/u);
   });
 
   it('keeps concrete provider and route class declarations out of CLI context', async () => {
@@ -289,18 +270,5 @@ describe('@mpx/application architecture', () => {
     }
     const root = await import('../../src/index.js');
     expect(root).not.toHaveProperty('createNodeSessionBranchProduction');
-  });
-
-  it('keeps generic application operation contracts out of provider-specific services', async () => {
-    const contracts = await readFile(
-      path.resolve(import.meta.dirname, '../../src/contracts.ts'),
-      'utf8',
-    );
-    const providerService = await readFile(
-      path.resolve(import.meta.dirname, '../../src/provider-application-service.ts'),
-      'utf8',
-    );
-    expect(contracts).toContain('export interface ApplicationOperationResult<T>');
-    expect(providerService).not.toContain('interface ApplicationOperationResult');
   });
 });

@@ -85,28 +85,11 @@ Initial model context includes full metadata only for `full`, a name only for `n
 
 ## Project provider and workflow configuration
 
-The committed manifest selects roles independently: `repository.provider` is required and drives Review and CI; optional `issues.provider` drives Issue commands and resolves to `none` when absent. Provider IDs select only the fixed built-in registry; no public, embedding, or hidden API can add descriptors or adapters. At runtime the selected ID must exist in the registry for its role, its provider-specific fields must satisfy that descriptor's closed schema, and a matching built-in adapter must exist for an operational capability; otherwise resolution fails closed before execution. The built-in repository providers are `github`, `gitlab`, `gerrit`, and `generic`; built-in issue providers are `github`, `gitlab`, `kanbanflow`, `local`, and `none`.
+The committed manifest selects roles independently. `repository.provider` is required and selects the shipped native reference for Review, CI, and repository operations. Optional `issues.provider` selects the shipped native reference for Issue and board operations; when absent, Issues are not configured. The nearest manifest must validate before use, and an invalid nearer manifest is never skipped for an ancestor.
 
-Built-in repository bindings require `remote`. KanbanFlow requires `boardId` and configured state-to-column IDs in `states.todo`, `states.wip`, `states.review`, and `states.done`, with optional `states.archive` and `boardName`. Normalization maps tasks in the configured `done` or `archive` columns to `finished`; the other configured workflow columns are `open`. `issue move --destination todo|wip|review|done|archive` resolves the state name to its configured column ID (and rejects an unconfigured state), while `issue finish` moves to the configured `done` column. See [Provider contracts](PROVIDERS.md) for what is actually implemented.
+Provider IDs map directly to shipped references. Project configuration contains no provider registry key, account reference, identity, credential, executable, or command template. Native tools retain their existing authentication environment. Repository providers require `remote`; KanbanFlow additionally requires `boardId` and the configured `states` mapping; local Issues require a logical `store` and may name a logical `view`.
 
-Project selection is not authentication selection. Every operational `mpx issue`, `mpx review`, and `mpx ci` command requires `--identity NAME`; MPX then resolves `identities.NAME.providerRoutes[configuredProvider]`. For example:
-
-```json
-{
-  "identities": {
-    "personal": {
-      "domain": "personal",
-      "runtimeRoots": { "claude": "~/.claude", "pi": "~/.pi/agent" },
-      "gitAuthorRoute": "personal",
-      "providerRoutes": { "github": "personal-gh", "kanbanflow": "personal-kf" }
-    }
-  }
-}
-```
-
-Route values are opaque labels owned by the identity. They cannot be paths, executable or private-key locations, credentials, or provider commands; they do not grant access. Content scopes and project overrides cannot contain routes, and CWD/domain classification never infers an identity. A missing explicit identity, unknown identity, or absent route fails closed as `IDENTITY_REQUIRED`, `IDENTITY_UNKNOWN`, or `PROVIDER_ROUTE_REQUIRED`.
-
-`workflow.codeReview.openAsDraft` determines whether `mpx review create` opens a draft (default `false`). `markReady` and `merge` are each `human` or `agent`. They are ceilings: `human` denies the corresponding `mpx review ready` or `mpx review merge` command with `WORKFLOW_POLICY_DENIED`; `agent` permits invocation but does not bypass provider authentication or repository policy.
+`workflow.codeReview.openAsDraft`, `markReady`, and `merge` remain policy consumed by canonical workflows. They do not select authentication or weaken authorization; merge requires fresh human approval. See [Native provider operations](PROVIDERS.md).
 
 ## Post-create preparation contract
 

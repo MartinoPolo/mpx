@@ -61,8 +61,6 @@ describe('Batch C5 canonical workflows', () => {
       'HITL gate',
       'test',
       'review loop',
-      'ci watch',
-      'ci retry',
       'Manual testing',
       'structured remediation',
       'privacy',
@@ -92,28 +90,21 @@ describe('Batch C5 canonical workflows', () => {
     }
   });
 
-  it('uses launch-bound MPX capabilities without direct provider CLI invocations', async () => {
-    const violations: string[] = [];
+  it('routes provider consumers through the shared native reference contract', async () => {
     for (const identity of identities) {
-      for (const file of await files(identity)) {
-        const content = await readFile(file, 'utf8');
-        if (/(?:^|[\n`$;|&])\s*(?:gh|glab|bb|az)(?:\.exe)?\s+(?=[a-z-])/imu.test(content)) {
-          violations.push(path.relative(root, file));
-        }
-        for (const command of content.matchAll(/\bmpx\s+(?:issue|review|ci)\s+[^\n`]+/gu)) {
-          expect(command[0], `${identity}: ${command[0]}`).toContain(
-            '--identity <launch-identity>',
-          );
-        }
-      }
+      const content = await Promise.all(
+        (await files(identity))
+          .filter((file) => file.endsWith('.md'))
+          .map((file) => readFile(file, 'utf8')),
+      ).then((parts) => parts.join('\n'));
+      expect(content, identity).toContain('ISSUE_TRACKER.md');
+      expect(content, identity).not.toContain('<launch-identity>');
     }
-    expect(violations).toEqual([]);
   });
 
   it('keeps launch identity and Review IDs immutable and closes support references', async () => {
     const content = await Promise.all(identities.map(skill)).then((values) => values.join('\n'));
-    expect(content).toContain('immutable identity selected when MPX launched');
-    expect(content).toContain('never infer or substitute one');
+    expect(content).toContain('ISSUE_TRACKER.md');
     expect(content).toContain('explicit Review ID');
     expect(content).toContain('never replace it from branch or provider discovery');
     const missing: string[] = [];
@@ -129,7 +120,10 @@ describe('Batch C5 canonical workflows', () => {
             continue;
           }
           try {
-            await stat(path.resolve(path.dirname(file), reference));
+            const target = reference.startsWith('../shared/')
+              ? path.resolve(root, '../instructions/shared', reference.slice('../shared/'.length))
+              : path.resolve(path.dirname(file), reference);
+            await stat(target);
           } catch {
             missing.push(`${path.relative(root, file)} -> ${reference}`);
           }

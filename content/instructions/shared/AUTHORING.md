@@ -35,12 +35,11 @@ irreversible actions, or false-success hazards. At every call site name:
 
 - the exact canonical agent identity, such as `mpx-explorer`;
 - the required model class when the callee does not declare one;
-- the MPX capability, such as `mpx issue view --identity <launch-identity> --json`;
+- the provider intent and explicit repository/board target resolved through the shared provider reference;
 - the repository-relative script and invocation;
 - exploration breadth and stopping condition.
 
-Use provider-neutral MPX Issue, Review, and CI contracts from
-[ISSUE_TRACKER.md](ISSUE_TRACKER.md). Never invoke provider CLIs from canonical content.
+Resolve provider operations through [ISSUE_TRACKER.md](ISSUE_TRACKER.md). Canonical skills may invoke only the native commands documented by its trusted shipped provider references; project configuration never supplies executable commands.
 
 ## Paths and private data
 

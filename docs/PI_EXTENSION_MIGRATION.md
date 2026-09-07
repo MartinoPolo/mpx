@@ -19,14 +19,20 @@ runtimes/pi/
     subagents/
     terminal-progress/
     config/                       # checked-in Pi-specific settings/keybindings
-    themes/
     test/
   runtime-pi/                    # thin launch/projection adapter
 ```
 
 Move every retained Pi-specific implementation and its tests from the former `mpx-pi` repository into `runtimes/pi/extensions`. Reconcile the existing vendored subagent copy into that package rather than retaining two trees. Runtime-neutral skills and agents remain canonical under `content` and are projected for Claude and Pi.
 
-Do not migrate generated legacy agents, machine-specific paths, dependency stores, caches, sessions, or retired scripts. Move retained Pi-specific settings, keybindings, themes, and prompts as checked-in source rather than generating them; keep runtime-neutral prompts under shared `content`. Replace hard-coded cross-repository imports with module-relative imports owned by the new package. Keep runtime selection, model selection, identity binding, and session locations as launch data rather than static extension configuration.
+Do not migrate generated legacy agents, machine-specific paths, dependency stores, caches, sessions, or retired scripts. Move retained Pi-specific settings, keybindings, and prompts as checked-in source rather than generating them; keep runtime-neutral prompts under shared `content`. Replace hard-coded cross-repository imports with module-relative imports owned by the new package. Keep runtime selection, model selection, identity binding, and session locations as launch data rather than static extension configuration.
+
+## Pi appearance
+
+Pi uses its built-in `dark` theme. The extension package ships no custom themes, and Pi
+launchers do not repaint the terminal background or cursor. Account identity belongs in the
+footer, not an account-specific terminal palette. Windows Terminal keeps its own appearance
+settings.
 
 ## Host parity
 

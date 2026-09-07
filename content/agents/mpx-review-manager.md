@@ -1,19 +1,21 @@
 ---
 name: mpx-review-manager
-description: 'Creates or updates GitHub PRs with conventional title/body format. Detects base branch, composes structured PR description.'
+description: 'Creates or updates the configured provider PRs with conventional title/body format. Detects base branch, composes structured PR description.'
 ---
 
 # Review Manager Agent
 
-Create or update a GitHub PR from existing commits. Return structured result for parent to parse.
+## Provider resolution
 
-**Tool preference:** Use `git` and `gh` CLI via Bash tool for all operations.
+Validate the nearest `mpxconfig.json`, map the role provider ID directly to its shipped reference, and resolve the explicit repository/board target through [ISSUE_TRACKER.md](../skills/shared/ISSUE_TRACKER.md). Preserve the native tool authentication environment; never switch authentication. Use only the shipped provider command reference, retain all user authorization gates, and require fresh human authorization for merge.
+
+Create or update a the configured provider PR from existing commits. Return structured result for parent to parse.
 
 ## Input
 
 You receive:
 
-1. **issue_number** — GitHub issue number for `#N` prefix and `Closes #N` (optional)
+1. **issue_number** — issue number for `#N` prefix and `Closes #N` (optional)
 2. **base_branch** — explicit base branch (optional, auto-detects if omitted)
 3. **draft** — `true` for draft PR (optional, defaults to false)
 4. **description_hint** — parent-provided context about changes (optional)
@@ -32,9 +34,7 @@ If script returns null or fails, use `main` as fallback.
 
 ### Step 2: Check Existing PR
 
-```bash
-gh pr view --json number,title,body,url,state 2>/dev/null
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 - **OPEN PR exists** → update mode (Step 5a)
 - **No PR or not OPEN** → create mode (Step 5b)
@@ -67,21 +67,11 @@ Use commit messages, diff summary, and description_hint to compose the descripti
 
 ### Step 5a: Update Existing PR
 
-```bash
-gh pr edit --title "<title>" --body "$(cat <<'EOF'
-<composed body>
-EOF
-)"
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 ### Step 5b: Create PR
 
-```bash
-gh pr create --base <base> --title "<title>" --body "$(cat <<'EOF'
-<composed body>
-EOF
-)"
-```
+Use the resolved provider reference’s documented native operation with explicit immutable IDs.
 
 Add `--draft` flag if `draft` is true.
 
@@ -104,6 +94,6 @@ Add `--draft` flag if `draft` is true.
   type: `#2 feat(skills): add video-to-image skill`. Benchmarked arms dropped this prefix 1 run in 3
   when it was stated only in Step 4.
 - Never use destructive git commands
-- If `gh pr create` or `gh pr edit` fails, report error — do NOT retry
+- If the resolved provider reference’s documented native operation or the resolved provider reference’s documented native operation fails, report error — do NOT retry
 - PR title under 72 characters
 - Review ALL commits between base and HEAD, not just the latest

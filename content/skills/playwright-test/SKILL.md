@@ -10,6 +10,8 @@ metadata:
 
 # mp-playwright-test
 
+Provider operations follow [the shared provider resolution and native command references](../shared/ISSUE_TRACKER.md).
+
 Run reliable browser verification over a defined scope. This skill owns **scope → surfaces** and orchestration. Read `../shared/PLAYWRIGHT_TESTING.md` now — the reliability rules (sanity-gate, assert-don't-eyeball, programmatic auth, never `networkidle`) live there and are followed verbatim. the invocation input
 
 ## Rules
@@ -23,7 +25,7 @@ Run reliable browser verification over a defined scope. This skill owns **scope 
 Parse `the invocation input`:
 
 - `uncommitted` (or empty) → **working-tree mode**: `git diff --name-only HEAD` (+ untracked).
-- `review:<id>` → **Review mode**: run `mpx review view --id <review-id> --identity <launch-identity> --json`, retain the returned source revision and changed-file metadata, and stop for clarification when no explicit Review ID is supplied.
+- `review:<id>` → **Review mode**: run the resolved provider reference’s documented native operation with an explicit target, retain the returned source revision and changed-file metadata, and stop for clarification when no explicit Review ID is supplied.
 - anything else → **verbal mode**: treat the text as a description of the app area to test.
 
 ## Step 2: Map scope → surfaces

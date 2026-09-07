@@ -64,11 +64,6 @@ export interface ProjectApplicationDependencies {
   }>;
   confirmInit?: typeof confirmInit;
   rollbackConfirmedInit?: typeof rollbackConfirmedInit;
-  providerDiagnostics?(request: {
-    cwd: string;
-    project: ProjectConfig;
-    user: UserConfig;
-  }): Promise<readonly Diagnostic[]>;
   ensureProject?(request: {
     cwd: string;
     projectRoot: string;
@@ -360,13 +355,6 @@ export class ProjectApplicationService {
         });
       }
     }
-    additionalDiagnostics.push(
-      ...((await this.dependencies.providerDiagnostics?.({
-        cwd: request.cwd,
-        project: found.config,
-        user,
-      })) ?? []),
-    );
     const services = Object.entries(found.config.development?.services ?? {}).sort(
       ([left], [right]) => left.localeCompare(right),
     );

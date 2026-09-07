@@ -119,8 +119,9 @@ than recording it in the summary.
 
 ## Step 8: Comment on the tracker issue/task
 
-Ask for the design issue/task number if unknown, then comment on it (verb + concrete CLI in
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md)) with this body:
+Ask for the design issue/task number if unknown, resolve and verify the explicit target using
+[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md), then comment with the selected provider reference's
+exact native syntax and this body:
 
 ```markdown
 ## Design Refined
@@ -139,8 +140,9 @@ Variant **<X>** refined: [comma-separated refinements]
 Run this only once the user has reviewed `refined.html` and approved it. Before approval, report
 "Pending user approval — re-run the unblock pass once approved" and leave every label in place.
 
-The `Design needed` gate maps to a concrete label/column per tracker — see
-[ISSUE_TRACKER.md](../shared/ISSUE_TRACKER.md) § Label mapping.
+Resolve the `Design needed` gate from existing tracker labels/columns using the selected provider
+reference. If it is absent, ask the user to authorize creating it where supported or to provide the
+intended mapping; do not invent one.
 
 1. **Find candidates** — these signals are complementary, use whichever return results:
 

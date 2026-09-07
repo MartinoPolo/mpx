@@ -29,7 +29,6 @@
     "@mpx/installer": "workspace:*",
     "@mpx/launch": "workspace:*",
     "@mpx/ports": "workspace:*",
-    "@mpx/providers": "workspace:*",
     "@mpx/runtime-claude": "workspace:*",
     "@mpx/runtime-contracts": "workspace:*",
     "@mpx/runtime-pi": "workspace:*",

@@ -23,6 +23,8 @@ MPX is a private-first TypeScript monorepo that provides one CLI and shared cont
 - Reserve root `tests/contract`, `tests/integration`, and `tests/e2e` for cross-boundary suites; keep payload tests in a skill only when they ship with or validate that payload.
 - Unify test taxonomy, configuration, and scripts without centralizing ownership or emitting tests from package builds.
 - Add narrow tests for domain behavior and malicious inputs.
+- Keep test data minimal. Mock file metadata for size-boundary tests instead of allocating large files; copy real payloads only when the behavior under test requires them.
+- Register temporary test roots for teardown immediately after creation, before fixture setup can fail. Use the shared Vitest temp isolation; never sweep host temp directories by name or follow links during cleanup.
 - Separate independent top-level constants, types, functions, and test scenarios with one blank line; tightly coupled declarations may remain grouped.
 - Preserve existing installations and data until the migration acceptance gates pass.
 

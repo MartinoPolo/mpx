@@ -10,6 +10,8 @@ metadata:
 
 # board-to-issues
 
+Provider operations follow [the shared provider resolution and native command references](../shared/ISSUE_TRACKER.md).
+
 Turn board notes into well-formed GitHub issues. the invocation input
 
 First:
@@ -32,7 +34,7 @@ Collect each `- [ ]` bullet under `# To Process`; skip any that already carry a 
 
 ## Step 3: Merge + dedup
 
-Group bullets that describe the same fix into a single proposed issue. Check for duplicates against existing issues with `mpx issue list --state open --search "<keywords>"` (and `mpx search issues` when useful); mark likely duplicates to skip, noting the existing issue number.
+Group bullets that describe the same fix into a single proposed issue. Check for duplicates against existing issues with the resolved provider reference’s documented native operation with an explicit target (and the resolved provider reference’s native issue-list/search operation when useful); mark likely duplicates to skip, noting the existing issue number.
 
 ## Step 4: Draft each issue
 
@@ -52,12 +54,7 @@ Present the full plan with `AskUserQuestion`: each board bullet → proposed iss
 
 Create each confirmed issue:
 
-```bash
-mpx issue create --title "<title>" --label "<type>,<AFK|HITL>,size:<X>,area:<..>" --assignee @me --body "$(cat <<'EOF'
-<body per GITHUB_ISSUE_TEMPLATE>
-EOF
-)"
-```
+Use the resolved provider reference's documented native create operation with the explicit target and approved title, body, labels, and assignee. Capture the returned immutable issue ID.
 
 ## Step 7: Write back to the board
 
