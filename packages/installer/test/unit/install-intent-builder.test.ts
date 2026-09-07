@@ -1,7 +1,7 @@
-import { mkdtemp, truncate, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   INSTALL_EXECUTABLE_MAX_BYTES,
   InstallIntentBuilder,
@@ -11,6 +11,23 @@ import {
   type InstallIntentRequestV1,
   type ReleaseManifestV1,
 } from '../../src/index.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, lstat: vi.fn(actual.lstat) };
+});
+
+const temporaryRoots = new Set<string>();
+
+afterEach(async () => {
+  vi.mocked(lstat).mockReset();
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  vi.mocked(lstat).mockImplementation(actual.lstat);
+  await Promise.all(
+    [...temporaryRoots].map((root) => rm(root, { recursive: true, force: true, maxRetries: 3 })),
+  );
+  temporaryRoots.clear();
+});
 
 const sha = (letter: string): string => letter.repeat(64);
 const baseRequest = (): InstallIntentRequestV1 => ({
@@ -50,6 +67,7 @@ describe('InstallIntentRequestV1', () => {
 
 async function createBuildFixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-intent-builder-'));
+  temporaryRoots.add(root);
   const configPath = path.join(root, 'config.json');
   const claude = path.join(root, 'claude.exe'),
     pi = path.join(root, 'pi.exe');
@@ -69,7 +87,7 @@ async function createBuildFixture() {
       bytes: 1,
       sha256: sha(String(((index + 2) % 9) + 1)),
     })),
-    ...['build-metadata.json', 'index.mjs', 'package.json'].map((name, index) => ({
+    ...['build-metadata.json', 'mpx-extension.mjs', 'package.json'].map((name, index) => ({
       path: `runtimes/pi/extensions/dist/package/${name}`,
       bytes: index + 1,
       sha256: sha(String(index + 1)),
@@ -193,20 +211,36 @@ it('builds a deterministic four-registration intent without publishing or extern
   expect(releases.publish).not.toHaveBeenCalled();
 });
 
-it('accepts a regular non-symlink executable at the current Claude Code size', async () => {
+it('accepts a regular non-symlink executable at the bounded security limit', async () => {
   const { builder, request } = await createBuildFixture();
-  await truncate(request.executables.claude.path, 315 * 1024 * 1024);
+  const executablePath = request.executables.claude.path;
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  vi.mocked(lstat).mockImplementation(async (target) => {
+    const stats = await actual.lstat(target);
+    if (target === executablePath) {
+      Object.defineProperty(stats, 'size', { value: INSTALL_EXECUTABLE_MAX_BYTES });
+    }
+    return stats;
+  });
 
   const result = await builder.build(request);
 
   expect(result.intent.runtimeRegistrations?.registrations[0]?.executable.path).toBe(
-    request.executables.claude.path,
+    executablePath,
   );
 });
 
 it('rejects an executable above the bounded security limit', async () => {
   const { builder, request } = await createBuildFixture();
-  await truncate(request.executables.claude.path, INSTALL_EXECUTABLE_MAX_BYTES + 1);
+  const executablePath = request.executables.claude.path;
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  vi.mocked(lstat).mockImplementation(async (target) => {
+    const stats = await actual.lstat(target);
+    if (target === executablePath) {
+      Object.defineProperty(stats, 'size', { value: INSTALL_EXECUTABLE_MAX_BYTES + 1 });
+    }
+    return stats;
+  });
 
   await expect(builder.build(request)).rejects.toMatchObject({
     code: 'INSTALL_EXECUTABLE_INVALID',

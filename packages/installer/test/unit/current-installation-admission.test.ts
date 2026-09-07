@@ -25,7 +25,7 @@ import {
 } from '../../src/pi-native-package.js';
 
 function fixture() {
-  const files = ['build-metadata.json', 'index.mjs', 'package.json'].map((name) => ({
+  const files = ['build-metadata.json', 'mpx-extension.mjs', 'package.json'].map((name) => ({
     path: `${PI_NATIVE_PACKAGE_ROOT}/${name}`,
     bytes: 1,
     sha256: installerDigest(name),

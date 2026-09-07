@@ -16,7 +16,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import path from 'node:path';
 import { connect as connectTls } from 'node:tls';
@@ -58,9 +58,7 @@ import {
   type WorktreePaths,
   buildBranchUrl,
   buildCiUrl,
-  buildCompareUrl,
   humanAge,
-  parseDefaultBranch,
   parsePorcelainV2,
   parseWorktreePaths,
   resolveProjectLocation,
@@ -251,6 +249,38 @@ export function thinkingGauge(level: string): string {
 
 // --- Settings ----------------------------------------------------------------
 
+export interface FooterSessionIdentity {
+  runtimeLabel: 'mpx-pi' | 'pi' | 'piw';
+  identity: string;
+  mode: string;
+}
+
+type FooterEnvironment = Readonly<Record<string, string | undefined>>;
+
+const SAFE_IDENTITY_FIELD = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
+
+export function resolveFooterSessionIdentity(
+  environment: FooterEnvironment = process.env,
+): FooterSessionIdentity {
+  if (environment.MPX_RUNTIME === 'pi') {
+    const identity = environment.MPX_IDENTITY ?? '';
+    const mode = environment.MPX_MODE ?? '';
+    return {
+      runtimeLabel: 'mpx-pi',
+      identity: SAFE_IDENTITY_FIELD.test(identity) ? identity : '',
+      mode: SAFE_IDENTITY_FIELD.test(mode) ? mode : '',
+    };
+  }
+
+  const accountRoot = environment.PI_CODING_AGENT_DIR?.trim() ?? '';
+  return {
+    runtimeLabel:
+      path.basename(path.normalize(accountRoot)).toLowerCase() === 'agent-work' ? 'piw' : 'pi',
+    identity: '',
+    mode: '',
+  };
+}
+
 export interface CompactionSettingsSnapshot {
   enabled: boolean;
   reserveTokens: number;
@@ -405,9 +435,6 @@ export interface GitSnapshot {
   status: GitStatus;
   worktree: WorktreePaths | undefined;
   branchUrl: string;
-  compareUrl: string;
-  /** mtime of `FETCH_HEAD` under the common git dir; undefined when never fetched. */
-  fetchEpochSeconds: number | undefined;
 }
 
 const GIT_TIMEOUT_MS = 3_000;
@@ -426,11 +453,8 @@ async function git(cwd: string, args: string[]): Promise<string> {
 }
 
 /**
- * One porcelain-v2 call carries branch, upstream, ahead/behind and dirty state;
- * the worktree paths, remote URLs and default branch cost three more cheap ref
- * reads and are only made when they can say something. `--untracked-files=normal`
- * collapses an untracked directory to one entry, so the count matches what
- * `git status` shows a human.
+ * One porcelain-v2 call carries the branch and the worktree paths plus remote
+ * URL provide the two footer links. All process work stays off the render path.
  */
 export async function readGitSnapshot(cwd: string): Promise<GitSnapshot | undefined> {
   if (cwd === '') {
@@ -455,109 +479,11 @@ export async function readGitSnapshot(cwd: string): Promise<GitSnapshot | undefi
   );
 
   const remote = (await git(cwd, ['remote', 'get-url', 'origin'])).trim();
-  let compareUrl = '';
-  if (remote !== '' && status.ahead > 0) {
-    const refs = await git(cwd, [
-      'for-each-ref',
-      '--format=%(refname:short)\t%(symref:short)',
-      'refs/remotes/origin/HEAD',
-      'refs/remotes/origin/main',
-      'refs/remotes/origin/master',
-    ]);
-    compareUrl = buildCompareUrl(remote, parseDefaultBranch(refs), status.branch);
-  }
-
-  let fetchEpochSeconds: number | undefined;
-  if (worktree !== undefined) {
-    try {
-      fetchEpochSeconds = Math.trunc(
-        statSync(path.join(worktree.commonDir, 'FETCH_HEAD')).mtimeMs / 1000,
-      );
-    } catch {
-      fetchEpochSeconds = undefined;
-    }
-  }
-
   return {
     status,
     worktree,
     branchUrl: remote === '' ? '' : buildBranchUrl(remote, status.branch),
-    compareUrl,
-    fetchEpochSeconds,
   };
-}
-
-/**
- * Upstream relation, quiet by design: `≡` in sync, `local`, and coloured counts
- * only where git is telling you something you might not already know. The
- * unpushed count links to the compare view — those commits are what a PR would
- * carry.
- */
-export function buildGitSigns(
-  status: GitStatus,
-  compareUrl: string,
-  palette: FooterPalette,
-): string {
-  if (status.branch === '') {
-    return '';
-  }
-  if (!status.hasUpstream) {
-    return `${palette.local}local${palette.reset}`;
-  }
-  // An upstream with no branch.ab line is exactly how git reports a deleted
-  // remote branch.
-  if (!status.hasAheadBehind) {
-    return `${palette.warn}remote deleted${palette.reset}`;
-  }
-  const unpushed = (color: string, label: string): string =>
-    `${color}${link(label, compareUrl)}${palette.reset}`;
-  if (status.ahead > 0 && status.behind > 0) {
-    return unpushed(palette.warn, `\u2191${status.ahead}\u2193${status.behind}`);
-  }
-  if (status.ahead > 0) {
-    return unpushed(palette.add, `\u2191${status.ahead}`);
-  }
-  if (status.behind > 0) {
-    return `${palette.del}\u2193${status.behind}${palette.reset}`;
-  }
-  return `${palette.dim}\u2261${palette.reset}`;
-}
-
-/** One segment per non-zero count: `+n` staged, `!n` modified, `?n` untracked, `~n` conflicted. */
-export function buildGitDirt(status: GitStatus, palette: FooterPalette): string[] {
-  if (status.branch === '') {
-    return [];
-  }
-  const segments: string[] = [];
-  if (status.staged > 0) {
-    segments.push(`${palette.dim}+${status.staged}${palette.reset}`);
-  }
-  if (status.unstaged > 0) {
-    segments.push(`${palette.dim}!${status.unstaged}${palette.reset}`);
-  }
-  if (status.untracked > 0) {
-    segments.push(`${palette.dim}?${status.untracked}${palette.reset}`);
-  }
-  if (status.conflicts > 0) {
-    segments.push(`${palette.warn}~${status.conflicts}${palette.reset}`);
-  }
-  return segments;
-}
-
-/** "how much do I trust the branch state beside me" — always dim, never a warning. */
-export function buildFetchAge(
-  fetchEpochSeconds: number | undefined,
-  nowSeconds: number,
-  palette: FooterPalette,
-): string {
-  if (fetchEpochSeconds === undefined) {
-    return '';
-  }
-  const age = nowSeconds - fetchEpochSeconds;
-  if (age < 600) {
-    return '';
-  }
-  return `${palette.dim}${humanAge(age)} ago${palette.reset}`;
 }
 
 // --- Codex quota -------------------------------------------------------------
@@ -1416,6 +1342,7 @@ export interface FooterSnapshot {
   sessionName: string;
   sessionShortId: string;
   sessionFileUrl: string;
+  sessionIdentity: FooterSessionIdentity;
   modelName: string;
   modelProvider: string;
   thinkingLevel: string;
@@ -1530,7 +1457,24 @@ export const buildSessionRow: FooterRowBuilder = (snapshot) => {
   return line === '' ? [] : [line];
 };
 
-/** Row 1 — model and the thinking gauge. */
+/** Row 2 — native Pi or the MPX launch identity and mode. */
+export const buildIdentityRow: FooterRowBuilder = (snapshot) => {
+  const { palette, sessionIdentity } = snapshot;
+  return [
+    joinSegments(
+      [
+        `${palette.accent}${sessionIdentity.runtimeLabel}${palette.reset}`,
+        sessionIdentity.identity === ''
+          ? ''
+          : `${palette.gray}${sessionIdentity.identity}${palette.reset}`,
+        sessionIdentity.mode === '' ? '' : `${palette.gray}${sessionIdentity.mode}${palette.reset}`,
+      ],
+      palette,
+    ),
+  ];
+};
+
+/** Row 3 — model and the thinking gauge. */
 export const buildModelRow: FooterRowBuilder = (snapshot) => {
   const { palette } = snapshot;
   const gauge = thinkingGauge(snapshot.thinkingLevel);
@@ -1545,15 +1489,13 @@ export const buildModelRow: FooterRowBuilder = (snapshot) => {
 };
 
 /**
- * Rows 6 + 9 + 10 - where you are, what is listening, and what is open against
- * this branch. In a linked worktree the two path halves are separate click
- * targets and the worktree half takes the brightest foreground, because it, not
- * the project, answers "where am I".
+ * Where you are, what is listening, and what is open against this branch. In a
+ * linked worktree the two path halves are separate click targets and the
+ * worktree half takes the brightest foreground, because it, not the project,
+ * answers "where am I".
  *
  * The dev-server ports and the MR/PR block ride here rather than on rows of
- * their own, exactly as the Claude bar composes them: all four fields answer
- * "where is this work", and the counts that grow without bound during a session
- * are the branch-state row's job below.
+ * their own because all four fields answer "where is this work".
  */
 export const buildLocationRow: FooterRowBuilder = (snapshot) => {
   const { palette, location } = snapshot;
@@ -1582,27 +1524,6 @@ export const buildLocationRow: FooterRowBuilder = (snapshot) => {
     palette,
   );
   return line === '' ? [] : [line];
-};
-
-/**
- * Row 5 — how the branch stands. Indented under the location row: visually a
- * detail *of* the row above rather than a peer, and it keeps three counts that
- * grow without bound during a session off the line that carries the links.
- */
-export const buildBranchStateRow: FooterRowBuilder = (snapshot) => {
-  const { palette, git } = snapshot;
-  if (git === undefined) {
-    return [];
-  }
-  const line = joinSegments(
-    [
-      buildGitSigns(git.status, git.compareUrl, palette),
-      ...buildGitDirt(git.status, palette),
-      buildFetchAge(git.fetchEpochSeconds, snapshot.nowSeconds, palette),
-    ],
-    palette,
-  );
-  return line === '' ? [] : [`${INDENT_GUARD}   ${line}`];
 };
 
 /**
@@ -1767,17 +1688,15 @@ export const buildQuotaRow: FooterRowBuilder = (snapshot) => {
 };
 
 /**
- * Display order, which is the Claude Code bar's order rather than the port
- * order — identity, then model, then location and its branch detail, then the
- * running totals and their compaction history, then quota, then the sub-agent
- * ledger. Rows 9 and 10 are not entries here: they compose into the location
- * row, the way the Claude bar composes them.
+ * Display order — session, launch identity, model, location, running totals
+ * and compaction history, quota, then the sub-agent ledger. Merge request and
+ * dev-server details compose into the location row.
  */
 export const FOOTER_ROW_BUILDERS: readonly FooterRowBuilder[] = [
   buildSessionRow,
+  buildIdentityRow,
   buildModelRow,
   buildLocationRow,
-  buildBranchStateRow,
   buildUsageRow,
   buildCompactionRows,
   buildQuotaRow,
@@ -2171,6 +2090,7 @@ export default function (pi: ExtensionAPI): void {
             sessionName: session.getSessionName() ?? '',
             sessionShortId: session.getSessionId().slice(0, 8),
             sessionFileUrl: sessionFile === undefined ? '' : toFileUrl(sessionFile),
+            sessionIdentity: resolveFooterSessionIdentity(),
             modelName: activeContext.model?.id ?? '',
             modelProvider: activeContext.model?.provider ?? '',
             thinkingLevel: activeContext.thinkingLevel ?? settings.defaultThinkingLevel,

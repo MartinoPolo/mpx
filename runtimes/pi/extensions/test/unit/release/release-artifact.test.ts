@@ -25,7 +25,6 @@ import {
   GUARD_ASSETS,
   HOST_EXTERNALS,
   PACKAGE_ASSETS,
-  THEME_ASSETS,
   VENDORED_LICENSE_ASSETS,
   assertAllowedImportSpecifiers,
   publishArtifact,
@@ -38,7 +37,7 @@ const distRoot = path.join(packageRoot, 'dist');
 const artifactRoot = path.join(distRoot, 'package');
 const dependencyLicenseFiles = ['licenses/croner.LICENSE', 'licenses/nanoid.LICENSE'];
 const payloadFiles = [
-  'index.mjs',
+  'mpx-extension.mjs',
   'package.json',
   ...PACKAGE_ASSETS,
   ...dependencyLicenseFiles,
@@ -129,8 +128,6 @@ const productionSourceInputs = [
   'subagents/worktree.ts',
   'terminal-progress/index.ts',
   'terminal-progress/state.ts',
-  'themes/amber.json',
-  'themes/green.json',
 ] as const;
 
 function canonicalJson(value: unknown): string {
@@ -154,7 +151,7 @@ function recomputeSourceTreeDigest(
 function recomputeBundlerConfigDigest(target = 'node22'): string {
   const exactBundleConfig = {
     entryPoint: 'index.ts',
-    outputFile: 'index.mjs',
+    outputFile: 'mpx-extension.mjs',
     esbuildVersion,
     options: {
       bundle: true,
@@ -248,7 +245,7 @@ async function assertVerificationRejects(
 }
 
 async function mutateBundleAndRefreshInventory(addition: string): Promise<void> {
-  const bundlePath = path.join(artifactRoot, 'index.mjs');
+  const bundlePath = path.join(artifactRoot, 'mpx-extension.mjs');
   const metadataPath = path.join(artifactRoot, 'build-metadata.json');
   const mutatedBundle = `${await readFile(bundlePath, 'utf8')}\n${addition}\n`;
   await writeFile(bundlePath, mutatedBundle);
@@ -256,7 +253,7 @@ async function mutateBundleAndRefreshInventory(addition: string): Promise<void> 
   const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
     files: Record<string, string>;
   };
-  metadata.files['index.mjs'] = createHash('sha256').update(mutatedBundle).digest('hex');
+  metadata.files['mpx-extension.mjs'] = createHash('sha256').update(mutatedBundle).digest('hex');
   await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
 }
 
@@ -293,10 +290,17 @@ test('release manifest is the exact native Pi package manifest', () => {
     private: true,
     type: 'module',
     pi: {
-      extensions: ['./index.mjs'],
-      themes: ['./themes/amber.json', './themes/green.json'],
+      extensions: ['./mpx-extension.mjs'],
     },
   });
+  assert.equal(
+    JSON.parse(readFileSync(path.join(artifactRoot, 'config', 'settings.json'), 'utf8')).theme,
+    'dark',
+  );
+  assert.equal(
+    Object.keys(snapshot(artifactRoot)).some((file) => file.startsWith('themes/')),
+    false,
+  );
 });
 
 test('release uses the immutable asset inventory and includes every license', () => {
@@ -313,7 +317,6 @@ test('release uses the immutable asset inventory and includes every license', ()
     'config/settings.json',
     'config/subagents.json',
   ]);
-  assert.deepEqual(THEME_ASSETS, ['themes/amber.json', 'themes/green.json']);
   assert.deepEqual(GUARD_ASSETS, [
     'guards/dangerous-command-guard.mjs',
     'guards/enforce-pkg-mgr.mjs',
@@ -331,7 +334,7 @@ test('release uses the immutable asset inventory and includes every license', ()
 
 test('bundle retains only host externals and node builtins', () => {
   runRelease('build');
-  const bundle = readFileSync(path.join(artifactRoot, 'index.mjs'), 'utf8');
+  const bundle = readFileSync(path.join(artifactRoot, 'mpx-extension.mjs'), 'utf8');
   const { staticSpecifiers, dynamicSpecifiers } = assertAllowedImportSpecifiers(bundle);
   const bareSpecifiers = [...staticSpecifiers, ...dynamicSpecifiers].filter(
     (specifier) =>
@@ -458,7 +461,7 @@ test('verification rejects missing and tampered bundle, asset, and metadata file
     await rm(path.join(artifactRoot, 'config', 'COMPACT.md'));
   });
   await assertVerificationRejects(async () => {
-    await writeFile(path.join(artifactRoot, 'index.mjs'), 'tampered');
+    await writeFile(path.join(artifactRoot, 'mpx-extension.mjs'), 'tampered');
   });
   await assertVerificationRejects(async () => {
     await writeFile(path.join(artifactRoot, 'guards', 'shared.mjs'), 'tampered');
@@ -468,7 +471,7 @@ test('verification rejects missing and tampered bundle, asset, and metadata file
     const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
       files: Record<string, string>;
     };
-    metadata.files['index.mjs'] = '0'.repeat(64);
+    metadata.files['mpx-extension.mjs'] = '0'.repeat(64);
     await writeFile(metadataPath, JSON.stringify(metadata));
   });
 }, 40_000);
@@ -519,7 +522,7 @@ test('verification rejects extra files, node_modules, nested lockfiles, and maps
     await writeFile(path.join(directory, 'pnpm-lock.yaml'), 'unexpected');
   }, /Forbidden release path/);
   await assertVerificationRejects(async () => {
-    await writeFile(path.join(artifactRoot, 'index.mjs.map'), 'unexpected');
+    await writeFile(path.join(artifactRoot, 'mpx-extension.mjs.map'), 'unexpected');
   }, /Forbidden release path/);
 }, 40_000);
 
@@ -558,17 +561,17 @@ test('walkers reject mocked symbolic links and unknown reparse entries', async (
 test('verification rejects a real directory symlink or junction', async () => {
   runRelease('build');
   const target = await mkdtemp(path.join(tmpdir(), 'pi-release-junction-'));
-  const themes = path.join(artifactRoot, 'themes');
+  const guards = path.join(artifactRoot, 'guards');
   try {
-    await writeFile(path.join(target, 'amber.json'), '{}');
-    await rm(themes, { recursive: true });
-    await symlink(target, themes, process.platform === 'win32' ? 'junction' : 'dir');
+    await writeFile(path.join(target, 'shared.mjs'), '');
+    await rm(guards, { recursive: true });
+    await symlink(target, guards, process.platform === 'win32' ? 'junction' : 'dir');
     assert.throws(
       () => runRelease('verify'),
       /Symbolic link, junction, or reparse point is forbidden/,
     );
   } finally {
-    await rm(themes, { recursive: true, force: true });
+    await rm(guards, { recursive: true, force: true });
     await rm(target, { recursive: true, force: true });
   }
 });
@@ -580,7 +583,7 @@ test('complete relocated package resolves COMPACT and guard paths inside itself'
     await rm(relocatedRoot, { recursive: true, force: true });
     await cp(artifactRoot, relocatedRoot, { recursive: true });
     const relocatedModule = (await import(
-      `${pathToFileURL(path.join(relocatedRoot, 'index.mjs')).href}?relocated=1`
+      `${pathToFileURL(path.join(relocatedRoot, 'mpx-extension.mjs')).href}?relocated=1`
     )) as {
       resolveCompactInstructionsFile: (configured?: string) => string;
       resolveGuardsDirectory: () => string;
@@ -604,7 +607,7 @@ test('failed atomic publish restores the previous valid artifact and cleans stag
   await rm(staging, { recursive: true, force: true });
   await rm(backup, { recursive: true, force: true });
   await cp(artifactRoot, staging, { recursive: true });
-  await writeFile(path.join(staging, 'index.mjs'), 'replacement');
+  await writeFile(path.join(staging, 'mpx-extension.mjs'), 'replacement');
   let renameCount = 0;
 
   await assert.rejects(

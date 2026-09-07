@@ -36,62 +36,6 @@ test('package manifest exposes only the static composition entry point', () => {
   });
 });
 
-const REQUIRED_THEME_COLORS = [
-  'accent',
-  'border',
-  'borderAccent',
-  'borderMuted',
-  'success',
-  'error',
-  'warning',
-  'muted',
-  'dim',
-  'text',
-  'thinkingText',
-  'scrollbarTrack',
-  'scrollbarThumb',
-  'selectedBg',
-  'userMessageBg',
-  'userMessageText',
-  'customMessageBg',
-  'customMessageText',
-  'customMessageLabel',
-  'toolPendingBg',
-  'toolSuccessBg',
-  'toolErrorBg',
-  'toolTitle',
-  'toolOutput',
-  'mdHeading',
-  'mdLink',
-  'mdLinkUrl',
-  'mdCode',
-  'mdCodeBlock',
-  'mdCodeBlockBorder',
-  'mdQuote',
-  'mdQuoteBorder',
-  'mdHr',
-  'mdListBullet',
-  'toolDiffAdded',
-  'toolDiffRemoved',
-  'toolDiffContext',
-  'syntaxComment',
-  'syntaxKeyword',
-  'syntaxFunction',
-  'syntaxVariable',
-  'syntaxString',
-  'syntaxNumber',
-  'syntaxType',
-  'syntaxOperator',
-  'syntaxPunctuation',
-  'thinkingOff',
-  'thinkingMinimal',
-  'thinkingLow',
-  'thinkingMedium',
-  'thinkingHigh',
-  'thinkingXhigh',
-  'bashMode',
-] as const;
-
 test('package settings retain only portable runtime choices', () => {
   const settings = readJson('config/settings.json');
   const forbiddenKeys = [
@@ -111,6 +55,7 @@ test('package settings retain only portable runtime choices', () => {
   assert.equal(typeof settings.compaction, 'object');
   assert.equal(typeof settings.terminal, 'object');
   assert.equal(settings.enableSkillCommands, true);
+  assert.equal(settings.theme, 'dark');
   assert.equal(settings.defaultProjectTrust, 'ask');
   assert.ok(Array.isArray(settings.packages));
   assert.ok(
@@ -196,26 +141,4 @@ test('keybindings and subagent settings are valid objects', () => {
     );
   }
   assert.equal(typeof subagents.fleetView, 'boolean');
-});
-
-test('amber and green themes define valid portable palettes', () => {
-  for (const name of ['amber', 'green']) {
-    const theme = readJson(`themes/${name}.json`);
-    const variables = theme.vars as Record<string, unknown>;
-    const colors = theme.colors as Record<string, unknown>;
-
-    assert.equal(theme.name, name);
-    assert.equal(typeof theme.$schema, 'string');
-    for (const token of REQUIRED_THEME_COLORS) {
-      assert.ok(token in colors, `${name}.${token}`);
-    }
-    for (const value of Object.values(colors)) {
-      assert.ok(
-        value === '' ||
-          (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255) ||
-          (typeof value === 'string' && (/^#[0-9a-f]{6}$/i.test(value) || value in variables)),
-        `${name} has invalid color ${String(value)}`,
-      );
-    }
-  }
 });

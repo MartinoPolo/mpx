@@ -54,7 +54,7 @@ async function writePiExtensionArtifact(repositoryRoot: string): Promise<string>
   const artifact = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions', 'dist', 'package');
   const payload = {
     'config/settings.json': '{"theme":"amber"}\n',
-    'index.mjs': 'export default function extension() {}\n',
+    'mpx-extension.mjs': 'export default function extension() {}\n',
   };
   for (const [name, body] of Object.entries(payload)) {
     const target = path.join(artifact, ...name.split('/'));
@@ -246,7 +246,7 @@ describe('immutable installer core', () => {
       });
       const paths = manifest.files.map((file) => file.path);
       expect(paths).toContain('runtimes/pi/extensions/dist/package/build-metadata.json');
-      expect(paths).toContain('runtimes/pi/extensions/dist/package/index.mjs');
+      expect(paths).toContain('runtimes/pi/extensions/dist/package/mpx-extension.mjs');
       expect(paths).toContain('runtimes/pi/extensions/dist/package/subagents/LICENSE');
       expect(paths).toContain('runtimes/pi/extensions/dist/package/licenses/croner.LICENSE');
       expect(paths).toContain('runtimes/pi/extensions/dist/package/licenses/nanoid.LICENSE');
@@ -304,14 +304,14 @@ describe('immutable installer core', () => {
     const repositoryRoot = isolated.repositoryRoot;
     const artifact = path.join(repositoryRoot, 'runtimes', 'pi', 'extensions', 'dist', 'package');
     try {
-      const bundle = path.join(artifact, 'index.mjs');
+      const bundle = path.join(artifact, 'mpx-extension.mjs');
       const metadataPath = path.join(artifact, 'build-metadata.json');
       const tampered = `${await readFile(bundle, 'utf8')}\n// tampered\n`;
       await writeFile(bundle, tampered);
       const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as {
         files: Record<string, string>;
       };
-      metadata.files['index.mjs'] = createHash('sha256').update(tampered).digest('hex');
+      metadata.files['mpx-extension.mjs'] = createHash('sha256').update(tampered).digest('hex');
       await writeFile(metadataPath, `${JSON.stringify(metadata)}\n`);
 
       await expect(
@@ -332,7 +332,7 @@ describe('immutable installer core', () => {
     await expect(
       buildCurrentReleaseManifest({
         repositoryRoot,
-        assetPaths: ['runtimes/pi/extensions/dist/package/index.mjs'],
+        assetPaths: ['runtimes/pi/extensions/dist/package/mpx-extension.mjs'],
       }),
     ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
   });
@@ -346,7 +346,7 @@ describe('immutable installer core', () => {
       'EXTENSIONS',
       'DIST',
       'PACKAGE',
-      'index.mjs',
+      'mpx-extension.mjs',
     );
     await mkdir(path.dirname(partial), { recursive: true });
     await writeFile(partial, 'export default function unverifiedExtension() {}\n');
@@ -354,7 +354,7 @@ describe('immutable installer core', () => {
     await expect(
       buildCurrentReleaseManifest({
         repositoryRoot,
-        assetPaths: ['RUNTIMES/PI/EXTENSIONS/DIST/PACKAGE/index.mjs'],
+        assetPaths: ['RUNTIMES/PI/EXTENSIONS/DIST/PACKAGE/mpx-extension.mjs'],
       }),
     ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
   });

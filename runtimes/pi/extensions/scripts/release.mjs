@@ -40,11 +40,9 @@ export const CONFIG_ASSETS = Object.freeze([
   'config/subagents.json',
 ]);
 
-export const THEME_ASSETS = Object.freeze(['themes/amber.json', 'themes/green.json']);
 export const VENDORED_LICENSE_ASSETS = Object.freeze(['subagents/LICENSE']);
 export const PACKAGE_ASSETS = Object.freeze([
   ...CONFIG_ASSETS,
-  ...THEME_ASSETS,
   ...GUARD_ASSETS,
   ...VENDORED_LICENSE_ASSETS,
 ]);
@@ -54,7 +52,7 @@ const dependencyLicenses = Object.freeze([
   { packageName: 'nanoid', output: 'licenses/nanoid.LICENSE' },
 ]);
 const generatedPayloadFiles = Object.freeze([
-  'index.mjs',
+  'mpx-extension.mjs',
   'package.json',
   ...PACKAGE_ASSETS,
   ...dependencyLicenses.map(({ output }) => output),
@@ -93,7 +91,7 @@ export const BUNDLER_OPTIONS = Object.freeze({
 });
 export const BUNDLER_CONFIG = Object.freeze({
   entryPoint: 'index.ts',
-  outputFile: 'index.mjs',
+  outputFile: 'mpx-extension.mjs',
   esbuildVersion,
   options: BUNDLER_OPTIONS,
 });
@@ -102,8 +100,7 @@ const releaseManifest = {
   private: true,
   type: 'module',
   pi: {
-    extensions: ['./index.mjs'],
-    themes: ['./themes/amber.json', './themes/green.json'],
+    extensions: ['./mpx-extension.mjs'],
   },
 };
 
@@ -121,7 +118,7 @@ function isApprovedImportSpecifier(specifier) {
 
 export function analyzeImportSpecifiers(source) {
   const sourceFile = ts.createSourceFile(
-    'index.mjs',
+    'mpx-extension.mjs',
     source,
     ts.ScriptTarget.Latest,
     true,
@@ -363,16 +360,26 @@ async function createArtifact(destination) {
 async function assertPortable(root) {
   const files = await artifactFiles(root);
   assertExactFiles(files, completeArtifactFiles, 'Release artifact');
+  const footerIdentityLabel = ['mpx', 'pi'].join('-');
   for (const file of files) {
     const content = await readFile(path.join(root, file), 'utf8');
-    if (/(?:^|[^a-z])[a-z]:[\\/]/i.test(content) || /mpx-(?:pi|claude-code)/i.test(content)) {
+    const auditedContent =
+      file === BUNDLER_CONFIG.outputFile
+        ? content
+            .replaceAll(JSON.stringify(footerIdentityLabel), '')
+            .replaceAll(`'${footerIdentityLabel}'`, '')
+        : content;
+    if (
+      /(?:^|[^a-z])[a-z]:[\\/]/i.test(auditedContent) ||
+      /mpx-(?:pi|claude-code)/i.test(auditedContent)
+    ) {
       throw new Error(`Machine or repository path leaked into ${file}`);
     }
   }
 }
 
 async function assertArtifactImportPolicy(root) {
-  assertAllowedImportSpecifiers(await readFile(path.join(root, 'index.mjs'), 'utf8'));
+  assertAllowedImportSpecifiers(await readFile(path.join(root, 'mpx-extension.mjs'), 'utf8'));
 }
 
 async function assertMetadataInventory(root) {

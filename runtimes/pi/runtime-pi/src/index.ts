@@ -53,6 +53,10 @@ export interface PiInvocationInput {
   accountRoot: string;
   cwd: string;
   runtimeContext: RuntimeContextV1;
+  launchIdentity?: {
+    readonly name: string;
+    readonly mode: string;
+  };
   immutableProjectionDirectory?: string;
   profile?: PiRuntimeProfileV1;
   runtimeContextFile?: string;
@@ -316,6 +320,14 @@ function compiledAgentsDirectory(directory: string, files: readonly PiProjection
 }
 
 export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvocationPlan> {
+  if (
+    input.launchIdentity &&
+    ![input.launchIdentity.name, input.launchIdentity.mode].every((value) =>
+      /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(value),
+    )
+  ) {
+    throw new Error('Pi launch identity contains an invalid display field');
+  }
   const runtimeContextFile = input.projection?.runtimeContextFile ?? input.runtimeContextFile;
   const profileInput = input.projection?.profile ?? input.profile;
   const profile = profileInput
@@ -443,6 +455,12 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
       MPX_RUNTIME: 'pi',
       MPX_RUNTIME_CONTEXT: JSON.stringify(context),
       MPX_RUNTIME_CONTEXT_FILE: absolute(runtimeContextFile, 'runtime context'),
+      ...(input.launchIdentity
+        ? {
+            MPX_IDENTITY: input.launchIdentity.name,
+            MPX_MODE: input.launchIdentity.mode,
+          }
+        : {}),
       MPX_ACTIVE_CONTENT_ROOT: activeContentRoot,
       MPX_ACTIVE_CONTENT_MANIFEST: manifestPath.replaceAll('\\', '/'),
       MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: JSON.stringify({

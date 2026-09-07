@@ -1,8 +1,8 @@
-import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutorAdapter, RuntimeAdapter } from '@mpx/executors';
 import { defaultContext } from '../../src/context.js';
 import { captureIo } from '../../src/io.js';
@@ -10,9 +10,25 @@ import { run } from '../../src/main.js';
 
 const canonicalContentRoot = fileURLToPath(new URL('../../../../content/', import.meta.url));
 const skillCatalogFixture = fileURLToPath(new URL('../fixtures/skill-catalog/', import.meta.url));
+const temporaryRoots: string[] = [];
+
+afterEach(async () => {
+  const results = await Promise.allSettled(
+    temporaryRoots
+      .splice(0)
+      .map((root) => rm(root, { recursive: true, force: true, maxRetries: 3 })),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Temporary fixture cleanup failed.');
+  }
+});
 
 async function explicitLaunchFixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-cli-explicit-launch-'));
+  temporaryRoots.push(root);
   const cwd = path.join(root, 'project');
   const appData = path.join(root, 'roaming');
   const localAppData = path.join(root, 'local');

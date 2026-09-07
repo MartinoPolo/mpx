@@ -157,7 +157,7 @@ it('discovers the release once and separates MPX commands from native project sk
   for (const action of ['build', 'verify']) {
     await runNode([releaseScript, action], { cwd: workspaceRoot, inheritOutput: true });
   }
-  expect((await stat(path.join(artifactRoot, 'index.mjs'))).isFile()).toBe(true);
+  expect((await stat(path.join(artifactRoot, 'mpx-extension.mjs'))).isFile()).toBe(true);
 
   const disposable = await mkdtemp(path.join(os.tmpdir(), 'mpx-real-pi-discovery-'));
   cleanupRoots.push(disposable);
@@ -249,7 +249,7 @@ it('discovers the release once and separates MPX commands from native project sk
       expect.objectContaining({
         name: command.name,
         source: 'extension',
-        sourceInfo: expect.objectContaining({ path: path.join(artifactRoot, 'index.mjs') }),
+        sourceInfo: expect.objectContaining({ path: path.join(artifactRoot, 'mpx-extension.mjs') }),
       }),
     ),
   );
@@ -280,7 +280,7 @@ it('discovers the release once and separates MPX commands from native project sk
       loaded.extensions.map((extension: { resolvedPath: string }) =>
         path.normalize(extension.resolvedPath),
       ),
-    ).toEqual([path.normalize(path.join(artifactRoot, 'index.mjs'))]);
+    ).toEqual([path.normalize(path.join(artifactRoot, 'mpx-extension.mjs'))]);
   }
 
   expect(await fileInventory(agentRoot)).toEqual([

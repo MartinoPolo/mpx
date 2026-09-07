@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import {
   copyFile,
   link,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -15,10 +16,18 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, lstat: vi.fn(actual.lstat) };
+});
+
 const execFileAsync = promisify(execFile);
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.mocked(lstat).mockReset();
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  vi.mocked(lstat).mockImplementation(actual.lstat);
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -227,7 +236,14 @@ it('rejects a non-file executable', async () => {
 
 it('rejects an oversized executable', async () => {
   const value = await requestFixture();
-  await truncate(value.pi, INSTALL_EXECUTABLE_MAX_BYTES + 1);
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  vi.mocked(lstat).mockImplementation(async (target) => {
+    const stats = await actual.lstat(target);
+    if (target === value.pi) {
+      Object.defineProperty(stats, 'size', { value: INSTALL_EXECUTABLE_MAX_BYTES + 1 });
+    }
+    return stats;
+  });
   const factory = new NodeSetupRequestFactory(value.environment, { version: async () => '1.0' });
   await expect(factory.create()).rejects.toMatchObject({ code: 'SETUP_EXECUTABLE_INVALID' });
 });
