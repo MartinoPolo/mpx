@@ -1,4 +1,4 @@
-export type AgentModelClassV1 = 'mechanical' | 'standard' | 'advanced' | 'frontier';
+export type AgentModelClassV1 = 'mechanical' | 'exploration' | 'standard' | 'advanced' | 'frontier';
 export type AgentThinkingV1 = 'low' | 'medium' | 'high';
 export type AgentCapabilityV1 =
   'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';

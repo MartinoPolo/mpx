@@ -10,7 +10,8 @@ export interface RuntimeModelSelectionV1 {
   readonly enabledModels: readonly string[];
 }
 
-export type RuntimeAgentModelClassV1 = 'mechanical' | 'standard' | 'advanced' | 'frontier';
+export type RuntimeAgentModelClassV1 =
+  'mechanical' | 'exploration' | 'standard' | 'advanced' | 'frontier';
 
 export interface RuntimeAgentModelMappingsV1 {
   readonly schemaVersion: 1;
@@ -64,7 +65,7 @@ export interface RuntimeProfilesV1 {
   }>;
 }
 
-const MODEL_CLASSES = ['advanced', 'frontier', 'mechanical', 'standard'] as const;
+const MODEL_CLASSES = ['advanced', 'exploration', 'frontier', 'mechanical', 'standard'] as const;
 const RUNTIMES = ['claude', 'pi'] as const;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const CLAUDE_ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -180,6 +181,7 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
     }
     parsed[runtime] = Object.freeze({
       mechanical: models.mechanical as string,
+      exploration: models.exploration as string,
       standard: models.standard as string,
       advanced: models.advanced as string,
       frontier: models.frontier as string,

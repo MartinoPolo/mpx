@@ -12,7 +12,7 @@ const MAX_IDENTITY_LENGTH = 128;
 const MAX_SELECTOR_LENGTH = 256;
 const MAX_SELECTOR_WILDCARDS = 16;
 const MAX_OUTPUT_SCHEMA_LENGTH = 256;
-const modelClasses = new Set(['mechanical', 'standard', 'advanced', 'frontier']);
+const modelClasses = new Set(['mechanical', 'exploration', 'standard', 'advanced', 'frontier']);
 const thinkingLevels = new Set(['low', 'medium', 'high']);
 const capabilities = new Set(['read', 'search', 'shell', 'write', 'browser', 'context', 'web']);
 

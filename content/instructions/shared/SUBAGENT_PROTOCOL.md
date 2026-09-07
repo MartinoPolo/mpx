@@ -8,12 +8,13 @@ resolve these policies to concrete harness fields and model IDs.
 Only structured runtime configuration selects a model; prose model names do not. Canonical call
 sites use model classes:
 
-| Class        | Best for                                                  |
-| ------------ | --------------------------------------------------------- |
-| `mechanical` | bounded checks, commits, lookups with no judgment         |
-| `standard`   | exploration, review, documentation, bounded judgment      |
-| `advanced`   | implementation, design, architecture, deep analysis       |
-| `frontier`   | deliberate manual escalation for large orchestration only |
+| Class         | Best for                                                  |
+| ------------- | --------------------------------------------------------- |
+| `mechanical`  | bounded checks, commits, lookups with no judgment         |
+| `exploration` | broad codebase discovery and repository search            |
+| `standard`    | review, documentation, and bounded judgment               |
+| `advanced`    | implementation, design, architecture, and deep analysis   |
+| `frontier`    | deliberate manual escalation for large orchestration only |
 
 An agent definition should declare its class and effort policy. Callers omit model selection for a
 declaring agent. Generic agents with no declaration require an explicit class at every call site.
@@ -29,7 +30,7 @@ standing automatic-agent class.
 Effort is runtime configuration, not prompt prose. Pin it in the agent definition when the runtime
 supports it:
 
-- exploration: `standard`, low;
+- exploration: `exploration`, medium;
 - review: `standard`, medium;
 - implementation with a pre-analyzed chunk: `advanced`, low;
 - TDD iteration and design: `advanced`, medium;
@@ -79,13 +80,13 @@ changes; stale measured claims are defects.
 | Task                                   | Class / effort                                        |
 | -------------------------------------- | ----------------------------------------------------- |
 | multi-phase orchestration              | `advanced` high; `frontier` only by manual escalation |
-| issue/codebase analysis                | `advanced` high                                       |
-| design/architecture/interface          | `advanced` medium                                     |
+| issue/codebase analysis                | `frontier` high                                       |
+| design/architecture/interface          | `frontier` medium                                     |
 | implementation to green                | `advanced` medium                                     |
 | pre-analyzed implementation            | `advanced` low                                        |
 | interactive browser loop               | `advanced` high                                       |
 | review                                 | `standard` medium                                     |
-| codebase exploration                   | `standard` low                                        |
+| codebase exploration                   | `exploration` medium                                  |
 | bounded composition/finding            | `standard` low                                        |
 | deterministic check/commit/docs lookup | `mechanical`                                          |
 

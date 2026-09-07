@@ -44,8 +44,8 @@
       "outputSchema": "text"
     },
     "mpx-explorer": {
-      "modelClass": "standard",
-      "thinking": "low",
+      "modelClass": "exploration",
+      "thinking": "medium",
       "capabilities": ["read", "search", "shell"],
       "nesting": [],
       "outputSchema": "text"

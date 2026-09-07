@@ -24,8 +24,20 @@ afterEach(async () =>
 const runtimeProfiles: RuntimeProfilesV1 = {
   schemaVersion: 1,
   models: {
-    claude: { mechanical: 'haiku', standard: 'sonnet', advanced: 'opus', frontier: 'fable' },
-    pi: { mechanical: 'p/m', standard: 'p/s', advanced: 'p/a', frontier: 'p/f' },
+    claude: {
+      mechanical: 'haiku',
+      exploration: 'sonnet',
+      standard: 'sonnet',
+      advanced: 'opus',
+      frontier: 'fable',
+    },
+    pi: {
+      mechanical: 'p/m',
+      exploration: 'p/m',
+      standard: 'p/s',
+      advanced: 'p/a',
+      frontier: 'p/f',
+    },
   },
   agentTranslation: {
     runtimes: {
@@ -118,8 +130,8 @@ async function createAgentFixture(root: string, outputSchema = 'text'): Promise<
       schemaVersion: 1,
       agents: {
         'mpx-explorer': {
-          modelClass: 'standard',
-          thinking: 'low',
+          modelClass: 'exploration',
+          thinking: 'medium',
           capabilities: ['read', 'search'],
           nesting: [],
           outputSchema,
@@ -247,11 +259,11 @@ describe('shared content compiler', () => {
   it.each([
     [
       'claude',
-      "---\nname: Explore\ndescription: Explore safely.\nmodel: 'sonnet'\neffort: 'low'\ntools: 'Read, Grep, Glob'\noutput-schema: 'text'\n\n---\nAgent body.\nSee [reference](references/guide.md).\n",
+      "---\nname: Explore\ndescription: Explore safely.\nmodel: 'sonnet'\neffort: 'medium'\ntools: 'Read, Grep, Glob'\noutput-schema: 'text'\n\n---\nAgent body.\nSee [reference](references/guide.md).\n",
     ],
     [
       'pi',
-      "---\nname: Explore\ndescription: Explore safely.\nmodel: 'p/s'\nthinking: 'low'\ntools: 'read, grep, find, ls'\noutput_schema: 'text'\n\n---\nAgent body.\nSee [reference](references/guide.md).\n",
+      "---\nname: Explore\ndescription: Explore safely.\nmodel: 'p/m'\nthinking: 'medium'\ntools: 'read, grep, find, ls'\noutput_schema: 'text'\n\n---\nAgent body.\nSee [reference](references/guide.md).\n",
     ],
   ] as const)(
     'compiles a complete deterministic YAML-safe representative %s agent',
@@ -271,9 +283,9 @@ describe('shared content compiler', () => {
         expect.objectContaining({
           canonicalIdentity: 'mpx-explorer',
           projectedIdentity: 'Explore',
-          semanticModel: 'standard',
-          concreteModel: runtime === 'claude' ? 'sonnet' : 'p/s',
-          thinking: 'low',
+          semanticModel: 'exploration',
+          concreteModel: runtime === 'claude' ? 'sonnet' : 'p/m',
+          thinking: 'medium',
           capabilities: ['read', 'search'],
           generatedPath: 'agents/Explore.md',
           sourcePath: 'mpx-explorer.md',

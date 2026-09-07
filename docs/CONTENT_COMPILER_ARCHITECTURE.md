@@ -16,7 +16,7 @@ The file inspected through MPX must be the exact file supplied to the runtime. R
 - Launch-specific content scopes, skill packs, exposure overrides, and project-local skills remain supported.
 - Provider-neutral MPX commands own Issue, Review, and CICI routing. Skills do not translate `mpx issue create` into provider CLIs.
 - Runtime and model differences live in one tracked, validated translation profile.
-- Canonical agents use semantic model classes: `mechanical`, `standard`, `advanced`, and `frontier`.
+- Canonical agents use semantic model classes: `mechanical`, `exploration`, `standard`, `advanced`, and `frontier`.
 - Unknown fields, placeholders, model classes, capabilities, references, or required runtime features fail closed.
 - Generated active content is persistent and directly inspectable.
 - Root and group CLI help use progressive disclosure rather than returning usage errors for incomplete command groups.
@@ -165,6 +165,7 @@ Required model mappings:
 | Semantic class | Claude   | Pi                           |
 | -------------- | -------- | ---------------------------- |
 | `mechanical`   | `haiku`  | `openai-codex/gpt-5.6-luna`  |
+| `exploration`  | `sonnet` | `openai-codex/gpt-5.6-luna`  |
 | `standard`     | `sonnet` | `openai-codex/gpt-5.6-terra` |
 | `advanced`     | `opus`   | `openai-codex/gpt-5.6-sol`   |
 | `frontier`     | `fable`  | `openai-codex/gpt-5.6-sol`   |
@@ -418,7 +419,7 @@ Introduce hierarchical command metadata, normal help flags, successful incomplet
 
 ### Semantic model profiles
 
-Replace canonical `luna`, `terra`, and `sol` classes with the four semantic classes. Add the tracked runtime profile and route agent generation through validated mappings.
+Replace canonical `luna`, `terra`, and `sol` classes with semantic classes. Add the tracked runtime profile and route agent generation through validated mappings.
 
 ### Shared compiler foundation
 

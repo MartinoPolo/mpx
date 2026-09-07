@@ -16,8 +16,9 @@ State the breadth and a stopping condition:
 | `medium`        | obvious locations plus one alternate naming convention                      |
 | `very thorough` | exhaust relevant conventions, sibling directories, configuration, and tests |
 
-Breadth controls search scope, not reasoning effort. `mpx-explorer` declares the `standard` model
-class and low effort in runtime projections, so callers do not pass a concrete model.
+Breadth controls search scope, not reasoning effort. `mpx-explorer` declares the `exploration` model
+class and medium effort in runtime projections. It resolves to Sonnet in Claude Code and Luna in Pi, so
+callers do not pass a concrete model.
 
 ## Prompt context explicitly
 

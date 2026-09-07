@@ -26,7 +26,7 @@ sources for writing, identity, tools, models, lifecycle, and permission mechanic
 2. **Gather requirements.** In one numbered request ask for purpose; distinct delegation
    branches and phrases; inputs and outputs; ordered actions; points where premature or
    false completion is plausible; reference needs; read-only or read-write scope; required
-   tools; mechanical, standard, or advanced model class; color; and parent-facing output
+   tools; mechanical, exploration, standard, or advanced model class; color; and parent-facing output
    shape. Use `the invocation input` for known answers, have every remaining field answered or
    marked not applicable, and define each branch's expected result.
 
@@ -38,7 +38,7 @@ sources for writing, identity, tools, models, lifecycle, and permission mechanic
 
 4. **Draft `agents/<agent-name>.md`.** Use lowercase hyphenated identity (except an exact
    built-in override), a one-line description under 250 characters that front-loads all
-   distinct delegation branches, minimal tools, a concrete the mechanical model class, the standard model class, or the advanced model class
+   distinct delegation branches, minimal tools, a concrete mechanical, exploration, standard, or advanced model class
    model, and a color. Include a focused role, numbered workflow, and parseable output
    contract. Follow SUBAGENT_PROTOCOL for MCP, overrides, model parameters, and grants
    rather than restating that lifecycle here. Align filename and identity, grant every

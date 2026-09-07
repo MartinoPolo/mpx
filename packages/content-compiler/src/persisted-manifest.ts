@@ -199,7 +199,9 @@ function parseAgent(value: unknown, index: number): CompiledAgentManifestEntry {
     `agents[${index}]`,
   );
   if (
-    !['mechanical', 'standard', 'advanced', 'frontier'].includes(String(item.semanticModel)) ||
+    !['mechanical', 'exploration', 'standard', 'advanced', 'frontier'].includes(
+      String(item.semanticModel),
+    ) ||
     !['low', 'medium', 'high'].includes(String(item.thinking))
   ) {
     fail('ACTIVE_CONTENT_MANIFEST_INVALID', `agents[${index}] model metadata is invalid.`);

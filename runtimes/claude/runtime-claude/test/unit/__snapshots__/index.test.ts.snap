@@ -3,8 +3,8 @@
 exports[`Claude projection > matches the complete Claude projection golden across skill exposures and harness files 1`] = `
 {
   ".claude-plugin/plugin.json": "7cde599358d65b31d293eabdc22033a1b76c4a2d6f8e7a73b33f7e20bb80c91e",
-  "active-content.json": "79879fc5b0736c359238d9aa35fcc8b0a53ea92756efafac455c753f2ed811a7",
-  "agents/Explore.md": "f73fa2508deb72c51a7417cd5b53f4843c77afa9ef5565bfac84bb2bff776a91",
+  "active-content.json": "a991c1c9a823a00874a06468936a2443b59290ac650e987f56764799c3c1954a",
+  "agents/Explore.md": "13f19c7a5734059e2b181f136c5835c4ae50b6408ceae3c22d0af7541ddf8781",
   "hooks/dangerous-command-policy.mjs": "f5c85d95188a10784f4f6a30665494cc55a29f3281e3da04a575cc65be9ee8b2",
   "hooks/hooks.json": "b62d1810c8d39c5bccf7c4b0d3d261c9676199d0cc5ec5cb95660aca13195c11",
   "hooks/runtime-guard.mjs": "157f0af1013e9c9fb3affc964a0470270b74122855360cd103dfa38cfb16e385",

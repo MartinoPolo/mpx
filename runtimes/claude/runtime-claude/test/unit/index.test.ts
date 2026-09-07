@@ -114,8 +114,8 @@ async function fixture() {
       schemaVersion: 1,
       agents: {
         'mpx-explorer': {
-          modelClass: 'standard',
-          thinking: 'low',
+          modelClass: 'exploration',
+          thinking: 'medium',
           capabilities: ['read', 'search', 'shell'],
           nesting: [],
           outputSchema: 'text',
@@ -582,7 +582,7 @@ describe('Claude projection', () => {
     await buildClaudePlugin({ ...f, outputRoot: out });
     const files = await tree(out);
     expect(files['agents/Explore.md']).toContain(
-      "name: Explore\ndescription: Exact Explore description\nmodel: 'sonnet'\neffort: 'low'\ntools: 'Read, Grep, Glob, Bash'\noutput-schema: 'text'",
+      "name: Explore\ndescription: Exact Explore description\nmodel: 'sonnet'\neffort: 'medium'\ntools: 'Read, Grep, Glob, Bash'\noutput-schema: 'text'",
     );
     expect(files).not.toHaveProperty('agents/mpx-explorer.md');
     expect(files['agents/Explore.md']).not.toContain('model: inherit');

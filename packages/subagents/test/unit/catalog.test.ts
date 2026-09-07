@@ -22,8 +22,8 @@ function expectCode(action: () => unknown, code: string): void {
 }
 
 describe('agent catalog V1', () => {
-  it('accepts exactly the four semantic model classes and rejects legacy classes', () => {
-    for (const modelClass of ['mechanical', 'standard', 'advanced', 'frontier']) {
+  it('accepts exactly the semantic model classes and rejects legacy classes', () => {
+    for (const modelClass of ['mechanical', 'exploration', 'standard', 'advanced', 'frontier']) {
       expect(parseAgentCatalogV1(catalog({ 'mpx-alpha': { ...agent, modelClass } }))).toMatchObject(
         {
           agents: { 'mpx-alpha': { modelClass } },

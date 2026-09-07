@@ -39,9 +39,16 @@ const agentAliases = Object.fromEntries(
 const profile = {
   schemaVersion: 1,
   models: {
-    claude: { mechanical: 'haiku', standard: 'sonnet', advanced: 'opus', frontier: 'fable' },
+    claude: {
+      mechanical: 'haiku',
+      exploration: 'sonnet',
+      standard: 'sonnet',
+      advanced: 'opus',
+      frontier: 'fable',
+    },
     pi: {
       mechanical: 'openai-codex/gpt-5.6-luna',
+      exploration: 'openai-codex/gpt-5.6-luna',
       standard: 'openai-codex/gpt-5.6-terra',
       advanced: 'openai-codex/gpt-5.6-sol',
       frontier: 'openai-codex/gpt-5.6-sol',
