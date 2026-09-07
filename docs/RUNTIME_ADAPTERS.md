@@ -1,10 +1,21 @@
 # Runtime adapters
 
-MPX resolves canonical content once into a runtime-neutral v4 manifest. The manifest records every canonical identity's inclusion decision, exposure, permissions, source hash, and metadata hash without embedding bodies, private roots, or runtime syntax. The logical skill artifact is distinct from each launch-bound reference to a full published runtime projection. Claude and Pi projections reference the same manifest key and have distinct artifact/file-map hashes.
+MPX resolves canonical content once into a runtime-neutral v4 manifest. The manifest records every canonical identity's
+inclusion decision, exposure, permissions, source hash, and metadata hash without embedding bodies, private roots, or
+runtime syntax. The logical skill artifact is distinct from each launch-bound reference to a full published runtime
+projection. Claude and Pi projections reference the same manifest key and have distinct artifact/file-map hashes.
 
-Runtime adapters consume verified runtime-neutral plans and a verified compiled content tree. They own only runtime assets, projection assembly, and invocation wiring; canonical skill and agent parsing/rendering, policy, provider logic, model-selection defaults, and application orchestration remain in their owning workspace packages.
+Runtime adapters consume verified runtime-neutral plans and a verified compiled content tree. They own only runtime
+assets, projection assembly, and invocation wiring; canonical skill and agent parsing/rendering, policy, provider logic,
+model-selection defaults, and application orchestration remain in their owning workspace packages.
 
-`content/runtime-profiles.json` is the tracked source for agent models, aliases, capability/tool mappings, frontmatter fields, separators, and nesting requirements. `@mpx/config` validates and freezes this strict profile. The shared content compiler loads canonical agents through `@mpx/subagents`, applies the selected runtime profile, and emits final agent bytes and manifest details. Runtime build APIs receive no agent model mapping and copy compiler-owned skill and agent bytes unchanged. The separate `RuntimeModelSelectionV1` session default remains code-owned and is not an agent-class mapping or user-config schema surface. Agent compilation does not generate Pi-specific extension implementation.
+`content/runtime-profiles.json` is the tracked source for agent models, aliases, capability/tool mappings, frontmatter
+fields, separators, and nesting requirements. `@mpx/config` validates and freezes this strict profile. The shared
+content compiler loads canonical agents through `@mpx/subagents`, applies the selected runtime profile, and emits final
+agent bytes and manifest details. Runtime build APIs receive no agent model mapping and copy compiler-owned skill and
+agent bytes unchanged. The separate `RuntimeModelSelectionV1` session default remains code-owned and is not an
+agent-class mapping or user-config schema surface. Agent compilation does not generate Pi-specific extension
+implementation.
 
 ## Four exposure states
 
@@ -15,24 +26,78 @@ Runtime adapters consume verified runtime-neutral plans and a verified compiled 
 | `explicit-only` | absent                      | no           | yes                      | yes                 |
 | `off`           | absent                      | no           | no                       | no                  |
 
-Model search is artifact-key-bound and can inspect canonical metadata only for `full` and `name-only`. Human search/detail is a separate explicit surface and may find `explicit-only`; prose mentioning a slash command is not explicit invocation. Bodies are lazy-loaded only after exact manifest, artifact, runtime, path, and content-hash revalidation. MPX-managed project skills follow the same policy, publication, and validation rules. Project `SKILL.md` files opt into that contract only through `metadata.mpx`. The shared project inventory classifies bounded frontmatter before managed parsing and returns unmanaged native directories separately; native skills are not added to the application catalog or assigned invented exposure metadata. Ordinary metadata, native names, tool declarations, and indentation remain native-owned. Explicit MPX metadata retains strict identity, namespace collision, exposure, disabled-invocation, and content/directory-hash checks. Ambiguous ownership, including unsupported YAML indirection, fails closed rather than falling back to native discovery. Both classes retain directory/file containment and aggregate inventory bounds.
+Model search is artifact-key-bound and can inspect canonical metadata only for `full` and `name-only`. Human
+search/detail is a separate explicit surface and may find `explicit-only`; prose mentioning a slash command is not
+explicit invocation. Bodies are lazy-loaded only after exact manifest, artifact, runtime, path, and content-hash
+revalidation. MPX-managed project skills follow the same policy, publication, and validation rules. Project `SKILL.md`
+files opt into that contract only through `metadata.mpx`. The shared project inventory classifies bounded frontmatter
+before managed parsing and returns unmanaged native directories separately; native skills are not added to the
+application catalog or assigned invented exposure metadata. Ordinary metadata, native names, tool declarations, and
+indentation remain native-owned. Explicit MPX metadata retains strict identity, namespace collision, exposure,
+disabled-invocation, and content/directory-hash checks. Ambiguous ownership, including unsupported YAML indirection,
+fails closed rather than falling back to native discovery. Both classes retain directory/file containment and aggregate
+inventory bounds.
 
 ## Pi
 
-[ADR 0004](adr/0004-canonical-native-pi-extensions.md) supersedes the generated-extension ownership model. Canonical Pi-specific source lives in `runtimes/pi/extensions`; native host Pi loads its immutable release package through normal Pi discovery. The adapter does not generate substitute footer, tool, hook, command, editor, widget, lifecycle, configuration, or theme implementations.
+[ADR 0004](adr/0004-canonical-native-pi-extensions.md) supersedes the generated-extension ownership model. Canonical
+Pi-specific source lives in `runtimes/pi/extensions`; native host Pi loads its immutable release package through normal
+Pi discovery. The adapter does not generate substitute footer, tool, hook, command, editor, widget, lifecycle,
+configuration, or theme implementations.
 
-The Pi adapter publishes only compiler-owned skills and agents plus launch-bound runtime context and profile data. It passes the selected account root as `PI_CODING_AGENT_DIR` and binds the active manifest's integrity to the launch. The canonical extension registers `/mpx:<name>` commands and lazily reads compiler-owned bodies; native `/skill:<name>` discovery receives individual generated managed-project directories and exact validated unmanaged `.agents/skills/<directory>/SKILL.md` files from the launch working directory. Passing native entrypoint files prevents Pi ignore rules from skipping the classified root and recursively discovering unclassified child skills; native name collisions retain Pi's first-loaded precedence, with generated managed skills passed first. The adapter rechecks the shared project inventory at invocation time and retains `--no-skills`: it never passes the whole project skill root, canonical skill directories, or managed skills omitted by exposure policy. Changed ownership of a projected project skill requires a fresh projection, not duplicate native exposure. Projected agents form the lowest-precedence trusted overlay. Native global and trusted-project agent definitions retain their Pi-owned precedence. Build output packages canonical extension source but is not a second implementation.
+The Pi adapter publishes only compiler-owned skills and agents plus launch-bound runtime context and profile data. It
+passes the selected account root as `PI_CODING_AGENT_DIR` and binds the active manifest's integrity to the launch. The
+canonical extension registers `/mpx:<name>` commands and lazily reads compiler-owned bodies; native `/skill:<name>`
+discovery receives individual generated managed-project directories and exact validated unmanaged
+`.agents/skills/<directory>/SKILL.md` files from the launch working directory. Passing native entrypoint files prevents
+Pi ignore rules from skipping the classified root and recursively discovering unclassified child skills; native name
+collisions retain Pi's first-loaded precedence, with generated managed skills passed first. The adapter rechecks the
+shared project inventory at invocation time and retains `--no-skills`: it never passes the whole project skill root,
+canonical skill directories, or managed skills omitted by exposure policy. Changed ownership of a projected project
+skill requires a fresh projection, not duplicate native exposure. Projected agents form the lowest-precedence trusted
+overlay. Native global and trusted-project agent definitions retain their Pi-owned precedence. Build output packages
+canonical extension source but is not a second implementation.
 
-The canonical lifecycle producer owns only the original MPX launch-bound native session. It verifies the private native-root binding, reads identity from Pi's session manager rather than injected session environment fields, and holds an exclusive writer receipt. Shutdown drains queued writes using the original session's stored snapshot, even if Pi has already changed its mutable session manager. Native new, resume, and fork remain operable: the producer registers no cancellable before-switch or before-fork hook. Only a successful replacement start with a different native reference retires tracking and emits a bounded warning that the replacement is not MPX launch-bound. Cancelled replacement attempts leave the original writer attached. Later replacement hooks and reloads cannot reuse the retired binding; same-session reload before replacement retains its ordering and original record.
+The canonical lifecycle producer owns only the original MPX launch-bound native session. It verifies the private
+native-root binding, reads identity from Pi's session manager rather than injected session environment fields, and holds
+an exclusive writer receipt. Shutdown drains queued writes using the original session's stored snapshot, even if Pi has
+already changed its mutable session manager. Native new, resume, and fork remain operable: the producer registers no
+cancellable before-switch or before-fork hook. Only a successful replacement start with a different native reference
+retires tracking and emits a bounded warning that the replacement is not MPX launch-bound. Cancelled replacement
+attempts leave the original writer attached. Later replacement hooks and reloads cannot reuse the retired binding;
+same-session reload before replacement retains its ordering and original record.
 
-Pi can announce startup before persisting its session header. The producer retains timestamped events in a bounded process-local queue and publishes them in order only after the recorded native file exists with a matching supported header under the validated root. Subsequent lifecycle hooks, including shutdown, attempt a drain without polling or creating a native file. Reload retains pending events and their original timestamps; a process exit before native persistence leaves no durable MPX session claim. Missing leaf files alone defer publication; malformed or mismatched headers, nonregular paths, linked ancestors, and substituted roots fail closed. This check stays producer-side because the generic event-directory consumer has no configured native-root authority with which to distinguish an absent native file safely; it does not broadly swallow filesystem errors or weaken quarantine rules.
+Pi can announce startup before persisting its session header. The producer retains timestamped events in a bounded
+process-local queue and publishes them in order only after the recorded native file exists with a matching supported
+header under the validated root. Subsequent lifecycle hooks, including shutdown, attempt a drain without polling or
+creating a native file. Reload retains pending events and their original timestamps; a process exit before native
+persistence leaves no durable MPX session claim. Missing leaf files alone defer publication; malformed or mismatched
+headers, nonregular paths, linked ancestors, and substituted roots fail closed. This check stays producer-side because
+the generic event-directory consumer has no configured native-root authority with which to distinguish an absent native
+file safely; it does not broadly swallow filesystem errors or weaken quarantine rules.
 
-Pi Docker launch and resume fail closed until whole-agent sandbox execution can load the same canonical package inside its isolated native root. MPX does not label a host Pi process as Docker-isolated and does not restore the retired host-to-worker tool bridge.
+Pi Docker launch and resume fail closed until whole-agent sandbox execution can load the same canonical package inside
+its isolated native root. MPX does not label a host Pi process as Docker-isolated and does not restore the retired
+host-to-worker tool bridge.
 
 ## Claude
 
-The Claude adapter publishes an immutable plugin projection with compiler-generated skills and agents, hooks, status adapter, runtime context, and plugin metadata. Claude cannot natively represent every four-state distinction: `name-only` receives a neutral name/description surface and `explicit-only` uses `disable-model-invocation: true`. The neutral manifest remains authoritative. The selected private account root is passed only as `CLAUDE_CONFIG_DIR`. Generated `${CLAUDE_PLUGIN_ROOT}` variables are allowed only in Claude adapter templates, never canonical content.
+The Claude adapter publishes an immutable plugin projection with compiler-generated skills and agents, hooks, status
+adapter, runtime context, and plugin metadata. Claude cannot natively represent every four-state distinction:
+`name-only` receives a neutral name/description surface and `explicit-only` uses `disable-model-invocation: true`. The
+neutral manifest remains authoritative. The selected private account root is passed only as `CLAUDE_CONFIG_DIR`.
+Generated `${CLAUDE_PLUGIN_ROOT}` variables are allowed only in Claude adapter templates, never canonical content.
 
-Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`. Immutable-copy checks at these earliest supported boundaries detect change but cannot atomically interpose between Claude's native `SKILL.md` read and expansion. The status adapter independently parses and validates the live `StatusSnapshotV1`; it does not validate the whole projection.
+Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`.
+Immutable-copy checks at these earliest supported boundaries detect change but cannot atomically interpose between
+Claude's native `SKILL.md` read and expansion. The status adapter independently parses and validates the live
+`StatusSnapshotV1`; it does not validate the whole projection.
 
-Both adapters enforce the shared dangerous-command policy. Interactive runtimes have no artificial 120-second lifetime; finite probes remain bounded. Releases and public launch data never contain credentials or sessions. A whole-agent sandbox may stage only its selected identity's Pi, Git, SSH, GitHub, and GitLab runtime state for trusted extensions; the opposite identity and unrelated host state remain unavailable. KanbanFlow uses OS-keyring authorization rather than a route config path. Sandbox failure has no host fallback. Session continuation is provided by the lifecycle/session layer rather than by projection generation.
+Both adapters enforce the shared dangerous-command policy. Interactive runtimes have no artificial 120-second lifetime;
+finite probes remain bounded. Releases and public launch data never contain credentials or sessions. A whole-agent
+sandbox may stage only its selected identity's Pi, Git, SSH, GitHub, and GitLab runtime state for trusted extensions;
+the opposite identity and unrelated host state remain unavailable. Native provider guides run `gh` and `glab` under the
+launch-injected `GH_CONFIG_DIR` and `GLAB_CONFIG_DIR`; canonical workflows must not override or unset those bindings.
+KanbanFlow uses OS-keyring authorization rather than a route config path, and its board identity/state mapping comes
+only from committed `mpxconfig.json`. Local Markdown remains managed through MPX storage commands. Sandbox failure has
+no host fallback. Session continuation is provided by the lifecycle/session layer rather than by projection generation.

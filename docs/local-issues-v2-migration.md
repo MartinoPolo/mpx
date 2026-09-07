@@ -11,4 +11,5 @@ Before selecting a v2 logical store, run an explicit, offline migration that:
 5. validates missing references, cycles, checksums, and file counts;
 6. atomically changes the identity-local logical store registration to the new root after human confirmation.
 
-Rollback restores only the previous logical registration. The old root remains untouched until acceptance and may then be archived. This is a migration plan, not a runtime compatibility reader.
+Rollback restores only the previous logical registration. The old root remains untouched until acceptance and may then
+be archived. This is a migration plan, not a runtime compatibility reader.

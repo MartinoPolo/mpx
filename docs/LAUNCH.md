@@ -1,12 +1,21 @@
 # MPX v2 launch
 
-`mpx launch claude|pi` resolves and executes the MPX v2 launch contract. Resolution produces a deeply immutable descriptor, a runtime-neutral resolved-skill manifest, and a runtime-specific immutable published projection. The logical skill artifact and the launch-bound full published-projection reference are separate bindings. Their hashes bind runtime, identity, project/repository/content scope, mode, skill policy, executor evidence, workspace, network policy, routes, approvals, and artifact bytes. A running process cannot widen that tuple: changed rights, bindings, evidence, or artifacts require a new launch and runtime restart (`LAUNCH_RESTART_REQUIRED`).
+`mpx launch claude|pi` resolves and executes the MPX v2 launch contract. Resolution produces a deeply immutable
+descriptor, a runtime-neutral resolved-skill manifest, and a runtime-specific immutable published projection. The
+logical skill artifact and the launch-bound full published-projection reference are separate bindings. Their hashes bind
+runtime, identity, project/repository/content scope, mode, skill policy, executor evidence, workspace, network policy,
+routes, approvals, and artifact bytes. A running process cannot widen that tuple: changed rights, bindings, evidence, or
+artifacts require a new launch and runtime restart (`LAUNCH_RESTART_REQUIRED`).
 
-> **Migration status:** Host Pi uses normal discovery of the canonical checked-in MPX Pi extension package. Optional whole-agent sandbox integration is pending. Docker launch and resume fail closed at the application boundary with no host fallback. See [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and [the implementation plan](PI_EXTENSION_MIGRATION.md).
+> **Migration status:** Host Pi uses normal discovery of the canonical checked-in MPX Pi extension package. Optional
+> whole-agent sandbox integration is pending. Docker launch and resume fail closed at the application boundary with no
+> host fallback. See [ADR 0004](adr/0004-canonical-native-pi-extensions.md) and
+> [the implementation plan](PI_EXTENSION_MIGRATION.md).
 
 ## Selection and aliases
 
-Identity is always explicit, including when supplied by a short alias. CWD classification never chooses identity or grants access. Aliases contribute only runtime and identity:
+Identity is always explicit, including when supplied by a short alias. CWD classification never chooses identity or
+grants access. Aliases contribute only runtime and identity:
 
 | Alias     | Runtime | Identity   |
 | --------- | ------- | ---------- |
@@ -15,30 +24,66 @@ Identity is always explicit, including when supplied by a short alias. CWD class
 | `pi-mpx`  | Pi      | `personal` |
 | `piw-mpx` | Pi      | `work`     |
 
-The installer never redefines the user's native `cc`, `ccd`, `ccw`, `ccwd`, `pi`, or `piw` commands. The four standard `-mpx` launchers temporarily select explicit host execution, direct workspace, a compatibility reason, and one-use `--approve-host` authority. This is an acknowledged non-sandboxed continuity route while production sandbox routes remain unaccepted; the MPX launch pipeline, identity binding, runtime projection, native-root preflight, and audit still apply. Pi preflight verifies the exact configured real directory and delegates credential availability to native Pi's bounded `auth check`; MPX never reads or copies credential files. The checks repeat immediately before child spawn. Claude retains its native-root behavior without Pi auth. Manual host launches without `--approve-host` retain direct-TTY confirmation.
+The installer never redefines the user's native `cc`, `ccd`, `ccw`, `ccwd`, `pi`, or `piw` commands. The four standard
+`-mpx` launchers temporarily select explicit host execution, direct workspace, a compatibility reason, and one-use
+`--approve-host` authority. This is an acknowledged non-sandboxed continuity route while production sandbox routes
+remain unaccepted; the MPX launch pipeline, identity binding, runtime projection, native-root preflight, and audit still
+apply. Pi preflight verifies the exact configured real directory and delegates credential availability to native Pi's
+bounded `auth check`; MPX never reads or copies credential files. The checks repeat immediately before child spawn.
+Claude retains its native-root behavior without Pi auth. Manual host launches without `--approve-host` retain direct-TTY
+confirmation.
 
-Mode, skill policy, content scope, executor, workspace, and network policy still resolve through direct input, project default, longest matching content-scope default, then safe built-ins. Alias expansion does not add a preset, mode, policy, or grant. Project skills are resolved under the same policy and immutable artifact bindings as canonical skills; project location alone grants nothing.
+Mode, skill policy, content scope, executor, workspace, and network policy still resolve through direct input, project
+default, longest matching content-scope default, then safe built-ins. Alias expansion does not add a preset, mode,
+policy, or grant. Project skills are resolved under the same policy and immutable artifact bindings as canonical skills;
+project location alone grants nothing.
 
-Launch-only runtime arguments use repeatable `--runtime-arg <value>`. MPX bounds and canonicalizes them, includes them in the launch descriptor and `launchKey`, and appends them after runtime-owned arguments. They cannot come from durable configuration or ambient environment. Control characters, oversized collections, and use outside launch execution fail closed.
+Launch-only runtime arguments use repeatable `--runtime-arg <value>`. MPX bounds and canonicalizes them, includes them
+in the launch descriptor and `launchKey`, and appends them after runtime-owned arguments. They cannot come from durable
+configuration or ambient environment. Control characters, oversized collections, and use outside launch execution fail
+closed.
 
 ## Execution gates
 
-**Current implementation:** Optional whole-agent sandbox integration is pending. Any real launch or resume selecting Docker fails with `EXECUTOR_UNAVAILABLE` before status access, executor preparation, projection, or process execution. There is no host fallback, and a Docker-labelled descriptor never authorizes a host process. Read-only sandbox diagnostics remain available for future integration work but do not enable execution. Native project trust remains Pi-owned under the approved ADR.
+**Current implementation:** Optional whole-agent sandbox integration is pending. Any real launch or resume selecting
+Docker fails with `EXECUTOR_UNAVAILABLE` before status access, executor preparation, projection, or process execution.
+There is no host fallback, and a Docker-labelled descriptor never authorizes a host process. Read-only sandbox
+diagnostics remain available for future integration work but do not enable execution. Native project trust remains
+Pi-owned under the approved ADR.
 
-Until the whole-agent route is implemented and accepted, Docker execution is unavailable. Host execution remains an explicit elevated compatibility path and is not sandbox isolation.
+Until the whole-agent route is implemented and accepted, Docker execution is unavailable. Host execution remains an
+explicit elevated compatibility path and is not sandbox isolation.
 
-Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where required, a nonempty reason, and exact one-use launch-bound approval. Approval is either fresh direct-TTY confirmation or the explicit argv-scoped `--approve-host` flag; the latter is accepted only for an explicit host launch with a reason and is never read from durable configuration or the environment. Interactive runtime processes have no artificial 120-second lifetime; finite readiness and diagnostic probes remain bounded.
+Host is an elevated compatibility path, not isolation. It requires explicit `--executor host`, direct workspace where
+required, a nonempty reason, and exact one-use launch-bound approval. Approval is either fresh direct-TTY confirmation
+or the explicit argv-scoped `--approve-host` flag; the latter is accepted only for an explicit host launch with a reason
+and is never read from durable configuration or the environment. Interactive runtime processes have no artificial
+120-second lifetime; finite readiness and diagnostic probes remain bounded.
 
-Before spawning, MPX builds and revalidates the exact runtime projection and performs an exact recheck of the selected executor evidence. Failed preconditions perform no projection or process side effect. Shared dangerous-command policy is applied consistently at runtime command boundaries.
+Before spawning, MPX builds and revalidates the exact runtime projection and performs an exact recheck of the selected
+executor evidence. Failed preconditions perform no projection or process side effect. Shared dangerous-command policy is
+applied consistently at runtime command boundaries.
 
-Phase F consumes preprovisioned read-only private routes and MCP descriptors. It does not create, install, copy, or migrate them; Phase I owns provisioning. KanbanFlow authorization comes from the OS keyring, not a route configuration path. Private provider/Git/SSH/MCP inputs remain private: public descriptors, envelopes, banners, and audit projections retain only safe labels, bindings, and digests.
+Phase F consumes preprovisioned read-only private routes and MCP descriptors. It does not create, install, copy, or
+migrate them; Phase I owns provisioning. KanbanFlow authorization comes from the OS keyring, not a route configuration
+path. Private provider/Git/SSH/MCP inputs remain private: public descriptors, envelopes, banners, and audit projections
+retain only safe labels, bindings, and digests.
 
-Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`. They are supported-boundary guards around an immutable copy, not an atomic native skill-load interceptor. Pi separately uses exact open-handle and body-hash checks.
+Claude integrity checkpoints are `SessionStart`, `UserPromptSubmit`, and `PreToolUse Skill|Agent|Task|Bash`. They are
+supported-boundary guards around an immutable copy, not an atomic native skill-load interceptor. Pi separately uses
+exact open-handle and body-hash checks.
 
 ## Runtime context, audit, and banner
 
-The child receives immutable launch bindings including the logical artifact and full published-projection reference. Claude additionally receives only its selected `CLAUDE_CONFIG_DIR`; Pi receives only its selected `PI_CODING_AGENT_DIR`. Other identities' private roots are not propagated.
+The child receives immutable launch bindings including the logical artifact and full published-projection reference.
+Claude additionally receives only its selected `CLAUDE_CONFIG_DIR`; Pi receives only its selected `PI_CODING_AGENT_DIR`.
+Other identities' private roots are not propagated.
 
-Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime, executor, and a short launch key without private roots. Audit output paths are hardened and records are bounded safe projections of outcome and error code. Records do not authorize a later launch. Any policy or artifact change requires relaunch and process restart; in-process rights expansion is rejected.
+Elevated descriptors carry a sanitized reason and `ELEVATED` banner state. The compact banner identifies runtime,
+executor, and a short launch key without private roots. Audit output paths are hardened and records are bounded safe
+projections of outcome and error code. Records do not authorize a later launch. Any policy or artifact change requires
+relaunch and process restart; in-process rights expansion is rejected.
 
-This surface does not claim whole-agent sandbox isolation, Phase I provisioning or installation, or Phase J legacy retirement. Session continuation/resume is delivered by the separate Phase G lifecycle and sessions components, not by the immutable runtime projection itself.
+This surface does not claim whole-agent sandbox isolation, Phase I provisioning or installation, or Phase J legacy
+retirement. Session continuation/resume is delivered by the separate Phase G lifecycle and sessions components, not by
+the immutable runtime projection itself.

@@ -4,17 +4,24 @@ Status: implemented for canonical skill and agent compilation
 
 ## Purpose
 
-MPX must keep one canonical source for skills, agents, shared instructions, rules, and hook declarations while producing native Claude Code and Pi content. Translation must be deterministic, lossless except for explicit exposure policy, and visible to users and agents.
+MPX must keep one canonical source for skills, agents, shared instructions, rules, and hook declarations while producing
+native Claude Code and Pi content. Translation must be deterministic, lossless except for explicit exposure policy, and
+visible to users and agents.
 
-The file inspected through MPX must be the exact file supplied to the runtime. Runtime adapters may assemble and launch a projection, but they must not rewrite compiled skill or agent bytes.
+The file inspected through MPX must be the exact file supplied to the runtime. Runtime adapters may assemble and launch
+a projection, but they must not rewrite compiled skill or agent bytes.
 
 ## Core decisions
 
-- One shared content compiler owns canonical parsing, launch selection, provider translation, reference packaging, and final skill/agent rendering. Runtime adapters copy compiled skill and agent bytes unchanged and never receive agent model mappings.
+- One shared content compiler owns canonical parsing, launch selection, provider translation, reference packaging, and
+  final skill/agent rendering. Runtime adapters copy compiled skill and agent bytes unchanged and never receive agent
+  model mappings.
 - Claude and Pi receive separate generated projections from the same compiler implementation.
 - Every directory skill is emitted as uppercase `SKILL.md` for both runtimes.
 - Launch-specific content scopes, skill packs, exposure overrides, and project-local skills remain supported.
-- Provider-neutral MPX commands own Issue, Review, and CICI routing. Skills do not translate `mpx issue create` into provider CLIs.
+- Typed provider-neutral MPX commands remain available for Issue, Review, and CI routing. Selected canonical workflows
+  may instead follow shared native-provider guides; they resolve each provider role from committed configuration and do
+  not translate typed commands implicitly.
 - Runtime and model differences live in one tracked, validated translation profile.
 - Canonical agents use semantic model classes: `mechanical`, `exploration`, `standard`, `advanced`, and `frontier`.
 - Unknown fields, placeholders, model classes, capabilities, references, or required runtime features fail closed.
@@ -41,7 +48,10 @@ content/
 └── runtime-profiles.json
 ```
 
-During migration, shared instructions and generated CLI references remain under `content/instructions/shared`, while rules remain under `content/instructions/rules`. The target layout above moves those inputs to `content/shared` and `content/rules` in a later chunk; this chunk does not move the existing shared tree. Final projected links such as `../shared/AUTHORING.md` must resolve without a test-only path redirect.
+During migration, shared instructions and generated CLI references remain under `content/instructions/shared`, while
+rules remain under `content/instructions/rules`. The target layout above moves those inputs to `content/shared` and
+`content/rules` in a later chunk; this chunk does not move the existing shared tree. Final projected links such as
+`../shared/AUTHORING.md` must resolve without a test-only path redirect.
 
 Canonical content contains semantic fields and MPX capabilities, not vendor model IDs or harness-native tool names.
 
@@ -52,7 +62,9 @@ The compiler validates one strict schema. A representative skill is:
 ```yaml
 ---
 name: issue-create
-description: 'Creates a clear provider-neutral Issue, optionally linked to an Epic. Use when the user says ‘create issue’, ‘file issue’, or asks to record actionable work.'
+description:
+  'Creates a clear provider-neutral Issue, optionally linked to an Epic. Use when the user says ‘create issue’, ‘file
+  issue’, or asks to record actionable work.'
 argument-hint: '<title or description> [--epic <id>]'
 metadata:
   mpx:
@@ -63,7 +75,13 @@ metadata:
 ---
 ```
 
-The portable description states what the skill does and every distinct trigger branch. Use concrete routing language such as `Use when the user says “create issue”`. Optional runtime enrichment must not carry a unique trigger.
+The portable description states what the skill does and every distinct trigger branch. Use concrete routing language
+such as `Use when the user says “create issue”`. Optional runtime enrichment must not carry a unique trigger.
+
+Canonical `metadata` may also contain the portable bookkeeping fields `author`, `version`, and `category`, each as a
+non-empty string. The compiler retains these fields in both Claude and Pi skill projections. In particular, `version`
+records personal content lineage (including existing three-part versions such as `1.2.3`); it is independent of and must
+not be interpreted as `metadata.mpx.schemaVersion` or `metadata.mpx.contentVersion`.
 
 ### Exposure semantics
 
@@ -74,7 +92,8 @@ The portable description states what the skill does and every distinct trigger b
 | `explicit-only` | Preserve the full description on disk and emit the runtime control that disables model invocation. |
 | `off`           | Do not emit the skill.                                                                             |
 
-`name-only` is required because explicit-only skills cannot be loaded when a user merely mentions the skill name in prose.
+`name-only` is required because explicit-only skills cannot be loaded when a user merely mentions the skill name in
+prose.
 
 A missing or empty description cannot represent name-only:
 
@@ -88,7 +107,8 @@ For name-only, both runtime files receive the same generated description:
 description: 'MPX skill issue-create. Load only when the user explicitly mentions ‘issue-create’ by name.'
 ```
 
-`disable-model-invocation` remains omitted. The active manifest records the canonical and effective descriptions and the name-only decision.
+`disable-model-invocation` remains omitted. The active manifest records the canonical and effective descriptions and the
+name-only decision.
 
 ### Invocation input
 
@@ -97,7 +117,8 @@ Canonical bodies should normally say `the invocation input` rather than using a 
 - Claude appends `ARGUMENTS: <value>` when no argument placeholder consumes the arguments.
 - Pi appends supplied arguments after the skill body.
 
-A typed invocation placeholder is reserved for workflows that require positional or named interpolation. The compiler must reject it when the selected runtime cannot preserve the requested semantics.
+A typed invocation placeholder is reserved for workflows that require positional or named interpolation. The compiler
+must reject it when the selected runtime cannot preserve the requested semantics.
 
 ## Native runtime skill outputs
 
@@ -125,9 +146,11 @@ Claude-specific fields may include:
 - `disable-model-invocation`;
 - `user-invocable`;
 - `allowed-tools` and `disallowed-tools`;
-- `model`, `effort`, `context`, `agent`, `background`, `hooks`, `paths`, and `shell` where requested by semantic configuration.
+- `model`, `effort`, `context`, `agent`, `background`, `hooks`, `paths`, and `shell` where requested by semantic
+  configuration.
 
-Only fields required by the skill are emitted. `allowed-tools` is a temporary permission grant, not a restrictive allowlist.
+Only fields required by the skill are emitted. `allowed-tools` is a temporary permission grant, not a restrictive
+allowlist.
 
 ### Pi
 
@@ -144,9 +167,16 @@ Only fields required by the skill are emitted. `allowed-tools` is a temporary pe
 
 Pi implements Agent Skills directory discovery and natively invokes a skill as `/skill:<name>`.
 
-Pi documents `name`, `description`, `license`, `compatibility`, `metadata`, experimental `allowed-tools`, and `disable-model-invocation`. The installed implementation currently consumes name, description, and disable-model-invocation for discovery behavior. The compiler must not claim that an experimental or ignored field enforces a capability.
+Pi documents `name`, `description`, `license`, `compatibility`, `metadata`, experimental `allowed-tools`, and
+`disable-model-invocation`. The installed implementation currently consumes name, description, and
+disable-model-invocation for discovery behavior. The compiler must not claim that an experimental or ignored field
+enforces a capability.
 
-Normal MPX launches register canonical skills as `/mpx:<name>` through the checked-in native extension package. The extension advertises only manifest-authorized metadata and lazily loads compiler-owned bodies from the verified active projection. The launch binds the manifest bytes and runtime context; invocation revalidates the manifest and selected skill bytes. Project skills retain native `/skill:<name>` commands. Canonical skills are not also supplied to native skill discovery, preventing duplicate commands. Non-MPX native Pi sessions are unchanged.
+Normal MPX launches register canonical skills as `/mpx:<name>` through the checked-in native extension package. The
+extension advertises only manifest-authorized metadata and lazily loads compiler-owned bodies from the verified active
+projection. The launch binds the manifest bytes and runtime context; invocation revalidates the manifest and selected
+skill bytes. Project skills retain native `/skill:<name>` commands. Canonical skills are not also supplied to native
+skill discovery, preventing duplicate commands. Non-MPX native Pi sessions are unchanged.
 
 ## Description policy
 
@@ -154,11 +184,13 @@ Normal MPX launches register canonical skills as `/mpx:<name>` through the check
 - Replace it only for name-only, using the tracked generic template.
 - Never generate opaque descriptions such as `mpx skill <name>` without the explicit mention instruction.
 - Keep both canonical and effective descriptions in the active manifest.
-- Prefer omitting `when_to_use`. If emitted for Claude, it can only repeat or enrich triggers already present in description.
+- Prefer omitting `when_to_use`. If emitted for Claude, it can only repeat or enrich triggers already present in
+  description.
 
 ## Translation profile
 
-`content/runtime-profiles.json` is the single tracked source for deterministic runtime mappings. It is validated before compilation.
+`content/runtime-profiles.json` is the single tracked source for deterministic runtime mappings. It is validated before
+compilation.
 
 Required model mappings:
 
@@ -184,7 +216,11 @@ The profile also owns:
 
 Unsupported optional fields are omitted and recorded. Unsupported required behavior fails compilation.
 
-Claude capability grants are least-privilege pre-approvals: `read` maps to `Read`, `search` to `Glob` and `Grep`, `shell` to `Bash`, `write` to `Write` and `Edit`, and `delegate` to `Agent`. Pi grant support is `unsupported`, so Pi output omits `allowed-tools`. A skill's optional semantic capabilities remain visible in the active manifest, alongside `capabilityGrantsApplied` and `capabilityGrantSupport`; a required grant fails closed when the selected runtime is unsupported.
+Claude capability grants are least-privilege pre-approvals: `read` maps to `Read`, `search` to `Glob` and `Grep`,
+`shell` to `Bash`, `write` to `Write` and `Edit`, and `delegate` to `Agent`. Pi grant support is `unsupported`, so Pi
+output omits `allowed-tools`. A skill's optional semantic capabilities remain visible in the active manifest, alongside
+`capabilityGrantsApplied` and `capabilityGrantSupport`; a required grant fails closed when the selected runtime is
+unsupported.
 
 ## Typed substitutions
 
@@ -212,22 +248,26 @@ The profile resolves canonical identities to runtime aliases. Unknown aliases fa
 
 ### Runtime capabilities and tools
 
-Tool names normally come from structured frontmatter, not body substitutions. A body token is allowed only when prose must name a runtime-native mechanism.
+Tool names normally come from structured frontmatter, not body substitutions. A body token is allowed only when prose
+must name a runtime-native mechanism.
 
 ### MPX commands
 
-Provider-neutral commands normally remain literal and unchanged:
+Typed MPX commands remain literal and unchanged:
 
 - `mpx issue ...`
 - `mpx review ...`
 - `mpx ci ...`
 - `mpx tool invoke ...`
 
-These commands route through the launch-selected provider. They are not translated to `gh`, `glab`, or another provider CLI.
+The compiler never translates them. Separately, canonical prose may link to the governed shared native-provider guides.
+Such a workflow selects `issues.provider` and `repository.provider` independently from committed `mpxconfig.json`,
+preserves launch-bound native account environments, and fails closed on unsupported branches.
 
 ### Runtime locations
 
-Runtime-specific skill or plugin roots may be substituted only where a bundled script requires an absolute runtime path. Relative links and skill-local scripts are preferred.
+Runtime-specific skill or plugin roots may be substituted only where a bundled script requires an absolute runtime path.
+Relative links and skill-local scripts are preferred.
 
 ### Compiler rules
 
@@ -239,17 +279,23 @@ Runtime-specific skill or plugin roots may be substituted only where a bundled s
 
 ## Provider-specific workflow variants
 
-The existing implementation selects packs, exposure, and project skills by launch context. It does not currently select different skill bodies for GitHub or GitLab.
+The existing implementation selects packs, exposure, and project skills by launch context. It does not currently select
+different skill bodies for GitHub or GitLab.
 
-Do not add provider variants merely to route API calls. `mpx issue create` already selects the configured Issue provider and verifies its capabilities.
+Do not add compiler-level body variants merely to route API calls. Typed MPX operations already select configured
+adapters, while shared native guides provide reusable explicit provider branches without requiring an MPX action for
+every provider operation.
 
-A provider-specific body variant is allowed only when the human workflow materially differs and cannot be expressed through the provider-neutral contract. Variant selection uses a bounded declarative schema with exact provider dimensions and a required default. Free-form expressions and embedded scripts are forbidden.
+A provider-specific body variant is allowed only when the human workflow materially differs and cannot be expressed
+through either shared interface. Variant selection uses a bounded declarative schema with exact provider dimensions and
+a required default. Free-form expressions and embedded scripts are forbidden.
 
 The selected output contains one straight workflow without unresolved provider branches.
 
 ## Shared content
 
-Shared references are compiler inputs and final projection files. The compiler must collect, hash, and copy every referenced shared document needed by a selected skill.
+Shared references are compiler inputs and final projection files. The compiler must collect, hash, and copy every
+referenced shared document needed by a selected skill.
 
 Final layout preserves references such as:
 
@@ -258,7 +304,8 @@ skills/issue-create/SKILL.md
 skills/shared/ISSUE_TRACKER.md
 ```
 
-The final-artifact closure check resolves links exactly as the runtime will see them. Tests must not special-case a missing projected path.
+The final-artifact closure check resolves links exactly as the runtime will see them. Tests must not special-case a
+missing projected path.
 
 ## One compiler implementation
 
@@ -292,13 +339,18 @@ Runtime packages retain native execution concerns:
 
 Runtime packages must not parse canonical skill metadata or modify compiled skill and agent bytes.
 
-The independent Claude agent renderer, Pi agent generator/check path, tracked Pi agent projection, Pi `body.md` representation, and duplicated runtime-specific metadata mappings have been removed. Themes, runtime assets, and the vendored Pi subagent implementation remain runtime-owned.
+The independent Claude agent renderer, Pi agent generator/check path, tracked Pi agent projection, Pi `body.md`
+representation, and duplicated runtime-specific metadata mappings have been removed. Themes, runtime assets, and the
+vendored Pi subagent implementation remain runtime-owned.
 
 ## Active generated content
 
-Every launch currently materializes a persistent readable, content-addressed tree beneath the existing runtime-artifacts root. The selected provider executes this exact published tree, and `mpx content inspect` is the stable inspection surface regardless of its physical location.
+Every launch currently materializes a persistent readable, content-addressed tree beneath the existing runtime-artifacts
+root. The selected provider executes this exact published tree, and `mpx content inspect` is the stable inspection
+surface regardless of its physical location.
 
-A human-readable relocation beneath the following machine-state path is a later optional improvement, not a prerequisite for inspection:
+A human-readable relocation beneath the following machine-state path is a later optional improvement, not a prerequisite
+for inspection:
 
 ```text
 %LOCALAPPDATA%/mpx/content/<repository>/<runtime>/<launch-key>/
@@ -341,7 +393,8 @@ mpx content inspect agent <identity-or-projected-name>
 mpx content check
 ```
 
-`inspect` verifies and reads the exact active file; all inspection actions consume the persisted `active-content.json` and never rebuild. Diff, export, open, and any optional relocation remain later work.
+`inspect` verifies and reads the exact active file; all inspection actions consume the persisted `active-content.json`
+and never rebuild. Diff, export, open, and any optional relocation remain later work.
 
 ## Progressive CLI help
 
@@ -363,7 +416,8 @@ Generate two concise references from the same registry. Their current migration 
 - `content/instructions/shared/MPX_CLI_BASIC.md`: common operations and examples;
 - `content/instructions/shared/MPX_CLI_REFERENCE.md`: complete command inventory.
 
-Their target location is `content/shared/` after the shared-tree migration. Agent instructions load the basic reference first and the complete reference only when the basic one is insufficient.
+Their target location is `content/shared/` after the shared-tree migration. Agent instructions load the basic reference
+first and the complete reference only when the basic one is insufficient.
 
 ## Symlink policy
 
@@ -390,7 +444,8 @@ Retain checks that protect the final executed result:
 - runtime invocation bound to the exact generated root;
 - active inspection that detects post-publication mutation.
 
-Remove intermediate hashes and artifacts only after proving they do not authorize a policy decision, deduplicate a reusable result, or detect meaningful mutation.
+Remove intermediate hashes and artifacts only after proving they do not authorize a policy decision, deduplicate a
+reusable result, or detect meaningful mutation.
 
 ## Verification strategy
 
@@ -415,40 +470,52 @@ Keep tests focused on contracts rather than snapshotting the entire corpus:
 
 ### CLI discoverability foundation
 
-Introduce hierarchical command metadata, normal help flags, successful incomplete-group help, and generated basic/full references. This work is independent of content rendering and may proceed in parallel.
+Introduce hierarchical command metadata, normal help flags, successful incomplete-group help, and generated basic/full
+references. This work is independent of content rendering and may proceed in parallel.
 
 ### Semantic model profiles
 
-Replace canonical `luna`, `terra`, and `sol` classes with semantic classes. Add the tracked runtime profile and route agent generation through validated mappings.
+Replace canonical `luna`, `terra`, and `sol` classes with semantic classes. Add the tracked runtime profile and route
+agent generation through validated mappings.
 
 ### Shared compiler foundation
 
-Create the compiler package and move canonical parsing, runtime profile parsing, deterministic rendering, and inspection-manifest contracts into it. Initially preserve current runtime output behavior behind compatibility tests.
+Create the compiler package and move canonical parsing, runtime profile parsing, deterministic rendering, and
+inspection-manifest contracts into it. Initially preserve current runtime output behavior behind compatibility tests.
 
 ### Content fidelity migration
 
-Restore argument hints, skill capabilities, metadata versioning, invocation input behavior, and shared references. Replace `runtime-code-guide` with an implemented runtime-aware documentation capability or explicit runtime references.
+Restore argument hints, skill capabilities, metadata versioning, invocation input behavior, and shared references.
+Replace `runtime-code-guide` with an implemented runtime-aware documentation capability or explicit runtime references.
 
 ### Native runtime projections
 
-Emit native `SKILL.md` files for Claude and Pi. Make runtime assembly consume compiler bytes without alteration. Remove Pi `body.md` and its private parser.
+Emit native `SKILL.md` files for Claude and Pi. Make runtime assembly consume compiler bytes without alteration. Remove
+Pi `body.md` and its private parser.
 
 ### Active inspection
 
-Materialize readable active trees, expose their paths to sessions, and implement the content CLI using the persisted manifest.
+Materialize readable active trees, expose their paths to sessions, and implement the content CLI using the persisted
+manifest.
 
 ### Provider variants
 
-Add bounded provider-specific body selection only after provider-neutral command routing is insufficient for a demonstrated workflow.
+Add bounded provider-specific body selection only after provider-neutral command routing is insufficient for a
+demonstrated workflow.
 
 ### Simplification
 
-Remove duplicate renderers, redundant compatibility layers, and intermediate integrity machinery after behavior and security gates remain green.
+Remove duplicate renderers, redundant compatibility layers, and intermediate integrity machinery after behavior and
+security gates remain green.
 
 ## Execution and tracking
 
-This document is the durable architecture and implementation source. It is not a temporary checklist and must remain after implementation so future agents can understand the content boundary.
+This document is the durable architecture and implementation source. It is not a temporary checklist and must remain
+after implementation so future agents can understand the content boundary.
 
-Implementation work should use isolated worktrees. Independent changes may run in parallel when their file ownership does not overlap. Each merged chunk must preserve the compiler invariant and leave targeted tests green before the next dependent chunk begins.
+Implementation work should use isolated worktrees. Independent changes may run in parallel when their file ownership
+does not overlap. Each merged chunk must preserve the compiler invariant and leave targeted tests green before the next
+dependent chunk begins.
 
-An external Issue or Epic may mirror progress, but it must link to this document rather than becoming the only source of architecture requirements.
+An external Issue or Epic may mirror progress, but it must link to this document rather than becoming the only source of
+architecture requirements.
