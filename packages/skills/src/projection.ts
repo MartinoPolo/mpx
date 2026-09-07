@@ -86,6 +86,9 @@ export interface SkillProjectionPlanEntry {
   readonly canonicalDescription: string;
   readonly argumentHint?: string;
   readonly capabilities?: readonly SkillCapability[];
+  readonly author?: string;
+  readonly version?: string;
+  readonly category?: string;
   readonly permissions: Readonly<{ humanInvocation: boolean; modelInvocation: boolean }>;
   readonly source: Readonly<{
     kind: 'canonical' | 'project';
@@ -267,6 +270,9 @@ export async function createSkillProjectionPlan(
       ...('capabilities' in skill && skill.capabilities
         ? { capabilities: [...skill.capabilities] }
         : {}),
+      ...('author' in skill && skill.author ? { author: skill.author } : {}),
+      ...('version' in skill && skill.version ? { version: skill.version } : {}),
+      ...('category' in skill && skill.category ? { category: skill.category } : {}),
       permissions: { ...artifactEntry.permissions },
       source: {
         kind: artifactEntry.source.kind,

@@ -162,6 +162,9 @@ export function parseCanonical(
   triggers?: string;
   argumentHint?: string;
   capabilities?: SkillCapability[];
+  author?: string;
+  version?: string;
+  category?: string;
   packs: SkillPack[];
   exposure: Exposure;
 } {
@@ -181,10 +184,23 @@ export function parseCanonical(
     throw new Error('description is required');
   }
   const metadata = data.metadata as Record<string, unknown> | undefined;
-  const mpx = metadata?.mpx as Record<string, unknown> | undefined;
+  if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') {
+    throw new Error('metadata.mpx is required and contains an unknown field');
+  }
+  const unknownMetadata = Object.keys(metadata).find(
+    (key) => !['mpx', 'author', 'version', 'category'].includes(key),
+  );
+  if (unknownMetadata) {
+    throw new Error(`unknown metadata field: ${unknownMetadata}`);
+  }
+  for (const key of ['author', 'version', 'category'] as const) {
+    const value = metadata[key];
+    if (value !== undefined && (typeof value !== 'string' || !value.trim())) {
+      throw new Error(`metadata.${key} must be a non-empty string`);
+    }
+  }
+  const mpx = metadata.mpx as Record<string, unknown> | undefined;
   if (
-    !metadata ||
-    Object.keys(metadata).join() !== 'mpx' ||
     !mpx ||
     Object.keys(mpx).some(
       (k) =>
@@ -242,6 +258,9 @@ export function parseCanonical(
     ...(Array.isArray(capabilities)
       ? { capabilities: [...new Set(capabilities as SkillCapability[])].sort() }
       : {}),
+    ...(typeof metadata.author === 'string' ? { author: metadata.author } : {}),
+    ...(typeof metadata.version === 'string' ? { version: metadata.version } : {}),
+    ...(typeof metadata.category === 'string' ? { category: metadata.category } : {}),
     packs: [...new Set(packs as SkillPack[])].sort(),
     exposure: exposure as Exposure,
   };

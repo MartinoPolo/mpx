@@ -112,6 +112,7 @@ class ContentCompilerError extends Error {
 
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+const quoteBookkeeping = (value: string): string => JSON.stringify(value);
 
 function renderedSkill(
   entry: SkillProjectionPlan['entries'][number],
@@ -133,6 +134,12 @@ function renderedSkill(
   const omitted: ContentFeature[] = [];
   const runtimeProfile = profiles.contentTranslation.runtimes[runtime];
   const lines = ['---', `name: ${entry.identity}`, `description: ${quote(effectiveDescription)}`];
+  if (entry.author || entry.version || entry.category) {
+    lines.push('metadata:');
+    if (entry.author) lines.push(`  author: ${quoteBookkeeping(entry.author)}`);
+    if (entry.version) lines.push(`  version: ${quoteBookkeeping(entry.version)}`);
+    if (entry.category) lines.push(`  category: ${quoteBookkeeping(entry.category)}`);
+  }
   if (entry.argumentHint) {
     if (runtimeProfile.argumentHint === 'supported') {
       lines.push(`${runtimeProfile.frontmatter.argumentHint!}: ${quote(entry.argumentHint)}`);

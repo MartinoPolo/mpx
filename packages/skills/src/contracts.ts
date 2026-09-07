@@ -59,6 +59,9 @@ export interface CanonicalSkill {
   triggers?: string;
   argumentHint?: string;
   capabilities?: SkillCapability[];
+  author?: string;
+  version?: string;
+  category?: string;
   skillPacks: SkillPack[];
   defaultExposure: Exposure;
   sourcePath: string;

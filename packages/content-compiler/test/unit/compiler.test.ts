@@ -174,7 +174,7 @@ async function fixture(
     await mkdir(path.join(skillsRoot, identity, 'references'), { recursive: true });
     const extra =
       identity === 'alpha'
-        ? `argument-hint: <topic>\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n    capabilities: [read, search, shell, write, delegate]\n`
+        ? `argument-hint: <topic>\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n    capabilities: [read, search, shell, write, delegate]\n  author: "Personal: Author's\\nTeam"\n  version: 1.2.3\n  category: "personal/tools"\n`
         : `metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n`;
     const body = options.unicodeBody
       ? `Unicode café 漢字 ${identity}.\r\nSecond line.\n`
@@ -421,6 +421,26 @@ describe('shared content compiler', () => {
         ),
       ).toHaveLength(3);
       expect(result.files.some((file) => file.relativePath.includes('/gone/'))).toBe(false);
+    },
+  );
+
+  it.each(['claude', 'pi'] as const)(
+    'preserves portable bookkeeping metadata in generated %s skills',
+    async (runtime) => {
+      const value = await fixture(runtime);
+      const result = await compileContent({
+        runtime,
+        plan: value.plan,
+        runtimeProfiles,
+        sharedInstructionRoot: value.sharedRoot,
+        agentRoot: value.agentRoot,
+      });
+      const output = text(result, 'skills/alpha/SKILL.md');
+      expect(output).toContain(
+        'metadata:\n  author: "Personal: Author\'s\\nTeam"\n  version: "1.2.3"\n  category: "personal/tools"',
+      );
+      expect(output).not.toContain('\nTeam:');
+      expect(output.split('\n---\n')).toHaveLength(2);
     },
   );
 
