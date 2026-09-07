@@ -21,7 +21,7 @@ function settingsPath() {
   );
 }
 
-export function iconsDirectory() {
+function iconsDirectory() {
   return join(settingsPath(), '..', 'icons');
 }
 

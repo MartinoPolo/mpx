@@ -15,14 +15,14 @@ export const CATEGORY_CONFIGS: Readonly<Record<TestCategory, string>> = {
   e2e: 'vitest.e2e.config.ts',
 };
 
-export const EXCLUDED_TEST_PATHS = [
+const EXCLUDED_TEST_PATHS = [
   '**/node_modules/**',
   '**/dist/**',
   '**/vendor/**',
   '**/generated/**',
 ] as const;
 
-export const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
+const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
   unit: ['**/*.integration.{test,spec}.*', '**/*.e2e.{test,spec}.*'],
   payload: [],
   contract: [],
@@ -30,7 +30,7 @@ export const CATEGORY_EXCLUDES: Readonly<Record<TestCategory, readonly string[]>
   e2e: [],
 };
 
-export const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
+const CATEGORY_INCLUDES: Readonly<Record<TestCategory, readonly string[]>> = {
   unit: [
     'apps/*/test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
     'packages/*/test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',

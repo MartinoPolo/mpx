@@ -77,10 +77,10 @@ For each issue, determine the correct action:
 3. If dead-code count legitimately changed (new public API, refactored exports), update the baseline:
 
 ```bash
-pnpm fallow:save-baseline
+pnpm fallow:baseline
 ```
 
-Commit the updated `fallow-baselines/dead-code-regression.json` alongside your code changes.
+Commit the updated `fallow-baselines/regression.json` alongside your code changes.
 
 ## Step 4: Final Verification
 

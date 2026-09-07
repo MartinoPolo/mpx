@@ -45,7 +45,7 @@ function commitsAhead(branch, remote, execFile) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-export function detectBaseBranch(explicitBranch, options = {}) {
+function detectBaseBranch(explicitBranch, options = {}) {
   const execFile = options.execFileSync || defaultExecFileSync;
   const remote = options.remote || 'origin';
 
