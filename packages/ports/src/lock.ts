@@ -21,8 +21,6 @@ interface LockOwner {
 export interface LockOptions {
   now?: () => number;
   inspectProcess?: ProcessInspector;
-  /** @deprecated Prefer inspectProcess, which also protects against PID reuse. */
-  isProcessAlive?: (pid: number) => boolean;
   timeoutMs?: number;
   retryMs?: number;
   heartbeatMs?: number;
@@ -139,17 +137,12 @@ function parseOwner(text: string): LockOwner | undefined {
 
 export class InterprocessLock {
   readonly lockPath: string;
-  private readonly options: Required<Omit<LockOptions, 'isProcessAlive'>>;
+  private readonly options: Required<LockOptions>;
   constructor(stateRoot: string, options: LockOptions = {}) {
     this.lockPath = path.join(stateRoot, 'ports-registry.lock');
-    const processInspector: ProcessInspector =
-      options.inspectProcess ??
-      (options.isProcessAlive
-        ? (pid) => ({ alive: options.isProcessAlive!(pid) })
-        : inspectProcess);
     this.options = {
       now: options.now ?? Date.now,
-      inspectProcess: processInspector,
+      inspectProcess: options.inspectProcess ?? inspectProcess,
       timeoutMs: options.timeoutMs ?? 10_000,
       retryMs: options.retryMs ?? 20,
       heartbeatMs: options.heartbeatMs ?? 1_000,

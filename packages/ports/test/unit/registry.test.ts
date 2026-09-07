@@ -176,7 +176,7 @@ describe('interprocess lock', () => {
   it('protects a live owner and times out with a stable error', async () => {
     const root = await temporaryRoot();
     const first = new InterprocessLock(root, {
-      isProcessAlive: () => true,
+      inspectProcess: () => ({ alive: true }),
       now: () => 100,
       timeoutMs: 5,
       retryMs: 1,
@@ -187,7 +187,7 @@ describe('interprocess lock', () => {
     ) as { token: string };
     await expect(
       new InterprocessLock(root, {
-        isProcessAlive: () => true,
+        inspectProcess: () => ({ alive: true }),
         now: (() => {
           let n = 100;
           return () => ++n;
