@@ -2,47 +2,18 @@
 
 - Status: Accepted
 
-## Context
-
-MPX currently generates a launch-specific Pi extension and suppresses Pi's normal extension discovery. That forced
-Pi-specific features from the former `mpx-pi` repository—including the footer, subagents, development services, guards,
-commands, and UI—to be reimplemented behind MPX runtime envelopes and generated adapters.
-
-The generated copies are harder to maintain, provide less behavior than the proven native extensions, and make host and
-sandbox Pi diverge. Whole-agent sandboxing already provides the useful isolation boundary around the host, original
-checkout, and opposite identity.
-
 ## Decision
 
-Gate 4 will move all canonical Pi-specific implementation source into the MPX monorepo under `runtimes/pi/extensions`.
-The former `mpx-pi` repository is a migration source only and is deprecated after its retained behavior and tests move.
+Pi-specific behavior is canonical checked-in source under `runtimes/pi/extensions`. Native Pi loads that package once through normal package discovery. MPX does not generate alternative footer, tool, hook, command, editor, widget, lifecycle, configuration, keybinding, or theme implementations.
 
-Native host Pi and whole-agent sandbox Pi will load that same checked-in extension package exactly once through Pi's
-normal extension APIs and discovery behavior. MPX will not generate alternative implementations of the footer, tools,
-hooks, commands, editor components, widgets, or extension lifecycle.
+Generation is limited to runtime-neutral shared content and launch-bound data. The content compiler owns final skill and agent bytes; build output may package canonical extension source but is never a second implementation.
 
-Generation is reserved for runtime-neutral content shared across harnesses, including skills and agents, plus
-launch-bound data such as resolved manifests and runtime context. Build output may package or compile canonical source,
-but generated output is never the implementation source.
-
-The selected identity's extensions may use that identity's credentials, Git routes, provider APIs, local services, and
-the selected open network policy inside the sandbox. The sandbox boundary protects the opposite identity, original
-checkout, unrelated host paths and processes, and the host Docker socket. Failure never falls back silently to host
-execution.
-
-The target runtime adapter remains thin. It registers the canonical package in the selected discovery surface, supplies
-validated launch data, projects shared skills and agents, and translates host/sandbox paths. Host GUI actions and
-published development ports cross only a narrow launch-bound bridge.
+The Pi runtime adapter remains thin: it selects the native account root, publishes compiled shared content, supplies validated launch context, and binds manifest integrity. Canonical skills use `/mpx:<name>`; native project skills retain `/skill:<name>`.
 
 ## Consequences
 
-- Remove `--no-extensions` and retire the explicit generated `--extension` entry after the canonical package is
-  registered for discovery, preventing duplicate activation.
-- Migrate retained Pi-specific source from `mpx-pi` without creating a second port in `runtime-pi`.
-- Remove generated or vendored duplicate footer, subagent, development-service, guard, and UI implementations after
-  parity is proven.
-- Permit normal `/reload` and user-enabled global or trusted project extensions.
-- Treat enabled extensions as trusted code with the selected identity's authority; open egress can disclose anything
-  readable by that identity.
-- Stage cross-platform paths and dependencies for Linux without changing extension behavior.
-- Keep the original checkout outside the sandbox and apply changes back explicitly from a host-owned private clone.
+- Native extension discovery and `/reload` remain available without duplicate activation.
+- Former external repositories are migration provenance only, not runtime or test authorities.
+- Enabled extensions execute with the selected native identity's authority.
+- Windows host execution is the accepted path and is not isolation.
+- Whole-agent sandbox execution remains unavailable. Docker launch fails closed without host fallback, broad home access, opposite-identity access, original-checkout mounts, or Docker-socket access.

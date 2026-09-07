@@ -14,7 +14,6 @@ const CONFIGURED_PATH_MARKER = ['<configured', 'path>'].join('-');
 const ACTIVE_COMPATIBILITY_DOCS = new Set([
   'docs/LAUNCH.md',
   'docs/RUNTIME_ADAPTERS.md',
-  'MPX_MIGRATION.md',
   'runtimes/claude/runtime-claude/COMPATIBILITY.md',
 ]);
 // Ordinary text validation is intentionally bounded to 1 MiB per file. The generated,

@@ -294,7 +294,7 @@ describe('generated repository validation', () => {
 
   it('narrowly excludes historical documentation from active identity and path checks', () => {
     expect(
-      validateFiles(files('docs/history/PI_MIGRATION.md', '/mp:ship C:\\_MP_projects\\mpx-pi')),
+      validateFiles(files('docs/history/MIGRATION.md', 'former source C:\\_MP_projects\\legacy')),
     ).toEqual([]);
   });
 

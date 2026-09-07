@@ -1,7 +1,6 @@
 # Sentry Diagnosis Contract
 
-Reviewed canonical equivalent of the former local Sentry helper. Sentry remains an identity-owned approved tool route,
-not a standalone exposed skill.
+Sentry is an identity-owned approved tool route, not a standalone exposed skill.
 
 ## Route and identity
 

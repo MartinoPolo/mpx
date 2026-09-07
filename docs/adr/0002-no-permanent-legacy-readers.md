@@ -2,6 +2,6 @@
 
 - Status: Accepted
 
-Legacy installations and data remain available for rollback during migration, but normal MPX operation never reads
-legacy worktree, port, provider, status-line, or session configuration. Explicit one-time import commands may read
-legacy state non-destructively and record provenance.
+Normal MPX operation never reads legacy configuration or treats former repositories as runtime authorities.
+
+A bounded one-time migration may read exact legacy state only when it validates provenance, preserves user data, records ownership, and fails closed on ambiguity. After migration, current configuration and receipts are the only authorities. Compatibility aliases and permanent fallback readers are not retained.

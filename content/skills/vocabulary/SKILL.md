@@ -65,8 +65,7 @@ _Avoid_: "task" for Issue, "project" for Workspace.
 
 ## Flagged Ambiguities
 
-- "workspace" was previously used for both the app container and VS Code workspace — resolved: **Workspace** is the
-  Grovekeeper container only.
+- **Workspace** means the app-level container, not a VS Code workspace.
 ```
 
 If updating: merge new terms into existing structure, update changed definitions, preserve terms that haven't changed.
