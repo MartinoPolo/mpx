@@ -1,4 +1,6 @@
-import { LocalIssueStore, rebuildObsidianIssueViews } from '@mpx/providers';
+import type { ProjectConfig, UserConfig } from '@mpx/config';
+import { MpxError } from '@mpx/core';
+import { LocalIssueStore, rebuildObsidianIssueViews } from './local-issue-store.js';
 
 export interface NodeLocalIssueViewRebuilder {
   rebuild(request: {
@@ -45,4 +47,51 @@ export function createNodeLocalIssueViewRebuilder(
       });
     },
   };
+}
+
+export function createConfiguredNodeLocalIssueStore(options: {
+  readonly project: ProjectConfig;
+  readonly user: UserConfig;
+}): LocalIssueStore {
+  const issues = options.project.issues;
+  if (issues?.provider !== 'local' || !issues.store) {
+    throw new MpxError({
+      code: 'LOCAL_ISSUE_CONFIG_INVALID',
+      message: 'The project must select the local provider and a registered logical store.',
+    });
+  }
+  const registration = options.user.localIssueStores?.[issues.store];
+  if (!registration) {
+    throw new MpxError({
+      code: 'LOCAL_ISSUE_STORE_NOT_FOUND',
+      message: `Local issue store '${issues.store}' is not registered in user configuration.`,
+    });
+  }
+  const view = issues.view === undefined ? undefined : options.user.localViews?.[issues.view];
+  if (issues.view !== undefined && !view) {
+    throw new MpxError({
+      code: 'LOCAL_ISSUE_VIEW_NOT_FOUND',
+      message: `Local issue view '${issues.view}' is not registered in user configuration.`,
+    });
+  }
+  const rebuilder = createNodeLocalIssueViewRebuilder();
+  const store = new LocalIssueStore(registration.root, {
+    projectId: options.project.project.id,
+    ...(view
+      ? {
+          onChanged: async () => {
+            await rebuilder.rebuild({
+              storeRoot: registration.root,
+              projectId: options.project.project.id,
+              view: {
+                vaultRoot: view.vaultRoot,
+                outputRoot: view.outputRoot,
+                resumeBaseUrl: view.resumeBaseUrl,
+              },
+            });
+          },
+        }
+      : {}),
+  });
+  return store;
 }

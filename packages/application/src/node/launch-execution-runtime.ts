@@ -458,6 +458,10 @@ export function productionRuntimeAdapters(input: {
           accountRoot: input.nativeRuntimeRoot,
           runtimeContextFile: built.runtimeContextFile,
           runtimeContext: input.projectionInput.runtimeContext,
+          launchIdentity: {
+            name: input.descriptor.identity.name,
+            mode: input.descriptor.mode,
+          },
           projectionReference: built.reference,
           ...(publishedProjection.files && publishedProjection.revalidation
             ? { projection: built as PiPublishedProjection }

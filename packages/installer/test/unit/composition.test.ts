@@ -59,7 +59,7 @@ function files(runtime: 'claude' | 'pi'): ProjectionFileV1[] {
 }
 const nativeInventory = [
   { path: 'build-metadata.json', sha256: sha('m'), bytes: 1 },
-  { path: 'index.mjs', sha256: sha('i'), bytes: 1 },
+  { path: 'mpx-extension.mjs', sha256: sha('i'), bytes: 1 },
   { path: 'package.json', sha256: sha('p'), bytes: 1 },
 ];
 const nativePackage = parsePiNativePackageRegistration({
@@ -131,7 +131,7 @@ async function piRestartRollbackFixture() {
     workRoot = path.join(temporary, 'pi-work'),
     packageBodies = {
       'build-metadata.json': 'm',
-      'index.mjs': 'i',
+      'mpx-extension.mjs': 'i',
       'package.json': 'p',
     },
     packageFiles = Object.entries(packageBodies).map(([file, body]) => ({
@@ -445,7 +445,7 @@ it('registers the native Pi package without exposing or overwriting private root
   try {
     const bodies = {
         'build-metadata.json': 'm',
-        'index.mjs': 'i',
+        'mpx-extension.mjs': 'i',
         'package.json': 'p',
       },
       inventory = Object.entries(bodies).map(([file, body]) => ({

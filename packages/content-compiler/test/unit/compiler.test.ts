@@ -254,6 +254,10 @@ describe('shared content compiler', () => {
       'issue-create',
       'review',
     ]);
+    expect(text(result, 'skills/shared/providers/GITHUB.md')).toContain(
+      'gh issue view <id> --repo <target>',
+    );
+    expect(text(result, 'skills/shared/providers/LOCAL.md')).toContain('schemaVersion: 2');
   });
 
   it.each([

@@ -24,9 +24,9 @@ const registration = () =>
   createPiNativePackageRegistration({
     schemaVersion: 1,
     kind: 'release-manifest',
-    releaseKey: installerDigest(files(['build-metadata.json', 'index.mjs', 'package.json'])),
-    convergenceHash: installerDigest(files(['build-metadata.json', 'index.mjs', 'package.json'])),
-    files: files(['build-metadata.json', 'index.mjs', 'package.json']),
+    releaseKey: installerDigest(files(['build-metadata.json', 'mpx-extension.mjs', 'package.json'])),
+    convergenceHash: installerDigest(files(['build-metadata.json', 'mpx-extension.mjs', 'package.json'])),
+    files: files(['build-metadata.json', 'mpx-extension.mjs', 'package.json']),
   });
 
 describe('Pi native package registration', () => {
@@ -38,7 +38,7 @@ describe('Pi native package registration', () => {
       artifactRootDigest: installerDigest(result.files),
       files: [
         { path: 'build-metadata.json', sha256: sha('build-metadata.json'), bytes: 1 },
-        { path: 'index.mjs', sha256: sha('index.mjs'), bytes: 2 },
+        { path: 'mpx-extension.mjs', sha256: sha('mpx-extension.mjs'), bytes: 2 },
         { path: 'package.json', sha256: sha('package.json'), bytes: 3 },
       ],
     });
@@ -59,7 +59,7 @@ describe('Pi native package registration', () => {
     'nul\0file.js',
     'a.js',
     'node_modules/x.js',
-    'index.mjs.map',
+    'mpx-extension.mjs.map',
     'package-lock.json',
     'cache/token',
   ])('rejects an unsafe or forbidden inventory path with the stable code: %s', (bad) => {
@@ -98,7 +98,7 @@ describe('Pi native package registration', () => {
 
   it('fails closed when required package artifacts are absent', () => {
     const base = registration();
-    for (const required of ['package.json', 'build-metadata.json', 'index.mjs']) {
+    for (const required of ['package.json', 'build-metadata.json', 'mpx-extension.mjs']) {
       const changed = base.files.filter((item) => item.path !== required);
       expect(() =>
         parsePiNativePackageRegistration({

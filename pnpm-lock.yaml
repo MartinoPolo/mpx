@@ -23,9 +23,6 @@ importers:
       '@mpx/installer':
         specifier: workspace:*
         version: link:packages/installer
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:packages/providers
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:packages/runtime-contracts
@@ -89,9 +86,6 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../../packages/ports
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:../../packages/providers
       '@mpx/runtime-contracts':
         specifier: workspace:*
         version: link:../../packages/runtime-contracts
@@ -147,9 +141,6 @@ importers:
       '@mpx/ports':
         specifier: workspace:*
         version: link:../ports
-      '@mpx/providers':
-        specifier: workspace:*
-        version: link:../providers
       '@mpx/runtime-claude':
         specifier: workspace:*
         version: link:../../runtimes/claude/runtime-claude
@@ -324,22 +315,6 @@ importers:
       '@mpx/config':
         specifier: workspace:*
         version: link:../config
-      '@mpx/core':
-        specifier: workspace:*
-        version: link:../core
-    devDependencies:
-      '@types/node':
-        specifier: ^22.15.0
-        version: 22.20.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(yaml@2.9.0)
-
-  packages/providers:
-    dependencies:
       '@mpx/core':
         specifier: workspace:*
         version: link:../core

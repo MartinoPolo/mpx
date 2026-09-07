@@ -152,7 +152,12 @@ describe('Node launch execution runtime adapters', () => {
     };
 
     try {
-      const descriptor = { runtime: 'pi', launchKey } as LaunchDescriptor;
+      const descriptor = {
+        runtime: 'pi',
+        launchKey,
+        identity: { name: 'identity', domain: 'personal' },
+        mode: 'developer',
+      } as LaunchDescriptor;
       const statusMaterialize = vi.fn(async () => undefined);
       const runtimeStatusMaterialize = vi.fn(async () => 'C:/state/runtime.json');
       const [adapter] = productionRuntimeAdapters({
@@ -212,6 +217,10 @@ describe('Node launch execution runtime adapters', () => {
       );
       expect(skillIndexes.map((index) => invocation.argv[index + 1])).toEqual([]);
       expect(invocation.environment.MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY).toBeDefined();
+      expect(invocation.environment).toMatchObject({
+        MPX_IDENTITY: 'identity',
+        MPX_MODE: 'developer',
+      });
       await expect(
         readFile(path.join(projectionDirectory, 'skills', 'sample', 'SKILL.md'), 'utf8'),
       ).resolves.toBe("---\nname: sample\ndescription: 'Sample skill'\n---\n# Sample\n");
@@ -236,7 +245,13 @@ describe('Node launch execution runtime adapters', () => {
     };
     const content = await projectionContentFixture(stateRoot, 'pi', binding);
     const artifactReference = content.artifact.reference;
-    const descriptor = { runtime: 'pi', launchKey, runtimeArgs } as unknown as LaunchDescriptor;
+    const descriptor = {
+      runtime: 'pi',
+      launchKey,
+      runtimeArgs,
+      identity: { name: 'identity', domain: 'personal' },
+      mode: 'developer',
+    } as unknown as LaunchDescriptor;
     const runtimeContext = createRuntimeContextV1({
       launchKey,
       launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },

@@ -1070,6 +1070,8 @@ describe('trust and privacy boundaries', () => {
     'MPX_ACTIVE_CONTENT_MANIFEST',
     'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
     'MPX_COMPILED_AGENTS_DIR',
+    'MPX_IDENTITY',
+    'MPX_MODE',
   ])('preserves trusted %s skill context without accepting ambient authority', (key) => {
     expect(sanitizedEnvironment({ [key]: 'ambient' }, {})).toEqual({});
     expect(

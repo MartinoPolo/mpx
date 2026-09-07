@@ -140,25 +140,6 @@ describe('ProjectApplicationService', () => {
         order.push('sbx');
         return { available: false, failureCodes: ['Z_CODE', 'A_CODE', 'A_CODE'], readOnly: true };
       },
-      providerDiagnostics: async ({
-        project: selectedProject,
-        user: selectedUser,
-      }: {
-        project: ProjectConfig;
-        user: UserConfig;
-      }) => {
-        order.push('providers');
-        expect(selectedProject).toBe(managedProject);
-        expect(selectedUser).toBe(user);
-        return [
-          {
-            code: 'PROVIDER_AUTH_FAILED',
-            message: 'Provider authentication failed.',
-            severity: 'error',
-            details: { identity: 'zed', provider: 'github', role: 'repository' },
-          },
-        ];
-      },
       statusSnapshot: async (request: { configHash: string }) => {
         order.push('status');
         expect(request.configHash).toBeTruthy();
@@ -188,7 +169,6 @@ describe('ProjectApplicationService', () => {
       'canonical',
       'project',
       'sbx',
-      'providers',
       'status',
       'resolve',
     ]);
@@ -198,22 +178,18 @@ describe('ProjectApplicationService', () => {
       'SKILL',
       'A_CODE',
       'Z_CODE',
-      'PROVIDER_AUTH_FAILED',
       'FIXED_SHARED_LIMITATION',
       'PORT',
     ]);
   });
 
   it('rejects mutable sandbox diagnostics before later diagnostic side effects', async () => {
-    const providerDiagnostics = vi.fn();
     await expect(
       setup({
         inventoryCanonical: async () => [],
         inventoryProjectSkills: async () => ({ skills: [], diagnostics: [] }),
         sbxDiagnostics: async () => ({ available: true, failureCodes: [], readOnly: false }),
-        providerDiagnostics,
       }).doctor({ cwd: 'C:/repo', environment: {}, catalogRoot: 'C:/catalog' }),
     ).rejects.toMatchObject({ code: 'SBX_DIAGNOSTICS_UNSAFE' });
-    expect(providerDiagnostics).not.toHaveBeenCalled();
   });
 });

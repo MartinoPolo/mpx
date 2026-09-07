@@ -1,7 +1,6 @@
 export const HOST_EXTERNALS: readonly string[];
 export const GUARD_ASSETS: readonly string[];
 export const CONFIG_ASSETS: readonly string[];
-export const THEME_ASSETS: readonly string[];
 export const VENDORED_LICENSE_ASSETS: readonly string[];
 export const PACKAGE_ASSETS: readonly string[];
 
@@ -18,7 +17,7 @@ export interface BundlerOptions {
 
 export interface BundlerConfig {
   readonly entryPoint: 'index.ts';
-  readonly outputFile: 'index.mjs';
+  readonly outputFile: 'mpx-extension.mjs';
   readonly esbuildVersion: string;
   readonly options: BundlerOptions;
 }

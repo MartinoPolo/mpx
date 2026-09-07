@@ -36,7 +36,9 @@ test('destination-bound fork retains history and continues from the active leaf'
       forkWorktreeSession(context(source, sourceCwd), targetCwd),
     );
     const handoff = destination.getLeafEntry() as any;
-    assert.equal(destination.getHeader().cwd, path.resolve(targetCwd));
+    const header = destination.getHeader();
+    assert.ok(header);
+    assert.equal(header.cwd, path.resolve(targetCwd));
     assert.equal(
       destination.getEntries().some((entry) => entry.id === abandoned),
       true,

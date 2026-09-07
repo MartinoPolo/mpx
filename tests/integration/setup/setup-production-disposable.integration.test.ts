@@ -708,7 +708,7 @@ it.each([false, true])(
         ),
       ).resolves.toBeInstanceOf(Buffer);
     }
-    for (const file of ['build-metadata.json', 'index.mjs', 'package.json']) {
+    for (const file of ['build-metadata.json', 'mpx-extension.mjs', 'package.json']) {
       await expect(readFile(path.join(packageSource, file))).resolves.toBeInstanceOf(Buffer);
     }
     await expect(orchestrator.verify(true)).resolves.toMatchObject({

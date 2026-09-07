@@ -28,6 +28,7 @@ import { preparationRuntime, windowsProcessIdentityInspector } from './preparati
 import { createNodeWorktreeLifecycleService } from './worktree-lifecycle.js';
 
 export * from './exact-native-root.js';
+export * from './local-issue-store.js';
 export * from './local-issue-view-rebuilder.js';
 export * from './obsolete-account-state-reset.js';
 export * from './pi-auth-availability.js';
@@ -221,8 +222,6 @@ export * from './launch-execution-runtime.js';
 export * from './launch-execution.js';
 export * from './launch-production.js';
 export * from './claude-gateway.js';
-export * from './provider-process-adapters.js';
-export * from './provider-application-service.js';
 export * from './private-route-materializer.js';
 export * from './session-lifecycle-bridge.js';
 export * from './session-production-adapters.js';

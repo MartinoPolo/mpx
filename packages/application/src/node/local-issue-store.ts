@@ -2,9 +2,25 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { MpxError, type JsonValue } from '@mpx/core';
-import { ISSUE_CAPABILITIES, LOCAL_ISSUE_CAPABILITIES, ProviderError } from '../registry.js';
-import { type IssueCommentV1, type IssueV1 } from '../contracts.js';
-import type { ProviderAdapter, ProviderInvocation } from '../service.js';
+
+interface IssueV1 {
+  readonly schemaVersion: 1;
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+  readonly state: 'open' | 'finished';
+  readonly labels: readonly string[];
+  readonly providerData: Readonly<Record<string, JsonValue>>;
+}
+
+interface IssueCommentV1 {
+  readonly schemaVersion: 1;
+  readonly id: string;
+  readonly issueId: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly providerData: Readonly<Record<string, JsonValue>>;
+}
 
 export interface LocalRelationships {
   parent?: string;
@@ -1333,79 +1349,6 @@ export class LocalIssueStore {
       };
     });
   }
-}
-
-export function createLocalIssueAdapter(options: {
-  root: string;
-  staleLockMilliseconds?: number;
-  projectId?: string;
-  onChanged?: (issue: LocalIssue) => Promise<void>;
-}): ProviderAdapter {
-  const store = new LocalIssueStore(options.root, options),
-    capabilities = [
-      ...ISSUE_CAPABILITIES.filter((capability) => capability !== 'issue.move'),
-      ...LOCAL_ISSUE_CAPABILITIES,
-    ];
-  return {
-    providerId: 'local',
-    role: 'issues',
-    backend: 'filesystem',
-    capabilities: capabilities as ProviderAdapter['capabilities'],
-    routeRequired: false,
-    async invoke(request: ProviderInvocation) {
-      const input = request.input as Record<string, unknown>;
-      switch (request.capability) {
-        case 'issue.list':
-          return store.list(input.state as 'open' | 'finished' | undefined);
-        case 'issue.view':
-          return store.view(String(input.id));
-        case 'issue.create':
-          return store.create({ title: String(input.title), body: String(input.body) });
-        case 'issue.edit':
-          return store.update(
-            String(input.id),
-            { title: String(input.title), body: String(input.body) },
-            typeof input.revision === 'string' ? input.revision : undefined,
-          );
-        case 'issue.comment':
-          return store.comment(String(input.id), String(input.body));
-        case 'issue.label': {
-          const issue = await store.view(String(input.id));
-          return store.update(
-            issue.id,
-            { labels: [...issue.labels, String(input.label)] },
-            String(issue.providerData.local.revision),
-          );
-        }
-        case 'issue.finish':
-          return store.update(
-            String(input.id),
-            { state: 'finished', localState: 'done' },
-            typeof input.revision === 'string' ? input.revision : undefined,
-          );
-        case 'issue.dependency.add':
-          return store.setDependency(
-            String(input.id),
-            String(input.dependencyId),
-            true,
-            typeof input.revision === 'string' ? input.revision : undefined,
-          );
-        case 'issue.dependency.remove':
-          return store.setDependency(
-            String(input.id),
-            String(input.dependencyId),
-            false,
-            typeof input.revision === 'string' ? input.revision : undefined,
-          );
-        default:
-          throw new ProviderError(
-            'CAPABILITY_UNSUPPORTED',
-            `Local issues do not support ${request.capability}.`,
-            { capability: request.capability },
-          );
-      }
-    },
-  };
 }
 
 function validateOutput(vaultRoot: string, outputRoot: string) {

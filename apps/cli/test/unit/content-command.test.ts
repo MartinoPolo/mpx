@@ -1,14 +1,31 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { executeContentCommand } from '../../src/content-command.js';
 
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
+const temporaryRoots: string[] = [];
+
+afterEach(async () => {
+  const results = await Promise.allSettled(
+    temporaryRoots
+      .splice(0)
+      .map((root) => rm(root, { recursive: true, force: true, maxRetries: 3 })),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Temporary fixture cleanup failed.');
+  }
+});
+
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-content-cli-'));
+  temporaryRoots.push(root);
   const alpha = Buffer.from('exact alpha skill bytes\r\n');
   const zeta = Buffer.from('exact zeta skill bytes\n');
   const explore = Buffer.from('exact explore agent bytes\n');
@@ -123,12 +140,6 @@ describe('content command', () => {
         },
       ],
     });
-  });
-
-  it('renders a concise active projection summary without native secret state', async () => {
-    const value = await fixture();
-    const result = await executeContentCommand({ action: 'inspect', args: [], env: value.env });
-
     expect(result.rawOutput).toContain(`Active content: ${value.root}`);
     expect(result.rawOutput).toContain(`Manifest: ${value.manifestPath}`);
     expect(result.rawOutput).toContain('alpha — Alpha skill.');

@@ -122,7 +122,7 @@ export function parsePiNativePackageRegistration(value: unknown): PiNativePackag
     ) ||
     !files.some((file) => file.path === 'package.json') ||
     !files.some((file) => file.path === 'build-metadata.json') ||
-    !files.some((file) => file.path === 'index.mjs') ||
+    !files.some((file) => file.path === 'mpx-extension.mjs') ||
     installerDigest(files) !== record.artifactRootDigest
   ) {
     fail('PI_NATIVE_INVENTORY_INVALID', 'Pi native package inventory is incomplete or changed.');

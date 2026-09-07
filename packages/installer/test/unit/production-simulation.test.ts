@@ -14,7 +14,7 @@ import {
 } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
 import {
   activateRelease,
@@ -101,6 +101,14 @@ function registration(
     ? { ...common, runtime: 'pi' as const, nativePackage }
     : { ...common, runtime: 'claude' as const };
 }
+const temporaryRoots = new Set<string>();
+
+afterEach(async () => {
+  const roots = [...temporaryRoots];
+  temporaryRoots.clear();
+  await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true, maxRetries: 3 })));
+});
+
 async function simulation(
   existing: boolean,
   prepareExtension: typeof preparePiExtensionBuildFixture = preparePiExtensionBuildFixture,
@@ -109,6 +117,7 @@ async function simulation(
   const root = await mkdtemp(
     path.join(checkoutRoot, 'node_modules', `mpx-production-${existing ? 'existing' : 'clean'}-`),
   );
+  temporaryRoots.add(root);
   try {
     return await prepareSimulation(existing, checkoutRoot, root, prepareExtension);
   } catch (error) {
@@ -407,7 +416,7 @@ it('plans, applies, and verifies a fresh base install without scheduled capture'
   expect(readNative).not.toHaveBeenCalledWith(scheduledTarget);
   expect(writeNative).not.toHaveBeenCalledWith(scheduledTarget, expect.anything());
   expect(removeNative).not.toHaveBeenCalledWith(scheduledTarget);
-  for (const file of ['build-metadata.json', 'index.mjs', 'package.json']) {
+  for (const file of ['build-metadata.json', 'mpx-extension.mjs', 'package.json']) {
     expect(await readFile(path.join(packageSource, file))).toEqual(
       await readFile(
         path.join(f.repositoryRoot, 'runtimes', 'pi', 'extensions', 'dist', 'package', file),

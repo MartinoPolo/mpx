@@ -1,7 +1,7 @@
-import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canonicalNativeRootDigest } from '@mpx/launch';
 import type { UserConfig } from '@mpx/config';
 import type { ProspectiveSessionResumePlanV1 } from '@mpx/application';
@@ -23,7 +23,6 @@ const deletedRoutes = [
     action,
   ]),
   ...['show', 'resolve', 'explain', 'validate'].map((action) => ['config', action]),
-  ...['list', 'explain', 'doctor'].map((action) => ['provider', action]),
   ...['list', 'search', 'show', 'explain', 'complete'].map((action) => ['skill', action]),
   ...['identity', 'mode', 'skill-policy', 'preset'].flatMap((group) => [
     [group, 'list'],
@@ -69,8 +68,25 @@ async function prospectivePlan(seed: NativeVerifiedResumeSeedV1): Promise<Resume
   return { ...unsigned, confirmationDigest: stableDigest(unsigned) };
 }
 
+const temporaryRoots: string[] = [];
+
+afterEach(async () => {
+  const results = await Promise.allSettled(
+    temporaryRoots
+      .splice(0)
+      .map((root) => rm(root, { recursive: true, force: true, maxRetries: 3 })),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Temporary fixture cleanup failed.');
+  }
+});
+
 async function resumableCliFixture() {
   const localAppData = await mkdtemp(path.join(tmpdir(), 'mpx-cli-confirmation-'));
+  temporaryRoots.push(localAppData);
   const nativeRoot = path.join(localAppData, 'native');
   const store = new SessionStore(localAppData);
   const identity = { domain: 'personal', name: 'main' } as const;
@@ -144,6 +160,7 @@ async function resumableCliFixture() {
 describe('canonical CLI dispatch', () => {
   it('returns an init dry-run envelope without publishing', async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), 'mpx-cli-init-dry-'));
+    temporaryRoots.push(cwd);
     const io = captureIo();
     const ensure = vi.fn();
 
@@ -162,6 +179,7 @@ describe('canonical CLI dispatch', () => {
 
   it('admits confirmed init and publishes its exact discovered manifest', async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), 'mpx-cli-init-confirm-'));
+    temporaryRoots.push(cwd);
     const io = captureIo();
     const ensure = vi.fn(async () => ({ lease: { port: 4173 }, warnings: [] }));
 
@@ -188,6 +206,7 @@ describe('canonical CLI dispatch', () => {
 
   it('uses production Pi discovery to normalize stale durable liveness without touching host roots', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-cli-production-list-'));
+    temporaryRoots.push(root);
     const appData = path.join(root, 'roaming');
     const localAppData = path.join(root, 'local');
     const stateRoot = path.join(localAppData, 'mpx');
@@ -416,6 +435,7 @@ describe('canonical CLI dispatch', () => {
 
   it('passes the exact prepared resume plan and resurrection authority to the injected executor', async () => {
     const localAppData = await mkdtemp(path.join(tmpdir(), 'mpx-cli-resume-'));
+    temporaryRoots.push(localAppData);
     const nativeRoot = path.join(localAppData, 'native');
     const store = new SessionStore(localAppData);
     const identity = { domain: 'personal', name: 'main' };
@@ -725,6 +745,7 @@ describe('canonical CLI dispatch', () => {
 
   it('executes internal resurrection without revealing it in direct help', async () => {
     const localAppData = await mkdtemp(path.join(tmpdir(), 'mpx-cli-routing-'));
+    temporaryRoots.push(localAppData);
     const executeIo = captureIo();
 
     expect(

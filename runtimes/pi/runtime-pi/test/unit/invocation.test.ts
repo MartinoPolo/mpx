@@ -197,6 +197,23 @@ it('does not disable native extension discovery', async () => {
   expect(plan.args).not.toContain('--extension');
 });
 
+it('exposes the selected identity and mode for the Pi footer', async () => {
+  const plan = await planPiInvocation({
+    executable: 'C:/trusted/pi.cmd',
+    profile: invocationProfile,
+    accountRoot: 'C:/native/pi/account-a',
+    runtimeContextFile: 'C:/launch/context.json',
+    runtimeContext,
+    launchIdentity: { name: 'personal', mode: 'developer' },
+    cwd: 'C:/repo',
+  });
+
+  expect(plan.env).toMatchObject({
+    MPX_IDENTITY: 'personal',
+    MPX_MODE: 'developer',
+  });
+});
+
 it('creates a hermetic Pi invocation with launch-current-compatible runtime-context JSON', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',

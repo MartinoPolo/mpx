@@ -53,6 +53,7 @@ describe('generated repository validation', () => {
         'SENTRY.md',
         'SUBAGENT_PROTOCOL.md',
         'WRITING_FOR_AGENTS.md',
+        'providers',
       ]),
     );
   });
@@ -60,7 +61,19 @@ describe('generated repository validation', () => {
   it('keeps current shared-instruction relative links closed', async () => {
     const root = path.resolve(import.meta.dirname, '../../..');
     const directory = path.join(root, 'content/instructions/shared');
-    const names = await readdir(directory);
+    const collect = async (root, relative = '') => {
+      const files = [];
+      for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
+        const next = path.posix.join(relative, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...(await collect(root, next)));
+        } else {
+          files.push(next);
+        }
+      }
+      return files;
+    };
+    const names = await collect(directory);
     const current = new Map(
       await Promise.all(
         names.map(async (name) => [

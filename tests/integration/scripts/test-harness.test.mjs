@@ -389,7 +389,7 @@ describe('final workspace and root command contracts', () => {
       unit: 'pnpm run build && vitest run --config vitest.unit.config.ts',
       payload: 'vitest run --config vitest.payload.config.ts',
       contract:
-        'pnpm --filter @mpx/providers... --filter @mpx/runtime-contracts... build && vitest run --config vitest.contract.config.ts',
+        'pnpm --filter @mpx/runtime-contracts... build && vitest run --config vitest.contract.config.ts',
       integration: 'pnpm --filter mpx... build && vitest run --config vitest.integration.config.ts',
       e2e: 'pnpm --filter mpx... build && vitest run --config vitest.e2e.config.ts',
     });

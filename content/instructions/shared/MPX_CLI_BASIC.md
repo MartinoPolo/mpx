@@ -46,66 +46,6 @@ Inspect the active projection or print one exact compiled file.
 
 Verify all active compiler files.
 
-## `mpx issue`
-
-Work with provider-neutral issues.
-
-### `mpx issue list [--state open|finished]`
-
-List issues.
-
-### `mpx issue view --id <id>`
-
-View an issue.
-
-Examples:
-
-- `mpx issue view --id 123`
-
-### `mpx issue create --title <title> --body <body>`
-
-Create an issue.
-
-### `mpx issue edit --id <id> --title <title> --body <body>`
-
-Edit an issue.
-
-### `mpx issue comment --id <id> --body <body>`
-
-Comment on an issue.
-
-### `mpx issue finish --id <id>`
-
-Finish an issue.
-
-## `mpx review`
-
-Work with provider-neutral code reviews.
-
-### `mpx review view --id <id>`
-
-View a review.
-
-### `mpx review create --title <title> --body <body> --source-branch <branch> --target-branch <branch>`
-
-Create a review.
-
-### `mpx review merge --id <id> [--method merge|squash|rebase]`
-
-Merge a review.
-
-## `mpx ci`
-
-Inspect and control provider-neutral CI.
-
-### `mpx ci status --id <id>`
-
-Show CI status.
-
-### `mpx ci logs --run-id <id>`
-
-Show CI run logs.
-
 ## `mpx session`
 
 List and resume native runtime sessions.

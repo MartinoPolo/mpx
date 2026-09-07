@@ -48,12 +48,12 @@ const nativePackage = parsePiNativePackageRegistration({
   packageRoot: 'runtimes/pi/extensions/dist/package',
   files: [
     { path: 'build-metadata.json', sha256: sha('metadata'), bytes: 1 },
-    { path: 'index.mjs', sha256: sha('index'), bytes: 1 },
+    { path: 'mpx-extension.mjs', sha256: sha('index'), bytes: 1 },
     { path: 'package.json', sha256: sha('package'), bytes: 1 },
   ],
   artifactRootDigest: installerDigest([
     { path: 'build-metadata.json', sha256: sha('metadata'), bytes: 1 },
-    { path: 'index.mjs', sha256: sha('index'), bytes: 1 },
+    { path: 'mpx-extension.mjs', sha256: sha('index'), bytes: 1 },
     { path: 'package.json', sha256: sha('package'), bytes: 1 },
   ]),
 });
@@ -129,7 +129,7 @@ describe('immutable runtime registration', () => {
     ).toThrowError(/REGISTRATION_EXECUTABLE_AMBIGUOUS/u);
 
     const changedFiles = nativePackage.files.map((file) =>
-      file.path === 'index.mjs' ? { ...file, sha256: sha('different-package') } : file,
+      file.path === 'mpx-extension.mjs' ? { ...file, sha256: sha('different-package') } : file,
     );
     const changedPackage = parsePiNativePackageRegistration({
       ...nativePackage,
@@ -402,7 +402,7 @@ describe('immutable runtime registration', () => {
 
     const alternateInventories = [
       nativePackage.files.map((file) =>
-        file.path === 'index.mjs' ? { ...file, sha256: sha('alternate-index') } : file,
+        file.path === 'mpx-extension.mjs' ? { ...file, sha256: sha('alternate-index') } : file,
       ),
       [
         ...nativePackage.files,

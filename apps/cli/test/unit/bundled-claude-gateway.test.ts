@@ -1,11 +1,26 @@
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
 
 const launchKey = 'c'.repeat(64);
+const temporaryRoots: string[] = [];
+
+afterEach(async () => {
+  const results = await Promise.allSettled(
+    temporaryRoots
+      .splice(0)
+      .map((root) => rm(root, { recursive: true, force: true, maxRetries: 3 })),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Temporary fixture cleanup failed.');
+  }
+});
 
 async function rpc(command: string, args: string[], requests: unknown[]): Promise<any[]> {
   return new Promise((resolve, reject) => {
@@ -47,6 +62,7 @@ describe('bundled Claude gateway', () => {
     expect(await readFile(cliBundle, 'utf8')).toContain('claude-gateway.js');
 
     const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-bundled-gateway-'));
+    temporaryRoots.push(stateRoot);
     const route = path.join(stateRoot, 'route.json');
     await writeFile(
       route,
