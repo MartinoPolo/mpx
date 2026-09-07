@@ -8,6 +8,7 @@ import type {
 } from './provider.js';
 
 export class StatusSnapshotValidationError extends Error {
+  // fallow-ignore-next-line unused-class-member -- public status error-code contract.
   readonly code = 'STATUS_SNAPSHOT_INVALID';
 
   constructor(message: string, options?: ErrorOptions) {

@@ -533,6 +533,7 @@ export class WorktreeLifecycleService {
     });
   }
 
+  // fallow-ignore-next-line unused-class-member -- lifecycle interface implementation used through adapters.
   async status(request: { cwd: string }): Promise<LifecycleResult> {
     const repository = await this.dependencies.repository.resolve(request.cwd);
     return {

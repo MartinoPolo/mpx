@@ -104,9 +104,6 @@ export class SessionService {
     private readonly clock: () => string = now,
     private readonly processInspector?: SessionProcessInspector,
   ) {}
-  async save(record: SessionRecordV1): Promise<SessionRecordV1> {
-    return this.store.put(parseSessionRecordV1(record));
-  }
   async list(filter: SessionListFilter = {}): Promise<SessionRecordV1[]> {
     return (await this.store.partitions())
       .flatMap((partition) => partition.records)

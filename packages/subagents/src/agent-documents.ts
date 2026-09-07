@@ -154,6 +154,7 @@ function parseDocument(identity: string, bytes: Uint8Array): CanonicalAgentDocum
   return document;
 }
 
+/** @public */
 export async function loadCanonicalAgentProjectionInputsV1(
   root: string,
   options: CanonicalAgentProjectionLoadOptionsV1 = {},
@@ -330,6 +331,7 @@ export async function loadCanonicalAgentProjectionInputsV1(
   });
 }
 
+/** @public */
 export function renderCanonicalAgentDocumentV1(
   document: CanonicalAgentDocumentV1,
   translation: CanonicalAgentDocumentTranslationV1,

@@ -110,6 +110,7 @@ export interface RuntimeStatusEnvelopeV1 {
 }
 
 export class RuntimeStatusEnvelopeValidationError extends Error {
+  // fallow-ignore-next-line unused-class-member -- public status error-code contract.
   readonly code = 'RUNTIME_STATUS_ENVELOPE_INVALID';
   constructor(message: string) {
     super(`Invalid runtime status envelope: ${message}.`);

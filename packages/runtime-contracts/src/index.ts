@@ -2,12 +2,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, opendir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+/** @public */
 export const RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION = 4 as const;
+/** @public */
 export const RUNTIME_SKILL_ARTIFACT_SCHEMA_VERSION = 4 as const;
+/** @public */
 export const RUNTIME_CONTEXT_SCHEMA_VERSION = 1 as const;
+/** @public */
 export const RUNTIME_CONTRACT_ERROR_SCHEMA_VERSION = 1 as const;
+/** @public */
 export const SESSION_LIFECYCLE_BINDING_SCHEMA_VERSION = 1 as const;
+/** @public */
 export const SESSION_LIFECYCLE_EVENT_SCHEMA_VERSION = 1 as const;
+/** @public */
 export const RUNTIME_SESSION_OBSERVATION_SCHEMA_VERSION = 1 as const;
 
 export type RuntimeName = 'claude' | 'pi';
@@ -54,6 +61,7 @@ export interface RuntimeContractDiagnostic {
   readonly restartRequired: boolean;
   readonly details?: Readonly<Record<string, string | number | boolean | null>>;
 }
+/** @public */
 export class RuntimeContractError extends Error {
   readonly schemaVersion = RUNTIME_CONTRACT_ERROR_SCHEMA_VERSION;
   constructor(
@@ -218,6 +226,7 @@ function lifecycleCreatorInput(value: unknown, keys: readonly string[], label: s
 export type NativeSessionRefV1 =
   | { readonly kind: 'native-id'; readonly value: string }
   | { readonly kind: 'root-relative-file'; readonly value: string };
+/** @public */
 export function parseNativeSessionRefV1(value: unknown): NativeSessionRefV1 {
   const item = record(value, 'nativeSessionRef');
   exactKeys(item, ['kind', 'value'], 'nativeSessionRef');
@@ -249,6 +258,7 @@ export interface SessionLifecycleBindingV1 {
   readonly createdAt: string;
   readonly expiresAt: string;
 }
+/** @public */
 export function createSessionLifecycleBindingV1(
   input: Omit<SessionLifecycleBindingV1, 'schemaVersion'> | SessionLifecycleBindingV1,
 ): SessionLifecycleBindingV1 {
@@ -292,6 +302,7 @@ export function createSessionLifecycleBindingV1(
   }
   return result;
 }
+/** @public */
 export function parseSessionLifecycleBindingV1(value: unknown): SessionLifecycleBindingV1 {
   const item = record(value, 'sessionLifecycleBinding');
   exactKeys(
@@ -322,6 +333,7 @@ export function parseSessionLifecycleBindingV1(value: unknown): SessionLifecycle
   }
   return createSessionLifecycleBindingV1(item as unknown as SessionLifecycleBindingV1);
 }
+/** @public */
 export function validateSessionLifecycleBindingV1(input: {
   readonly binding: unknown;
   readonly context: unknown;
@@ -379,6 +391,7 @@ export interface SessionLifecycleEventV1 {
   readonly pid: number;
   readonly startFingerprint: string;
 }
+/** @public */
 export function createSessionLifecycleEventV1(
   input: Omit<SessionLifecycleEventV1, 'schemaVersion'> | SessionLifecycleEventV1,
 ): SessionLifecycleEventV1 {
@@ -427,6 +440,7 @@ export function createSessionLifecycleEventV1(
     startFingerprint: boundedText(input.startFingerprint, 'startFingerprint', 256),
   };
 }
+/** @public */
 export function parseSessionLifecycleEventV1(value: unknown): SessionLifecycleEventV1 {
   const item = record(value, 'sessionLifecycleEvent');
   exactKeys(
@@ -479,6 +493,7 @@ export interface RuntimeSessionObservationV1 {
   readonly source: string;
   readonly diagnostic: string | null;
 }
+/** @public */
 export function createRuntimeSessionObservationV1(
   input: Omit<RuntimeSessionObservationV1, 'schemaVersion'> | RuntimeSessionObservationV1,
 ): RuntimeSessionObservationV1 {
@@ -544,6 +559,7 @@ export function createRuntimeSessionObservationV1(
   }
   return result;
 }
+/** @public */
 export function parseRuntimeSessionObservationV1(value: unknown): RuntimeSessionObservationV1 {
   const item = record(value, 'runtimeSessionObservation');
   exactKeys(
@@ -576,6 +592,7 @@ export function parseRuntimeSessionObservationV1(value: unknown): RuntimeSession
   return createRuntimeSessionObservationV1(item as unknown as RuntimeSessionObservationV1);
 }
 
+/** @public */
 export function createResolvedSkillManifestV4(input: {
   binding: RuntimeBinding;
   decisions: readonly ResolvedSkillDecisionV4[];
@@ -599,6 +616,7 @@ export function createResolvedSkillManifestV4(input: {
   return { ...tuple, manifestKey: hash(tuple) };
 }
 
+/** @public */
 export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManifestV4 {
   const item = record(value, 'manifest');
   exactKeys(item, ['schemaVersion', 'manifestKey', 'binding', 'decisions'], 'manifest');
@@ -668,6 +686,7 @@ export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManif
   return parsed;
 }
 
+/** @public */
 export function createRuntimeSkillArtifactReferenceV4(
   input: Omit<RuntimeSkillArtifactReferenceV4, 'schemaVersion'>,
 ): RuntimeSkillArtifactReferenceV4 {
@@ -679,6 +698,7 @@ export function createRuntimeSkillArtifactReferenceV4(
     fileMapHash: text(input.fileMapHash, 'fileMapHash'),
   };
 }
+/** @public */
 export function parseRuntimeSkillArtifactReferenceV4(
   value: unknown,
 ): RuntimeSkillArtifactReferenceV4 {
@@ -701,6 +721,7 @@ export function parseRuntimeSkillArtifactReferenceV4(
     fileMapHash: text(item.fileMapHash, 'runtimeArtifact.fileMapHash'),
   });
 }
+/** @public */
 export function createRuntimeContextV1(
   input: Omit<RuntimeContextV1, 'schemaVersion'> | RuntimeContextV1,
 ): RuntimeContextV1 {
@@ -721,6 +742,7 @@ export function createRuntimeContextV1(
     binding: parseBinding(input.binding),
   };
 }
+/** @public */
 export function parseRuntimeContextV1(value: unknown): RuntimeContextV1 {
   const item = record(value, 'runtimeContext');
   exactKeys(
@@ -751,6 +773,7 @@ export function parseRuntimeContextV1(value: unknown): RuntimeContextV1 {
 export type RuntimeProjectionExecutor<TProjection, TResult = TProjection> = (
   projection: TProjection,
 ) => TResult | Promise<TResult>;
+/** @public */
 export interface RuntimeProjectionBuilder<TProjection, TResult = TProjection> {
   readonly runtime: RuntimeName;
   project(
@@ -758,11 +781,6 @@ export interface RuntimeProjectionBuilder<TProjection, TResult = TProjection> {
     executor: RuntimeProjectionExecutor<TProjection, TResult>,
   ): Promise<TResult>;
 }
-export interface RuntimeAdapter<TContext = RuntimeContextV1, TResult = unknown> {
-  readonly runtime: RuntimeName;
-  launch(context: TContext): TResult | Promise<TResult>;
-}
-
 export interface RuntimeArtifactFile {
   readonly path: string;
   readonly sha256: string;
@@ -787,6 +805,7 @@ export interface RuntimeArtifactInventoryLimits {
   readonly maxDirectoryCount?: number;
   readonly maxDepth?: number;
 }
+/** @public */
 export const DEFAULT_RUNTIME_ARTIFACT_INVENTORY_LIMITS = Object.freeze({
   maxFileCount: 10_000,
   maxFileBytes: 16 * 1024 * 1024,
@@ -1162,6 +1181,7 @@ function same(left: unknown, right: unknown): boolean {
   return stable(left) === stable(right);
 }
 
+/** @public */
 export async function revalidateRuntimeArtifact(
   directory: string,
   expectedInput: PublishedRuntimeArtifactReference,
@@ -1201,6 +1221,7 @@ export async function revalidateRuntimeArtifact(
   return { valid: diagnostics.length === 0, diagnostics };
 }
 
+/** @public */
 export async function publishRuntimeArtifact(input: {
   sourceRoot: string;
   artifactsRoot: string;
@@ -1271,6 +1292,7 @@ export async function publishRuntimeArtifact(input: {
   }
 }
 
+/** @public */
 export async function validateRuntimeContext(input: {
   context: RuntimeContextV1;
   expectedLaunch: { launchKey: string; descriptorDigest: string };

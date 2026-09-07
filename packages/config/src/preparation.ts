@@ -18,6 +18,7 @@ const SHELL_EXECUTABLES = new Set([
 ]);
 
 export class PreparationPlanError extends Error {
+  // fallow-ignore-next-line unused-class-member -- public configuration error-code contract.
   readonly code = 'PREPARATION_PLAN_INVALID' as const;
   constructor(public readonly diagnostics: readonly Diagnostic[]) {
     super(diagnostics.map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`).join('; '));

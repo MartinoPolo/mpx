@@ -1475,6 +1475,7 @@ export class PortService {
     }
     await this.dependencies.platform.killProcess({ pid, startedAt: authorized.startedAt });
   }
+  // fallow-ignore-next-line unused-class-member -- public operational diagnostics API.
   async diagnose(): Promise<{
     leases: number;
     conflicts: readonly import('./adapters.js').ListenerInfo[];

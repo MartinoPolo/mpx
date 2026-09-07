@@ -2,8 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
   parseStatusSnapshotV1,
-  renderClaudeFixture,
-  renderPiFixture,
+  renderClaudePortSegment,
+  renderPiPortSegment,
   renderPortSegment,
   type StatusSnapshotV1,
 } from '../../src/index.js';
@@ -28,8 +28,8 @@ describe('port segment renderers', () => {
   ])('keeps the provider fixture renderers exactly equal to the %s text snapshot', async (name) => {
     const { snapshot, text } = await fixture(name);
     expect(renderPortSegment(snapshot)).toBe(text);
-    expect(renderClaudeFixture(snapshot)).toBe(text);
-    expect(renderPiFixture(snapshot)).toBe(text);
+    expect(renderClaudePortSegment(snapshot)).toBe(text);
+    expect(renderPiPortSegment(snapshot)).toBe(text);
   });
 
   it('collectively covers every resolution state, service mode, and conflict value', async () => {
@@ -58,7 +58,7 @@ describe('port segment renderers', () => {
   it('renders shuffled service input in the same deterministic order', async () => {
     const { snapshot, text } = await fixture('valid');
     const shuffled = { ...snapshot, services: [...snapshot.services].reverse() };
-    expect(renderClaudeFixture(shuffled)).toBe(text);
-    expect(renderPiFixture(shuffled)).toBe(text);
+    expect(renderClaudePortSegment(shuffled)).toBe(text);
+    expect(renderPiPortSegment(shuffled)).toBe(text);
   });
 });

@@ -9,6 +9,7 @@ export class ExecutionError extends Error {
   ) {
     super(message);
   }
+  // fallow-ignore-next-line unused-class-member -- JavaScript JSON serialization hook.
   toJSON(): {
     code: string;
     message: string;

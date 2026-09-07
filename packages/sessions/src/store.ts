@@ -572,6 +572,7 @@ export class SessionStore {
     }
     return result;
   }
+  // fallow-ignore-next-line unused-class-member -- consumed by application Node session adapters.
   async listNativeBindings(): Promise<NativeBindingRecordV1[]> {
     const directory = path.join(this.stateRoot, 'sessions', 'v1', 'private', 'native-bindings');
     let files: string[];

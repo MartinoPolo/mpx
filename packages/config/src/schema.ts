@@ -8,6 +8,7 @@ function load(name: string): object {
 export const validateProject = ajv.compile<ProjectConfig>(load('mpxconfig.schema.json'));
 export const validateUserConfig = ajv.compile<UserConfig>(load('user-config.schema.json'));
 export class ConfigValidationError extends Error {
+  // fallow-ignore-next-line unused-class-member -- consumed by the CLI error protocol.
   readonly code = 'CONFIG_INVALID' as const;
   constructor(public readonly errors: ErrorObject[]) {
     super(errors.map((e) => `${e.instancePath || '/'} ${e.message}`).join('; '));

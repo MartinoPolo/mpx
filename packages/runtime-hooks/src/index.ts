@@ -7,7 +7,7 @@ export interface HookDecision {
   readonly code?: string;
   readonly message?: string;
 }
-export class RuntimeHookError extends Error {
+class RuntimeHookError extends Error {
   constructor(
     readonly code: string,
     message: string,
@@ -1576,7 +1576,7 @@ const DEFAULT_PROJECTED_ENVIRONMENT: ProjectEnvironment = Object.freeze({
  * Provider-neutral defaults formerly composed by the Pi projection adapter.
  * Runtime adapters only normalize native events and deliver these evaluator results.
  */
-export function createDefaultProjectedRuntimePolicies(
+function createDefaultProjectedRuntimePolicies(
   options: {
     readonly environment?: ProjectEnvironment;
     readonly processEnvironment?: Readonly<Record<string, string | undefined>>;

@@ -174,16 +174,13 @@ export interface RuntimeToolGateway {
     signal?: AbortSignal;
   }): Promise<{ readonly claim: string; readonly sources: readonly SearchResult[] }>;
 }
+/** @public */
 export const RUNTIME_GATEWAY_TOOL_NAMES = Object.freeze([
   'mcp',
   'web_search',
   'fetch_content',
   'get_search_content',
   'source_check',
-] as const);
-export const RUNTIME_TOOL_NAMES = Object.freeze([
-  ...RUNTIME_GATEWAY_TOOL_NAMES,
-  'dev_server',
 ] as const);
 export type RuntimeToolName = (typeof RUNTIME_GATEWAY_TOOL_NAMES)[number];
 export interface RuntimeToolUnsupportedDiagnostic {

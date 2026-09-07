@@ -66,12 +66,3 @@ export function renderClaudePortSegment(value: unknown): string {
 export function renderPiPortSegment(value: unknown): string {
   return renderPortSegment(parseStatusSnapshotV1(value));
 }
-
-/** @deprecated Use renderClaudePortSegment. */
-export function renderClaudeFixture(value: unknown): string {
-  return renderClaudePortSegment(value);
-}
-/** @deprecated Use renderPiPortSegment. */
-export function renderPiFixture(value: unknown): string {
-  return renderPiPortSegment(value);
-}

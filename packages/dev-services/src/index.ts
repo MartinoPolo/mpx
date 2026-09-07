@@ -9,7 +9,7 @@ import { WindowsProcessCapabilities } from '@mpx/windows';
 
 export * from './tool-adapter.js';
 
-export const DEV_SERVICES_CHANGED_EVENT = 'dev-services:changed';
+const DEV_SERVICES_CHANGED_EVENT = 'dev-services:changed';
 export type DevServiceState = 'starting' | 'ready' | 'crashed' | 'stopped';
 export type ExecutorKind = 'host' | 'docker';
 export interface PortAssignment {

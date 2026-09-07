@@ -381,16 +381,6 @@ export function preparationApprovalPhrases(approval: PreparationApproval): {
   };
 }
 
-/** @deprecated Use preparationApprovalPhrases so privilege kinds are never merged. */
-export function preparationApprovalPhrase(approval: PreparationApproval): string {
-  const phrases = preparationApprovalPhrases(approval);
-  return (
-    phrases.packageAutomationApproval ??
-    phrases.explicitExecutableApproval ??
-    `APPROVE WORKTREE PREPARATION ${digest(approval)}`
-  );
-}
-
 function utf8Tail(text: string, maximum: number): string {
   const bytes = Buffer.from(text, 'utf8');
   if (bytes.length <= maximum) {

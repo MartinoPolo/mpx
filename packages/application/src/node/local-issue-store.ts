@@ -1226,6 +1226,7 @@ export class LocalIssueStore {
       return this.#changed(await this.view(id));
     });
   }
+  // fallow-ignore-next-line unused-class-member -- public Node issue-store mutation API.
   async update(id: string, patch: LocalIssuePatch, expectedRevision?: string): Promise<LocalIssue> {
     return this.#locked(async (assertOwned) => {
       const current = await this.#read(id);
@@ -1274,6 +1275,7 @@ export class LocalIssueStore {
       return this.#changed(await this.view(id));
     });
   }
+  // fallow-ignore-next-line unused-class-member -- public Node issue-store dependency API.
   async setDependency(
     id: string,
     dependencyId: string,
@@ -1320,6 +1322,7 @@ export class LocalIssueStore {
       return this.#changed(await this.view(id));
     });
   }
+  // fallow-ignore-next-line unused-class-member -- public Node issue-store comment API.
   async comment(id: string, body: string): Promise<IssueCommentV1> {
     return this.#locked(async (assertOwned) => {
       const current = await this.#read(id),

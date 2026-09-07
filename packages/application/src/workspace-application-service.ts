@@ -327,6 +327,7 @@ export class WorkspaceApplicationService {
     });
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async list(request: WorkspaceRequestV1): Promise<WorkspaceListResultV1> {
     assertSchema(request);
     const diagnostics = await this.recover(request.cwd, true);
@@ -338,6 +339,7 @@ export class WorkspaceApplicationService {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async show(request: WorkspaceShowRequestV1): Promise<WorkspaceShowResultV1> {
     assertSchema(request);
     const diagnostics = [...(await this.recover(request.cwd, true, false, false))];
@@ -469,6 +471,7 @@ export class WorkspaceApplicationService {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async create(request: WorkspaceCreateRequestV1): Promise<WorkspaceMutationResultV1> {
     assertSchema(request);
     await this.recover(request.cwd, false, false);
@@ -492,6 +495,7 @@ export class WorkspaceApplicationService {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async remove(request: WorkspaceRemoveRequestV1): Promise<WorkspaceMutationResultV1> {
     assertSchema(request);
     await this.recover(request.cwd, false);
@@ -610,6 +614,7 @@ export class WorkspaceApplicationService {
     return { found, workspace, configured, script: configured.start.script, manager, lease };
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async start(request: WorkspaceServiceRequestV1): Promise<WorkspaceServiceResultV1> {
     const {
       found,
@@ -694,6 +699,7 @@ export class WorkspaceApplicationService {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async stop(request: WorkspaceServiceRequestV1): Promise<WorkspaceServiceResultV1> {
     const { workspace, manager } = await this.serviceContext(request, true);
     const current = singleStatus(await manager.status(request.serviceId));
@@ -713,6 +719,7 @@ export class WorkspaceApplicationService {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
   async logs(request: WorkspaceLogsRequestV1): Promise<{
     schemaVersion: 1;
     kind: 'workspace-service-logs';
