@@ -2,9 +2,9 @@
 
 ## Concurrency
 
-Sequential execution on one shared branch is the safe default because workers share an index. Experimental parallel execution requires one real isolated worktree per Issue. Workers may edit and commit only their worktree; the orchestrator integrates each confirmed commit and resolves conflicts before verification. Run the verify and review gates once on the integrated branch, never separately as a substitute.
+Sequential execution on the dedicated batch worktree's shared branch is the safe default. Experimental parallel execution requires an additional real isolated worktree per Issue. Workers may edit and commit only their assigned worktree; the orchestrator integrates each confirmed commit into the batch worktree and resolves conflicts before verification. Run the verify and review gates once on the integrated batch branch, never separately as a substitute.
 
-Use ordinary `git worktree`, merge, and cherry-pick operations. Clean up only worktrees created by this run and do not alter a user's existing worktree.
+Use the runtime's worktree operation for the batch worktree. Use ordinary `git worktree`, merge, and cherry-pick operations for explicitly requested per-Issue parallelism. Clean up only worktrees created by this run and do not alter a user's existing worktree.
 
 ## Verification
 

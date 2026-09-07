@@ -87,11 +87,11 @@ For each fix:
 
 After all individual fixes pass, run the full check suite once.
 
-### Step 6: Create PR
+### Step 6: Create Review
 
-Use `mpx commit-push-pr` skill to commit all changes and create a PR. Include the evaluation table in the PR body so reviewers can see the reasoning for each decision.
+Use `/mpx:commit-push-pr` to commit all changes and create a Review. Include the evaluation table in the Review body so reviewers can see the reasoning for each decision.
 
-PR title format: `chore: audit and fix code quality suppressions`
+Review title format: `chore: audit and fix code quality suppressions`
 
 ## Edge Cases
 

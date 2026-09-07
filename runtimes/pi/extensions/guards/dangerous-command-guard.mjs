@@ -29,6 +29,42 @@ export const RM_RF_ALLOWED_TARGETS = new Set([
 
 /**
  * @param {string} command
+ * @returns {boolean}
+ */
+export function redirectsToWindowsNullDevice(command) {
+  let quote = '';
+  let escaped = false;
+
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = '';
+      }
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character === '>' && /^\s*["']?NUL["']?(?=\s|[;&|)]|$)/iu.test(command.slice(index + 1))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * @param {string} command
  * @returns {{ blocked: boolean, message?: string }}
  */
 export function checkDangerousCommand(command) {
@@ -129,6 +165,9 @@ export function checkDangerousCommand(command) {
   }
 
   // 9. Device overwrite via redirect
+  if (redirectsToWindowsNullDevice(trimmed)) {
+    return blocked('Git Bash NUL redirection creates a literal file; use /dev/null', command);
+  }
   if (/>\s*\/dev\/sd[a-z]/.test(trimmed)) {
     return blocked('device overwrite', command);
   }

@@ -1,5 +1,5 @@
 ---
-name: commit-push-review
+name: commit-push-pr
 description: Commit and push verified changes, then create or update a provider-neutral Review
 triggers: committing, pushing, and publishing a Review together
 metadata:
@@ -9,7 +9,7 @@ metadata:
     defaultExposure: name-only
 ---
 
-# Commit, Push, and Review
+# Commit, Push, and PR
 
 ## Launch identity
 

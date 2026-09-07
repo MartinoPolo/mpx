@@ -22,7 +22,7 @@ const classifiedSkills = {
     'code-clean',
     'commit',
     'commit-push',
-    'commit-push-review',
+    'commit-push-pr',
     'components-audit',
     'consolidate-context',
     'decompose',

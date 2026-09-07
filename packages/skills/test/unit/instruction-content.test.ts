@@ -179,7 +179,18 @@ describe('canonical instruction selectors', () => {
     if (!claudeAdapter || !piAdapter) {
       throw new Error('runtime adapter fixture is incomplete');
     }
+    const globalPolicy = contents[0];
+    if (!globalPolicy) {
+      throw new Error('global policy fixture is incomplete');
+    }
     expect(claudeAdapter.trim()).toBe('@../../global/AGENTS.md');
+    expect(globalPolicy).toContain(
+      'Work in the current checkout unless the user requests isolation or an active workflow explicitly requires it.',
+    );
+    expect(globalPolicy).toContain('expected risk or churn');
+    expect(globalPolicy).toContain('file count alone is not a reason');
+    expect(globalPolicy).not.toContain('Use an isolated worktree for multi-file features');
     expect(piAdapter).not.toContain('Repository and worktree discipline');
+    expect(piAdapter).not.toContain('Use isolated worktrees for implementation agents');
   });
 });

@@ -8,4 +8,4 @@
 - There is no plan or todo tool. Sequence multi-step work directly.
 - Use `edit` for targeted changes to existing files. Use `write` for new files or complete rewrites.
 - Prefer `read`, `grep`, `find`, and `ls` over shell equivalents. Issue independent tool calls in parallel.
-- Delegate self-contained work through the `Agent` tool when available. Name the agent type and give it a self-contained prompt. Use isolated worktrees for implementation agents.
+- Delegate self-contained work through the `Agent` tool when available. Name the agent type and give it a self-contained prompt.

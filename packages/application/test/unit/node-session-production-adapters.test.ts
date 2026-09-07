@@ -345,3 +345,46 @@ it('resolves resume only from configured identity/runtime/root digest after nati
   });
   expect('verifyAccountBinding' in dependencies).toBe(false);
 });
+
+it('reports persisted inactive Pi records without process evidence as inactive after target verification', async () => {
+  const f = await fixture();
+  const verifyTarget = vi.fn(async () => undefined);
+  const inspect = vi.fn(async () => undefined);
+  const dependencies = await productionSessionResumeDependencies({
+    user: f.user,
+    store: new SessionStore(f.state),
+    piTargetVerifier: verifyTarget,
+    processes: { inspect },
+  })({ runtime: 'pi', liveness: 'inactive', process: null } as never);
+  const ref = { kind: 'root-relative-file' as const, value: 'sessions/session.jsonl' };
+
+  await expect(dependencies.verifyNativeTarget(f.pi, ref, 'pi:session')).resolves.toEqual({
+    valid: true,
+    activity: 'inactive',
+  });
+  expect(verifyTarget).toHaveBeenCalledExactlyOnceWith(f.pi, ref);
+  expect(inspect).not.toHaveBeenCalled();
+});
+
+it.each(['unknown', 'active'] as const)(
+  'keeps persisted %s Pi records without process evidence unavailable after target verification',
+  async (liveness) => {
+    const f = await fixture();
+    const verifyTarget = vi.fn(async () => undefined);
+    const inspect = vi.fn(async () => undefined);
+    const dependencies = await productionSessionResumeDependencies({
+      user: f.user,
+      store: new SessionStore(f.state),
+      piTargetVerifier: verifyTarget,
+      processes: { inspect },
+    })({ runtime: 'pi', liveness, process: null } as never);
+    const ref = { kind: 'root-relative-file' as const, value: 'sessions/session.jsonl' };
+
+    await expect(dependencies.verifyNativeTarget(f.pi, ref, 'pi:session')).resolves.toEqual({
+      valid: true,
+      activity: 'unavailable',
+    });
+    expect(verifyTarget).toHaveBeenCalledExactlyOnceWith(f.pi, ref);
+    expect(inspect).not.toHaveBeenCalled();
+  },
+);

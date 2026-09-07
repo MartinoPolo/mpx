@@ -7,7 +7,7 @@ import providerCases from '../fixtures/content-batch-c5/provider-cases.json' wit
 const root = path.resolve(import.meta.dirname, '../../../../content/skills');
 const identities = [
   'batch-execute',
-  'commit-push-review',
+  'commit-push-pr',
   'epic-review',
   'execute',
   'hitl',
@@ -70,6 +70,17 @@ describe('Batch C5 canonical workflows', () => {
     ]) {
       expect(content, phrase).toContain(phrase);
     }
+  });
+
+  it('requires dedicated worktrees for execute workflows without defaulting batch Issues to parallelism', async () => {
+    const executeContent = await skill('execute');
+    const batchExecuteContent = await skill('batch-execute');
+    const batchReference = await readFile(path.join(root, 'batch-execute', 'REFERENCE.md'), 'utf8');
+
+    expect(executeContent).toContain('Establish a dedicated isolated worktree for the Issue');
+    expect(batchExecuteContent).toContain('Establish a dedicated isolated worktree for the batch');
+    expect(batchExecuteContent).toContain('sequential by default');
+    expect(batchReference).toContain('explicitly requested per-Issue parallelism');
   });
 
   it('documents GitHub, GitLab, and unsupported provider capability branches', async () => {

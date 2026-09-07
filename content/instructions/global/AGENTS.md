@@ -13,6 +13,7 @@
 - Keep comments rare. Explain only a non-obvious reason, constraint, or rejected alternative.
 - Update documentation when behavior changes. Remove an obsolete rule instead of adding a comment that says the new behavior succeeded.
 - Avoid numeric descriptions of repository state in durable prose because they become stale.
+- In Windows Git Bash, discard output with `/dev/null`, never `NUL`; remove literal `NUL` artifacts when encountered.
 - Do not use em dashes in generated prose.
 - Keep edits to repository `AGENTS.md` files concise and limited to durable repository-authoring intent.
 
@@ -25,7 +26,7 @@
 
 - Resolve machine roots from `MPX_*` environment variables. Do not guess absolute paths.
 - Confirm the MPX repository root and current worktree before editing or running commands.
-- Use an isolated worktree for multi-file features, refactors, or sustained work. Preserve the main checkout and follow `docs/WORKTREE_HUB.md`.
+- Work in the current checkout by default. User or workflow can override this and use worktree. Worktree creation is recommended for high-risk/churn tasks. For worktree creation, follow `docs/WORKTREE_HUB.md`.
 - Before starting a development, preview, Storybook, or end-to-end server, read this worktree's `.worktree-ports.json` and use its assigned port. Never assume a fixed port or reuse another worktree's port.
 
 ## MPX operations

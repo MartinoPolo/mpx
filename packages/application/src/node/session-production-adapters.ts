@@ -89,7 +89,11 @@ export function productionSessionResumeDependencies(input: {
           return { valid: true, activity: 'unavailable' as const };
         }
         if (!record.process) {
-          return { valid: true, activity: 'unavailable' as const };
+          return {
+            valid: true,
+            activity:
+              record.liveness === 'inactive' ? ('inactive' as const) : ('unavailable' as const),
+          };
         }
         let inspected;
         try {
