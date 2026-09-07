@@ -100,6 +100,21 @@ describe('Pi native package registration', () => {
     }
   });
 
+  it('accepts the previously published native package entrypoint in owned receipts', () => {
+    const base = registration();
+    const files = base.files.map((file) =>
+      file.path === 'mpx-extension.mjs' ? { ...file, path: 'index.mjs' } : file,
+    );
+
+    expect(
+      parsePiNativePackageRegistration({
+        ...base,
+        files,
+        artifactRootDigest: installerDigest(files),
+      }).files,
+    ).toEqual(files);
+  });
+
   it('fails closed when required package artifacts are absent', () => {
     const base = registration();
     for (const required of ['package.json', 'build-metadata.json', 'mpx-extension.mjs']) {
