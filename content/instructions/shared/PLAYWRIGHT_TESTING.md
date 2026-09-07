@@ -54,6 +54,4 @@ for (const surface of surfaces) {
 await browser.close();
 ```
 
-Report `PASS`, `FAIL`, or `BLOCKED` per surface, measured versus expected value, and screenshot path. Browser results
-required by CI are published through the MPX CI contract under the launch identity; unsupported publication receives a
-manual handoff.
+Report `PASS`, `FAIL`, or `BLOCKED` per surface, measured versus expected value, and screenshot path. Publish browser results through the selected repository provider's documented native CI operation; unsupported publication receives a manual handoff.

@@ -1,7 +1,6 @@
 # Board Convention
 
-Shared convention for MPX's plain-markdown Obsidian board workflow. The board preserves visual requirements that
-issue-provider APIs may not round-trip and can later create provider-neutral MPX Issues.
+Shared convention for MPX's plain-markdown Obsidian board workflow. The board preserves visual requirements that provider APIs may not round-trip and can later create Issues through the selected native guide.
 
 ## Link layout
 
@@ -29,7 +28,7 @@ image through `.mpx/board-files/Pasted image.png` and ignore the optional displa
 | Lane                 | Meaning                                  | Transition owner         |
 | -------------------- | ---------------------------------------- | ------------------------ |
 | `To Process`         | raw notes                                | user intake              |
-| `Ready to implement` | an MPX Issue exists                      | board-to-issues workflow |
+| `Ready to implement` | a provider Issue exists                  | board-to-issues workflow |
 | `Manual testing`     | implemented, awaiting human verification | batch execution workflow |
 | `Archive`            | manually verified                        | user                     |
 
@@ -44,10 +43,9 @@ unchecked top-level items in `To Process` are intake candidates. Other lanes are
 
 An item may have continuation lines and multiple images. Conversion may combine related items into one issue. Classify
 type from content: a defect is `bug`, a chore/audit/refactor is `task`, and a new capability or improvement is
-`enhancement`. Submit labels semantically through the MPX Issue contract and let the selected adapter map or reject
-them.
+`enhancement`. Resolve the selected native guide, inspect available provider labels, and use only an exact supported label.
 
-After issue creation, append the returned provider-neutral issue reference and move the item:
+After issue creation, append the returned provider Issue reference and move the item:
 
 ```markdown
 # Ready to implement
@@ -55,8 +53,7 @@ After issue creation, append the returned provider-neutral issue reference and m
 - [ ] The edit-name control should align with the name ![[Pasted image.png]] → issue:142
 ```
 
-Use `issue:<id>` as the canonical annotation; an adapter may display a provider-native reference in its projection.
-Batch execution matches the item by this annotation, or by stable text identity in board-direct mode.
+Use `issue:<id>` as the canonical annotation. Batch execution matches the item by this annotation, or by stable text identity in board-direct mode.
 
 ## State is the lane, not the checkbox
 

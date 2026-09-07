@@ -1,18 +1,24 @@
-# Local Markdown Provider Guide
+# Local provider reference
 
-Applies only when `issues.provider` in committed `mpxconfig.json` is `local`. Local Issues are identity-owned managed
-configuration/storage, so this guide intentionally retains the typed MPX interface rather than direct filesystem edits.
+`issues.provider: "local"` uses the logical `issues.store` registration in validated user configuration; optional `issues.view` names a registered generated view. These roots are user or account storage, not repository-owned data. Never derive either root from the repository or `project.id`.
 
-Pass the immutable launch identity and `--json` on every operation. Consult generated
-[MPX CLI basic](../MPX_CLI_BASIC.md) or [complete reference](../MPX_CLI_REFERENCE.md) for the exact installed flags;
-generated CLI docs are authoritative and are not manually edited.
+Use the supported Node entrypoint from an installed MPX workspace or application environment:
 
-Supported managed operations include Issue list, view, create, edit/update, comment, label, and finish, plus local
-dependency add/remove when exposed by installed help. Always use explicit IDs returned by structured responses, preserve
-schema versions, and fail closed on an unknown envelope. Represent parent/child relationships with reciprocal Markdown
-body links; do not directly manipulate storage files or projection backlinks.
+```js
+import path from 'node:path';
+import { discoverProjectConfig, loadUserConfig } from '@mpx/config';
+import { createConfiguredNodeLocalIssueStore } from '@mpx/application/node';
 
-Local does not provide pull requests, merge requests, Gerrit changes, milestones, CI, or merge operations. Resolve `repository.provider`
-independently for those. Local intentionally has no native `issue.move`; do not simulate it by moving or renaming
-Markdown files. Missing store registration, identity, route, projection, or supported action is a managed-provider error
-and manual handoff, not permission to locate or modify the backing store.
+const found = await discoverProjectConfig(process.cwd());
+if (!found) throw new Error('No mpxconfig.json');
+const appData = process.env.APPDATA;
+if (!appData) throw new Error('APPDATA is required');
+const user = await loadUserConfig(path.join(appData, 'mpx', 'config.json'));
+const store = createConfiguredNodeLocalIssueStore({ project: found.config, user });
+```
+
+Require `APPDATA` explicitly and stop if absent. `loadUserConfig` validates and interpolates user registrations. The application entrypoint resolves exact logical names, fails closed when either is absent, preserves the registered absolute store root, and wires `onChanged` so successful mutations rebuild the registered view. A rebuild failure is reported as `projectionRebuildPending`; it does not roll back committed issue data.
+
+Use only the public `LocalIssueStore` methods: `list([open|finished])`, `view(id)`, `create(input)`, `update(id, patch[, expectedRevision])`, `comment(id, body)`, and `setDependency(id, dependencyId, present[, expectedRevision])`. Retain the calling skill's read and mutation authorization gates.
+
+Each issue is a schema-versioned UTF-8 Markdown document indexed by `.mpx-index.json`. The component validates IDs, indexed filenames, project and schema identity, references, symlinks, and absolute non-private roots; writes use its lease lock and atomic files. Preserve unknown frontmatter and content after `<!-- mpx:preserve -->`. Hosted repository creation, Review, CI, authentication, merge, and board movement are unsupported.

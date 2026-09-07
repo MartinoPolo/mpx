@@ -11,7 +11,7 @@ ports, worktrees, sessions, and installation.
 - Keep domain logic in workspace packages and runtime adapters thin.
 - Treat `mpxconfig.json` as the only committed project integration manifest.
 - Keep generated machine state outside Git.
-- Use provider-neutral Issue, Review, and CI contracts.
+- Route Issue, Review, and CI operations through the shipped native-provider references.
 - Emit stable versioned JSON envelopes from automation-capable CLI commands.
 - Fail closed on unknown schema versions, stale artifacts, ambiguous identities, and untrusted automation.
 - Do not add permanent readers for legacy MPX configuration.
@@ -30,7 +30,7 @@ ports, worktrees, sessions, and installation.
 - Add narrow tests for domain behavior and malicious inputs.
 - Separate independent top-level constants, types, functions, and test scenarios with one blank line; tightly coupled
   declarations may remain grouped.
-- Preserve existing installations and data until the migration acceptance gates pass.
+- Preserve existing installations and user data; mutate only explicitly verified, owned resources.
 
 ## Runtime content
 

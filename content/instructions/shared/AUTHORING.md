@@ -29,7 +29,7 @@ invocation.
 
 ## Provider artifact terminology
 
-Use **pull request (PR)** as the common user-facing shorthand. At a cross-provider workflow's introduction, clarify once that PR means a GitHub pull request, GitLab merge request, or Gerrit change as applicable; use PR thereafter. Use native provider vocabulary where types must be distinguished and at command boundaries. Reserve **review** for the act of code review. Internal contracts and implementation names—including `Review`, `review_id`, `mpx review`, and `mpx-review-manager`—remain unchanged and should be identified as internal when ambiguity is possible.
+Use **pull request (PR)** as the common user-facing shorthand. At a cross-provider workflow's introduction, clarify once that PR means a GitHub pull request, GitLab merge request, or Gerrit change as applicable; use PR thereafter. Use native provider vocabulary where types must be distinguished and at command boundaries. Reserve **review** for the act of code review. Existing internal type and agent names such as `Review`, `review_id`, and `mpx-review-manager` are not CLI commands and should be identified as internal when ambiguity is possible.
 
 ## Positive and explicit instructions
 
@@ -38,14 +38,11 @@ false-success hazards. At every call site name:
 
 - the exact canonical agent identity, such as `mpx-explorer`;
 - the required model class when the callee does not declare one;
-- the MPX capability, such as `mpx issue view --identity <launch-identity> --json`;
+- the provider intent and explicit repository or board target;
 - the repository-relative script and invocation;
 - exploration breadth and stopping condition.
 
-Use either the typed MPX contracts or the explicitly selected native-provider guides described in
-[ISSUE_TRACKER.md](ISSUE_TRACKER.md). Canonical content may invoke a provider CLI only after linking to
-[PROVIDER_ROUTING.md](PROVIDER_ROUTING.md) and its selected guide; never inline an ungoverned provider fallback or infer
-a provider from remotes.
+Resolve provider operations through [ISSUE_TRACKER.md](ISSUE_TRACKER.md). Canonical content may invoke only the native commands documented by the selected guide under [PROVIDER_ROUTING.md](PROVIDER_ROUTING.md); never inline an ungoverned provider fallback or infer a provider from remotes.
 
 ## Paths and private data
 
@@ -89,5 +86,5 @@ Keep MCP registration and tool-prefix details in runtime adapters; canonical con
 - Generated projections must record their canonical source/version and pass drift validation.
 - A runtime-specific workaround must name its measured runtime/version and be re-tested before the projection carries it
   forward.
-- Deprecation means moving an artifact to the repository's deprecated area, not deleting history.
+- Delete superseded artifacts after their consumers and replacement are verified; Git retains history.
 - Use conventional commits.

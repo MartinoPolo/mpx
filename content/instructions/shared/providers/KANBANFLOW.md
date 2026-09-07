@@ -32,14 +32,9 @@ Labels must already exist; `kf` has no label-create command. Use only canonical 
 in `mpxconfig.json`; optional `archive` is unsupported when not configured. `--force`, deletion, assignment changes,
 attachments, subtasks, and `grab` require separate explicit workflow authorization.
 
-## Adapter/version boundary
+## Version boundary
 
-The canonical MPX adapter source currently invokes the newer public `kf issue list|view|create|edit|move|finish`
-grammar, with `kf comment add`; its adapter tests verify those exact argv forms. The safely inspected installed CLI
-rejects `kf issue` and exposes the older `kf task` grammar above. Therefore native workflows must inspect `kf --help`
-and use only the grammar actually advertised by that executable. Do not translate between `issue` and `task` by
-guesswork. If a workflow requires adapter parity and installed help does not expose it, use the typed MPX Issue API when
-the calling skill permits that managed interface, otherwise return a version-mismatch handoff.
+Inspect `kf --help` and use only the grammar advertised by the installed executable. Do not translate between `issue` and `task` by guesswork. If the installed help does not expose a required operation, return a version-mismatch handoff.
 
 KanbanFlow has no pull request, merge request, milestone, or CI operations. It has no native parent/sub-Issue hierarchy in
 this contract; use body links. Board labels cannot be created by automation through this guide.

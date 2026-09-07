@@ -114,8 +114,7 @@ until that acceptance is unambiguous.
 ### 7. Log the refactor RFC
 
 Resolve `issues.provider` independently from the nearest valid `mpxconfig.json`; do not infer it from repository hosting
-or installed tools. Use only the selected provider guide's documented Issue-create operation: a native operation for
-hosted providers and the Local guide's typed MPX route for Local managed Issues. Preserve immutable launch identity and
+or installed tools. Use only the selected provider guide's documented Issue-create operation: a native operation for hosted providers or the Local guide's application entrypoint. Preserve immutable launch identity and
 its account-bound environment for every provider operation. If provider routing, identity, capability, or the required
 label is unavailable, return an exact manual handoff instead of switching providers or identities.
 

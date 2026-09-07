@@ -51,10 +51,15 @@ template semantics or switch providers.
 ```bash
 git -C <project-path> checkout -b dev
 git -C <project-path> push -u origin dev
+```
+
+Set the default branch only through the selected provider guide. For GitHub:
+
+```bash
 gh repo edit <owner/project-name> --default-branch dev
 ```
 
-For GitHub, protect `main` and `dev` with the native API:
+For another provider, stop with a manual handoff when its guide does not document default-branch changes. For GitHub, protect `main` and `dev` with the native API:
 
 ```bash
 gh api repos/<owner>/<project-name>/branches/<branch>/protection --method PUT --input - <<'EOF'

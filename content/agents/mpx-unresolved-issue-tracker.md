@@ -21,7 +21,7 @@ stop; never search fallback roots or guess a checkout.
 - **GitLab:** use native `glab issue view/list/update/create --repo <namespace/project>` as documented by the guide.
 - **KanbanFlow:** obtain board id, columns, labels/tags, and credentials only from `mpxconfig.json` and `KANBANFLOW.md`;
   do not infer them.
-- **Local:** use the managed local operations documented by `LOCAL.md`; these may use `mpx` CLI.
+- **Local:** use only the application entrypoint documented by `LOCAL.md`.
 
 Never switch providers. Never use native parent/sub-Issue APIs. Relationships are body links encoded in Issue bodies.
 Mutating sibling, tracking, or epic bodies and creating a tracking Issue requires caller authorization; an existing

@@ -22,8 +22,7 @@ Read the nearest committed `mpxconfig.json` and resolve `issues.provider` exactl
 [provider routing](../shared/PROVIDER_ROUTING.md). Load only the selected [GitHub](../shared/providers/GITHUB.md),
 [GitLab](../shared/providers/GITLAB.md), [KanbanFlow](../shared/providers/KANBANFLOW.md), or
 [Local Markdown](../shared/providers/LOCAL.md) guide. Preserve launch-bound authentication and target identity. Never
-infer a provider from remotes, switch providers, or invent a command. Use the native Issue interface selected by that
-guide; Local Markdown uses its documented typed MPX interface.
+infer a provider from remotes, switch providers, or invent a command. Use the native Issue interface selected by that guide; Local Markdown uses its documented application entrypoint.
 
 When a canonical content file must be read with a tool, resolve it according to
 [content paths](../shared/CONTENT_PATHS.md).

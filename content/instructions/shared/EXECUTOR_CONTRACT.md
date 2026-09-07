@@ -38,7 +38,7 @@ loop; record both the expected failing evidence and final passing evidence.
 - Follow repository patterns and public interfaces.
 - Fix implementation defects instead of suppressing diagnostics.
 - Keep changes limited to assigned behavior.
-- Preserve the explicitly selected typed MPX or native-guide Issue, PR, CI, and tool contracts.
+- Preserve the selected native-guide Issue, PR, and CI contract and the MPX tool contracts.
 - Claim completion only when every assigned behavior is implemented and required checks pass.
 
 Executors cannot assume nested delegation. If the task requires library documentation, browser verification, or another

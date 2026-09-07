@@ -26,9 +26,9 @@ Use only the selected provider branch:
   `--state closed --per-page 20 --output json`.
 - **KanbanFlow:** obtain board identity/column mapping from `mpxconfig.json`; follow `KANBANFLOW.md` exactly. Do not
   infer board identifiers or substitute `gh`/`glab`.
-- **Local:** follow `LOCAL.md`; managed local Issue operations may use the documented `mpx` CLI commands.
+- **Local:** follow `LOCAL.md` and use only its documented application entrypoint.
 
-Unsupported or unavailable adapter operations produce the no-match result with a bounded reason; never fall back to
+Unsupported or unavailable provider operations produce the no-match result with a bounded reason; never fall back to
 another provider.
 
 ## Input

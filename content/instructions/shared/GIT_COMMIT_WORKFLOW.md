@@ -15,9 +15,7 @@ Do not delegate failure diagnosis back to the committer.
 
 ## Phase B: linked issue
 
-Extract an Issue identity from the branch using the repository's configured extraction command, if present. Verify every
-candidate through the selected Issue interface: its native provider guide's explicit-target view command, or the
-selected typed MPX Issue view command.
+Extract an Issue identity from the branch using the repository's configured extraction command, if present. Verify every candidate through the selected native provider guide's explicit-target Issue view command.
 
 If extraction finds nothing, spawn `mpx-issue-finder` with the branch name, commits, diff summary, selected Issue
 interface, and validated target. A high-confidence match continues automatically. Present multiple candidates to the
@@ -25,13 +23,9 @@ user. Continue without an Issue when none matches; never invent a reference.
 
 ## Phase C: create or update review
 
-Spawn `mpx-review-manager` using the selected repository guide or the explicitly selected typed `Review` interface. Supply
-the validated repository target, source and target branches, optional verified Issue ID, draft state, and description
-hint.
+Spawn `mpx-review-manager` using the selected repository guide. Supply the validated repository target, source and target branches, optional verified Issue ID, draft state, and description hint.
 
-Create a PR only when no immutable update ID was supplied. Update only the exact immutable PR ID supplied
-to the manager or returned by an earlier create; never discover an update target implicitly. Capture and return the
-immutable ID and URL from structured native output or the typed response.
+Create a PR only when no immutable update ID was supplied. Update only the exact immutable PR ID supplied to the manager or returned by an earlier create; never discover an update target implicitly. Capture and return the immutable ID and URL from native output.
 
 Unsupported creation, update, or fields produce a manual handoff under [ISSUE_TRACKER.md](ISSUE_TRACKER.md); do not
 invent a provider command. On operational failure, the parent may diagnose authentication, remote, or target-branch

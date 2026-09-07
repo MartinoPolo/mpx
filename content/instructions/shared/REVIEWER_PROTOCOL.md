@@ -28,5 +28,4 @@ Suggested fix (optional)
 Keep each finding concise, normally two to five lines. An agent may define a different severity scale or require
 confidence/evidence lines; that local override wins.
 
-When publishing through an MPX Review contract, submit structured findings under the immutable launch identity.
-Unsupported comments or review states produce a structured manual handoff; do not switch to a provider CLI.
+When publishing through a provider Review, use the selected native guide with an explicit target. Unsupported comments or review states produce a structured manual handoff; do not switch providers or invent commands.
