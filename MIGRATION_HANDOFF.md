@@ -4,7 +4,7 @@
 
 ## Active checkout and preservation
 
-Continue in `${MPX_PROJECTS}/mpx.worktrees/migration-acceptance` until its verified work is integrated into main. The user authorized evaluating all MPX worktrees, finishing useful unmerged work, and consolidating main without discarding unique changes.
+Continue in `${MPX_PROJECTS}/mpx` on `main`, the sole registered checkout. The acceptance work is integrated. Its former directory is empty but Windows refused final directory removal; do not force it. The merged acceptance branch and original-main stash remain as recovery references. `MPX_MIGRATION.md` records the retirement archive failure and resulting evidence limitation.
 
 Other checkout payloads are byte-verified in `${MPX_PROJECTS}/mpx-recovery/worktree-consolidation-20260906T181233Z`. The original namespace preservation is in `${MPX_PROJECTS}/mpx-recovery/namespace-before-acceptance-2026-09-06T07-14-43-462Z`. Retire worktrees only after reconciling their content and active ownership.
 
@@ -21,7 +21,7 @@ Other checkout payloads are byte-verified in `${MPX_PROJECTS}/mpx-recovery/workt
 
 See the latest installed acceptance in `MPX_MIGRATION.md`. Personal and work Pi launches, fast listing, explicit cross-release resume and subsequent unchanged resume passed on the installed release. Native histories were preserved. The setup before-image qualification is explicit; do not turn it into a claim of pristine protocol compliance.
 
-Finish clean-main consolidation and retire only the inactive, fully integrated acceptance checkout. Personal Claude login, provider authentication/configuration and interactive visual/keybinding/audio checks remain separate. Fallow and optional sandbox work remain deferred. Keep recovery archives and the original-main stash.
+Clean-main consolidation is complete. Remove the empty former checkout directory only after its holder exits and ordinary removal succeeds. Personal Claude login, provider authentication/configuration and interactive visual/keybinding/audio checks remain separate. Fallow and optional sandbox work remain deferred. Keep recovery archives and the original-main stash.
 
 ## Durable references
 
