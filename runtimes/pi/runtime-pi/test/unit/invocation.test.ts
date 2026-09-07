@@ -210,7 +210,7 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
       'medium',
       '--tui-mode',
       'fullscreen',
-      '--theme',
+      '--use-theme',
       'dark',
     ],
     env: {
@@ -486,7 +486,7 @@ it.each([
       'medium',
       '--tui-mode',
       'fullscreen',
-      '--theme',
+      '--use-theme',
       'dark',
     ]);
     expect(plan.env.PI_CODING_AGENT_DIR).toBe('C:/native/pi/selected-account');
