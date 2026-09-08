@@ -6,7 +6,8 @@
  * `render(width)` remains pure formatting and never blocks.
  *
  * Parsing and formatting logic lives in package-local helpers. The footer
- * re-expresses only colour-bearing rendering so theme changes apply immediately.
+ * re-expresses colour-bearing rendering so theme changes apply immediately,
+ * except for stable model-class and effort scales that must keep their meaning.
  *
  * Rows 9-11 (MR/PR + CI block, dev-server port probes, subagent Σ tally) were
  * added in part 2. Rows 9 and 10 hang off the location row the way the Claude
@@ -75,7 +76,8 @@ const runCommand = promisify(execFile);
  * recolours the bar. Two hues have no semantic slot in pi's `ThemeColor` union —
  * the context bar's middle escalation step and the "never left this machine"
  * sand — so those keep the xterm-256 fallbacks the Claude bar used before it
- * became scheme-derived.
+ * became scheme-derived. Model class and effort also use fixed categorical
+ * scales so their meaning does not change when the surrounding theme does.
  */
 export interface FooterPalette {
   reset: string;
@@ -103,6 +105,17 @@ export interface FooterPalette {
   local: string;
   /** Reserved for the MR/PR reference in row 9. */
   mr: string;
+  modelLuna: string;
+  modelTerra: string;
+  modelSol: string;
+  modelAstra: string;
+  effortOff: string;
+  effortMinimal: string;
+  effortLow: string;
+  effortMedium: string;
+  effortHigh: string;
+  effortXhigh: string;
+  effortMax: string;
 }
 
 /** Minimal shape of pi's `Theme` this file needs; keeps the renderer mockable. */
@@ -147,6 +160,17 @@ function resolveFooterPalette(theme: FooterTheme): FooterPalette {
     session: BOLD + themeColor(theme, 'mdHeading', ansi256(176)),
     local: ansi256(180),
     mr: themeColor(theme, 'mdLink', ansi256(75)),
+    modelLuna: ansi256(114),
+    modelTerra: ansi256(179),
+    modelSol: ansi256(208),
+    modelAstra: ansi256(176),
+    effortOff: ansi256(255),
+    effortMinimal: ansi256(245),
+    effortLow: ansi256(114),
+    effortMedium: ansi256(75),
+    effortHigh: ansi256(179),
+    effortXhigh: ansi256(208),
+    effortMax: ansi256(203),
   };
 }
 
@@ -250,7 +274,7 @@ export function thinkingGauge(level: string): string {
 // --- Settings ----------------------------------------------------------------
 
 export interface FooterSessionIdentity {
-  runtimeLabel: 'mpx-pi' | 'pi' | 'piw';
+  runtimeLabel: 'pi (mpx)' | 'piw (mpx)' | 'pi' | 'piw';
   identity: string;
   mode: string;
 }
@@ -266,7 +290,7 @@ export function resolveFooterSessionIdentity(
     const identity = environment.MPX_IDENTITY ?? '';
     const mode = environment.MPX_MODE ?? '';
     return {
-      runtimeLabel: 'mpx-pi',
+      runtimeLabel: identity === 'work' ? 'piw (mpx)' : 'pi (mpx)',
       identity: SAFE_IDENTITY_FIELD.test(identity) ? identity : '',
       mode: SAFE_IDENTITY_FIELD.test(mode) ? mode : '',
     };
@@ -1466,14 +1490,50 @@ export const buildIdentityRow: FooterRowBuilder = (snapshot) => {
   ];
 };
 
-/** Row 3 — model and the thinking gauge. */
-const buildModelRow: FooterRowBuilder = (snapshot) => {
+/** Model-class and effort colours make the two independent scales scannable. */
+function modelComplexityColor(modelName: string, palette: FooterPalette): string {
+  const modelClass = modelName
+    .toLowerCase()
+    .match(/(?:^|[-_.])(luna|terra|sol|astra)(?:$|[-_.])/u)?.[1];
+  switch (modelClass) {
+    case 'luna':
+      return palette.modelLuna;
+    case 'terra':
+      return palette.modelTerra;
+    case 'sol':
+      return palette.modelSol;
+    case 'astra':
+      return palette.modelAstra;
+    default:
+      return palette.accent;
+  }
+}
+
+function thinkingLevelColor(level: string, palette: FooterPalette): string {
+  const colors: Readonly<Record<string, string>> = {
+    off: palette.effortOff,
+    minimal: palette.effortMinimal,
+    low: palette.effortLow,
+    medium: palette.effortMedium,
+    high: palette.effortHigh,
+    xhigh: palette.effortXhigh,
+    max: palette.effortMax,
+  };
+  return colors[level] ?? palette.gray;
+}
+
+/** Row 3 — model complexity and the current thinking-effort gauge. */
+export const buildModelRow: FooterRowBuilder = (snapshot) => {
   const { palette } = snapshot;
   const gauge = thinkingGauge(snapshot.thinkingLevel);
   const line = joinSegments(
     [
-      snapshot.modelName === '' ? '' : `${palette.accent}${snapshot.modelName}${palette.reset}`,
-      gauge === '' ? '' : `${palette.gray}${gauge}${palette.reset}`,
+      snapshot.modelName === ''
+        ? ''
+        : `${modelComplexityColor(snapshot.modelName, palette)}${snapshot.modelName}${palette.reset}`,
+      gauge === ''
+        ? ''
+        : `${thinkingLevelColor(snapshot.thinkingLevel, palette)}${gauge}${palette.reset}`,
     ],
     palette,
   );

@@ -4,6 +4,7 @@ import { test } from 'vitest';
 
 import {
   buildIdentityRow,
+  buildModelRow,
   buildSessionRow,
   renderFooterRows,
   resolveFooterSessionIdentity,
@@ -29,6 +30,17 @@ const palette = Object.fromEntries(
     'session',
     'local',
     'mr',
+    'modelLuna',
+    'modelTerra',
+    'modelSol',
+    'modelAstra',
+    'effortOff',
+    'effortMinimal',
+    'effortLow',
+    'effortMedium',
+    'effortHigh',
+    'effortXhigh',
+    'effortMax',
   ].map((name) => [name, '']),
 ) as unknown as FooterPalette;
 
@@ -39,7 +51,15 @@ test('resolves MPX launch identity details from the trusted launch environment',
       MPX_IDENTITY: 'personal',
       MPX_MODE: 'developer',
     }),
-    { runtimeLabel: 'mpx-pi', identity: 'personal', mode: 'developer' },
+    { runtimeLabel: 'pi (mpx)', identity: 'personal', mode: 'developer' },
+  );
+  assert.deepEqual(
+    resolveFooterSessionIdentity({
+      MPX_RUNTIME: 'pi',
+      MPX_IDENTITY: 'work',
+      MPX_MODE: 'developer',
+    }),
+    { runtimeLabel: 'piw (mpx)', identity: 'work', mode: 'developer' },
   );
 });
 
@@ -61,11 +81,40 @@ test('renders session details first and launch identity second', () => {
     sessionName: 'Footer identity',
     sessionShortId: '01a07ce9',
     sessionFileUrl: '',
-    sessionIdentity: { runtimeLabel: 'mpx-pi', identity: 'personal', mode: 'developer' },
+    sessionIdentity: { runtimeLabel: 'pi (mpx)', identity: 'personal', mode: 'developer' },
   } as FooterSnapshot;
 
   assert.deepEqual(renderFooterRows(snapshot, [buildSessionRow, buildIdentityRow]), [
     'Footer identity · #01a07ce9',
-    'mpx-pi · personal · developer',
+    'pi (mpx) · personal · developer',
+  ]);
+});
+
+test('colors model families by complexity and gauges by effort', () => {
+  const coloredPalette = {
+    ...palette,
+    reset: '</>',
+    gray: '<gray>',
+    accent: '<accent>',
+    modelLuna: '<green>',
+    modelTerra: '<yellow>',
+    modelSol: '<orange>',
+    modelAstra: '<purple>',
+    effortOff: '<white>',
+    effortMinimal: '<minimal>',
+    effortLow: '<green>',
+    effortMedium: '<blue>',
+    effortHigh: '<yellow>',
+    effortXhigh: '<orange>',
+    effortMax: '<red>',
+  };
+  const snapshot = {
+    palette: coloredPalette,
+    modelName: 'gpt-5.6-sol',
+    thinkingLevel: 'xhigh',
+  } as FooterSnapshot;
+
+  assert.deepEqual(renderFooterRows(snapshot, [buildModelRow]), [
+    '<orange>gpt-5.6-sol</> <gray>·</> <orange>◆◆◆◆◆◇</>',
   ]);
 });
