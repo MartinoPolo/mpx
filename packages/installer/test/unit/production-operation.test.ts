@@ -181,6 +181,37 @@ it('rejects secret-bearing user config through the public config parser', async 
   ).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
 });
 
+it('rejects malformed edited user-config bytes before they can become adoption evidence', async () => {
+  const releaseKey = 'a'.repeat(64),
+    target = 'C:\\Roaming\\mpx\\config.json',
+    malformed = '{"identities":',
+    files = new FakeBinaryFileSystem();
+  await files.write(target, Buffer.from(malformed));
+  const adapter = new ProductionInstallerOperationAdapter(
+    {
+      MPX_APPS: 'C:\\Apps',
+      APPDATA: 'C:\\Roaming',
+      LOCALAPPDATA: 'C:\\Local',
+      USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+    },
+    'me',
+    { files, resources: new FakeJsonResourceStore() },
+  );
+  const malformedIntent = {
+    ...withUserConfig(releaseKey),
+    userConfigArtifact: {
+      target: '%APPDATA%/mpx/config.json',
+      content: malformed,
+      sha256: createHash('sha256').update(malformed).digest('hex'),
+    },
+  } satisfies InstallIntentV1;
+  await expect(
+    adapter.operations(malformedIntent, releaseManifest(releaseKey)),
+  ).rejects.toBeDefined();
+  expect(await files.read(target)).toEqual(Buffer.from(malformed));
+});
+
 it('creates absent user config exactly and accepts exact existing bytes', async () => {
   const releaseKey = 'a'.repeat(64),
     target = 'C:\\Roaming\\mpx\\config.json',

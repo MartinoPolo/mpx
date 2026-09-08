@@ -27,6 +27,14 @@ import { aggregateInstallerFailure } from './failure.js';
 export { installerDigest } from './immutable-core.js';
 export type { InstallIntentV1, InstallOperationV1 } from './immutable-core.js';
 
+export interface OwnedUserConfigAdoption {
+  readonly operationId: '01-user-config';
+  readonly adapter: string;
+  readonly target: string;
+  readonly desiredDigest: string;
+  readonly validatedArtifactDigest: string;
+}
+
 function fail(code: string, message: string): never {
   throw new MpxError({ code, message });
 }
@@ -52,6 +60,30 @@ export interface StoredTransaction {
 }
 function operationChanges(operation: InstallOperationV1, digest: string | null): boolean {
   return operation.action === 'ensure' ? digest !== operation.desiredDigest : digest !== null;
+}
+
+function adoptedUserConfig(
+  receipt: OwnershipReceiptV1,
+  prior: InstallOperationV1,
+  adoption: OwnedUserConfigAdoption | undefined,
+  actual: string | null,
+): boolean {
+  const locator = receipt.operationLocators.find((candidate) => candidate.operationId === prior.id);
+  return Boolean(
+    adoption &&
+    actual !== null &&
+    prior.id === '01-user-config' &&
+    prior.action === 'ensure' &&
+    adoption.operationId === prior.id &&
+    adoption.adapter === prior.adapter &&
+    adoption.target === prior.target &&
+    adoption.desiredDigest === actual &&
+    adoption.validatedArtifactDigest === actual &&
+    locator?.adapter === prior.adapter &&
+    locator.bindingDigest === installerDigest({ operation: prior, spec: locator.spec }) &&
+    (locator.spec as { kind?: unknown; retention?: unknown } | null)?.kind === 'user-config' &&
+    (locator.spec as { retention?: unknown } | null)?.retention === 'user-owned',
+  );
 }
 
 function durableSnapshots(
@@ -502,6 +534,7 @@ export interface ImmutableInstallerServiceOptions {
   readonly now?: () => Date;
   readonly failureInjection?: (operationId: string, index: number) => void;
   readonly beforeApply?: () => Promise<void>;
+  readonly userConfigAdoption?: OwnedUserConfigAdoption;
 }
 const RELEASE_UPGRADE_ID = 'ownership-release-upgrade';
 const RELEASE_UPGRADE_VERIFIER = 'installer:ownership-release-upgrade';
@@ -727,7 +760,24 @@ export class ImmutableInstallerService {
         priorReceipt &&
         installerDigest(priorReceipt.operations) !== installerDigest(plan.operations)
       ) {
-        fail('INSTALL_OWNERSHIP_MISMATCH', 'Existing ownership differs from the plan.');
+        await this.assertOwnedReceipt(priorReceipt);
+        const changed = priorReceipt.operations.filter(
+          (prior) =>
+            installerDigest(prior) !==
+            installerDigest(plan.operations.find((operation) => operation.id === prior.id) ?? null),
+        );
+        if (
+          priorReceipt.operations.length !== plan.operations.length ||
+          changed.length !== 1 ||
+          !adoptedUserConfig(
+            priorReceipt,
+            changed[0]!,
+            this.options.userConfigAdoption,
+            plan.observations.find((item) => item.id === changed[0]!.id)?.digest ?? null,
+          )
+        ) {
+          fail('INSTALL_OWNERSHIP_MISMATCH', 'Existing ownership differs from the plan.');
+        }
       }
       const snapshots: Record<string, string | null> = {};
       for (const [index, operation] of plan.operations.entries()) {
@@ -802,14 +852,16 @@ export class ImmutableInstallerService {
         }
         const receiptOperationLocators = await this.locateOperations(plan.operations);
         const receipt: OwnershipReceiptV1 =
-          priorReceipt && !upgrading
+          priorReceipt &&
+          !upgrading &&
+          installerDigest(priorReceipt.operations) === installerDigest(plan.operations)
             ? priorReceipt
             : {
                 schemaVersion: 2,
                 kind: 'ownership-receipt',
                 releaseKey: plan.intent.releaseKey,
                 convergenceHash: plan.intent.convergenceHash,
-                files: manifest!.files,
+                files: manifest?.files ?? priorReceipt!.files,
                 operations: plan.operations,
                 operationLocators: receiptOperationLocators,
                 installIntent: plan.intent,
@@ -924,7 +976,10 @@ export class ImmutableInstallerService {
     await this.hydrateReceiptOperations(receipt);
     for (const operation of receipt.operations) {
       const actual = await this.adapter(operation.adapter).observe(operation);
-      if (operation.action === 'ensure' ? actual !== operation.desiredDigest : actual !== null) {
+      if (
+        (operation.action === 'ensure' ? actual !== operation.desiredDigest : actual !== null) &&
+        !adoptedUserConfig(receipt, operation, this.options.userConfigAdoption, actual)
+      ) {
         fail('INSTALL_FOREIGN_OR_DRIFTED', `Owned target ${operation.target} is drifted.`);
       }
     }

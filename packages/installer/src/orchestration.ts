@@ -24,6 +24,7 @@ import {
   type LegacyOwnershipReceiptV1,
   type SideEffectAdapter,
   type TransactionStore,
+  type OwnedUserConfigAdoption,
 } from './transaction.js';
 import { aggregateInstallerFailure } from './failure.js';
 import {
@@ -47,6 +48,7 @@ const missing = (failure: unknown): boolean => (failure as NodeJS.ErrnoException
 export interface InstallerOperationSet {
   readonly automatic: readonly InstallOperationV1[];
   readonly classifications?: InstallOperationClassificationsV1;
+  readonly userConfigAdoption?: OwnedUserConfigAdoption;
 }
 /** The host owns native details; orchestration only consumes ordered, reversible operations. */
 export interface InstallerOperationAdapter extends SideEffectAdapter {
@@ -214,12 +216,14 @@ export class InstallOrchestrator {
   private service(
     manifest?: ReleaseManifestV1,
     beforeApply?: () => Promise<void>,
+    userConfigAdoption?: OwnedUserConfigAdoption,
   ): ImmutableInstallerService {
     return new ImmutableInstallerService({
       adapters: [this.options.adapter],
       store: this.options.store,
       ...(manifest ? { manifest } : {}),
       ...(beforeApply ? { beforeApply } : {}),
+      ...(userConfigAdoption ? { userConfigAdoption } : {}),
       now: this.now,
     });
   }
@@ -231,6 +235,7 @@ export class InstallOrchestrator {
     manifest: ReleaseManifestV1;
     operations: readonly InstallOperationV1[];
     classifications?: InstallOperationClassificationsV1;
+    userConfigAdoption?: OwnedUserConfigAdoption;
   }> {
     const intent = parseInstallIntentV1(intentValue),
       manifest = await this.options.releases.build();
@@ -259,6 +264,7 @@ export class InstallOrchestrator {
       manifest,
       operations,
       ...(grouped.classifications ? { classifications: grouped.classifications } : {}),
+      ...(grouped.userConfigAdoption ? { userConfigAdoption: grouped.userConfigAdoption } : {}),
     };
   }
   private async migratedReceipt(
@@ -317,7 +323,9 @@ export class InstallOrchestrator {
     }
     return receipt;
   }
-  private async validatedReceipt(): Promise<OwnershipReceiptV1 | undefined> {
+  private async validatedReceipt(
+    userConfigAdoption?: OwnedUserConfigAdoption,
+  ): Promise<OwnershipReceiptV1 | undefined> {
     const receipt = await this.options.store.readReceipt();
     if (!receipt) {
       return undefined;
@@ -326,7 +334,7 @@ export class InstallOrchestrator {
     if (releaseIssues.length) {
       fail('INSTALL_FOREIGN_OR_DRIFTED', `Owned release is drifted (${releaseIssues.join(', ')}).`);
     }
-    await this.service().assertOwnedReceipt(receipt);
+    await this.service(undefined, undefined, userConfigAdoption).assertOwnedReceipt(receipt);
     return receipt;
   }
   private async recoverPending(): Promise<void> {
@@ -422,7 +430,11 @@ export class InstallOrchestrator {
       files: receipt.files,
     };
     assertPiNativePackagesMatchRelease(ownedManifest, priorIntent.runtimeRegistrations);
-    await this.service().assertOwnedReceipt(receipt);
+    const desiredManifest = await this.options.releases.build();
+    const desired = await this.options.adapter.operations(intent, desiredManifest, false, receipt);
+    await this.service(undefined, undefined, desired.userConfigAdoption).assertOwnedReceipt(
+      receipt,
+    );
     const expected = await this.options.adapter.operations(
       priorIntent,
       ownedManifest,
@@ -566,10 +578,13 @@ export class InstallOrchestrator {
         await this.recoverPending();
       }
       const legacy = await this.options.store.readLegacyReceiptForMigration();
-      const priorReceipt = legacy ? undefined : await this.validatedReceipt();
-      const current = await this.current(intent, priorReceipt);
+      const receipt = legacy ? undefined : await this.options.store.readReceipt();
+      const current = await this.current(intent, receipt);
+      const priorReceipt = legacy
+        ? undefined
+        : await this.validatedReceipt(current.userConfigAdoption);
       const migration = legacy ? await this.migratedReceipt(current, legacy) : undefined;
-      const base = await this.service(current.manifest).plan(
+      const base = await this.service(current.manifest, undefined, current.userConfigAdoption).plan(
         current.intent,
         current.operations,
         priorReceipt,
@@ -652,8 +667,13 @@ export class InstallOrchestrator {
       await this.assertAdmission(plan.intent, admission);
     }
     const legacyBeforeApply = await this.options.store.readLegacyReceiptForMigration();
-    const priorReceipt = legacyBeforeApply ? undefined : await this.validatedReceipt();
-    const current = await this.current(plan.intent, priorReceipt);
+    const receiptBeforeApply = legacyBeforeApply
+      ? undefined
+      : await this.options.store.readReceipt();
+    const current = await this.current(plan.intent, receiptBeforeApply);
+    const priorReceipt = legacyBeforeApply
+      ? undefined
+      : await this.validatedReceipt(current.userConfigAdoption);
     const upgradeReference = plan.classifications?.confirmationRequired.find(
         (reference) => reference.id === RELEASE_UPGRADE_ID,
       ),
@@ -733,11 +753,11 @@ export class InstallOrchestrator {
     ) {
       fail('INSTALL_PLAN_STALE', 'Install operations changed after planning.');
     }
-    const revalidated = await this.service(current.manifest).plan(
-      current.intent,
-      current.operations,
-      priorReceipt,
-    );
+    const revalidated = await this.service(
+      current.manifest,
+      undefined,
+      current.userConfigAdoption,
+    ).plan(current.intent, current.operations, priorReceipt);
     if (installerDigest(revalidated.observations) !== installerDigest(plan.observations)) {
       fail('INSTALL_OBSERVATION_CHANGED', 'Machine observations changed after planning.');
     }
@@ -759,6 +779,7 @@ export class InstallOrchestrator {
             }
           }
         : undefined,
+      current.userConfigAdoption,
     );
     const receipt = await service.apply(plan, confirmation);
     let rollbackActivation: (() => Promise<void>) | undefined;

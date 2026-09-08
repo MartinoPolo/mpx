@@ -567,7 +567,8 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     requireActual = false,
     priorReceipt?: OwnershipReceiptV1,
   ): Promise<InstallerOperationSet> {
-    let userConfigEntry: Entry | undefined;
+    let userConfigEntry: Entry | undefined,
+      userConfigAdoption: InstallerOperationSet['userConfigAdoption'];
     if (intent.userConfigArtifact) {
       parseUserConfig(intent.userConfigArtifact.content, this.environment);
       const appData = this.environment.APPDATA;
@@ -588,6 +589,16 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
           'INSTALL_FOREIGN_OR_DRIFTED',
           'Refusing to replace different existing user-config bytes.',
         );
+      }
+      const prior = priorReceipt?.operations.find((operation) => operation.id === '01-user-config');
+      if (existing?.equals(body) && prior?.desiredDigest !== intent.userConfigArtifact.sha256) {
+        userConfigAdoption = {
+          operationId: '01-user-config',
+          adapter: this.name,
+          target,
+          desiredDigest: intent.userConfigArtifact.sha256,
+          validatedArtifactDigest: intent.userConfigArtifact.sha256,
+        };
       }
       userConfigEntry = {
         fileBody: body,
@@ -900,6 +911,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         automatic: automaticOperations.map((operation) => operation.id),
         confirmationRequired: [],
       },
+      ...(userConfigAdoption ? { userConfigAdoption } : {}),
     };
   }
   private assertProjectionLocator(

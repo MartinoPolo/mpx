@@ -25,6 +25,7 @@ Use `pnpm run setup`, not `pnpm setup`: the latter is pnpm's own shell-configura
 - Setup changes only receipt-owned MPX resources.
 - Native credentials, sessions, account roots, launchers, extensions, settings, Windows Terminal profiles, and unrelated files remain user-owned.
 - Existing evidence is validated before mutation. Missing, corrupt, stale, foreign, partial, or concurrently changed ownership fails closed.
+- The sole mutable exception is an existing receipt-owned `%APPDATA%/mpx/config.json`: setup may adopt exact, fully valid requested config bytes at the same ownership-bound path without rewriting them. Concurrent edits and all other drift still fail closed.
 - Pending authorized transactions recover under the installer lock. Failed applies roll back automatically from durable journals and snapshots.
 - Planning, rollback, recovery, and legacy detach are internal to `mpx setup`; there are no public rollback, uninstall, or external-action commands.
 

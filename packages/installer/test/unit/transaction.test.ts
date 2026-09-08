@@ -67,6 +67,12 @@ class BytesAdapter implements SideEffectAdapter {
       this.values.set(operation.target, Buffer.from(snapshot, 'base64'));
     }
   }
+  async receiptLocator(operation: InstallOperationV1) {
+    return operation.id === '01-user-config'
+      ? { kind: 'user-config', retention: 'user-owned' }
+      : { kind: 'file' };
+  }
+  async hydrateReceiptOperation() {}
 }
 class RetainingAdapter implements SideEffectAdapter {
   readonly name = 'retaining';
@@ -663,6 +669,184 @@ describe('installer transactions', () => {
     expect(values.get('owned-c')?.toString()).toBe('external');
     expect((await restarted.readTransaction())?.journal).toMatchObject({ phase: 'rolled-back' });
     expect((await restarted.readTransaction())?.journal).not.toHaveProperty('inFlightOperationId');
+  });
+
+  it('adopts exact validated receipt-owned user config without overwriting it', async () => {
+    const target = 'C:\\Roaming\\mpx\\config.json',
+      edited = Buffer.from('{"identities":{},"domains":{}}'),
+      values = new Map([[target, edited]]),
+      adapter = new BytesAdapter(values),
+      store = new MemoryTransactionStore(),
+      prior: InstallOperationV1 = {
+        id: '01-user-config',
+        adapter: 'files',
+        action: 'ensure',
+        target,
+        desiredDigest: 'b'.repeat(64),
+      },
+      desiredDigest = installerDigest(edited.toString('base64')),
+      desired = { ...prior, desiredDigest },
+      spec = { kind: 'user-config', retention: 'user-owned' },
+      releaseKey = installerDigest([]),
+      validIntent = { ...intent, releaseKey, convergenceHash: releaseKey };
+    await store.writeReceipt({
+      schemaVersion: 2,
+      kind: 'ownership-receipt',
+      releaseKey,
+      convergenceHash: releaseKey,
+      files: [],
+      operations: [prior],
+      operationLocators: operationLocators([prior], spec),
+      installedAt: '2025-01-01T00:00:00.000Z',
+    });
+    const service = new ImmutableInstallerService({
+      adapters: [adapter],
+      store,
+      userConfigAdoption: {
+        operationId: '01-user-config',
+        adapter: 'files',
+        target,
+        desiredDigest,
+        validatedArtifactDigest: desiredDigest,
+      },
+    });
+    const apply = vi.spyOn(adapter, 'apply');
+    const plan = await service.plan(validIntent, [desired], await store.readReceipt());
+    const receipt = await service.apply(plan, plan.confirmationDigest);
+    expect(values.get(target)).toEqual(edited);
+    expect(apply).not.toHaveBeenCalled();
+    expect(receipt.operations).toEqual([desired]);
+    await service.rollback();
+    expect(values.get(target)).toEqual(edited);
+  });
+
+  it.each([
+    ['different path', { target: 'C:\\Elsewhere\\config.json' }],
+    ['different adapter', { adapter: 'other' }],
+    ['different kind', { spec: { kind: 'file' } }],
+    ['different retention', { spec: { kind: 'user-config', retention: 'installer-owned' } }],
+  ])('rejects user-config adoption with %s', async (_label, change) => {
+    const target = 'C:\\Roaming\\mpx\\config.json',
+      edited = Buffer.from('valid'),
+      adapter = new BytesAdapter(new Map([[target, edited]])),
+      store = new MemoryTransactionStore(),
+      prior: InstallOperationV1 = {
+        id: '01-user-config',
+        adapter: 'files',
+        action: 'ensure',
+        target,
+        desiredDigest: 'b'.repeat(64),
+      },
+      digest = installerDigest(edited.toString('base64')),
+      desired = {
+        ...prior,
+        target: 'target' in change ? change.target : target,
+        adapter: 'adapter' in change ? change.adapter : 'files',
+        desiredDigest: digest,
+      },
+      spec = 'spec' in change ? change.spec : { kind: 'user-config', retention: 'user-owned' };
+    await store.writeReceipt({
+      schemaVersion: 2,
+      kind: 'ownership-receipt',
+      releaseKey: installerDigest([]),
+      convergenceHash: installerDigest([]),
+      files: [],
+      operations: [prior],
+      operationLocators: operationLocators([prior], spec),
+      installedAt: '2025-01-01T00:00:00.000Z',
+    });
+    const service = new ImmutableInstallerService({
+      adapters: [adapter],
+      store,
+      userConfigAdoption: {
+        operationId: '01-user-config',
+        adapter: desired.adapter,
+        target: desired.target,
+        desiredDigest: digest,
+        validatedArtifactDigest: digest,
+      },
+    });
+    await expect(service.assertOwnedReceipt((await store.readReceipt())!)).rejects.toMatchObject({
+      code: 'INSTALL_FOREIGN_OR_DRIFTED',
+    });
+  });
+
+  it('rejects another drifted receipt resource while user config is adoptable', async () => {
+    const configTarget = 'C:\\Roaming\\mpx\\config.json',
+      edited = Buffer.from('valid'),
+      adapter = new BytesAdapter(
+        new Map([
+          [configTarget, edited],
+          ['other', Buffer.from('drift')],
+        ]),
+      ),
+      store = new MemoryTransactionStore(),
+      digest = installerDigest(edited.toString('base64')),
+      config: InstallOperationV1 = {
+        id: '01-user-config',
+        adapter: 'files',
+        action: 'ensure',
+        target: configTarget,
+        desiredDigest: 'b'.repeat(64),
+      },
+      other: InstallOperationV1 = {
+        id: '20-other',
+        adapter: 'files',
+        action: 'ensure',
+        target: 'other',
+        desiredDigest: 'c'.repeat(64),
+      };
+    const configSpec = { kind: 'user-config', retention: 'user-owned' };
+    await store.writeReceipt({
+      schemaVersion: 2,
+      kind: 'ownership-receipt',
+      releaseKey: installerDigest([]),
+      convergenceHash: installerDigest([]),
+      files: [],
+      operations: [config, other],
+      operationLocators: [
+        ...operationLocators([config], configSpec),
+        ...operationLocators([other], { kind: 'file' }),
+      ],
+      installedAt: '2025-01-01T00:00:00.000Z',
+    });
+    const service = new ImmutableInstallerService({
+      adapters: [adapter],
+      store,
+      userConfigAdoption: {
+        operationId: '01-user-config',
+        adapter: 'files',
+        target: configTarget,
+        desiredDigest: digest,
+        validatedArtifactDigest: digest,
+      },
+    });
+    await expect(service.assertOwnedReceipt((await store.readReceipt())!)).rejects.toMatchObject({
+      code: 'INSTALL_FOREIGN_OR_DRIFTED',
+    });
+  });
+
+  it('rejects a concurrent user-config edit after planning', async () => {
+    const target = 'C:\\Roaming\\mpx\\config.json',
+      edited = Buffer.from('valid'),
+      values = new Map([[target, edited]]),
+      adapter = new BytesAdapter(values),
+      store = new MemoryTransactionStore(),
+      digest = installerDigest(edited.toString('base64')),
+      operation: InstallOperationV1 = {
+        id: '01-user-config',
+        adapter: 'files',
+        action: 'ensure',
+        target,
+        desiredDigest: digest,
+      };
+    const service = new ImmutableInstallerService({ adapters: [adapter], store });
+    const plan = await service.plan(intent, [operation]);
+    values.set(target, Buffer.from('concurrent'));
+    await expect(service.apply(plan, plan.confirmationDigest)).rejects.toMatchObject({
+      code: 'INSTALL_OBSERVATION_CHANGED',
+    });
+    expect(values.get(target)?.toString()).toBe('concurrent');
   });
 
   it('retains apply transaction state and both failures when rollback fails', async () => {
