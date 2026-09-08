@@ -56,7 +56,16 @@ export interface PiInvocationInput {
   launchIdentity?: {
     readonly name: string;
     readonly mode: string;
+    readonly skillPolicy: string;
   };
+  projectProviders?: {
+    readonly repository: string;
+    readonly issues: string;
+    readonly repositoryUrl?: string;
+    readonly issuesUrl?: string;
+    readonly projectConfigPath?: string;
+  };
+  accountConfigPath?: string;
   immutableProjectionDirectory?: string;
   profile?: PiRuntimeProfileV1;
   runtimeContextFile?: string;
@@ -340,8 +349,8 @@ function compiledAgentsDirectory(directory: string, files: readonly PiProjection
 export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvocationPlan> {
   if (
     input.launchIdentity &&
-    ![input.launchIdentity.name, input.launchIdentity.mode].every((value) =>
-      /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(value),
+    ![input.launchIdentity.name, input.launchIdentity.mode, input.launchIdentity.skillPolicy].every(
+      (value) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(value),
     )
   ) {
     throw new Error('Pi launch identity contains an invalid display field');
@@ -481,8 +490,28 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
         ? {
             MPX_IDENTITY: input.launchIdentity.name,
             MPX_MODE: input.launchIdentity.mode,
+            MPX_SKILL_POLICY: input.launchIdentity.skillPolicy,
           }
         : {}),
+      ...(input.projectProviders
+        ? {
+            MPX_REPOSITORY_PROVIDER: input.projectProviders.repository,
+            MPX_ISSUES_PROVIDER: input.projectProviders.issues,
+          }
+        : {}),
+      MPX_REPOSITORY_URL: input.projectProviders?.repositoryUrl ?? '',
+      MPX_ISSUES_URL: input.projectProviders?.issuesUrl ?? '',
+      MPX_PROJECT_CONFIG_PATH: input.projectProviders?.projectConfigPath
+        ? absolute(input.projectProviders.projectConfigPath, 'project config path')
+        : '',
+      MPX_ACCOUNT_CONFIG_PATH: input.accountConfigPath
+        ? absolute(input.accountConfigPath, 'account config path')
+        : '',
+      MPX_SESSION_SKILLS_DIR: projectionFiles.some((entry) =>
+        /^skills\/[^/]+\/SKILL\.md$/u.test(entry.path),
+      )
+        ? absolute(path.join(activeContentRoot, 'skills'), 'compiled skills directory')
+        : '',
       MPX_ACTIVE_CONTENT_ROOT: activeContentRoot,
       MPX_ACTIVE_CONTENT_MANIFEST: manifestPath.replaceAll('\\', '/'),
       MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: JSON.stringify({

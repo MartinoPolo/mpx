@@ -166,7 +166,21 @@ describe('Node launch execution runtime adapters', () => {
         launchKey,
         identity: { name: 'identity', domain: 'personal' },
         mode: 'developer',
+        skillPolicy: 'policy',
       } as LaunchDescriptor;
+      await writeFile(
+        path.join(canonicalRoot, 'mpxconfig.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          project: { id: 'example/project' },
+          repository: { provider: 'gitlab', remote: 'origin' },
+          issues: {
+            provider: 'kanbanflow',
+            boardId: 'board',
+            states: { todo: 'todo', wip: 'wip', review: 'review', done: 'done' },
+          },
+        }),
+      );
       const statusMaterialize = vi.fn(async () => undefined);
       const runtimeStatusMaterialize = vi.fn(async () => 'C:/state/runtime.json');
       const [adapter] = productionRuntimeAdapters({
@@ -229,6 +243,9 @@ describe('Node launch execution runtime adapters', () => {
       expect(invocation.environment).toMatchObject({
         MPX_IDENTITY: 'identity',
         MPX_MODE: 'developer',
+        MPX_SKILL_POLICY: 'policy',
+        MPX_REPOSITORY_PROVIDER: 'gitlab',
+        MPX_ISSUES_PROVIDER: 'kanbanflow',
       });
       await expect(
         readFile(path.join(projectionDirectory, 'skills', 'sample', 'SKILL.md'), 'utf8'),
@@ -260,6 +277,7 @@ describe('Node launch execution runtime adapters', () => {
       runtimeArgs,
       identity: { name: 'identity', domain: 'personal' },
       mode: 'developer',
+      skillPolicy: 'policy',
     } as unknown as LaunchDescriptor;
     const runtimeContext = createRuntimeContextV1({
       launchKey,

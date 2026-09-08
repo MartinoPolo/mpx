@@ -19,6 +19,22 @@ Repeatable `--runtime-arg <value>` arguments are launch-only, bounded, and appen
 
 The selected runtime receives only its native account root: `CLAUDE_CONFIG_DIR` or `PI_CODING_AGENT_DIR`. MPX does not read or copy credentials. Native provider authentication and project trust remain runtime-owned.
 
+## Pi footer
+
+The launch row displays `pi (mpx) · mode:developer · skills:developer · gh · gh` (`piw (mpx)` for work identity). Mode and skill policy come independently from the resolved launch through `MPX_MODE` and `MPX_SKILL_POLICY`; changing either requires a new launch. No skill counts are displayed.
+
+Provider badges follow repository-then-Issues order and are never collapsed, even when identical. Provider selection comes from the session workspace's validated configuration at launch, not from Git remotes: GitHub is `gh`, GitLab is `glab`, and KanbanFlow is `kf`. An absent Issue configuration displays `none`; unavailable or invalid configuration displays `?` for each unknown role. Relaunch to apply provider configuration changes. The worktree remains on its separate location line.
+
+Footer hyperlinks open these destinations when available:
+
+- Runtime identity: the MPX account configuration, not native Pi settings.
+- Mode: the discovered project's `mpxconfig.json`.
+- Skills: the active projection's compiled skills directory, not the source checkout or a history of invoked skills.
+- Repository: GitHub pull requests or GitLab merge requests, using the configured repository remote.
+- Issues: the corresponding GitHub/GitLab issue list, or the explicitly configured KanbanFlow board.
+
+Missing or unsafe destinations remain unlinked. Local directory projects do not acquire an inferred repository or issue tracker. Links use terminal hyperlinks; opening them depends on the terminal and local file associations.
+
 ## Executors
 
 Windows host execution is an elevated compatibility path, not isolation. Manual use requires explicit host selection, a reason, and fresh direct-TTY or exact argv-scoped approval. Installed aliases provide the bounded one-use approval expected by their managed launch contract.

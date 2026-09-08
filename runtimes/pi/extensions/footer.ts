@@ -275,24 +275,100 @@ export function thinkingGauge(level: string): string {
 
 export interface FooterSessionIdentity {
   runtimeLabel: 'pi (mpx)' | 'piw (mpx)' | 'pi' | 'piw';
-  identity: string;
   mode: string;
+  skillPolicy: string;
+  accountConfigUrl?: string;
+  projectConfigUrl?: string;
+  skillsUrl?: string;
+}
+
+export interface FooterProviderSnapshot {
+  repository: string;
+  issues: string;
+  repositoryUrl?: string;
+  issuesUrl?: string;
 }
 
 type FooterEnvironment = Readonly<Record<string, string | undefined>>;
 
 const SAFE_IDENTITY_FIELD = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
+const PROVIDER_BADGES: Readonly<Record<string, string>> = {
+  github: 'gh',
+  gitlab: 'glab',
+  gerrit: 'gerrit',
+  kanbanflow: 'kf',
+  local: 'local',
+  none: 'none',
+};
+
+function safeDisplayField(value: string | undefined): string {
+  return value !== undefined && SAFE_IDENTITY_FIELD.test(value) ? value : '';
+}
+
+function providerBadge(value: unknown): string {
+  if (typeof value !== 'string' || !SAFE_IDENTITY_FIELD.test(value)) {
+    return '?';
+  }
+  const provider = value.toLowerCase();
+  return Object.hasOwn(PROVIDER_BADGES, provider) ? PROVIDER_BADGES[provider] : value;
+}
+
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
+
+function safeWebUrl(value: string | undefined): string {
+  const candidate = value?.trim() ?? '';
+  if (candidate === '' || CONTROL_CHARACTERS.test(candidate)) {
+    return '';
+  }
+  try {
+    const parsed = new URL(candidate);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.username === '' &&
+      parsed.password === ''
+      ? candidate
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+function safeFileUrl(value: string | undefined): string {
+  const candidate = value?.trim() ?? '';
+  return candidate !== '' &&
+    !CONTROL_CHARACTERS.test(candidate) &&
+    (path.isAbsolute(candidate) || path.win32.isAbsolute(candidate))
+    ? toFileUrl(candidate)
+    : '';
+}
+
+export function resolveFooterProviders(
+  environment: FooterEnvironment = process.env,
+): FooterProviderSnapshot {
+  const repositoryUrl = safeWebUrl(environment.MPX_REPOSITORY_URL);
+  const issuesUrl = safeWebUrl(environment.MPX_ISSUES_URL);
+  return {
+    repository: providerBadge(environment.MPX_REPOSITORY_PROVIDER),
+    issues: providerBadge(environment.MPX_ISSUES_PROVIDER),
+    ...(repositoryUrl === '' ? {} : { repositoryUrl }),
+    ...(issuesUrl === '' ? {} : { issuesUrl }),
+  };
+}
 
 export function resolveFooterSessionIdentity(
   environment: FooterEnvironment = process.env,
 ): FooterSessionIdentity {
   if (environment.MPX_RUNTIME === 'pi') {
-    const identity = environment.MPX_IDENTITY ?? '';
-    const mode = environment.MPX_MODE ?? '';
+    const identity = safeDisplayField(environment.MPX_IDENTITY);
+    const accountConfigUrl = safeFileUrl(environment.MPX_ACCOUNT_CONFIG_PATH);
+    const projectConfigUrl = safeFileUrl(environment.MPX_PROJECT_CONFIG_PATH);
+    const skillsUrl = safeFileUrl(environment.MPX_SESSION_SKILLS_DIR);
     return {
       runtimeLabel: identity === 'work' ? 'piw (mpx)' : 'pi (mpx)',
-      identity: SAFE_IDENTITY_FIELD.test(identity) ? identity : '',
-      mode: SAFE_IDENTITY_FIELD.test(mode) ? mode : '',
+      mode: safeDisplayField(environment.MPX_MODE),
+      skillPolicy: safeDisplayField(environment.MPX_SKILL_POLICY),
+      ...(accountConfigUrl === '' ? {} : { accountConfigUrl }),
+      ...(projectConfigUrl === '' ? {} : { projectConfigUrl }),
+      ...(skillsUrl === '' ? {} : { skillsUrl }),
     };
   }
 
@@ -300,8 +376,8 @@ export function resolveFooterSessionIdentity(
   return {
     runtimeLabel:
       path.basename(path.normalize(accountRoot)).toLowerCase() === 'agent-work' ? 'piw' : 'pi',
-    identity: '',
     mode: '',
+    skillPolicy: '',
   };
 }
 
@@ -1359,6 +1435,7 @@ export interface FooterSnapshot {
   sessionShortId: string;
   sessionFileUrl: string;
   sessionIdentity: FooterSessionIdentity;
+  providers: FooterProviderSnapshot;
   modelName: string;
   modelProvider: string;
   thinkingLevel: string;
@@ -1473,17 +1550,21 @@ export const buildSessionRow: FooterRowBuilder = (snapshot) => {
   return line === '' ? [] : [line];
 };
 
-/** Row 2 — native Pi or the MPX launch identity and mode. */
+/** Row 2 — runtime, independent launch policies, then repository and Issue providers. */
 export const buildIdentityRow: FooterRowBuilder = (snapshot) => {
   const { palette, sessionIdentity } = snapshot;
   return [
     joinSegments(
       [
-        `${palette.accent}${sessionIdentity.runtimeLabel}${palette.reset}`,
-        sessionIdentity.identity === ''
+        `${palette.accent}${link(sessionIdentity.runtimeLabel, sessionIdentity.accountConfigUrl ?? '')}${palette.reset}`,
+        sessionIdentity.mode === ''
           ? ''
-          : `${palette.gray}${sessionIdentity.identity}${palette.reset}`,
-        sessionIdentity.mode === '' ? '' : `${palette.gray}${sessionIdentity.mode}${palette.reset}`,
+          : `${palette.gray}${link(`mode:${sessionIdentity.mode}`, sessionIdentity.projectConfigUrl ?? '')}${palette.reset}`,
+        sessionIdentity.skillPolicy === ''
+          ? ''
+          : `${palette.gray}${link(`skills:${sessionIdentity.skillPolicy}`, sessionIdentity.skillsUrl ?? '')}${palette.reset}`,
+        `${palette.gray}${link(snapshot.providers.repository, snapshot.providers.repositoryUrl ?? '')}${palette.reset}`,
+        `${palette.gray}${link(snapshot.providers.issues, snapshot.providers.issuesUrl ?? '')}${palette.reset}`,
       ],
       palette,
     ),
@@ -2143,6 +2224,7 @@ export default function (pi: ExtensionAPI): void {
             sessionShortId: session.getSessionId().slice(0, 8),
             sessionFileUrl: sessionFile === undefined ? '' : toFileUrl(sessionFile),
             sessionIdentity: resolveFooterSessionIdentity(),
+            providers: resolveFooterProviders(),
             modelName: activeContext.model?.id ?? '',
             modelProvider: activeContext.model?.provider ?? '',
             thinkingLevel: activeContext.thinkingLevel ?? settings.defaultThinkingLevel,

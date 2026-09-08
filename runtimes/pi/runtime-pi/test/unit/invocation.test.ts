@@ -199,22 +199,55 @@ it('does not disable native extension discovery', async () => {
   expect(plan.args).not.toContain('--extension');
 });
 
-it('exposes the selected identity and mode for the Pi footer', async () => {
+it('exposes the selected identity, mode and independent skill policy for the Pi footer', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
     runtimeContext,
-    launchIdentity: { name: 'personal', mode: 'developer' },
+    launchIdentity: { name: 'personal', mode: 'project', skillPolicy: 'developer' },
+    projectProviders: {
+      repository: 'gitlab',
+      issues: 'kanbanflow',
+      repositoryUrl: 'https://gitlab.example/group/repo/-/merge_requests',
+      issuesUrl: 'https://kanbanflow.com/board/team%2Fboard',
+      projectConfigPath: 'C:/repo/mpxconfig.json',
+    },
+    accountConfigPath: 'C:/Users/example/AppData/Roaming/mpx/config.json',
     cwd: 'C:/repo',
   });
 
   expect(plan.env).toMatchObject({
     MPX_IDENTITY: 'personal',
-    MPX_MODE: 'developer',
+    MPX_MODE: 'project',
+    MPX_SKILL_POLICY: 'developer',
+    MPX_REPOSITORY_PROVIDER: 'gitlab',
+    MPX_ISSUES_PROVIDER: 'kanbanflow',
+    MPX_REPOSITORY_URL: 'https://gitlab.example/group/repo/-/merge_requests',
+    MPX_ISSUES_URL: 'https://kanbanflow.com/board/team%2Fboard',
+    MPX_PROJECT_CONFIG_PATH: 'C:/repo/mpxconfig.json',
+    MPX_ACCOUNT_CONFIG_PATH: 'C:/Users/example/AppData/Roaming/mpx/config.json',
+    MPX_SESSION_SKILLS_DIR: path.join(projectionDirectory, 'skills').replaceAll('\\', '/'),
   });
 });
+
+it.each(['', 'developer\nspoof', 'developer · spoof'])(
+  'rejects an invalid footer skill policy %j',
+  async (skillPolicy) => {
+    await expect(
+      planPiInvocation({
+        executable: 'C:/trusted/pi.cmd',
+        profile: invocationProfile,
+        accountRoot: 'C:/native/pi/account-a',
+        runtimeContextFile: 'C:/launch/context.json',
+        runtimeContext,
+        launchIdentity: { name: 'personal', mode: 'project', skillPolicy },
+        cwd: 'C:/repo',
+      }),
+    ).rejects.toThrow('Pi launch identity contains an invalid display field');
+  },
+);
 
 it('creates a hermetic Pi invocation with launch-current-compatible runtime-context JSON', async () => {
   const plan = await planPiInvocation({
@@ -255,6 +288,11 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
       MPX_RUNTIME: 'pi',
       MPX_RUNTIME_CONTEXT: JSON.stringify(runtimeContext),
       MPX_RUNTIME_CONTEXT_FILE: 'C:/launch/context.json',
+      MPX_REPOSITORY_URL: '',
+      MPX_ISSUES_URL: '',
+      MPX_PROJECT_CONFIG_PATH: '',
+      MPX_ACCOUNT_CONFIG_PATH: '',
+      MPX_SESSION_SKILLS_DIR: path.join(projectionDirectory, 'skills').replaceAll('\\', '/'),
       MPX_ACTIVE_CONTENT_ROOT: projectionDirectory.replaceAll('\\', '/'),
       MPX_ACTIVE_CONTENT_MANIFEST: path
         .join(projectionDirectory, 'active-content.json')

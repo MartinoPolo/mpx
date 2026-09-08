@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import type {
@@ -24,7 +26,7 @@ import {
   type RuntimeLaunchBinding,
   type VerificationEvidence,
 } from '@mpx/executors';
-import { loadRuntimeProfilesV1 } from '@mpx/config';
+import { discoverProjectConfig, loadRuntimeProfilesV1 } from '@mpx/config';
 import {
   compileContent,
   verifyCompiledContentTree,
@@ -56,6 +58,125 @@ import {
 } from '@mpx/runtime-pi';
 import type { SkillProjectionPlan, RuntimeSkillArtifact } from '@mpx/skills';
 import type { RuntimeStatusEnvelopeV1, StatusSnapshotV1 } from '@mpx/status';
+import {
+  productionTrustedExecutablePolicy,
+  resolveTrustedExecutable,
+  revalidateTrustedExecutable,
+} from '@mpx/worktrees';
+
+export interface PiFooterProviders {
+  readonly repository: string;
+  readonly issues: string;
+  readonly repositoryUrl?: string;
+  readonly issuesUrl?: string;
+  readonly projectConfigPath?: string;
+}
+
+type GitRemoteReader = (cwd: string, remote: string) => Promise<string>;
+
+const execFileAsync = promisify(execFile);
+
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
+
+async function productionGitRemoteReader(cwd: string, remote: string): Promise<string> {
+  const policy = productionTrustedExecutablePolicy([cwd]);
+  const executable = await resolveTrustedExecutable('git', cwd, policy);
+  await revalidateTrustedExecutable(executable, policy);
+  const result = await execFileAsync(
+    executable.path,
+    [...(executable.trustedPrefixArguments ?? []), 'remote', 'get-url', '--', remote],
+    { cwd, shell: false, timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true },
+  );
+  return result.stdout.trim();
+}
+
+function encodedRepositoryUrl(remote: string): string | undefined {
+  if (!remote || CONTROL_CHARACTERS.test(remote)) {
+    return undefined;
+  }
+  let host: string;
+  let rawPath: string;
+  try {
+    if (/^[^/@:]+@[^/:]+:.+$/u.test(remote)) {
+      const match = /^[^/@:]+@([^/:]+):(.+)$/u.exec(remote);
+      if (!match) {
+        return undefined;
+      }
+      host = match[1]!;
+      rawPath = match[2]!;
+    } else {
+      const parsed = new URL(remote);
+      if (!['https:', 'ssh:'].includes(parsed.protocol) || !parsed.hostname) {
+        return undefined;
+      }
+      host = parsed.protocol === 'https:' ? parsed.host : parsed.hostname;
+      rawPath = parsed.pathname;
+    }
+    const segments = rawPath
+      .replace(/^\/+|\/+$/gu, '')
+      .replace(/\.git$/u, '')
+      .split('/')
+      .map((segment) => decodeURIComponent(segment));
+    if (
+      segments.length < 2 ||
+      segments.some((segment) => !segment || CONTROL_CHARACTERS.test(segment))
+    ) {
+      return undefined;
+    }
+    const url = new URL(`https://${host}`);
+    url.pathname = segments.map(encodeURIComponent).join('/');
+    return url.toString().replace(/\/$/u, '');
+  } catch {
+    return undefined;
+  }
+}
+
+export async function readPiFooterProviders(
+  cwd: string,
+  readGitRemote: GitRemoteReader = productionGitRemoteReader,
+): Promise<PiFooterProviders> {
+  try {
+    const project = await discoverProjectConfig(cwd);
+    if (!project) {
+      return { repository: '', issues: '' };
+    }
+    const repository = project.config.repository?.provider ?? '';
+    const issues = project.config.issues?.provider ?? 'none';
+    const result: PiFooterProviders = {
+      repository,
+      issues,
+      projectConfigPath: project.path,
+    };
+    let repositoryUrl: string | undefined;
+    if ((repository === 'github' || repository === 'gitlab') && project.config.repository) {
+      const configured = project.config.repository.remote;
+      if (!CONTROL_CHARACTERS.test(configured)) {
+        const remote = encodedRepositoryUrl(configured)
+          ? configured
+          : await readGitRemote(project.root, configured).catch(() => '');
+        repositoryUrl = encodedRepositoryUrl(remote);
+      }
+    }
+    const issuesUrl =
+      issues === 'kanbanflow' && project.config.issues?.boardId
+        ? `https://kanbanflow.com/board/${encodeURIComponent(project.config.issues.boardId)}`
+        : repositoryUrl && issues === repository && (issues === 'github' || issues === 'gitlab')
+          ? `${repositoryUrl}${issues === 'github' ? '/issues' : '/-/issues'}`
+          : undefined;
+    return {
+      ...result,
+      ...(repositoryUrl
+        ? {
+            repositoryUrl: `${repositoryUrl}${repository === 'github' ? '/pulls' : '/-/merge_requests'}`,
+          }
+        : {}),
+      ...(issuesUrl ? { issuesUrl } : {}),
+    };
+  } catch {
+    // Unavailable display metadata must not block a launch or invent provider routes.
+    return { repository: '', issues: '' };
+  }
+}
 
 export interface LaunchProjection {
   readonly directory: string;
@@ -492,7 +613,13 @@ export function productionRuntimeAdapters(input: {
           launchIdentity: {
             name: input.descriptor.identity.name,
             mode: input.descriptor.mode,
+            skillPolicy: input.descriptor.skillPolicy,
           },
+          projectProviders: await readPiFooterProviders(input.cwd),
+          ...(typeof input.environment.APPDATA === 'string' &&
+          path.isAbsolute(input.environment.APPDATA)
+            ? { accountConfigPath: path.join(input.environment.APPDATA, 'mpx', 'config.json') }
+            : {}),
           projectionReference: built.reference,
           ...(publishedProjection.files && publishedProjection.revalidation
             ? { projection: built as PiPublishedProjection }
