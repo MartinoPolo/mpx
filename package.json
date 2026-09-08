@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
+    "setup": "pnpm run bundle:cli && powershell.exe -NoProfile -File scripts/setup.ps1",
     "check": "pnpm run check:quality && pnpm run validate:generated && pnpm run validate:structure && pnpm -r check",
     "check:quality": "pnpm run format:check && pnpm run lint && pnpm run check:fallow",
     "check:fallow": "fallow --regression-baseline fallow-baselines/regression.json --fail-on-regression --format json --quiet --output-file .fallow/check.json",

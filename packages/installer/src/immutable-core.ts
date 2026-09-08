@@ -745,6 +745,43 @@ async function verifyPiExtensionArtifact(repositoryRoot: string): Promise<void> 
   }
 }
 
+async function verifyImmutableReleaseSource(
+  repositoryRoot: string,
+): Promise<ReleaseManifestV1 | undefined> {
+  const resolved = path.resolve(repositoryRoot),
+    releaseKey = path.basename(resolved),
+    releases = path.dirname(resolved);
+  if (
+    !SHA.test(releaseKey) ||
+    path.basename(releases) !== 'releases' ||
+    path.basename(path.dirname(releases)) !== 'mpx'
+  ) {
+    return undefined;
+  }
+  try {
+    const rootInfo = await lstat(repositoryRoot);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+      throw new Error('Immutable release root is unsafe');
+    }
+    const manifestPath = path.join(repositoryRoot, 'release-manifest.json'),
+      manifestInfo = await lstat(manifestPath);
+    if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink()) {
+      throw new Error('Immutable release manifest is unsafe');
+    }
+    const manifest = parseReleaseManifestV1(parseStrictJson(await readFile(manifestPath, 'utf8')));
+    if (manifest.releaseKey !== releaseKey) {
+      throw new Error('Immutable release basename does not match its manifest');
+    }
+    const actual = await buildReleaseManifestWithoutMetadata(repositoryRoot);
+    if (canonicalJson(actual) !== canonicalJson(manifest)) {
+      throw new Error('Immutable release inventory differs from its manifest');
+    }
+    return manifest;
+  } catch {
+    fail('INSTALL_RELEASE_ARTIFACT_INVALID', 'Immutable release source failed verification.');
+  }
+}
+
 async function withCurrentReleaseSource<T>(
   options: CurrentReleaseOptions,
   action: (sourceDirectory: string) => Promise<T>,
@@ -758,7 +795,8 @@ async function withCurrentReleaseSource<T>(
     'LICENSE',
     'LICENSE.md',
   ];
-  if (canonicalPiArtifactSelection(assets) === 'included') {
+  const immutableManifest = await verifyImmutableReleaseSource(options.repositoryRoot);
+  if (canonicalPiArtifactSelection(assets) === 'included' && !immutableManifest) {
     await verifyPiExtensionArtifact(options.repositoryRoot);
   }
   const staging = await mkdtemp(path.join(tmpdir(), 'mpx-current-release-'));
@@ -792,6 +830,25 @@ async function withCurrentReleaseSource<T>(
             await mkdir(path.dirname(target), { recursive: true });
             await copyFile(path.join(source, ...entry.path.split('/')), target);
           }
+        }
+      }
+      if (immutableManifest) {
+        const expectedFiles = immutableManifest.files.filter((file) =>
+          assets.some((asset) => {
+            const relative = path.relative(
+              path.resolve(options.repositoryRoot, asset),
+              path.resolve(options.repositoryRoot, file.path),
+            );
+            return (
+              relative !== '..' &&
+              !relative.startsWith(`..${path.sep}`) &&
+              !path.isAbsolute(relative)
+            );
+          }),
+        );
+        const stagedManifest = await buildReleaseManifest(staging);
+        if (canonicalJson(stagedManifest.files) !== canonicalJson(expectedFiles)) {
+          fail('INSTALL_RELEASE_COPY_DRIFT', 'Staged release differs from verified source.');
         }
       }
       return action(staging);

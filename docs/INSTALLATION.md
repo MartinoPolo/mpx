@@ -6,7 +6,19 @@ Configure `%APPDATA%/mpx/config.json`, set the required `MPX_*` machine roots, t
 mpx setup
 ```
 
-`mpx setup` builds, validates, publishes, selects, and strictly verifies an immutable release. Rerunning it is the supported idempotent repair and upgrade path.
+`mpx setup` validates and repairs the currently installed immutable release. It does not build changes from the directory where you run it. Installed releases are checked against their complete content-addressed manifest without requiring development dependencies.
+
+## Install changes from the Windows checkout
+
+From the MPX repository in Git Bash, run:
+
+```bash
+pnpm run setup
+```
+
+This builds and verifies the Pi extension, bundles the CLI, then publishes, selects, and strictly verifies the new immutable release. A failed build stops before installation. The setup wrapper reads missing MPX values from your existing Windows user environment; it does not add or persist environment variables. Repository dependencies must already be installed (`pnpm install` for a fresh checkout).
+
+Use `pnpm run setup`, not `pnpm setup`: the latter is pnpm's own shell-configuration command. After setup succeeds, restart your MPX runtime to load the new release. Native account data and credentials remain untouched.
 
 ## Ownership and safety
 

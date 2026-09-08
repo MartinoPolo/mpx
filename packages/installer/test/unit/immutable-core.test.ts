@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -76,6 +76,21 @@ async function writePiExtensionArtifact(repositoryRoot: string): Promise<string>
     })}\n`,
   );
   return artifact;
+}
+
+async function dependencyFreeInstalledRelease(): Promise<{
+  releaseRoot: string;
+  cleanup: () => Promise<void>;
+}> {
+  const root = await temporary(),
+    source = path.join(root, 'source'),
+    appsRoot = path.join(root, 'apps');
+  await writePiExtensionArtifact(source);
+  const manifest = await publishRelease({ sourceDirectory: source, appsRoot });
+  return {
+    releaseRoot: path.join(appsRoot, 'mpx', 'releases', manifest.releaseKey),
+    cleanup: () => rm(root, { recursive: true, force: true }),
+  };
 }
 
 describe('immutable installer core', () => {
@@ -236,6 +251,84 @@ describe('immutable installer core', () => {
       await rm(sibling, { recursive: true, force: true });
     }
   });
+
+  it('accepts a fully inventoried installed release without development dependencies', async () => {
+    const installed = await dependencyFreeInstalledRelease();
+    try {
+      const manifest = await buildCurrentReleaseManifest({
+        repositoryRoot: installed.releaseRoot,
+        assetPaths: ['runtimes/pi/extensions/dist/package'],
+      });
+      expect(manifest.files.map((file) => file.path)).toContain(
+        'runtimes/pi/extensions/dist/package/mpx-extension.mjs',
+      );
+    } finally {
+      await installed.cleanup();
+    }
+  });
+
+  it.each(['missing', 'malformed', 'digest', 'inventory'] as const)(
+    'rejects an installed release with %s manifest metadata',
+    async (mutation) => {
+      const installed = await dependencyFreeInstalledRelease();
+      try {
+        const manifestPath = path.join(installed.releaseRoot, 'release-manifest.json');
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+        await rm(manifestPath);
+        if (mutation === 'malformed') {
+          await writeFile(manifestPath, '{');
+        } else if (mutation !== 'missing') {
+          if (mutation === 'digest') {
+            manifest.releaseKey = '0'.repeat(64);
+          } else {
+            manifest.files = [];
+          }
+          await writeFile(manifestPath, JSON.stringify(manifest));
+        }
+        await expect(
+          buildCurrentReleaseManifest({ repositoryRoot: installed.releaseRoot }),
+        ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
+      } finally {
+        await installed.cleanup();
+      }
+    },
+  );
+
+  it.each(['modified', 'missing', 'added', 'symlink'] as const)(
+    'rejects an installed release with a %s inventory entry',
+    async (mutation) => {
+      const installed = await dependencyFreeInstalledRelease();
+      try {
+        const artifact = path.join(
+          installed.releaseRoot,
+          'runtimes',
+          'pi',
+          'extensions',
+          'dist',
+          'package',
+        );
+        if (mutation === 'modified') {
+          await writeFile(path.join(artifact, 'mpx-extension.mjs'), 'tampered\n');
+        } else if (mutation === 'missing') {
+          await rm(path.join(artifact, 'mpx-extension.mjs'));
+        } else if (mutation === 'added') {
+          await writeFile(path.join(artifact, 'added.txt'), 'unowned\n');
+        } else {
+          const target = path.join(installed.releaseRoot, 'link-target');
+          await mkdir(target);
+          await symlink(target, path.join(artifact, 'unsafe-link'), 'junction');
+        }
+        await expect(
+          buildCurrentReleaseManifest({
+            repositoryRoot: installed.releaseRoot,
+            assetPaths: ['runtimes/pi/extensions/dist/package'],
+          }),
+        ).rejects.toMatchObject({ code: 'INSTALL_RELEASE_ARTIFACT_INVALID' });
+      } finally {
+        await installed.cleanup();
+      }
+    },
+  );
 
   it('includes the complete canonically verified Pi extension artifact in the release manifest', async () => {
     const isolated = await isolatedCanonicalRepository();
