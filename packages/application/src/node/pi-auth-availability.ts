@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { Buffer } from 'node:buffer';
 import { MpxError } from '@mpx/core';
+import { ExecutionError } from '@mpx/executors';
 export interface PiAuthVerifier {
   verify(root: string): Promise<void>;
 }
@@ -63,6 +64,14 @@ export class PiAuthAvailabilityProbe implements PiAuthVerifier {
     } catch (error) {
       if (error instanceof MpxError) {
         throw error;
+      }
+      if (error instanceof ExecutionError) {
+        throw new MpxError({
+          code: error.code,
+          message: error.message,
+          retryable: false,
+          ...(error.details ? { details: error.details } : {}),
+        });
       }
       throw unavailable('Pi OAuth availability could not be verified.');
     }

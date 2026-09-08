@@ -475,6 +475,20 @@ async function absoluteRoots(environment: NodeJS.ProcessEnv): Promise<readonly s
   await include(path.dirname(process.execPath));
   return [...roots];
 }
+async function canonicalHomeDirectory(environment: NodeJS.ProcessEnv): Promise<string | undefined> {
+  if (process.platform !== 'win32') {
+    return undefined;
+  }
+  const value = environment.USERPROFILE ?? environment.HOME;
+  if (!value || !path.win32.isAbsolute(value)) {
+    return undefined;
+  }
+  const stat = await lstat(value).catch(() => undefined);
+  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
+    return undefined;
+  }
+  return realpath(value).catch(() => undefined);
+}
 async function inspectExecutable(file: string): Promise<FileInspection> {
   const stat = await lstat(file);
   if (stat.isSymbolicLink() || !stat.isFile()) {
@@ -522,13 +536,18 @@ export async function resolveTrustedRuntimeExecutable(input: {
       environment: input.environment,
     });
   }
+  const [trustedRoots, homeDirectory] = await Promise.all([
+    absoluteRoots(input.environment),
+    canonicalHomeDirectory(input.environment),
+  ]);
   return locateTrustedExecutable({
     candidates: [candidate],
     projectRoot: input.cwd,
-    trustedRoots: await absoluteRoots(input.environment),
+    trustedRoots,
     nodeExecutable: process.execPath,
     platform: process.platform,
     ...(input.runtime === 'pi' ? { knownWrapper: 'pi-fnm' as const } : {}),
+    ...(homeDirectory ? { homeDirectory } : {}),
     inspect: inspectExecutable,
   });
 }

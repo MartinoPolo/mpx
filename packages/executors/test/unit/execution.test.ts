@@ -631,6 +631,79 @@ describe('trust and privacy boundaries', () => {
     });
   });
 
+  it('admits only the exact running Windows FNM Pi installation when the home directory is the project root', async () => {
+    const home = 'C:/Users/snapy';
+    const directory = `${home}/AppData/Roaming/fnm/node-versions/v22/installation`;
+    const wrapper = `#!/bin/sh\nbasedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")\nexec "$basedir/node" "$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" "$@"\n`;
+    const cli = `${directory}/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js`;
+    const files = new Map<string, { realpath: string; content?: string }>([
+      [`${directory}/pi`, { realpath: `${directory}/pi`, content: wrapper }],
+      [`${directory}/node.exe`, { realpath: `${directory}/node.exe` }],
+      [cli, { realpath: cli }],
+    ]);
+    const resolve = (overrides: Partial<Parameters<typeof locateTrustedExecutable>[0]> = {}) =>
+      locateTrustedExecutable({
+        candidates: [`${directory}/pi`],
+        projectRoot: home,
+        homeDirectory: home,
+        trustedRoots: [`${home}/AppData/Roaming/fnm`],
+        nodeExecutable: `${directory}/node.exe`,
+        platform: 'win32',
+        knownWrapper: 'pi-fnm',
+        inspect: async (file) => {
+          const entry = files.get(file);
+          if (!entry) {
+            throw new Error('missing');
+          }
+          return { file: true, ...entry };
+        },
+        ...overrides,
+      });
+
+    await expect(resolve()).resolves.toEqual({
+      executable: `${directory}/node.exe`,
+      argvPrefix: [cli],
+    });
+
+    const rejectExistingCandidate = async (candidate: string, content?: string) =>
+      expect(
+        resolve({
+          candidates: [candidate],
+          inspect: async (file) => {
+            if (file === candidate) {
+              return { file: true, realpath: file, ...(content ? { content } : {}) };
+            }
+            const entry = files.get(file);
+            if (!entry) {
+              throw new Error('missing');
+            }
+            return { file: true, ...entry };
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'TRUSTED_EXECUTABLE_NOT_FOUND' });
+    await rejectExistingCandidate(`${directory}/pi`); // binary named pi
+    await rejectExistingCandidate(`${directory}/arbitrary.js`, 'console.log("not Pi")');
+    await rejectExistingCandidate(`${directory}/pi`, `${wrapper}echo forged\n`);
+    await expect(resolve({ projectRoot: directory })).rejects.toMatchObject({
+      code: 'TRUSTED_EXECUTABLE_NOT_FOUND',
+    });
+    await expect(resolve({ nodeExecutable: `${directory}/other-node.exe` })).rejects.toMatchObject({
+      code: 'TRUSTED_EXECUTABLE_NOT_FOUND',
+    });
+
+    files.set(`${directory}/node`, { realpath: `${directory}/node` });
+    await expect(resolve()).rejects.toMatchObject({ code: 'TRUSTED_EXECUTABLE_NOT_FOUND' });
+    files.delete(`${directory}/node`);
+    files.set(cli, { realpath: `${home}/escaped/cli.js` });
+    await expect(resolve()).rejects.toMatchObject({ code: 'TRUSTED_EXECUTABLE_NOT_FOUND' });
+    files.set(cli, { realpath: cli });
+    files.set(`${directory}/node.exe`, { realpath: `${home}/escaped/node.exe` });
+    await expect(resolve()).rejects.toMatchObject({ code: 'TRUSTED_EXECUTABLE_NOT_FOUND' });
+    files.set(`${directory}/node.exe`, { realpath: `${directory}/node.exe` });
+    files.set(`${directory}/pi`, { realpath: `${directory}/forged/pi`, content: wrapper });
+    await expect(resolve()).rejects.toMatchObject({ code: 'TRUSTED_EXECUTABLE_NOT_FOUND' });
+  });
+
   it('rejects an accepted Windows FNM Pi wrapper when node siblings conflict', async () => {
     const wrapper = `#!/bin/sh\nbasedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")\nexec "$basedir/node" "$basedir/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" "$@"\n`;
     await expect(
@@ -1084,6 +1157,9 @@ describe('trust and privacy boundaries', () => {
     'MPX_COMPILED_AGENTS_DIR',
     'MPX_IDENTITY',
     'MPX_MODE',
+    'MPX_SKILL_POLICY',
+    'MPX_REPOSITORY_PROVIDER',
+    'MPX_ISSUES_PROVIDER',
   ])('preserves trusted %s skill context without accepting ambient authority', (key) => {
     expect(sanitizedEnvironment({ [key]: 'ambient' }, {})).toEqual({});
     expect(
@@ -1131,6 +1207,9 @@ describe('trust and privacy boundaries', () => {
               [otherVariable]: 'C:/crossed',
               TOKEN: 'secret',
               ARBITRARY: 'drop',
+              MPX_SKILL_POLICY: 'developer',
+              MPX_REPOSITORY_PROVIDER: 'gitlab',
+              MPX_ISSUES_PROVIDER: 'kanbanflow',
             },
           };
         },
@@ -1162,7 +1241,12 @@ describe('trust and privacy boundaries', () => {
       });
 
       expect(requests[0]?.environment).toEqual(
-        expect.objectContaining({ [selectedVariable]: root }),
+        expect.objectContaining({
+          [selectedVariable]: root,
+          MPX_SKILL_POLICY: 'developer',
+          MPX_REPOSITORY_PROVIDER: 'gitlab',
+          MPX_ISSUES_PROVIDER: 'kanbanflow',
+        }),
       );
       expect(requests[0]?.environment).toEqual(
         expect.objectContaining(

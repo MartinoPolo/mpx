@@ -842,10 +842,13 @@ export async function locateTrustedExecutable(input: {
   nodeExecutable: string;
   platform: NodeJS.Platform;
   knownWrapper?: 'pi-fnm';
+  /** Canonical home directory. Enables only the verified Windows FNM Pi installation exception. */
+  homeDirectory?: string;
   inspect(file: string): Promise<FileInspection>;
 }): Promise<{ executable: string; argvPrefix: readonly string[] }> {
   const project = canonicalPath(input.projectRoot);
   const roots = input.trustedRoots.map(canonicalPath);
+  const home = input.homeDirectory ? canonicalPath(input.homeDirectory) : undefined;
   for (const candidate of input.candidates) {
     if (!path.win32.isAbsolute(candidate) && !path.posix.isAbsolute(candidate)) {
       continue;
@@ -859,7 +862,19 @@ export async function locateTrustedExecutable(input: {
       continue;
     }
     const real = canonicalPath(inspected.realpath);
-    if (within(real, project) || !roots.some((root) => within(real, root))) {
+    const projectBlocked = within(real, project);
+    const possibleHomeFnmWrapper =
+      projectBlocked &&
+      input.platform === 'win32' &&
+      input.knownWrapper === 'pi-fnm' &&
+      home !== undefined &&
+      project === home &&
+      real === canonicalPath(candidate) &&
+      path.win32.basename(real).toLowerCase() === 'pi' &&
+      inspected.content !== undefined &&
+      Buffer.byteLength(inspected.content) <= 4096 &&
+      knownFnmPiWrapper(inspected.content);
+    if ((projectBlocked && !possibleHomeFnmWrapper) || !roots.some((root) => within(real, root))) {
       continue;
     }
     const base = path.win32.basename(real).toLowerCase();
@@ -916,19 +931,39 @@ export async function locateTrustedExecutable(input: {
         ),
         input.inspect(cliFile).catch(() => undefined),
       ]);
-      const trustedNodes = nodeInspections.filter(
-        ({ file, inspection }) =>
+      const currentNode = canonicalPath(input.nodeExecutable);
+      const currentNodeInspection = await input
+        .inspect(input.nodeExecutable)
+        .catch(() => undefined);
+      const verifiedCurrentNode =
+        path.win32.isAbsolute(input.nodeExecutable) &&
+        currentNodeInspection?.file === true &&
+        canonicalPath(currentNodeInspection.realpath) === currentNode &&
+        roots.some((root) => within(currentNode, root));
+      const homeInstallException =
+        possibleHomeFnmWrapper &&
+        verifiedCurrentNode &&
+        path.win32.dirname(real) === path.win32.dirname(currentNode);
+      const existingNodeSiblings = nodeInspections.filter(({ inspection }) => inspection?.file);
+      const trustedNodes = nodeInspections.filter(({ file, inspection }) => {
+        const canonicalFile = canonicalPath(file);
+        return (
           inspection?.file &&
-          canonicalPath(inspection.realpath) === canonicalPath(file) &&
-          roots.some((root) => within(canonicalPath(file), root)) &&
-          !within(canonicalPath(file), project),
-      );
+          canonicalPath(inspection.realpath) === canonicalFile &&
+          roots.some((root) => within(canonicalFile, root)) &&
+          (!within(canonicalFile, project) ||
+            (homeInstallException && canonicalFile === currentNode))
+        );
+      });
+      const canonicalCli = canonicalPath(cliFile);
       if (
         trustedNodes.length !== 1 ||
+        (homeInstallException && existingNodeSiblings.length !== 1) ||
+        (homeInstallException && canonicalPath(trustedNodes[0]!.file) !== currentNode) ||
         !cliInspection?.file ||
-        canonicalPath(cliInspection.realpath) !== canonicalPath(cliFile) ||
-        !roots.some((root) => within(canonicalPath(cliFile), root)) ||
-        within(canonicalPath(cliFile), project)
+        canonicalPath(cliInspection.realpath) !== canonicalCli ||
+        !roots.some((root) => within(canonicalCli, root)) ||
+        (within(canonicalCli, project) && !homeInstallException)
       ) {
         continue;
       }
@@ -973,6 +1008,9 @@ const TRUSTED_LAUNCH_ENV_ALLOW = new Set([
   'MPX_COMPILED_AGENTS_DIR',
   'MPX_IDENTITY',
   'MPX_MODE',
+  'MPX_SKILL_POLICY',
+  'MPX_REPOSITORY_PROVIDER',
+  'MPX_ISSUES_PROVIDER',
   'MPX_SESSION_LIFECYCLE_BINDING_ID',
   'MPX_SESSION_LIFECYCLE_EVENT_DIR',
 ]);
@@ -984,6 +1022,7 @@ export function sanitizedEnvironment(
   for (const [key, value] of Object.entries(source)) {
     if (
       value !== undefined &&
+      !TRUSTED_LAUNCH_ENV_ALLOW.has(key) &&
       (ENV_ALLOW.has(key) ||
         /^MPX_(?:LAUNCH|CONTEXT|PROJECT|REPOSITORY|WORKSPACE|RUNTIME)_/u.test(key))
     ) {

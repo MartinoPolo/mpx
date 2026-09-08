@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MpxError } from '@mpx/core';
+import { ExecutionError } from '@mpx/executors';
 import { PiAuthAvailabilityProbe } from '../../src/node/pi-auth-availability.js';
 
 describe('PiAuthAvailabilityProbe', () => {
@@ -69,6 +70,21 @@ describe('PiAuthAvailabilityProbe', () => {
     });
 
     await expect(probe.verify('C:/accounts/work')).rejects.toBe(failure);
+  });
+
+  it('preserves executor trust failures as their own MpxError code', async () => {
+    const probe = new PiAuthAvailabilityProbe({
+      resolveTrustedExecutable: async () => {
+        throw new ExecutionError('TRUSTED_EXECUTABLE_NOT_FOUND', 'No trusted executable.');
+      },
+      run: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+      cwd: 'C:/outside',
+      environment: {},
+    });
+
+    const error = await probe.verify('C:/accounts/work').catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(MpxError);
+    expect(error).toMatchObject({ code: 'TRUSTED_EXECUTABLE_NOT_FOUND' });
   });
 
   it('rejects exact-shaped auth output that is not ready', async () => {
