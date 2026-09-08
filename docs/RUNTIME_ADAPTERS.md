@@ -34,6 +34,13 @@ Claude receives an immutable plugin projection with compiled skills and agents, 
 
 Claude represents `name-only` with a neutral description and `explicit-only` with `disable-model-invocation`. Integrity checks run at the earliest supported native boundaries, but they are not an atomic interceptor around Claude's own skill-file read.
 
+## Host environment
+
+Host launches preserve `ProgramData` for Windows OpenSSH. Dropping it can make `ssh.exe` and
+`ssh-add.exe` exit before diagnostic output, including for a local version check. Preserve this OS
+path without forwarding ambient SSH command overrides or authentication-agent settings through the
+launch environment allowlist.
+
 ## Executor status
 
 Windows host execution is the accepted compatibility path and is not isolation. Whole-agent Docker execution is unavailable: launch and resume fail with `EXECUTOR_UNAVAILABLE` and never fall back to host. Session continuation belongs to the lifecycle/session layer, not projection generation.

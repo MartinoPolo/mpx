@@ -1064,6 +1064,18 @@ describe('trust and privacy boundaries', () => {
     });
   });
 
+  it.each(['ProgramData', 'PROGRAMDATA'])(
+    'preserves %s for Windows OpenSSH startup without forwarding SSH overrides',
+    (key) => {
+      expect(
+        sanitizedEnvironment(
+          { [key]: 'C:/ProgramData', GIT_SSH_COMMAND: 'untrusted', SSH_AUTH_SOCK: 'ambient' },
+          {},
+        ),
+      ).toEqual({ [key]: 'C:/ProgramData' });
+    },
+  );
+
   it.each([
     'MPX_RUNTIME',
     'MPX_ACTIVE_CONTENT_ROOT',

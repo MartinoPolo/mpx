@@ -958,6 +958,9 @@ const ENV_ALLOW = new Set([
   'USERPROFILE',
   'APPDATA',
   'LOCALAPPDATA',
+  // Windows OpenSSH reads ProgramData before initializing diagnostic output.
+  'ProgramData',
+  'PROGRAMDATA',
   'TERM',
   'COLORTERM',
   'WT_SESSION',
