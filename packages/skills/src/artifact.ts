@@ -16,6 +16,7 @@ import {
   type RuntimeSkillArtifact,
   type RuntimeSkillEntry,
 } from './contracts.js';
+import { skillResolutionKey } from './identity.js';
 import { isProjectSkill, skillSourceHash } from './inventory.js';
 
 function artifactFileMap(entries: readonly RuntimeSkillEntry[]): unknown[] {
@@ -59,7 +60,7 @@ export function createRuntimeSkillArtifact(
   },
 ): RuntimeSkillArtifact {
   const manifest = parseResolvedSkillManifestV4(manifestValue);
-  const source = new Map(catalog.map((skill) => [skill.identity, skill]));
+  const source = new Map(catalog.map((skill) => [skillResolutionKey(skill), skill]));
   if (source.size !== manifest.decisions.length) {
     catalogError(
       'STALE_CATALOG',
@@ -118,9 +119,10 @@ function runtimeEntry(
 ): RuntimeSkillEntry {
   const project = isProjectSkill(skill);
   return {
-    identity: skill.identity,
+    identity: skillResolutionKey(skill),
     publicName:
-      mapping[skill.identity] ?? (project ? `/${skill.identity}` : `/mpx:${skill.identity}`),
+      mapping[skillResolutionKey(skill)] ??
+      (project ? `/skill:${skill.identity}` : `/mpx:${skill.identity}`),
     packs: project ? [] : [...skill.skillPacks].sort(),
     exposure: decision.exposure,
     metadataHash: decision.metadataHash,
@@ -156,10 +158,11 @@ function expectedRuntimeEntries(
 ): RuntimeSkillEntry[] {
   const source = new Map<string, CatalogSkill>();
   for (const skill of catalog) {
-    if (source.has(skill.identity)) {
-      tampered('duplicate-catalog-identity', skill.identity);
+    const identity = skillResolutionKey(skill);
+    if (source.has(identity)) {
+      tampered('duplicate-catalog-identity', identity);
     }
-    source.set(skill.identity, skill);
+    source.set(identity, skill);
   }
   if (source.size !== manifest.decisions.length) {
     tampered('catalog-membership');
@@ -302,7 +305,7 @@ export function validateArtifact(
       throw new Error('artifact hash mismatch');
     }
     if (catalog) {
-      const source = new Map(catalog.map((skill) => [skill.identity, skill]));
+      const source = new Map(catalog.map((skill) => [skillResolutionKey(skill), skill]));
       for (const entry of artifact.entries) {
         const skill = source.get(entry.identity);
         if (

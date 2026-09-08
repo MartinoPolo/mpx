@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { parseResolvedSkillManifestV4 } from '@mpx/runtime-contracts';
+import { bareSkillIdentity, parseResolvedSkillManifestV4 } from '@mpx/runtime-contracts';
 import {
   SkillCatalogError,
   catalogError,
@@ -94,11 +94,18 @@ export async function loadSkillBody(request: SkillBodyRequest): Promise<LoadedSk
       );
     }
   } else {
+    const bareIdentity = bareSkillIdentity(entry.identity, 'project');
+    if (!bareIdentity) {
+      catalogError(
+        'SKILL_PROVENANCE_MISMATCH',
+        `skill '${request.identity}' has invalid project identity`,
+      );
+    }
     const expectedSourcePath = path.join(
       entry.source.projectRoot,
       '.agents',
       'skills',
-      entry.identity,
+      bareIdentity,
       'SKILL.md',
     );
     if (!samePath(entry.source.path, expectedSourcePath)) {

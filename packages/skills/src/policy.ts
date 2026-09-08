@@ -6,6 +6,7 @@ import {
   type ResolveOptions,
   type SkillPack,
 } from './contracts.js';
+import { skillResolutionKey } from './identity.js';
 import { isProjectSkill } from './inventory.js';
 
 function effectiveExposure(
@@ -49,14 +50,15 @@ export function policyExposure(
   options: ResolveOptions,
 ): { exposure: Exposure; source: string } {
   const policy = options.skillPolicyConfig.skillExposure;
-  const selectedPolicyExposure = policy.skills?.[skill.identity] ?? policy.default;
+  const resolutionKey = skillResolutionKey(skill);
+  const selectedPolicyExposure = policy.skills?.[resolutionKey] ?? policy.default;
   if (isProjectSkill(skill)) {
     const scopeExposure =
-      options.contentScopeExposure?.skills?.[skill.identity] ??
+      options.contentScopeExposure?.skills?.[resolutionKey] ??
       options.contentScopeExposure?.default ??
       'full';
     const projectExposure =
-      options.projectExposure?.skills?.[skill.identity] ??
+      options.projectExposure?.skills?.[resolutionKey] ??
       options.projectExposure?.default ??
       'full';
     return {

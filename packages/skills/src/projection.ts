@@ -1,4 +1,6 @@
+import { isPathWithinRoot } from '@mpx/core';
 import { createHash } from 'node:crypto';
+import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { RuntimeBinding, RuntimeSkillArtifactReferenceV4 } from '@mpx/runtime-contracts';
 import {
@@ -12,6 +14,7 @@ import {
   type RuntimeSkillArtifact,
 } from './contracts.js';
 import { validateArtifact, verifyRuntimeSkillArtifact } from './artifact.js';
+import { skillResolutionKey } from './identity.js';
 import { directoryDigest, enumerateSkillDirectory } from './inventory.js';
 import { loadSkillBody, type LoadedSkillBody, type SkillInvocation } from './loader.js';
 import { rankSearchCandidates } from './search-ranking.js';
@@ -43,7 +46,7 @@ export function humanSkillDetail(
   const entry = artifact.entries.find(
     (x) => x.identity === identity && x.permissions.humanInvocation,
   );
-  const skill = catalog.find((x) => x.identity === identity);
+  const skill = catalog.find((candidate) => skillResolutionKey(candidate) === identity);
   return entry && skill
     ? { identity, publicName: entry.publicName, description: skill.description }
     : undefined;
@@ -111,6 +114,8 @@ export interface SkillProjectionPlan {
   readonly manifestKey: string;
   readonly artifactReference: RuntimeSkillArtifactReferenceV4;
   readonly entries: readonly SkillProjectionPlanEntry[];
+  /** Verified support files shared only by included managed project skills. */
+  readonly projectSharedFiles?: readonly SkillProjectionFile[];
   readonly initialModelContext: readonly SkillProjectionDisclosure[];
   readonly humanContext: readonly SkillProjectionDisclosure[];
   readonly modelSearchContext: readonly SkillProjectionDisclosure[];
@@ -153,6 +158,126 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+const samePath = (left: string, right: string): boolean => {
+  const normalize = (value: string): string => {
+    const resolved = path.resolve(value);
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return normalize(left) === normalize(right);
+};
+
+type ProjectArtifactEntry = RuntimeSkillArtifact['entries'][number] & {
+  source: Extract<RuntimeSkillArtifact['entries'][number]['source'], { kind: 'project' }>;
+};
+
+type DirectorySnapshot = Readonly<{
+  path: string;
+  stat: Awaited<ReturnType<typeof lstat>>;
+  real: string;
+}>;
+
+function sameFileIdentity(
+  left: Awaited<ReturnType<typeof lstat>>,
+  right: Awaited<ReturnType<typeof lstat>>,
+): boolean {
+  return (
+    left.isDirectory() === right.isDirectory() &&
+    left.isSymbolicLink() === right.isSymbolicLink() &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.birthtimeMs === right.birthtimeMs
+  );
+}
+
+async function snapshotProjectSharedFiles(
+  projectEntries: readonly ProjectArtifactEntry[],
+): Promise<readonly SkillProjectionFile[] | undefined> {
+  if (!projectEntries.length) {
+    return undefined;
+  }
+  const first = projectEntries[0]!.source;
+  if (
+    projectEntries.some(
+      (entry) =>
+        !samePath(entry.source.projectRoot, first.projectRoot) ||
+        !samePath(entry.source.realProjectRoot, first.realProjectRoot),
+    )
+  ) {
+    return catalogError(
+      'SKILL_PATH_INVALID',
+      'included project skills must share one verified project root',
+    );
+  }
+  const ancestors = [
+    first.projectRoot,
+    path.join(first.projectRoot, '.agents'),
+    path.join(first.projectRoot, '.agents', 'skills'),
+  ];
+  const sharedRoot = path.join(ancestors[2]!, 'shared');
+  try {
+    await lstat(sharedRoot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    return catalogError('SKILL_PATH_INVALID', 'project shared support is not inventory-safe');
+  }
+  try {
+    const directories = [...ancestors, sharedRoot];
+    const snapshots: DirectorySnapshot[] = [];
+    for (const candidate of directories) {
+      const before = await lstat(candidate);
+      if (!before.isDirectory() || before.isSymbolicLink()) {
+        throw new Error('unsafe project shared directory');
+      }
+      const real = await realpath(candidate);
+      const after = await lstat(candidate);
+      if (!sameFileIdentity(before, after)) {
+        throw new Error('unsafe project shared directory');
+      }
+      snapshots.push({ path: candidate, stat: after, real });
+    }
+    const currentProjectRoot = snapshots[0]!.real;
+    if (
+      !samePath(currentProjectRoot, first.realProjectRoot) ||
+      snapshots.slice(1).some((snapshot) => !isPathWithinRoot(snapshot.real, currentProjectRoot))
+    ) {
+      throw new Error('unsafe project shared directory');
+    }
+    const files = await enumerateSkillDirectory(sharedRoot);
+    for (const snapshot of snapshots) {
+      const [current, currentReal] = await Promise.all([
+        lstat(snapshot.path),
+        realpath(snapshot.path),
+      ]);
+      if (
+        !current.isDirectory() ||
+        current.isSymbolicLink() ||
+        !sameFileIdentity(snapshot.stat, current) ||
+        !samePath(snapshot.real, currentReal)
+      ) {
+        throw new Error('unsafe project shared directory');
+      }
+    }
+    if (files.some((file) => path.posix.basename(file.relativePath).toLowerCase() === 'skill.md')) {
+      return catalogError(
+        'SKILL_PATH_INVALID',
+        'project shared support cannot contain a SKILL.md entry',
+      );
+    }
+    return files.map((file) => ({
+      relativePath: file.relativePath,
+      bytes: Uint8Array.from(file.bytes),
+      sha256: sha256(file.bytes),
+    }));
+  } catch (error) {
+    if (error instanceof Error && error.name === 'SkillCatalogError') {
+      throw error;
+    }
+    return catalogError('SKILL_PATH_INVALID', 'project shared support is not inventory-safe');
+  }
+}
+
 /** Builds an in-memory, provider-neutral snapshot after strict manifest/artifact/source verification. */
 export async function createSkillProjectionPlan(
   input: SkillProjectionPlanInput,
@@ -164,7 +289,7 @@ export async function createSkillProjectionPlan(
     runtime: input.artifact.runtime,
     mapping,
   });
-  const catalog = new Map(input.catalog.map((skill) => [skill.identity, skill]));
+  const catalog = new Map(input.catalog.map((skill) => [skillResolutionKey(skill), skill]));
   const entries: SkillProjectionPlanEntry[] = [];
   for (const artifactEntry of input.artifact.entries) {
     if (artifactEntry.exposure === 'off') {
@@ -301,12 +426,18 @@ export async function createSkillProjectionPlan(
     });
   }
   entries.sort((a, b) => a.identity.localeCompare(b.identity));
+  const projectSharedFiles = await snapshotProjectSharedFiles(
+    input.artifact.entries.filter(
+      (entry): entry is ProjectArtifactEntry => entry.source.kind === 'project',
+    ),
+  );
   const plan: SkillProjectionPlan = {
     runtime: input.artifact.runtime,
     binding: clone(input.manifest.binding),
     manifestKey: input.artifact.manifestKey,
     artifactReference: clone(input.artifact.reference),
     entries,
+    ...(projectSharedFiles ? { projectSharedFiles } : {}),
     initialModelContext: entries.flatMap((entry) =>
       entry.initialContext ? [entry.initialContext] : [],
     ),

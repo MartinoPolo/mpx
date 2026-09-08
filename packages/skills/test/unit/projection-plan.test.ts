@@ -32,6 +32,44 @@ const thrownCode = (action: () => unknown) => {
   return undefined;
 };
 
+async function projectFixture(
+  options: { name?: string; sharedFile?: string; sharedSkill?: boolean } = {},
+) {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-project-plan-'));
+  roots.push(root);
+  const skillsRoot = path.join(root, '.agents', 'skills');
+  const name = options.name ?? 'commit';
+  await mkdir(path.join(skillsRoot, name), { recursive: true });
+  await writeFile(
+    path.join(skillsRoot, name, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: Project ${name}\nmetadata:\n  mpx:\n    projectExposure: full\n---\nProject body.\n`,
+  );
+  if (options.sharedFile || options.sharedSkill) {
+    await mkdir(path.join(skillsRoot, 'shared'), { recursive: true });
+  }
+  if (options.sharedFile) {
+    await writeFile(path.join(skillsRoot, 'shared', options.sharedFile), 'shared support');
+  }
+  if (options.sharedSkill) {
+    await writeFile(
+      path.join(skillsRoot, 'shared', 'SKILL.md'),
+      '---\nname: shared\ndescription: Native shared\n---\nNative body.\n',
+    );
+  }
+  const inventory = await inventoryProjectSkills(root);
+  const catalog = inventory.skills;
+  const manifest = resolveManifest(catalog, {
+    repositoryId: 'repo',
+    contentScope: 'work',
+    identity: 'work',
+    skillPolicy: 'developer',
+    skillPolicyConfig: { skillExposure: { default: 'full' } },
+    enabledPacks: [],
+  });
+  const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
+  return { root, skillsRoot, catalog, manifest, artifact };
+}
+
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-plan-'));
   roots.push(root);
@@ -309,7 +347,121 @@ describe('process-local skill projection plans', () => {
     ).rejects.toSatisfy((e) => code(e) === 'SKILL_CONTENT_STALE');
   });
 
+  it('snapshots project shared support and covers it with plan tamper verification', async () => {
+    const value = await projectFixture({ sharedFile: 'WRITING.md' });
+    const plan = await createSkillProjectionPlan({
+      canonicalRoot: path.join(value.root, 'unused'),
+      manifest: value.manifest,
+      artifact: value.artifact,
+      catalog: value.catalog,
+    });
+    expect(plan.projectSharedFiles?.map((file) => file.relativePath)).toEqual(['WRITING.md']);
+    plan.projectSharedFiles![0]!.bytes[0] = 0;
+    expect(() => verifySkillProjectionPlan(plan)).toThrowError(/SKILL_PROJECTION_PLAN_CHANGED/u);
+  });
+
+  it('does not collect project support without an included project entry or a shared folder', async () => {
+    const canonical = await fixture();
+    const canonicalPlan = await createSkillProjectionPlan({
+      canonicalRoot: canonical.root,
+      manifest: canonical.manifest,
+      artifact: canonical.artifact,
+      catalog: canonical.catalog,
+    });
+    const project = await projectFixture();
+    const projectPlan = await createSkillProjectionPlan({
+      canonicalRoot: path.join(project.root, 'unused'),
+      manifest: project.manifest,
+      artifact: project.artifact,
+      catalog: project.catalog,
+    });
+    expect(canonicalPlan.projectSharedFiles).toBeUndefined();
+    expect(projectPlan.projectSharedFiles).toBeUndefined();
+  });
+
+  it('fails closed when included project skills claim different verified roots', async () => {
+    const first = await projectFixture({ name: 'commit' });
+    const second = await projectFixture({ name: 'review' });
+    const catalog = [...first.catalog, ...second.catalog];
+    const manifest = resolveManifest(catalog, {
+      repositoryId: 'repo',
+      contentScope: 'work',
+      identity: 'work',
+      skillPolicy: 'test',
+      skillPolicyConfig: { skillExposure: { default: 'full' } },
+      enabledPacks: [],
+    });
+    const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
+    await expect(
+      createSkillProjectionPlan({
+        canonicalRoot: path.join(first.root, 'unused'),
+        manifest,
+        artifact,
+        catalog,
+      }),
+    ).rejects.toMatchObject({
+      diagnostics: [
+        {
+          code: 'SKILL_PATH_INVALID',
+          message: 'included project skills must share one verified project root',
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['exact', { sharedSkill: true }],
+    ['case variant', { sharedFile: 'skill.MD' }],
+  ])(
+    'rejects a %s SKILL.md basename inside project shared support with a stable public diagnostic',
+    async (_label, options) => {
+      const value = await projectFixture(options);
+      await expect(
+        createSkillProjectionPlan({
+          canonicalRoot: path.join(value.root, 'unused'),
+          manifest: value.manifest,
+          artifact: value.artifact,
+          catalog: value.catalog,
+        }),
+      ).rejects.toMatchObject({
+        diagnostics: [
+          {
+            code: 'SKILL_PATH_INVALID',
+            message: 'project shared support cannot contain a SKILL.md entry',
+          },
+        ],
+      });
+    },
+  );
+
   const supportsDirectoryLinks = process.platform === 'win32' || path.sep === '/';
+  it.runIf(supportsDirectoryLinks)(
+    'rejects a linked project shared root without exposing native paths',
+    async () => {
+      const value = await projectFixture({ sharedFile: 'WRITING.md' });
+      const outside = await mkdtemp(path.join(tmpdir(), 'mpx-project-shared-outside-'));
+      roots.push(outside);
+      await rm(path.join(value.skillsRoot, 'shared'), { recursive: true });
+      await symlink(
+        outside,
+        path.join(value.skillsRoot, 'shared'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      await expect(
+        createSkillProjectionPlan({
+          canonicalRoot: path.join(value.root, 'unused'),
+          manifest: value.manifest,
+          artifact: value.artifact,
+          catalog: value.catalog,
+        }),
+      ).rejects.toMatchObject({
+        diagnostics: [
+          { code: 'SKILL_PATH_INVALID', message: 'project shared support is not inventory-safe' },
+        ],
+      });
+    },
+  );
+
   it.runIf(supportsDirectoryLinks)(
     'rejects unsafe linked support directories by exact diagnostic code',
     async () => {

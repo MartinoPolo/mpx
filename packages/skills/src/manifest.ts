@@ -3,11 +3,13 @@ import {
   type ResolvedSkillDecisionV4,
 } from '@mpx/runtime-contracts';
 import {
+  SkillCatalogError,
   digest,
   type CatalogSkill,
   type ResolveOptions,
   type ResolvedManifest,
 } from './contracts.js';
+import { skillResolutionKey } from './identity.js';
 import { isProjectSkill, skillSourceHash } from './inventory.js';
 import { effectiveSkillPacks, policyExposure } from './policy.js';
 
@@ -15,6 +17,30 @@ export function resolveManifest(
   catalog: readonly CatalogSkill[],
   options: ResolveOptions,
 ): ResolvedManifest {
+  const canonicalIdentities = new Set(
+    catalog.filter((skill) => !isProjectSkill(skill)).map((skill) => skill.identity),
+  );
+  const exposureSettings = [
+    ['skillPolicyConfig.skillExposure', options.skillPolicyConfig.skillExposure],
+    ['contentScopeExposure', options.contentScopeExposure],
+    ['projectExposure', options.projectExposure],
+  ] as const;
+  for (const skill of catalog.filter(isProjectSkill)) {
+    if (canonicalIdentities.has(skill.identity)) {
+      continue;
+    }
+    for (const [setting, exposure] of exposureSettings) {
+      if (Object.hasOwn(exposure?.skills ?? {}, skill.identity)) {
+        throw new SkillCatalogError([
+          {
+            code: 'PROJECT_SKILL_POLICY_KEY_INVALID',
+            message: `${setting}.skills['${skill.identity}'] names a canonical skill, but only the project skill exists. Change the key to '${skillResolutionKey(skill)}' to preserve its exposure restriction`,
+            path: skill.sourcePath,
+          },
+        ]);
+      }
+    }
+  }
   const enabled = new Set(effectiveSkillPacks(options));
   const resolution = {
     identity: options.identity,
@@ -32,7 +58,7 @@ export function resolveManifest(
     const off = effective.exposure === 'off';
     const included = packIncluded && !off;
     return {
-      identity: skill.identity,
+      identity: skillResolutionKey(skill),
       included,
       exclusionReasons: [
         ...(!packIncluded ? ['pack-excluded'] : []),
@@ -46,7 +72,7 @@ export function resolveManifest(
       },
       metadataHash: digest({
         resolution,
-        identity: skill.identity,
+        identity: skillResolutionKey(skill),
         description: skill.description,
         triggers: isProjectSkill(skill) ? null : (skill.triggers ?? null),
         origin: isProjectSkill(skill)

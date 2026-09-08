@@ -47,7 +47,11 @@ export interface Diagnostic {
 }
 export class SkillCatalogError extends Error {
   constructor(public readonly diagnostics: readonly Diagnostic[]) {
-    super(diagnostics.map((item) => `${item.code}: ${item.message}`).join('\n'));
+    super(
+      diagnostics
+        .map((item) => `${item.code}${item.path ? ` [${item.path}]` : ''}: ${item.message}`)
+        .join('\n'),
+    );
     this.name = 'SkillCatalogError';
   }
 }

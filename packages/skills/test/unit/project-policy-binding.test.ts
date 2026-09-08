@@ -58,13 +58,35 @@ describe('project skills in the combined policy artifact', () => {
       const { manifest, artifact } = resolved(catalog, exposure);
       expect(manifest.decisions).toHaveLength(1);
       expect(artifact.entries).toHaveLength(exposure === 'off' ? 0 : 1);
-      expect(humanListSkills(artifact).some((skill) => skill.identity === 'local-review')).toBe(
-        human,
-      );
-      expect(initialModelContext(artifact).some((skill) => skill.identity === 'local-review')).toBe(
-        model,
-      );
+      expect(
+        humanListSkills(artifact).some((skill) => skill.identity === 'skill:local-review'),
+      ).toBe(human);
+      expect(
+        initialModelContext(artifact).some((skill) => skill.identity === 'skill:local-review'),
+      ).toBe(model);
       expect(initialModelContext(artifact)[0]?.description !== undefined).toBe(description);
+    },
+  );
+
+  it.each(['policy', 'scope', 'project'])(
+    'rejects a bare project-only %s override rather than dropping its restriction',
+    async (setting) => {
+      const { catalog } = await fixture();
+      const exposure = { skills: { 'local-review': 'off' as const } };
+      expect(() =>
+        resolveManifest(catalog, {
+          repositoryId: 'sample/app',
+          contentScope: 'work',
+          identity: 'work',
+          skillPolicy: 'policy',
+          enabledPacks: [],
+          skillPolicyConfig: {
+            skillExposure: { default: 'full', ...(setting === 'policy' ? exposure : {}) },
+          },
+          ...(setting === 'scope' ? { contentScopeExposure: exposure } : {}),
+          ...(setting === 'project' ? { projectExposure: exposure } : {}),
+        }),
+      ).toThrow(/PROJECT_SKILL_POLICY_KEY_INVALID.*skill:local-review/su);
     },
   );
 
@@ -98,7 +120,7 @@ describe('project skills in the combined policy artifact', () => {
           manifest,
           artifact,
           runtime: 'pi',
-          identity: 'local-review',
+          identity: 'skill:local-review',
           invocation: 'model',
         })
       ).body,
@@ -110,7 +132,7 @@ describe('project skills in the combined policy artifact', () => {
         manifest,
         artifact,
         runtime: 'pi',
-        identity: 'local-review',
+        identity: 'skill:local-review',
         invocation: 'model',
       }),
     ).rejects.toThrow(/SKILL_DIRECTORY_STALE/u);

@@ -271,7 +271,10 @@ describe('project skill inventory aggregate limits', () => {
         directories(MAX_PROJECT_SKILL_CANDIDATES - 1).map((entry) => entry.name),
       );
       expect(result.diagnostics).toMatchObject([
-        { code: 'PROJECT_SKILL_INVALID', message: 'deterministic runtime collision' },
+        {
+          code: 'PROJECT_SKILL_COLLISION',
+          message: expect.stringContaining("duplicates /skill:skill-0000 from '"),
+        },
       ]);
     } finally {
       some.mockRestore();

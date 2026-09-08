@@ -5,9 +5,12 @@ import path from 'node:path';
 import {
   createRuntimeSkillArtifact,
   doctor,
+  humanSearchSkills,
+  humanSkillDetail,
   initialModelContext,
   inventoryCanonical,
   inventoryProjectSkills,
+  loadSkillBody,
   resolveManifest,
   SkillCatalogError,
   type Exposure,
@@ -95,7 +98,108 @@ describe('skill catalog and v4 resolution', () => {
       path.join(skillRoot, 'SKILL.md'),
       '---\nname: deploy\ndescription: Deploy safely\nmetadata:\n  mpx:\n    projectExposure: explicit-only\n---\n',
     );
-    expect((await inventoryProjectSkills(root)).diagnostics[0]?.code).toBe('PROJECT_SKILL_INVALID');
+    const invalid = await inventoryProjectSkills(root);
+    expect(invalid.diagnostics[0]?.code).toBe('PROJECT_SKILL_INVALID');
+    const error = new SkillCatalogError(invalid.diagnostics);
+    expect(error.message).toContain(path.join(skillRoot, 'SKILL.md'));
+    expect(error.message).toContain("'explicit-only' requires disable-model-invocation: true");
+    expect(error.message).toContain('Update the frontmatter');
+  });
+
+  it('keeps same-name canonical and managed project skills distinct end to end', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-coexist-'));
+    roots.push(root);
+    const canonicalRoot = path.join(root, 'canonical');
+    const projectRoot = path.join(root, 'project');
+    await mkdir(path.join(canonicalRoot, 'commit'), { recursive: true });
+    await mkdir(path.join(projectRoot, '.agents', 'skills', 'commit'), { recursive: true });
+    await writeFile(
+      path.join(canonicalRoot, 'commit', 'SKILL.md'),
+      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nCANONICAL BODY\n',
+    );
+    await writeFile(
+      path.join(projectRoot, '.agents', 'skills', 'commit', 'SKILL.md'),
+      '---\nname: commit\ndescription: Project commit\ndisable-model-invocation: true\nmetadata:\n  mpx:\n    projectExposure: explicit-only\n---\nPROJECT BODY\n',
+    );
+    const canonical = await inventoryCanonical(canonicalRoot);
+    const project = await inventoryProjectSkills(projectRoot, canonical);
+    expect(project.diagnostics).toEqual([]);
+    expect(project.skills[0]?.identity).toBe('commit');
+    const combined = [...canonical, ...project.skills];
+    const options = {
+      ...base,
+      skillPolicyConfig: {
+        skillExposure: {
+          default: 'full' as const,
+          skills: { commit: 'full' as const, 'skill:commit': 'explicit-only' as const },
+        },
+      },
+    };
+    const manifest = resolveManifest(combined, options);
+    expect(manifest.decisions.map((decision) => decision.identity)).toEqual([
+      'commit',
+      'skill:commit',
+    ]);
+    const artifact = createRuntimeSkillArtifact(manifest, combined, { runtime: 'pi' });
+    expect(artifact.entries.map(({ identity, publicName }) => ({ identity, publicName }))).toEqual([
+      { identity: 'commit', publicName: '/mpx:commit' },
+      { identity: 'skill:commit', publicName: '/skill:commit' },
+    ]);
+    expect(humanSkillDetail(artifact, combined, 'commit')?.description).toBe('Canonical commit');
+    expect(humanSkillDetail(artifact, combined, 'skill:commit')?.description).toBe(
+      'Project commit',
+    );
+    expect(humanSearchSkills(artifact, combined, 'commit').map((item) => item.description)).toEqual(
+      ['Canonical commit', 'Project commit'],
+    );
+    expect(
+      (
+        await loadSkillBody({
+          canonicalRoot,
+          manifest,
+          artifact,
+          runtime: 'pi',
+          identity: 'commit',
+          invocation: 'model',
+        })
+      ).body,
+    ).toBe('CANONICAL BODY\n');
+    expect(
+      (
+        await loadSkillBody({
+          canonicalRoot,
+          manifest,
+          artifact,
+          runtime: 'pi',
+          identity: 'skill:commit',
+          invocation: 'human-explicit',
+        })
+      ).body,
+    ).toBe('PROJECT BODY\n');
+    await expect(
+      loadSkillBody({
+        canonicalRoot,
+        manifest,
+        artifact,
+        runtime: 'pi',
+        identity: 'skill:commit',
+        invocation: 'model',
+      }),
+    ).rejects.toThrow(/SKILL_INVOCATION_DENIED/u);
+
+    const independentlyNarrowed = resolveManifest(combined, {
+      ...base,
+      skillPolicyConfig: {
+        skillExposure: {
+          default: 'full',
+          skills: { commit: 'off', 'skill:commit': 'explicit-only' },
+        },
+      },
+    });
+    expect(independentlyNarrowed.decisions).toMatchObject([
+      { identity: 'commit', included: false },
+      { identity: 'skill:commit', included: true, exposure: 'explicit-only' },
+    ]);
   });
 
   it('rejects malicious YAML aliases and canonical runtime overrides', async () => {

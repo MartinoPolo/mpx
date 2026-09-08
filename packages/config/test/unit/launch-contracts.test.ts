@@ -246,6 +246,55 @@ it('accepts exactly the four authoritative exposure states', () => {
   expect(() => parseUserConfig(JSON.stringify(value), environment)).not.toThrow();
 });
 
+it('keeps canonical and project skill resolution keys separate in policies and overrides', () => {
+  const value = fixture();
+  value.skillPolicies.developer.skillExposure.skills = {
+    commit: 'name-only',
+    'skill:commit': 'full',
+  };
+  value.contentScopes.personal.skillExposure = {
+    default: 'name-only',
+    skills: { commit: 'off', 'skill:commit': 'explicit-only' },
+  };
+  value.projects = {
+    'acme/app': {
+      skillExposure: {
+        skills: { commit: 'name-only', 'skill:commit': 'full' },
+      },
+    },
+  };
+
+  const config = parseUserConfig(JSON.stringify(value), environment);
+  expect(config.skillPolicies.developer!.skillExposure.skills).toEqual({
+    commit: 'name-only',
+    'skill:commit': 'full',
+  });
+  expect(config.contentScopes.personal!.skillExposure?.skills).toEqual({
+    commit: 'off',
+    'skill:commit': 'explicit-only',
+  });
+  expect(config.projects?.['acme/app']?.skillExposure?.skills).toEqual({
+    commit: 'name-only',
+    'skill:commit': 'full',
+  });
+});
+
+it.each([
+  'tool:commit',
+  'skill:',
+  'skill:Commit',
+  'skill:commit/other',
+  'skill:commit:other',
+  'skill:-commit',
+  'skill:commit--push',
+])('rejects malformed qualified skill resolution key %s', (key) => {
+  const value = fixture();
+  value.skillPolicies.developer.skillExposure.skills = { [key]: 'full' };
+  expect(() => parseUserConfig(JSON.stringify(value), environment)).toThrowError(
+    expect.objectContaining({ code: 'CONFIG_INVALID' }),
+  );
+});
+
 it.each(['full', 'name-only', 'off'])('rejects clean %s overrides', (exposure) => {
   const value = fixture();
   value.skillPolicies.clean.skillExposure.skills = { review: exposure };

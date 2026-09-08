@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, opendir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+export { bareSkillIdentity } from './skill-identity.js';
+
 /** @public */
 export const RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION = 4 as const;
 /** @public */

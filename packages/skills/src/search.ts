@@ -4,6 +4,7 @@ import {
   type RuntimeSkillArtifact,
   type RuntimeSkillEntry,
 } from './contracts.js';
+import { skillResolutionKey } from './identity.js';
 import { isProjectSkill } from './inventory.js';
 import { validateArtifact } from './artifact.js';
 import { rankSearchCandidates } from './search-ranking.js';
@@ -42,7 +43,7 @@ function runSearchPipeline(
     );
   }
   validateArtifact(artifact, catalog, options.artifactKey);
-  const source = new Map(catalog.map((skill) => [skill.identity, skill]));
+  const source = new Map(catalog.map((skill) => [skillResolutionKey(skill), skill]));
   const candidates = artifact.entries.filter(options.allowsEntry).flatMap((entry) => {
     const skill = source.get(entry.identity);
     if (!skill) {
@@ -50,7 +51,7 @@ function runSearchPipeline(
     }
     return [
       {
-        identity: skill.identity,
+        identity: entry.identity,
         publicName: entry.publicName,
         description: skill.description,
         ...(isProjectSkill(skill) || !skill.triggers ? {} : { triggers: skill.triggers }),

@@ -238,7 +238,12 @@ export interface ProjectSkillDirectory {
 export interface ProjectSkillFileSystem {
   opendir(root: string): Promise<ProjectSkillDirectory>;
   realpath(file: string): Promise<string>;
-  readFile(file: string, encoding: 'utf8', inventoryBytesRemaining?: number): Promise<string>;
+  /** Undefined means the initial SKILL.md inspection found no entry, not a later read failure. */
+  readFile(
+    file: string,
+    encoding: 'utf8',
+    inventoryBytesRemaining?: number,
+  ): Promise<string | undefined>;
   enumerateDirectory?(
     directory: string,
     inventoryBytesRemaining: number,
@@ -264,7 +269,15 @@ const projectSkillFileSystem: ProjectSkillFileSystem = {
     const directory = path.dirname(file);
     const root = path.dirname(directory);
     await regularProjectDirectories([path.dirname(root), root, directory]);
-    const stat = await lstat(file);
+    const stat = await lstat(file).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        return undefined;
+      }
+      throw error;
+    });
+    if (!stat) {
+      return undefined;
+    }
     if (stat.isSymbolicLink() || !stat.isFile()) {
       throw new Error('project SKILL.md must be a regular file');
     }
@@ -344,7 +357,7 @@ async function containedProject(
 }
 export async function inventoryProjectSkills(
   projectRoot: string,
-  canonical: readonly CanonicalSkill[] = [],
+  _canonical: readonly CanonicalSkill[] = [],
   filesystem: ProjectSkillFileSystem = projectSkillFileSystem,
 ): Promise<{
   skills: ProjectSkill[];
@@ -355,7 +368,7 @@ export async function inventoryProjectSkills(
   const diagnostics: Diagnostic[] = [];
   const skills: ProjectSkill[] = [];
   const nativeSkillDirectories: string[] = [];
-  const acceptedIdentities = new Set(canonical.map((x) => x.identity));
+  const acceptedIdentities = new Set<string>();
   let candidates: ProjectSkillDirectoryEntry[];
   try {
     candidates = await projectSkillCandidates(root, filesystem);
@@ -406,12 +419,15 @@ export async function inventoryProjectSkills(
     try {
       await containedProject(projectRoot, root, filesystem);
       const directory = await containedProject(root, path.dirname(file), filesystem);
-      const real = await containedProject(path.dirname(file), file, filesystem);
       const text = await filesystem.readFile(
         file,
         'utf8',
         MAX_PROJECT_SKILL_INVENTORY_BYTES - inventoryBytes,
       );
+      if (text === undefined) {
+        continue;
+      }
+      const real = await containedProject(path.dirname(file), file, filesystem);
       const classifiedBytes = Buffer.from(text, 'utf8');
       inventoryBytes += classifiedBytes.length;
       if (inventoryBytes > MAX_PROJECT_SKILL_INVENTORY_BYTES) {
@@ -465,20 +481,32 @@ export async function inventoryProjectSkills(
         name.startsWith('mpx-') ||
         name.includes(':')
       ) {
-        throw new Error('project identity is invalid or attempts /mpx:* namespace');
+        throw new Error(
+          `managed project skill name must equal directory name '${entry.name}', use lowercase kebab-case, and must not start with 'mpx-' or contain ':'. Rename the directory and frontmatter name to the same valid value; it will be exposed as /skill:<name>`,
+        );
       }
       if (acceptedIdentities.has(name)) {
-        throw new Error('deterministic runtime collision');
+        const previous = skills.find((skill) => skill.identity === name)!;
+        diagnostics.push({
+          code: 'PROJECT_SKILL_COLLISION',
+          message: `managed project skill '${name}' duplicates /skill:${name} from '${previous.sourcePath}'. Rename one skill directory and its frontmatter name`,
+          path: file,
+        });
+        continue;
       }
       const mpx = (data.metadata as Record<string, unknown> | undefined)?.mpx as
         Record<string, unknown> | undefined;
       const exposure = mpx?.projectExposure;
       if (exposure !== 'full' && exposure !== 'explicit-only') {
-        throw new Error('metadata.mpx.projectExposure must be full or explicit-only');
+        throw new Error(
+          "metadata.mpx.projectExposure must be exactly 'full' or 'explicit-only'. Set it to 'full' for model discovery or 'explicit-only' for /skill:<name> invocation only",
+        );
       }
       const disabled = data['disable-model-invocation'] === true;
       if ((exposure === 'full' && disabled) || (exposure === 'explicit-only' && !disabled)) {
-        throw new Error('projectExposure and disable-model-invocation mismatch');
+        throw new Error(
+          `managed project exposure mismatch: '${exposure}' requires disable-model-invocation: ${exposure === 'explicit-only' ? 'true' : 'false'}. Update the frontmatter to those matching values`,
+        );
       }
       if (typeof data.description !== 'string') {
         throw new Error('description is required');
@@ -553,19 +581,11 @@ export function skillSourceHash(skill: CatalogSkill): string {
 }
 
 export function doctor(
-  canonical: readonly CanonicalSkill[],
+  _canonical: readonly CanonicalSkill[],
   project: { skills: ProjectSkill[]; diagnostics: Diagnostic[] },
 ): Diagnostic[] {
   const diagnostics = [...project.diagnostics];
-  const ids = new Set(canonical.map((x) => x.identity));
   for (const skill of project.skills) {
-    if (ids.has(skill.identity)) {
-      diagnostics.push({
-        code: 'SKILL_COLLISION',
-        message: `${skill.identity} collides with /mpx:${skill.identity}`,
-        path: skill.sourcePath,
-      });
-    }
     if (skill.projectExposure === 'full') {
       diagnostics.push({
         code: 'PROJECT_SKILL_CONTEXT_COST',
