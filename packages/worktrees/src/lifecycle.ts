@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import type { PreparationPlan, ProjectConfig } from '@mpx/config';
+import type { PreparationPlan, ProjectConfig, RepositoryProjectConfig } from '@mpx/config';
 import type { ConfiguredPackageManager, PreparationApproval } from './preparation-engine.js';
 import { preparationPlan } from '@mpx/config';
 import { MpxError } from '@mpx/core';
@@ -191,6 +191,15 @@ export interface RemoveWorktreeRequest {
 function lifecycleError(code: string, message: string): MpxError {
   return new MpxError({ code, message, retryable: false });
 }
+function requireRepositoryConfig(config: ProjectConfig): RepositoryProjectConfig {
+  if (config.project.kind === 'directory' || config.repository === undefined) {
+    throw lifecycleError(
+      'PROJECT_REPOSITORY_REQUIRED',
+      'This operation requires a repository-backed project.',
+    );
+  }
+  return config as RepositoryProjectConfig;
+}
 function errorFact(phase: LifecyclePhase, error: unknown): LifecycleFailure {
   return {
     phase,
@@ -234,7 +243,8 @@ export class WorktreeLifecycleService {
 
   async create(request: CreateWorktreeRequest): Promise<LifecycleResult> {
     const repository = await this.dependencies.repository.resolve(request.cwd);
-    const repositoryId = repository.config.project.id;
+    const repositoryConfig = requireRepositoryConfig(repository.config);
+    const repositoryId = repositoryConfig.project.id;
     return withRepositoryLock(this.dependencies.lock, repository.commonGitDirectory, async () => {
       const inventory = await this.dependencies.git.list(repository.mainRoot);
       const usableInventory = inventory.filter((entry) => !entry.prunable);
@@ -302,7 +312,7 @@ export class WorktreeLifecycleService {
             discoverRemoteHead(
               this.dependencies.git,
               repository.mainRoot,
-              repository.config.repository.remote,
+              repositoryConfig.repository.remote,
             ),
         }));
       let state: LifecycleState;
@@ -368,6 +378,7 @@ export class WorktreeLifecycleService {
 
   async remove(request: RemoveWorktreeRequest): Promise<LifecycleResult> {
     const repository = await this.dependencies.repository.resolve(request.cwd);
+    requireRepositoryConfig(repository.config);
     const repositoryId = repository.config.project.id;
     return withRepositoryLock(this.dependencies.lock, repository.commonGitDirectory, async () => {
       if (sameLifecyclePath(request.worktreePath, repository.mainRoot)) {
@@ -536,6 +547,7 @@ export class WorktreeLifecycleService {
   // fallow-ignore-next-line unused-class-member -- lifecycle interface implementation used through adapters.
   async status(request: { cwd: string }): Promise<LifecycleResult> {
     const repository = await this.dependencies.repository.resolve(request.cwd);
+    requireRepositoryConfig(repository.config);
     return {
       schemaVersion: 1,
       owner: 'mpx',
@@ -548,6 +560,7 @@ export class WorktreeLifecycleService {
 
   async reconcile(request: { cwd: string }): Promise<LifecycleResult> {
     const repository = await this.dependencies.repository.resolve(request.cwd);
+    requireRepositoryConfig(repository.config);
     const repositoryId = repository.config.project.id;
     return withRepositoryLock(this.dependencies.lock, repository.commonGitDirectory, async () => {
       const inventory = await this.dependencies.git.list(repository.mainRoot);

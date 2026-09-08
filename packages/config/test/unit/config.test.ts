@@ -12,8 +12,10 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseStrictJson, StrictJsonError } from '../../src/strict-json.js';
+import { discoverProjectConfig } from '../../src/discover.js';
 import { assertValid, validateProject } from '../../src/schema.js';
+import { parseStrictJson, StrictJsonError } from '../../src/strict-json.js';
+import { isDirectoryProjectConfig } from '../../src/types.js';
 import { parseUserConfig } from '../../src/user-config.js';
 import { confirmInit, planInit, rollbackConfirmedInit } from '../../src/init.js';
 const base = (provider = 'github') => ({
@@ -54,6 +56,57 @@ describe('closed project schema', () => {
   it.each(['../app', 'owner//app', 'owner/app/extra'])('rejects unsafe project ID %s', (id) =>
     expect(() => assertValid(validateProject, { ...base(), project: { id } })).toThrow(),
   );
+  it('accepts an explicit directory project without a repository', () => {
+    const config = {
+      schemaVersion: 1 as const,
+      project: { id: 'local/home', kind: 'directory' as const },
+    };
+    expect(() => assertValid(validateProject, config)).not.toThrow();
+    expect(isDirectoryProjectConfig(config)).toBe(true);
+  });
+  it.each([
+    { schemaVersion: 1, project: { id: 'local/home' } },
+    { ...base(), project: { id: 'acme/app', kind: 'directory' } },
+  ])('rejects project definitions that violate repository conditional requirements', (config) =>
+    expect(() => assertValid(validateProject, config)).toThrow(),
+  );
+});
+
+describe('directory project discovery', () => {
+  it('applies a directory config only at its canonical root', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-directory-project-'));
+    const child = path.join(root, 'child');
+    try {
+      await mkdir(child);
+      await writeFile(
+        path.join(root, 'mpxconfig.json'),
+        JSON.stringify({ schemaVersion: 1, project: { id: 'local/root', kind: 'directory' } }),
+      );
+      await expect(discoverProjectConfig(root)).resolves.toMatchObject({ root });
+      await expect(discoverProjectConfig(child)).resolves.toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed on a malformed directory config encountered from a descendant', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-directory-invalid-'));
+    const child = path.join(root, 'child');
+    try {
+      await mkdir(child);
+      await writeFile(
+        path.join(root, 'mpxconfig.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          project: { id: 'local/root', kind: 'directory' },
+          repository: {},
+        }),
+      );
+      await expect(discoverProjectConfig(child)).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 it('rejects empty or duplicate preparation dependencies', () => {
   const config = {

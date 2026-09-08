@@ -84,8 +84,8 @@ export interface ServiceConfig {
 export interface ProjectConfig {
   $schema?: string;
   schemaVersion: 1;
-  project: { id: string };
-  repository: { provider: RepositoryProvider; remote: string };
+  project: { id: string; kind?: 'directory' };
+  repository?: { provider: RepositoryProvider; remote: string };
   issues?: IssuesConfig;
   tooling?: { packageManager: 'auto' | 'pnpm' | 'yarn' | 'npm' | 'bun' | 'none' };
   workflow?: {
@@ -100,6 +100,22 @@ export interface ProjectConfig {
     postCreate?: { execution: 'foreground' | 'background' | 'none'; steps?: PreparationStep[] };
   };
   development?: { services: Record<string, ServiceConfig> };
+}
+export type DirectoryProjectConfig = ProjectConfig & {
+  project: { id: string; kind: 'directory' };
+  repository?: never;
+};
+export type RepositoryProjectConfig = ProjectConfig & {
+  project: { id: string; kind?: never };
+  repository: { provider: RepositoryProvider; remote: string };
+};
+export function isDirectoryProjectConfig(config: ProjectConfig): config is DirectoryProjectConfig {
+  return config.project.kind === 'directory';
+}
+export function isRepositoryProjectConfig(
+  config: ProjectConfig,
+): config is RepositoryProjectConfig {
+  return config.project.kind === undefined && config.repository !== undefined;
 }
 export interface ContentScope {
   roots: string[];

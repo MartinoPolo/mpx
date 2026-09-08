@@ -535,10 +535,11 @@ describe('launch resolution', () => {
     ).rejects.toMatchObject({ code: 'MODE_UNKNOWN' });
   });
 
-  it('does not require cross-domain grants for inferred personal-assistant and developer modes, but still requires them for inferred project mode', async () => {
+  it('allows explicitly selected personal-assistant and supported OSS developer modes, but still requires grants for inferred project mode', async () => {
     const assistant = await resolveLaunch({
       ...unboundBase,
       identity: 'personal',
+      mode: 'personal-assistant',
       cwd: 'C:/assistant/input/note',
       skillArtifact: artifact({ contentScope: 'assistant-input', projectId: null }),
     });
@@ -584,6 +585,54 @@ describe('launch resolution', () => {
     await expect(resolveLaunch({ ...crossDomainProject, mode: 'developer' })).rejects.toMatchObject(
       expectedMismatch,
     );
+  });
+
+  it('uses developer only for application-authorized missing work config while preserving strict explicit intent', async () => {
+    await expect(
+      resolveLaunchSelection({
+        ...base,
+        identity: 'work',
+        cwd: 'C:/work/unconfigured',
+        automaticModeFallback: 'missing-project-config',
+      }),
+    ).resolves.toMatchObject({
+      mode: { name: 'developer' },
+      provenance: { mode: 'automatic-fallback' },
+    });
+    await expect(
+      resolveLaunchSelection({
+        ...base,
+        identity: 'work',
+        cwd: 'C:/work/unconfigured',
+        mode: 'project',
+        automaticModeFallback: 'missing-project-config',
+      }),
+    ).resolves.toMatchObject({ mode: { name: 'project' }, provenance: { mode: 'explicit' } });
+    await expect(
+      resolveLaunchSelection({
+        ...base,
+        identity: 'work',
+        cwd: 'C:/work/unconfigured',
+        preset: 'work',
+        automaticModeFallback: 'missing-project-config',
+      }),
+    ).resolves.toMatchObject({ mode: { name: 'project' }, preset: 'work' });
+  });
+
+  it('rejects unbound personal/work domain mismatches before project-required diagnostics', async () => {
+    await expect(
+      resolveLaunch({
+        ...unboundBase,
+        identity: 'personal',
+        cwd: 'C:/work/unbound',
+        mode: 'project',
+        skillArtifact: artifact({
+          projectId: null,
+          identity: 'personal',
+          contentScope: 'work',
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_DOMAIN_MISMATCH' });
   });
 
   it('requires a canonical project id for project mode', async () => {

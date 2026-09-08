@@ -31,7 +31,8 @@ export interface ExecutorVerificationEvidence {
   readonly verifier: string;
   readonly evidenceDigest: string;
 }
-export type LaunchProvenance = 'explicit' | 'user-project' | 'user-scope' | 'built-in';
+export type LaunchProvenance =
+  'explicit' | 'user-project' | 'user-scope' | 'built-in' | 'automatic-fallback';
 export type DockerAvailability = 'available' | 'unavailable' | 'unverified';
 export type ShortLaunchAlias = 'cc' | 'ccw' | 'pi' | 'piw';
 export type SkillArtifactInput = SkillArtifactReference;
@@ -80,6 +81,8 @@ export interface ResolveLaunchSelectionInput {
   readonly networkPolicy?: string;
   readonly preset?: string;
   readonly projectId?: string;
+  /** Application-authorized fallback used only when project config discovery returned missing. */
+  readonly automaticModeFallback?: 'missing-project-config';
 }
 export interface ResolveLaunchInput extends ResolveLaunchSelectionInput {
   readonly runtimeArgs?: readonly string[];

@@ -2,8 +2,8 @@ import type { DiscoveredConfig, UserConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
 import {
   canonicalRuntimeArgs,
-  identityDomainMismatchMessage,
   resolveLaunch,
+  validateLaunchDomain,
   resolveLaunchSelection,
   serializeLaunchPublic,
   type ExecutorVerificationEvidence,
@@ -96,6 +96,7 @@ interface PreparedFacts {
   readonly artifact: RuntimeSkillArtifact;
   readonly skillArtifact: Awaited<ReturnType<typeof resolveLaunchSkills>>['skillArtifact'];
   readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
+  readonly warnings: readonly Diagnostic[];
 }
 interface ResolvedFacts extends PreparedFacts {
   readonly descriptor: LaunchDescriptor;
@@ -168,6 +169,11 @@ const invalidState = () =>
     message: 'Launch application state is invalid or belongs to another service.',
   });
 const freezeToken = <T>(): T => Object.freeze(Object.create(null)) as T;
+const fallbackWarning = (): Diagnostic => ({
+  code: 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK',
+  severity: 'warning',
+  message: 'Project configuration is missing; developer mode was selected automatically.',
+});
 
 export class LaunchApplicationService {
   readonly #prepared = new WeakMap<object, PreparedFacts>();
@@ -199,17 +205,10 @@ export class LaunchApplicationService {
       ...(request.networkPolicy ? { networkPolicy: request.networkPolicy } : {}),
       ...(request.preset ? { preset: request.preset } : {}),
       ...(projectId ? { projectId } : {}),
+      ...(!found ? { automaticModeFallback: 'missing-project-config' as const } : {}),
     });
-    if (projectId && selection.identity.domain !== selection.cwdClassification.domain) {
-      throw new MpxError({
-        code: 'IDENTITY_DOMAIN_MISMATCH',
-        message: identityDomainMismatchMessage(
-          selection.runtime,
-          selection.identity.name,
-          selection.cwdClassification.domain,
-        ),
-      });
-    }
+    validateLaunchDomain(selection);
+    const warnings = selection.provenance.mode === 'automatic-fallback' ? [fallbackWarning()] : [];
     return {
       data: {
         schemaVersion: 1,
@@ -217,7 +216,7 @@ export class LaunchApplicationService {
         identity: selection.identity,
         selection: serializeLaunchSelection(selection),
       },
-      warnings: [],
+      warnings,
     };
   }
 
@@ -277,8 +276,10 @@ export class LaunchApplicationService {
       ...(request.networkPolicy ? { networkPolicy: request.networkPolicy } : {}),
       ...(request.preset ? { preset: request.preset } : {}),
       ...(projectId ? { projectId } : {}),
+      ...(!found ? { automaticModeFallback: 'missing-project-config' } : {}),
     };
     const selection = await resolveLaunchSelection(selectionInput);
+    const warnings = selection.provenance.mode === 'automatic-fallback' ? [fallbackWarning()] : [];
     if (runtimeArgs?.length && selection.executor === 'docker') {
       throw new MpxError({
         code: 'RUNTIME_ARGS_EXECUTOR_UNAVAILABLE',
@@ -304,22 +305,23 @@ export class LaunchApplicationService {
       },
       this.dependencies,
     );
-    const statusSnapshot = found
-      ? () =>
-          this.dependencies.statusSnapshot({
-            cwd: request.cwd,
-            projectRoot: found.root,
-            config: found.config,
-          })
-      : async () =>
-          parseStatusSnapshotV1({
-            schemaVersion: 1,
-            project: { id: repositoryId, cwd: request.cwd },
-            worktree: { id: null, path: null, role: null, branch: null },
-            portResolution: 'missing',
-            services: [],
-            diagnostics: [],
-          });
+    const statusSnapshot =
+      found && found.config.project.kind !== 'directory'
+        ? () =>
+            this.dependencies.statusSnapshot({
+              cwd: request.cwd,
+              projectRoot: found.root,
+              config: found.config,
+            })
+        : async () =>
+            parseStatusSnapshotV1({
+              schemaVersion: 1,
+              project: { id: repositoryId, cwd: request.cwd },
+              worktree: { id: null, path: null, role: null, branch: null },
+              portResolution: 'missing',
+              services: [],
+              diagnostics: [],
+            });
     const token = freezeToken<PreparedLaunch>();
     this.#prepared.set(token as object, {
       request: canonicalRequest,
@@ -332,6 +334,7 @@ export class LaunchApplicationService {
       artifact,
       skillArtifact,
       statusSnapshot,
+      warnings,
     });
     return token;
   }
@@ -378,13 +381,18 @@ export class LaunchApplicationService {
       runtime: facts.selection.runtime,
       identity: facts.selection.identity.name,
       ...(facts.request.alias ? { alias: facts.request.alias } : {}),
-      ...(facts.request.mode ? { mode: facts.request.mode } : {}),
+      ...(facts.selection.provenance.mode !== 'automatic-fallback' && facts.request.mode
+        ? { mode: facts.request.mode }
+        : {}),
       ...(facts.request.skillPolicy ? { skillPolicy: facts.request.skillPolicy } : {}),
       ...(facts.request.contentScope ? { contentScope: facts.request.contentScope } : {}),
       executor: facts.selection.executor,
       workspace: facts.selection.workspace,
       networkPolicy: facts.selection.networkPolicy.name,
       ...(facts.request.preset ? { preset: facts.request.preset } : {}),
+      ...(facts.selection.provenance.mode === 'automatic-fallback'
+        ? { automaticModeFallback: 'missing-project-config' as const }
+        : {}),
       ...(facts.request.runtimeArgs ? { runtimeArgs: facts.request.runtimeArgs } : {}),
       ...(input.grants ? { grants: input.grants } : {}),
       ...(input.reason ? { reason: input.reason } : {}),
@@ -438,7 +446,7 @@ export class LaunchApplicationService {
       throw invalidState();
     }
     if (facts.request.operation === 'explain') {
-      return { data: serializeLaunchPublic(facts.descriptor), warnings: [] };
+      return { data: serializeLaunchPublic(facts.descriptor), warnings: facts.warnings };
     }
     let beforeChildExecution: (() => Promise<void>) | undefined;
     if (facts.selection.runtime === 'pi' && facts.evidence.status === 'verified') {
@@ -475,6 +483,6 @@ export class LaunchApplicationService {
       ...(facts.found ? { project: facts.found } : {}),
       ...(beforeChildExecution ? { beforeChildExecution } : {}),
     });
-    return { data: null, warnings: [], silent: true, exitCode: result.exitCode };
+    return { data: null, warnings: facts.warnings, silent: true, exitCode: result.exitCode };
   }
 }

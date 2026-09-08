@@ -22,8 +22,7 @@
     "work": ["${MPX_WORK}"],
     "oss": ["${MPX_CLONED}"],
     "assistant-input": ["${MPX_OBSIDIAN_VAULT}"],
-    "assistant-output": ["${MPX_AI_GENERATED}"],
-    "cloud": ["${MPX_ONEDRIVE}"]
+    "assistant-output": ["${MPX_AI_GENERATED}"]
   },
   "contentScopes": {
     "personal": { "roots": ["${MPX_PROJECTS}"], "skillPacks": ["core", "personal"] },

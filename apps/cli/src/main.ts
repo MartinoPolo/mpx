@@ -329,7 +329,7 @@ function productionSessionResumeLaunch(
     authority,
   );
 }
-async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResult> {
+async function execute(parsed: Parsed, context: CliContext, io: CliIo): Promise<ExecuteResult> {
   const [group, action, ...args] = parsed.command;
   const runtimeArgOption = parsed.options.get('runtime-arg');
   const runtimeArgs = Array.isArray(runtimeArgOption) ? runtimeArgOption : undefined;
@@ -657,8 +657,17 @@ async function execute(parsed: Parsed, context: CliContext): Promise<ExecuteResu
       ...(Array.isArray(grantOptions) ? { grants: grantOptions } : {}),
       ...(reasonOption ? { reason: reasonOption } : {}),
     });
+    const descriptor = service.descriptor(resolved);
+    const prelaunchWarnings = descriptor.diagnostics.filter(
+      (diagnostic) => diagnostic.code === 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK',
+    );
+    if (!parsed.json) {
+      for (const warning of prelaunchWarnings) {
+        io.stderr(`${warning.code}: ${warning.message}\n`);
+      }
+    }
     const result = await service.execute(resolved);
-    return { ...result, warnings };
+    return { ...result, warnings: [...result.warnings] };
   }
   if (group === 'init' && !action) {
     const result = await projectApplication(context).init({
@@ -730,9 +739,11 @@ export async function run(
     if (group && actionName && !group.actions.some((item) => item.name === actionName)) {
       throw new UsageError(`Unknown command: ${groupName} ${actionName}`);
     }
-    const result = await execute(parsed, context);
+    const result = await execute(parsed, context, io);
     if (result.machinePath !== undefined) {
       io.stdout(`${result.machinePath}\n`);
+    } else if (result.silent && parsed.json && result.warnings.length > 0) {
+      io.stdout(JSON.stringify(successEnvelope(asJson(result.data), result.warnings)) + '\n');
     } else if (!result.silent) {
       if (parsed.json) {
         io.stdout(JSON.stringify(successEnvelope(asJson(result.data), result.warnings)) + '\n');

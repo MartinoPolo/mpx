@@ -170,7 +170,7 @@ export function parseLaunchDescriptorV2(value: unknown): LaunchDescriptor {
   item.grants.forEach((entry, index) => exact(entry, ['access', 'resource'], `grants[${index}]`));
   exact(item.contentScope, ['name'], 'contentScope');
   exact(item.cwdClassification, ['domain', 'contentScope'], 'cwdClassification');
-  exact(
+  const provenance = exact(
     item.provenance,
     [
       'runtime',
@@ -184,6 +184,16 @@ export function parseLaunchDescriptorV2(value: unknown): LaunchDescriptor {
     ],
     'provenance',
   );
+  const provenanceValues = [
+    'explicit',
+    'user-project',
+    'user-scope',
+    'built-in',
+    'automatic-fallback',
+  ];
+  if (Object.values(provenance).some((source) => !provenanceValues.includes(source as string))) {
+    fail('LAUNCH_DESCRIPTOR_INVALID', 'provenance contains an invalid source.');
+  }
   const routes = exact(item.routes, ['gitAuthor', 'providers', 'ssh', 'mcp'], 'routes');
   const routeLabels = [
     routes.gitAuthor,

@@ -336,6 +336,89 @@ describe('LaunchApplicationService', () => {
     expect(prepareExecutor).not.toHaveBeenCalled();
   });
 
+  it('propagates malformed project discovery and never treats it as missing', async () => {
+    const malformed = new Error('malformed discovery');
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      discoverProjectConfig: async () => {
+        throw malformed;
+      },
+    });
+    await expect(service.prepare(request)).rejects.toBe(malformed);
+  });
+
+  it('defers cross-domain grant validation until resolve rather than blocking prepare', async () => {
+    const crossUser = structuredClone(user);
+    crossUser.identities.work!.domain = 'personal';
+    const service = new LaunchApplicationService(dependencies());
+    const prepared = await service.prepare({
+      ...request,
+      userConfig: crossUser,
+      executor: 'host',
+      workspace: 'direct',
+    });
+    await expect(
+      service.resolve(prepared, { grants: ['rw:work'], reason: 'approved later' }),
+    ).rejects.toMatchObject({ code: 'GRANT_APPROVAL_REQUIRED' });
+  });
+
+  it('preserves missing work-project fallback provenance and warning through execution', async () => {
+    const fallbackUser = structuredClone(user);
+    fallbackUser.modes.developer = {
+      resources: { 'identity-domain': 'read-write', 'cloned-repositories': 'read-only' },
+    };
+    const launchExecution = vi.fn(async () => ({ exitCode: 0 }));
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      discoverProjectConfig: async () => undefined,
+      launchExecution,
+    });
+    const prepared = await service.prepare({
+      ...request,
+      userConfig: fallbackUser,
+      executor: 'host',
+      workspace: 'direct',
+    });
+    const resolved = await service.resolve(prepared, { reason: 'test' });
+    expect(service.descriptor(resolved)).toMatchObject({
+      mode: 'developer',
+      provenance: { mode: 'automatic-fallback' },
+      diagnostics: [expect.objectContaining({ code: 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK' })],
+    });
+    await expect(service.execute(resolved)).resolves.toMatchObject({
+      silent: true,
+      warnings: [expect.objectContaining({ code: 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK' })],
+    });
+    expect(launchExecution).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses synthetic status for directory projects without invoking Git status discovery', async () => {
+    const statusSnapshot = vi.fn(dependencies().statusSnapshot);
+    const launchExecution = vi.fn(async (input) => {
+      await expect(input.statusSnapshot()).resolves.toMatchObject({
+        project: { id: 'sample/app' },
+        worktree: { id: null, path: null },
+      });
+      return { exitCode: 0 };
+    });
+    const service = new LaunchApplicationService({
+      ...dependencies(),
+      discoverProjectConfig: async () => ({
+        root: process.cwd(),
+        path: `${process.cwd()}/mpxconfig.json`,
+        config: {
+          schemaVersion: 1 as const,
+          project: { id: 'sample/app', kind: 'directory' as const },
+        },
+      }),
+      statusSnapshot,
+      launchExecution,
+    });
+    const prepared = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
+    await service.execute(await service.resolve(prepared, { reason: 'test' }));
+    expect(statusSnapshot).not.toHaveBeenCalled();
+  });
+
   it('rejects forged immutable preparation state', async () => {
     const service = new LaunchApplicationService(dependencies());
     await expect(service.resolve(Object.freeze({}) as never)).rejects.toMatchObject({

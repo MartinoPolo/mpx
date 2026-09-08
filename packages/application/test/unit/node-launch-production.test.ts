@@ -22,7 +22,10 @@ const user: UserConfig = {
   },
   domains: { work: [process.cwd()] },
   contentScopes: { work: { roots: [process.cwd()], skillPacks: ['core'] } },
-  modes: { project: { resources: { 'selected-project': 'read-write' } } },
+  modes: {
+    developer: { resources: { 'selected-project': 'read-write' } },
+    project: { resources: { 'selected-project': 'read-write' } },
+  },
   skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
   presets: {
     standard: {

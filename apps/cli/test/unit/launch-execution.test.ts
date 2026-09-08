@@ -76,7 +76,12 @@ async function explicitLaunchFixture() {
       },
       domains: { work: [cwd] },
       contentScopes: { work: { roots: [cwd], skillPacks: ['core'] } },
-      modes: { project: { resources: { 'selected-project': 'read-write' } } },
+      modes: {
+        project: { resources: { 'selected-project': 'read-write' } },
+        developer: {
+          resources: { 'identity-domain': 'read-write', 'cloned-repositories': 'read-only' },
+        },
+      },
       skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
       presets: {
         'work-project': {
@@ -106,6 +111,84 @@ async function explicitLaunchFixture() {
 }
 
 describe('canonical launch dispatch', () => {
+  it.each([false, true])(
+    'emits missing-config warning around silent launch (json=%s)',
+    async (json) => {
+      const fixture = await explicitLaunchFixture();
+      const events: string[] = [];
+      const captured = captureIo();
+      const io = {
+        ...captured,
+        stdout: (text: string) => {
+          events.push('stdout');
+          captured.stdout(text);
+        },
+        stderr: (text: string) => {
+          events.push('warning');
+          captured.stderr(text);
+        },
+      };
+      const host: ExecutorAdapter = {
+        name: 'host',
+        verify: async () => ({
+          status: 'verified',
+          verifier: 'test-host',
+          evidenceDigest: 'a'.repeat(64),
+        }),
+        execute: async () => {
+          events.push('child');
+          return { exitCode: 0, stdout: '', stderr: '', truncated: false };
+        },
+      };
+      const argv = [
+        ...(json ? ['--json'] : []),
+        '--cwd',
+        fixture.cwd,
+        'launch',
+        'pi',
+        '--identity',
+        'work',
+        '--executor',
+        'host',
+        '--workspace',
+        'direct',
+        '--reason',
+        'Fallback test',
+        '--approve-host',
+      ];
+      expect(
+        await run(argv, io, {
+          env: fixture.env,
+          catalogRoot: fixture.catalogRoot,
+          discoverProjectConfig: async () => undefined,
+          launchExecutorAdapters: [host],
+          launchRuntimeAdapters: [
+            {
+              runtime: 'pi',
+              prepare: async () => ({
+                executable: path.join(fixture.piRoot, 'pi.exe'),
+                argv: [],
+                environment: {},
+              }),
+            },
+          ],
+          launchRoutes: { materialize: async () => ({ 'git:git-work': 'C:/test/git-work' }) },
+          exactNativeRootVerifier: { verify: async () => undefined },
+          piAuthVerifier: { verify: async () => undefined },
+        }),
+      ).toBe(0);
+      if (json) {
+        expect(events.indexOf('stdout')).toBeGreaterThan(events.indexOf('child'));
+        expect(JSON.parse(captured.out.join('')).warnings).toEqual([
+          expect.objectContaining({ code: 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK' }),
+        ]);
+      } else {
+        expect(events.indexOf('warning')).toBeLessThan(events.indexOf('child'));
+        expect(captured.err.join('')).toContain('PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK');
+      }
+    },
+  );
+
   it('provides production route and audit services on the default context', () => {
     expect(defaultContext.launchRoutes).toBeDefined();
     expect(defaultContext.launchAudit).toBeDefined();

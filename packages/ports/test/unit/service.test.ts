@@ -10,7 +10,7 @@ import {
   type RegistryState,
   type WorktreeIdentity,
 } from '../../src/index.js';
-import type { ProjectConfig } from '@mpx/config';
+import type { ProjectConfig, RepositoryProjectConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
 const roots: string[] = [];
 const temp = async () => {
@@ -45,7 +45,7 @@ const config = (
   projectId = 'project',
   scope: 'checkout' | 'project' = 'checkout',
   mode: 'managed' | 'fixed-shared' = 'managed',
-): ProjectConfig => ({
+): RepositoryProjectConfig => ({
   schemaVersion: 1,
   project: { id: projectId.includes('/') ? projectId : `fixture/${projectId}` },
   repository: { provider: 'generic', remote: 'x' },

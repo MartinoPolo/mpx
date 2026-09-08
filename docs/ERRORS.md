@@ -21,17 +21,23 @@ when diagnosing ownership or integrity failures.
 
 ## Working without project configuration
 
-If project mode reports `PROJECT_REQUIRED`, append `--mode developer` to the
-original launch command. For example, a work Pi launcher can be invoked as:
+When a work identity launches from the work domain without project configuration,
+MPX automatically selects developer mode only if neither `--mode` nor `--preset`
+was supplied. It emits `PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK` before an
+interactive child starts and includes the warning in returned JSON. Explicit
+`--mode project` and presets retain strict project intent and may report
+`PROJECT_REQUIRED`. Malformed project configuration never triggers the fallback.
 
-```bash
-piw-mpx --mode developer
-```
+The fallback does not turn a repository into an MPX-managed project or enable
+project-dependent workspace and service operations. Developer mode normally grants
+broader identity-domain access than project mode; it is not a project-isolation
+substitute.
 
-This avoids requiring a project manifest. It does not turn a repository into an
-MPX-managed project or enable project-dependent workspace and service operations.
-Developer mode normally grants broader identity-domain access than project mode;
-it is not a project-isolation substitute.
+Identity/domain mismatches remain rejected with or without project configuration,
+unless an explicit trusted grant applies. Personal special-purpose modes may access
+only their matching assistant or computer-control domains when their configured
+resources authorize that domain and the mode was explicitly selected or selected by
+a personal preset.
 
 Other modes serve different purposes. The user configuration is authoritative for
 available modes and their resource declarations:

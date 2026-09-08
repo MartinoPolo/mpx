@@ -3,7 +3,7 @@
   "$id": "https://mpx.dev/schemas/mpxconfig.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "project", "repository"],
+  "required": ["schemaVersion", "project"],
   "properties": {
     "$schema": {
       "type": "string"
@@ -20,6 +20,9 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
           "maxLength": 129
+        },
+        "kind": {
+          "const": "directory"
         }
       }
     },
@@ -221,6 +224,30 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "project": {
+            "type": "object",
+            "properties": { "kind": { "const": "directory" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["project"]
+      },
+      "then": {
+        "not": {
+          "properties": { "repository": {} },
+          "required": ["repository"]
+        }
+      },
+      "else": {
+        "properties": { "repository": {} },
+        "required": ["repository"]
+      }
+    }
+  ],
   "$defs": {
     "logicalId": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
     "installStep": {

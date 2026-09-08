@@ -139,6 +139,46 @@ function fixture(overrides: Partial<LifecycleDependencies> = {}) {
 }
 
 describe('worktree lifecycle create', () => {
+  it('rejects a directory project before Git or mutation side effects', async () => {
+    const value = fixture({
+      repository: {
+        resolve: async () => ({
+          mainRoot: main,
+          commonGitDirectory: `${main}/.git`,
+          configPath: `${main}/mpxconfig.json`,
+          config: {
+            schemaVersion: 1,
+            project: { id: 'local/widgets', kind: 'directory' },
+          },
+        }),
+      },
+      git: {
+        run: async () => {
+          value.events.push('git:run');
+          return Buffer.alloc(0);
+        },
+        list: async () => {
+          value.events.push('git:list');
+          return [];
+        },
+        isDirty: async () => {
+          value.events.push('git:dirty');
+          return false;
+        },
+        isInUse: async () => {
+          value.events.push('git:in-use');
+          return false;
+        },
+      },
+    });
+
+    await expect(
+      value.service.create({ cwd: main, branch: 'feature/directory-refused' }),
+    ).rejects.toMatchObject({ code: 'PROJECT_REPOSITORY_REQUIRED' });
+    expect(value.events).toEqual([]);
+    expect(value.states.size).toBe(0);
+  });
+
   it('requires production preparation approval before include and port effects, then resumes in order', async () => {
     const configured = {
       ...config,

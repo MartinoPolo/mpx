@@ -195,6 +195,43 @@ function resolvedAxis(
   return explicit ?? presetValue ?? fallback;
 }
 
+export function validateLaunchDomain(
+  selection: LaunchSelection,
+  grants: readonly LaunchGrant[] = [],
+): void {
+  const domain = selection.cwdClassification.domain;
+  if (selection.identity.domain === domain || grants.some((grant) => grant.resource === domain)) {
+    return;
+  }
+  if (
+    selection.mode.name === 'developer' &&
+    (domain === 'oss' || domain === 'cloned-repositories') &&
+    selection.mode.declaration.resources['cloned-repositories'] !== undefined
+  ) {
+    return;
+  }
+  const specialMode =
+    (selection.mode.name === 'personal-assistant' &&
+      (domain === 'assistant-input' || domain === 'assistant-output')) ||
+    (selection.mode.name === 'computer-control' &&
+      (domain === 'computer-control-config' || domain === 'computer-control-executable-settings'));
+  const intentionallySelected =
+    selection.provenance.mode === 'explicit' ||
+    (selection.preset !== null && selection.identity.domain === 'personal');
+  if (
+    selection.identity.domain === 'personal' &&
+    specialMode &&
+    intentionallySelected &&
+    selection.mode.declaration.resources[domain] !== undefined
+  ) {
+    return;
+  }
+  fail(
+    'IDENTITY_DOMAIN_MISMATCH',
+    identityDomainMismatchMessage(selection.runtime, selection.identity.name, domain),
+  );
+}
+
 function inferredModeName(domain: string): string {
   if (domain === 'assistant-input' || domain === 'assistant-output') {
     return 'personal-assistant';
@@ -266,11 +303,19 @@ export async function resolveLaunchSelection(
     );
   }
 
-  const modeName = resolvedAxis(
+  const normallySelectedMode = resolvedAxis(
     input.mode,
     preset?.mode,
     inferredModeName(cwdClassification.domain),
   );
+  const useAutomaticFallback =
+    input.automaticModeFallback === 'missing-project-config' &&
+    normallySelectedMode === 'project' &&
+    identity.domain === 'work' &&
+    cwdClassification.domain === 'work' &&
+    input.mode === undefined &&
+    input.preset === undefined;
+  const modeName = useAutomaticFallback ? 'developer' : normallySelectedMode;
   const skillPolicyName = resolvedAxis(input.skillPolicy, preset?.skillPolicy, 'clean');
   const contentScopeName = resolvedAxis(
     input.contentScope,
@@ -309,7 +354,7 @@ export async function resolveLaunchSelection(
   const provenance = {
     runtime: 'explicit' as const,
     identity: 'explicit' as const,
-    mode: source(input.mode),
+    mode: useAutomaticFallback ? ('automatic-fallback' as const) : source(input.mode),
     skillPolicy: source(input.skillPolicy),
     contentScope: source(input.contentScope),
     executor: source(input.executor),
@@ -339,6 +384,8 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
     fail('REPOSITORY_ID_INVALID', 'Repository id must be a canonical owner/repository id.');
   }
   const selection = await resolveLaunchSelection(input);
+  const grants = normalizeGrants(input.grants ?? []);
+  validateLaunchDomain(selection, grants);
   validateSkillArtifact(input.skillArtifact);
   if (input.skillArtifact.runtime !== selection.runtime) {
     fail(
@@ -419,17 +466,10 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
     contentScope: selection.cwdClassification.contentScope,
   };
 
-  const grants = normalizeGrants(input.grants ?? []);
   const crossDomainGrant =
     identity.domain === cwdDomain.domain
       ? undefined
       : grants.find((grant) => grant.resource === cwdDomain.domain);
-  if (input.projectId !== undefined && identity.domain !== cwdDomain.domain && !crossDomainGrant) {
-    fail(
-      'IDENTITY_DOMAIN_MISMATCH',
-      identityDomainMismatchMessage(selection.runtime, identityName, cwdDomain.domain),
-    );
-  }
   const effectiveResources = structuredClone(modeDeclaration.resources);
   if (
     crossDomainGrant &&
@@ -545,8 +585,20 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
       'Executor verification evidence must name its verifier and contain a SHA-256 evidence digest.',
     );
   }
-  const diagnostics =
-    executor === 'docker' && dockerAvailability !== 'available'
+  const diagnostics = [
+    ...(selection.provenance.mode === 'automatic-fallback'
+      ? [
+          {
+            code: 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK',
+            severity: 'warning' as const,
+            status: 'projected' as const,
+            message: 'Project configuration is missing; developer mode was selected automatically.',
+            remediation:
+              'Add project configuration to use project mode, or select a mode explicitly.',
+          },
+        ]
+      : []),
+    ...(executor === 'docker' && dockerAvailability !== 'available'
       ? [
           {
             code:
@@ -566,7 +618,8 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
               'Start or install Docker, then verify the projected launch before execution. Do not fall back to host.',
           },
         ]
-      : [];
+      : []),
+  ];
 
   const tuple = {
     schemaVersion: 2 as const,
