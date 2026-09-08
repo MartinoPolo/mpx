@@ -53,6 +53,7 @@ const productionSourceInputs = [
   '../../../packages/runtime-contracts/package.json',
   '../../../packages/runtime-contracts/src/capabilities.ts',
   '../../../packages/runtime-contracts/src/index.ts',
+  '../../../packages/runtime-contracts/src/skill-identity.ts',
   'agent-resurrect.ts',
   'auto-title.ts',
   'canonical-skills.ts',

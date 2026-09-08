@@ -546,18 +546,25 @@ describe('Claude projection', () => {
     expect(files['skills/explicit/SKILL.md']).toContain('disable-model-invocation: true');
     expect(files['skills/explicit/SKILL.md']).toContain('BODY explicit');
   });
-  it('projects a policy-bound project skill and every support file through the combined artifact', async () => {
+  it('projects same-name canonical and managed skills through distinct Claude plugins', async () => {
     const f = await fixture(),
-      projectRoot = path.join(f.root, 'project');
-    const directory = path.join(projectRoot, '.agents', 'skills', 'local');
+      projectRoot = path.join(f.root, 'project'),
+      canonicalDirectory = path.join(f.canonical, 'commit');
+    await mkdir(canonicalDirectory);
+    await writeFile(
+      path.join(canonicalDirectory, 'SKILL.md'),
+      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nCANONICAL COMMIT BODY\n',
+    );
+    const canonicalCatalog = await inventoryCanonical(f.canonical);
+    const directory = path.join(projectRoot, '.agents', 'skills', 'commit');
     await mkdir(path.join(directory, 'reference'), { recursive: true });
     await writeFile(
       path.join(directory, 'SKILL.md'),
-      '---\nname: local\ndescription: Local project behavior\nmetadata:\n  mpx:\n    projectExposure: full\n---\nLOCAL BODY\n',
+      '---\nname: commit\ndescription: Local project behavior\nmetadata:\n  mpx:\n    projectExposure: full\n---\nPROJECT COMMIT BODY\n',
     );
-    await writeFile(path.join(directory, 'reference', 'guide.md'), 'GUIDE local\n');
-    const project = (await inventoryProjectSkills(projectRoot, f.catalog)).skills;
-    const catalog = [...f.catalog, ...project];
+    await writeFile(path.join(directory, 'reference', 'guide.md'), 'GUIDE commit\n');
+    const project = (await inventoryProjectSkills(projectRoot, canonicalCatalog)).skills;
+    const catalog = [...canonicalCatalog, ...project];
     const manifest = resolveManifest(catalog, {
       repositoryId: 'repo',
       projectId: 'repo',
@@ -588,13 +595,57 @@ describe('Claude projection', () => {
       agentRoot: f.agents,
     });
     const outputRoot = path.join(f.root, 'project-out');
-    await buildClaudePlugin({ ...f, skillPlan, compiledContent, runtimeContext, outputRoot });
-    expect(await readFile(path.join(outputRoot, 'skills', 'local', 'SKILL.md'), 'utf8')).toContain(
-      'LOCAL BODY',
+    const projection = await buildClaudePlugin({
+      ...f,
+      skillPlan,
+      compiledContent,
+      runtimeContext,
+      outputRoot,
+    });
+    expect(await readFile(path.join(outputRoot, 'skills', 'commit', 'SKILL.md'), 'utf8')).toContain(
+      'CANONICAL COMMIT BODY',
     );
     expect(
-      await readFile(path.join(outputRoot, 'skills', 'local', 'reference', 'guide.md'), 'utf8'),
-    ).toBe('GUIDE local\n');
+      await readFile(
+        path.join(outputRoot, 'project-skills', 'skills', 'commit', 'SKILL.md'),
+        'utf8',
+      ),
+    ).toContain('PROJECT COMMIT BODY');
+    expect(
+      await readFile(
+        path.join(outputRoot, 'project-skills', 'skills', 'commit', 'reference', 'guide.md'),
+        'utf8',
+      ),
+    ).toBe('GUIDE commit\n');
+    expect(
+      await readFile(path.join(outputRoot, '.claude-plugin', 'plugin.json'), 'utf8'),
+    ).toContain('"name": "mpx"');
+    expect(
+      await readFile(
+        path.join(outputRoot, 'project-skills', '.claude-plugin', 'plugin.json'),
+        'utf8',
+      ),
+    ).toContain('"name": "skill"');
+    const publishedProjection = {
+      ...projection,
+      pluginDirectory: outputRoot,
+      reference: { ...projectionReference, projectionKey: projection.artifactKey },
+      reused: false,
+    };
+    const launch = createClaudeInvocationPlan({
+      executable: 'C:/tools/claude.exe',
+      projection: publishedProjection,
+      accountRoot: 'C:/native/claude/account-a',
+      runtimeContext: { launchKey: 'k' },
+      projectionReference: publishedProjection.reference,
+      environment: {},
+    });
+    expect(launch.args).toEqual([
+      '--plugin-dir',
+      outputRoot,
+      '--plugin-dir',
+      path.join(outputRoot, 'project-skills'),
+    ]);
   });
   it('creates deterministic self-contained files and changes projection for a different artifact key', async () => {
     const f = await fixture(),

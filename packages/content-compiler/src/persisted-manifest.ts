@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { bareSkillIdentity } from '@mpx/runtime-contracts';
 import type {
   CompiledAgentManifestEntry,
   CompiledSkillManifestEntry,
@@ -152,7 +153,7 @@ function parseSkill(value: unknown, index: number): CompiledSkillManifestEntry {
   ) {
     fail('ACTIVE_CONTENT_MANIFEST_INVALID', `skills[${index}].capabilityGrantSupport is invalid.`);
   }
-  return {
+  const skill: CompiledSkillManifestEntry = {
     identity: text(item.identity, `skills[${index}].identity`),
     exposure: item.exposure as CompiledSkillManifestEntry['exposure'],
     canonicalDescription: text(item.canonicalDescription, `skills[${index}].canonicalDescription`),
@@ -172,6 +173,8 @@ function parseSkill(value: unknown, index: number): CompiledSkillManifestEntry {
       : {}),
     omittedOptionalFeatures: omitted as ContentFeature[],
   };
+  classifyCompiledSkillSource(skill);
+  return skill;
 }
 
 function parseAgent(value: unknown, index: number): CompiledAgentManifestEntry {
@@ -407,25 +410,25 @@ function validateExpectation(expected: ActiveContentExpectation): void {
 export function classifyCompiledSkillSource(
   entry: CompiledSkillManifestEntry,
 ): 'canonical' | 'project' {
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(entry.identity)) {
-    return fail('ACTIVE_CONTENT_MANIFEST_INVALID', 'Skill identity has unsafe provenance.');
-  }
-  const generatedPath = `skills/${entry.identity}/SKILL.md`;
-  if (entry.generatedPath !== generatedPath) {
-    return fail(
-      'ACTIVE_CONTENT_MANIFEST_INVALID',
-      `Skill '${entry.identity}' has unsafe provenance.`,
-    );
-  }
-  if (entry.sourcePath === `content/skills/${entry.identity}/SKILL.md`) {
+  const canonical = bareSkillIdentity(entry.identity, 'canonical');
+  if (
+    canonical &&
+    entry.generatedPath === `skills/${canonical}/SKILL.md` &&
+    entry.sourcePath === `content/skills/${canonical}/SKILL.md`
+  ) {
     return 'canonical';
   }
-  if (entry.sourcePath === `.agents/skills/${entry.identity}/SKILL.md`) {
+  const project = bareSkillIdentity(entry.identity, 'project');
+  if (
+    project &&
+    entry.generatedPath === `project-skills/skills/${project}/SKILL.md` &&
+    entry.sourcePath === `.agents/skills/${project}/SKILL.md`
+  ) {
     return 'project';
   }
   return fail(
     'ACTIVE_CONTENT_MANIFEST_INVALID',
-    `Skill '${entry.identity}' has unknown provenance.`,
+    `Skill '${entry.identity}' must use an exact canonical bare identity or project 'skill:<name>' identity with its matching source and generated paths.`,
   );
 }
 

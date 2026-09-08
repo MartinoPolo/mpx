@@ -79,16 +79,16 @@ async function runNode(
 async function skillProjection(root: string): Promise<Record<string, string>> {
   const files: Array<{ relativePath: string; sha256: string; byteCount: number }> = [];
   const skills = [];
-  for (const [identity, exposure, source] of [
-    ['canonical-full', 'full', 'content'],
-    ['canonical-manual', 'explicit-only', 'content'],
-    ['local', 'full', '.agents'],
+  for (const [identity, exposure, source, relativePath] of [
+    ['commit', 'full', 'content', 'skills/commit/SKILL.md'],
+    ['canonical-manual', 'explicit-only', 'content', 'skills/canonical-manual/SKILL.md'],
+    ['skill:commit', 'full', '.agents', 'project-skills/skills/commit/SKILL.md'],
   ] as const) {
-    const header = `---\nname: ${identity}\ndescription: ${identity} description\n${exposure === 'explicit-only' ? 'disable-model-invocation: true\n' : ''}---\n`;
+    const bareName = identity.replace(/^skill:/u, '');
+    const header = `---\nname: ${bareName}\ndescription: ${bareName} description\n${exposure === 'explicit-only' ? 'disable-model-invocation: true\n' : ''}---\n`;
     const bytes = Buffer.from(`${header}Instructions for ${identity}.\n`);
-    const relativePath = `skills/${identity}/SKILL.md`;
     const sha256 = createHash('sha256').update(bytes).digest('hex');
-    await mkdir(path.join(root, 'skills', identity), { recursive: true });
+    await mkdir(path.dirname(path.join(root, relativePath)), { recursive: true });
     await writeFile(path.join(root, relativePath), bytes);
     files.push({ relativePath, sha256, byteCount: bytes.byteLength });
     skills.push({
@@ -96,7 +96,7 @@ async function skillProjection(root: string): Promise<Record<string, string>> {
       exposure,
       canonicalDescription: `${identity} description`,
       effectiveDescription: `${identity} description`,
-      sourcePath: `${source}/skills/${identity}/SKILL.md`,
+      sourcePath: `${source}/skills/${bareName}/SKILL.md`,
       generatedPath: relativePath,
       generatedSha256: sha256,
       bodyByteOffset: Buffer.byteLength(header),
@@ -106,7 +106,7 @@ async function skillProjection(root: string): Promise<Record<string, string>> {
   const manifestPath = path.join(root, 'active-content.json');
   const manifest = JSON.stringify({
     schemaVersion: 1,
-    compilerVersion: '1.0.0',
+    compilerVersion: '1.1.0',
     runtime: 'pi',
     profileSchemaVersion: 1,
     binding: { projectId: null, repositoryId: 'fixture', contentScope: 'personal' },
@@ -183,7 +183,7 @@ it('discovers the release once and separates MPX commands from native project sk
       '--no-session',
       '--no-skills',
       '--skill',
-      path.join(activeRoot, 'skills', 'local'),
+      path.join(activeRoot, 'project-skills', 'skills', 'commit'),
     ],
     {
       cwd,
@@ -262,11 +262,11 @@ it('discovers the release once and separates MPX commands from native project sk
       .filter(({ name }) => name.startsWith('mpx:'))
       .map(({ name }) => name)
       .sort(),
-  ).toEqual(['mpx:canonical-full', 'mpx:canonical-manual']);
+  ).toEqual(['mpx:canonical-manual', 'mpx:commit']);
   expect(commands.filter(({ name }) => name.startsWith('skill:')).map(({ name }) => name)).toEqual([
-    'skill:local',
+    'skill:commit',
   ]);
-  expect(commands.find(({ name }) => name === 'skill:local')).toMatchObject({ source: 'skill' });
+  expect(commands.find(({ name }) => name === 'skill:commit')).toMatchObject({ source: 'skill' });
   expect(
     records.filter((record) => (record as { type?: string }).type === 'extension_error'),
   ).toEqual([]);
@@ -275,16 +275,30 @@ it('discovers the release once and separates MPX commands from native project sk
   children.delete(child);
 
   const { DefaultResourceLoader } = await import(piEntryUrl);
-  const loader = new DefaultResourceLoader({ cwd, agentDir: agentRoot, noSkills: true });
-  for (let reload = 0; reload < 2; reload += 1) {
-    await loader.reload();
-    const loaded = loader.getExtensions();
-    expect(loaded.errors).toEqual([]);
-    expect(
-      loaded.extensions.map((extension: { resolvedPath: string }) =>
-        path.normalize(extension.resolvedPath),
-      ),
-    ).toEqual([path.normalize(path.join(artifactRoot, 'mpx-extension.mjs'))]);
+  const previousContentEnvironment = Object.fromEntries(
+    Object.keys(skillEnvironment).map((name) => [name, process.env[name]]),
+  );
+  Object.assign(process.env, skillEnvironment);
+  try {
+    const loader = new DefaultResourceLoader({ cwd, agentDir: agentRoot, noSkills: true });
+    for (let reload = 0; reload < 2; reload += 1) {
+      await loader.reload();
+      const loaded = loader.getExtensions();
+      expect(loaded.errors).toEqual([]);
+      expect(
+        loaded.extensions.map((extension: { resolvedPath: string }) =>
+          path.normalize(extension.resolvedPath),
+        ),
+      ).toEqual([path.normalize(path.join(artifactRoot, 'mpx-extension.mjs'))]);
+    }
+  } finally {
+    for (const [name, value] of Object.entries(previousContentEnvironment)) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
   }
 
   expect(await fileInventory(agentRoot)).toEqual([

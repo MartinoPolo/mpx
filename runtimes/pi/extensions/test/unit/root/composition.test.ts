@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 
-vi.mock('@mpx/content-compiler', () => ({
+vi.mock('@mpx/content-compiler/active', () => ({
   classifyCompiledSkillSource: vi.fn(),
-  loadActiveContentProjection: vi.fn(),
+  loadActiveContentProjection: vi.fn().mockResolvedValue({ manifest: { skills: [] } }),
   readActiveSkill: vi.fn(),
 }));
 
@@ -30,6 +30,16 @@ const EXPECTED_COMPONENTS = [
   'worktree',
   'terminal-progress',
 ];
+
+beforeEach(() => {
+  vi.stubEnv('MPX_RUNTIME', 'pi');
+  vi.stubEnv(
+    'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
+    JSON.stringify({ sha256: '0'.repeat(64), byteCount: 0 }),
+  );
+});
+
+afterEach(() => vi.unstubAllEnvs());
 
 type Handler = (...arguments_: unknown[]) => unknown;
 

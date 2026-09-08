@@ -196,6 +196,9 @@ importers:
       '@mpx/config':
         specifier: workspace:*
         version: link:../config
+      '@mpx/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@mpx/skills':
         specifier: workspace:*
         version: link:../skills

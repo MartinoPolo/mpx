@@ -41,7 +41,11 @@ import {
   type SessionLifecycleBindingV1,
 } from '@mpx/runtime-contracts';
 import type { NativeBindingRecordV1 } from '@mpx/sessions';
-import { createClaudeInvocationPlan, publishClaudeProjection } from '@mpx/runtime-claude';
+import {
+  createClaudeInvocationPlan,
+  publishClaudeProjection,
+  type ClaudeInvocationProjection,
+} from '@mpx/runtime-claude';
 import { materializeClaudeGateway } from './claude-gateway.js';
 import {
   buildPiProjection,
@@ -57,6 +61,8 @@ export interface LaunchProjection {
   readonly directory: string;
   readonly reference: PublishedRuntimeArtifactReference;
   readonly pluginDirectory?: string;
+  readonly artifactKey?: string;
+  readonly files?: readonly string[];
   readonly runtimeContextFile?: string;
   readonly profile?: PiRuntimeProfileV1;
 }
@@ -378,7 +384,31 @@ export function productionRuntimeAdapters(input: {
           }
           const projectionResult = await projection('claude'),
             built = projectionResult.built,
-            pluginDirectory = built.pluginDirectory ?? built.directory;
+            pluginDirectory = built.pluginDirectory ?? built.directory,
+            hasProjectSkills = input.projectionInput.skillPlan.entries.some(
+              (entry) => entry.source.kind === 'project',
+            );
+          if (
+            hasProjectSkills &&
+            (!built.artifactKey ||
+              !built.files?.includes('project-skills/.claude-plugin/plugin.json'))
+          ) {
+            throw new MpxError({
+              code: 'RUNTIME_PROJECTION_INVALID',
+              message:
+                'The Claude projection is missing its published project skill plugin. Rebuild the projection and restart.',
+            });
+          }
+          const publishedProjection: ClaudeInvocationProjection | undefined =
+            built.artifactKey && built.files
+              ? {
+                  directory: built.directory,
+                  pluginDirectory,
+                  artifactKey: built.artifactKey,
+                  files: built.files,
+                  reference: built.reference,
+                }
+              : undefined;
           const gateway = await materializeClaudeGateway({
             stateRoot: input.stateRoot,
             capability: input.projectionInput.runtimeCapabilityManifest,
@@ -397,6 +427,7 @@ export function productionRuntimeAdapters(input: {
           const plan = createClaudeInvocationPlan({
             executable: input.trustedExecutable.executable,
             pluginDirectory,
+            ...(publishedProjection ? { projection: publishedProjection } : {}),
             accountRoot: input.nativeRuntimeRoot,
             runtimeContext: input.projectionInput.runtimeContext,
             projectionReference: built.reference,

@@ -94,8 +94,10 @@ async function write(
   await writeFile(target, text);
   files.push(relative);
 }
-function pluginJson() {
-  return `${JSON.stringify({ name: 'mpx', version: '0.0.0', description: 'MPX Claude runtime projection' }, null, 2)}\n`;
+function pluginJson(name: 'mpx' | 'skill' = 'mpx') {
+  const description =
+    name === 'mpx' ? 'MPX Claude runtime projection' : 'Managed project skills projection';
+  return `${JSON.stringify({ name, version: '0.0.0', description }, null, 2)}\n`;
 }
 const MAX_OUTPUT_STYLE_BYTES = 1024 * 1024;
 async function canonicalInstruction(
@@ -464,9 +466,13 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
       'runtime status must match the Claude launch and repository binding',
     );
   }
+  const hasProjectSkills = projected.some(([relative]) =>
+    relative.startsWith('project-skills/skills/'),
+  );
   const runtimeOwned = new Set(
     [
       '.claude-plugin/plugin.json',
+      'project-skills/.claude-plugin/plugin.json',
       'CLAUDE.md',
       'instructions/global/AGENTS.md',
       'output-styles/mpx-terse.md',
@@ -491,6 +497,14 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
   await mkdir(input.outputRoot, { recursive: false });
   try {
     await write(input.outputRoot, '.claude-plugin/plugin.json', pluginJson(), files);
+    if (hasProjectSkills) {
+      await write(
+        input.outputRoot,
+        'project-skills/.claude-plugin/plugin.json',
+        pluginJson('skill'),
+        files,
+      );
+    }
     for (const [relative, text] of projected) {
       await write(input.outputRoot, relative, text, files);
     }
@@ -944,10 +958,14 @@ export function diagnoseLegacyNamespaceConflicts(
   }
   return [];
 }
+export type ClaudeInvocationProjection = Pick<
+  ClaudePublishedProjection,
+  'directory' | 'artifactKey' | 'files' | 'pluginDirectory' | 'reference'
+>;
 export interface ClaudeInvocationInput {
   readonly executable: string;
   readonly pluginDirectory?: string;
-  readonly projection?: ClaudePublishedProjection;
+  readonly projection?: ClaudeInvocationProjection;
   readonly accountRoot: string;
   readonly runtimeContext: unknown;
   readonly projectionReference?: PublishedRuntimeArtifactReference;
@@ -1033,6 +1051,10 @@ export function createClaudeInvocationPlan(input: ClaudeInvocationInput): Claude
     );
   }
   diagnoseLegacyNamespaceConflicts(input.legacyPluginNames ?? []);
+  const projectPluginDirectory =
+    input.projection?.files.includes('project-skills/.claude-plugin/plugin.json') === true
+      ? path.join(pluginDirectory, 'project-skills')
+      : undefined;
   const inheritedRoot = input.environment.CLAUDE_CONFIG_DIR;
   if (
     inheritedRoot !== undefined &&
@@ -1078,6 +1100,7 @@ export function createClaudeInvocationPlan(input: ClaudeInvocationInput): Claude
     args: [
       '--plugin-dir',
       pluginDirectory,
+      ...(projectPluginDirectory ? ['--plugin-dir', projectPluginDirectory] : []),
       ...(gatewayConfig ? ['--mcp-config', gatewayConfig, '--strict-mcp-config'] : []),
       ...(resume ? ['--resume', resume.value] : []),
     ],

@@ -23,7 +23,7 @@ async function fixture() {
   await writeFile(path.join(root, 'agents', 'Explore.md'), agent);
   const manifest = {
     schemaVersion: 1,
-    compilerVersion: '1.0.0',
+    compilerVersion: '1.1.0',
     runtime: 'claude',
     profileSchemaVersion: 1,
     binding: { projectId: null, repositoryId: 'repo', contentScope: 'test' },
@@ -97,7 +97,9 @@ describe('persisted active content', () => {
     expect(
       classifyCompiledSkillSource({
         ...canonical,
+        identity: 'skill:alpha',
         sourcePath: '.agents/skills/alpha/SKILL.md',
+        generatedPath: 'project-skills/skills/alpha/SKILL.md',
       }),
     ).toBe('project');
     expect(() =>
@@ -116,6 +118,19 @@ describe('persisted active content', () => {
         }),
       ).toThrowError(expect.objectContaining({ code: 'ACTIVE_CONTENT_MANIFEST_INVALID' }));
     }
+  });
+
+  it.each([
+    { identity: 'skill:alpha', sourcePath: '.agents/skills/alpha/SKILL.md' },
+    { identity: 'alpha', sourcePath: '.agents/skills/alpha/SKILL.md' },
+    { identity: 'skill:alpha', sourcePath: 'content/skills/alpha/SKILL.md' },
+  ])('rejects mismatched skill provenance before loading verified bytes: %j', async (changes) => {
+    const value = await fixture();
+    Object.assign(value.manifest.skills[0]!, changes);
+    await writeFile(value.manifestPath, JSON.stringify(value.manifest));
+    await expect(
+      loadActiveContentProjection({ root: value.root, manifestPath: value.manifestPath }),
+    ).rejects.toMatchObject({ code: 'ACTIVE_CONTENT_MANIFEST_INVALID' });
   });
 
   it('verifies exact manifest bytes and expected launch binding', async () => {

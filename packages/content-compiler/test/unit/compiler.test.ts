@@ -14,7 +14,12 @@ import {
 } from '@mpx/skills';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeProfilesV1, type RuntimeProfilesV1 } from '@mpx/config';
-import { compileContent, verifyCompiledContentTree } from '../../src/index.js';
+import {
+  compileContent,
+  loadActiveContentProjection,
+  readActiveSkill,
+  verifyCompiledContentTree,
+} from '../../src/index.js';
 
 const roots: string[] = [];
 afterEach(async () =>
@@ -385,9 +390,124 @@ describe('shared content compiler', () => {
       agentRoot,
     });
     expect(result.files.map((file) => file.relativePath)).toContain(
-      'skills/local-helper/references/guide.md',
+      'project-skills/skills/local-helper/references/guide.md',
     );
     expect(result.manifest.skills[0]?.sourcePath).toBe('.agents/skills/local-helper/SKILL.md');
+  });
+
+  it.each(['pi', 'claude'] as const)(
+    'compiles project sibling Markdown references from a verified shared snapshot for %s',
+    async (runtime) => {
+      const root = await mkdtemp(path.join(tmpdir(), 'mpx-project-shared-'));
+      roots.push(root);
+      const canonicalRoot = path.join(root, 'canonical');
+      const projectRoot = path.join(root, 'project');
+      const projectSkillRoot = path.join(projectRoot, '.agents', 'skills');
+      await mkdir(canonicalRoot, { recursive: true });
+      await mkdir(path.join(projectSkillRoot, 'commit'), { recursive: true });
+      await mkdir(path.join(projectSkillRoot, 'shared'), { recursive: true });
+      await writeFile(
+        path.join(projectSkillRoot, 'commit', 'SKILL.md'),
+        '---\nname: commit\ndescription: Project commit\nmetadata:\n  mpx:\n    projectExposure: full\n---\nSee [writing](../shared/WRITING.md).\n',
+      );
+      await writeFile(path.join(projectSkillRoot, 'shared', 'WRITING.md'), '# Project writing\n');
+      const project = await inventoryProjectSkills(projectRoot);
+      const manifest = resolveManifest(project.skills, {
+        repositoryId: 'repo',
+        contentScope: 'test',
+        identity: 'test',
+        skillPolicy: 'test',
+        skillPolicyConfig: { skillExposure: { default: 'full' } },
+        enabledPacks: [],
+      });
+      const artifact = createRuntimeSkillArtifact(manifest, project.skills, { runtime });
+      const plan = await createSkillProjectionPlan({
+        manifest,
+        artifact,
+        catalog: project.skills,
+        canonicalRoot,
+      });
+      const agentRoot = await createAgentFixture(root);
+      const sharedInstructionRoot = path.join(root, 'canonical-shared');
+      await mkdir(sharedInstructionRoot);
+      await writeFile(path.join(sharedInstructionRoot, 'WRITING.md'), '# Canonical writing\n');
+
+      expect(plan.projectSharedFiles?.map((file) => file.relativePath)).toEqual(['WRITING.md']);
+      const tree = await compileContent({
+        runtime,
+        plan,
+        runtimeProfiles,
+        agentRoot,
+        sharedInstructionRoot,
+      });
+
+      expect(text(tree, 'project-skills/skills/shared/WRITING.md')).toBe('# Project writing\n');
+      expect(text(tree, 'skills/shared/WRITING.md')).toBe('# Canonical writing\n');
+    },
+  );
+
+  it('persists same-name canonical and project skills at distinct paths with bare frontmatter', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-compiler-coexist-'));
+    roots.push(root);
+    const canonicalRoot = path.join(root, 'canonical');
+    const projectRoot = path.join(root, 'project');
+    await mkdir(path.join(canonicalRoot, 'commit'), { recursive: true });
+    await mkdir(path.join(projectRoot, '.agents', 'skills', 'commit'), { recursive: true });
+    await writeFile(
+      path.join(canonicalRoot, 'commit', 'SKILL.md'),
+      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nCANONICAL\n',
+    );
+    await writeFile(
+      path.join(projectRoot, '.agents', 'skills', 'commit', 'SKILL.md'),
+      '---\nname: commit\ndescription: Project commit\ndisable-model-invocation: true\nmetadata:\n  mpx:\n    projectExposure: explicit-only\n---\nPROJECT\n',
+    );
+    const canonical = await inventoryCanonical(canonicalRoot);
+    const project = await inventoryProjectSkills(projectRoot, canonical);
+    const catalog = [...canonical, ...project.skills];
+    const manifest = resolveManifest(catalog, {
+      repositoryId: 'repo',
+      contentScope: 'test',
+      identity: 'test',
+      skillPolicy: 'test',
+      skillPolicyConfig: { skillExposure: { default: 'full' } },
+      enabledPacks: ['core'],
+    });
+    const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
+    const plan = await createSkillProjectionPlan({ manifest, artifact, catalog, canonicalRoot });
+    const agentRoot = await createAgentFixture(root);
+    const sharedInstructionRoot = path.join(root, 'shared');
+    await mkdir(sharedInstructionRoot);
+    await writeFile(path.join(sharedInstructionRoot, 'GUIDE.md'), '# Shared\n');
+    const tree = await compileContent({
+      runtime: 'pi',
+      plan,
+      runtimeProfiles,
+      agentRoot,
+      sharedInstructionRoot,
+    });
+    expect(
+      tree.manifest.skills.map(({ identity, generatedPath }) => ({ identity, generatedPath })),
+    ).toEqual([
+      { identity: 'commit', generatedPath: 'skills/commit/SKILL.md' },
+      { identity: 'skill:commit', generatedPath: 'project-skills/skills/commit/SKILL.md' },
+    ]);
+    for (const file of tree.files) {
+      const target = path.join(root, 'active', ...file.relativePath.split('/'));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, file.bytes);
+    }
+    const activeRoot = path.join(root, 'active');
+    const active = await loadActiveContentProjection({
+      root: activeRoot,
+      manifestPath: path.join(activeRoot, 'active-content.json'),
+    });
+    expect((await readActiveSkill(active, 'commit')).body).toBe('CANONICAL\n');
+    expect((await readActiveSkill(active, 'skill:commit')).body).toBe('PROJECT\n');
+    for (const identity of ['commit', 'skill:commit']) {
+      const entry = tree.manifest.skills.find((skill) => skill.identity === identity)!;
+      const generated = tree.files.find((file) => file.relativePath === entry.generatedPath)!;
+      expect(Buffer.from(generated.bytes).toString('utf8')).toMatch(/^---\nname: commit\n/u);
+    }
   });
 
   it('returns a deterministic sorted final tree and versioned inspection manifest from one API', async () => {
@@ -412,7 +532,7 @@ describe('shared content compiler', () => {
     );
     expect(first.manifest).toMatchObject({
       schemaVersion: 1,
-      compilerVersion: '1.0.0',
+      compilerVersion: '1.1.0',
       runtime: 'claude',
     });
   });

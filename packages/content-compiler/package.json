@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@mpx/config": "workspace:*",
+    "@mpx/runtime-contracts": "workspace:*",
     "@mpx/skills": "workspace:*",
     "@mpx/subagents": "workspace:*"
   },

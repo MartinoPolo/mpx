@@ -48,7 +48,7 @@ async function fixture() {
     exposure: 'name-only',
     canonicalDescription: description,
     effectiveDescription: description,
-    sourcePath: `${identity}/SKILL.md`,
+    sourcePath: `content/skills/${identity}/SKILL.md`,
     generatedPath: files[fileIndex]!.relativePath,
     generatedSha256: files[fileIndex]!.sha256,
     bodyByteOffset: 0,
@@ -78,7 +78,7 @@ async function fixture() {
   });
   const manifest = {
     schemaVersion: 1,
-    compilerVersion: '1.0.0',
+    compilerVersion: '1.1.0',
     runtime: 'claude',
     profileSchemaVersion: 1,
     binding: { projectId: null, repositoryId: 'repo', contentScope: 'test' },

@@ -52,7 +52,7 @@ it.each(['native-skill', 'sample'])(
     ]);
     await Promise.all([
       mkdir(path.join(root, 'agents'), { recursive: true }),
-      mkdir(path.join(root, 'skills', 'sample'), { recursive: true }),
+      mkdir(path.join(root, 'project-skills', 'skills', 'sample'), { recursive: true }),
       mkdir(path.join(root, 'instructions', 'pi'), { recursive: true }),
     ]);
     const context = createRuntimeContextV1({
@@ -75,7 +75,7 @@ it.each(['native-skill', 'sample'])(
       sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex'),
       manifest = {
         schemaVersion: 1,
-        compilerVersion: '1.0.0',
+        compilerVersion: '1.1.0',
         runtime: 'pi',
         profileSchemaVersion: 1,
         binding: context.binding,
@@ -83,12 +83,12 @@ it.each(['native-skill', 'sample'])(
         manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
         skills: [
           {
-            identity: 'sample',
+            identity: 'skill:sample',
             exposure: 'full',
             canonicalDescription: 'Sample.',
             effectiveDescription: 'Sample.',
             sourcePath: '.agents/skills/sample/SKILL.md',
-            generatedPath: 'skills/sample/SKILL.md',
+            generatedPath: 'project-skills/skills/sample/SKILL.md',
             generatedSha256: sha256(skillBytes),
             bodyByteOffset: 0,
             omittedOptionalFeatures: [],
@@ -120,7 +120,7 @@ it.each(['native-skill', 'sample'])(
             byteCount: agentBytes.byteLength,
           },
           {
-            relativePath: 'skills/sample/SKILL.md',
+            relativePath: 'project-skills/skills/sample/SKILL.md',
             sha256: sha256(skillBytes),
             byteCount: skillBytes.byteLength,
           },
@@ -130,7 +130,7 @@ it.each(['native-skill', 'sample'])(
     await Promise.all([
       writeFile(path.join(root, 'active-content.json'), manifestBytes),
       writeFile(path.join(root, 'agents', 'Explore.md'), agentBytes),
-      writeFile(path.join(root, 'skills', 'sample', 'SKILL.md'), skillBytes),
+      writeFile(path.join(root, 'project-skills', 'skills', 'sample', 'SKILL.md'), skillBytes),
       writeFile(contextFile, contextBytes),
       writeFile(path.join(root, 'instructions', 'pi', 'MANAGED_PROMPT.md'), managedPromptBytes),
       writeFile(
@@ -155,7 +155,11 @@ it.each(['native-skill', 'sample'])(
         sha256: sha256(contextBytes),
         bytes: contextBytes.byteLength,
       },
-      { path: 'skills/sample/SKILL.md', sha256: sha256(skillBytes), bytes: skillBytes.byteLength },
+      {
+        path: 'project-skills/skills/sample/SKILL.md',
+        sha256: sha256(skillBytes),
+        bytes: skillBytes.byteLength,
+      },
     ];
     const launchBinding = {
       launchKey: context.launchKey,
@@ -226,7 +230,7 @@ it.each(['native-skill', 'sample'])(
       argument === '--skill' ? [plan.args[index + 1]!] : [],
     );
     expect(skillPaths).toEqual([
-      path.join(root, 'skills', 'sample').replaceAll('\\', '/'),
+      path.join(root, 'project-skills', 'skills', 'sample').replaceAll('\\', '/'),
       nativeEntrypoint.replaceAll('\\', '/'),
     ]);
 
@@ -253,7 +257,7 @@ it.each(['native-skill', 'sample'])(
     expect(
       loaded.skills.map((skill: { filePath: string }) => path.normalize(skill.filePath)),
     ).toEqual([
-      path.join(root, 'skills', 'sample', 'SKILL.md'),
+      path.join(root, 'project-skills', 'skills', 'sample', 'SKILL.md'),
       ...(nativeName === 'sample' ? [] : [nativeEntrypoint]),
     ]);
     expect(loaded.skills.some((skill: { name: string }) => skill.name === 'child')).toBe(false);

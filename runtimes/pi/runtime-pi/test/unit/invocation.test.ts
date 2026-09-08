@@ -54,7 +54,7 @@ const managedPromptBytes = Buffer.from('managed prompt\n');
 const contentFiles = [
   { relativePath: 'agents/Explore.md', bytes: agentBytes },
   { relativePath: 'skills/mpx-canonical/SKILL.md', bytes: canonicalSkillBytes },
-  { relativePath: 'skills/project-skill/SKILL.md', bytes: projectSkillBytes },
+  { relativePath: 'project-skills/skills/project-skill/SKILL.md', bytes: projectSkillBytes },
 ].map((file) => ({
   ...file,
   sha256: createHash('sha256').update(file.bytes).digest('hex'),
@@ -62,7 +62,7 @@ const contentFiles = [
 }));
 const activeManifest = {
   schemaVersion: 1,
-  compilerVersion: '1.0.0',
+  compilerVersion: '1.1.0',
   runtime: 'pi',
   profileSchemaVersion: 1,
   binding: { projectId: 'sample/app', repositoryId: 'sample/app', contentScope: 'work' },
@@ -81,12 +81,12 @@ const activeManifest = {
       omittedOptionalFeatures: [],
     },
     {
-      identity: 'project-skill',
+      identity: 'skill:project-skill',
       exposure: 'full',
       canonicalDescription: 'Project.',
       effectiveDescription: 'Project.',
       sourcePath: '.agents/skills/project-skill/SKILL.md',
-      generatedPath: 'skills/project-skill/SKILL.md',
+      generatedPath: 'project-skills/skills/project-skill/SKILL.md',
       generatedSha256: contentFiles[2]!.sha256,
       bodyByteOffset: 0,
       omittedOptionalFeatures: [],
@@ -148,7 +148,9 @@ const projectionReference: PublishedRuntimeArtifactReference = {
 mkdirSync(path.join(projectionDirectory, 'agents'));
 mkdirSync(path.join(projectionDirectory, 'instructions', 'pi'), { recursive: true });
 mkdirSync(path.join(projectionDirectory, 'skills', 'mpx-canonical'), { recursive: true });
-mkdirSync(path.join(projectionDirectory, 'skills', 'project-skill'), { recursive: true });
+mkdirSync(path.join(projectionDirectory, 'project-skills', 'skills', 'project-skill'), {
+  recursive: true,
+});
 writeFileSync(path.join(projectionDirectory, 'active-content.json'), activeManifestBytes);
 writeFileSync(
   path.join(projectionDirectory, 'instructions', 'pi', 'MANAGED_PROMPT.md'),
@@ -234,7 +236,9 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
         .join(projectionDirectory, 'instructions', 'pi', 'MANAGED_PROMPT.md')
         .replaceAll('\\', '/'),
       '--skill',
-      path.join(projectionDirectory, 'skills', 'project-skill').replaceAll('\\', '/'),
+      path
+        .join(projectionDirectory, 'project-skills', 'skills', 'project-skill')
+        .replaceAll('\\', '/'),
       '--provider',
       'openai-codex',
       '--model',
@@ -371,7 +375,9 @@ it('adds only individually contained native cwd skills beside generated managed 
     );
     expect(plan.args).toContain('--no-skills');
     expect(directories).toEqual([
-      path.join(projectionDirectory, 'skills', 'project-skill').replaceAll('\\', '/'),
+      path
+        .join(projectionDirectory, 'project-skills', 'skills', 'project-skill')
+        .replaceAll('\\', '/'),
       `${canonicalName}/SKILL.md`,
       `${native}/SKILL.md`,
     ]);
@@ -515,7 +521,9 @@ it.each([
         .join(projectionDirectory, 'instructions', 'pi', 'MANAGED_PROMPT.md')
         .replaceAll('\\', '/'),
       '--skill',
-      path.join(projectionDirectory, 'skills', 'project-skill').replaceAll('\\', '/'),
+      path
+        .join(projectionDirectory, 'project-skills', 'skills', 'project-skill')
+        .replaceAll('\\', '/'),
       '--provider',
       provider,
       '--model',

@@ -10,6 +10,7 @@ import {
   renderCanonicalAgentDocumentV1,
 } from '@mpx/subagents/documents';
 import type { AgentCapabilityV1, AgentModelClassV1, AgentThinkingV1 } from '@mpx/subagents';
+import { bareSkillIdentity } from '@mpx/runtime-contracts';
 import {
   enumerateSkillDirectory,
   verifySkillProjectionPlan,
@@ -114,6 +115,20 @@ const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).d
 const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
 const quoteBookkeeping = (value: string): string => JSON.stringify(value);
 
+function generatedSkillPath(
+  identity: string,
+  origin: 'canonical' | 'project',
+  supportPath = 'SKILL.md',
+): string {
+  const bareIdentity = bareSkillIdentity(identity, origin);
+  if (!bareIdentity) {
+    throw new ContentCompilerError(`invalid ${origin} skill identity: ${identity}`);
+  }
+  const directory =
+    origin === 'project' ? `project-skills/skills/${bareIdentity}` : `skills/${bareIdentity}`;
+  return `${directory}/${supportPath}`;
+}
+
 function renderedSkill(
   entry: SkillProjectionPlan['entries'][number],
   runtime: Runtime,
@@ -133,7 +148,13 @@ function renderedSkill(
       : entry.canonicalDescription;
   const omitted: ContentFeature[] = [];
   const runtimeProfile = profiles.contentTranslation.runtimes[runtime];
-  const lines = ['---', `name: ${entry.identity}`, `description: ${quote(effectiveDescription)}`];
+  const renderedName = bareSkillIdentity(entry.identity, entry.source.kind);
+  if (!renderedName) {
+    throw new ContentCompilerError(
+      `invalid ${entry.source.kind} skill identity: ${entry.identity}`,
+    );
+  }
+  const lines = ['---', `name: ${renderedName}`, `description: ${quote(effectiveDescription)}`];
   if (entry.author || entry.version || entry.category) {
     lines.push('metadata:');
     if (entry.author) {
@@ -357,7 +378,7 @@ export function verifyCompiledContentTree(
       return (
         !planned ||
         skill.identity !== planned.identity ||
-        skill.generatedPath !== `skills/${skill.identity}/SKILL.md` ||
+        skill.generatedPath !== generatedSkillPath(planned.identity, planned.source.kind) ||
         !file ||
         skill.generatedSha256 !== file.sha256 ||
         !Number.isSafeInteger(skill.bodyByteOffset) ||
@@ -429,12 +450,15 @@ export async function compileContent(input: CompileContentInput): Promise<Compil
     if (entry.exposure === 'off') {
       throw new ContentCompilerError(`off skill entered verified plan: ${entry.identity}`);
     }
-    const generatedPath = `skills/${entry.identity}/SKILL.md`;
+    const generatedPath = generatedSkillPath(entry.identity, entry.source.kind);
     const rendered = renderedSkill(entry, input.runtime, runtimeProfiles);
     add(generatedPath, rendered.bytes);
     const generated = files.get(generatedPath)!;
     for (const support of entry.files) {
-      add(`skills/${entry.identity}/${support.relativePath}`, support.bytes);
+      add(
+        generatedSkillPath(entry.identity, entry.source.kind, support.relativePath),
+        support.bytes,
+      );
     }
     skills.push({
       identity: entry.identity,
@@ -454,6 +478,9 @@ export async function compileContent(input: CompileContentInput): Promise<Compil
         : {}),
       omittedOptionalFeatures: rendered.omitted,
     });
+  }
+  for (const file of plan.projectSharedFiles ?? []) {
+    add(`project-skills/skills/shared/${file.relativePath}`, file.bytes);
   }
   const shared = await enumerateSkillDirectory(input.sharedInstructionRoot);
   for (const file of shared) {

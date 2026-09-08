@@ -33,9 +33,13 @@ For `name-only`, the compiler emits a neutral description that permits invocatio
 
 ## Runtime projections
 
-Claude receives an immutable plugin projection. Pi receives compiled content plus launch context; the checked-in package under `runtimes/pi/extensions` registers canonical commands as `/mpx:<name>` and lazily reads verified compiler-owned bodies. Native project skills remain `/skill:<name>` and are never assigned invented MPX metadata.
+Claude receives an immutable core plugin named `mpx` plus, when managed project skills are present, a second immutable nested plugin named `skill`; repeated `--plugin-dir` arguments preserve native `/mpx:<name>` and `/skill:<name>` namespaces. Pi receives compiled content plus launch context; the checked-in package under `runtimes/pi/extensions` registers canonical commands as `/mpx:<name>` and lazily reads verified compiler-owned bodies. Managed project skills keep a bare source directory and frontmatter name, resolve internally as `skill:<name>`, compile under `project-skills/skills/<name>/`, and retain the native Pi command `/skill:<name>`. Canonical skills keep their bare resolution identity and compile under `skills/<name>/`. The separate generated roots prevent same-name canonical and project payloads from overwriting one another.
 
-Shared references are compiler inputs and projection files. Relative links must resolve exactly in the published tree. Provider workflows select the configured role and load a shipped native-command guide; the compiler does not create provider facade commands.
+Project discovery ignores ordinary directories without a `SKILL.md` entry, such as shared reference folders. Existing malformed skill files, non-file entries, unsafe links, and I/O failures remain errors; support directories still count toward bounded inventory traversal.
+
+Skill-specific exposure settings use bare keys for canonical skills and `skill:<name>` keys for managed project skills. A bare override matching only a project skill fails with migration guidance rather than silently dropping its restriction.
+
+Shared references are compiler inputs and projection files. Relative links must resolve exactly in the published tree. For included managed project skills, `.agents/skills/shared` is an optional support-only directory: planning snapshots it once from the artifact-verified project root, rejects links, escapes, multiple project roots, and any nested `SKILL.md`, and binds the snapshot to plan verification. The compiler performs no project source reads and publishes that snapshot under `project-skills/skills/shared/`, distinct from canonical `skills/shared/`. Provider workflows select the configured role and load a shipped native-command guide; the compiler does not create provider facade commands.
 
 ## Translation profile
 

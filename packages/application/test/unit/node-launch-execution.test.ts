@@ -9,6 +9,7 @@ import {
   createRuntimeSkillArtifact,
   createSkillProjectionPlan,
   inventoryCanonical,
+  inventoryProjectSkills,
   resolveManifest,
 } from '@mpx/skills';
 import { composeRuntimeStatusEnvelopeV1 } from '@mpx/status';
@@ -23,19 +24,27 @@ async function projectionContentFixture(
   root: string,
   runtime: 'claude' | 'pi',
   binding: { projectId: string; repositoryId: string; contentScope: string },
+  projectSkill = false,
 ) {
   const contentRoot = path.join(root, 'content');
   const canonicalRoot = path.join(contentRoot, 'skills');
   const agentsRoot = fileURLToPath(new URL('../../../../content/agents/', import.meta.url));
-  await mkdir(path.join(canonicalRoot, 'sample'), { recursive: true });
+  const skillRoot = projectSkill
+    ? path.join(root, '.agents', 'skills', 'sample')
+    : path.join(canonicalRoot, 'sample');
+  await mkdir(skillRoot, { recursive: true });
   await writeFile(
-    path.join(canonicalRoot, 'sample', 'SKILL.md'),
-    '---\nname: sample\ndescription: Sample\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nSample body.\n',
+    path.join(skillRoot, 'SKILL.md'),
+    projectSkill
+      ? '---\nname: sample\ndescription: Sample\nmetadata:\n  mpx:\n    projectExposure: full\n---\nSample body.\n'
+      : '---\nname: sample\ndescription: Sample\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nSample body.\n',
   );
-  const catalog = await inventoryCanonical(canonicalRoot);
+  const catalog = projectSkill
+    ? (await inventoryProjectSkills(root)).skills
+    : await inventoryCanonical(canonicalRoot);
   const manifest = resolveManifest(catalog, {
     ...binding,
-    enabledPacks: ['core'],
+    enabledPacks: projectSkill ? [] : ['core'],
     identity: 'identity',
     skillPolicy: 'policy',
     skillPolicyConfig: { skillExposure: { default: 'full' } },
@@ -341,6 +350,198 @@ describe('Node launch execution runtime adapters', () => {
       expect(invocation.argv.slice(-runtimeArgs.length)).toEqual(runtimeArgs);
       expect(invocation.argv[0]).toBe('wrapper-entry.js');
       expect(invocation.argv.length).toBeGreaterThan(runtimeArgs.length + 1);
+    } finally {
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('includes runtime and managed-project plugin directories through the application adapter', async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-claude-project-plugin-'));
+    const launchKey = 'a'.repeat(64);
+    const binding = {
+      projectId: 'sample/app',
+      repositoryId: 'sample/repo',
+      contentScope: 'work',
+    };
+    const content = await projectionContentFixture(stateRoot, 'claude', binding, true);
+    const descriptor = {
+      runtime: 'claude',
+      launchKey,
+      identity: { name: 'work', domain: 'work' },
+    } as LaunchDescriptor;
+    const runtimeContext = createRuntimeContextV1({
+      launchKey,
+      launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
+      manifestKey: content.artifact.reference.manifestKey,
+      runtimeArtifact: content.artifact.reference,
+      binding,
+    });
+    const capability = createRuntimeCapabilityManifestV1({
+      runtime: 'claude',
+      launchKey,
+      identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
+      binding,
+      executor: 'host',
+      tools: [],
+      routes: [],
+      resources: [],
+      mounts: [],
+      destinations: [],
+      skills: [],
+      models: [],
+      nesting: { depth: 0, maxDepth: 0 },
+    });
+    try {
+      const [adapter] = productionRuntimeAdapters({
+        descriptor,
+        cwd: stateRoot,
+        environment: {},
+        nativeRuntimeRoot: 'C:/native/claude',
+        stateRoot,
+        projectionInput: {
+          descriptor,
+          skillPlan: content.skillPlan,
+          agentsRoot: content.agentsRoot,
+          runtimeProfilesFile: content.runtimeProfilesFile,
+          artifactsRoot: stateRoot,
+          runtimeContext,
+          runtimeStatusEnvelope: composeRuntimeStatusEnvelopeV1({
+            generatedAt: '2026-01-01T00:00:00.000Z',
+            binding: { launchKey, runtimeId: 'claude', repositoryId: binding.repositoryId },
+            harness: { kind: 'claude', version: null, surface: 'statusline' },
+            contributions: [],
+          }),
+          runtimeCapabilityManifest: capability,
+          runtimeLaunchBinding: {
+            launchKey,
+            runtime: 'claude',
+            identity: { name: 'work', domain: 'work' },
+            worktreeRoot: stateRoot,
+            executor: 'host',
+            assignedPorts: [],
+          },
+        },
+        launchBanner: 'launch',
+        initialSnapshot: {
+          schemaVersion: 1,
+          project: { id: 'sample/app', cwd: stateRoot },
+          worktree: { id: null, path: null, role: null, branch: null },
+          portResolution: 'valid',
+          services: [],
+          diagnostics: [],
+        },
+        statusSnapshot: async () => ({}) as never,
+        bindStatusPath: () => undefined,
+        bindRuntimeStatusPath: () => undefined,
+        statusMaterializer: { materialize: async () => undefined },
+        runtimeStatusMaterializer: {
+          materialize: async () => path.join(stateRoot, 'runtime.json'),
+        },
+        trustedExecutable: { executable: process.execPath, argvPrefix: [] },
+      });
+
+      const invocation = await adapter!.prepare({ routes: {} } as never);
+      const pluginDirectories = invocation.argv.flatMap((value, index) =>
+        value === '--plugin-dir' ? [invocation.argv[index + 1]] : [],
+      );
+      expect(pluginDirectories).toHaveLength(2);
+      expect(pluginDirectories[1]).toBe(path.join(pluginDirectories[0]!, 'project-skills'));
+    } finally {
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a Claude projection missing the managed-project plugin manifest', async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), 'mpx-claude-invalid-project-plugin-'));
+    const launchKey = 'a'.repeat(64);
+    const binding = {
+      projectId: 'sample/app',
+      repositoryId: 'sample/repo',
+      contentScope: 'work',
+    };
+    const content = await projectionContentFixture(stateRoot, 'claude', binding, true);
+    const descriptor = {
+      runtime: 'claude',
+      launchKey,
+      identity: { name: 'work', domain: 'work' },
+    } as LaunchDescriptor;
+    const runtimeContext = createRuntimeContextV1({
+      launchKey,
+      launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
+      manifestKey: content.artifact.reference.manifestKey,
+      runtimeArtifact: content.artifact.reference,
+      binding,
+    });
+    const capability = createRuntimeCapabilityManifestV1({
+      runtime: 'claude',
+      launchKey,
+      identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
+      binding,
+      executor: 'host',
+      tools: [],
+      routes: [],
+      resources: [],
+      mounts: [],
+      destinations: [],
+      skills: [],
+      models: [],
+      nesting: { depth: 0, maxDepth: 0 },
+    });
+    try {
+      const [adapter] = productionRuntimeAdapters({
+        descriptor,
+        cwd: stateRoot,
+        environment: {},
+        nativeRuntimeRoot: 'C:/native/claude',
+        stateRoot,
+        projectionInput: {
+          descriptor,
+          skillPlan: content.skillPlan,
+          agentsRoot: content.agentsRoot,
+          runtimeProfilesFile: content.runtimeProfilesFile,
+          artifactsRoot: stateRoot,
+          runtimeContext,
+          runtimeStatusEnvelope: {} as never,
+          runtimeCapabilityManifest: capability,
+          runtimeLaunchBinding: {
+            launchKey,
+            runtime: 'claude',
+            identity: { name: 'work', domain: 'work' },
+            worktreeRoot: stateRoot,
+            executor: 'host',
+            assignedPorts: [],
+          },
+        },
+        launchBanner: 'launch',
+        initialSnapshot: {
+          schemaVersion: 1,
+          project: { id: 'sample/app', cwd: stateRoot },
+          worktree: { id: null, path: null, role: null, branch: null },
+          portResolution: 'valid',
+          services: [],
+          diagnostics: [],
+        },
+        statusSnapshot: async () => ({}) as never,
+        bindStatusPath: () => undefined,
+        bindRuntimeStatusPath: () => undefined,
+        statusMaterializer: { materialize: async () => undefined },
+        runtimeStatusMaterializer: {
+          materialize: async () => path.join(stateRoot, 'runtime.json'),
+        },
+        trustedExecutable: { executable: process.execPath, argvPrefix: [] },
+        builder: async (input) => ({
+          directory: stateRoot,
+          pluginDirectory: stateRoot,
+          artifactKey: 'd'.repeat(64),
+          files: ['.claude-plugin/plugin.json'],
+          reference: publishedReference(input),
+        }),
+        validator: async () => undefined,
+      });
+
+      await expect(adapter!.prepare({ routes: {} } as never)).rejects.toMatchObject({
+        code: 'RUNTIME_PROJECTION_INVALID',
+      });
     } finally {
       await rm(stateRoot, { recursive: true, force: true });
     }
