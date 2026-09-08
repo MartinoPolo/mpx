@@ -204,6 +204,34 @@ describe('canonical CLI dispatch', () => {
     expect(io.err.join('')).toContain('USAGE_ERROR');
   });
 
+  it('formats human usage failures with solutions and preserved command help', async () => {
+    const io = captureIo();
+
+    expect(await run(['workspace', 'show', '--unknown'], io, { env: {} })).toBe(2);
+    expect(io.err.join('')).toContain('ERROR [USAGE_ERROR] - Unknown option: --unknown');
+    expect(io.err.join('')).toContain('POSSIBLE SOLUTIONS/WORKAROUNDS');
+    expect(io.err.join('')).toContain('mpx help --all');
+    expect(io.err.join('')).toContain('Usage: mpx [options] <command>');
+    expect(io.out).toEqual([]);
+  });
+
+  it('keeps the JSON error envelope and usage exit status unchanged', async () => {
+    const io = captureIo();
+
+    expect(await run(['workspace', 'show', '--unknown', '--json'], io, { env: {} })).toBe(2);
+    expect(JSON.parse(io.out.join(''))).toEqual({
+      apiVersion: 1,
+      ok: false,
+      error: {
+        code: 'USAGE_ERROR',
+        message: 'Unknown option: --unknown',
+        retryable: false,
+      },
+      warnings: [],
+    });
+    expect(io.err).toEqual([]);
+  });
+
   it('uses production Pi discovery to normalize stale durable liveness without touching host roots', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-cli-production-list-'));
     temporaryRoots.push(root);

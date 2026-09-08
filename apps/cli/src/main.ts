@@ -45,6 +45,7 @@ import {
   productionSessionResumeDependencies,
 } from '@mpx/application/node';
 import { processIo, type CliIo } from './io.js';
+import { formatHumanError } from './error-format.js';
 import {
   commandGroup,
   renderActionHelp,
@@ -768,7 +769,7 @@ export async function run(
       io.stdout(JSON.stringify(errorEnvelope(normalized)) + '\n');
     } else {
       io.stderr(
-        `${normalized.code}: ${normalized.message}\n${usageError ? usageGuidance(parsed) : ''}`,
+        formatHumanError(normalized.toPublic(), usageError ? usageGuidance(parsed) : undefined),
       );
     }
     return usageError ? 2 : 1;

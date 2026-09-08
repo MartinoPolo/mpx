@@ -30,3 +30,7 @@ Docker execution is unavailable. Launch and resume fail with `EXECUTOR_UNAVAILAB
 Before spawning, MPX publishes and revalidates the exact runtime projection and executor evidence. Public descriptors, banners, audits, and errors omit credentials, native session data, private roots, command output, and file contents.
 
 Claude checks projection integrity at its earliest supported hook boundaries. Pi binds the manifest to launch context and revalidates canonical skill files when loaded. Session continuation is handled by the separate [session lifecycle](SESSIONS_INSTALLER.md).
+
+## Error guidance
+
+Human CLI errors include possible solutions and explanations; see [error guidance](ERRORS.md) for working without project configuration and choosing a mode. Suggestions do not bypass approvals or ownership checks. `--json` retains its existing contract, and native runtime and gateway protocols retain their own error presentation.
