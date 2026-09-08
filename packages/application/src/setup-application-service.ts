@@ -24,6 +24,7 @@ export interface SetupApplicationDependencies {
   readonly requestFactory: SetupRequestFactory;
   readonly localReset: { run(): Promise<void> };
   readonly detach: { run(): Promise<void> };
+  readonly legacyPiExtensionsCleanup: { run(): Promise<void> };
   readonly builder: Pick<InstallIntentBuilder, 'build'>;
   readonly installationProbe: CurrentInstallationProbe;
   readonly orchestrator: Pick<
@@ -46,6 +47,7 @@ export class SetupApplicationService {
       await this.dependencies.localReset.run();
       await this.dependencies.detach.run();
     }
+    await this.dependencies.legacyPiExtensionsCleanup.run();
     const plan = await this.dependencies.orchestrator.plan(built.intent, admission);
     await this.dependencies.orchestrator.apply(plan, plan.confirmationDigest);
     const verified: InstallVerificationV1 = await this.dependencies.orchestrator.verify(true);

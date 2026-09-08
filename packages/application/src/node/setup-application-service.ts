@@ -19,6 +19,7 @@ import {
 } from '@mpx/installer';
 import { SetupApplicationService, type SetupRequestFactory } from '../setup-application-service.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
+import { LegacyPiExtensionCleanupService } from './legacy-pi-extension-cleanup.js';
 import { ObsoleteAccountStateResetService } from './obsolete-account-state-reset.js';
 
 const MAX_CONFIG_BYTES = 1024 * 1024;
@@ -465,6 +466,15 @@ export function createNodeSetupApplicationService(dependencies: {
         await detach.run();
         // Recovery may only restore links; a second run completes detachment or verifies the receipt.
         await detach.run();
+      },
+    },
+    legacyPiExtensionsCleanup: {
+      run: async () => {
+        const config = resolvePiDetachConfig(requestFactory.config(), dependencies.environment);
+        await new LegacyPiExtensionCleanupService({
+          piRoots: Object.values(config.identities).map((value) => value.runtimeRoots.pi),
+          projectsRoot,
+        }).run();
       },
     },
   });

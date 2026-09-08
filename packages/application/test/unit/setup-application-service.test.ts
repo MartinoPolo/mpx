@@ -64,6 +64,11 @@ function fixture(status: CurrentInstallationAdmission['status'] = 'initial', fai
         record('detach');
       }),
     },
+    legacyPiExtensionsCleanup: {
+      run: vi.fn(async () => {
+        record('cleanup');
+      }),
+    },
     orchestrator: {
       admitCurrentInstallation: vi.fn(async (actual, actualProbe) => {
         expect(actual).toBe(intent);
@@ -107,6 +112,7 @@ it('admits before initial reset and exact legacy detach, then binds planning and
     'admit',
     'reset',
     'detach',
+    'cleanup',
     'plan',
     'apply',
     'verify',
@@ -121,12 +127,14 @@ it('skips both reset and wholesale detachment for a verified current installatio
     'request',
     'build',
     'admit',
+    'cleanup',
     'plan',
     'apply',
     'verify',
     'request',
     'build',
     'admit',
+    'cleanup',
     'plan',
     'apply',
     'verify',
@@ -135,12 +143,22 @@ it('skips both reset and wholesale detachment for a verified current installatio
   expect(value.dependencies.detach.run).not.toHaveBeenCalled();
 });
 
-it.each(['request', 'build', 'admit', 'reset', 'detach', 'plan', 'apply', 'verify'])(
+it.each(['request', 'build', 'admit', 'reset', 'detach', 'cleanup', 'plan', 'apply', 'verify'])(
   'fails closed at %s without invoking later operations',
   async (failureAt) => {
     const value = fixture('initial', failureAt);
     await expect(value.service.execute()).rejects.toBe(value.failure);
-    const sequence = ['request', 'build', 'admit', 'reset', 'detach', 'plan', 'apply', 'verify'];
+    const sequence = [
+      'request',
+      'build',
+      'admit',
+      'reset',
+      'detach',
+      'cleanup',
+      'plan',
+      'apply',
+      'verify',
+    ];
     expect(value.order).toEqual(sequence.slice(0, sequence.indexOf(failureAt) + 1));
   },
 );

@@ -30,6 +30,7 @@ import { createNodeWorktreeLifecycleService } from './worktree-lifecycle.js';
 export * from './exact-native-root.js';
 export * from './local-issue-store.js';
 export * from './local-issue-view-rebuilder.js';
+export * from './legacy-pi-extension-cleanup.js';
 export * from './obsolete-account-state-reset.js';
 export * from './pi-auth-availability.js';
 export * from './preparation-worker-polling.js';
