@@ -5,10 +5,13 @@ Human-readable MPX CLI errors include a diagnostic code, the reason, and a
 remediation with suggestions for the error code or error family. Unknown errors
 provide command-discovery and reporting instructions rather than an invented repair.
 
-Each command is followed by an explanation. Suggestions are alternatives, not a
-script to execute from top to bottom. Replace angle-bracket placeholders before
-running a command. Flag-only entries explain options to append to the original
-command so its runtime, identity, executor, and approval choices are retained.
+Each command is followed by an explanation. In an interactive color-capable terminal,
+the command portion is bold cyan so it remains distinct from its explanation. Styling
+is disabled for redirected output, `NO_COLOR`, and terminals identified as `dumb`.
+Suggestions are alternatives, not a script to execute from top to bottom. Replace
+angle-bracket placeholders before running a command. Flag-only entries explain options
+to append to the original command so its runtime, identity, executor, and approval
+choices are retained.
 
 Recovery guidance does not grant permission, perform repairs, or relax validation.
 Read the explanation before running a command: setup changes the installation,

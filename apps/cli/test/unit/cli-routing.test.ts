@@ -215,6 +215,13 @@ describe('canonical CLI dispatch', () => {
     expect(io.out).toEqual([]);
   });
 
+  it('colors solution commands when the error output supports color', async () => {
+    const io = { ...captureIo(), supportsColor: true };
+
+    expect(await run(['workspace', 'show', '--unknown'], io, { env: {} })).toBe(2);
+    expect(io.err.join('')).toContain('\u001b[1;36mmpx help --all\u001b[0m -');
+  });
+
   it('keeps the JSON error envelope and usage exit status unchanged', async () => {
     const io = captureIo();
 

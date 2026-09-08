@@ -769,7 +769,9 @@ export async function run(
       io.stdout(JSON.stringify(errorEnvelope(normalized)) + '\n');
     } else {
       io.stderr(
-        formatHumanError(normalized.toPublic(), usageError ? usageGuidance(parsed) : undefined),
+        formatHumanError(normalized.toPublic(), usageError ? usageGuidance(parsed) : undefined, {
+          color: io.supportsColor === true,
+        }),
       );
     }
     return usageError ? 2 : 1;

@@ -35,6 +35,18 @@ describe('human CLI error formatting', () => {
     expect(output).toContain('Try this now');
   });
 
+  it('styles only commands when terminal color is enabled', () => {
+    const output = formatHumanError(publicError({ code: 'PROJECT_REQUIRED' }), undefined, {
+      color: true,
+    });
+
+    expect(output).toContain('\u001b[1;36m--mode developer\u001b[0m - Append to the original');
+    expect(output).toContain('\u001b[1;36mmpx init\u001b[0m - Preview project initialization');
+    expect(output).toContain('\u001b[1;36mmpx init --confirm\u001b[0m - Only if you choose');
+    expect(output).toContain('\u001b[1;36m--cwd <project-root>\u001b[0m - Append to the original');
+    expect(output).not.toContain('\u001b[1;36mAppend to the original');
+  });
+
   it('preserves supplied usage help without duplicating it as the reason', () => {
     const usage = 'Usage: example command\nExample options';
     const output = formatHumanError(
