@@ -98,6 +98,25 @@ function activityLiveness(type: SessionLifecycleEventV1['type']): SessionLivenes
   return type === 'shutdown' ? 'inactive' : 'active';
 }
 
+function monotonicUpdatedAt(candidate: string, current?: SessionRecordV1): string {
+  const parsed = new Date(candidate);
+  if (
+    Number.isNaN(parsed.valueOf()) ||
+    parsed.toISOString() !== candidate ||
+    current === undefined
+  ) {
+    return candidate;
+  }
+  return [candidate, current.timestamps.createdAt, current.timestamps.updatedAt].reduce(
+    (latest, timestamp) => (timestamp > latest ? timestamp : latest),
+  );
+}
+
+function monotonicActivityAt(candidate: string, current?: SessionRecordV1): string {
+  const previous = current?.timestamps.lastActivityAt;
+  return previous !== null && previous !== undefined && previous > candidate ? previous : candidate;
+}
+
 export class SessionService {
   constructor(
     readonly store: SessionStore,
@@ -265,11 +284,11 @@ export class SessionService {
         },
         timestamps: {
           createdAt,
-          updatedAt: event.timestamp,
+          updatedAt: monotonicUpdatedAt(event.timestamp, current),
           lastActivityAt:
             event.type === 'shutdown'
               ? (current?.timestamps.lastActivityAt ?? null)
-              : event.timestamp,
+              : monotonicActivityAt(event.timestamp, current),
         },
         lifecycle: {
           bindingId: event.bindingId,
@@ -370,7 +389,10 @@ export class SessionService {
                   : parseSessionRecordV1({
                       ...record,
                       liveness: 'active',
-                      timestamps: { ...record.timestamps, updatedAt: capturedAt },
+                      timestamps: {
+                        ...record.timestamps,
+                        updatedAt: monotonicUpdatedAt(capturedAt, record),
+                      },
                     });
               }
               if (inspection.status === 'absent') {
@@ -381,13 +403,19 @@ export class SessionService {
                   ...record,
                   liveness: 'inactive',
                   process: null,
-                  timestamps: { ...record.timestamps, updatedAt: capturedAt },
+                  timestamps: {
+                    ...record.timestamps,
+                    updatedAt: monotonicUpdatedAt(capturedAt, record),
+                  },
                 });
               }
               return parseSessionRecordV1({
                 ...record,
                 liveness: 'unknown',
-                timestamps: { ...record.timestamps, updatedAt: capturedAt },
+                timestamps: {
+                  ...record.timestamps,
+                  updatedAt: monotonicUpdatedAt(capturedAt, record),
+                },
               });
             }),
           },
@@ -431,7 +459,10 @@ export class SessionService {
                       ...record,
                       liveness: 'inactive',
                       process: null,
-                      timestamps: { ...record.timestamps, updatedAt: capturedAt },
+                      timestamps: {
+                        ...record.timestamps,
+                        updatedAt: monotonicUpdatedAt(capturedAt, record),
+                      },
                     })
                   : record,
               ),
@@ -584,8 +615,8 @@ export class SessionService {
         },
         timestamps: {
           createdAt: current?.timestamps.createdAt ?? timestamp,
-          updatedAt: timestamp,
-          lastActivityAt: timestamp,
+          updatedAt: monotonicUpdatedAt(timestamp, current),
+          lastActivityAt: monotonicActivityAt(timestamp, current),
         },
         lifecycle: current?.lifecycle ?? {
           bindingId: null,

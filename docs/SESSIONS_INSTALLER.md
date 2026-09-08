@@ -13,7 +13,7 @@ MPX stores bounded lifecycle metadata only for sessions it represents. It does n
 
 Listing consumes pending lifecycle events, scans only exact configured runtime roots, and performs bounded reconciliation. Malformed native data becomes a diagnostic rather than deleting durable records. Process liveness uses PID plus start fingerprint; a missing process is marked inactive only after a valid platform snapshot.
 
-Pi discovery and resume verify the configured real account root and delegate credential availability to native Pi's bounded `auth check`. Claude retains native account-root behavior. Both runtimes keep their native resume argv.
+Pi discovery and resume verify the configured real account root and delegate credential availability to native Pi's bounded `auth check`. Claude discovery and resume share interactive-session parsing, including current `kind` and legacy `type` metadata, while retaining native account-root behavior. Both runtimes keep their native resume argv. Reconciliation and delayed lifecycle events preserve monotonic record timestamps when scans overlap new launches.
 
 ## Resume authorization
 

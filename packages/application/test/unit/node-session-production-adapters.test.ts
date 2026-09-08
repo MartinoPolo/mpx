@@ -6,6 +6,7 @@ import type { UserConfig } from '@mpx/config';
 import { canonicalNativeRootDigest } from '@mpx/launch';
 import { deriveNativeBindingRef, SessionStore } from '@mpx/sessions';
 import {
+  claudeActivityFromAgentsOutput,
   productionSessionDiscoveries,
   productionSessionResumeDependencies,
 } from '../../src/node/session-production-adapters.js';
@@ -14,6 +15,18 @@ const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
+
+it('recognizes only current-shape interactive Claude agents as active', () => {
+  const output = JSON.stringify({
+    agents: [
+      { kind: 'background', sessionId: 'background', cwd: 'C:/repo', pid: 41 },
+      { kind: 'interactive', sessionId: 'current', cwd: 'C:/repo', pid: 42 },
+    ],
+  });
+
+  expect(claudeActivityFromAgentsOutput(output, 'current')).toBe('active');
+  expect(claudeActivityFromAgentsOutput(output, 'background')).toBe('inactive');
+});
 
 async function fixture() {
   const state = await mkdtemp(path.join(tmpdir(), 'mpx-session-adapters-'));

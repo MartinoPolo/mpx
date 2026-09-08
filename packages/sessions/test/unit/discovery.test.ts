@@ -5,6 +5,7 @@ import { setImmediate } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WindowsProcessCapabilities, type PowerShellRunner } from '@mpx/windows';
 import {
+  ClaudeActiveScanner,
   PiV2ActiveRegistryScanner,
   type ProcessInspection,
   type ProcessInspector,
@@ -18,6 +19,87 @@ const roots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+it.each([
+  [
+    'agents',
+    { agents: [{ kind: 'interactive', sessionId: 'current', cwd: 'C:/repo', pid: 42 }] },
+    'current',
+    42,
+    null,
+  ],
+  [
+    'sessions',
+    {
+      sessions: [
+        { type: 'interactive', sessionId: 'legacy', cwd: 'C:/repo', pid: 43, name: 'Legacy' },
+      ],
+    },
+    'legacy',
+    43,
+    'Legacy',
+  ],
+  [
+    'array',
+    [{ kind: 'interactive', sessionId: 'array', cwd: 'C:/repo', pid: 44, name: null }],
+    'array',
+    44,
+    null,
+  ],
+] as const)(
+  'discovers Claude interactive agents from the %s envelope',
+  async (_label, payload, nativeSessionId, pid, title) => {
+    const scanner = new ClaudeActiveScanner(async () => ({
+      available: true,
+      exitCode: 0,
+      stdout: JSON.stringify(payload),
+    }));
+
+    const result = await scanner.scan();
+
+    expect(result.status).toBe('available');
+    expect(result.sessions).toHaveLength(1);
+    expect(result.sessions[0]).toMatchObject({
+      nativeSessionId,
+      nativeSessionRef: { kind: 'native-id', value: nativeSessionId },
+      cwd: 'C:/repo',
+      pid,
+      title,
+    });
+  },
+);
+
+it('excludes background Claude agents and fails closed on conflicting discriminators', async () => {
+  const scan = (payload: unknown) =>
+    new ClaudeActiveScanner(async () => ({
+      available: true,
+      exitCode: 0,
+      stdout: JSON.stringify(payload),
+    })).scan();
+
+  await expect(
+    scan({ agents: [{ kind: 'background', sessionId: 'worker', cwd: 'C:/repo', pid: 42 }] }),
+  ).resolves.toMatchObject({ status: 'available', sessions: [] });
+  await expect(
+    scan({ agents: [{ kind: 'interactive', type: 'background' }] }),
+  ).resolves.toMatchObject({ status: 'malformed', sessions: [] });
+});
+
+it.each([
+  { kind: null },
+  { kind: 1 },
+  { type: null },
+  { type: false },
+  { kind: 'background', type: 1 },
+])('fails closed when a present Claude discriminator is not a string: %j', async (agent) => {
+  const scanner = new ClaudeActiveScanner(async () => ({
+    available: true,
+    exitCode: 0,
+    stdout: JSON.stringify({ agents: [agent] }),
+  }));
+
+  await expect(scanner.scan()).resolves.toMatchObject({ status: 'malformed', sessions: [] });
 });
 
 async function registryFixture(pids: readonly number[]) {

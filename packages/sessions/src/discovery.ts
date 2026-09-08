@@ -16,6 +16,61 @@ export interface CommandOutput {
   readonly stderr?: string;
 }
 export type ClaudeCommandExecutor = (command: readonly string[]) => Promise<CommandOutput>;
+
+export function parseClaudeActiveAgents(value: unknown): readonly DiscoveredSession[] {
+  const values = Array.isArray(value)
+    ? value
+    : isObject(value) && Array.isArray(value.sessions)
+      ? value.sessions
+      : isObject(value) && Array.isArray(value.agents)
+        ? value.agents
+        : undefined;
+  if (!values) {
+    throw new Error('missing agents array');
+  }
+  const sessions: DiscoveredSession[] = [];
+  for (const agent of values) {
+    if (!isObject(agent)) {
+      continue;
+    }
+    const hasType = Object.hasOwn(agent, 'type');
+    const hasKind = Object.hasOwn(agent, 'kind');
+    if (
+      (hasType && typeof agent.type !== 'string') ||
+      (hasKind && typeof agent.kind !== 'string')
+    ) {
+      throw new Error('malformed agent kind');
+    }
+    if (hasType && hasKind && agent.type !== agent.kind) {
+      throw new Error('conflicting agent kind');
+    }
+    const kind = hasKind ? agent.kind : agent.type;
+    if (kind !== 'interactive') {
+      continue;
+    }
+    if (
+      typeof agent.sessionId !== 'string' ||
+      typeof agent.cwd !== 'string' ||
+      typeof agent.pid !== 'number' ||
+      !Number.isSafeInteger(agent.pid) ||
+      agent.pid < 1 ||
+      (agent.name !== undefined && agent.name !== null && typeof agent.name !== 'string')
+    ) {
+      throw new Error('malformed interactive agent');
+    }
+    sessions.push({
+      nativeSessionId: agent.sessionId,
+      nativeSessionRef: { kind: 'native-id', value: agent.sessionId },
+      cwd: agent.cwd,
+      title: agent.name === undefined ? null : agent.name,
+      pid: agent.pid,
+      startFingerprint:
+        typeof agent.startFingerprint === 'string' ? agent.startFingerprint : `pid:${agent.pid}`,
+    });
+  }
+  return sessions;
+}
+
 export class ClaudeActiveScanner implements RuntimeDiscovery {
   readonly runtime = 'claude' as const;
   constructor(private readonly execute: ClaudeCommandExecutor) {}
@@ -38,44 +93,7 @@ export class ClaudeActiveScanner implements RuntimeDiscovery {
       };
     }
     try {
-      const parsed = JSON.parse(output.stdout) as unknown;
-      const values = Array.isArray(parsed)
-        ? parsed
-        : isObject(parsed) && Array.isArray(parsed.sessions)
-          ? parsed.sessions
-          : isObject(parsed) && Array.isArray(parsed.agents)
-            ? parsed.agents
-            : undefined;
-      if (!values) {
-        throw new Error('missing agents array');
-      }
-      const sessions: DiscoveredSession[] = [];
-      for (const value of values) {
-        if (!isObject(value) || value.type !== 'interactive') {
-          continue;
-        }
-        if (
-          typeof value.sessionId !== 'string' ||
-          typeof value.cwd !== 'string' ||
-          typeof value.pid !== 'number' ||
-          !Number.isSafeInteger(value.pid) ||
-          value.pid < 1 ||
-          (value.name !== null && typeof value.name !== 'string')
-        ) {
-          throw new Error('malformed interactive agent');
-        }
-        sessions.push({
-          nativeSessionId: value.sessionId,
-          nativeSessionRef: { kind: 'native-id', value: value.sessionId },
-          cwd: value.cwd,
-          title: value.name,
-          pid: value.pid,
-          startFingerprint:
-            typeof value.startFingerprint === 'string'
-              ? value.startFingerprint
-              : `pid:${value.pid}`,
-        });
-      }
+      const sessions = parseClaudeActiveAgents(JSON.parse(output.stdout) as unknown);
       return { status: 'available', sessions, diagnostic: null };
     } catch {
       return {

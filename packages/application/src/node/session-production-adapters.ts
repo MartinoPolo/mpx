@@ -8,6 +8,7 @@ import {
   PiV2ActiveRegistryScanner,
   SessionStore,
   deriveNativeBindingRef,
+  parseClaudeActiveAgents,
   type IdentityV1,
   type ProcessInspector,
   type ResumeDependencies,
@@ -20,6 +21,16 @@ import type { SessionDiscoveryScope } from '../session-application-service.js';
 import { ExactNativeRootVerifier } from './exact-native-root.js';
 import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-availability.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
+
+export function claudeActivityFromAgentsOutput(
+  stdout: string,
+  nativeSessionId: string,
+): 'active' | 'inactive' {
+  const sessions = parseClaudeActiveAgents(JSON.parse(stdout) as unknown);
+  return sessions.some((session) => session.nativeSessionId === nativeSessionId)
+    ? 'active'
+    : 'inactive';
+}
 
 export function productionSessionResumeDependencies(input: {
   user: UserConfig;
@@ -141,24 +152,7 @@ export function productionSessionResumeDependencies(input: {
               return;
             }
             try {
-              const value = JSON.parse(stdout) as unknown;
-              const entries = Array.isArray(value)
-                ? value
-                : typeof value === 'object' &&
-                    value !== null &&
-                    Array.isArray((value as { agents?: unknown }).agents)
-                  ? (value as { agents: unknown[] }).agents
-                  : [];
-              resolve(
-                entries.some(
-                  (item) =>
-                    typeof item === 'object' &&
-                    item !== null &&
-                    (item as { sessionId?: unknown }).sessionId === ref.value,
-                )
-                  ? 'active'
-                  : 'inactive',
-              );
+              resolve(claudeActivityFromAgentsOutput(stdout, ref.value));
             } catch {
               resolve('unavailable');
             }

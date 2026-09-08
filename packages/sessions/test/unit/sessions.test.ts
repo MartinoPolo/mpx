@@ -873,6 +873,49 @@ it('accepts sequence one when a resumed session moves to a new lifecycle binding
   expect(resumed.lifecycle).toMatchObject({ bindingId: 'new-ordering-domain', sequence: 1 });
 });
 
+it('accepts an older event in a new lifecycle without rolling record timestamps backward', async () => {
+  const store = new SessionStore(await temporary()),
+    service = new SessionService(store, () => later);
+  await store.saveNativeBinding(nativeBinding());
+  await store.put(
+    record({
+      timestamps: { createdAt: later, updatedAt: later, lastActivityAt: later },
+      lifecycle: { bindingId: 'old-binding', sequence: 8, timestamp: later },
+    }),
+  );
+  await store.saveLifecycleBinding({
+    ...lifecycleBindingRecord('older-event-binding'),
+    nativeSessionRef: { kind: 'native-id', value: 'abc' },
+  });
+  const ingested = await service.ingest(
+    createSessionLifecycleEventV1({
+      eventId: 'older-new-domain-event',
+      bindingId: 'older-event-binding',
+      type: 'activity',
+      sequence: 1,
+      timestamp: instant,
+      nativeSessionId: 'abc',
+      nativeSessionRef: { kind: 'native-id', value: 'abc' },
+      cwd: 'C:/repo',
+      title: null,
+      model: null,
+      effort: null,
+      pid: 42,
+      startFingerprint: 'start',
+    }),
+  );
+  expect(ingested.timestamps).toEqual({
+    createdAt: later,
+    updatedAt: later,
+    lastActivityAt: later,
+  });
+  expect(ingested.lifecycle).toMatchObject({
+    bindingId: 'older-event-binding',
+    sequence: 1,
+    timestamp: instant,
+  });
+});
+
 it('retains shutdown process evidence for later native activity verification', async () => {
   const store = new SessionStore(await temporary()),
     service = new SessionService(store);
@@ -1244,6 +1287,67 @@ it('reconcile scopes observations to context identity and deduplicates scanners'
   });
 });
 
+it('does not roll discovery timestamps behind a concurrently replaced record', async () => {
+  const store = new SessionStore(await temporary()),
+    service = new SessionService(store, () => instant),
+    context = { identity, nativeBindingRef: 'native:opaque', runtime: 'claude' as const },
+    discovered = {
+      nativeSessionId: 'raced',
+      nativeSessionRef: { kind: 'native-id' as const, value: 'raced' },
+      cwd: 'C:/repo',
+      title: null,
+      pid: 42,
+      startFingerprint: 'start',
+    };
+  await store.saveNativeBinding(nativeBinding());
+  await service.reconcile([
+    {
+      scanner: {
+        runtime: 'claude',
+        scan: async () => ({
+          status: 'available' as const,
+          sessions: [discovered],
+          diagnostic: null,
+        }),
+      },
+      context,
+    },
+  ]);
+  const current = await service.show('claude:raced');
+  let scanned!: () => void, release!: () => void;
+  const scanStarted = new Promise<void>((resolve) => {
+    scanned = resolve;
+  });
+  const continueScan = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reconciling = service.reconcile([
+    {
+      scanner: {
+        runtime: 'claude',
+        scan: async () => {
+          scanned();
+          await continueScan;
+          return { status: 'available' as const, sessions: [discovered], diagnostic: null };
+        },
+      },
+      context,
+    },
+  ]);
+  await scanStarted;
+  await store.put({
+    ...current,
+    timestamps: { createdAt: later, updatedAt: later, lastActivityAt: later },
+  });
+  release();
+  await expect(reconciling).resolves.toHaveLength(1);
+  expect((await service.show('claude:raced')).timestamps).toEqual({
+    createdAt: later,
+    updatedAt: later,
+    lastActivityAt: later,
+  });
+});
+
 it('emits lifecycle-only Pi observations without duplicating Claude scanner observations', async () => {
   const store = new SessionStore(await temporary()),
     service = new SessionService(store, () => later);
@@ -1577,6 +1681,46 @@ it('does not apply a stale Pi process inspection after a newer process tuple is 
   expect(await new SessionService(store).show('pi:race')).toMatchObject({
     liveness: 'active',
     process: { pid: 77, startFingerprint: 'new' },
+  });
+});
+
+it('does not roll a Pi record timestamp backward after a concurrent update', async () => {
+  const store = new SessionStore(await temporary());
+  const original = record({
+    runtime: 'pi',
+    runtimeQualifiedId: 'pi:timestamp-race',
+    recordId: 'pi-timestamp-race',
+    identity: { domain: 'local', name: 'pi' },
+    nativeSessionRef: { kind: 'root-relative-file', value: 'timestamp-race.jsonl' },
+    liveness: 'active',
+    process: { pid: 42, startFingerprint: 'start' },
+  });
+  await store.put(original);
+  let inspected!: () => void, release!: () => void;
+  const inspectionStarted = new Promise<void>((resolve) => {
+    inspected = resolve;
+  });
+  const continueInspection = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reconciling = new SessionService(store, () => instant, {
+    inspect: async () => {
+      inspected();
+      await continueInspection;
+      return { status: 'absent' };
+    },
+  }).reconcile([]);
+  await inspectionStarted;
+  await store.put({
+    ...original,
+    timestamps: { ...original.timestamps, createdAt: later, updatedAt: later },
+  });
+  release();
+  await reconciling;
+  expect(await new SessionService(store).show('pi:timestamp-race')).toMatchObject({
+    liveness: 'inactive',
+    process: null,
+    timestamps: { createdAt: later, updatedAt: later },
   });
 });
 
