@@ -931,6 +931,7 @@ const ENV_ALLOW = new Set([
   'PATH',
   'Path',
   'PATHEXT',
+  'SystemRoot',
   'SYSTEMROOT',
   'WINDIR',
   'COMSPEC',
@@ -940,12 +941,21 @@ const ENV_ALLOW = new Set([
   'USERPROFILE',
   'APPDATA',
   'LOCALAPPDATA',
-  // Windows OpenSSH reads ProgramData before initializing diagnostic output.
+  // Windows tools use these system roots for trusted binaries, plugins, and startup data.
   'ProgramData',
   'PROGRAMDATA',
+  'ProgramFiles',
+  'ProgramFiles(x86)',
+  'ProgramW6432',
   'TERM',
   'COLORTERM',
+  'TERM_PROGRAM',
   'WT_SESSION',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'LC_MESSAGES',
+  'LANGUAGE',
 ]);
 const TRUSTED_LAUNCH_ENV_ALLOW = new Set([
   'MPX_RUNTIME',

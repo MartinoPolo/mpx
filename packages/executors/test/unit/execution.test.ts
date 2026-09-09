@@ -1017,6 +1017,7 @@ describe('trust and privacy boundaries', () => {
           TOKEN: 'secret',
           API_KEY: 'secret',
           APPROVAL_NONCE: 'secret',
+          TMPDIR: '/ambient/temp',
           RANDOM: 'drop',
         },
         {
@@ -1039,17 +1040,34 @@ describe('trust and privacy boundaries', () => {
     });
   });
 
-  it.each(['ProgramData', 'PROGRAMDATA'])(
-    'preserves %s for Windows OpenSSH startup without forwarding SSH overrides',
-    (key) => {
-      expect(
-        sanitizedEnvironment(
-          { [key]: 'C:/ProgramData', GIT_SSH_COMMAND: 'untrusted', SSH_AUTH_SOCK: 'ambient' },
-          {},
-        ),
-      ).toEqual({ [key]: 'C:/ProgramData' });
-    },
-  );
+  it.each([
+    ['SystemRoot', 'C:/Windows'],
+    ['ProgramData', 'C:/ProgramData'],
+    ['PROGRAMDATA', 'C:/ProgramData'],
+    ['ProgramFiles', 'C:/Program Files'],
+    ['ProgramFiles(x86)', 'C:/Program Files (x86)'],
+    ['ProgramW6432', 'C:/Program Files'],
+  ])('preserves Windows system directory %s without forwarding SSH overrides', (key, value) => {
+    expect(
+      sanitizedEnvironment(
+        { [key]: value, GIT_SSH_COMMAND: 'untrusted', SSH_AUTH_SOCK: 'ambient' },
+        {},
+      ),
+    ).toEqual({ [key]: value });
+  });
+
+  it.each([
+    ['TERM_PROGRAM', 'vscode'],
+    ['LANG', 'cs_CZ.UTF-8'],
+    ['LC_ALL', 'cs_CZ.UTF-8'],
+    ['LC_CTYPE', 'cs_CZ.UTF-8'],
+    ['LC_MESSAGES', 'cs_CZ.UTF-8'],
+    ['LANGUAGE', 'cs:en'],
+  ])('preserves non-authoritative host context %s without forwarding secrets', (key, value) => {
+    expect(sanitizedEnvironment({ [key]: value, TOKEN: 'secret', API_KEY: 'secret' }, {})).toEqual({
+      [key]: value,
+    });
+  });
 
   it.each([
     'MPX_RUNTIME',

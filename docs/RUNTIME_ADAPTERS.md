@@ -30,4 +30,4 @@ Claude represents `name-only` with neutral trigger metadata and `explicit-only` 
 
 The internal `ExecutorAdapter.assertReady` boundary checks the selected adapter's concrete executable, invocation, account/root, artifacts, launch binding, support, and approval inputs. A constant host-adapter hash is not security evidence or sandbox proof.
 
-Windows host execution is supported with explicit selection, reason, and fresh approval. It is not OS filesystem isolation. Whole-agent Docker execution is unavailable and never falls back to host. The Windows environment preserves `ProgramData` for OpenSSH while excluding ambient command overrides and authentication-agent settings.
+Windows host execution is supported with explicit selection, reason, and fresh approval. It is not OS filesystem isolation. Whole-agent Docker execution is unavailable and never falls back to host. Runtime environments preserve standard system roots, `TEMP`/`TMP` selection, terminal identity, and locale metadata needed by supported host tools. Ambient command overrides, authentication-agent settings, credentials, proxies, endpoint selectors, and trust-store overrides remain excluded.
