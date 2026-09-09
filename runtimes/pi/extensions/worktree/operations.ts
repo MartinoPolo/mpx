@@ -17,6 +17,35 @@ export type Execute = (
   options?: ExecOptions,
 ) => Promise<ExecResult>;
 
+export interface WorkspaceHubInvocation {
+  command: string;
+  argumentPrefix: string[];
+}
+
+export function resolveWorkspaceHubInvocation(
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  nodeExecutable: string = process.execPath,
+): WorkspaceHubInvocation {
+  if (platform !== 'win32') {
+    return { command: 'mpx', argumentPrefix: [] };
+  }
+  const applicationsRoot = environment.MPX_APPS?.trim();
+  const driveQualified = applicationsRoot ? /^[A-Za-z]:[\\/]/u.test(applicationsRoot) : false;
+  const uncQualified = applicationsRoot
+    ? /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/u.test(applicationsRoot)
+    : false;
+  if (!applicationsRoot || (!driveQualified && !uncQualified)) {
+    throw new Error(
+      'MPX_APPS must identify a drive-qualified or UNC MPX applications root on Windows.',
+    );
+  }
+  return {
+    command: nodeExecutable,
+    argumentPrefix: [path.win32.join(applicationsRoot, 'mpx', 'bin', 'mpx-node.mjs')],
+  };
+}
+
 export const COMMAND_USAGE =
   '/worktree <name> [--base <ref>] [-- <task>] or /worktree --enter <path> [-- <task>]';
 
@@ -139,6 +168,134 @@ export function parseWorkspaceCreateResult(output: string): string {
   return envelope.data.path;
 }
 
+export function findWorktreeForBranch(output: string, branch: string): string | undefined {
+  const expectedReference = `refs/heads/${branch}`;
+  const matches: string[] = [];
+  let worktreePath: string | undefined;
+  let worktreeBranch: string | undefined;
+  let prunable = false;
+  const publish = () => {
+    if (worktreeBranch === expectedReference && worktreePath !== undefined && !prunable) {
+      matches.push(worktreePath);
+    }
+    worktreePath = undefined;
+    worktreeBranch = undefined;
+    prunable = false;
+  };
+
+  for (const field of output.split('\0')) {
+    if (field === '') {
+      publish();
+      continue;
+    }
+    const separator = field.indexOf(' ');
+    const key = separator === -1 ? field : field.slice(0, separator);
+    const value = separator === -1 ? '' : field.slice(separator + 1);
+    if (key === 'worktree') {
+      worktreePath = value;
+    } else if (key === 'branch') {
+      worktreeBranch = value;
+    } else if (key === 'prunable') {
+      prunable = true;
+    }
+  }
+  publish();
+
+  if (matches.length > 1) {
+    throw new Error(`Git reported multiple worktrees for branch ${JSON.stringify(branch)}.`);
+  }
+  const match = matches[0];
+  if (match !== undefined && !path.isAbsolute(match)) {
+    throw new Error('Git reported a non-absolute worktree path.');
+  }
+  return match;
+}
+
+const EXECUTION_TIMEOUT_MS = 120_000;
+const MAX_DIAGNOSTIC_CHARACTERS = 12_000;
+
+interface ExecutionDiagnosticResult {
+  stdout?: string;
+  stderr?: string;
+  code?: unknown;
+  killed?: unknown;
+}
+
+function boundedJson(value: unknown, maximumCharacters: number): string {
+  const serialized = JSON.stringify(value) ?? 'undefined';
+  if (serialized.length <= maximumCharacters) {
+    return serialized;
+  }
+  let tailLength = maximumCharacters;
+  let bounded = '';
+  do {
+    bounded = JSON.stringify({ truncated: true, jsonTail: serialized.slice(-tailLength) });
+    tailLength = Math.max(0, tailLength - Math.max(1, bounded.length - maximumCharacters));
+  } while (bounded.length > maximumCharacters && tailLength > 0);
+  return bounded.slice(0, maximumCharacters);
+}
+
+function boundedTail(value: string, maximumCharacters: number): string {
+  if (value.length <= maximumCharacters) {
+    return value;
+  }
+  const marker = `[truncated output; ${value.length} total characters]\n`;
+  if (marker.length >= maximumCharacters) {
+    return marker.slice(0, maximumCharacters);
+  }
+  return `${marker}${value.slice(-(maximumCharacters - marker.length))}`;
+}
+
+function diagnosticPrimitive(value: unknown): string | number | boolean | null | undefined {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value)
+    ? (value as string | number | boolean | null)
+    : undefined;
+}
+
+function executionFailureDetails(
+  error: unknown,
+): ExecutionDiagnosticResult & { description: string } {
+  const description = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  if (typeof error !== 'object' || error === null) {
+    return { description };
+  }
+  const failure = error as Record<string, unknown>;
+  return {
+    description,
+    stdout: typeof failure.stdout === 'string' ? failure.stdout : undefined,
+    stderr: typeof failure.stderr === 'string' ? failure.stderr : undefined,
+    code: diagnosticPrimitive(failure.code),
+    killed: diagnosticPrimitive(failure.killed),
+  };
+}
+
+function formatExecutionDiagnostic(
+  command: string,
+  args: string[],
+  cwd: string,
+  result?: ExecutionDiagnosticResult,
+  executionError?: string,
+): string {
+  const metadata = [
+    `Command: ${boundedJson(command, 512)}`,
+    `Arguments: ${boundedJson(args, 2_048)}`,
+    `Cwd: ${boundedJson(cwd, 1_024)}`,
+    `Exit code: ${result?.code === undefined ? '<unavailable>' : boundedJson(result.code, 128)}`,
+    `Killed/timeout: ${result?.killed === undefined ? '<unavailable>' : boundedJson(result.killed, 128)}`,
+    ...(executionError === undefined
+      ? []
+      : [`Execution error: ${boundedTail(executionError, 1_024)}`]),
+  ].join('\n');
+  const stdout = result?.stdout === undefined ? '<unavailable>' : result.stdout || '<empty>';
+  const stderr = result?.stderr === undefined ? '<unavailable>' : result.stderr || '<empty>';
+  const sectionCharacters = '\nstdout:\n\nstderr:\n'.length;
+  const outputBudget = Math.max(0, MAX_DIAGNOSTIC_CHARACTERS - metadata.length - sectionCharacters);
+  const stdoutBudget = Math.floor(outputBudget / 2);
+  const stderrBudget = outputBudget - stdoutBudget;
+
+  return `${metadata}\nstdout:\n${boundedTail(stdout, stdoutBudget)}\nstderr:\n${boundedTail(stderr, stderrBudget)}`;
+}
+
 async function checkedExecute(
   execute: Execute,
   command: string,
@@ -147,12 +304,25 @@ async function checkedExecute(
   signal: AbortSignal,
 ): Promise<string> {
   signal.throwIfAborted();
-  const result = await execute(command, args, { cwd, signal, timeout: 120_000 });
+  let result: ExecResult;
+  try {
+    result = await execute(command, args, { cwd, signal, timeout: EXECUTION_TIMEOUT_MS });
+  } catch (error) {
+    signal.throwIfAborted();
+    const failure = executionFailureDetails(error);
+    throw new Error(
+      `Execution failed:\n${formatExecutionDiagnostic(
+        command,
+        args,
+        cwd,
+        failure,
+        failure.description,
+      )}`,
+    );
+  }
   signal.throwIfAborted();
   if (result.code !== 0 || result.killed) {
-    throw new Error(
-      `${command} failed${result.killed ? ' or timed out' : ` (${result.code})`}:\n${(result.stderr || result.stdout).slice(-12_000)}`,
-    );
+    throw new Error(`Execution failed:\n${formatExecutionDiagnostic(command, args, cwd, result)}`);
   }
   return result.stdout.trim();
 }
@@ -173,11 +343,17 @@ export async function prepareWorktree(
   let target: string;
   if (request.action === 'create') {
     await git(['check-ref-format', '--branch', request.name!]);
+    const existingTarget = findWorktreeForBranch(
+      await git(['worktree', 'list', '--porcelain', '-z'], sourceRoot),
+      request.name!,
+    );
     try {
+      const hub = resolveWorkspaceHubInvocation();
       const output = await checkedExecute(
         execute,
-        'mpx',
+        hub.command,
         [
+          ...hub.argumentPrefix,
           '--cwd',
           sourceRoot,
           '--json',
@@ -192,9 +368,28 @@ export async function prepareWorktree(
       );
       target = parseWorkspaceCreateResult(output);
     } catch (error) {
-      throw new Error(
-        `MPX workspace Hub is unavailable or creation failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      signal.throwIfAborted();
+      const hubFailure = error instanceof Error ? error.message : String(error);
+      let recoveredTarget: string | undefined;
+      try {
+        const inventory = await git(['worktree', 'list', '--porcelain', '-z'], sourceRoot);
+        recoveredTarget = findWorktreeForBranch(inventory, request.name!);
+      } catch (recoveryError) {
+        signal.throwIfAborted();
+        throw new Error(
+          `MPX workspace Hub is unavailable or creation failed: ${hubFailure}\nGit could not resolve a partially created worktree: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+        );
+      }
+      if (recoveredTarget === undefined || existingTarget !== undefined) {
+        const manualRecovery =
+          existingTarget === undefined
+            ? 'No matching worktree was reported by Git. As a manual fallback, create the requested branch and worktree with Git, then use /worktree --enter <path>.'
+            : 'The matching worktree existed before this request, so it was not entered automatically. Inspect git worktree list and use /worktree --enter <path> if it is the intended checkout.';
+        throw new Error(
+          `MPX workspace Hub is unavailable or creation failed: ${hubFailure}\n${manualRecovery}`,
+        );
+      }
+      target = recoveredTarget;
     }
   } else {
     target = path.resolve(cwd, request.path!);

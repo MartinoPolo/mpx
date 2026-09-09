@@ -6,12 +6,51 @@ import path from 'node:path';
 import { test } from 'vitest';
 
 import {
+  findWorktreeForBranch,
   parseCommand,
   parseWorkspaceCreateResult,
   prepareWorktree,
+  resolveWorkspaceHubInvocation,
   validateRequest,
   type Execute,
 } from '../../../worktree/operations.js';
+
+async function runFailingWorkspaceCreate(
+  runMpx: Execute,
+  signal = new AbortController().signal,
+): Promise<void> {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-worktree-create-failure-'));
+  const source = path.join(root, 'source');
+  const commonDirectory = path.join(source, '.git');
+  await mkdir(commonDirectory, { recursive: true });
+  const execute: Execute = async (command, args, options) => {
+    if (args.includes('workspace') && args.includes('create')) {
+      return runMpx(command, args, options);
+    }
+    if (args.includes('--show-toplevel')) {
+      return { stdout: source, stderr: '', code: 0, killed: false };
+    }
+    if (args.includes('--git-common-dir')) {
+      return { stdout: commonDirectory, stderr: '', code: 0, killed: false };
+    }
+    return { stdout: '', stderr: '', code: 0, killed: false };
+  };
+
+  try {
+    await prepareWorktree({ action: 'create', name: 'feature' }, source, execute, signal);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+async function captureWorkspaceCreateFailure(runMpx: Execute): Promise<string> {
+  try {
+    await runFailingWorkspaceCreate(runMpx);
+    assert.fail('workspace creation should fail');
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
 
 test('command parser preserves quoted paths, creation options, and the raw task tail', () => {
   assert.deepEqual(
@@ -31,6 +70,42 @@ test('command parser preserves quoted paths, creation options, and the raw task 
   assert.throws(
     () => parseCommand('feature/name --color #12aBcD'),
     /Unexpected argument: --color/u,
+  );
+});
+
+test('workspace Hub invocation bypasses Windows command-script lookup', () => {
+  assert.deepEqual(
+    resolveWorkspaceHubInvocation({ MPX_APPS: 'C:\\MP Apps' }, 'win32', 'C:\\Node\\node.exe'),
+    {
+      command: 'C:\\Node\\node.exe',
+      argumentPrefix: ['C:\\MP Apps\\mpx\\bin\\mpx-node.mjs'],
+    },
+  );
+  assert.deepEqual(resolveWorkspaceHubInvocation({}, 'linux', '/usr/bin/node'), {
+    command: 'mpx',
+    argumentPrefix: [],
+  });
+  for (const applicationsRoot of [undefined, '/rooted', '\\rooted']) {
+    assert.throws(
+      () =>
+        resolveWorkspaceHubInvocation(
+          applicationsRoot === undefined ? {} : { MPX_APPS: applicationsRoot },
+          'win32',
+          'C:\\Node\\node.exe',
+        ),
+      /MPX_APPS.*drive-qualified or UNC/u,
+    );
+  }
+  assert.deepEqual(
+    resolveWorkspaceHubInvocation(
+      { MPX_APPS: '\\\\server\\applications' },
+      'win32',
+      'C:\\Node\\node.exe',
+    ),
+    {
+      command: 'C:\\Node\\node.exe',
+      argumentPrefix: ['\\\\server\\applications\\mpx\\bin\\mpx-node.mjs'],
+    },
   );
 });
 
@@ -55,6 +130,38 @@ test('workspace create output requires a successful mutation with one absolute p
         }),
       ),
     /absolute/,
+  );
+});
+
+test('worktree inventory resolves only the usable checkout for an exact branch', () => {
+  const target = path.resolve('partial-worktree');
+  const other = path.resolve('other-worktree');
+  const prunable = path.resolve('prunable-worktree');
+  const inventory = [
+    `worktree ${other}`,
+    'HEAD a',
+    'branch refs/heads/feature-other',
+    '',
+    `worktree ${prunable}`,
+    'HEAD b',
+    'branch refs/heads/feature',
+    'prunable stale metadata',
+    '',
+    `worktree ${target}`,
+    'HEAD c',
+    'branch refs/heads/feature',
+    '',
+  ].join('\0');
+
+  assert.equal(findWorktreeForBranch(inventory, 'feature'), target);
+  assert.equal(findWorktreeForBranch(inventory, 'missing'), undefined);
+  assert.throws(
+    () =>
+      findWorktreeForBranch(
+        `${inventory}\0worktree ${path.resolve('duplicate')}\0branch refs/heads/feature\0\0`,
+        'feature',
+      ),
+    /multiple worktrees/,
   );
 });
 
@@ -165,7 +272,15 @@ test('create delegates to the release-owned workspace CLI and uses its returned 
     if (command === 'git' && args[0] === 'check-ref-format') {
       return { stdout: '', stderr: '', code: 0, killed: false };
     }
-    if (command === 'mpx') {
+    if (command === 'git' && args[0] === 'worktree') {
+      return {
+        stdout: `worktree ${source}\0HEAD a\0branch refs/heads/main\0\0`,
+        stderr: '',
+        code: 0,
+        killed: false,
+      };
+    }
+    if (args.includes('workspace') && args.includes('create')) {
       return {
         stdout: JSON.stringify({
           ok: true,
@@ -188,11 +303,22 @@ test('create delegates to the release-owned workspace CLI and uses its returned 
     ),
     target,
   );
+  const hub = resolveWorkspaceHubInvocation();
   assert.deepEqual(
-    calls.find(({ command }) => command === 'mpx'),
+    calls.find(({ args }) => args.includes('workspace') && args.includes('create')),
     {
-      command: 'mpx',
-      args: ['--cwd', source, '--json', 'workspace', 'create', 'feature', '--base', 'HEAD~1'],
+      command: hub.command,
+      args: [
+        ...hub.argumentPrefix,
+        '--cwd',
+        source,
+        '--json',
+        'workspace',
+        'create',
+        'feature',
+        '--base',
+        'HEAD~1',
+      ],
       cwd: source,
     },
   );
@@ -200,6 +326,196 @@ test('create delegates to the release-owned workspace CLI and uses its returned 
     rm(source, { recursive: true, force: true }),
     rm(target, { recursive: true, force: true }),
   ]);
+});
+
+test('create recovers a checkout that the Hub created before reporting failure', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-worktree-partial-create-'));
+  const source = path.join(root, 'source');
+  const target = path.join(root, 'source.worktrees', 'feature');
+  const commonDirectory = path.join(root, 'common');
+  await Promise.all(
+    [source, target, commonDirectory].map((directory) => mkdir(directory, { recursive: true })),
+  );
+  let inventoryCalls = 0;
+  const execute: Execute = async (command, args, options) => {
+    if (args.includes('workspace') && args.includes('create')) {
+      return { stdout: '', stderr: '', code: 1, killed: false };
+    }
+    if (args[0] === 'worktree' && args[1] === 'list') {
+      inventoryCalls += 1;
+      return {
+        stdout:
+          inventoryCalls === 1
+            ? `worktree ${source}\0HEAD a\0branch refs/heads/main\0\0`
+            : `worktree ${source}\0HEAD a\0branch refs/heads/main\0\0worktree ${target}\0HEAD b\0branch refs/heads/feature\0\0`,
+        stderr: '',
+        code: 0,
+        killed: false,
+      };
+    }
+    if (args.includes('--show-toplevel')) {
+      return {
+        stdout: options?.cwd === target ? target : source,
+        stderr: '',
+        code: 0,
+        killed: false,
+      };
+    }
+    if (args.includes('--git-common-dir')) {
+      return { stdout: commonDirectory, stderr: '', code: 0, killed: false };
+    }
+    return { stdout: '', stderr: '', code: 0, killed: false };
+  };
+
+  try {
+    assert.equal(
+      await prepareWorktree(
+        { action: 'create', name: 'feature' },
+        source,
+        execute,
+        new AbortController().signal,
+      ),
+      target,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('create does not enter a matching worktree that predates the Hub request', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-worktree-existing-create-'));
+  const source = path.join(root, 'source');
+  const existing = path.join(root, 'existing');
+  const commonDirectory = path.join(root, 'common');
+  await Promise.all(
+    [source, existing, commonDirectory].map((directory) => mkdir(directory, { recursive: true })),
+  );
+  const execute: Execute = async (command, args) => {
+    if (args.includes('workspace') && args.includes('create')) {
+      return { stdout: '', stderr: '', code: 1, killed: false };
+    }
+    if (args[0] === 'worktree' && args[1] === 'list') {
+      return {
+        stdout: `worktree ${source}\0HEAD a\0branch refs/heads/main\0\0worktree ${existing}\0HEAD b\0branch refs/heads/feature\0\0`,
+        stderr: '',
+        code: 0,
+        killed: false,
+      };
+    }
+    if (args.includes('--show-toplevel')) {
+      return { stdout: source, stderr: '', code: 0, killed: false };
+    }
+    if (args.includes('--git-common-dir')) {
+      return { stdout: commonDirectory, stderr: '', code: 0, killed: false };
+    }
+    return { stdout: '', stderr: '', code: 0, killed: false };
+  };
+
+  try {
+    await assert.rejects(
+      prepareWorktree(
+        { action: 'create', name: 'feature' },
+        source,
+        execute,
+        new AbortController().signal,
+      ),
+      /existed before this request.*--enter/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('failed execution reports invocation metadata and explicit empty output streams', async () => {
+  const message = await captureWorkspaceCreateFailure(async () => ({
+    stdout: '',
+    stderr: '',
+    code: 1,
+    killed: false,
+  }));
+
+  assert.ok(
+    message.includes(`Command: ${JSON.stringify(resolveWorkspaceHubInvocation().command)}`),
+  );
+  assert.match(message, /Arguments: \[.*"--cwd",/u);
+  assert.match(message, /Cwd: ".*source"/u);
+  assert.match(message, /Exit code: 1/u);
+  assert.match(message, /Killed\/timeout: false/u);
+  assert.match(message, /stdout:\n<empty>/u);
+  assert.match(message, /stderr:\n<empty>/u);
+});
+
+test('failed execution retains JSON stdout and whitespace-prefixed nonempty stderr', async () => {
+  const stdout = JSON.stringify({ ok: false, error: { code: 'workspace_failed' } });
+  const stderr = '  \nwarning: retry refused';
+  const message = await captureWorkspaceCreateFailure(async () => ({
+    stdout,
+    stderr,
+    code: 2,
+    killed: false,
+  }));
+
+  assert.ok(message.includes(stdout));
+  assert.ok(message.includes(stderr));
+});
+
+test('rejected execution reports invocation context and the original failure', async () => {
+  const message = await captureWorkspaceCreateFailure(async () => {
+    throw new Error('spawn failed: executable unavailable');
+  });
+
+  assert.ok(
+    message.includes(`Command: ${JSON.stringify(resolveWorkspaceHubInvocation().command)}`),
+  );
+  assert.match(message, /Cwd: ".*source"/u);
+  assert.match(message, /Execution error: Error: spawn failed: executable unavailable/u);
+  assert.match(message, /stdout:\n<unavailable>/u);
+  assert.match(message, /stderr:\n<unavailable>/u);
+});
+
+test('rejected execution preserves its original failure with unsupported metadata values', async () => {
+  const circular: Record<string, unknown> = {};
+  circular.self = circular;
+  const message = await captureWorkspaceCreateFailure(async () => {
+    const error = Object.assign(new Error('original spawn failure'), {
+      code: 1n,
+      killed: circular,
+    });
+    throw error;
+  });
+
+  assert.match(message, /Execution error: Error: original spawn failure/u);
+});
+
+test('aborting pending execution preserves the exact abort reason', async () => {
+  const controller = new AbortController();
+  const abortReason = new Error('caller requested abort');
+  const pending = runFailingWorkspaceCreate(
+    async (_command, _args, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('backend aborted')));
+        controller.abort(abortReason);
+      }),
+    controller.signal,
+  );
+
+  await assert.rejects(pending, (error: unknown) => error === abortReason);
+});
+
+test('failed execution bounds large diagnostics while retaining both output tails', async () => {
+  const stdoutTail = 'STDOUT_TAIL';
+  const stderrTail = 'STDERR_TAIL';
+  const message = await captureWorkspaceCreateFailure(async () => ({
+    stdout: `${'o'.repeat(20_000)}${stdoutTail}`,
+    stderr: `${'e'.repeat(20_000)}${stderrTail}`,
+    code: 1,
+    killed: true,
+  }));
+
+  assert.ok(message.length <= 12_500, `diagnostic length was ${message.length}`);
+  assert.ok(message.includes(stdoutTail));
+  assert.ok(message.includes(stderrTail));
+  assert.match(message, /Killed\/timeout: true/u);
 });
 
 test('create fails closed when the workspace hub is unavailable', async () => {

@@ -17,6 +17,13 @@ mpx port kill <pid>
 `workspace show` without a path selects the Git worktree containing `--cwd`. Machine mode prints only its canonical
 path, which makes it suitable for shell `cd` wrappers.
 
+Pi's main-session worktree handoff snapshots Git's worktree inventory before asking the workspace Hub to create a
+checkout. On Windows it invokes the authenticated MPX Node entry directly because shell-free child processes do not
+resolve the installed `mpx.cmd` selector. If the Hub fails after Git has created the requested branch checkout, the
+handoff validates and enters only that newly reported worktree. It never treats a pre-existing checkout as the result of
+the failed request. When no new checkout exists, the error leaves the current session usable and gives a manual Git plus
+`/worktree --enter` recovery path.
+
 Normal operations perform one bounded recovery pass. If that pass reports a structurally valid, bounded orphan set and
 its generated exact approval, the application performs at most one second reconcile with that approval; it never loops.
 Read operations report bounded, redacted degraded diagnostics when recovery cannot complete. Mutations fail before their
