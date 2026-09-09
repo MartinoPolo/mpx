@@ -9,11 +9,10 @@ import {
   inventoryCanonical,
   inventoryProjectSkills,
   resolveManifest,
-  type Runtime,
-  type SkillProjectionPlan,
 } from '@mpx/skills';
+import type { Runtime, SkillProjectionPlan } from '@mpx/skills/contracts';
 import { fileURLToPath } from 'node:url';
-import { loadRuntimeProfilesV1, type RuntimeProfilesV1 } from '@mpx/config';
+import { loadRuntimeProfiles, type RuntimeProfiles } from '@mpx/config';
 import {
   compileContent,
   loadActiveContentProjection,
@@ -26,7 +25,7 @@ afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
 
-const runtimeProfiles: RuntimeProfilesV1 = {
+const runtimeProfiles: RuntimeProfiles = {
   schemaVersion: 1,
   models: {
     claude: {
@@ -173,14 +172,13 @@ async function fixture(
         ['alpha', 'full'],
         ['named', 'name-only'],
         ['locked', 'explicit-only'],
-        ['gone', 'off'],
       ] as const);
   for (const [identity, exposure] of definitions) {
     await mkdir(path.join(skillsRoot, identity, 'references'), { recursive: true });
     const extra =
       identity === 'alpha'
-        ? `argument-hint: <topic>\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n    capabilities: [read, search, shell, write, delegate]\n  author: "Personal: Author's\\nTeam"\n  version: 1.2.3\n  category: "personal/tools"\n`
-        : `metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n`;
+        ? `argument-hint: <topic>\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n    capabilities: [read, search, shell, write, delegate]\n  author: "Personal: Author's\\nTeam"\n  version: 1.2.3\n  category: "personal/tools"\n`
+        : `metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n`;
     const body = options.unicodeBody
       ? `Unicode café 漢字 ${identity}.\r\nSecond line.\n`
       : `Body ${identity}.\nSee [shared](../shared/GUIDE.md).\n${identity === 'alpha' ? (options.referenceDefinition ?? '') : ''}`;
@@ -192,16 +190,14 @@ async function fixture(
     await writeFile(path.join(skillsRoot, identity, 'references', 'local.md'), '# Local\n');
   }
   const catalog = await inventoryCanonical(skillsRoot);
-  const exposures = Object.fromEntries(
-    definitions.map(([identity, exposure]) => [identity, exposure]),
-  );
   const manifest = resolveManifest(catalog, {
     repositoryId: 'repo',
-    contentScope: 'test',
     identity: 'test',
-    skillPolicy: 'test',
-    skillPolicyConfig: { skillExposure: { default: 'full', skills: exposures } },
-    enabledPacks: ['core'],
+    selection: {
+      location: { name: 'test', canonicalRoot: skillsRoot },
+      packs: ['development'],
+      source: 'user-location',
+    },
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime });
   const plan = await createSkillProjectionPlan({
@@ -219,61 +215,75 @@ const text = (result: Awaited<ReturnType<typeof compileContent>>, relativePath: 
   );
 
 describe('shared content compiler', () => {
-  it('compiles a representative real canonical corpus against the actual shared directory', async () => {
-    const repositoryRoot = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../..',
-    );
-    const canonicalRoot = path.join(repositoryRoot, 'content', 'skills');
-    const catalog = await inventoryCanonical(canonicalRoot);
-    const selected = catalog.filter((skill) =>
-      ['issue-create', 'review', 'commit'].includes(skill.identity),
-    );
-    const manifest = resolveManifest(selected, {
-      repositoryId: 'mpx',
-      contentScope: 'integration',
-      identity: 'integration',
-      skillPolicy: 'integration',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: ['core', 'work'],
-    });
-    const artifact = createRuntimeSkillArtifact(manifest, selected, { runtime: 'claude' });
-    const plan = await createSkillProjectionPlan({
-      canonicalRoot,
-      manifest,
-      artifact,
-      catalog: selected,
-    });
-    const trackedProfiles = await loadRuntimeProfilesV1(
-      path.join(repositoryRoot, 'content', 'runtime-profiles.json'),
-    );
-    const result = await compileContent({
-      runtime: 'claude',
-      plan,
-      runtimeProfiles: trackedProfiles,
-      sharedInstructionRoot: path.join(repositoryRoot, 'content', 'instructions', 'shared'),
-      agentRoot: path.join(repositoryRoot, 'content', 'agents'),
-    });
-    expect(result.manifest.skills.map((skill) => skill.identity)).toEqual([
-      'commit',
-      'issue-create',
-      'review',
-    ]);
-    for (const provider of ['GITHUB', 'LOCAL']) {
-      const canonicalGuide = await readFile(
-        path.join(
-          repositoryRoot,
-          'content',
-          'instructions',
-          'shared',
-          'providers',
-          `${provider}.md`,
-        ),
-        'utf8',
+  it.each(['development', 'personal'] as const)(
+    'compiles the entire %s pack from the real canonical corpus',
+    async (pack) => {
+      const repositoryRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../../../..',
       );
-      expect(text(result, `skills/shared/providers/${provider}.md`)).toBe(canonicalGuide);
-    }
-  });
+      const canonicalRoot = path.join(repositoryRoot, 'content', 'skills');
+      const catalog = await inventoryCanonical(canonicalRoot);
+      const selectedIdentities = catalog
+        .filter((skill) => skill.skillPacks.includes(pack))
+        .map((skill) => skill.identity)
+        .sort();
+      const excludedIdentities = catalog
+        .filter((skill) => !skill.skillPacks.includes(pack))
+        .map((skill) => skill.identity);
+      const manifest = resolveManifest(catalog, {
+        repositoryId: 'mpx',
+        identity: 'integration',
+        selection: {
+          location: { name: `integration-${pack}`, canonicalRoot },
+          packs: [pack],
+          source: 'user-location',
+        },
+      });
+      const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
+      const plan = await createSkillProjectionPlan({
+        canonicalRoot,
+        manifest,
+        artifact,
+        catalog,
+      });
+      const trackedProfiles = await loadRuntimeProfiles(
+        path.join(repositoryRoot, 'content', 'runtime-profiles.json'),
+      );
+      const result = await compileContent({
+        runtime: 'claude',
+        plan,
+        runtimeProfiles: trackedProfiles,
+        sharedInstructionRoot: path.join(repositoryRoot, 'content', 'instructions', 'shared'),
+        agentRoot: path.join(repositoryRoot, 'content', 'agents'),
+      });
+
+      expect(selectedIdentities).not.toHaveLength(0);
+      expect(result.manifest.skills.map((skill) => skill.identity).sort()).toEqual(
+        selectedIdentities,
+      );
+      expect(result.files.some((file) => file.relativePath.startsWith('skills/'))).toBe(true);
+      for (const identity of excludedIdentities) {
+        expect(result.files.map((file) => file.relativePath)).not.toContain(
+          `skills/${identity}/SKILL.md`,
+        );
+      }
+      for (const provider of ['GITHUB', 'LOCAL']) {
+        const canonicalGuide = await readFile(
+          path.join(
+            repositoryRoot,
+            'content',
+            'instructions',
+            'shared',
+            'providers',
+            `${provider}.md`,
+          ),
+          'utf8',
+        );
+        expect(text(result, `skills/shared/providers/${provider}.md`)).toBe(canonicalGuide);
+      }
+    },
+  );
 
   it.each([
     [
@@ -366,11 +376,12 @@ describe('shared content compiler', () => {
     const manifest = resolveManifest(project.skills, {
       repositoryId: 'repo',
       projectId: 'project',
-      contentScope: 'test',
       identity: 'test',
-      skillPolicy: 'test',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: ['core'],
+      selection: {
+        location: { name: 'test', canonicalRoot: projectRoot },
+        packs: ['development'],
+        source: 'project',
+      },
     });
     const artifact = createRuntimeSkillArtifact(manifest, project.skills, { runtime: 'claude' });
     const plan = await createSkillProjectionPlan({
@@ -414,11 +425,12 @@ describe('shared content compiler', () => {
       const project = await inventoryProjectSkills(projectRoot);
       const manifest = resolveManifest(project.skills, {
         repositoryId: 'repo',
-        contentScope: 'test',
         identity: 'test',
-        skillPolicy: 'test',
-        skillPolicyConfig: { skillExposure: { default: 'full' } },
-        enabledPacks: [],
+        selection: {
+          location: { name: 'test', canonicalRoot: projectRoot },
+          packs: ['development'],
+          source: 'project',
+        },
       });
       const artifact = createRuntimeSkillArtifact(manifest, project.skills, { runtime });
       const plan = await createSkillProjectionPlan({
@@ -455,7 +467,7 @@ describe('shared content compiler', () => {
     await mkdir(path.join(projectRoot, '.agents', 'skills', 'commit'), { recursive: true });
     await writeFile(
       path.join(canonicalRoot, 'commit', 'SKILL.md'),
-      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nCANONICAL\n',
+      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\nCANONICAL\n',
     );
     await writeFile(
       path.join(projectRoot, '.agents', 'skills', 'commit', 'SKILL.md'),
@@ -466,11 +478,12 @@ describe('shared content compiler', () => {
     const catalog = [...canonical, ...project.skills];
     const manifest = resolveManifest(catalog, {
       repositoryId: 'repo',
-      contentScope: 'test',
       identity: 'test',
-      skillPolicy: 'test',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: ['core'],
+      selection: {
+        location: { name: 'test', canonicalRoot: projectRoot },
+        packs: ['development'],
+        source: 'project',
+      },
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
     const plan = await createSkillProjectionPlan({ manifest, artifact, catalog, canonicalRoot });
@@ -501,8 +514,11 @@ describe('shared content compiler', () => {
       root: activeRoot,
       manifestPath: path.join(activeRoot, 'active-content.json'),
     });
-    expect((await readActiveSkill(active, 'commit')).body).toBe('CANONICAL\n');
-    expect((await readActiveSkill(active, 'skill:commit')).body).toBe('PROJECT\n');
+    await expect(readActiveSkill(active, 'commit')).rejects.toMatchObject({
+      code: 'ACTIVE_CONTENT_AMBIGUOUS',
+    });
+    expect((await readActiveSkill(active, 'commit', 'canonical')).body).toBe('CANONICAL\n');
+    expect((await readActiveSkill(active, 'commit', 'project')).body).toBe('PROJECT\n');
     for (const identity of ['commit', 'skill:commit']) {
       const entry = tree.manifest.skills.find((skill) => skill.identity === identity)!;
       const generated = tree.files.find((file) => file.relativePath === entry.generatedPath)!;
@@ -531,14 +547,14 @@ describe('shared content compiler', () => {
       first.files.map((file) => file.relativePath).sort(),
     );
     expect(first.manifest).toMatchObject({
-      schemaVersion: 1,
-      compilerVersion: '1.1.0',
+      schemaVersion: 2,
+      compilerVersion: '2.0.0',
       runtime: 'claude',
     });
   });
 
   it.each(['claude', 'pi'] as const)(
-    'emits native uppercase SKILL.md paths and excludes off entries for %s',
+    'emits native uppercase SKILL.md paths for all selected entries in %s',
     async (runtime) => {
       const value = await fixture(runtime);
       const result = await compileContent({
@@ -554,7 +570,6 @@ describe('shared content compiler', () => {
           /skills\/(?:alpha|named|locked)\/SKILL\.md$/u.test(file.relativePath),
         ),
       ).toHaveLength(3);
-      expect(result.files.some((file) => file.relativePath.includes('/gone/'))).toBe(false);
     },
   );
 

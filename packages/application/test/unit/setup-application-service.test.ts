@@ -2,9 +2,9 @@ import { expect, it, vi } from 'vitest';
 import { SetupApplicationService } from '../../src/setup-application-service.js';
 import type {
   CurrentInstallationAdmission,
-  InstallIntentBuildResultV1,
-  InstallIntentV1,
-  InstallPlanV1,
+  InstallIntentBuildResult,
+  InstallIntent,
+  InstallPlan,
 } from '@mpx/installer';
 
 const digest = 'a'.repeat(64);
@@ -14,18 +14,18 @@ const intent = {
   releaseKey: digest,
   convergenceHash: digest,
   components: ['cli'],
-} as InstallIntentV1;
+} as InstallIntent;
 const built = {
   schemaVersion: 1,
   kind: 'install-intent-build-result',
   intent,
-} as InstallIntentBuildResultV1;
+} as InstallIntentBuildResult;
 const plan = {
   schemaVersion: 1,
   kind: 'install-plan',
   intent,
   confirmationDigest: digest,
-} as InstallPlanV1;
+} as InstallPlan;
 
 function fixture(status: CurrentInstallationAdmission['status'] = 'initial', failureAt?: string) {
   const order: string[] = [];

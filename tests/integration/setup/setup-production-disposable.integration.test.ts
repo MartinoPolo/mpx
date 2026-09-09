@@ -27,7 +27,7 @@ import {
   NodeTransactionStore,
   ProductionInstallerOperationAdapter,
   resolvePiNativePackageSource,
-  type InstallIntentBuildResultV1,
+  type InstallIntentBuildResult,
 } from '@mpx/installer';
 import { FakeJsonResourceStore } from '@mpx/windows';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -298,7 +298,7 @@ it.each([false, true])(
       releases,
       environment: fixture.environment,
     });
-    let built: InstallIntentBuildResultV1 | undefined;
+    let built: InstallIntentBuildResult | undefined;
     const realBuild = builder.build.bind(builder);
     vi.spyOn(builder, 'build').mockImplementation(async (request) => {
       for (const piRoot of fixture.piRoots) {
@@ -310,7 +310,7 @@ it.each([false, true])(
       return built;
     });
     const runtimeRegistrations = {
-      inspect: async (intent: InstallIntentBuildResultV1['intent']) => {
+      inspect: async (intent: InstallIntentBuildResult['intent']) => {
         for (const piRoot of fixture.piRoots) {
           for (const [, , destination] of legacyEntries) {
             expect((await lstat(path.join(piRoot, destination))).isSymbolicLink()).toBe(

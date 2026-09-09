@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
 import {
+  canonicalJson,
   installerDigest,
-  parseOwnershipReceiptV1,
-  type InstallIntentV1,
-  type InstallOperationV1,
-  type OwnershipReceiptV1,
+  parseOwnershipReceipt,
+  type InstallIntent,
+  type InstallOperation,
+  type OwnershipReceipt,
 } from '../../src/immutable-core.js';
 import {
   InstallOrchestrator,
@@ -78,7 +79,7 @@ function fixture() {
       }),
     ),
   );
-  const intent: InstallIntentV1 = {
+  const intent: InstallIntent = {
     schemaVersion: 1,
     kind: 'install-intent',
     releaseKey,
@@ -97,7 +98,7 @@ function fixture() {
       nativeRootDigest,
       settings: { packages: ['foreign', desiredSource], unrelated: true },
     }));
-  const operations: InstallOperationV1[] = piRoots.map((root) => ({
+  const operations: InstallOperation[] = piRoots.map((root) => ({
     id: `50-pi-settings-${root.domain}`,
     adapter: 'fixture',
     action: 'ensure',
@@ -132,7 +133,27 @@ function fixture() {
       bindingDigest: installerDigest({ operation, spec }),
     };
   });
-  const receipt = parseOwnershipReceiptV1({
+  const historicalContent = canonicalJson({
+    schemaVersion: 2,
+    identities: {},
+    domains: {},
+    locations: {},
+    modes: {},
+    presets: {},
+    launchDefaults: { locations: {}, projects: {} },
+    networkPolicies: {},
+    executors: { host: {} },
+    contentScopes: { obsolete: true },
+  });
+  const historicalIntent: InstallIntent = {
+    ...intent,
+    userConfigArtifact: {
+      target: '%APPDATA%/mpx/config.json',
+      content: historicalContent,
+      sha256: installerDigest(JSON.parse(historicalContent)),
+    },
+  };
+  const receipt = parseOwnershipReceipt({
     schemaVersion: 2,
     kind: 'ownership-receipt',
     releaseKey,
@@ -140,20 +161,26 @@ function fixture() {
     files,
     operations,
     operationLocators,
-    installIntent: intent,
+    installIntent: historicalIntent,
     installedAt: '2025-01-01T00:00:00.000Z',
   });
   const store = new MemoryTransactionStore();
   const adapter = {
     name: 'fixture',
-    operations: vi.fn(async () => ({ automatic: operations })),
-    observe: vi.fn(async (operation: InstallOperationV1) => operation.desiredDigest),
+    operations: vi.fn(async (requestedIntent: InstallIntent) => {
+      if (requestedIntent.userConfigArtifact) {
+        throw new Error('historical user config is rejected by the current parser');
+      }
+      return { automatic: operations };
+    }),
+    observe: vi.fn(async (operation: InstallOperation) => operation.desiredDigest),
     hydrateReceiptOperation: vi.fn(async () => undefined),
     capture: vi.fn(async () => null),
     receiptLocator: vi.fn(
-      async (operation: InstallOperationV1) =>
+      async (operation: InstallOperation) =>
         operationLocators.find((locator) => locator.operationId === operation.id)!.spec,
     ),
+    authorizeOwnedOperations: vi.fn(async () => undefined),
     apply: vi.fn(async () => undefined),
     restore: vi.fn(async () => undefined),
   } satisfies InstallerOperationAdapter;
@@ -162,7 +189,7 @@ function fixture() {
     build: vi.fn(async () => manifest),
     publish: vi.fn(async () => manifest),
     verify: vi.fn(
-      async (_receipt: OwnershipReceiptV1, _strict: boolean): Promise<readonly string[]> => [],
+      async (_receipt: OwnershipReceipt, _strict: boolean): Promise<readonly string[]> => [],
     ),
   };
   const observed = { selectedReleaseKey: releaseKey as string | null, hasArtifacts: true, piRoots };
@@ -187,6 +214,9 @@ it('authenticates the complete current receipt and binds a strict admission to p
   const admission = await value.orchestrator.admitCurrentInstallation(value.intent, value.probe);
   expect(admission.status).toBe('current');
   expect(value.releases.verify).toHaveBeenCalledWith(value.receipt, true);
+  expect(value.adapter.operations).toHaveBeenCalled();
+  expect(value.adapter.operations.mock.calls[0]?.[0]).toEqual(value.intent);
+  expect(value.adapter.operations.mock.calls[0]?.[0].userConfigArtifact).toBeUndefined();
   const plan = await value.orchestrator.plan(value.intent, admission);
   expect(plan.classifications?.confirmationRequired).toContainEqual({
     id: 'setup-current-installation',
@@ -302,15 +332,6 @@ it.each([
   expect(value.adapter.apply).not.toHaveBeenCalled();
   expect(value.adapter.capture).not.toHaveBeenCalled();
   expect(value.releases.publish).not.toHaveBeenCalled();
-});
-
-it('does not blanket-admit schema-one ownership receipts', async () => {
-  const value = fixture();
-  const { installIntent: _intent, operationLocators: _locators, ...receipt } = value.receipt;
-  await value.store.writeLegacyReceiptForMigration({ ...receipt, schemaVersion: 1 });
-  await expect(
-    value.orchestrator.admitCurrentInstallation(value.intent, value.probe),
-  ).rejects.toMatchObject({ code: 'INSTALL_RECEIPT_MIGRATION_REQUIRED' });
 });
 
 it.each(['planning', 'locked-apply'])(

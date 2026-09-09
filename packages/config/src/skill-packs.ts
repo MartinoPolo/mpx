@@ -1,1 +1,1 @@
-export { resolveEffectiveSkillPacks, type EffectiveSkillPackOptions } from '@mpx/skills/contracts';
+export { resolveEffectiveSkillPacks } from '@mpx/skills/contracts';

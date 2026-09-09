@@ -1,32 +1,28 @@
-import type { DiscoveredConfig, UserConfig } from '@mpx/config';
+import type { DiscoveredConfig } from '@mpx/config';
 import {
   createSkillArtifactReference,
   sha256Canonical,
   type JsonValue,
   type SkillArtifactReference,
 } from '@mpx/core';
-import {
-  createRuntimeSkillArtifact,
-  resolveManifest,
-  SkillCatalogError,
-  type CanonicalSkill,
-  type CatalogSkill,
-  type ProjectSkill,
-  type ResolveOptions,
-  type ResolvedManifest,
-  type Runtime,
-  type RuntimeSkillArtifact,
-} from '@mpx/skills';
-import { resolveProjectSkillOptions } from './project-application-service.js';
+import { createRuntimeSkillArtifact, resolveManifest, SkillCatalogError } from '@mpx/skills';
+import type {
+  CanonicalSkill,
+  CatalogSkill,
+  ProjectSkill,
+  ResolveOptions,
+  ResolvedManifest,
+  ResolvedSkillSelection,
+  Runtime,
+  RuntimeSkillArtifact,
+} from '@mpx/skills/contracts';
 
 export interface LaunchSkillResolutionInput {
-  readonly userConfig: UserConfig;
   readonly project?: DiscoveredConfig;
   readonly repositoryId?: string;
   readonly canonicalRoot: string;
   readonly identity: string;
-  readonly skillPolicy: string;
-  readonly contentScope: string;
+  readonly selection: ResolvedSkillSelection;
   readonly runtime: Runtime;
 }
 
@@ -77,21 +73,19 @@ export async function resolveLaunchSkills(
   );
   const projectId = input.project?.config.project.id;
   const repositoryId = input.repositoryId ?? projectId ?? 'unbound/runtime';
-  const options = resolveProjectSkillOptions(input.userConfig, {
-    identity: input.identity,
-    skillPolicy: input.skillPolicy,
-    contentScope: input.contentScope,
+  const options: ResolveOptions = {
     repositoryId,
     ...(projectId ? { projectId } : {}),
-  });
+    identity: input.identity,
+    selection: input.selection,
+  };
   const manifest = resolveManifest(catalog, options);
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: input.runtime });
   const skillArtifact = createSkillArtifactReference({
     runtime: input.runtime,
     identity: input.identity,
-    skillPolicy: input.skillPolicy,
-    contentScope: input.contentScope,
     projectId: projectId ?? null,
+    repositoryId,
     catalogHash: sha256Canonical(
       catalog.map((skill) => ({
         identity: skill.identity,
@@ -106,10 +100,7 @@ export async function resolveLaunchSkills(
           : { origin: 'canonical' }),
       })) as unknown as JsonValue,
     ),
-    enabledPacks: options.enabledPacks,
-    skillPolicyConfig: options.skillPolicyConfig as unknown as JsonValue,
-    contentScopeExposure: options.contentScopeExposure as unknown as JsonValue,
-    projectExposure: (options.projectExposure ?? null) as unknown as JsonValue,
+    selection: input.selection,
   });
   return immutable(
     structuredClone({

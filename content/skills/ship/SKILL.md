@@ -8,7 +8,7 @@ metadata:
   category: git-workflow
   mpx:
     schemaVersion: 1
-    skillPacks: [core]
+    skillPacks: [development]
     defaultExposure: name-only
 ---
 

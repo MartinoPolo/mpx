@@ -526,7 +526,7 @@ export default function (pi: ExtensionAPI) {
       toolUses: record.toolUses,
       durationMs,
       tokens,
-      // VENDOR EDIT (mpx-pi, Phase 7 row 11): the footer's completed-agent tally
+      // VENDOR EDIT (mpx-pi): the footer's completed-agent tally
       // groups by the actual resolved model and shows the thinking gauge; the
       // shared event bus is its only view of a finished agent.
       model: record.invocation?.modelName,

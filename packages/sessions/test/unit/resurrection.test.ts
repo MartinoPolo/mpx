@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  parseSessionResurrectionExportV1,
-  projectSessionResurrectionRecordV1,
-  type SessionRecordV1,
+  parseSessionResurrectionExport,
+  projectSessionResurrectionRecord,
+  type SessionRecord,
 } from '../../src/index.js';
 
 const exportedRecord = {
@@ -24,7 +24,7 @@ const exportedRecord = {
 } as const;
 
 const sourceRecord = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   recordId: 'opaque-record',
   runtimeQualifiedId: 'claude:private-native-id',
   runtime: 'claude',
@@ -35,12 +35,14 @@ const sourceRecord = {
     launchKey: 'private-launch',
     descriptorDigest: 'a'.repeat(64),
     mode: 'interactive',
-    skillPolicy: 'standard',
-    contentScope: 'repo',
+    selection: {
+      location: { name: 'repo', canonicalRoot: 'C:/repo' },
+      packs: ['development'],
+      source: 'project',
+    },
     executor: { kind: 'host' },
     workspace: 'direct',
     networkPolicy: 'restricted',
-    grants: [{ access: 'credential', resource: 'private-token' }],
     artifactKey: 'private-artifact',
     manifestKey: 'private-manifest',
   },
@@ -64,14 +66,14 @@ const sourceRecord = {
     lastActivityAt: null,
   },
   lifecycle: { bindingId: 'private-lifecycle', sequence: 1, timestamp: null },
-} as unknown as SessionRecordV1 & {
-  readonly launch: NonNullable<SessionRecordV1['launch']>;
+} as unknown as SessionRecord & {
+  readonly launch: NonNullable<SessionRecord['launch']>;
 };
 
 describe('session resurrection export protocol', () => {
   it('parses the exact versioned public DTO including liveness', () => {
     expect(
-      parseSessionResurrectionExportV1({
+      parseSessionResurrectionExport({
         schemaVersion: 1,
         kind: 'session-resurrection-export',
         records: [exportedRecord],
@@ -103,12 +105,12 @@ describe('session resurrection export protocol', () => {
         ],
       },
     ]) {
-      expect(() => parseSessionResurrectionExportV1(malicious)).toThrow();
+      expect(() => parseSessionResurrectionExport(malicious)).toThrow();
     }
   });
 
   it('projects only approved public fields and emits argv as data', () => {
-    const projected = projectSessionResurrectionRecordV1(sourceRecord);
+    const projected = projectSessionResurrectionRecord(sourceRecord);
     expect(projected).toEqual(exportedRecord);
     const serialized = JSON.stringify(projected);
     for (const secret of [

@@ -6,11 +6,11 @@ describe('@mpx/subagents package API', () => {
   it('exposes agent documents only through the narrow documents subpath', () => {
     expect(Object.keys(documentApi).sort()).toEqual([
       'AgentDocumentError',
-      'loadCanonicalAgentProjectionInputsV1',
-      'renderCanonicalAgentDocumentV1',
+      'loadCanonicalAgentProjectionInputs',
+      'renderCanonicalAgentDocument',
     ]);
     expect(rootApi).not.toHaveProperty('AgentDocumentError');
-    expect(rootApi).not.toHaveProperty('loadCanonicalAgentProjectionInputsV1');
-    expect(rootApi).not.toHaveProperty('renderCanonicalAgentDocumentV1');
+    expect(rootApi).not.toHaveProperty('loadCanonicalAgentProjectionInputs');
+    expect(rootApi).not.toHaveProperty('renderCanonicalAgentDocument');
   });
 });

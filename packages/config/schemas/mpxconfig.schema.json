@@ -68,9 +68,15 @@
           "additionalProperties": false,
           "required": ["provider", "store"],
           "properties": {
-            "provider": { "const": "local" },
-            "store": { "$ref": "#/$defs/logicalId" },
-            "view": { "$ref": "#/$defs/logicalId" }
+            "provider": {
+              "const": "local"
+            },
+            "store": {
+              "$ref": "#/$defs/logicalId"
+            },
+            "view": {
+              "$ref": "#/$defs/logicalId"
+            }
           }
         },
         {
@@ -222,6 +228,21 @@
           }
         }
       }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packs"],
+      "properties": {
+        "packs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["development", "personal"]
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -230,7 +251,11 @@
         "properties": {
           "project": {
             "type": "object",
-            "properties": { "kind": { "const": "directory" } },
+            "properties": {
+              "kind": {
+                "const": "directory"
+              }
+            },
             "required": ["kind"]
           }
         },
@@ -238,18 +263,26 @@
       },
       "then": {
         "not": {
-          "properties": { "repository": {} },
+          "properties": {
+            "repository": {}
+          },
           "required": ["repository"]
         }
       },
       "else": {
-        "properties": { "repository": {} },
+        "properties": {
+          "repository": {}
+        },
         "required": ["repository"]
       }
     }
   ],
   "$defs": {
-    "logicalId": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 64 },
+    "logicalId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+      "maxLength": 64
+    },
     "installStep": {
       "type": "object",
       "additionalProperties": false,
@@ -421,8 +454,13 @@
               "additionalProperties": false,
               "required": ["type", "script"],
               "properties": {
-                "type": { "const": "package-script" },
-                "script": { "type": "string", "minLength": 1 }
+                "type": {
+                  "const": "package-script"
+                },
+                "script": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             },
             {
@@ -430,8 +468,12 @@
               "additionalProperties": false,
               "required": ["type", "kind"],
               "properties": {
-                "type": { "const": "external" },
-                "kind": { "const": "database" }
+                "type": {
+                  "const": "external"
+                },
+                "kind": {
+                  "const": "database"
+                }
               }
             },
             {
@@ -439,7 +481,9 @@
               "additionalProperties": false,
               "required": ["type"],
               "properties": {
-                "type": { "const": "test-only" }
+                "type": {
+                  "const": "test-only"
+                }
               }
             }
           ]

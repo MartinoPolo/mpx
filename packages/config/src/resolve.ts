@@ -1,12 +1,14 @@
 import { isPathWithinRoot, MpxError } from '@mpx/core';
 import { realpath } from 'node:fs/promises';
 import type {
-  ContentScopeClassification,
+  ApplicableResourceClassification,
+  ConfigurableResource,
   CwdClassification,
-  ExposureConfig,
+  LocationClassification,
   ProjectConfig,
   ProvenanceEntry,
   ResolvedConfig,
+  ResolvedSkillSelection,
   UserConfig,
 } from './types.js';
 import { sortProvenance } from './provenance.js';
@@ -14,7 +16,8 @@ import { resolveEffectiveSkillPacks } from './skill-packs.js';
 
 export interface KnownLaunchCwdClassification {
   domain: string;
-  contentScope: string;
+  location: string;
+  applicableResource?: ConfigurableResource;
 }
 
 function isMissingRealpathError(error: unknown): boolean {
@@ -25,13 +28,14 @@ function isMissingRealpathError(error: unknown): boolean {
   return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
-async function classifyRoots<T extends 'domain' | 'contentScope'>(
+type RootMatch = { name: string; canonicalRoot: string };
+
+async function matchingRoots(
   cwd: string,
   groups: Record<string, readonly string[]>,
-  field: T,
-): Promise<T extends 'domain' ? CwdClassification : ContentScopeClassification> {
+): Promise<RootMatch[]> {
   const canonicalCwd = await realpath(cwd);
-  const matches: Array<{ name: string; root: string }> = [];
+  const matches: RootMatch[] = [];
   for (const [name, roots] of Object.entries(groups).sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -43,7 +47,7 @@ async function classifyRoots<T extends 'domain' | 'contentScope'>(
             ? 'win32'
             : process.platform;
         if (isPathWithinRoot(canonicalCwd, canonicalRoot, { platform })) {
-          matches.push({ name, root: canonicalRoot });
+          matches.push({ name, canonicalRoot });
         }
       } catch (error) {
         if (!isMissingRealpathError(error)) {
@@ -52,40 +56,70 @@ async function classifyRoots<T extends 'domain' | 'contentScope'>(
       }
     }
   }
-  matches.sort(
+  return matches.sort(
     (left, right) =>
-      right.root.length - left.root.length ||
+      right.canonicalRoot.length - left.canonicalRoot.length ||
       left.name.localeCompare(right.name) ||
-      left.root.localeCompare(right.root),
+      left.canonicalRoot.localeCompare(right.canonicalRoot),
   );
+}
+
+async function bestRoot(
+  cwd: string,
+  groups: Record<string, readonly string[]>,
+  ambiguityCode: string,
+): Promise<RootMatch | undefined> {
+  const matches = await matchingRoots(cwd, groups);
   const best = matches[0];
-  if (!best) {
-    return { status: 'unknown' } as T extends 'domain'
-      ? CwdClassification
-      : ContentScopeClassification;
+  if (
+    best &&
+    matches.some((match) => match.name !== best.name && match.canonicalRoot === best.canonicalRoot)
+  ) {
+    throw new MpxError({
+      code: ambiguityCode,
+      message: `Canonical root '${best.canonicalRoot}' has multiple configured owners.`,
+      remediation: 'Remove the duplicate canonical root mapping and relaunch.',
+    });
   }
-  return (
-    field === 'domain'
-      ? { status: 'known', domain: best.name, root: best.root }
-      : { status: 'known', contentScope: best.name, root: best.root }
-  ) as T extends 'domain' ? CwdClassification : ContentScopeClassification;
+  return best;
 }
 
-export function classifyCwd(cwd: string, userConfig: UserConfig): Promise<CwdClassification> {
-  return classifyRoots(cwd, userConfig.domains, 'domain');
+export async function classifyCwd(cwd: string, userConfig: UserConfig): Promise<CwdClassification> {
+  const best = await bestRoot(cwd, userConfig.domains, 'DOMAIN_CLASSIFICATION_AMBIGUOUS');
+  return best
+    ? { status: 'known', domain: best.name, root: best.canonicalRoot }
+    : { status: 'unknown' };
 }
 
-export function classifyContentScope(
+export async function classifyLocation(
   cwd: string,
   userConfig: UserConfig,
-): Promise<ContentScopeClassification> {
-  return classifyRoots(
-    cwd,
-    Object.fromEntries(
-      Object.entries(userConfig.contentScopes).map(([name, scope]) => [name, scope.roots]),
-    ),
-    'contentScope',
+): Promise<LocationClassification> {
+  const groups = Object.fromEntries(
+    Object.entries(userConfig.locations).map(([name, location]) => [name, location.roots]),
   );
+  const best = await bestRoot(cwd, groups, 'LOCATION_CLASSIFICATION_AMBIGUOUS');
+  return best
+    ? { status: 'known', location: best.name, canonicalRoot: best.canonicalRoot }
+    : { status: 'unknown' };
+}
+
+export async function classifyApplicableResource(
+  cwd: string,
+  userConfig: UserConfig,
+): Promise<ApplicableResourceClassification> {
+  const best = await bestRoot(
+    cwd,
+    userConfig.resourceRoots ?? {},
+    'RESOURCE_CLASSIFICATION_AMBIGUOUS',
+  );
+  return best
+    ? {
+        status: 'known',
+        resource: best.name as ConfigurableResource,
+        canonicalRoot: best.canonicalRoot,
+      }
+    : { status: 'unknown' };
 }
 
 function safeErrnoCode(error: unknown): string {
@@ -101,18 +135,23 @@ export async function resolveKnownLaunchCwdClassification(
   userConfig: UserConfig,
 ): Promise<KnownLaunchCwdClassification> {
   try {
-    const [cwdClassification, contentClassification] = await Promise.all([
+    const [domain, location, resource] = await Promise.all([
       classifyCwd(cwd, userConfig),
-      classifyContentScope(cwd, userConfig),
+      classifyLocation(cwd, userConfig),
+      classifyApplicableResource(cwd, userConfig),
     ]);
-    if (cwdClassification.status === 'unknown' || contentClassification.status === 'unknown') {
+    if (domain.status === 'unknown' || location.status === 'unknown') {
       throw new MpxError({
         code: 'CWD_CLASSIFICATION_UNKNOWN',
-        message: 'The launch CWD must have known domain and content classifications.',
-        remediation: 'Add explicit domain and content-scope roots or choose a known CWD.',
+        message: 'The launch CWD must have known domain and location classifications.',
+        remediation: 'Add explicit domain and location roots or choose a known CWD.',
       });
     }
-    return { domain: cwdClassification.domain, contentScope: contentClassification.contentScope };
+    return {
+      domain: domain.domain,
+      location: location.location,
+      ...(resource.status === 'known' ? { applicableResource: resource.resource } : {}),
+    };
   } catch (error) {
     if (error instanceof MpxError) {
       throw error;
@@ -126,14 +165,65 @@ export async function resolveKnownLaunchCwdClassification(
   }
 }
 
+export async function resolveSkillSelection(
+  projectConfig: ProjectConfig | undefined,
+  userConfig: UserConfig,
+  cwd: string,
+  identityName: string,
+  projectId?: string,
+): Promise<ResolvedSkillSelection> {
+  const locationClassification = await classifyLocation(cwd, userConfig);
+  if (locationClassification.status === 'unknown') {
+    throw new MpxError({
+      code: 'LOCATION_UNKNOWN',
+      message: 'The launch CWD does not select a configured location.',
+      remediation: 'Add a location root with selected skill packs.',
+    });
+  }
+  const identity = userConfig.identities[identityName];
+  if (!identity) {
+    throw new MpxError({
+      code: 'IDENTITY_UNKNOWN',
+      message: `Identity '${identityName}' is not configured.`,
+      remediation: 'Select an explicit configured identity.',
+    });
+  }
+  const selectedProjectId = projectConfig?.project.id ?? projectId;
+  const projectOverride = selectedProjectId ? userConfig.projects?.[selectedProjectId] : undefined;
+  const location = userConfig.locations[locationClassification.location]!;
+  const selected =
+    projectConfig?.skills?.packs ?? projectOverride?.skillPacks ?? location.skillPacks;
+  let packs;
+  try {
+    packs = resolveEffectiveSkillPacks(selected, identity.allowedSkillPacks);
+  } catch (error) {
+    throw new MpxError({
+      code: selected.some((pack) => !identity.allowedSkillPacks.includes(pack))
+        ? 'SKILL_PACK_NOT_ALLOWED'
+        : 'SKILL_PACK_SELECTION_INVALID',
+      message: (error as Error).message,
+      remediation: 'Select at least one pack allowed by the explicit identity.',
+    });
+  }
+  return {
+    location: {
+      name: locationClassification.location,
+      canonicalRoot: locationClassification.canonicalRoot,
+    },
+    packs,
+    source: projectConfig?.skills ? 'project' : projectOverride ? 'user-project' : 'user-location',
+  };
+}
+
 export async function resolveConfig(
   projectConfig: ProjectConfig,
   userConfig: UserConfig,
   cwd: string,
+  identityName: string,
 ): Promise<ResolvedConfig> {
-  const [cwdClassification, contentClassification] = await Promise.all([
+  const [cwdClassification, selection] = await Promise.all([
     classifyCwd(cwd, userConfig),
-    classifyContentScope(cwd, userConfig),
+    resolveSkillSelection(projectConfig, userConfig, cwd, identityName),
   ]);
   if (cwdClassification.status === 'unknown') {
     throw new MpxError({
@@ -142,63 +232,20 @@ export async function resolveConfig(
       remediation: 'Add an explicit domain root or choose a known CWD.',
     });
   }
-  if (contentClassification.status === 'unknown') {
-    throw new MpxError({
-      code: 'CONTENT_SCOPE_UNKNOWN',
-      message: 'The launch CWD does not select a content scope.',
-      remediation: 'Add a content-scope root or select one explicitly at launch.',
-    });
-  }
-  const contentScope = userConfig.contentScopes[contentClassification.contentScope]!;
-  const projectOverride = userConfig.projects?.[projectConfig.project.id];
-  const provenance: ProvenanceEntry[] = [];
-  const mark = (pointer: string, source: ProvenanceEntry['source']): void => {
-    provenance.push({ pointer, source });
-  };
-
+  const provenance: ProvenanceEntry[] = [{ pointer: '/selection/packs', source: selection.source }];
   const project = structuredClone(projectConfig);
   if (!project.issues) {
     project.issues = { provider: 'none' };
-    mark('/project/issues', 'default');
+    provenance.push({ pointer: '/project/issues', source: 'default' });
   }
   if (!project.tooling) {
     project.tooling = { packageManager: 'auto' };
-    mark('/project/tooling', 'default');
+    provenance.push({ pointer: '/project/tooling', source: 'default' });
   }
-
-  const skillPacks = resolveEffectiveSkillPacks({
-    contentScopeSkillPacks: contentScope.skillPacks,
-    projectSkillPacks: projectOverride?.skillPacks,
-  });
-  mark(
-    '/contentScope/skillPacks',
-    projectOverride?.skillPacks
-      ? 'user-project'
-      : contentScope.skillPacks
-        ? 'user-content-scope'
-        : 'default',
-  );
-  const skillExposure: ExposureConfig = structuredClone(contentScope.skillExposure ?? {});
-  if (contentScope.skillExposure) {
-    mark('/contentScope/skillExposure', 'user-content-scope');
-  }
-  const projectSkillExposure = projectOverride?.skillExposure
-    ? structuredClone(projectOverride.skillExposure)
-    : undefined;
-  if (projectSkillExposure) {
-    mark('/contentScope/projectSkillExposure', 'user-project');
-  }
-
   return {
     project,
     cwdClassification,
-    contentScope: {
-      name: contentClassification.contentScope,
-      root: contentClassification.root,
-      skillPacks: [...skillPacks],
-      skillExposure,
-      ...(projectSkillExposure ? { projectSkillExposure } : {}),
-    },
+    selection,
     provenance: sortProvenance(provenance),
   };
 }

@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { bareSkillIdentity, parseResolvedSkillManifestV4 } from '@mpx/runtime-contracts';
+import { bareSkillIdentity, parseResolvedSkillManifest } from '@mpx/runtime-contracts';
 import {
   SkillCatalogError,
   catalogError,
   type ResolvedManifest,
   type Runtime,
   type RuntimeSkillArtifact,
+  type SkillInvocation,
+  type SkillBodyProvenance,
 } from './contracts.js';
 import { frontmatter } from './frontmatter.js';
 import { contained, directoryDigest, enumerateSkillDirectory } from './inventory.js';
@@ -15,18 +17,11 @@ import { validateArtifact } from './artifact.js';
 
 export const MAX_SKILL_BODY_BYTES = 256 * 1024;
 
-export type SkillInvocation = 'model' | 'human-explicit';
 export interface LoadedSkillBody {
   identity: string;
   body: string;
   wrappedBody: string;
-  provenance: {
-    artifactKey: string;
-    contentHash: string;
-    invocation: SkillInvocation;
-    runtime: Runtime;
-    sourcePath: string;
-  };
+  provenance: SkillBodyProvenance;
 }
 export interface SkillBodyRequest {
   canonicalRoot: string;
@@ -45,9 +40,9 @@ function samePath(left: string, right: string): boolean {
 export async function loadSkillBody(request: SkillBodyRequest): Promise<LoadedSkillBody> {
   let manifest: ResolvedManifest;
   try {
-    manifest = parseResolvedSkillManifestV4(request.manifest);
+    manifest = parseResolvedSkillManifest(request.manifest);
   } catch {
-    return catalogError('STALE_ARTIFACT', 'skill loading requires the current exact v4 manifest');
+    return catalogError('STALE_ARTIFACT', 'skill loading requires the current exact v5 manifest');
   }
   validateArtifact(request.artifact);
   if (request.artifact.manifestKey !== manifest.manifestKey) {

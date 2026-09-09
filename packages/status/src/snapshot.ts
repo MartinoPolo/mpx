@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises';
 import type {
   PortResolutionState,
   StatusDiagnosticSeverity,
-  StatusDiagnosticV1,
-  StatusServiceV1,
-  StatusSnapshotV1,
+  StatusDiagnostic,
+  StatusService,
+  StatusSnapshot,
 } from './provider.js';
 
 export class StatusSnapshotValidationError extends Error {
@@ -91,7 +91,7 @@ function nullableIntegerAt(
   return value;
 }
 
-function parseService(value: unknown, index: number): StatusServiceV1 {
+function parseService(value: unknown, index: number): StatusService {
   const path = `services[${index}]`;
   const service = objectAt(value, path, [
     'id',
@@ -115,7 +115,7 @@ function parseService(value: unknown, index: number): StatusServiceV1 {
   };
 }
 
-function parseDiagnostic(value: unknown, index: number): StatusDiagnosticV1 {
+function parseDiagnostic(value: unknown, index: number): StatusDiagnostic {
   const path = `diagnostics[${index}]`;
   const diagnostic = objectAt(value, path, ['code', 'severity', 'message', 'serviceId']);
   return {
@@ -134,7 +134,7 @@ function parseDiagnostic(value: unknown, index: number): StatusDiagnosticV1 {
 }
 
 /** Strictly validates and copies an untrusted version-one status snapshot. */
-export function parseStatusSnapshotV1(value: unknown): StatusSnapshotV1 {
+export function parseStatusSnapshot(value: unknown): StatusSnapshot {
   const snapshot = objectAt(value, 'status snapshot', [
     'schemaVersion',
     'project',
@@ -190,10 +190,10 @@ export function parseStatusSnapshotV1(value: unknown): StatusSnapshotV1 {
   };
 }
 
-/** Parses JSON and applies strict StatusSnapshotV1 validation. */
-export function parseStatusSnapshotV1Json(text: string): StatusSnapshotV1 {
+/** Parses JSON and applies strict StatusSnapshot validation. */
+export function parseStatusSnapshotJson(text: string): StatusSnapshot {
   try {
-    return parseStatusSnapshotV1(JSON.parse(text) as unknown);
+    return parseStatusSnapshot(JSON.parse(text) as unknown);
   } catch (error) {
     if (error instanceof StatusSnapshotValidationError) {
       throw error;
@@ -203,7 +203,7 @@ export function parseStatusSnapshotV1Json(text: string): StatusSnapshotV1 {
 }
 
 export interface RuntimeStatusSnapshotReader {
-  read(): Promise<StatusSnapshotV1>;
+  read(): Promise<StatusSnapshot>;
 }
 
 /** Adapts any asynchronous, read-only snapshot source for runtime polling. */
@@ -212,20 +212,20 @@ export function createRuntimeStatusSnapshotReader(
 ): RuntimeStatusSnapshotReader {
   return {
     async read() {
-      return parseStatusSnapshotV1(await source());
+      return parseStatusSnapshot(await source());
     },
   };
 }
 
 /** Reads only the explicitly named snapshot file, without allocation or repair. */
-export async function readStatusSnapshotV1(snapshotPath: string): Promise<StatusSnapshotV1> {
-  return parseStatusSnapshotV1Json(await readFile(snapshotPath, 'utf8'));
+export async function readStatusSnapshot(snapshotPath: string): Promise<StatusSnapshot> {
+  return parseStatusSnapshotJson(await readFile(snapshotPath, 'utf8'));
 }
 
 export function createStatusSnapshotFileReader(snapshotPath: string): RuntimeStatusSnapshotReader {
   return {
     async read() {
-      return readStatusSnapshotV1(snapshotPath);
+      return readStatusSnapshot(snapshotPath);
     },
   };
 }
@@ -234,7 +234,7 @@ export interface StatusRefreshClock {
   schedule(callback: () => Promise<void>, intervalMs: number): () => void;
 }
 export interface StatusSnapshotRefreshController {
-  current(): StatusSnapshotV1 | undefined;
+  current(): StatusSnapshot | undefined;
   start(): void;
   stop(): void;
   refresh(): Promise<void>;
@@ -254,7 +254,7 @@ export function createStatusSnapshotRefreshController(
   clock: StatusRefreshClock = systemStatusRefreshClock,
   intervalMs = 1_000,
 ): StatusSnapshotRefreshController {
-  let snapshot: StatusSnapshotV1 | undefined;
+  let snapshot: StatusSnapshot | undefined;
   let cancel: (() => void) | undefined;
   let pending: Promise<void> | undefined;
   const refresh = async (): Promise<void> => {

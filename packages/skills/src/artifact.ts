@@ -1,10 +1,10 @@
 import {
-  createRuntimeSkillArtifactReferenceV4,
-  parseResolvedSkillManifestV4,
-  parseRuntimeSkillArtifactReferenceV4,
-  type ResolvedSkillDecisionV4,
+  createRuntimeSkillArtifactReference,
+  parseResolvedSkillManifest,
+  parseRuntimeSkillArtifactReference,
+  type ResolvedSkillDecision,
   RuntimeContractError,
-  type RuntimeSkillArtifactReferenceV4,
+  type RuntimeSkillArtifactReference,
 } from '@mpx/runtime-contracts';
 import {
   catalogError,
@@ -59,7 +59,7 @@ export function createRuntimeSkillArtifact(
     mapping?: Readonly<Record<string, string>> | undefined;
   },
 ): RuntimeSkillArtifact {
-  const manifest = parseResolvedSkillManifestV4(manifestValue);
+  const manifest = parseResolvedSkillManifest(manifestValue);
   const source = new Map(catalog.map((skill) => [skillResolutionKey(skill), skill]));
   if (source.size !== manifest.decisions.length) {
     catalogError(
@@ -84,19 +84,19 @@ export function createRuntimeSkillArtifact(
     .sort((a, b) => a.identity.localeCompare(b.identity));
   const fileMapHash = digest(artifactFileMap(entries));
   const artifactKey = digest({
-    schemaVersion: 4,
+    schemaVersion: 5,
     runtime: options.runtime,
     manifestKey: manifest.manifestKey,
     fileMapHash,
   });
-  const reference = createRuntimeSkillArtifactReferenceV4({
+  const reference = createRuntimeSkillArtifactReference({
     runtime: options.runtime,
     manifestKey: manifest.manifestKey,
     artifactKey,
     fileMapHash,
   });
   const artifact: RuntimeSkillArtifact = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     runtime: options.runtime,
     manifestKey: manifest.manifestKey,
     reference,
@@ -114,7 +114,7 @@ function tampered(reason: string, identity?: string): never {
 }
 function runtimeEntry(
   skill: CatalogSkill,
-  decision: ResolvedSkillDecisionV4,
+  decision: ResolvedSkillDecision,
   mapping: Readonly<Record<string, string>>,
 ): RuntimeSkillEntry {
   const project = isProjectSkill(skill);
@@ -181,11 +181,7 @@ function expectedRuntimeEntries(
     if (!decision.included) {
       continue;
     }
-    if (
-      decision.exposure === 'off' ||
-      decision.exclusionReasons.includes('off') ||
-      decision.exclusionReasons.includes('pack-excluded')
-    ) {
+    if (decision.exclusionReasons.includes('pack-excluded')) {
       tampered('invalid-inclusion-decision', decision.identity);
     }
     entries.push(runtimeEntry(skill, decision, mapping));
@@ -203,12 +199,12 @@ export function verifyRuntimeSkillArtifact(
 ): RuntimeSkillArtifact {
   let manifest: ResolvedManifest;
   try {
-    manifest = parseResolvedSkillManifestV4(manifestValue);
+    manifest = parseResolvedSkillManifest(manifestValue);
   } catch {
     return tampered('manifest-invalid');
   }
   if (
-    artifact.schemaVersion !== 4 ||
+    artifact.schemaVersion !== 5 ||
     artifact.runtime !== options.runtime ||
     artifact.manifestKey !== manifest.manifestKey
   ) {
@@ -253,20 +249,20 @@ export function verifyRuntimeSkillArtifact(
     tampered('entry-order');
   }
   const fileMapHash = digest(artifactFileMap(expectedEntries));
-  const expectedReference = createRuntimeSkillArtifactReferenceV4({
+  const expectedReference = createRuntimeSkillArtifactReference({
     runtime: options.runtime,
     manifestKey: manifest.manifestKey,
     fileMapHash,
     artifactKey: digest({
-      schemaVersion: 4,
+      schemaVersion: 5,
       runtime: options.runtime,
       manifestKey: manifest.manifestKey,
       fileMapHash,
     }),
   });
-  let reference: RuntimeSkillArtifactReferenceV4;
+  let reference: RuntimeSkillArtifactReference;
   try {
-    reference = parseRuntimeSkillArtifactReferenceV4(artifact.reference);
+    reference = parseRuntimeSkillArtifactReference(artifact.reference);
   } catch {
     return tampered('reference-invalid');
   }
@@ -283,16 +279,16 @@ export function validateArtifact(
 ): RuntimeSkillArtifact {
   try {
     if (
-      artifact.schemaVersion !== 4 ||
+      artifact.schemaVersion !== 5 ||
       artifact.manifestKey !== artifact.reference.manifestKey ||
       artifact.runtime !== artifact.reference.runtime
     ) {
       throw new Error('schema or binding mismatch');
     }
-    const reference = parseRuntimeSkillArtifactReferenceV4(artifact.reference);
+    const reference = parseRuntimeSkillArtifactReference(artifact.reference);
     const fileMapHash = digest(artifactFileMap(artifact.entries));
     const calculatedKey = digest({
-      schemaVersion: 4,
+      schemaVersion: 5,
       runtime: artifact.runtime,
       manifestKey: artifact.manifestKey,
       fileMapHash,
@@ -322,7 +318,7 @@ export function validateArtifact(
   } catch {
     return catalogError(
       'STALE_ARTIFACT',
-      'runtime operation requires the current exact v4 artifact',
+      'runtime operation requires the current exact v5 artifact',
     );
   }
 }

@@ -17,11 +17,6 @@ const modeExplanations: readonly ErrorSolution[] = [
     explanation:
       'developer mode gives identity-domain repositories read/write access and cloned repositories read-only access without project configuration; it has broader access.',
   },
-  { explanation: 'personal-assistant mode permits assistant input and output.' },
-  {
-    explanation:
-      'computer-control mode permits configuration access with staged executable settings.',
-  },
   {
     explanation:
       'unrestricted mode has broad host access and requires separate trusted approval and a reason. It is not a recommended workaround, and no command bypasses approval.',
@@ -84,6 +79,17 @@ const configNotFound: readonly ErrorSolution[] = [
   },
 ];
 
+const invalidConfig: readonly ErrorSolution[] = [
+  {
+    explanation:
+      'Inspect the indicated field in the project mpxconfig.json or the user-local %APPDATA%/mpx/config.json, according to which file the command was loading.',
+  },
+  {
+    explanation:
+      'Compare the file with the current MPX configuration schemas and correct missing required fields, unknown fields, malformed or duplicate JSON, and references to unavailable MPX_* environment roots.',
+  },
+];
+
 const userConfig: readonly ErrorSolution[] = [
   {
     explanation:
@@ -99,14 +105,6 @@ const cwd: readonly ErrorSolution[] = [
   },
 ];
 
-const contentScope: readonly ErrorSolution[] = [
-  {
-    command: '--content-scope <configured-scope>',
-    explanation:
-      'Append a configured scope to the original launch command, replacing the placeholder, or remove an erroneous explicit scope; correct configured content roots rather than generated artifacts.',
-  },
-];
-
 const identityRequired: readonly ErrorSolution[] = [
   {
     command: '--identity <configured-identity>',
@@ -118,7 +116,7 @@ const identityRequired: readonly ErrorSolution[] = [
 const identityMismatch: readonly ErrorSolution[] = [
   {
     explanation:
-      'Use an identity configured for the required domain, or launch from the correct configured domain. Do not alter grants to bypass the domain boundary.',
+      'Use an identity configured for the required domain, or launch from the correct configured domain.',
   },
 ];
 
@@ -167,6 +165,13 @@ const setupLocked: readonly ErrorSolution[] = [
   {
     explanation:
       'Close competing setup or Pi processes, then retry; do not remove the settings lock.',
+  },
+];
+
+const contentCompilation: readonly ErrorSolution[] = [
+  {
+    explanation:
+      'Fix the canonical content reference or selected pack dependency reported by the compiler, rebuild or reinstall the managed release, then retry the original MPX launcher. Do not edit generated artifacts or automatically broaden enabled packs.',
   },
 ];
 
@@ -319,46 +324,35 @@ const relaunch: readonly ErrorSolution[] = [
   ...runtime,
 ];
 
-const grantInvalid: readonly ErrorSolution[] = [
-  {
-    command: '--grant <access:resource>',
-    explanation:
-      'On the original launch command, use ro:<resource> for read-only or rw:<resource> for read/write access to a configured resource. Remove contradictory grants. Every grant requires a nonempty reason and separate matching trusted approval; syntax alone does not grant access.',
-  },
-];
-
 const elevationReason: readonly ErrorSolution[] = [
   {
     command: '--reason "Explain why elevated access is needed"',
     explanation:
-      'Append a genuine nonempty reason to the original launch command. A reason records intent; it does not replace trusted approval for host execution, grants, or unrestricted mode.',
+      'Append a genuine nonempty reason to the original launch command. A reason records intent; it does not replace trusted approval for host execution or unrestricted mode.',
   },
 ];
 
 const exact = new Map<string, readonly ErrorSolution[]>([
   ['PROJECT_REQUIRED', projectRequired],
+  ['CONTENT_COMPILATION_FAILED', contentCompilation],
   ['LAUNCH_RESTART_REQUIRED', relaunch],
   ['LAUNCH_CONTEXT_REQUIRED', relaunch],
   ['LAUNCH_CONTEXT_INVALID', relaunch],
   ['RUNTIME_PROJECTION_REQUIRED', relaunch],
   ['RUNTIME_PROJECTION_INVALID', relaunch],
   ['RUNTIME_STATUS_BINDING_INVALID', relaunch],
-  ['GRANT_INVALID', grantInvalid],
-  ['GRANT_CONFLICT', grantInvalid],
   ['ELEVATION_REASON_REQUIRED', elevationReason],
   ['HOST_REASON_REQUIRED', elevationReason],
   ['MODE_UNKNOWN', modeUnknown],
   ['CONFIG_NOT_FOUND', configNotFound],
-  ['CONFIG_INVALID', doctor('invalid project configuration')],
+  ['CONFIG_INVALID', invalidConfig],
   ['USER_CONFIG_REQUIRED', userConfig],
   ['USER_CONFIG_UNREADABLE', userConfig],
   ['CWD_CLASSIFICATION_UNKNOWN', cwd],
   ['CWD_CLASSIFICATION_FAILED', cwd],
-  ['CONTENT_SCOPE_UNKNOWN', contentScope],
   ['IDENTITY_REQUIRED', identityRequired],
   ['IDENTITY_UNKNOWN', identityRequired],
   ['IDENTITY_DOMAIN_MISMATCH', identityMismatch],
-  ['SKILL_POLICY_UNKNOWN', namedOption('--skill-policy', 'skill-policy')],
   ['NETWORK_POLICY_UNKNOWN', namedOption('--network-policy', 'network-policy')],
   ['PRESET_UNKNOWN', namedOption('--preset', 'preset')],
   ['RUNTIME_REQUIRED', runtime],
@@ -410,7 +404,6 @@ const families: readonly (readonly [string, readonly ErrorSolution[]])[] = [
   ['POLICY_', authority],
   ['PRESET_', authority],
   ['NETWORK_', authority],
-  ['GRANT_', authority],
   ['HOST_', authority],
   ['APPROVAL_', authority],
   ['EXECUTOR_', authority],
@@ -418,7 +411,6 @@ const families: readonly (readonly [string, readonly ErrorSolution[]])[] = [
   ['CONFIG_', doctor('configuration diagnostics')],
   ['USER_CONFIG_', userConfig],
   ['CWD_', cwd],
-  ['CONTENT_SCOPE_', contentScope],
 ];
 
 export function errorSolutions(code: string): readonly ErrorSolution[] {

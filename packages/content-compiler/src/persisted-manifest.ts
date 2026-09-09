@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { bareSkillIdentity } from '@mpx/runtime-contracts';
+import { bareSkillIdentity, parseSkillSelection } from '@mpx/runtime-contracts';
 import type {
   CompiledAgentManifestEntry,
   CompiledSkillManifestEntry,
@@ -93,6 +93,10 @@ const strings = (value: unknown, label: string): string[] => {
   }
   return value.map((item, index) => text(item, `${label}[${index}]`));
 };
+const parseSelection = (
+  value: unknown,
+  code: 'ACTIVE_CONTENT_MANIFEST_INVALID' | 'ACTIVE_CONTENT_BINDING_INVALID',
+) => parseSkillSelection(value, (_selectionCode, message) => fail(code, message));
 const portablePath = (value: unknown, label: string): string => {
   const result = text(value, label).replaceAll('\\', '/');
   const normalized = path.posix.normalize(result);
@@ -282,10 +286,11 @@ function parsePersistedContentManifest(source: string): ContentInspectionManifes
     return fail('ACTIVE_CONTENT_MANIFEST_INVALID', 'Active content runtime is invalid.');
   }
   const binding = record(item.binding, 'binding');
-  exact(binding, ['projectId', 'repositoryId', 'contentScope'], [], 'binding');
+  exact(binding, ['projectId', 'repositoryId', 'identity', 'selection'], [], 'binding');
   if (binding.projectId !== null && typeof binding.projectId !== 'string') {
     return fail('ACTIVE_CONTENT_MANIFEST_INVALID', 'binding.projectId is invalid.');
   }
+  const selected = parseSelection(binding.selection, 'ACTIVE_CONTENT_MANIFEST_INVALID');
   const envelope = record(item.manifestEnvelope, 'manifestEnvelope');
   exact(envelope, ['path', 'includedInFileMap'], [], 'manifestEnvelope');
   if (envelope.path !== 'active-content.json' || envelope.includedInFileMap !== false) {
@@ -335,14 +340,15 @@ function parsePersistedContentManifest(source: string): ContentInspectionManifes
     }
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: CONTENT_MANIFEST_SCHEMA_VERSION,
     compilerVersion: CONTENT_COMPILER_VERSION,
     runtime: item.runtime,
-    profileSchemaVersion: 1,
+    profileSchemaVersion: RUNTIME_PROFILE_SCHEMA_VERSION,
     binding: {
       projectId: binding.projectId as string | null,
       repositoryId: text(binding.repositoryId, 'binding.repositoryId'),
-      contentScope: text(binding.contentScope, 'binding.contentScope'),
+      identity: text(binding.identity, 'binding.identity'),
+      selection: selected,
     },
     manifestKey: text(item.manifestKey, 'manifestKey'),
     manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
@@ -356,6 +362,24 @@ const samePath = (left: string, right: string): boolean =>
   process.platform === 'win32'
     ? path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
     : path.resolve(left) === path.resolve(right);
+
+function sameBinding(
+  left: ContentInspectionManifest['binding'],
+  right: ContentInspectionManifest['binding'],
+): boolean {
+  const leftPacks = [...left.selection.packs].sort();
+  const rightPacks = [...right.selection.packs].sort();
+  return (
+    left.projectId === right.projectId &&
+    left.repositoryId === right.repositoryId &&
+    left.identity === right.identity &&
+    left.selection.location.name === right.selection.location.name &&
+    left.selection.location.canonicalRoot === right.selection.location.canonicalRoot &&
+    left.selection.source === right.selection.source &&
+    leftPacks.length === rightPacks.length &&
+    leftPacks.every((pack, index) => pack === rightPacks[index])
+  );
+}
 
 function validateExpectation(expected: ActiveContentExpectation): void {
   const keys = Object.keys(expected as object);
@@ -383,13 +407,14 @@ function validateExpectation(expected: ActiveContentExpectation): void {
       !binding ||
       typeof binding !== 'object' ||
       Array.isArray(binding) ||
-      Object.keys(binding).sort().join(',') !== 'contentScope,projectId,repositoryId' ||
+      Object.keys(binding).sort().join(',') !== 'identity,projectId,repositoryId,selection' ||
       (binding.projectId !== null && !boundedText(binding.projectId)) ||
       !boundedText(binding.repositoryId) ||
-      !boundedText(binding.contentScope)
+      !boundedText(binding.identity)
     ) {
       fail('ACTIVE_CONTENT_BINDING_INVALID', 'Expected active content binding is invalid.');
     }
+    parseSelection(binding.selection, 'ACTIVE_CONTENT_BINDING_INVALID');
   }
   if (
     expected.manifestFile !== undefined &&
@@ -525,9 +550,7 @@ export async function loadActiveContentProjection(input: {
       (input.expected?.manifestKey !== undefined &&
         input.expected.manifestKey !== manifest.manifestKey) ||
       (input.expected?.binding !== undefined &&
-        (input.expected.binding.projectId !== manifest.binding.projectId ||
-          input.expected.binding.repositoryId !== manifest.binding.repositoryId ||
-          input.expected.binding.contentScope !== manifest.binding.contentScope))
+        !sameBinding(input.expected.binding, manifest.binding))
     ) {
       return fail(
         'ACTIVE_CONTENT_BINDING_INVALID',
@@ -597,13 +620,23 @@ export async function readActiveContentEntry(
 export async function readActiveSkill(
   active: ActiveContentProjection,
   identity: string,
+  source?: 'canonical' | 'project',
 ): Promise<{
   entry: CompiledSkillManifestEntry;
   body: string;
   filePath: string;
   baseDirectory: string;
 }> {
-  const matches = active.manifest.skills.filter((entry) => entry.identity === identity);
+  if (source !== undefined && source !== 'canonical' && source !== 'project') {
+    return fail('ACTIVE_CONTENT_MANIFEST_INVALID', 'Active skill source is invalid.');
+  }
+  const matches = active.manifest.skills.filter((entry) => {
+    const entrySource = classifyCompiledSkillSource(entry);
+    return (
+      (source === undefined || source === entrySource) &&
+      (entry.identity === identity || bareSkillIdentity(entry.identity, entrySource) === identity)
+    );
+  });
   if (matches.length === 0) {
     return fail('ACTIVE_CONTENT_UNKNOWN', `Unknown active skill '${identity}'.`);
   }
@@ -611,7 +644,7 @@ export async function readActiveSkill(
     return fail('ACTIVE_CONTENT_AMBIGUOUS', `Active skill identity '${identity}' is ambiguous.`);
   }
   const entry = matches[0]!;
-  const bytes = await readActiveContentEntry(active, 'skill', identity);
+  const bytes = await verifiedFile(active, entry.generatedPath);
   const filePath = path.join(active.root, ...entry.generatedPath.split('/'));
   return {
     entry,

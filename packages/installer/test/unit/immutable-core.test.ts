@@ -10,13 +10,13 @@ import {
   buildReleaseManifest,
   canonicalJson,
   installerDigest,
-  parseInstallIntentV1,
-  parseOwnershipReceiptV1,
-  parseReleaseManifestV1,
+  parseInstallIntent,
+  parseOwnershipReceipt,
+  parseReleaseManifest,
   publishCurrentRelease,
   publishRelease,
   readActiveRelease,
-  type OwnershipReceiptV1,
+  type OwnershipReceipt,
 } from '../../src/immutable-core.js';
 import { preparePiExtensionBuildFixture } from '../fixtures/pi-extension-build.js';
 
@@ -109,7 +109,7 @@ describe('immutable installer core', () => {
       components: ['cli'],
       userConfigArtifact: artifact,
     };
-    expect(parseInstallIntentV1(intent)).toEqual(intent);
+    expect(parseInstallIntent(intent)).toEqual(intent);
   });
 
   it.each([
@@ -124,7 +124,7 @@ describe('immutable installer core', () => {
       sha256: createHash('sha256').update(content, 'utf8').digest('hex'),
     };
     expect(() =>
-      parseInstallIntentV1({
+      parseInstallIntent({
         schemaVersion: 1,
         kind: 'install-intent',
         releaseKey: 'a'.repeat(64),
@@ -137,13 +137,13 @@ describe('immutable installer core', () => {
 
   it('strictly accepts only a bounded user-config artifact with its exact SHA-256', () => {
     const content = canonicalJson({
+      schemaVersion: 2,
       identities: {},
       domains: {},
-      contentScopes: {},
+      locations: {},
       modes: {},
-      skillPolicies: {},
       presets: {},
-      launchDefaults: { scopes: {}, projects: {} },
+      launchDefaults: { locations: {}, projects: {} },
       networkPolicies: {},
       executors: { host: {} },
     });
@@ -160,24 +160,24 @@ describe('immutable installer core', () => {
       components: ['cli'],
       userConfigArtifact: artifact,
     };
-    expect(parseInstallIntentV1(base)).toEqual(base);
+    expect(parseInstallIntent(base)).toEqual(base);
     expect(() =>
-      parseInstallIntentV1({ ...base, userConfigArtifact: { ...artifact, extra: true } }),
+      parseInstallIntent({ ...base, userConfigArtifact: { ...artifact, extra: true } }),
     ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
     expect(() =>
-      parseInstallIntentV1({
+      parseInstallIntent({
         ...base,
         userConfigArtifact: { ...artifact, content: `${content} ` },
       }),
     ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
     expect(() =>
-      parseInstallIntentV1({
+      parseInstallIntent({
         ...base,
         userConfigArtifact: { ...artifact, sha256: 'b'.repeat(64) },
       }),
     ).toThrowError(expect.objectContaining({ code: 'INSTALL_SCHEMA_INVALID' }));
     expect(() =>
-      parseInstallIntentV1({
+      parseInstallIntent({
         ...base,
         userConfigArtifact: {
           ...artifact,
@@ -221,7 +221,7 @@ describe('immutable installer core', () => {
     expect(first.files.map((entry) => entry.path)).toEqual(['a.txt', 'z/b.txt']);
     expect(first.files.map((entry) => entry.bytes)).toEqual([5, 4]);
     expect(first.releaseKey).toBe(first.convergenceHash);
-    expect(parseReleaseManifestV1(first)).toEqual(first);
+    expect(parseReleaseManifest(first)).toEqual(first);
   });
 
   it('removes only its allocated repository when isolated setup fails', async () => {
@@ -474,13 +474,13 @@ describe('immutable installer core', () => {
       'content/skills/commit/SKILL.md',
     ]);
     expect(second).toEqual(first);
-    expect(parseReleaseManifestV1(first)).toEqual(first);
+    expect(parseReleaseManifest(first)).toEqual(first);
 
     const published = await publishRelease({ sourceDirectory: firstSource, appsRoot: apps });
     const republished = await publishRelease({ sourceDirectory: secondSource, appsRoot: apps });
     expect(republished).toEqual(published);
     expect(
-      parseReleaseManifestV1(
+      parseReleaseManifest(
         JSON.parse(
           await readFile(
             path.join(apps, 'mpx', 'releases', published.releaseKey, 'release-manifest.json'),
@@ -541,7 +541,7 @@ describe('immutable installer core', () => {
       installedAt: '2025-01-01T00:00:00.000Z',
     };
     expect(() =>
-      parseOwnershipReceiptV1({
+      parseOwnershipReceipt({
         ...receipt,
         operationLocators: [{ ...receipt.operationLocators[0], spec: { kind: 'native' } }],
       }),
@@ -551,7 +551,7 @@ describe('immutable installer core', () => {
   it('rejects legacy receipts whose removal operations have no durable locator', () => {
     const releaseKey = installerDigest([]);
     expect(() =>
-      parseOwnershipReceiptV1({
+      parseOwnershipReceipt({
         schemaVersion: 1,
         kind: 'ownership-receipt',
         releaseKey,
@@ -580,7 +580,7 @@ describe('immutable installer core', () => {
     if (!entry) {
       throw new Error('Published release fixture has no files.');
     }
-    const receipt: OwnershipReceiptV1 = {
+    const receipt: OwnershipReceipt = {
       schemaVersion: 2,
       kind: 'ownership-receipt',
       releaseKey: manifest.releaseKey,

@@ -1,46 +1,33 @@
 # Runtime adapters
 
-MPX compiles canonical content before runtime assembly. Adapters consume the verified compiled tree and own only native projection assets, invocation arguments, and runtime lifecycle wiring.
+MPX compiles canonical content before runtime assembly. Adapters consume the verified compiled tree and own only native projection assets, invocation arguments, concrete readiness checks, and runtime lifecycle wiring.
 
 ## Shared boundaries
 
 - `content/runtime-profiles.json` maps semantic model classes, capabilities, aliases, and supported frontmatter to each runtime.
-- Compiler-owned skill and agent bytes are copied unchanged.
-- Private account roots are passed only to the selected runtime.
+- The compiler is the sole renderer; compiler-owned skill and agent bytes are copied unchanged.
+- Private account roots are passed only to the explicitly selected runtime and identity.
+- Adapters preserve real executable/invocation, account-root, artifact, launch-binding, approval, and pre-spawn validation.
 - Releases and public launch data contain no credentials, native sessions, or private file contents.
-- Dangerous-command policy is shared; runtime event translation and process execution remain adapter-owned.
 
 ## Pi
 
-Canonical Pi-specific implementation lives under `runtimes/pi/extensions` and is loaded once through native package discovery. The adapter does not generate substitute footer, tool, hook, command, editor, widget, configuration, keybinding, or theme implementations.
+Canonical Pi implementation lives under `runtimes/pi/extensions` and is loaded once through native package discovery. The adapter does not generate substitute UI or extension implementations.
 
-The adapter passes `PI_CODING_AGENT_DIR`, compiled agents, launch context, and a manifest integrity binding. The native extension registers compiler-managed skills as `/mpx:<name>` and lazily revalidates their files before loading bodies.
+The adapter passes `PI_CODING_AGENT_DIR`, compiled agents, launch context, executor binding, and manifest integrity binding. The extension registers canonical `/mpx:<name>` and managed-project `/skill:<name>` entries and lazily revalidates compiler-owned bodies.
 
-Project skills are classified before launch:
+Pi's editor-wide autocomplete provider suggests names from the accepted active inventory at prompt start and inside multiline text without descriptions or body reads. Selecting a suggestion only edits text. Exact submitted managed references in prose use validated lazy resolution; quoted/code examples remain literal. Reload and session/worktree replacement refresh inventory, while invalid projection state yields no trusted stale suggestions. Existing slash/path completion and editor composition remain native.
 
-- explicit MPX metadata opts a skill into managed compilation and strict exposure policy;
-- native skills retain Pi interpretation and `/skill:<name>`;
-- ambiguous ownership, unsafe YAML indirection, path escape, or changed files fail closed.
-
-The adapter keeps ambient broad skill discovery disabled and supplies only exact validated project entrypoints. Native extension and agent discovery otherwise retain Pi-owned precedence and trust behavior.
-
-Pi lifecycle integration tracks only the original MPX launch-bound native session. It queues startup events until a matching native session header exists, never creates or rewrites native session files, and stops claiming ownership after a successful native session replacement.
-
-Completion notifications are owned by the native extension. User-origin TUI or RPC requests may notify after `agent_settled` and queued continuations drain; headless subagents, print/JSON sessions, idle menus, cancellation, reload, and shutdown do not. Windows uses `%WINDIR%/Media/tada.wav`; mute controls suppress sound and taskbar flashing.
+Project skills are classified before launch. Valid `metadata.mpx.projectExposure` opts into managed compilation with `full`, `name-only`, or `explicit-only`; unmarked skills retain native interpretation. Ambiguous ownership, collisions, malformed metadata, unsafe indirection, path escape, or changed files fail closed.
 
 ## Claude
 
-Claude receives an immutable plugin projection with compiled skills and agents, hooks, status support, runtime context, and plugin metadata. `CLAUDE_CONFIG_DIR` selects the native account root.
+Claude receives immutable canonical `mpx` and, when needed, managed-project `skill` plugin projections. Repeated native plugin arguments preserve `/mpx:<name>` and `/skill:<name>`. Unmarked Claude project skills keep Claude's actual raw native naming.
 
-Claude represents `name-only` with a neutral description and `explicit-only` with `disable-model-invocation`. Integrity checks run at the earliest supported native boundaries, but they are not an atomic interceptor around Claude's own skill-file read.
-
-## Host environment
-
-Host launches preserve `ProgramData` for Windows OpenSSH. Dropping it can make `ssh.exe` and
-`ssh-add.exe` exit before diagnostic output, including for a local version check. Preserve this OS
-path without forwarding ambient SSH command overrides or authentication-agent settings through the
-launch environment allowlist.
+Claude represents `name-only` with neutral trigger metadata and `explicit-only` with `disable-model-invocation`. Integrity checks run at the earliest supported native boundaries, but are not an atomic interceptor around Claude's own reads. MPX documents this verified projection behavior without claiming identical runtime APIs.
 
 ## Executor status
 
-Windows host execution is the accepted compatibility path and is not isolation. Whole-agent Docker execution is unavailable: launch and resume fail with `EXECUTOR_UNAVAILABLE` and never fall back to host. Session continuation belongs to the lifecycle/session layer, not projection generation.
+The internal `ExecutorAdapter.assertReady` boundary checks the selected adapter's concrete executable, invocation, account/root, artifacts, launch binding, support, and approval inputs. A constant host-adapter hash is not security evidence or sandbox proof.
+
+Windows host execution is supported with explicit selection, reason, and fresh approval. It is not OS filesystem isolation. Whole-agent Docker execution is unavailable and never falls back to host. The Windows environment preserves `ProgramData` for OpenSSH while excluding ambient command overrides and authentication-agent settings.

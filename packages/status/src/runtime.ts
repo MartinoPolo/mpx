@@ -1,112 +1,112 @@
-export type RuntimeStatusFreshnessStateV1 = 'current' | 'stale' | 'unavailable' | 'error';
-export type RuntimeStatusSourceV1 = 'native' | 'provider' | 'derived' | 'cache';
-export interface RuntimeStatusGroupMetadataV1 {
-  source: RuntimeStatusSourceV1;
-  state: RuntimeStatusFreshnessStateV1;
+export type RuntimeStatusFreshnessState = 'current' | 'stale' | 'unavailable' | 'error';
+export type RuntimeStatusSource = 'native' | 'provider' | 'derived' | 'cache';
+export interface RuntimeStatusGroupMetadata {
+  source: RuntimeStatusSource;
+  state: RuntimeStatusFreshnessState;
   capturedAt: string | null;
   freshUntil: string | null;
   diagnostic: string | null;
   unavailable: string | null;
 }
-export interface RuntimeStatusBindingV1 {
+export interface RuntimeStatusBinding {
   launchKey: string;
   runtimeId: string;
   repositoryId: string;
 }
-export type RuntimeStatusHarnessV1 =
+export type RuntimeStatusHarness =
   | { kind: 'claude'; version: string | null; surface: 'statusline' }
   | { kind: 'pi'; version: string | null; surface: 'footer' };
-interface Group extends RuntimeStatusGroupMetadataV1 {}
-export interface RuntimeIdentityStatusV1 extends Group {
+interface Group extends RuntimeStatusGroupMetadata {}
+export interface RuntimeIdentityStatus extends Group {
   profile: 'personal' | 'work' | null;
   label: string | null;
 }
-export interface RuntimeSessionStatusV1 extends Group {
+export interface RuntimeSessionStatus extends Group {
   elapsedMs: number | null;
   turns: number | null;
   title?: string | null;
 }
-export interface RuntimeModelStatusV1 extends Group {
+export interface RuntimeModelStatus extends Group {
   modelId: string | null;
   label: string | null;
   contextUsedTokens: number | null;
   contextLimitTokens: number | null;
   effort?: 'low' | 'medium' | 'high' | 'max' | null;
 }
-export interface RuntimeLocationStatusV1 extends Group {
+export interface RuntimeLocationStatus extends Group {
   label: string | null;
 }
-export interface RuntimeRepositoryStatusV1 extends Group {
+export interface RuntimeRepositoryStatus extends Group {
   name: string | null;
   branch: string | null;
   dirty: boolean | null;
   ahead: number | null;
   behind: number | null;
 }
-export interface RuntimeUsageStatusV1 extends Group {
+export interface RuntimeUsageStatus extends Group {
   inputTokens: number | null;
   outputTokens: number | null;
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   totalTokens: number | null;
 }
-export interface RuntimeCostStatusV1 extends Group {
+export interface RuntimeCostStatus extends Group {
   currency: 'USD';
   amountMicros: number | null;
 }
-export interface RuntimeProviderUsageStatusV1 extends Group {
+export interface RuntimeProviderUsageStatus extends Group {
   provider: string | null;
   used: number | null;
   limit: number | null;
   unit: 'requests' | 'tokens' | 'percent' | null;
   resetAt: string | null;
 }
-export interface RuntimeCompactionStatusV1 extends Group {
+export interface RuntimeCompactionStatus extends Group {
   count: number | null;
   lastAt: string | null;
 }
-export interface RuntimeSubagentStatusV1 extends Group {
+export interface RuntimeSubagentStatus extends Group {
   active: number | null;
   completed: number | null;
   failed: number | null;
 }
-export interface RuntimeDevelopmentServiceV1 {
+export interface RuntimeDevelopmentService {
   id: string;
   state: 'listening' | 'stopped' | 'conflict' | 'unknown';
   port: number | null;
 }
-export interface RuntimeDevelopmentStatusV1 extends Group {
-  services: RuntimeDevelopmentServiceV1[];
+export interface RuntimeDevelopmentStatus extends Group {
+  services: RuntimeDevelopmentService[];
 }
-export type RuntimeStatusActionIdV1 =
+export type RuntimeStatusActionId =
   'refresh' | 'show-usage' | 'open-repository' | 'show-tasks' | 'open-review' | 'show-ci';
-export interface RuntimeStatusActionV1 {
-  id: RuntimeStatusActionIdV1;
+export interface RuntimeStatusAction {
+  id: RuntimeStatusActionId;
   enabled: boolean;
   narrowLabel: string;
   wideLabel: string;
 }
-export interface RuntimeActionsStatusV1 extends Group {
-  items: RuntimeStatusActionV1[];
+export interface RuntimeActionsStatus extends Group {
+  items: RuntimeStatusAction[];
 }
 
-export interface RuntimeStatusEnvelopeV1 {
+export interface RuntimeStatusEnvelope {
   schemaVersion: 1;
   generatedAt: string;
-  binding: RuntimeStatusBindingV1;
-  harness: RuntimeStatusHarnessV1;
-  identity: RuntimeIdentityStatusV1;
-  session: RuntimeSessionStatusV1;
-  model: RuntimeModelStatusV1;
-  location: RuntimeLocationStatusV1;
-  repository: RuntimeRepositoryStatusV1;
-  usage: RuntimeUsageStatusV1;
-  cost: RuntimeCostStatusV1;
-  providerUsage: RuntimeProviderUsageStatusV1;
-  compactions: RuntimeCompactionStatusV1;
-  subagents: RuntimeSubagentStatusV1;
-  development: RuntimeDevelopmentStatusV1;
-  actions: RuntimeActionsStatusV1;
+  binding: RuntimeStatusBinding;
+  harness: RuntimeStatusHarness;
+  identity: RuntimeIdentityStatus;
+  session: RuntimeSessionStatus;
+  model: RuntimeModelStatus;
+  location: RuntimeLocationStatus;
+  repository: RuntimeRepositoryStatus;
+  usage: RuntimeUsageStatus;
+  cost: RuntimeCostStatus;
+  providerUsage: RuntimeProviderUsageStatus;
+  compactions: RuntimeCompactionStatus;
+  subagents: RuntimeSubagentStatus;
+  development: RuntimeDevelopmentStatus;
+  actions: RuntimeActionsStatus;
 }
 
 export class RuntimeStatusEnvelopeValidationError extends Error {
@@ -216,7 +216,7 @@ const GROUP_METADATA_FIELDS = [
   'diagnostic',
   'unavailable',
 ] as const;
-function metadataAt(record: Record<string, unknown>, path: string): RuntimeStatusGroupMetadataV1 {
+function metadataAt(record: Record<string, unknown>, path: string): RuntimeStatusGroupMetadata {
   const source = enumAt(record.source, `${path}.source`, [
     'native',
     'provider',
@@ -259,11 +259,11 @@ function baseGroup(
   value: unknown,
   path: string,
   fields: readonly string[],
-): [Record<string, unknown>, RuntimeStatusGroupMetadataV1] {
+): [Record<string, unknown>, RuntimeStatusGroupMetadata] {
   const record = objectAt(value, path, [...GROUP_METADATA_FIELDS, ...fields]);
   return [record, metadataAt(record, path)];
 }
-function bindingAt(value: unknown): RuntimeStatusBindingV1 {
+function bindingAt(value: unknown): RuntimeStatusBinding {
   const r = objectAt(value, 'binding', ['launchKey', 'runtimeId', 'repositoryId']);
   return {
     launchKey: idAt(r.launchKey, 'binding.launchKey'),
@@ -271,7 +271,7 @@ function bindingAt(value: unknown): RuntimeStatusBindingV1 {
     repositoryId: idAt(r.repositoryId, 'binding.repositoryId'),
   };
 }
-function harnessAt(value: unknown): RuntimeStatusHarnessV1 {
+function harnessAt(value: unknown): RuntimeStatusHarness {
   const r = objectAt(value, 'harness', ['kind', 'version', 'surface']);
   const kind = enumAt(r.kind, 'harness.kind', ['claude', 'pi'] as const);
   const version = nullableTextAt(r.version, 'harness.version', 64);
@@ -288,7 +288,7 @@ function harnessAt(value: unknown): RuntimeStatusHarnessV1 {
 }
 
 /** Strictly validates, privacy-checks, and independently copies an untrusted envelope. */
-export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvelopeV1 {
+export function parseRuntimeStatusEnvelope(value: unknown): RuntimeStatusEnvelope {
   const keys = [
     'schemaVersion',
     'generatedAt',
@@ -391,7 +391,7 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   if (!Array.isArray(development.services) || development.services.length > 64) {
     fail('development.services', 'an array of at most 64 services');
   }
-  const services = development.services.map((item, index): RuntimeDevelopmentServiceV1 => {
+  const services = development.services.map((item, index): RuntimeDevelopmentService => {
     const p = `development.services[${index}]`;
     const r = objectAt(item, p, ['id', 'state', 'port']);
     const port = integerNullAt(r.port, `${p}.port`, 65535);
@@ -415,7 +415,7 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   if (!Array.isArray(actions.items) || actions.items.length > 8) {
     fail('actions.items', 'an array of at most 8 semantic actions');
   }
-  const items = actions.items.map((item, index): RuntimeStatusActionV1 => {
+  const items = actions.items.map((item, index): RuntimeStatusAction => {
     const p = `actions.items[${index}]`;
     const r = objectAt(item, p, ['id', 'enabled', 'narrowLabel', 'wideLabel']);
     if (typeof r.enabled !== 'boolean') {
@@ -526,10 +526,10 @@ export function parseRuntimeStatusEnvelopeV1(value: unknown): RuntimeStatusEnvel
   };
 }
 
-/** Parses JSON and applies strict RuntimeStatusEnvelopeV1 validation. */
-export function parseRuntimeStatusEnvelopeV1Json(text: string): RuntimeStatusEnvelopeV1 {
+/** Parses JSON and applies strict RuntimeStatusEnvelope validation. */
+export function parseRuntimeStatusEnvelopeJson(text: string): RuntimeStatusEnvelope {
   try {
-    return parseRuntimeStatusEnvelopeV1(JSON.parse(text) as unknown);
+    return parseRuntimeStatusEnvelope(JSON.parse(text) as unknown);
   } catch (error) {
     if (error instanceof RuntimeStatusEnvelopeValidationError) {
       throw error;
@@ -538,8 +538,8 @@ export function parseRuntimeStatusEnvelopeV1Json(text: string): RuntimeStatusEnv
   }
 }
 
-export type RuntimeStatusCapabilitySupportV1 = 'native' | 'adapter' | 'derived' | 'unsupported';
-export type RuntimeStatusFieldV1 =
+export type RuntimeStatusCapabilitySupport = 'native' | 'adapter' | 'derived' | 'unsupported';
+export type RuntimeStatusField =
   | 'identity.profile'
   | 'identity.label'
   | 'session.elapsedMs'
@@ -575,16 +575,16 @@ export type RuntimeStatusFieldV1 =
   | 'subagents.failed'
   | 'development.services'
   | 'actions.items';
-export type RuntimeStatusFieldCapabilityV1 =
+export type RuntimeStatusFieldCapability =
   | { readonly support: 'native' | 'adapter' | 'derived' }
   | { readonly support: 'unsupported'; readonly reason: string };
-export interface RuntimeStatusCapabilitiesV1 {
+export interface RuntimeStatusCapabilities {
   readonly schemaVersion: 1;
   readonly harness: 'claude' | 'pi';
   readonly surface: 'statusline' | 'footer';
   readonly widths: readonly ['narrow', 'wide'];
-  readonly semanticActions: readonly RuntimeStatusActionIdV1[];
-  readonly fields: Readonly<Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>>;
+  readonly semanticActions: readonly RuntimeStatusActionId[];
+  readonly fields: Readonly<Record<RuntimeStatusField, RuntimeStatusFieldCapability>>;
 }
 const RUNTIME_STATUS_FIELDS = [
   'identity.profile',
@@ -622,7 +622,7 @@ const RUNTIME_STATUS_FIELDS = [
   'subagents.failed',
   'development.services',
   'actions.items',
-] as const satisfies readonly RuntimeStatusFieldV1[];
+] as const satisfies readonly RuntimeStatusField[];
 const ALL_ACTIONS = [
   'refresh',
   'show-usage',
@@ -631,16 +631,16 @@ const ALL_ACTIONS = [
   'open-review',
   'show-ci',
 ] as const;
-const unsupported = (reason: string): RuntimeStatusFieldCapabilityV1 => ({
+const unsupported = (reason: string): RuntimeStatusFieldCapability => ({
   support: 'unsupported',
   reason,
 });
 function capabilityFields(
-  overrides: Partial<Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>>,
-): Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1> {
+  overrides: Partial<Record<RuntimeStatusField, RuntimeStatusFieldCapability>>,
+): Record<RuntimeStatusField, RuntimeStatusFieldCapability> {
   return Object.fromEntries(
     RUNTIME_STATUS_FIELDS.map((field) => [field, overrides[field] ?? { support: 'adapter' }]),
-  ) as Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>;
+  ) as Record<RuntimeStatusField, RuntimeStatusFieldCapability>;
 }
 const claudeFields = capabilityFields({
   'session.elapsedMs': { support: 'native' },
@@ -681,7 +681,7 @@ const piFields = capabilityFields({
   'cost.currency': { support: 'derived' },
   'cost.amountMicros': unsupported('Pi does not expose native session cost'),
 });
-function parseFieldCapability(value: unknown, path: string): RuntimeStatusFieldCapabilityV1 {
+function parseFieldCapability(value: unknown, path: string): RuntimeStatusFieldCapability {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     fail(path, 'a capability object');
   }
@@ -708,7 +708,7 @@ function parseFieldCapability(value: unknown, path: string): RuntimeStatusFieldC
     : { support };
 }
 /** Strictly validates and deeply freezes the complete renderer capability contract. */
-export function parseRuntimeStatusCapabilitiesV1(value: unknown): RuntimeStatusCapabilitiesV1 {
+export function parseRuntimeStatusCapabilities(value: unknown): RuntimeStatusCapabilities {
   const root = objectAt(value, 'runtime status capabilities', [
     'schemaVersion',
     'harness',
@@ -757,7 +757,7 @@ export function parseRuntimeStatusCapabilitiesV1(value: unknown): RuntimeStatusC
       field,
       parseFieldCapability(fields[field], `runtime status capabilities.fields.${field}`),
     ]),
-  ) as Record<RuntimeStatusFieldV1, RuntimeStatusFieldCapabilityV1>;
+  ) as Record<RuntimeStatusField, RuntimeStatusFieldCapability>;
   return deepFreeze({
     schemaVersion: 1,
     harness,
@@ -768,7 +768,7 @@ export function parseRuntimeStatusCapabilitiesV1(value: unknown): RuntimeStatusC
   });
 }
 const CAPABILITIES = {
-  claude: parseRuntimeStatusCapabilitiesV1({
+  claude: parseRuntimeStatusCapabilities({
     schemaVersion: 1,
     harness: 'claude',
     surface: 'statusline',
@@ -776,7 +776,7 @@ const CAPABILITIES = {
     semanticActions: ALL_ACTIONS,
     fields: claudeFields,
   }),
-  pi: parseRuntimeStatusCapabilitiesV1({
+  pi: parseRuntimeStatusCapabilities({
     schemaVersion: 1,
     harness: 'pi',
     surface: 'footer',
@@ -785,12 +785,10 @@ const CAPABILITIES = {
     fields: piFields,
   }),
 };
-export function getRuntimeStatusCapabilitiesV1(
-  harness: 'claude' | 'pi',
-): RuntimeStatusCapabilitiesV1 {
+export function getRuntimeStatusCapabilities(harness: 'claude' | 'pi'): RuntimeStatusCapabilities {
   return CAPABILITIES[harness];
 }
-export type RuntimeStatusGroupNameV1 =
+export type RuntimeStatusGroupName =
   | 'identity'
   | 'session'
   | 'model'
@@ -803,19 +801,19 @@ export type RuntimeStatusGroupNameV1 =
   | 'subagents'
   | 'development'
   | 'actions';
-type RuntimeStatusGroups = Pick<RuntimeStatusEnvelopeV1, RuntimeStatusGroupNameV1>;
-export interface RuntimeStatusContributionV1 {
+type RuntimeStatusGroups = Pick<RuntimeStatusEnvelope, RuntimeStatusGroupName>;
+export interface RuntimeStatusContribution {
   source: 'cache' | 'launch' | 'repository' | 'runtime';
-  binding: RuntimeStatusBindingV1;
+  binding: RuntimeStatusBinding;
   groups: Partial<RuntimeStatusGroups>;
 }
 export interface ComposeRuntimeStatusEnvelopeV1Input {
   generatedAt: string;
-  binding: RuntimeStatusBindingV1;
-  harness: RuntimeStatusHarnessV1;
-  contributions: readonly RuntimeStatusContributionV1[];
+  binding: RuntimeStatusBinding;
+  harness: RuntimeStatusHarness;
+  contributions: readonly RuntimeStatusContribution[];
 }
-const GROUP_NAMES: readonly RuntimeStatusGroupNameV1[] = [
+const GROUP_NAMES: readonly RuntimeStatusGroupName[] = [
   'identity',
   'session',
   'model',
@@ -830,7 +828,7 @@ const GROUP_NAMES: readonly RuntimeStatusGroupNameV1[] = [
   'actions',
 ];
 function unavailableGroups(): RuntimeStatusGroups {
-  const unavailable: RuntimeStatusGroupMetadataV1 = {
+  const unavailable: RuntimeStatusGroupMetadata = {
     source: 'derived',
     state: 'unavailable',
     capturedAt: null,
@@ -880,15 +878,15 @@ function unavailableGroups(): RuntimeStatusGroups {
     actions: { ...unavailable, items: [] },
   };
 }
-function sameBinding(a: RuntimeStatusBindingV1, b: RuntimeStatusBindingV1): boolean {
+function sameBinding(a: RuntimeStatusBinding, b: RuntimeStatusBinding): boolean {
   return (
     a.launchKey === b.launchKey && a.runtimeId === b.runtimeId && a.repositoryId === b.repositoryId
   );
 }
 /** Pure composition. Contributions are atomic by group; precedence is runtime > repository > launch > cache. */
-export function composeRuntimeStatusEnvelopeV1(
+export function composeRuntimeStatusEnvelope(
   input: ComposeRuntimeStatusEnvelopeV1Input,
-): RuntimeStatusEnvelopeV1 {
+): RuntimeStatusEnvelope {
   const groups = unavailableGroups();
   const rank = { cache: 0, launch: 1, repository: 2, runtime: 3 } as const;
   if (
@@ -912,7 +910,7 @@ export function composeRuntimeStatusEnvelopeV1(
       }
     }
   }
-  return parseRuntimeStatusEnvelopeV1({
+  return parseRuntimeStatusEnvelope({
     schemaVersion: 1,
     generatedAt: input.generatedAt,
     binding: input.binding,
@@ -925,15 +923,15 @@ export interface RuntimeStatusEnvelopeReader {
   read(signal: AbortSignal): Promise<unknown>;
 }
 export interface RuntimeStatusRefreshController {
-  current(): RuntimeStatusEnvelopeV1 | undefined;
+  current(): RuntimeStatusEnvelope | undefined;
   refresh(): Promise<void>;
   abort(): void;
 }
 export interface RuntimeStatusRefreshOptions {
   timeoutMs?: number;
-  initial?: RuntimeStatusEnvelopeV1;
+  initial?: RuntimeStatusEnvelope;
 }
-function staleEnvelope(value: RuntimeStatusEnvelopeV1): RuntimeStatusEnvelopeV1 {
+function staleEnvelope(value: RuntimeStatusEnvelope): RuntimeStatusEnvelope {
   const clone = structuredClone(value);
   for (const name of GROUP_NAMES) {
     if (clone[name].state === 'current') {
@@ -952,7 +950,7 @@ export function createRuntimeStatusRefreshController(
     throw new RangeError('timeoutMs must be from 1 through 60000');
   }
   let value =
-    options.initial === undefined ? undefined : parseRuntimeStatusEnvelopeV1(options.initial);
+    options.initial === undefined ? undefined : parseRuntimeStatusEnvelope(options.initial);
   let pending: Promise<void> | undefined;
   let active: AbortController | undefined;
   const refresh = (): Promise<void> => {
@@ -974,7 +972,7 @@ export function createRuntimeStatusRefreshController(
     try {
       read = (async () => {
         const next = await reader.read(controller.signal);
-        value = parseRuntimeStatusEnvelopeV1(next);
+        value = parseRuntimeStatusEnvelope(next);
       })();
     } catch (error) {
       read = Promise.reject(error);
@@ -1003,22 +1001,22 @@ export function createRuntimeStatusRefreshController(
   };
 }
 
-export interface RuntimeStatusProjectionV1 {
+export interface RuntimeStatusProjection {
   readonly generatedAt: string;
-  readonly harness: RuntimeStatusHarnessV1;
-  readonly identity: RuntimeIdentityStatusV1;
-  readonly session: RuntimeSessionStatusV1;
-  readonly model: RuntimeModelStatusV1;
-  readonly location: RuntimeLocationStatusV1;
-  readonly repository: RuntimeRepositoryStatusV1;
-  readonly usage: RuntimeUsageStatusV1;
-  readonly cost: RuntimeCostStatusV1;
-  readonly providerUsage: RuntimeProviderUsageStatusV1;
-  readonly compactions: RuntimeCompactionStatusV1;
-  readonly subagents: RuntimeSubagentStatusV1;
-  readonly development: RuntimeDevelopmentStatusV1;
+  readonly harness: RuntimeStatusHarness;
+  readonly identity: RuntimeIdentityStatus;
+  readonly session: RuntimeSessionStatus;
+  readonly model: RuntimeModelStatus;
+  readonly location: RuntimeLocationStatus;
+  readonly repository: RuntimeRepositoryStatus;
+  readonly usage: RuntimeUsageStatus;
+  readonly cost: RuntimeCostStatus;
+  readonly providerUsage: RuntimeProviderUsageStatus;
+  readonly compactions: RuntimeCompactionStatus;
+  readonly subagents: RuntimeSubagentStatus;
+  readonly development: RuntimeDevelopmentStatus;
   readonly actions: readonly {
-    readonly id: RuntimeStatusActionIdV1;
+    readonly id: RuntimeStatusActionId;
     readonly enabled: boolean;
     readonly label: string;
   }[];
@@ -1033,11 +1031,11 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 /** Creates a detached renderer-only view. It is synchronous, immutable, and has no I/O authority or binding identifiers. */
-export function projectRuntimeStatusEnvelopeV1(
-  value: RuntimeStatusEnvelopeV1,
+export function projectRuntimeStatusEnvelope(
+  value: RuntimeStatusEnvelope,
   width: 'narrow' | 'wide',
-): RuntimeStatusProjectionV1 {
-  const parsed = parseRuntimeStatusEnvelopeV1(value);
+): RuntimeStatusProjection {
+  const parsed = parseRuntimeStatusEnvelope(value);
   const { binding: _binding, schemaVersion: _schemaVersion, actions, ...safe } = parsed;
   return deepFreeze({
     ...safe,

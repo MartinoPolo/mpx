@@ -5,17 +5,17 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
-  createRuntimeContextV1,
-  createSessionLifecycleBindingV1,
+  createRuntimeContext,
+  createSessionLifecycleBinding,
   type PublishedRuntimeArtifactReference,
 } from '@mpx/runtime-contracts';
 import {
-  createPiRuntimeProfileV1,
+  createPiRuntimeProfile,
   planPiInvocation as planRawPiInvocation,
   verifyPiResumeTarget,
 } from '../../src/index.js';
 
-const invocationProfile = createPiRuntimeProfileV1(
+const invocationProfile = createPiRuntimeProfile(
   {
     schemaVersion: 1,
     runtime: 'pi',
@@ -61,11 +61,20 @@ const contentFiles = [
   byteCount: file.bytes.byteLength,
 }));
 const activeManifest = {
-  schemaVersion: 1,
-  compilerVersion: '1.1.0',
+  schemaVersion: 2,
+  compilerVersion: '2.0.0',
   runtime: 'pi',
   profileSchemaVersion: 1,
-  binding: { projectId: 'sample/app', repositoryId: 'sample/app', contentScope: 'work' },
+  binding: {
+    projectId: 'sample/app',
+    repositoryId: 'sample/app',
+    identity: 'personal',
+    selection: {
+      location: { name: 'work', canonicalRoot: 'C:/repo' },
+      packs: ['development'],
+      source: 'project',
+    },
+  },
   manifestKey: 'c'.repeat(64),
   manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
   skills: [
@@ -171,23 +180,60 @@ const publishedProjection = {
 const planPiInvocation = (input: Parameters<typeof planRawPiInvocation>[0]) =>
   planRawPiInvocation({ ...publishedProjection, ...input });
 
-const runtimeContext = createRuntimeContextV1({
+const runtimeContext = createRuntimeContext({
   launchKey: 'a'.repeat(64),
   launchDescriptor: { reference: 'launch.json', digest: 'b'.repeat(64) },
   manifestKey: 'c'.repeat(64),
   runtimeArtifact: {
-    schemaVersion: 4,
+    schemaVersion: 5,
     runtime: 'pi',
     manifestKey: 'c'.repeat(64),
     artifactKey: 'd'.repeat(64),
     fileMapHash: 'e'.repeat(64),
   },
-  binding: { projectId: 'sample/app', repositoryId: 'sample/app', contentScope: 'work' },
+  binding: {
+    projectId: 'sample/app',
+    repositoryId: 'sample/app',
+    identity: 'personal',
+    selection: {
+      location: { name: 'work', canonicalRoot: 'C:/repo' },
+      packs: ['development'],
+      source: 'project',
+    },
+  },
 });
+
+it.each(['host', 'docker'] as const)(
+  'binds the selected %s executor instead of an inherited ambient executor',
+  async (executor) => {
+    const inherited = process.env.MPX_RUNTIME_EXECUTOR;
+    process.env.MPX_RUNTIME_EXECUTOR = executor === 'host' ? 'docker' : 'host';
+    try {
+      const plan = await planPiInvocation({
+        executable: 'C:/trusted/pi.cmd',
+        executor,
+        profile: invocationProfile,
+        accountRoot: 'C:/native/pi/account-a',
+        runtimeContextFile: 'C:/launch/context.json',
+        runtimeContext,
+        cwd: 'C:/repo',
+      });
+
+      expect(plan.env.MPX_RUNTIME_EXECUTOR).toBe(executor);
+    } finally {
+      if (inherited === undefined) {
+        delete process.env.MPX_RUNTIME_EXECUTOR;
+      } else {
+        process.env.MPX_RUNTIME_EXECUTOR = inherited;
+      }
+    }
+  },
+);
 
 it('does not disable native extension discovery', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
+    executor: 'host',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
@@ -199,14 +245,15 @@ it('does not disable native extension discovery', async () => {
   expect(plan.args).not.toContain('--extension');
 });
 
-it('exposes the selected identity, mode and independent skill policy for the Pi footer', async () => {
+it('exposes identity, mode, and independent provider routes without a skill-policy environment axis', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
+    executor: 'host',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
     runtimeContext,
-    launchIdentity: { name: 'personal', mode: 'project', skillPolicy: 'developer' },
+    launchIdentity: { name: 'personal', mode: 'project' },
     projectProviders: {
       repository: 'gitlab',
       issues: 'kanbanflow',
@@ -221,7 +268,6 @@ it('exposes the selected identity, mode and independent skill policy for the Pi 
   expect(plan.env).toMatchObject({
     MPX_IDENTITY: 'personal',
     MPX_MODE: 'project',
-    MPX_SKILL_POLICY: 'developer',
     MPX_REPOSITORY_PROVIDER: 'gitlab',
     MPX_ISSUES_PROVIDER: 'kanbanflow',
     MPX_REPOSITORY_URL: 'https://gitlab.example/group/repo/-/merge_requests',
@@ -230,19 +276,21 @@ it('exposes the selected identity, mode and independent skill policy for the Pi 
     MPX_ACCOUNT_CONFIG_PATH: 'C:/Users/example/AppData/Roaming/mpx/config.json',
     MPX_SESSION_SKILLS_DIR: path.join(projectionDirectory, 'skills').replaceAll('\\', '/'),
   });
+  expect(plan.env).not.toHaveProperty('MPX_SKILL_POLICY');
 });
 
 it.each(['', 'developer\nspoof', 'developer · spoof'])(
-  'rejects an invalid footer skill policy %j',
-  async (skillPolicy) => {
+  'rejects an invalid footer mode %j',
+  async (mode) => {
     await expect(
       planPiInvocation({
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host',
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         runtimeContextFile: 'C:/launch/context.json',
         runtimeContext,
-        launchIdentity: { name: 'personal', mode: 'project', skillPolicy },
+        launchIdentity: { name: 'personal', mode },
         cwd: 'C:/repo',
       }),
     ).rejects.toThrow('Pi launch identity contains an invalid display field');
@@ -252,6 +300,7 @@ it.each(['', 'developer\nspoof', 'developer · spoof'])(
 it('creates a hermetic Pi invocation with launch-current-compatible runtime-context JSON', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
+    executor: 'host',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
@@ -286,6 +335,7 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
     env: {
       PI_CODING_AGENT_DIR: 'C:/native/pi/account-a',
       MPX_RUNTIME: 'pi',
+      MPX_RUNTIME_EXECUTOR: 'host',
       MPX_RUNTIME_CONTEXT: JSON.stringify(runtimeContext),
       MPX_RUNTIME_CONTEXT_FILE: 'C:/launch/context.json',
       MPX_REPOSITORY_URL: '',
@@ -348,6 +398,7 @@ it('does not expose a canonical-only skill manifest through native --skill', asy
     );
     const plan = await planRawPiInvocation({
       executable: 'C:/trusted/pi.cmd',
+      executor: 'host',
       profile: invocationProfile,
       accountRoot: 'C:/native/pi/account-a',
       runtimeContextFile: 'C:/launch/context.json',
@@ -402,6 +453,7 @@ it('adds only individually contained native cwd skills beside generated managed 
     );
     const plan = await planPiInvocation({
       executable: 'C:/trusted/pi.cmd',
+      executor: 'host',
       profile: invocationProfile,
       accountRoot: 'C:/native/pi/account-a',
       runtimeContextFile: 'C:/launch/context.json',
@@ -446,6 +498,7 @@ it.each([
       const directory = await writeProjectSkill(cwd, 'native-skill');
       const input = {
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host' as const,
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         runtimeContextFile: 'C:/launch/context.json',
@@ -470,6 +523,7 @@ it('does not expose a previously managed project skill twice after ownership cha
     await expect(
       planPiInvocation({
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host',
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         runtimeContextFile: 'C:/launch/context.json',
@@ -491,6 +545,7 @@ it('rejects native cwd directories containing linked support files at invocation
     await expect(
       planPiInvocation({
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host',
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         runtimeContextFile: 'C:/launch/context.json',
@@ -514,6 +569,7 @@ it('fails invocation when the launch-selected active manifest bytes change', asy
     await expect(
       planPiInvocation({
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host',
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         runtimeContextFile: 'C:/launch/context.json',
@@ -532,7 +588,7 @@ it.each([
 ] as const)(
   'pins the %s profile instead of consulting ambient native settings',
   async (_identity, provider, model) => {
-    const profile = createPiRuntimeProfileV1(
+    const profile = createPiRuntimeProfile(
       {
         schemaVersion: 1,
         runtime: 'pi',
@@ -544,6 +600,7 @@ it.each([
     );
     const plan = await planPiInvocation({
       executable: 'C:/trusted/pi.cmd',
+      executor: 'host',
       profile,
       accountRoot: 'C:/native/pi/selected-account',
       runtimeContextFile: 'C:/launch/context.json',
@@ -588,6 +645,7 @@ it('accepts only a module-verified regular Pi session beneath the exact account 
     });
     const base = {
       executable: path.join(account, 'pi.cmd'),
+      executor: 'host' as const,
       profile: invocationProfile,
       accountRoot: account,
       runtimeContextFile: path.join(account, 'context.json'),
@@ -638,7 +696,7 @@ it('rejects escaped, missing, and symlinked Pi resume targets during async verif
   }
 });
 it('injects only a full validated Pi lifecycle binding id and directory', async () => {
-  const binding = createSessionLifecycleBindingV1({
+  const binding = createSessionLifecycleBinding({
       bindingId: 'binding-1',
       bindingRef: 'ref',
       runtime: 'pi',
@@ -655,6 +713,7 @@ it('injects only a full validated Pi lifecycle binding id and directory', async 
     }),
     base = {
       executable: 'C:/trusted/pi.cmd',
+      executor: 'host' as const,
       profile: invocationProfile,
       accountRoot: 'C:/native/pi/account-a',
       runtimeContextFile: 'C:/launch/context.json',
@@ -679,6 +738,7 @@ it('injects only a full validated Pi lifecycle binding id and directory', async 
 it('leaves bridge and status integration to the canonically discovered native package', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
+    executor: 'host',
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
     runtimeContextFile: 'C:/launch/context.json',
@@ -694,6 +754,7 @@ it('leaves bridge and status integration to the canonically discovered native pa
 it('propagates the exact published projection reference as JSON', async () => {
   const plan = await planPiInvocation({
     executable: 'C:/trusted/pi.cmd',
+    executor: 'host',
     runtimeContextFile: path.join(projectionDirectory, 'runtime-context.json'),
     profile: invocationProfile,
     accountRoot: 'C:/native/pi/account-a',
@@ -720,6 +781,7 @@ it('fails closed when flattened published projection metadata is absent', async 
     await expect(
       planRawPiInvocation({
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host',
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         immutableProjectionDirectory: directory,
@@ -763,6 +825,7 @@ it('fails closed when a flattened projection file map has a case-insensitive col
     await expect(
       planRawPiInvocation({
         executable: 'C:/trusted/pi.cmd',
+        executor: 'host',
         profile: invocationProfile,
         accountRoot: 'C:/native/pi/account-a',
         immutableProjectionDirectory: directory,

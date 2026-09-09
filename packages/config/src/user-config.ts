@@ -45,13 +45,13 @@ function rootToken(value: unknown, environment: NodeJS.ProcessEnv, pointer: stri
   const match = fullToken.exec(value);
   if (!match) {
     if (value.includes('${')) {
-      throw validationError(pointer, `uses an unsupported environment root token: ${value}`);
+      throw validationError(pointer, 'uses an unsupported environment root token');
     }
     return absoluteRoot(value, pointer);
   }
   const variable = match[1]!;
   if (!allowedRootVariables.has(variable)) {
-    throw validationError(pointer, `uses an unsupported environment root token: ${value}`);
+    throw validationError(pointer, 'uses an unsupported environment root token');
   }
   const resolved = environment[variable];
   if (!resolved) {
@@ -95,7 +95,8 @@ function rejectUndocumentedInterpolation(value: unknown, pointer = ''): void {
   if (typeof value === 'string' && value.includes('${')) {
     const documentedRoot =
       /^\/domains\/[^/]+\/\d+$/u.test(pointer) ||
-      /^\/contentScopes\/[^/]+\/roots\/\d+$/u.test(pointer) ||
+      /^\/locations\/[^/]+\/roots\/\d+$/u.test(pointer) ||
+      /^\/resourceRoots\/[^/]+\/\d+$/u.test(pointer) ||
       /^\/localIssueStores\/[^/]+\/root$/u.test(pointer) ||
       /^\/localViews\/[^/]+\/(?:vaultRoot|outputRoot)$/u.test(pointer);
     if (!documentedRoot) {
@@ -145,10 +146,16 @@ export function interpolateUserConfig(
       roots[index] = rootToken(root, environment, `/domains/${name}/${index}`);
     });
   }
-  const scopes = result.contentScopes as Record<string, { roots?: unknown[] }> | undefined;
+  const scopes = result.locations as Record<string, { roots?: unknown[] }> | undefined;
   for (const [name, scope] of Object.entries(scopes ?? {})) {
     scope.roots?.forEach((root, index) => {
-      scope.roots![index] = rootToken(root, environment, `/contentScopes/${name}/roots/${index}`);
+      scope.roots![index] = rootToken(root, environment, `/locations/${name}/roots/${index}`);
+    });
+  }
+  const resources = result.resourceRoots as Record<string, unknown[]> | undefined;
+  for (const [name, roots] of Object.entries(resources ?? {})) {
+    roots.forEach((root, index) => {
+      roots[index] = rootToken(root, environment, `/resourceRoots/${name}/${index}`);
     });
   }
   const stores = result.localIssueStores as Record<string, { root?: unknown }> | undefined;
@@ -185,7 +192,6 @@ export function interpolateUserConfig(
 const builtInModeLimits = {
   project: { 'selected-project': 'read-write' },
   developer: { 'identity-domain': 'read-write', 'cloned-repositories': 'read-only' },
-  'personal-assistant': { 'assistant-input': 'read-write', 'assistant-output': 'read-write' },
   'computer-control': {
     'computer-control-config': 'read-write',
     'computer-control-executable-settings': 'staged-write',
@@ -238,39 +244,10 @@ function assertReferences(config: UserConfig): void {
       }
     }
   }
-  const clean = config.skillPolicies.clean;
-  if (
-    clean &&
-    (clean.skillPacks !== undefined ||
-      clean.skillExposure.default !== 'explicit-only' ||
-      Object.values(clean.skillExposure.skills ?? {}).some(
-        (exposure) => exposure !== 'explicit-only',
-      ))
-  ) {
-    throw validationError(
-      '/skillPolicies/clean',
-      'must retain all selected trusted skills as explicit-only with zero initial disclosure',
-    );
-  }
-  const policyPackLimits = {
-    developer: new Set(['core', 'work']),
-    'personal-assistant': new Set(['core', 'personal']),
-  };
-  for (const [name, policy] of Object.entries(config.skillPolicies)) {
-    const limits = policyPackLimits[name as keyof typeof policyPackLimits];
-    if (limits && policy.skillPacks?.some((pack) => !limits.has(pack))) {
-      throw validationError(
-        `/skillPolicies/${name}/skillPacks`,
-        'widens the built-in skill policy',
-      );
-    }
-  }
   for (const [name, preset] of Object.entries(config.presets)) {
     const references: Array<[string, boolean]> = [
       ['identity', preset.identity in config.identities],
       ['mode', preset.mode in config.modes],
-      ['skillPolicy', preset.skillPolicy in config.skillPolicies],
-      ['contentScope', preset.contentScope in config.contentScopes],
       ['executor', preset.executor in config.executors],
       ['networkPolicy', preset.networkPolicy in config.networkPolicies],
     ];
@@ -278,18 +255,6 @@ function assertReferences(config: UserConfig): void {
       if (!valid) {
         throw validationError(`/presets/${name}/${field}`, `references an unknown ${field}`);
       }
-    }
-    const policy = config.skillPolicies[preset.skillPolicy];
-    const scope = config.contentScopes[preset.contentScope];
-    if (
-      policy?.skillPacks &&
-      scope?.skillPacks &&
-      policy.skillPacks.some((pack) => !scope.skillPacks!.includes(pack))
-    ) {
-      throw validationError(
-        `/presets/${name}/skillPolicy`,
-        'selects packs outside the content scope',
-      );
     }
   }
 
@@ -343,16 +308,16 @@ function assertReferences(config: UserConfig): void {
       );
     }
   }
-  for (const [scopeName, defaults] of Object.entries(config.launchDefaults.scopes)) {
-    if (!(scopeName in config.contentScopes)) {
+  for (const [scopeName, defaults] of Object.entries(config.launchDefaults.locations)) {
+    if (!(scopeName in config.locations)) {
       throw validationError(
-        `/launchDefaults/scopes/${scopeName}`,
-        'references an unknown content scope',
+        `/launchDefaults/locations/${scopeName}`,
+        'references an unknown location',
       );
     }
     for (const [identityName, presetName] of Object.entries(defaults)) {
       assertLaunchDefault(
-        `/launchDefaults/scopes/${scopeName}/${identityName}`,
+        `/launchDefaults/locations/${scopeName}/${identityName}`,
         identityName,
         presetName,
       );

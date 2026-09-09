@@ -5,27 +5,26 @@ import { MpxError, parseStrictJson } from '@mpx/core';
 import {
   acquireAtomicOwnerLock,
   installerDigest,
-  parseInstallIntentV1,
-  parseInstallPlanV1,
-  parseInstallOperationV1,
-  parseInstallOperationLocatorsV1,
-  parseMachineSnapshotV1,
-  parseReleaseManifestV1,
-  parseOwnershipReceiptV1,
-  type InstallIntentV1,
-  type InstallOperationLocatorV1,
-  type InstallOperationV1,
-  type InstallPlanV1,
-  type InstallVerificationV1,
-  type MachineObservationV1,
-  type MachineSnapshotV1,
-  type OwnershipReceiptV1,
-  type ReleaseManifestV1,
-  type TransactionJournalV1,
+  parseInstallIntent,
+  parseInstallPlan,
+  parseInstallOperation,
+  parseInstallOperationLocators,
+  parseMachineSnapshot,
+  parseOwnershipReceipt,
+  type InstallIntent,
+  type InstallOperationLocator,
+  type InstallOperation,
+  type InstallPlan,
+  type InstallVerification,
+  type MachineObservation,
+  type MachineSnapshot,
+  type OwnershipReceipt,
+  type ReleaseManifest,
+  type TransactionJournal,
 } from './immutable-core.js';
 import { aggregateInstallerFailure } from './failure.js';
 export { installerDigest } from './immutable-core.js';
-export type { InstallIntentV1, InstallOperationV1 } from './immutable-core.js';
+export type { InstallIntent, InstallOperation } from './immutable-core.js';
 
 export interface OwnedUserConfigAdoption {
   readonly operationId: '01-user-config';
@@ -40,31 +39,31 @@ function fail(code: string, message: string): never {
 }
 export interface SideEffectAdapter {
   readonly name: string;
-  observe(operation: InstallOperationV1): Promise<string | null>;
-  capture(operation: InstallOperationV1): Promise<string | null>;
-  apply(operation: InstallOperationV1): Promise<void>;
-  restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
-  receiptLocator?(operation: InstallOperationV1): Promise<unknown>;
+  observe(operation: InstallOperation): Promise<string | null>;
+  capture(operation: InstallOperation): Promise<string | null>;
+  apply(operation: InstallOperation): Promise<void>;
+  restore(operation: InstallOperation, snapshot: string | null): Promise<void>;
+  receiptLocator?(operation: InstallOperation): Promise<unknown>;
   hydrateReceiptOperation?(
-    operation: InstallOperationV1,
+    operation: InstallOperation,
     locator: unknown,
-    priorReceipt?: OwnershipReceiptV1,
+    priorReceipt?: OwnershipReceipt,
   ): Promise<void>;
 }
 export interface StoredTransaction {
-  journal: TransactionJournalV1;
+  journal: TransactionJournal;
   snapshots: Readonly<Record<string, string | null>>;
-  operations: readonly InstallOperationV1[];
-  operationLocators: readonly InstallOperationLocatorV1[];
-  priorReceipt?: OwnershipReceiptV1;
+  operations: readonly InstallOperation[];
+  operationLocators: readonly InstallOperationLocator[];
+  priorReceipt?: OwnershipReceipt;
 }
-function operationChanges(operation: InstallOperationV1, digest: string | null): boolean {
+function operationChanges(operation: InstallOperation, digest: string | null): boolean {
   return operation.action === 'ensure' ? digest !== operation.desiredDigest : digest !== null;
 }
 
 function adoptedUserConfig(
-  receipt: OwnershipReceiptV1,
-  prior: InstallOperationV1,
+  receipt: OwnershipReceipt,
+  prior: InstallOperation,
   adoption: OwnedUserConfigAdoption | undefined,
   actual: string | null,
 ): boolean {
@@ -88,7 +87,7 @@ function adoptedUserConfig(
 
 function durableSnapshots(
   snapshots: Readonly<Record<string, string | null>>,
-  journal: TransactionJournalV1,
+  journal: TransactionJournal,
 ): Record<string, string | null> {
   const ids = [
     ...journal.completedOperationIds,
@@ -98,13 +97,13 @@ function durableSnapshots(
 }
 
 function parseStoredOperationState(source: Record<string, unknown>): {
-  operations: readonly InstallOperationV1[];
-  operationLocators: readonly InstallOperationLocatorV1[];
+  operations: readonly InstallOperation[];
+  operationLocators: readonly InstallOperationLocator[];
 } {
   if (!Array.isArray(source.operations) || !Array.isArray(source.operationLocators)) {
     throw new Error('Stored transaction operations are invalid.');
   }
-  const operations = source.operations.map(parseInstallOperationV1);
+  const operations = source.operations.map(parseInstallOperation);
   if (
     new Set(operations.map((item) => item.id)).size !== operations.length ||
     operations.some(
@@ -115,87 +114,12 @@ function parseStoredOperationState(source: Record<string, unknown>): {
   }
   return {
     operations,
-    operationLocators: parseInstallOperationLocatorsV1(source.operationLocators, operations),
+    operationLocators: parseInstallOperationLocators(source.operationLocators, operations),
   };
 }
-export interface LegacyOwnershipReceiptV1 {
-  readonly schemaVersion: 1;
-  readonly kind: 'ownership-receipt';
-  readonly releaseKey: string;
-  readonly convergenceHash: string;
-  readonly files: OwnershipReceiptV1['files'];
-  readonly operations: readonly InstallOperationV1[];
-  readonly installedAt: string;
-}
-function parseLegacyOwnershipReceiptForMigration(value: unknown): LegacyOwnershipReceiptV1 {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    fail(
-      'INSTALL_RECEIPT_MIGRATION_UNSAFE',
-      'Legacy ownership receipt is unknown or ambiguous; use manual recovery guidance before changing native state.',
-    );
-  }
-  const source = value as Record<string, unknown>,
-    keys = [
-      'schemaVersion',
-      'kind',
-      'releaseKey',
-      'convergenceHash',
-      'files',
-      'operations',
-      'installedAt',
-    ];
-  if (
-    Object.keys(source).sort().join('\0') !== keys.sort().join('\0') ||
-    source.schemaVersion !== 1 ||
-    source.kind !== 'ownership-receipt' ||
-    !Array.isArray(source.operations) ||
-    typeof source.installedAt !== 'string' ||
-    !Number.isFinite(Date.parse(source.installedAt))
-  ) {
-    fail(
-      'INSTALL_RECEIPT_MIGRATION_UNSAFE',
-      'Legacy ownership receipt is unknown or ambiguous; use manual recovery guidance before changing native state.',
-    );
-  }
-  try {
-    const manifest = parseReleaseManifestV1({
-      schemaVersion: 1,
-      kind: 'release-manifest',
-      releaseKey: source.releaseKey,
-      convergenceHash: source.convergenceHash,
-      files: source.files,
-    });
-    const operations = source.operations.map(parseInstallOperationV1);
-    if (
-      new Set(operations.map((operation) => operation.id)).size !== operations.length ||
-      operations.some(
-        (operation, index) =>
-          index > 0 && operations[index - 1]!.id.localeCompare(operation.id) >= 0,
-      )
-    ) {
-      throw new Error();
-    }
-    return {
-      schemaVersion: 1,
-      kind: 'ownership-receipt',
-      releaseKey: manifest.releaseKey,
-      convergenceHash: manifest.convergenceHash,
-      files: manifest.files,
-      operations,
-      installedAt: source.installedAt,
-    };
-  } catch {
-    fail(
-      'INSTALL_RECEIPT_MIGRATION_UNSAFE',
-      'Legacy ownership receipt is forged or ambiguous; use manual recovery guidance before changing native state.',
-    );
-  }
-}
 export interface TransactionStore {
-  readReceipt(): Promise<OwnershipReceiptV1 | undefined>;
-  /** Bounded compatibility seam used only by the explicit v1-to-v2 migration. */
-  readLegacyReceiptForMigration(): Promise<LegacyOwnershipReceiptV1 | undefined>;
-  writeReceipt(receipt: OwnershipReceiptV1): Promise<void>;
+  readReceipt(): Promise<OwnershipReceipt | undefined>;
+  writeReceipt(receipt: OwnershipReceipt): Promise<void>;
   removeReceipt(): Promise<void>;
   writeTransaction(value: StoredTransaction): Promise<void>;
   readTransaction(): Promise<StoredTransaction | undefined>;
@@ -203,25 +127,13 @@ export interface TransactionStore {
   exclusive<T>(action: () => Promise<T>): Promise<T>;
 }
 export class MemoryTransactionStore implements TransactionStore {
-  private receipt: OwnershipReceiptV1 | LegacyOwnershipReceiptV1 | undefined;
+  private receipt: OwnershipReceipt | undefined;
   private transaction: StoredTransaction | undefined;
   private tail: Promise<void> = Promise.resolve();
   async readReceipt() {
-    if (this.receipt?.schemaVersion === 1) {
-      fail(
-        'INSTALL_RECEIPT_MIGRATION_REQUIRED',
-        'Ownership receipt schema v1 requires a confirmed migration; use the install plan or manual recovery guidance.',
-      );
-    }
-    return this.receipt && structuredClone(this.receipt);
+    return this.receipt && structuredClone(parseOwnershipReceipt(this.receipt));
   }
-  async readLegacyReceiptForMigration() {
-    return this.receipt?.schemaVersion === 1 ? structuredClone(this.receipt) : undefined;
-  }
-  async writeLegacyReceiptForMigration(value: unknown) {
-    this.receipt = structuredClone(parseLegacyOwnershipReceiptForMigration(value));
-  }
-  async writeReceipt(value: OwnershipReceiptV1) {
+  async writeReceipt(value: OwnershipReceipt) {
     this.receipt = structuredClone(value);
   }
   async removeReceipt() {
@@ -298,24 +210,12 @@ export class NodeTransactionStore implements TransactionStore {
       throw failure;
     }
   }
-  async readReceipt(): Promise<OwnershipReceiptV1 | undefined> {
+  async readReceipt(): Promise<OwnershipReceipt | undefined> {
     const value = await this.read('receipt.json');
-    if ((value as { schemaVersion?: unknown } | undefined)?.schemaVersion === 1) {
-      fail(
-        'INSTALL_RECEIPT_MIGRATION_REQUIRED',
-        'Ownership receipt schema v1 requires a confirmed migration; use the install plan or manual recovery guidance.',
-      );
-    }
-    return value === undefined ? undefined : parseOwnershipReceiptV1(value);
+    return value === undefined ? undefined : parseOwnershipReceipt(value);
   }
-  async readLegacyReceiptForMigration(): Promise<LegacyOwnershipReceiptV1 | undefined> {
-    const value = await this.read('receipt.json');
-    return (value as { schemaVersion?: unknown } | undefined)?.schemaVersion === 1
-      ? parseLegacyOwnershipReceiptForMigration(value)
-      : undefined;
-  }
-  async writeReceipt(value: OwnershipReceiptV1): Promise<void> {
-    await this.atomic('receipt.json', parseOwnershipReceiptV1(value));
+  async writeReceipt(value: OwnershipReceipt): Promise<void> {
+    await this.atomic('receipt.json', parseOwnershipReceipt(value));
   }
   async removeReceipt(): Promise<void> {
     await rm(this.file('receipt.json'), { force: true });
@@ -411,7 +311,7 @@ export class NodeTransactionStore implements TransactionStore {
       ) {
         throw new Error();
       }
-      const snapshot = parseMachineSnapshotV1(journalSource.snapshot);
+      const snapshot = parseMachineSnapshot(journalSource.snapshot);
       if (
         snapshot.transactionId !== journalSource.transactionId ||
         snapshot.observations.length !== operations.length ||
@@ -440,13 +340,13 @@ export class NodeTransactionStore implements TransactionStore {
       ) {
         throw new Error();
       }
-      const priorReceipt = hasPrior ? parseOwnershipReceiptV1(source.priorReceipt) : undefined;
+      const priorReceipt = hasPrior ? parseOwnershipReceipt(source.priorReceipt) : undefined;
       return {
         journal: {
           schemaVersion: 1,
           kind: 'transaction-journal',
           transactionId: journalSource.transactionId,
-          phase: journalSource.phase as TransactionJournalV1['phase'],
+          phase: journalSource.phase as TransactionJournal['phase'],
           completedOperationIds: completed,
           ...(hasInFlight ? { inFlightOperationId: inFlight as string } : {}),
           snapshot,
@@ -530,7 +430,7 @@ export class NodeTransactionStore implements TransactionStore {
 export interface ImmutableInstallerServiceOptions {
   readonly adapters: readonly SideEffectAdapter[];
   readonly store: TransactionStore;
-  readonly manifest?: ReleaseManifestV1;
+  readonly manifest?: ReleaseManifest;
   readonly now?: () => Date;
   readonly failureInjection?: (operationId: string, index: number) => void;
   readonly beforeApply?: () => Promise<void>;
@@ -558,10 +458,10 @@ function runtimeProjectionLocation(target: string, releaseKey: string): string |
 }
 
 function validateUpgradeOperations(
-  priorReceipt: OwnershipReceiptV1,
+  priorReceipt: OwnershipReceipt,
   targetReleaseKey: string,
-  operations: readonly InstallOperationV1[],
-  observations?: readonly MachineObservationV1[],
+  operations: readonly InstallOperation[],
+  observations?: readonly MachineObservation[],
 ): void {
   const currentById = new Map(operations.map((operation) => [operation.id, operation]));
   for (const prior of priorReceipt.operations) {
@@ -620,9 +520,9 @@ export class ImmutableInstallerService {
   }
 
   private async locateOperations(
-    operations: readonly InstallOperationV1[],
-  ): Promise<readonly InstallOperationLocatorV1[]> {
-    const locators: InstallOperationLocatorV1[] = [];
+    operations: readonly InstallOperation[],
+  ): Promise<readonly InstallOperationLocator[]> {
+    const locators: InstallOperationLocator[] = [];
     for (const operation of operations) {
       const spec = (await this.adapter(operation.adapter).receiptLocator?.(operation)) ?? null;
       locators.push({
@@ -632,16 +532,16 @@ export class ImmutableInstallerService {
         bindingDigest: installerDigest({ operation, spec }),
       });
     }
-    return parseInstallOperationLocatorsV1(locators, operations);
+    return parseInstallOperationLocators(locators, operations);
   }
 
   private async hydrateOperations(
-    operations: readonly InstallOperationV1[],
+    operations: readonly InstallOperation[],
     locatorValues: unknown,
     ambiguousCode: string,
-    priorReceipt?: OwnershipReceiptV1,
+    priorReceipt?: OwnershipReceipt,
   ): Promise<void> {
-    const locators = parseInstallOperationLocatorsV1(locatorValues, operations);
+    const locators = parseInstallOperationLocators(locatorValues, operations);
     for (let index = 0; index < operations.length; index++) {
       const operation = operations[index]!,
         locator = locators[index]!,
@@ -660,17 +560,17 @@ export class ImmutableInstallerService {
   }
 
   async plan(
-    intentValue: InstallIntentV1,
-    requested: readonly InstallOperationV1[],
-    priorReceipt?: OwnershipReceiptV1,
-  ): Promise<InstallPlanV1> {
-    const intent = parseInstallIntentV1(intentValue),
-      prior = priorReceipt ? parseOwnershipReceiptV1(priorReceipt) : undefined;
+    intentValue: InstallIntent,
+    requested: readonly InstallOperation[],
+    priorReceipt?: OwnershipReceipt,
+  ): Promise<InstallPlan> {
+    const intent = parseInstallIntent(intentValue),
+      prior = priorReceipt ? parseOwnershipReceipt(priorReceipt) : undefined;
     const operations = [...requested].sort((a, b) => a.id.localeCompare(b.id));
     if (new Set(operations.map((x) => x.id)).size !== operations.length) {
       fail('INSTALL_OPERATION_DUPLICATE', 'Operation IDs must be unique.');
     }
-    const observations: MachineObservationV1[] = [];
+    const observations: MachineObservation[] = [];
     for (const operation of operations) {
       const digest = await this.adapter(operation.adapter).observe(operation);
       if (prior && digest !== null && digest !== operation.desiredDigest) {
@@ -698,9 +598,9 @@ export class ImmutableInstallerService {
       observations,
       operations,
     };
-    return parseInstallPlanV1({ ...base, confirmationDigest: installerDigest(base) });
+    return parseInstallPlan({ ...base, confirmationDigest: installerDigest(base) });
   }
-  private async assertCurrent(plan: InstallPlanV1): Promise<void> {
+  private async assertCurrent(plan: InstallPlan): Promise<void> {
     for (let index = 0; index < plan.operations.length; index++) {
       const operation = plan.operations[index]!,
         expected = plan.observations[index]!;
@@ -712,8 +612,8 @@ export class ImmutableInstallerService {
       }
     }
   }
-  async apply(planValue: InstallPlanV1, confirmation: string): Promise<OwnershipReceiptV1> {
-    const plan = parseInstallPlanV1(planValue);
+  async apply(planValue: InstallPlan, confirmation: string): Promise<OwnershipReceipt> {
+    const plan = parseInstallPlan(planValue);
     if (confirmation !== plan.confirmationDigest) {
       fail('INSTALL_CONFIRMATION_MISMATCH', 'Exact plan confirmation is required.');
     }
@@ -786,14 +686,14 @@ export class ImmutableInstallerService {
         }
       }
       const operationLocators = await this.locateOperations(plan.operations),
-        snapshot: MachineSnapshotV1 = {
+        snapshot: MachineSnapshot = {
           schemaVersion: 1,
           kind: 'machine-snapshot',
           transactionId: randomUUID(),
           observations: plan.observations,
           capturedAt: this.now().toISOString(),
         };
-      let journal: TransactionJournalV1 = {
+      let journal: TransactionJournal = {
         schemaVersion: 1,
         kind: 'transaction-journal',
         transactionId: snapshot.transactionId,
@@ -851,7 +751,7 @@ export class ImmutableInstallerService {
           );
         }
         const receiptOperationLocators = await this.locateOperations(plan.operations);
-        const receipt: OwnershipReceiptV1 =
+        const receipt: OwnershipReceipt =
           priorReceipt &&
           !upgrading &&
           installerDigest(priorReceipt.operations) === installerDigest(plan.operations)
@@ -902,7 +802,7 @@ export class ImmutableInstallerService {
   }
   private async rollbackStored(
     stored: StoredTransaction,
-    operations: readonly InstallOperationV1[],
+    operations: readonly InstallOperation[],
   ): Promise<void> {
     const mutated = new Set([
       ...stored.journal.completedOperationIds,
@@ -926,7 +826,7 @@ export class ImmutableInstallerService {
       await this.options.store.removeReceipt();
     }
     const { inFlightOperationId: _inFlightOperationId, ...journal } = stored.journal;
-    const rolledBack: TransactionJournalV1 = {
+    const rolledBack: TransactionJournal = {
       ...journal,
       phase: 'rolled-back',
       completedOperationIds: operations
@@ -964,15 +864,15 @@ export class ImmutableInstallerService {
       }
     });
   }
-  private async hydrateReceiptOperations(receipt: OwnershipReceiptV1): Promise<void> {
+  private async hydrateReceiptOperations(receipt: OwnershipReceipt): Promise<void> {
     await this.hydrateOperations(
       receipt.operations,
       receipt.operationLocators,
       'INSTALL_RECEIPT_AMBIGUOUS',
     );
   }
-  async assertOwnedReceipt(receiptValue: OwnershipReceiptV1): Promise<void> {
-    const receipt = parseOwnershipReceiptV1(receiptValue);
+  async assertOwnedReceipt(receiptValue: OwnershipReceipt): Promise<void> {
+    const receipt = parseOwnershipReceipt(receiptValue);
     await this.hydrateReceiptOperations(receipt);
     for (const operation of receipt.operations) {
       const actual = await this.adapter(operation.adapter).observe(operation);
@@ -984,7 +884,7 @@ export class ImmutableInstallerService {
       }
     }
   }
-  async verify(): Promise<InstallVerificationV1> {
+  async verify(): Promise<InstallVerification> {
     const receipt = await this.options.store.readReceipt();
     const issues: string[] = [];
     if (!receipt) {

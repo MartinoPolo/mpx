@@ -1,67 +1,27 @@
 # Error guidance
 
-Human-readable MPX CLI errors include a diagnostic code, the reason, and a
-`POSSIBLE SOLUTIONS/WORKAROUNDS` section. Guidance combines the operation's own
-remediation with suggestions for the error code or error family. Unknown errors
-provide command-discovery and reporting instructions rather than an invented repair.
+Human-readable MPX CLI errors include a diagnostic code, reason, and `POSSIBLE SOLUTIONS/WORKAROUNDS`. Suggestions do not grant permission, perform repairs, relax validation, or form a script to run top-to-bottom. Replace placeholders and understand setup, initialization, migration, or resume mutations first.
 
-Each command is followed by an explanation. In an interactive color-capable terminal,
-the command portion is bold cyan so it remains distinct from its explanation. Styling
-is disabled for redirected output, `NO_COLOR`, and terminals identified as `dumb`.
-Suggestions are alternatives, not a script to execute from top to bottom. Replace
-angle-bracket placeholders before running a command. Flag-only entries explain options
-to append to the original command so its runtime, identity, executor, and approval
-choices are retained.
+## Selection failures
 
-Recovery guidance does not grant permission, perform repairs, or relax validation.
-Read the explanation before running a command: setup changes the installation,
-confirmed initialization writes project configuration, and confirmed session resume
-can launch a runtime. Preserve user files, sessions, receipts, leases, and locks
-when diagnosing ownership or integrity failures.
+Identity is explicit and immutable. A project, location, directory, provider, or Git remote cannot select identity or credentials. MPX rejects:
 
-## Working without project configuration
+- a requested skill pack outside `identities.<id>.allowedSkillPacks` rather than filtering it;
+- unresolved or equally specific ambiguous canonical locations rather than exposing every pack;
+- identity/domain mismatches rather than treating a resource name as authority;
+- malformed project configuration rather than skipping it for an ancestor;
+- stale launch, artifact, account-root, executor, or session bindings rather than guessing.
 
-When a work identity launches from the work domain without project configuration,
-MPX automatically selects developer mode only if neither `--mode` nor `--preset`
-was supplied. It emits `PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK` before an
-interactive child starts and includes the warning in returned JSON. Explicit
-`--mode project` and presets retain strict project intent and may report
-`PROJECT_REQUIRED`. Malformed project configuration never triggers the fallback.
+Effective packs come from committed project `skills.packs`, then user-local project selection, then the most-specific containing user-local location. Configure an appropriate location or project selection and relaunch. Ordinary directory changes do not update a running inventory.
 
-The fallback does not turn a repository into an MPX-managed project or enable
-project-dependent workspace and service operations. Developer mode normally grants
-broader identity-domain access than project mode; it is not a project-isolation
-substitute.
+Supported modes are `project`, `developer`, `computer-control`, and `unrestricted`. There is no `personal-assistant` mode or special domain-name inference. Assistant inputs/outputs and cloned sources are ordinary configured resource roots admitted by an explicit mode and canonical root; a name such as `oss` grants nothing. `unrestricted` still requires a reason and separate fresh approval.
 
-Identity/domain mismatches remain rejected with or without project configuration,
-unless an explicit trusted grant applies. Personal special-purpose modes may access
-only their matching assistant or computer-control domains when their configured
-resources authorize that domain and the mode was explicitly selected or selected by
-a personal preset.
+Named `clean`, `developer`, and `personal-assistant` skill policies, content-scope overrides, per-project/per-scope exposure overrides, `off`, and extra grants were removed. There is no replacement global clean switch or per-project individual disable. A host agent's filesystem reads were never mediated by the removed grant plumbing; Windows host execution remains explicitly approved but not isolated. Docker is unavailable and has no host fallback.
 
-Other modes serve different purposes. The user configuration is authoritative for
-available modes and their resource declarations:
+## Configuration diagnosis
 
-- `project`: work associated with a canonical project ID.
-- `developer`: identity-domain development, with cloned repositories normally read-only.
-- `personal-assistant`: assistant input and output resources.
-- `computer-control`: computer-control configuration and staged executable settings.
-- `unrestricted`: broad host access, requiring a reason and separate trusted approval;
-  not a recommended workaround for a missing project ID.
-
-To adopt project configuration instead, `mpx init` previews initialization;
-`mpx init --confirm` explicitly authorizes writing it. Do not initialize a work
-repository unless you intend to add that configuration.
+`CONFIG_INVALID` reports a JSON pointer and a safe reason without echoing configuration values or private root paths. Inspect that field in the project `mpxconfig.json` or user-local `%APPDATA%/mpx/config.json`, compare it with the current schemas, and check required or unknown fields and referenced `MPX_*` environment roots. Malformed and duplicate JSON are reported directly; `mpx doctor` is not a repair step for an invalid file.
 
 ## Automation and coverage
 
-`--json` retains the existing versioned error envelope and exit status. Human
-presentation guidance is not added to JSON or runtime-tool protocol schemas.
-Existing structured remediation remains available as before.
-
-The shared formatter applies to errors normalized by the MPX CLI. Native runtime
-startup errors, shell/bootstrap failures before the CLI loads, and separate tool
-protocol errors may use their own presentation. A diagnostic suggestion such as
-`mpx doctor` or `mpx content check` gathers evidence; it is not a promise of repair.
-When seeking help, retain the diagnostic code and redact credentials and private
-configuration from any shared output.
+`--json` retains versioned error envelopes and exit status. Native runtime startup, shell/bootstrap, and tool protocols may use their own presentation. Diagnostics such as `mpx doctor` or `mpx content check` gather evidence, not promise repair. Preserve diagnostic codes and redact credentials and private configuration when seeking help.

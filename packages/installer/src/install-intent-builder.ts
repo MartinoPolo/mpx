@@ -6,8 +6,8 @@ import { parseUserConfig, type UserConfig } from '@mpx/config';
 import {
   USER_CONFIG_ARTIFACT_MAX_BYTES,
   installerDigest,
-  parseInstallIntentV1,
-  type InstallIntentV1,
+  parseInstallIntent,
+  type InstallIntent,
 } from './immutable-core.js';
 import {
   createRuntimeRegistrationMatrix,
@@ -92,27 +92,27 @@ function sortedUnique<T>(items: readonly T[], key: (item: T) => string, label: s
     fail(`${label} must be unique and sorted.`);
   }
 }
-export interface InstallExecutableRequestV1 {
+export interface InstallExecutableRequest {
   readonly path: string;
   readonly version: string;
 }
-export interface InstallProjectionRequestV1 {
+export interface InstallProjectionRequest {
   readonly path: string;
   readonly role: ProjectionRole;
 }
-export interface InstallIntentRequestV1 {
+export interface InstallIntentRequest {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent-request';
   readonly userConfigPath: string;
   readonly identities: { readonly personal: string; readonly work: string };
   readonly providers: { readonly personal: string; readonly work: string };
   readonly executables: {
-    readonly claude: InstallExecutableRequestV1;
-    readonly pi: InstallExecutableRequestV1;
+    readonly claude: InstallExecutableRequest;
+    readonly pi: InstallExecutableRequest;
   };
   readonly projections: {
-    readonly claude: readonly InstallProjectionRequestV1[];
-    readonly pi: readonly InstallProjectionRequestV1[];
+    readonly claude: readonly InstallProjectionRequest[];
+    readonly pi: readonly InstallProjectionRequest[];
   };
 }
 
@@ -120,14 +120,14 @@ function parseSelection(value: unknown, label: string): { personal: string; work
   const item = exact(value, ['personal', 'work'], label);
   return { personal: id(item.personal, `${label}.personal`), work: id(item.work, `${label}.work`) };
 }
-function parseExecutable(value: unknown): InstallExecutableRequestV1 {
+function parseExecutable(value: unknown): InstallExecutableRequest {
   const item = exact(value, ['path', 'version'], 'executable request');
   return {
     path: absolute(item.path, 'Executable path'),
     version: text(item.version, 'Executable version'),
   };
 }
-function parseProjection(value: unknown, label: string): InstallProjectionRequestV1[] {
+function parseProjection(value: unknown, label: string): InstallProjectionRequest[] {
   const result = array(value, label).map((entry) => {
     const item = exact(entry, ['path', 'role'], 'projection item');
     const relative = text(item.path, 'Projection path');
@@ -148,7 +148,7 @@ function parseProjection(value: unknown, label: string): InstallProjectionReques
   sortedUnique(result, (item) => item.path, label);
   return result;
 }
-export function parseInstallIntentRequestV1(value: unknown): InstallIntentRequestV1 {
+export function parseInstallIntentRequest(value: unknown): InstallIntentRequest {
   const request = exact(
     value,
     [
@@ -167,7 +167,7 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
   }
   const executables = exact(request.executables, ['claude', 'pi'], 'Executables'),
     projections = exact(request.projections, ['claude', 'pi'], 'Projections');
-  const parsed: InstallIntentRequestV1 = {
+  const parsed: InstallIntentRequest = {
     schemaVersion: 1,
     kind: 'install-intent-request',
     userConfigPath: absolute(request.userConfigPath, 'User config path'),
@@ -185,23 +185,23 @@ export function parseInstallIntentRequestV1(value: unknown): InstallIntentReques
   return parsed;
 }
 
-export interface InstallIntentBuildResultV1 {
+export interface InstallIntentBuildResult {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent-build-result';
-  readonly intent: InstallIntentV1;
+  readonly intent: InstallIntent;
 }
 
-export function parseInstallIntentBuildResultV1(value: unknown): InstallIntentBuildResultV1 {
+export function parseInstallIntentBuildResult(value: unknown): InstallIntentBuildResult {
   const result = exact(value, ['schemaVersion', 'kind', 'intent'], 'Install intent build result');
   if (result.schemaVersion !== 1 || result.kind !== 'install-intent-build-result') {
     fail('Install intent build result header is invalid.');
   }
-  const intent = parseInstallIntentV1(result.intent);
+  const intent = parseInstallIntent(result.intent);
   return { schemaVersion: 1, kind: 'install-intent-build-result', intent };
 }
 
 async function regularFileEvidence(
-  request: InstallExecutableRequestV1,
+  request: InstallExecutableRequest,
 ): Promise<{ path: string; sha256: string; version: string }> {
   const info = await lstat(request.path).catch(() =>
     fail('Executable is unavailable.', 'INSTALL_EXECUTABLE_INVALID'),
@@ -241,8 +241,8 @@ export interface InstallIntentBuilderOptions {
 }
 export class InstallIntentBuilder {
   constructor(private readonly options: InstallIntentBuilderOptions) {}
-  async build(value: InstallIntentRequestV1 | unknown): Promise<InstallIntentBuildResultV1> {
-    const request = parseInstallIntentRequestV1(value),
+  async build(value: InstallIntentRequest | unknown): Promise<InstallIntentBuildResult> {
+    const request = parseInstallIntentRequest(value),
       info = await lstat(request.userConfigPath).catch(() =>
         fail('User configuration is unavailable.', 'INSTALL_USER_CONFIG_INVALID'),
       );
@@ -317,7 +317,7 @@ export class InstallIntentBuilder {
         }),
       ),
     );
-    const intent = parseInstallIntentV1({
+    const intent = parseInstallIntent({
       schemaVersion: 1,
       kind: 'install-intent',
       releaseKey: manifest.releaseKey,
@@ -330,7 +330,7 @@ export class InstallIntentBuilder {
       },
       runtimeRegistrations: matrix,
     });
-    return parseInstallIntentBuildResultV1({
+    return parseInstallIntentBuildResult({
       schemaVersion: 1,
       kind: 'install-intent-build-result',
       intent,

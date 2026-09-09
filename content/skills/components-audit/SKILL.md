@@ -7,7 +7,7 @@ metadata:
   category: code-review
   mpx:
     schemaVersion: 1
-    skillPacks: [work]
+    skillPacks: [development]
     defaultExposure: name-only
 ---
 

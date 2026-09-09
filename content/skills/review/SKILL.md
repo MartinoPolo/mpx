@@ -9,7 +9,7 @@ metadata:
   category: code-review
   mpx:
     schemaVersion: 1
-    skillPacks: [core]
+    skillPacks: [development]
     defaultExposure: full
 ---
 

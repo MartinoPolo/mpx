@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createRuntimeSkillArtifactReferenceV4 } from '@mpx/runtime-contracts';
+import { createRuntimeSkillArtifactReference } from '@mpx/runtime-contracts';
 import {
   createRuntimeSkillArtifact,
   inventoryCanonical,
@@ -15,6 +15,7 @@ const roots: string[] = [];
 afterEach(async () =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))),
 );
+
 function stable(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stable).join(',')}]`;
@@ -22,61 +23,79 @@ function stable(value: unknown): string {
   if (value && typeof value === 'object') {
     return `{${Object.entries(value)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`)
+      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
       .join(',')}}`;
   }
   return JSON.stringify(value);
 }
-function digest(value: unknown): string {
-  return createHash('sha256').update(stable(value)).digest('hex');
-}
+
+const digest = (value: unknown): string => createHash('sha256').update(stable(value)).digest('hex');
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-integrity-'));
   roots.push(root);
   for (const [name, exposure] of [
     ['shown', 'name-only'],
-    ['hidden', 'off'],
+    ['manual', 'explicit-only'],
   ] as const) {
     await mkdir(path.join(root, name));
     await writeFile(
       path.join(root, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${name} description\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name}\n`,
+      `---\nname: ${name}\ndescription: ${name} description\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n---\n${name}\n`,
     );
   }
   const catalog = await inventoryCanonical(root);
   const manifest = resolveManifest(catalog, {
     repositoryId: 'repo',
-    contentScope: 'work',
-    enabledPacks: ['core'],
-    identity: 'work',
-    skillPolicy: 'policy',
-    skillPolicyConfig: {
-      skillExposure: { default: 'full', skills: { shown: 'name-only', hidden: 'off' } },
+    identity: 'personal',
+    selection: {
+      location: { name: 'coding', canonicalRoot: root },
+      packs: ['development'],
+      source: 'project',
     },
   });
-  return {
-    catalog,
-    manifest,
-    artifact: createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' }),
-  };
+  const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
+  return { catalog, manifest, artifact };
 }
 
-function selfConsistent(
-  artifact: Awaited<ReturnType<typeof fixture>>['artifact'],
-  entries: typeof artifact.entries,
-) {
-  const fileMap = entries
+type Artifact = Awaited<ReturnType<typeof fixture>>['artifact'];
+
+function fileMap(entries: Artifact['entries']) {
+  return entries
     .map((entry) => ({
       identity: entry.identity,
       publicName: entry.publicName,
+      packs: [...entry.packs].sort(),
+      exposure: entry.exposure,
       metadataHash: entry.metadataHash,
-      contentHash: entry.source.contentHash,
+      description: entry.description ?? null,
+      triggers: entry.triggers ?? null,
+      source:
+        entry.source.kind === 'project'
+          ? {
+              kind: entry.source.kind,
+              path: entry.source.path,
+              realPath: entry.source.realPath,
+              contentHash: entry.source.contentHash,
+              directoryHash: entry.source.directoryHash,
+              projectRoot: entry.source.projectRoot,
+              realProjectRoot: entry.source.realProjectRoot,
+            }
+          : {
+              kind: entry.source.kind,
+              path: entry.source.path,
+              realPath: entry.source.realPath,
+              contentHash: entry.source.contentHash,
+            },
+      permissions: { ...entry.permissions },
     }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
-  const fileMapHash = digest(fileMap);
+}
+
+function selfConsistent(artifact: Artifact, entries: Artifact['entries']): Artifact {
+  const fileMapHash = digest(fileMap(entries));
   const artifactKey = digest({
-    schemaVersion: 4,
+    schemaVersion: 5,
     runtime: artifact.runtime,
     manifestKey: artifact.manifestKey,
     fileMapHash,
@@ -84,7 +103,7 @@ function selfConsistent(
   return {
     ...artifact,
     entries,
-    reference: createRuntimeSkillArtifactReferenceV4({
+    reference: createRuntimeSkillArtifactReference({
       runtime: artifact.runtime,
       manifestKey: artifact.manifestKey,
       fileMapHash,
@@ -93,38 +112,40 @@ function selfConsistent(
   };
 }
 
-describe('bound runtime artifact integrity', () => {
-  it('rejects self-consistent exposure, permission, identity, inclusion, omission, duplicate, source, and metadata mutations', async () => {
-    const { catalog, manifest, artifact } = await fixture();
-    const shown = artifact.entries[0];
-    if (!shown) {
-      throw new Error('fixture did not produce the shown runtime entry');
-    }
-    const mutations: Array<typeof artifact.entries> = [
-      [{ ...shown, exposure: 'full' as const, description: 'forged' }],
-      [{ ...shown, permissions: { humanInvocation: true, modelInvocation: false } }],
-      [{ ...shown, publicName: '/mpx:forged' }],
-      [{ ...shown, packs: ['work' as const] }],
-      [{ ...shown, metadataHash: 'forged' }],
-      [{ ...shown, source: { ...shown.source, contentHash: 'forged' } }],
-      [shown, shown],
-      [],
-      [shown, { ...shown, identity: 'hidden', publicName: '/mpx:hidden' }],
-    ];
-    for (const entries of mutations) {
-      expect(() =>
-        verifyRuntimeSkillArtifact(selfConsistent(artifact, entries), manifest, catalog, {
-          runtime: 'pi',
-        }),
-      ).toThrowError(
-        expect.objectContaining({
-          code: 'RUNTIME_ARTIFACT_TAMPERED',
-          details: expect.objectContaining({ restartRequired: true }),
-        }),
-      );
-    }
-    expect(verifyRuntimeSkillArtifact(artifact, manifest, catalog, { runtime: 'pi' })).toBe(
-      artifact,
+it('rejects self-consistent forged v5 artifacts beyond superficial reference hashes', async () => {
+  const { catalog, manifest, artifact } = await fixture();
+  const shown = artifact.entries.find((entry) => entry.identity === 'shown')!;
+  const mutations: Artifact['entries'][] = [
+    artifact.entries.map((entry) =>
+      entry === shown ? { ...entry, exposure: 'full', description: 'forged' } : entry,
+    ),
+    artifact.entries.map((entry) =>
+      entry === shown
+        ? { ...entry, permissions: { ...entry.permissions, modelInvocation: false } }
+        : entry,
+    ),
+    artifact.entries.map((entry) => (entry === shown ? { ...entry, identity: 'forged' } : entry)),
+    artifact.entries.filter((entry) => entry !== shown),
+    [...artifact.entries, shown],
+    artifact.entries.map((entry) =>
+      entry === shown ? { ...entry, source: { ...entry.source, contentHash: 'forged' } } : entry,
+    ),
+    artifact.entries.map((entry) =>
+      entry === shown ? { ...entry, metadataHash: 'forged' } : entry,
+    ),
+  ];
+
+  for (const entries of mutations) {
+    expect(() =>
+      verifyRuntimeSkillArtifact(selfConsistent(artifact, entries), manifest, catalog, {
+        runtime: 'pi',
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'RUNTIME_ARTIFACT_TAMPERED',
+        details: expect.objectContaining({ restartRequired: true }),
+      }),
     );
-  });
+  }
+  expect(verifyRuntimeSkillArtifact(artifact, manifest, catalog, { runtime: 'pi' })).toBe(artifact);
 });

@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { ProductionSessionLifecycleBridge } from '@mpx/application/node';
-import { parseSessionLifecycleEventV1, type RuntimeContextV1 } from '@mpx/runtime-contracts';
+import { parseSessionLifecycleEvent, type RuntimeContext } from '@mpx/runtime-contracts';
 import { LifecycleEventDirectoryConsumer, SessionService, SessionStore } from '@mpx/sessions';
 import {
   link,
@@ -90,31 +90,39 @@ async function fixture(identity = { domain: 'personal', name: 'prejemesi' }) {
   await Promise.all([mkdir(cwd), mkdir(nativeRoot)]);
   const store = new SessionStore(path.join(root, 'state'));
   const bridge = new ProductionSessionLifecycleBridge({ store });
-  const runtimeContext: RuntimeContextV1 = {
-    schemaVersion: 1,
+  const runtimeContext: RuntimeContext = {
+    schemaVersion: 2,
     launchKey: 'launch',
     launchDescriptor: { reference: 'launch.json', digest: 'a'.repeat(64) },
     manifestKey: 'manifest',
     runtimeArtifact: {
-      schemaVersion: 4,
+      schemaVersion: 5,
       runtime: 'pi',
       manifestKey: 'manifest',
       artifactKey: 'artifact',
       fileMapHash: 'b'.repeat(64),
     },
-    binding: { projectId: 'project', repositoryId: 'repository', contentScope: 'personal' },
+    binding: {
+      projectId: 'project',
+      repositoryId: 'repository',
+      identity: identity.name,
+      selection: {
+        location: { name: 'fixture', canonicalRoot: cwd },
+        packs: ['development'],
+        source: 'user-location',
+      },
+    },
   };
   const prepared = await bridge.prepare({
     descriptor: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       nativeRuntimeRootDigest: 'c'.repeat(64),
       runtime: 'pi',
       identity,
       launchKey: runtimeContext.launchKey,
-      binding: runtimeContext.binding,
+      binding: { projectId: 'project', repositoryId: 'repository' },
       mode: 'project',
-      skillPolicy: 'clean',
-      contentScope: { name: 'personal' },
+      selection: runtimeContext.binding.selection,
       executor: {
         name: 'host',
         effectiveEnforcement: 'advisory',
@@ -131,11 +139,6 @@ async function fixture(identity = { domain: 'personal', name: 'prejemesi' }) {
           limitation: 'No filesystem or confidentiality isolation is enforced.',
         },
       },
-      executorVerification: {
-        status: 'verified',
-        verifier: 'fixture',
-        evidenceDigest: 'd'.repeat(64),
-      },
       workspace: 'direct',
       networkPolicy: { name: 'minimal', declaration: { preset: 'deny-all' } },
       preset: null,
@@ -143,15 +146,12 @@ async function fixture(identity = { domain: 'personal', name: 'prejemesi' }) {
         runtime: 'explicit',
         identity: 'explicit',
         mode: 'explicit',
-        skillPolicy: 'explicit',
-        contentScope: 'explicit',
         executor: 'explicit',
         workspace: 'explicit',
         networkPolicy: 'explicit',
       },
       diagnostics: [],
-      grants: [],
-      cwdClassification: { domain: identity.domain, contentScope: 'personal' },
+      cwdClassification: { domain: identity.domain, location: 'fixture' },
       routes: {
         gitAuthor: `git-${identity.name}`,
         providers: {},
@@ -161,23 +161,19 @@ async function fixture(identity = { domain: 'personal', name: 'prejemesi' }) {
       intendedPolicy: {
         mode: 'project',
         resources: { 'selected-project': 'read-write' },
-        grants: [],
         inputsDigest: 'e'.repeat(64),
-        approvalsDigest: 'f'.repeat(64),
       },
       skillArtifact: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         runtime: 'pi',
         identity: identity.name,
-        skillPolicy: 'clean',
-        contentScope: 'personal',
         projectId: runtimeContext.binding.projectId,
+        repositoryId: runtimeContext.binding.repositoryId,
         catalogHash: '1'.repeat(64),
-        enabledPacks: [],
-        skillPolicyConfigHash: '2'.repeat(64),
-        contentScopeExposureHash: '3'.repeat(64),
-        projectExposureHash: '4'.repeat(64),
-        effectivePolicyHash: '5'.repeat(64),
+        location: runtimeContext.binding.selection.location,
+        packs: runtimeContext.binding.selection.packs,
+        selectionSource: runtimeContext.binding.selection.source,
+        selectionHash: '2'.repeat(64),
         artifactKey: runtimeContext.runtimeArtifact.artifactKey,
       },
       elevationAudit: {
@@ -210,7 +206,7 @@ async function fixture(identity = { domain: 'personal', name: 'prejemesi' }) {
         .filter((name) => name.endsWith('.json'))
         .sort()
         .map(async (name) =>
-          parseSessionLifecycleEventV1(
+          parseSessionLifecycleEvent(
             JSON.parse(await readFile(path.join(prepared.eventDirectory, name), 'utf8')),
           ),
         ),
@@ -246,6 +242,28 @@ async function fixture(identity = { domain: 'personal', name: 'prejemesi' }) {
     identity,
   };
 }
+
+it('rejects the obsolete v1 session-store path without a legacy fallback', async () => {
+  const { extension, environment, prepared } = await fixture();
+  const sessionsDirectory = path.dirname(
+    path.dirname(path.dirname(path.dirname(prepared.eventDirectory))),
+  );
+  const legacyDirectory = path.join(
+    sessionsDirectory,
+    'v1',
+    'private',
+    'lifecycle-events',
+    path.basename(prepared.eventDirectory),
+  );
+  sessionLifecycle(extension.api, {
+    ...environment,
+    MPX_SESSION_LIFECYCLE_EVENT_DIR: legacyDirectory,
+  });
+  await expect(extension.emit('session_start', { reason: 'startup' })).rejects.toThrow(
+    /private session store path/,
+  );
+  expect(extension.api.exec).not.toHaveBeenCalled();
+});
 
 it.each([
   { domain: 'personal', name: 'prejemesi' },

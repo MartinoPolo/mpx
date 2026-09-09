@@ -16,10 +16,10 @@ import {
 import {
   canonicalJson,
   installerDigest,
-  type InstallIntentV1,
-  type InstallOperationV1,
-  type OwnershipReceiptV1,
-  type ReleaseManifestV1,
+  type InstallIntent,
+  type InstallOperation,
+  type OwnershipReceipt,
+  type ReleaseManifest,
 } from './immutable-core.js';
 import {
   buildStableNodeEntryBody,
@@ -29,13 +29,17 @@ import {
 import {
   verifyNativeRoots,
   verifyRuntimeRegistrationMatrix,
-  type NativeRootProbeV1,
+  type NativeRootProbe,
   type RegisteredRuntime,
   type RuntimeIdentity,
-  type RuntimeRegistrationMatrixV1,
-  type RuntimeRegistrationObservationV1,
+  type RuntimeRegistrationMatrix,
+  type RuntimeRegistrationObservation,
 } from './runtime-registration.js';
-import type { InstallerOperationAdapter, InstallerOperationSet } from './orchestration.js';
+import type {
+  InstallerOperationAdapter,
+  InstallerOperationSet,
+  OperationAuthority,
+} from './orchestration.js';
 import { withInstallerCleanup } from './failure.js';
 import { atomicReplaceRegularFile, type AtomicRegularFileOperations } from './atomic-file.js';
 import {
@@ -45,6 +49,7 @@ import {
   type PiPrivateRootResolver,
 } from './pi-native-settings.js';
 import {
+  parsePiSettingsLocator,
   PiNativeSettingsOperationService,
   type PiNativeSettingsOperation,
 } from './pi-native-settings-operation.js';
@@ -167,11 +172,11 @@ export class NodeJsonResourceStore implements JsonResourceStore {
 
 export interface RuntimeRegistrationInspectionPort {
   inspect(
-    intent: InstallIntentV1,
-    priorReceipt?: OwnershipReceiptV1,
+    intent: InstallIntent,
+    priorReceipt?: OwnershipReceipt,
   ): Promise<{
-    readonly observations: readonly RuntimeRegistrationObservationV1[];
-    readonly nativeRootProbes: readonly NativeRootProbeV1[];
+    readonly observations: readonly RuntimeRegistrationObservation[];
+    readonly nativeRootProbes: readonly NativeRootProbe[];
     readonly mcpSharing: Readonly<Record<RuntimeIdentity, 'shared' | 'isolated'>>;
     readonly staticMcpIssues?: readonly string[];
     readonly staticMcpAbsent?: readonly string[];
@@ -185,12 +190,12 @@ export class ReadOnlyRuntimeRegistrationInspector implements RuntimeRegistration
     this.piPrivateRoots = new UserConfigPiPrivateRootResolver(environment);
   }
 
-  async inspect(intent: InstallIntentV1, priorReceipt?: OwnershipReceiptV1) {
+  async inspect(intent: InstallIntent, priorReceipt?: OwnershipReceipt) {
     const matrix =
       intent.runtimeRegistrations ??
       fail('INSTALL_SCHEMA_INVALID', 'Runtime registration intent is required.');
-    const observations: RuntimeRegistrationObservationV1[] = [],
-      nativeRootProbes: NativeRootProbeV1[] = [],
+    const observations: RuntimeRegistrationObservation[] = [],
+      nativeRootProbes: NativeRootProbe[] = [],
       runtimeIssues: string[] = [];
     const mcpSharing = {} as Record<RuntimeIdentity, 'shared' | 'isolated'>;
     for (const registration of matrix.registrations) {
@@ -438,7 +443,7 @@ function expectedEnvironmentAfterApply(
 }
 
 function registeredRuntimeExecutableEnvironment(
-  matrix: RuntimeRegistrationMatrixV1 | undefined,
+  matrix: RuntimeRegistrationMatrix | undefined,
 ): NodeJS.ProcessEnv {
   if (!matrix) {
     return {};
@@ -485,7 +490,7 @@ interface ProjectionFileLocator {
 interface ProjectionRetainedLocator {
   kind: 'projection-retained';
   projection: ProjectionFileLocator;
-  file: ReleaseManifestV1['files'][number];
+  file: ReleaseManifest['files'][number];
 }
 
 const normalizedProjectionPath = (relative: string): string =>
@@ -494,8 +499,29 @@ const normalizedProjectionPath = (relative: string): string =>
 const projectionKey = (identity: RuntimeIdentity, relative: string): string =>
   `${identity}/${normalizedProjectionPath(relative)}`;
 
+const projectionDescriptorTarget = (
+  localAppData: string,
+  releaseKey: string,
+  identity: RuntimeIdentity,
+): string =>
+  path.win32.join(
+    localAppData,
+    'mpx',
+    'runtime-projections',
+    releaseKey,
+    identity,
+    'projection.json',
+  );
+
+interface ProjectionDescriptorAuthority {
+  releaseKey: string;
+  identity: RuntimeIdentity;
+  runtime: RegisteredRuntime;
+}
+
 interface Entry {
-  operation: InstallOperationV1;
+  operation: InstallOperation;
+  descriptor?: ProjectionDescriptorAuthority;
   projection?: ProjectionFileLocator;
   retained?: ProjectionRetainedLocator;
   launcher?: ManagedLauncherSpec;
@@ -562,10 +588,10 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   }
 
   async operations(
-    intent: InstallIntentV1,
-    manifest: ReleaseManifestV1,
+    intent: InstallIntent,
+    manifest: ReleaseManifest,
     requireActual = false,
-    priorReceipt?: OwnershipReceiptV1,
+    priorReceipt?: OwnershipReceipt,
   ): Promise<InstallerOperationSet> {
     let userConfigEntry: Entry | undefined,
       userConfigAdoption: InstallerOperationSet['userConfigAdoption'];
@@ -724,7 +750,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     const resources = [specs.environment, ...specs.shortcuts];
     for (const [index, resource] of resources.entries()) {
-      const operation: InstallOperationV1 = {
+      const operation: InstallOperation = {
         id: `${20 + index * 10}-${resource.kind}`,
         adapter: this.name,
         action: 'ensure',
@@ -750,16 +776,18 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
         `${canonicalJson({ schemaVersion: 1, kind: 'synthetic-runtime-projection', releaseKey: intent.releaseKey, identity: registration.identity, projection: registration.projection })}\n`,
         'utf8',
       );
-      const projectionTarget = path.win32.join(
+      const projectionTarget = projectionDescriptorTarget(
         this.environment.LOCALAPPDATA!,
-        'mpx',
-        'runtime-projections',
-        intent.releaseKey,
+        manifest.releaseKey,
         registration.identity,
-        'projection.json',
       );
       automatic.push({
         fileBody: projectionBody,
+        descriptor: {
+          releaseKey: manifest.releaseKey,
+          identity: registration.identity,
+          runtime: registration.runtime,
+        },
         operation: {
           id: `60-projection-${registration.identity}-descriptor`,
           adapter: this.name,
@@ -915,7 +943,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     };
   }
   private assertProjectionLocator(
-    operation: InstallOperationV1,
+    operation: InstallOperation,
     projection: ProjectionFileLocator,
   ): void {
     const relative = projection.relativePath;
@@ -953,21 +981,21 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
   }
 
-  private priorProjectionInventory(receipt?: OwnershipReceiptV1): Map<
+  private priorProjectionInventory(receipt?: OwnershipReceipt): Map<
     string,
     {
-      operation: InstallOperationV1;
+      operation: InstallOperation;
       projection: ProjectionFileLocator;
-      file: ReleaseManifestV1['files'][number];
+      file: ReleaseManifest['files'][number];
       retained?: ProjectionRetainedLocator;
     }
   > {
     const inventory = new Map<
       string,
       {
-        operation: InstallOperationV1;
+        operation: InstallOperation;
         projection: ProjectionFileLocator;
-        file: ReleaseManifestV1['files'][number];
+        file: ReleaseManifest['files'][number];
         retained?: ProjectionRetainedLocator;
       }
     >();
@@ -1076,7 +1104,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     return inventory;
   }
 
-  private assertRetained(operation: InstallOperationV1, retained: ProjectionRetainedLocator): void {
+  private assertRetained(operation: InstallOperation, retained: ProjectionRetainedLocator): void {
     if (
       Object.keys(retained).sort().join('\0') !== 'file\0kind\0projection' ||
       retained.kind !== 'projection-retained' ||
@@ -1122,7 +1150,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   }
 
   private async readRetainedFile(
-    operation: InstallOperationV1,
+    operation: InstallOperation,
     retained: ProjectionRetainedLocator,
   ): Promise<Buffer> {
     await this.assertProjectionBoundary(operation.target);
@@ -1146,8 +1174,8 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
   }
 
   private priorOwnedAuthorization(
-    receipt: OwnershipReceiptV1,
-    operation: InstallOperationV1,
+    receipt: OwnershipReceipt,
+    operation: InstallOperation,
     resource: OwnedResourceSpec,
   ): PriorOwnedResourceAuthorization | undefined {
     const prior = receipt.operations.find((candidate) => candidate.id === operation.id),
@@ -1199,7 +1227,294 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       desiredDigest: prior.desiredDigest,
     };
   }
-  async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
+  async authorizeOwnedOperations(
+    receipt: OwnershipReceipt,
+    desiredAuthority: readonly OperationAuthority[],
+  ): Promise<void> {
+    const desired = new Map<string, OperationAuthority>();
+    for (const authority of desiredAuthority) {
+      if (desired.has(authority.operation.id)) {
+        fail(
+          'INSTALL_CURRENT_UNVERIFIED',
+          `Current ownership is ambiguous for ${authority.operation.id}.`,
+        );
+      }
+      desired.set(authority.operation.id, authority);
+    }
+    const historical = new Map(receipt.operations.map((operation) => [operation.id, operation]));
+    if (historical.size !== receipt.operations.length) {
+      fail('INSTALL_CURRENT_UNVERIFIED', 'Historical operation ownership is ambiguous.');
+    }
+    const locatorById = new Map(
+      receipt.operationLocators.map((locator) => [locator.operationId, locator]),
+    );
+    if (locatorById.size !== receipt.operationLocators.length) {
+      fail('INSTALL_CURRENT_UNVERIFIED', 'Historical locator ownership is ambiguous.');
+    }
+    const historicalIntent = receipt.installIntent;
+    if (!historicalIntent) {
+      fail(
+        'INSTALL_CURRENT_UNVERIFIED',
+        'Historical ownership is incomplete: installIntent is missing.',
+      );
+    }
+    // Require only the footprint derivable from schema-2 intent, not later desired operations.
+    const requiredHistoricalIds = [
+      '05-cli-selector',
+      '10-profile-0',
+      '10-profile-1',
+      '20-user-environment',
+      '30-shortcut',
+      '40-shortcut',
+      ...(historicalIntent.userConfigArtifact ? ['01-user-config'] : []),
+      ...(historicalIntent.runtimeRegistrations?.registrations ?? []).flatMap(
+        (registration, index) => [
+          `60-projection-${registration.identity}-descriptor`,
+          `${70 + index}-registration-${registration.identity}`,
+        ],
+      ),
+      ...(historicalIntent.staticMcpRegistrations ?? []).map(
+        (registration, index) =>
+          `${74 + index}-registration-mcp-${registration.label.replace(':', '-')}`,
+      ),
+    ];
+    for (const operationId of requiredHistoricalIds) {
+      if (!historical.has(operationId) || !locatorById.has(operationId)) {
+        fail(
+          'INSTALL_CURRENT_UNVERIFIED',
+          `Historical ownership is incomplete: required operation or locator is missing for ${operationId}.`,
+        );
+      }
+    }
+    const projectionInventory = this.priorProjectionInventory(receipt);
+    for (const registration of historicalIntent.runtimeRegistrations?.registrations ?? []) {
+      for (const file of registration.projection.files) {
+        const key = projectionKey(registration.identity, file.path);
+        if (!projectionInventory.has(key)) {
+          fail(
+            'INSTALL_CURRENT_UNVERIFIED',
+            `Historical ownership is incomplete: projection coverage is missing for ${key}.`,
+          );
+        }
+      }
+    }
+    const normalizedFile = (value: string) => path.win32.resolve(value).toLowerCase();
+    const object = (value: unknown): Record<string, unknown> | undefined =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : undefined;
+    for (const operation of receipt.operations) {
+      const durable = locatorById.get(operation.id);
+      if (
+        !durable ||
+        durable.adapter !== operation.adapter ||
+        durable.bindingDigest !== installerDigest({ operation, spec: durable.spec })
+      ) {
+        fail(
+          'INSTALL_CURRENT_UNVERIFIED',
+          `Historical ownership binding is invalid for ${operation.id}.`,
+        );
+      }
+      const oldLocator = object(durable.spec);
+      if (!oldLocator || typeof oldLocator.kind !== 'string') {
+        fail(
+          'INSTALL_CURRENT_UNVERIFIED',
+          `Historical ownership kind is invalid for ${operation.id}.`,
+        );
+      }
+      const current = desired.get(operation.id);
+      const currentLocator = object(current?.locator);
+      if (oldLocator.kind === 'user-config') {
+        const expected =
+          this.environment.APPDATA &&
+          path.win32.join(this.environment.APPDATA, 'mpx', 'config.json');
+        if (
+          Object.keys(oldLocator).sort().join('\0') !== 'kind\0retention' ||
+          oldLocator.retention !== 'user-owned' ||
+          operation.id !== '01-user-config' ||
+          operation.action !== 'ensure' ||
+          !expected ||
+          normalizedFile(operation.target) !== normalizedFile(expected) ||
+          (current &&
+            (currentLocator?.kind !== 'user-config' ||
+              normalizedFile(current.operation.target) !== normalizedFile(expected)))
+        ) {
+          fail(
+            'INSTALL_CURRENT_UNVERIFIED',
+            `User-config ownership is invalid for ${operation.id}.`,
+          );
+        }
+        continue;
+      }
+      if (operation.id.startsWith('61-projection-')) {
+        const oldProjection = projectionInventory.get(
+          [...projectionInventory].find(([, item]) => item.operation.id === operation.id)?.[0] ??
+            '',
+        );
+        const projection = currentLocator?.kind === 'projection-file' ? currentLocator : undefined;
+        const retained =
+          currentLocator?.kind === 'projection-retained'
+            ? (currentLocator as unknown as ProjectionRetainedLocator)
+            : undefined;
+        if (!oldProjection) {
+          fail(
+            'INSTALL_CURRENT_UNVERIFIED',
+            `Projection ownership is invalid for ${operation.id}.`,
+          );
+        }
+        if (current && retained) {
+          this.assertRetained(current.operation, retained);
+          if (
+            canonicalJson(current.operation) !== canonicalJson(oldProjection.operation) ||
+            canonicalJson(retained.projection) !== canonicalJson(oldProjection.projection) ||
+            canonicalJson(retained.file) !== canonicalJson(oldProjection.file) ||
+            (oldProjection.retained &&
+              canonicalJson(retained) !== canonicalJson(oldProjection.retained))
+          ) {
+            fail(
+              'INSTALL_CURRENT_UNVERIFIED',
+              `Retained projection ownership is invalid for ${operation.id}.`,
+            );
+          }
+          await this.readRetainedFile(current.operation, retained);
+          continue;
+        }
+        if (
+          current &&
+          (!projection ||
+            oldProjection.retained ||
+            current.operation.adapter !== oldProjection.operation.adapter ||
+            current.operation.action !== oldProjection.operation.action ||
+            projection.identity !== oldProjection.projection.identity ||
+            projection.relativePath !== oldProjection.projection.relativePath)
+        ) {
+          fail(
+            'INSTALL_CURRENT_UNVERIFIED',
+            `Projection ownership is invalid for ${operation.id}.`,
+          );
+        }
+        continue;
+      }
+      if (
+        !current ||
+        !currentLocator ||
+        current.operation.adapter !== operation.adapter ||
+        current.operation.action !== operation.action
+      ) {
+        fail(
+          'INSTALL_CURRENT_UNVERIFIED',
+          `Historical ownership exceeds current scope for ${operation.id}.`,
+        );
+      }
+      if (oldLocator.kind !== currentLocator.kind) {
+        fail('INSTALL_CURRENT_UNVERIFIED', `Ownership kind changed for ${operation.id}.`);
+      }
+      if (oldLocator.kind === 'pi-settings') {
+        const oldSettings = parsePiSettingsLocator(oldLocator);
+        const newSettings = parsePiSettingsLocator(currentLocator);
+        const bindings = (value: typeof oldSettings) =>
+          [...value.bindings]
+            .map(({ identity, domain, nativeRootDigest }) => ({
+              identity,
+              domain,
+              nativeRootDigest,
+            }))
+            .sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b)));
+        if (
+          operation.target !== current.operation.target ||
+          canonicalJson(bindings(oldSettings)) !== canonicalJson(bindings(newSettings))
+        ) {
+          fail('INSTALL_CURRENT_UNVERIFIED', `Pi ownership changed for ${operation.id}.`);
+        }
+        continue;
+      }
+      if (oldLocator.kind === 'launcher') {
+        const oldSpec = object(oldLocator.spec),
+          newSpec = object(currentLocator.spec);
+        if (
+          !oldSpec ||
+          !newSpec ||
+          oldSpec.path !== newSpec.path ||
+          oldSpec.shell !== newSpec.shell ||
+          normalizedFile(operation.target) !== normalizedFile(current.operation.target)
+        ) {
+          fail('INSTALL_CURRENT_UNVERIFIED', `Launcher ownership changed for ${operation.id}.`);
+        }
+        continue;
+      }
+      if (oldLocator.kind === 'resource') {
+        const oldSpec = object(oldLocator.spec),
+          newSpec = object(currentLocator.spec);
+        const desiredKeys = (spec: Record<string, unknown> | undefined) =>
+          Object.keys(object(spec?.desired) ?? {}).sort();
+        if (
+          !oldSpec ||
+          !newSpec ||
+          oldSpec.kind === 'terminal-profile' ||
+          oldSpec.kind === 'scheduled-task' ||
+          oldSpec.kind !== newSpec.kind ||
+          oldSpec.target !== newSpec.target ||
+          oldSpec.ownershipKey !== newSpec.ownershipKey ||
+          operation.target !== current.operation.target ||
+          canonicalJson(desiredKeys(oldSpec)) !== canonicalJson(desiredKeys(newSpec))
+        ) {
+          fail(
+            'INSTALL_CURRENT_UNVERIFIED',
+            `Native resource ownership changed for ${operation.id}.`,
+          );
+        }
+        continue;
+      }
+      const currentEntry = this.entries.get(installerDigest(current.operation));
+      if (currentEntry?.descriptor) {
+        const descriptor = currentEntry.descriptor;
+        const priorRegistration = receipt.installIntent?.runtimeRegistrations?.registrations.find(
+          (registration) => registration.identity === descriptor.identity,
+        );
+        const expectedId = `60-projection-${descriptor.identity}-descriptor`;
+        const oldTarget =
+          this.environment.LOCALAPPDATA &&
+          projectionDescriptorTarget(
+            this.environment.LOCALAPPDATA,
+            receipt.releaseKey,
+            descriptor.identity,
+          );
+        const currentTarget =
+          this.environment.LOCALAPPDATA &&
+          projectionDescriptorTarget(
+            this.environment.LOCALAPPDATA,
+            descriptor.releaseKey,
+            descriptor.identity,
+          );
+        if (
+          operation.id !== expectedId ||
+          current.operation.id !== expectedId ||
+          priorRegistration?.identity !== descriptor.identity ||
+          priorRegistration.runtime !== descriptor.runtime ||
+          oldLocator.kind !== 'file' ||
+          Object.keys(oldLocator).join('\0') !== 'kind' ||
+          currentLocator.kind !== 'file' ||
+          Object.keys(currentLocator).join('\0') !== 'kind' ||
+          !oldTarget ||
+          !currentTarget ||
+          normalizedFile(operation.target) !== normalizedFile(oldTarget) ||
+          normalizedFile(current.operation.target) !== normalizedFile(currentTarget)
+        ) {
+          fail('INSTALL_CURRENT_UNVERIFIED', `File ownership changed for ${operation.id}.`);
+        }
+        continue;
+      }
+      if (
+        oldLocator.kind !== 'file' ||
+        Object.keys(oldLocator).join('\0') !== 'kind' ||
+        currentLocator.kind !== 'file' ||
+        normalizedFile(operation.target) !== normalizedFile(current.operation.target)
+      ) {
+        fail('INSTALL_CURRENT_UNVERIFIED', `File ownership changed for ${operation.id}.`);
+      }
+    }
+  }
+  async receiptLocator(operation: InstallOperation): Promise<unknown> {
     if (this.piSettings.handles(operation)) {
       return this.piSettings.receiptLocator(operation);
     }
@@ -1222,9 +1537,9 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     return { kind: 'file' };
   }
   async hydrateReceiptOperation(
-    operation: InstallOperationV1,
+    operation: InstallOperation,
     locator: unknown,
-    priorReceipt?: OwnershipReceiptV1,
+    priorReceipt?: OwnershipReceipt,
   ): Promise<void> {
     if (this.piSettings.handles(operation, locator)) {
       await this.piSettings.hydrateReceiptOperation(operation, locator);
@@ -1380,7 +1695,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     this.entries.set(installerDigest(operation), entry);
   }
-  private async entry(operation: InstallOperationV1): Promise<Entry> {
+  private async entry(operation: InstallOperation): Promise<Entry> {
     const exact = this.entries.get(installerDigest(operation));
     if (exact) {
       return exact;
@@ -1406,7 +1721,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     return fail('INSTALL_PLAN_STALE', `Unknown or stale production operation ${operation.id}.`);
   }
-  async observe(operation: InstallOperationV1): Promise<string | null> {
+  async observe(operation: InstallOperation): Promise<string | null> {
     if (this.piSettings.handles(operation)) {
       return this.piSettings.observe(operation);
     }
@@ -1424,7 +1739,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     }
     return (await this.owned.inspect(entry.resource!)).digest;
   }
-  async capture(operation: InstallOperationV1): Promise<string | null> {
+  async capture(operation: InstallOperation): Promise<string | null> {
     if (this.piSettings.handles(operation)) {
       return this.piSettings.capture(operation);
     }
@@ -1443,7 +1758,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
     const current = await this.resources.read(target);
     return current === undefined ? null : Buffer.from(JSON.stringify(current)).toString('base64');
   }
-  async apply(operation: InstallOperationV1): Promise<void> {
+  async apply(operation: InstallOperation): Promise<void> {
     if (this.piSettings.handles(operation)) {
       await this.piSettings.apply(operation);
       return;
@@ -1525,7 +1840,7 @@ export class ProductionInstallerOperationAdapter implements InstallerOperationAd
       await this.owned.apply(await this.owned.plan(entry.resource!), entry.priorOwned);
     }
   }
-  async restore(operation: InstallOperationV1, snapshot: string | null): Promise<void> {
+  async restore(operation: InstallOperation, snapshot: string | null): Promise<void> {
     if (this.piSettings.handles(operation)) {
       await this.piSettings.restore(operation, snapshot);
       return;

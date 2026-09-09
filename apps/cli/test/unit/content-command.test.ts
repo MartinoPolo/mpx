@@ -77,11 +77,20 @@ async function fixture() {
     generatedByteCount: files[fileIndex]!.byteCount,
   });
   const manifest = {
-    schemaVersion: 1,
-    compilerVersion: '1.1.0',
+    schemaVersion: 2,
+    compilerVersion: '2.0.0',
     runtime: 'claude',
     profileSchemaVersion: 1,
-    binding: { projectId: null, repositoryId: 'repo', contentScope: 'test' },
+    binding: {
+      projectId: null,
+      repositoryId: 'repo',
+      identity: 'test',
+      selection: {
+        location: { name: 'test', canonicalRoot: process.cwd() },
+        packs: ['development'],
+        source: 'user-location',
+      },
+    },
     manifestKey: 'key',
     manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
     skills: [skill('zeta', 'Zeta skill.', 3), skill('alpha', 'Alpha skill.', 2)],

@@ -1,7 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { readFile } from 'node:fs/promises';
 import { expect, it, vi } from 'vitest';
-import { createRuntimeCapabilityManifestV1, type ToolAuthorityV1 } from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifest, type ToolAuthority } from '@mpx/runtime-contracts';
 import { activateClaudePluginRuntime } from '../../src/index.js';
 
 const launchKey = 'a'.repeat(64);
@@ -9,7 +9,7 @@ const authority = (
   name: string,
   routes: string[] = [],
   destinations: string[] = [],
-): ToolAuthorityV1 => ({
+): ToolAuthority => ({
   schemaVersion: 1,
   name,
   executors: ['host'],
@@ -64,11 +64,19 @@ it('activates the generated Claude surface with launch-bound gateway, dev-servic
   const activated = activateClaudePluginRuntime({
     register: (name, execute) => registered.set(name, execute),
     publish: (event) => events.push(event),
-    capability: createRuntimeCapabilityManifestV1({
+    capability: createRuntimeCapabilityManifest({
       runtime: 'claude',
       launchKey,
       identity: { name: 'personal', domain: 'personal', nativeRuntimeRootDigest: 'b'.repeat(64) },
-      binding: { projectId: 'app', repositoryId: 'repo', contentScope: 'personal' },
+      binding: {
+        projectId: 'app',
+        repositoryId: 'repo',
+        selection: {
+          location: { name: 'personal', canonicalRoot: 'C:/personal' },
+          packs: ['personal'],
+          source: 'project',
+        },
+      },
       executor: 'host',
       tools: [
         authority('mcp', ['mcp:fixture']),

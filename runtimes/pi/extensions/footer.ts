@@ -276,10 +276,8 @@ export function thinkingGauge(level: string): string {
 export interface FooterSessionIdentity {
   runtimeLabel: 'pi (mpx)' | 'piw (mpx)' | 'pi' | 'piw';
   mode: string;
-  skillPolicy: string;
   accountConfigUrl?: string;
   projectConfigUrl?: string;
-  skillsUrl?: string;
 }
 
 export interface FooterProviderSnapshot {
@@ -361,14 +359,11 @@ export function resolveFooterSessionIdentity(
     const identity = safeDisplayField(environment.MPX_IDENTITY);
     const accountConfigUrl = safeFileUrl(environment.MPX_ACCOUNT_CONFIG_PATH);
     const projectConfigUrl = safeFileUrl(environment.MPX_PROJECT_CONFIG_PATH);
-    const skillsUrl = safeFileUrl(environment.MPX_SESSION_SKILLS_DIR);
     return {
       runtimeLabel: identity === 'work' ? 'piw (mpx)' : 'pi (mpx)',
       mode: safeDisplayField(environment.MPX_MODE),
-      skillPolicy: safeDisplayField(environment.MPX_SKILL_POLICY),
       ...(accountConfigUrl === '' ? {} : { accountConfigUrl }),
       ...(projectConfigUrl === '' ? {} : { projectConfigUrl }),
-      ...(skillsUrl === '' ? {} : { skillsUrl }),
     };
   }
 
@@ -377,7 +372,6 @@ export function resolveFooterSessionIdentity(
     runtimeLabel:
       path.basename(path.normalize(accountRoot)).toLowerCase() === 'agent-work' ? 'piw' : 'pi',
     mode: '',
-    skillPolicy: '',
   };
 }
 
@@ -1560,9 +1554,6 @@ export const buildIdentityRow: FooterRowBuilder = (snapshot) => {
         sessionIdentity.mode === ''
           ? ''
           : `${palette.gray}${link(`mode:${sessionIdentity.mode}`, sessionIdentity.projectConfigUrl ?? '')}${palette.reset}`,
-        sessionIdentity.skillPolicy === ''
-          ? ''
-          : `${palette.gray}${link(`skills:${sessionIdentity.skillPolicy}`, sessionIdentity.skillsUrl ?? '')}${palette.reset}`,
         `${palette.gray}${link(snapshot.providers.repository, snapshot.providers.repositoryUrl ?? '')}${palette.reset}`,
         `${palette.gray}${link(snapshot.providers.issues, snapshot.providers.issuesUrl ?? '')}${palette.reset}`,
       ],

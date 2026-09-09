@@ -9,8 +9,8 @@ import { parseStrictJson } from '@mpx/core';
 import {
   canonicalJson,
   installerDigest,
-  parseReleaseManifestV1,
-  type ReleaseFileV1,
+  parseReleaseManifest,
+  type ReleaseFile,
 } from '../../src/immutable-core.js';
 import {
   buildStableNodeEntryBody,
@@ -27,7 +27,7 @@ const roots: string[] = [];
 const sha256 = (body: string | Buffer): string => createHash('sha256').update(body).digest('hex');
 
 function releaseManifest(files: Readonly<Record<string, string | Buffer>>) {
-  const evidence: ReleaseFileV1[] = Object.entries(files)
+  const evidence: ReleaseFile[] = Object.entries(files)
     .map(([file, body]) => ({ path: file, bytes: Buffer.byteLength(body), sha256: sha256(body) }))
     .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
   const releaseKey = installerDigest(evidence);
@@ -269,7 +269,7 @@ syncBuiltinESMExports();
     );
     await selectRelease(localAppData, validReleaseManifest.releaseKey);
 
-    expect(parseReleaseManifestV1(parseStrictJson(canonicalJson(validReleaseManifest)))).toEqual(
+    expect(parseReleaseManifest(parseStrictJson(canonicalJson(validReleaseManifest)))).toEqual(
       validReleaseManifest,
     );
     await expect(execute(entry, localAppData, [])).resolves.toMatchObject({
@@ -288,7 +288,7 @@ syncBuiltinESMExports();
       await writeFile(path.join(release, 'release-manifest.json'), `${manifestBody}\n`);
       await selectRelease(localAppData, validReleaseManifest.releaseKey);
 
-      expect(() => parseReleaseManifestV1(parseStrictJson(manifestBody))).toThrow();
+      expect(() => parseReleaseManifest(parseStrictJson(manifestBody))).toThrow();
       await expect(execute(entry, localAppData, [])).resolves.toMatchObject({
         code: 2,
         stdout: '',

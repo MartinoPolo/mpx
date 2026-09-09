@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "identities": {
     "personal": {
       "domain": "personal",
@@ -6,7 +7,8 @@
       "gitAuthorRoute": "personal",
       "providerRoutes": { "github": "github-personal" },
       "sshRoute": "personal-agent",
-      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false }
+      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false },
+      "allowedSkillPacks": ["development", "personal"]
     },
     "work": {
       "domain": "work",
@@ -14,27 +16,33 @@
       "gitAuthorRoute": "work",
       "providerRoutes": { "gitlab": "gitlab-work", "kanbanflow": "kanbanflow-work" },
       "sshRoute": "work-agent",
-      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false }
+      "mcpSharing": { "allow": ["context7"], "shareNativeAuth": false },
+      "allowedSkillPacks": ["development"]
     }
   },
   "domains": {
-    "personal": ["${MPX_PROJECTS}"],
-    "work": ["${MPX_WORK}"],
-    "oss": ["${MPX_CLONED}"],
-    "assistant-input": ["${MPX_OBSIDIAN_VAULT}"],
-    "assistant-output": ["${MPX_AI_GENERATED}"]
+    "personal": [
+      "${MPX_PROJECTS}",
+      "${MPX_CLONED}",
+      "${MPX_OBSIDIAN_VAULT}",
+      "${MPX_AI_GENERATED}"
+    ],
+    "work": ["${MPX_WORK}"]
   },
-  "contentScopes": {
-    "personal": { "roots": ["${MPX_PROJECTS}"], "skillPacks": ["core", "personal"] },
-    "work": { "roots": ["${MPX_WORK}"], "skillPacks": ["core", "work"] }
+  "locations": {
+    "personal-coding": {
+      "roots": ["${MPX_PROJECTS}", "${MPX_CLONED}"],
+      "skillPacks": ["development"]
+    },
+    "work-coding": { "roots": ["${MPX_WORK}"], "skillPacks": ["development"] },
+    "notes": { "roots": ["${MPX_OBSIDIAN_VAULT}"], "skillPacks": ["personal"] },
+    "assets": { "roots": ["${MPX_AI_GENERATED}"], "skillPacks": ["personal"] }
   },
+  "resourceRoots": { "cloned-repositories": ["${MPX_CLONED}"] },
   "modes": {
     "project": { "resources": { "selected-project": "read-write" } },
     "developer": {
       "resources": { "identity-domain": "read-write", "cloned-repositories": "read-only" }
-    },
-    "personal-assistant": {
-      "resources": { "assistant-input": "read-write", "assistant-output": "read-write" }
     },
     "computer-control": {
       "resources": {
@@ -44,61 +52,31 @@
     },
     "unrestricted": { "resources": { "host": "read-write" } }
   },
-  "skillPolicies": {
-    "clean": { "skillExposure": { "default": "explicit-only" } },
-    "developer": { "skillPacks": ["core"], "skillExposure": { "default": "name-only" } },
-    "personal-assistant": {
-      "skillPacks": ["core", "personal"],
-      "skillExposure": { "default": "name-only" }
-    }
-  },
   "presets": {
     "personal-dev": {
       "identity": "personal",
       "mode": "developer",
-      "skillPolicy": "developer",
-      "contentScope": "personal",
       "executor": "docker",
       "workspace": "clone",
       "networkPolicy": "implementation"
-    },
-    "personal-research": {
-      "identity": "personal",
-      "mode": "project",
-      "skillPolicy": "developer",
-      "contentScope": "personal",
-      "executor": "docker",
-      "workspace": "clone",
-      "networkPolicy": "research"
     },
     "work-project": {
       "identity": "work",
       "mode": "project",
-      "skillPolicy": "developer",
-      "contentScope": "work",
       "executor": "docker",
       "workspace": "clone",
       "networkPolicy": "implementation"
-    },
-    "work-delivery": {
-      "identity": "work",
-      "mode": "project",
-      "skillPolicy": "developer",
-      "contentScope": "work",
-      "executor": "docker",
-      "workspace": "clone",
-      "networkPolicy": "delivery"
     }
   },
   "launchDefaults": {
-    "scopes": { "personal": { "personal": "personal-dev" }, "work": { "work": "work-project" } },
+    "locations": {
+      "personal-coding": { "personal": "personal-dev" },
+      "work-coding": { "work": "work-project" }
+    },
     "projects": { "MartinoPolo/mpx": { "personal": "personal-dev", "work": "work-project" } }
   },
   "networkPolicies": {
-    "research": { "preset": "allow-all", "denyPrivateNetworks": true },
-    "implementation": { "preset": "balanced", "approvedProjectAdditions": true },
-    "delivery": { "extends": "implementation", "approvedDeliveryAdditions": true },
-    "minimal": { "preset": "deny-all", "requiredRuntimeEndpoints": true }
+    "implementation": { "preset": "balanced", "approvedProjectAdditions": true }
   },
   "executors": { "host": {}, "docker": {} }
 }

@@ -20,16 +20,17 @@ async function fixture() {
   await mkdir(path.join(root, 'review'));
   await writeFile(
     path.join(root, 'review', 'SKILL.md'),
-    '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: name-only\n---\nBODY\n',
+    '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: name-only\n---\nBODY\n',
   );
   const catalog = await inventoryCanonical(root);
   const manifest = resolveManifest(catalog, {
     repositoryId: 'repo',
-    contentScope: 'work',
-    identity: 'work',
-    skillPolicy: 'developer',
-    skillPolicyConfig: { skillExposure: { default: 'name-only' } },
-    enabledPacks: ['core'],
+    identity: 'development',
+    selection: {
+      location: { name: 'test', canonicalRoot: 'C:/test' },
+      packs: ['development'],
+      source: 'project',
+    },
   });
   return {
     root,

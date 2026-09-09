@@ -22,11 +22,20 @@ async function fixture() {
   await writeFile(path.join(root, 'skills', 'alpha', 'SKILL.md'), skill);
   await writeFile(path.join(root, 'agents', 'Explore.md'), agent);
   const manifest = {
-    schemaVersion: 1,
-    compilerVersion: '1.1.0',
+    schemaVersion: 2,
+    compilerVersion: '2.0.0',
     runtime: 'claude',
     profileSchemaVersion: 1,
-    binding: { projectId: null, repositoryId: 'repo', contentScope: 'test' },
+    binding: {
+      projectId: null,
+      repositoryId: 'repo',
+      identity: 'test',
+      selection: {
+        location: { name: 'test', canonicalRoot: root },
+        packs: ['development'] as const,
+        source: 'user-location' as const,
+      },
+    },
     manifestKey: 'manifest-key',
     manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
     skills: [
@@ -76,6 +85,26 @@ async function fixture() {
 }
 
 describe('persisted active content', () => {
+  it('rejects a structurally valid stale schema 1/compiler 1.1.0 projection', async () => {
+    const value = await fixture();
+    Object.assign(value.manifest, { schemaVersion: 1, compilerVersion: '1.1.0' });
+    const staleBytes = Buffer.from(JSON.stringify(value.manifest));
+    await writeFile(value.manifestPath, staleBytes);
+
+    await expect(
+      loadActiveContentProjection({
+        root: value.root,
+        manifestPath: value.manifestPath,
+        expected: {
+          runtime: 'claude',
+          manifestKey: value.manifest.manifestKey,
+          binding: value.manifest.binding,
+          manifestFile: { sha256: sha256(staleBytes), byteCount: staleBytes.byteLength },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'ACTIVE_CONTENT_MANIFEST_INVALID' });
+  });
+
   it('loads only an exact root-to-manifest binding and rejects unknown manifest fields', async () => {
     const value = await fixture();
     await expect(
@@ -83,6 +112,42 @@ describe('persisted active content', () => {
     ).resolves.toMatchObject({ root: value.root, manifestPath: value.manifestPath });
 
     await writeFile(value.manifestPath, JSON.stringify({ ...value.manifest, unexpected: true }));
+    await expect(
+      loadActiveContentProjection({ root: value.root, manifestPath: value.manifestPath }),
+    ).rejects.toMatchObject({ code: 'ACTIVE_CONTENT_MANIFEST_INVALID' });
+  });
+
+  it('normalizes equivalent pack ordering in persisted projection bindings', async () => {
+    const value = await fixture();
+    (
+      value.manifest.binding.selection as {
+        packs: readonly ('development' | 'personal')[];
+      }
+    ).packs = ['personal', 'development'];
+    await writeFile(value.manifestPath, JSON.stringify(value.manifest));
+
+    await expect(
+      loadActiveContentProjection({ root: value.root, manifestPath: value.manifestPath }),
+    ).resolves.toMatchObject({
+      manifest: { binding: { selection: { packs: ['development', 'personal'] } } },
+    });
+  });
+
+  it('rejects unknown fields in persisted projection selections', async () => {
+    const value = await fixture();
+    Object.assign(value.manifest.binding.selection.location, { unexpected: true });
+    await writeFile(value.manifestPath, JSON.stringify(value.manifest));
+
+    await expect(
+      loadActiveContentProjection({ root: value.root, manifestPath: value.manifestPath }),
+    ).rejects.toMatchObject({ code: 'ACTIVE_CONTENT_MANIFEST_INVALID' });
+  });
+
+  it('rejects a relative selected root through the persisted manifest parser', async () => {
+    const value = await fixture();
+    value.manifest.binding.selection.location.canonicalRoot = 'skills/canonical';
+    await writeFile(value.manifestPath, JSON.stringify(value.manifest));
+
     await expect(
       loadActiveContentProjection({ root: value.root, manifestPath: value.manifestPath }),
     ).rejects.toMatchObject({ code: 'ACTIVE_CONTENT_MANIFEST_INVALID' });
@@ -149,9 +214,10 @@ describe('persisted active content', () => {
         expected: {
           ...expected,
           binding: {
-            contentScope: value.manifest.binding.contentScope,
+            identity: value.manifest.binding.identity,
             repositoryId: value.manifest.binding.repositoryId,
             projectId: value.manifest.binding.projectId,
+            selection: value.manifest.binding.selection,
           },
         },
       }),
@@ -211,6 +277,48 @@ describe('persisted active content', () => {
     });
     await writeFile(path.join(value.root, 'skills', 'alpha', 'SKILL.md'), generated.subarray(1));
     await expect(readActiveSkill(active, 'alpha')).rejects.toMatchObject({
+      code: 'ACTIVE_CONTENT_TAMPERED',
+    });
+  });
+
+  it('selects same-name canonical and project skills only with a verified source qualifier', async () => {
+    const value = await fixture();
+    const projectBytes = Buffer.from('project skill bytes\n', 'utf8');
+    const projectPath = 'project-skills/skills/alpha/SKILL.md';
+    await mkdir(path.join(value.root, 'project-skills', 'skills', 'alpha'), { recursive: true });
+    await writeFile(path.join(value.root, ...projectPath.split('/')), projectBytes);
+    value.manifest.skills.push({
+      ...value.manifest.skills[0]!,
+      identity: 'skill:alpha',
+      sourcePath: '.agents/skills/alpha/SKILL.md',
+      generatedPath: projectPath,
+      generatedSha256: sha256(projectBytes),
+    });
+    value.manifest.files.push({
+      relativePath: projectPath,
+      sha256: sha256(projectBytes),
+      byteCount: projectBytes.byteLength,
+    });
+    await writeFile(value.manifestPath, `${JSON.stringify(value.manifest, null, 2)}\n`);
+    const active = await loadActiveContentProjection({
+      root: value.root,
+      manifestPath: value.manifestPath,
+    });
+
+    await expect(readActiveSkill(active, 'alpha')).rejects.toMatchObject({
+      code: 'ACTIVE_CONTENT_AMBIGUOUS',
+    });
+    await expect(readActiveSkill(active, 'alpha', 'canonical')).resolves.toMatchObject({
+      body: value.skill.toString('utf8'),
+      entry: { identity: 'alpha' },
+    });
+    await expect(readActiveSkill(active, 'alpha', 'project')).resolves.toMatchObject({
+      body: projectBytes.toString('utf8'),
+      entry: { identity: 'skill:alpha' },
+    });
+
+    await writeFile(path.join(value.root, ...projectPath.split('/')), 'tampered');
+    await expect(readActiveSkill(active, 'alpha', 'project')).rejects.toMatchObject({
       code: 'ACTIVE_CONTENT_TAMPERED',
     });
   });

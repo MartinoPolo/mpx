@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { AgentCatalogError } from '../../src/index.js';
 import {
   AgentDocumentError,
-  loadCanonicalAgentProjectionInputsV1,
-  renderCanonicalAgentDocumentV1,
+  loadCanonicalAgentProjectionInputs,
+  renderCanonicalAgentDocument,
 } from '@mpx/subagents/documents';
 
 const metadata = (identities: string[]) =>
@@ -61,8 +61,8 @@ describe('canonical agent documents', () => {
     ['LF', '---\nname: mpx-alpha\ndescription: café 漢字\n---\nbody\0bytes'],
     ['CRLF', '---\r\nname: mpx-alpha\r\ndescription: café 漢字\r\n---\r\nbody'],
   ])('parses %s without normalizing canonical bytes', async (_label, source) => {
-    const loaded = await loadCanonicalAgentProjectionInputsV1(await fixture(source));
-    const rendered = renderCanonicalAgentDocumentV1(loaded.entries[0]!.document, {
+    const loaded = await loadCanonicalAgentProjectionInputs(await fixture(source));
+    const rendered = renderCanonicalAgentDocument(loaded.entries[0]!.document, {
       name: 'Alias',
       fields: [{ name: 'model', value: 'sonnet' }],
     });
@@ -77,7 +77,7 @@ describe('canonical agent documents', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-documents-empty-'));
 
     await expect(
-      loadCanonicalAgentProjectionInputsV1(root, { allowMissingMetadata: true }),
+      loadCanonicalAgentProjectionInputs(root, { allowMissingMetadata: true }),
     ).resolves.toEqual({ schemaVersion: 1, entries: [], supportFiles: [] });
   });
 
@@ -86,7 +86,7 @@ describe('canonical agent documents', () => {
     await rm(path.join(root, 'metadata.json'));
 
     await expect(
-      loadCanonicalAgentProjectionInputsV1(root, { allowMissingMetadata: true }),
+      loadCanonicalAgentProjectionInputs(root, { allowMissingMetadata: true }),
     ).rejects.toEqual(
       expect.objectContaining<Partial<AgentCatalogError>>({
         code: 'AGENT_CATALOG_COVERAGE_INVALID',
@@ -102,7 +102,7 @@ describe('canonical agent documents', () => {
     await rm(metadataPath);
     await mkdir(metadataPath);
 
-    await expect(loadCanonicalAgentProjectionInputsV1(root)).rejects.toMatchObject({
+    await expect(loadCanonicalAgentProjectionInputs(root)).rejects.toMatchObject({
       name: 'AgentDocumentError',
       code: 'AGENT_METADATA_FILE_INVALID',
       path: metadataPath,
@@ -120,7 +120,7 @@ describe('canonical agent documents', () => {
       await writeFile(target, metadata(['mpx-alpha']));
       await symlink(target, metadataPath, 'file');
 
-      await expect(loadCanonicalAgentProjectionInputsV1(root)).rejects.toMatchObject({
+      await expect(loadCanonicalAgentProjectionInputs(root)).rejects.toMatchObject({
         name: 'AgentDocumentError',
         code: 'AGENT_METADATA_FILE_INVALID',
         path: metadataPath,
@@ -139,7 +139,7 @@ describe('canonical agent documents', () => {
       await mkdir(target);
       await symlink(target, metadataPath, 'junction');
 
-      await expect(loadCanonicalAgentProjectionInputsV1(root)).rejects.toMatchObject({
+      await expect(loadCanonicalAgentProjectionInputs(root)).rejects.toMatchObject({
         name: 'AgentDocumentError',
         code: 'AGENT_METADATA_FILE_INVALID',
         path: metadataPath,
@@ -154,14 +154,14 @@ describe('canonical agent documents', () => {
     ['duplicate name', '---\nname: mpx-alpha\nname: mpx-alpha\n---\n'],
     ['mismatched name', '---\nname: mpx-other\n---\n'],
   ])('rejects malformed frontmatter: %s', async (_label, source) => {
-    await expect(
-      loadCanonicalAgentProjectionInputsV1(await fixture(source)),
-    ).rejects.toBeInstanceOf(AgentDocumentError);
+    await expect(loadCanonicalAgentProjectionInputs(await fixture(source))).rejects.toBeInstanceOf(
+      AgentDocumentError,
+    );
   });
 
   it('rejects forged documents and keeps deterministic bytewise inventory ordering', async () => {
     expect(() =>
-      renderCanonicalAgentDocumentV1({ schemaVersion: 1, identity: 'mpx-alpha' } as never, {
+      renderCanonicalAgentDocument({ schemaVersion: 1, identity: 'mpx-alpha' } as never, {
         name: 'x',
         fields: [],
       }),
@@ -171,16 +171,16 @@ describe('canonical agent documents', () => {
       await writeFile(path.join(root, `${identity}.md`), `---\nname: ${identity}\n---\n`);
     }
     await writeFile(path.join(root, 'metadata.json'), metadata(['mpx-z', 'mpx-a']));
-    expect(
-      (await loadCanonicalAgentProjectionInputsV1(root)).entries.map((x) => x.identity),
-    ).toEqual(['mpx-a', 'mpx-z']);
+    expect((await loadCanonicalAgentProjectionInputs(root)).entries.map((x) => x.identity)).toEqual(
+      ['mpx-a', 'mpx-z'],
+    );
   });
 
   it('loads support files as exact bytes', async () => {
     const root = await fixture('---\nname: mpx-alpha\n---\n');
     await mkdir(path.join(root, 'references'));
     await writeFile(path.join(root, 'references', 'raw.bin'), Buffer.from([0, 255, 13, 10]));
-    const loaded = await loadCanonicalAgentProjectionInputsV1(root);
+    const loaded = await loadCanonicalAgentProjectionInputs(root);
     expect(loaded.supportFiles[0]!.relativePath).toBe('references/raw.bin');
     expect([...loaded.supportFiles[0]!.bytes]).toEqual([0, 255, 13, 10]);
   });

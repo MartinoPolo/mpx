@@ -494,18 +494,31 @@ export async function inventoryProjectSkills(
         });
         continue;
       }
-      const mpx = (data.metadata as Record<string, unknown> | undefined)?.mpx as
-        Record<string, unknown> | undefined;
-      const exposure = mpx?.projectExposure;
-      if (exposure !== 'full' && exposure !== 'explicit-only') {
+      const metadata = data.metadata;
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new Error('metadata.mpx must be a mapping');
+      }
+      const mpx = (metadata as Record<string, unknown>).mpx;
+      if (!mpx || typeof mpx !== 'object' || Array.isArray(mpx)) {
+        throw new Error('metadata.mpx must be a mapping');
+      }
+      const unknownMpxField = Object.keys(mpx).find((key) => key !== 'projectExposure');
+      if (unknownMpxField) {
+        throw new Error(`unknown metadata.mpx field: ${unknownMpxField}`);
+      }
+      const exposure = Object.hasOwn(mpx, 'projectExposure')
+        ? (mpx as Record<string, unknown>).projectExposure
+        : 'full';
+      if (exposure !== 'full' && exposure !== 'name-only' && exposure !== 'explicit-only') {
         throw new Error(
-          "metadata.mpx.projectExposure must be exactly 'full' or 'explicit-only'. Set it to 'full' for model discovery or 'explicit-only' for /skill:<name> invocation only",
+          "metadata.mpx.projectExposure must be exactly 'full', 'name-only', or 'explicit-only'",
         );
       }
       const disabled = data['disable-model-invocation'] === true;
-      if ((exposure === 'full' && disabled) || (exposure === 'explicit-only' && !disabled)) {
+      const expectedDisabled = exposure === 'explicit-only';
+      if (disabled !== expectedDisabled) {
         throw new Error(
-          `managed project exposure mismatch: '${exposure}' requires disable-model-invocation: ${exposure === 'explicit-only' ? 'true' : 'false'}. Update the frontmatter to those matching values`,
+          `managed project exposure mismatch: '${exposure}' requires disable-model-invocation: ${String(expectedDisabled)}`,
         );
       }
       if (typeof data.description !== 'string') {

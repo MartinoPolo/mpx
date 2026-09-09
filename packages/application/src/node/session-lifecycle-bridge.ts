@@ -3,11 +3,11 @@ import { lstat, mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { canonicalNativeRootDigest, type LaunchDescriptor } from '@mpx/launch';
 import {
-  createSessionLifecycleBindingV1,
-  type NativeSessionRefV1,
-  type RuntimeContextV1,
-  type RuntimeSessionObservationV1,
-  type SessionLifecycleBindingV1,
+  createSessionLifecycleBinding,
+  type NativeSessionRef,
+  type RuntimeContext,
+  type RuntimeSessionObservation,
+  type SessionLifecycleBinding,
 } from '@mpx/runtime-contracts';
 import {
   LifecycleEventDirectoryConsumer,
@@ -15,25 +15,25 @@ import {
   SessionService,
   SessionStore,
   deriveNativeBindingRef,
-  type NativeBindingRecordV1,
+  type NativeBindingRecord,
 } from '@mpx/sessions';
 
 export interface LaunchLifecyclePreparation {
-  readonly binding: SessionLifecycleBindingV1;
+  readonly binding: SessionLifecycleBinding;
   readonly eventDirectory: string;
 }
 export interface SessionLifecycleBridge {
   prepare(input: {
     descriptor: LaunchDescriptor;
-    runtimeContext: RuntimeContextV1;
+    runtimeContext: RuntimeContext;
     nativeRuntimeRoot: string;
     cwd: string;
-    nativeSessionRef?: NativeSessionRefV1;
-    nativeBinding?: NativeBindingRecordV1;
+    nativeSessionRef?: NativeSessionRef;
+    nativeBinding?: NativeBindingRecord;
   }): Promise<LaunchLifecyclePreparation>;
   consume(bindingId: string): Promise<void>;
   /** Consumes durable events and returns the observation bound to this launch only. */
-  observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
+  observe(bindingId: string): Promise<RuntimeSessionObservation | undefined>;
 }
 export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge {
   private readonly store: SessionStore;
@@ -45,11 +45,11 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
   }
   async prepare(input: {
     descriptor: LaunchDescriptor;
-    runtimeContext: RuntimeContextV1;
+    runtimeContext: RuntimeContext;
     nativeRuntimeRoot: string;
     cwd: string;
-    nativeSessionRef?: NativeSessionRefV1;
-    nativeBinding?: NativeBindingRecordV1;
+    nativeSessionRef?: NativeSessionRef;
+    nativeBinding?: NativeBindingRecord;
   }): Promise<LaunchLifecyclePreparation> {
     const now = new Date().toISOString(),
       bindingId = randomUUID();
@@ -122,7 +122,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
         });
       }
     }
-    const binding = createSessionLifecycleBindingV1({
+    const binding = createSessionLifecycleBinding({
       bindingId,
       bindingRef: `lifecycle-${bindingId}`,
       runtime: input.descriptor.runtime,
@@ -138,7 +138,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     });
     await this.store.saveLifecycleBinding({
-      schemaVersion: 1,
+      schemaVersion: 2,
       binding,
       nativeBindingRef,
       nativeSessionRef: input.nativeSessionRef ?? null,
@@ -146,12 +146,10 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
         launchKey: input.descriptor.launchKey,
         descriptorDigest: input.runtimeContext.launchDescriptor.digest,
         mode: input.descriptor.mode,
-        skillPolicy: input.descriptor.skillPolicy,
-        contentScope: input.descriptor.contentScope.name,
+        selection: structuredClone(input.descriptor.selection),
         executor: { kind: input.descriptor.executor.name },
         workspace: input.descriptor.workspace,
         networkPolicy: input.descriptor.networkPolicy.name,
-        grants: input.descriptor.grants,
         artifactKey: input.runtimeContext.runtimeArtifact.artifactKey,
         manifestKey: input.runtimeContext.manifestKey,
       },
@@ -186,7 +184,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
       await this.onSessionsChanged?.();
     }
   }
-  async observe(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined> {
+  async observe(bindingId: string): Promise<RuntimeSessionObservation | undefined> {
     const binding = await this.store.readLifecycleBinding(bindingId);
     const service = new SessionService(this.store);
     const observations = await service.reconcile([], [bindingId]);

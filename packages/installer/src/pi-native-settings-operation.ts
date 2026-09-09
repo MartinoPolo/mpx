@@ -4,23 +4,23 @@ import { MpxError, parseStrictJson } from '@mpx/core';
 import {
   canonicalJson,
   installerDigest,
-  type InstallIntentV1,
-  type InstallOperationV1,
-  type OwnershipReceiptV1,
-  type ReleaseManifestV1,
+  type InstallIntent,
+  type InstallOperation,
+  type OwnershipReceipt,
+  type ReleaseManifest,
 } from './immutable-core.js';
 import { withInstallerCleanup } from './failure.js';
 import {
   PI_NATIVE_PACKAGE_ROOT,
   invertPiNativePackageSettings,
   parsePiNativePackageRegistration,
-  parsePiPackageSettingsPlanV1,
+  parsePiPackageSettingsPlan,
   parsePiSettings,
   planPiNativePackageSettings,
   resolvePiNativePackageSource,
   serializePiSettings,
-  type PiNativePackageRegistrationV1,
-  type PiPackageSettingsPlanV1,
+  type PiNativePackageRegistration,
+  type PiPackageSettingsPlan,
 } from './pi-native-package.js';
 import {
   type PiNativeSettingsLock,
@@ -62,14 +62,14 @@ const absolutePackageSource = (value: string): boolean =>
 interface PiReleasePlanInput {
   readonly releaseRoot: string;
   readonly desiredSource: string;
-  readonly nativePackage: PiNativePackageRegistrationV1;
+  readonly nativePackage: PiNativePackageRegistration;
   readonly priorOwnedSources: readonly string[];
 }
 
 function deriveReleasePlanInput(
   appsRoot: string,
   releaseKey: string,
-  nativePackage: PiNativePackageRegistrationV1,
+  nativePackage: PiNativePackageRegistration,
   priorReleaseKey?: string,
 ): PiReleasePlanInput {
   const releaseRoot = path.join(appsRoot, 'mpx', 'releases', releaseKey);
@@ -123,35 +123,35 @@ async function verifyPiPackageArtifacts(
   }
 }
 
-function piPlanEvidence(plan: PiPackageSettingsPlanV1): PiPackageSettingsPlanV1 {
+function piPlanEvidence(plan: PiPackageSettingsPlan): PiPackageSettingsPlan {
   const { planDigest: _digest, settings: _settings, ...base } = plan;
   const evidence = { ...base, settings: { packages: plan.packagesAfter } };
   return { ...evidence, planDigest: installerDigest(evidence) };
 }
 
-interface PiSettingsOwnedAnchorV1 {
+interface PiSettingsOwnedAnchor {
   readonly source: string;
   readonly packagesBeforeIndex: number;
   readonly unownedBefore: number;
 }
 
-interface PiSettingsForwardPlanV1 {
+interface PiSettingsForwardPlan {
   readonly packagesBefore: readonly unknown[];
   readonly packagesAfter: readonly unknown[];
-  readonly ownedAnchors: readonly PiSettingsOwnedAnchorV1[];
+  readonly ownedAnchors: readonly PiSettingsOwnedAnchor[];
   readonly beforeDigest: string;
   readonly afterDigest: string;
   readonly planDigest: string;
 }
 
-interface PiSettingsSnapshotV1 {
+interface PiSettingsSnapshot {
   readonly mode: 'ensure' | 'remove';
   readonly settingsExisted: boolean;
   readonly packagesExisted: boolean;
-  readonly forwardPlan: PiSettingsForwardPlanV1;
+  readonly forwardPlan: PiSettingsForwardPlan;
 }
 
-function parsePiSettingsSnapshot(value: unknown): PiSettingsSnapshotV1 {
+function parsePiSettingsSnapshot(value: unknown): PiSettingsSnapshot {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('snapshot');
@@ -192,7 +192,7 @@ function parsePiSettingsSnapshot(value: unknown): PiSettingsSnapshotV1 {
         []) as readonly unknown[],
       packagesAfter = (parsePiSettings({ packages: plan.packagesAfter }).packages ??
         []) as readonly unknown[],
-      ownedAnchors = plan.ownedAnchors.map((candidate): PiSettingsOwnedAnchorV1 => {
+      ownedAnchors = plan.ownedAnchors.map((candidate): PiSettingsOwnedAnchor => {
         if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
           throw new Error('owned anchor');
         }
@@ -332,19 +332,19 @@ interface PiReleaseBinding {
   readonly releaseKey: string;
   readonly packageRoot: typeof PI_NATIVE_PACKAGE_ROOT;
   readonly registrationDigest: string;
-  readonly registration: PiNativePackageRegistrationV1;
+  readonly registration: PiNativePackageRegistration;
 }
 
 interface PiSettingsLocator {
   readonly bindings: readonly PiIdentityBinding[];
   readonly currentRelease: PiReleaseBinding;
   readonly priorRelease: PiReleaseBinding | null;
-  readonly plan: PiPackageSettingsPlanV1;
+  readonly plan: PiPackageSettingsPlan;
 }
 
 function releaseBinding(
   releaseKey: string,
-  registration: PiNativePackageRegistrationV1,
+  registration: PiNativePackageRegistration,
 ): PiReleaseBinding {
   return {
     releaseKey,
@@ -420,7 +420,7 @@ export function parsePiSettingsLocator(value: unknown): PiSettingsLocator {
       bindings,
       currentRelease: parseRelease(locator.currentRelease),
       priorRelease: locator.priorRelease === null ? null : parseRelease(locator.priorRelease),
-      plan: parsePiPackageSettingsPlanV1(locator.plan),
+      plan: parsePiPackageSettingsPlan(locator.plan),
     };
   } catch (failure) {
     if (failure instanceof MpxError && failure.code === 'INSTALL_RECEIPT_FORGED') {
@@ -431,13 +431,13 @@ export function parsePiSettingsLocator(value: unknown): PiSettingsLocator {
 }
 
 interface PiSettingsEntryBase {
-  readonly operation: InstallOperationV1;
+  readonly operation: InstallOperation;
   readonly root: string;
   readonly settingsPath: string;
   readonly bindings: readonly PiIdentityBinding[];
   readonly releaseKey: string;
-  readonly registration: PiNativePackageRegistrationV1;
-  readonly plan: PiPackageSettingsPlanV1;
+  readonly registration: PiNativePackageRegistration;
+  readonly plan: PiPackageSettingsPlan;
 }
 
 type PiSettingsEntry = PiSettingsEntryBase &
@@ -445,24 +445,24 @@ type PiSettingsEntry = PiSettingsEntryBase &
     | { readonly priorReleaseKey?: never; readonly priorRegistration?: never }
     | {
         readonly priorReleaseKey: string;
-        readonly priorRegistration: PiNativePackageRegistrationV1;
+        readonly priorRegistration: PiNativePackageRegistration;
       }
   );
 
 export interface PiNativeSettingsOperation {
   plan(
-    intent: InstallIntentV1,
-    manifest: ReleaseManifestV1,
+    intent: InstallIntent,
+    manifest: ReleaseManifest,
     requireActual: boolean,
-    priorReceipt?: OwnershipReceiptV1,
-  ): Promise<readonly InstallOperationV1[]>;
-  handles(operation: InstallOperationV1, locator?: unknown): boolean;
-  receiptLocator(operation: InstallOperationV1): Promise<unknown>;
-  hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown): Promise<void>;
-  observe(operation: InstallOperationV1): Promise<string | null>;
-  capture(operation: InstallOperationV1): Promise<string | null>;
-  apply(operation: InstallOperationV1): Promise<void>;
-  restore(operation: InstallOperationV1, snapshot: string | null): Promise<void>;
+    priorReceipt?: OwnershipReceipt,
+  ): Promise<readonly InstallOperation[]>;
+  handles(operation: InstallOperation, locator?: unknown): boolean;
+  receiptLocator(operation: InstallOperation): Promise<unknown>;
+  hydrateReceiptOperation(operation: InstallOperation, locator: unknown): Promise<void>;
+  observe(operation: InstallOperation): Promise<string | null>;
+  capture(operation: InstallOperation): Promise<string | null>;
+  apply(operation: InstallOperation): Promise<void>;
+  restore(operation: InstallOperation, snapshot: string | null): Promise<void>;
 }
 
 export class PiNativeSettingsOperationService implements PiNativeSettingsOperation {
@@ -479,7 +479,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     this.nativeSettings = port;
   }
 
-  handles(operation: InstallOperationV1, locator?: unknown): boolean {
+  handles(operation: InstallOperation, locator?: unknown): boolean {
     return (
       operation.target.startsWith('pi:') ||
       (locator !== null &&
@@ -504,16 +504,16 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     );
   }
 
-  private planFor(entry: PiSettingsEntry, settings: unknown | undefined): PiPackageSettingsPlanV1 {
+  private planFor(entry: PiSettingsEntry, settings: unknown | undefined): PiPackageSettingsPlan {
     return planPiNativePackageSettings({ settings, ...this.releasePlanInput(entry) });
   }
 
   private forwardPlan(
-    mode: PiSettingsSnapshotV1['mode'],
+    mode: PiSettingsSnapshot['mode'],
     packagesBefore: readonly unknown[],
     packagesAfter: readonly unknown[],
-    ownedAnchors: readonly PiSettingsOwnedAnchorV1[],
-  ): PiSettingsForwardPlanV1 {
+    ownedAnchors: readonly PiSettingsOwnedAnchor[],
+  ): PiSettingsForwardPlan {
     const base = {
       packagesBefore,
       packagesAfter,
@@ -527,14 +527,14 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
   private ownedAnchors(
     entry: PiSettingsEntry,
     packages: readonly unknown[],
-  ): readonly PiSettingsOwnedAnchorV1[] {
+  ): readonly PiSettingsOwnedAnchor[] {
     return this.planFor(entry, { packages }).priorOwnedEntries;
   }
 
   private assertExactOwnedSources(
     entry: PiSettingsEntry,
     packages: readonly unknown[],
-    expected: readonly PiSettingsOwnedAnchorV1[],
+    expected: readonly PiSettingsOwnedAnchor[],
   ): void {
     const actualSources = this.ownedAnchors(entry, packages).map((anchor) => anchor.source),
       expectedSources = expected.map((anchor) => anchor.source);
@@ -548,11 +548,11 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
 
   private reconstructForwardPlan(
     entry: PiSettingsEntry,
-    snapshot: PiSettingsSnapshotV1,
-  ): PiSettingsForwardPlanV1 {
+    snapshot: PiSettingsSnapshot,
+  ): PiSettingsForwardPlan {
     const supplied = snapshot.forwardPlan;
     try {
-      let expected: PiSettingsForwardPlanV1;
+      let expected: PiSettingsForwardPlan;
       if (snapshot.mode === 'ensure') {
         const plan = piPlanEvidence(this.planFor(entry, { packages: supplied.packagesBefore }));
         expected = this.forwardPlan(
@@ -597,11 +597,11 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
   }
 
   async plan(
-    intent: InstallIntentV1,
-    manifest: ReleaseManifestV1,
+    intent: InstallIntent,
+    manifest: ReleaseManifest,
     requireActual: boolean,
-    priorReceipt?: OwnershipReceiptV1,
-  ): Promise<readonly InstallOperationV1[]> {
+    priorReceipt?: OwnershipReceipt,
+  ): Promise<readonly InstallOperation[]> {
     if (!intent.runtimeRegistrations) {
       return [];
     }
@@ -614,7 +614,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
       {
         inspection: PiSettingsRootInspection;
         bindings: PiIdentityBinding[];
-        registration: PiNativePackageRegistrationV1;
+        registration: PiNativePackageRegistration;
       }
     >();
     const appsRoot = this.appsRoot();
@@ -672,7 +672,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
         (locator.spec as Record<string, unknown>).kind === 'pi-settings';
       return isPiOperation || isPiLocator ? [parsePiSettingsLocator(locator.spec)] : [];
     });
-    const operations: InstallOperationV1[] = [];
+    const operations: InstallOperation[] = [];
     for (const value of physicalRoots.values()) {
       const first = value.bindings[0];
       if (!first) {
@@ -727,7 +727,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
           fail('INSTALL_REGISTRATION_UNHEALTHY', 'Pi native package actual state is unhealthy.');
         }
       }
-      const operation: InstallOperationV1 = {
+      const operation: InstallOperation = {
         id: `50-pi-settings-${first.domain}`,
         adapter: this.adapterName,
         action: 'ensure',
@@ -765,7 +765,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     return operations;
   }
 
-  private async entry(operation: InstallOperationV1): Promise<PiSettingsEntry> {
+  private async entry(operation: InstallOperation): Promise<PiSettingsEntry> {
     const exact = this.entries.get(installerDigest(operation));
     if (exact) {
       return exact;
@@ -780,7 +780,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     return fail('INSTALL_PLAN_STALE', `Unknown or stale production operation ${operation.id}.`);
   }
 
-  async receiptLocator(operation: InstallOperationV1): Promise<unknown> {
+  async receiptLocator(operation: InstallOperation): Promise<unknown> {
     const entry = await this.entry(operation);
     return {
       schemaVersion: 1,
@@ -795,7 +795,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     };
   }
 
-  async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown): Promise<void> {
+  async hydrateReceiptOperation(operation: InstallOperation, locator: unknown): Promise<void> {
     const locatorValue = parsePiSettingsLocator(locator);
     const firstBinding = locatorValue.bindings[0];
     if (!firstBinding) {
@@ -954,7 +954,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     this.assertLock(lock);
   }
 
-  async observe(operation: InstallOperationV1): Promise<string | null> {
+  async observe(operation: InstallOperation): Promise<string | null> {
     const entry = await this.entry(operation);
     return this.withLock(entry, async (settings) => {
       const packages = (parsePiSettings(settings).packages as unknown[] | undefined) ?? [];
@@ -962,12 +962,12 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     });
   }
 
-  async capture(operation: InstallOperationV1): Promise<string | null> {
+  async capture(operation: InstallOperation): Promise<string | null> {
     const entry = await this.entry(operation);
     return this.withLock(entry, async (settings) => {
       const parsed = parsePiSettings(settings),
         packagesBefore = (parsed.packages as readonly unknown[] | undefined) ?? [];
-      let forwardPlan: PiSettingsForwardPlanV1;
+      let forwardPlan: PiSettingsForwardPlan;
       if (operation.action === 'remove') {
         const beforePlan = piPlanEvidence(this.planFor(entry, { packages: packagesBefore }));
         if (
@@ -1013,7 +1013,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     });
   }
 
-  async apply(operation: InstallOperationV1): Promise<void> {
+  async apply(operation: InstallOperation): Promise<void> {
     const entry = await this.entry(operation);
     await this.withLock(entry, async (settings, lock) => {
       if (operation.action === 'remove') {
@@ -1041,7 +1041,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
   private restoreRemovedPackages(
     entry: PiSettingsEntry,
     currentPackages: readonly unknown[],
-    forward: PiSettingsForwardPlanV1,
+    forward: PiSettingsForwardPlan,
   ): readonly unknown[] {
     const expectedAfterAnchors = this.ownedAnchors(entry, forward.packagesAfter),
       actualAfterAnchors = this.ownedAnchors(entry, currentPackages);
@@ -1096,7 +1096,7 @@ export class PiNativeSettingsOperationService implements PiNativeSettingsOperati
     ];
   }
 
-  async restore(operation: InstallOperationV1, snapshot: string | null): Promise<void> {
+  async restore(operation: InstallOperation, snapshot: string | null): Promise<void> {
     const entry = await this.entry(operation);
     if (snapshot === null) {
       fail('INSTALL_PI_SETTINGS_DRIFT', 'Pi settings rollback evidence is unavailable.');

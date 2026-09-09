@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import * as nativeFs from 'node:fs/promises';
 import path from 'node:path';
-import { parseAgentCatalogV1, resolveAgentCatalogV1 } from './agent-catalog.js';
+import { parseAgentCatalog, resolveAgentCatalog } from './agent-catalog.js';
 import { AgentCatalogError } from './agent-catalog-contracts.js';
 import {
   AgentDocumentError,
-  type CanonicalAgentDocumentFileSystemV1,
-  type CanonicalAgentDocumentTranslationV1,
-  type CanonicalAgentDocumentV1,
-  type CanonicalAgentProjectionInputsV1,
-  type CanonicalAgentProjectionLoadOptionsV1,
+  type CanonicalAgentDocumentFileSystem,
+  type CanonicalAgentDocumentTranslation,
+  type CanonicalAgentDocument,
+  type CanonicalAgentProjectionInputs,
+  type CanonicalAgentProjectionLoadOptions,
 } from './agent-document-contracts.js';
 
 const MAX_DOCUMENTS = 128,
@@ -25,7 +25,7 @@ interface PrivateDocument {
   closingStart: number;
   newline: Uint8Array;
 }
-const verifiedDocuments = new WeakMap<CanonicalAgentDocumentV1, PrivateDocument>();
+const verifiedDocuments = new WeakMap<CanonicalAgentDocument, PrivateDocument>();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 const encoder = new TextEncoder();
 const byteSort = (left: string, right: string) =>
@@ -45,7 +45,7 @@ function fail(
   throw new AgentDocumentError(code, message, cause === undefined ? undefined : { cause });
 }
 async function exactRead(
-  fs: CanonicalAgentDocumentFileSystemV1,
+  fs: CanonicalAgentDocumentFileSystem,
   file: string,
   root: string,
   maximum: number,
@@ -97,7 +97,7 @@ async function exactRead(
     fail(code, `${kind} could not be read`, error);
   }
 }
-function parseDocument(identity: string, bytes: Uint8Array): CanonicalAgentDocumentV1 {
+function parseDocument(identity: string, bytes: Uint8Array): CanonicalAgentDocument {
   let text: string;
   try {
     text = decoder.decode(bytes);
@@ -143,7 +143,7 @@ function parseDocument(identity: string, bytes: Uint8Array): CanonicalAgentDocum
   const document = Object.freeze({
     schemaVersion: 1 as const,
     identity,
-  }) as CanonicalAgentDocumentV1;
+  }) as CanonicalAgentDocument;
   verifiedDocuments.set(document, {
     bytes: new Uint8Array(bytes),
     nameStart,
@@ -155,12 +155,12 @@ function parseDocument(identity: string, bytes: Uint8Array): CanonicalAgentDocum
 }
 
 /** @public */
-export async function loadCanonicalAgentProjectionInputsV1(
+export async function loadCanonicalAgentProjectionInputs(
   root: string,
-  options: CanonicalAgentProjectionLoadOptionsV1 = {},
-  injectedFs?: CanonicalAgentDocumentFileSystemV1,
-): Promise<CanonicalAgentProjectionInputsV1> {
-  const fs = injectedFs ?? (nativeFs as unknown as CanonicalAgentDocumentFileSystemV1);
+  options: CanonicalAgentProjectionLoadOptions = {},
+  injectedFs?: CanonicalAgentDocumentFileSystem,
+): Promise<CanonicalAgentProjectionInputs> {
+  const fs = injectedFs ?? (nativeFs as unknown as CanonicalAgentDocumentFileSystem);
   let verifiedRoot: string;
   try {
     const stat = await fs.lstat(root);
@@ -191,7 +191,7 @@ export async function loadCanonicalAgentProjectionInputsV1(
   let total = 0;
   const documents: {
     identity: string;
-    document: CanonicalAgentDocumentV1;
+    document: CanonicalAgentDocument;
     sourcePath: string;
     sourceSha256: string;
     sourceByteCount: number;
@@ -235,9 +235,9 @@ export async function loadCanonicalAgentProjectionInputsV1(
   }
   let catalog;
   try {
-    catalog = resolveAgentCatalogV1(
+    catalog = resolveAgentCatalog(
       metadataBytes
-        ? parseAgentCatalogV1(decoder.decode(metadataBytes))
+        ? parseAgentCatalog(decoder.decode(metadataBytes))
         : { schemaVersion: 1, agents: {} },
       documents.map((x) => x.identity),
     );
@@ -332,9 +332,9 @@ export async function loadCanonicalAgentProjectionInputsV1(
 }
 
 /** @public */
-export function renderCanonicalAgentDocumentV1(
-  document: CanonicalAgentDocumentV1,
-  translation: CanonicalAgentDocumentTranslationV1,
+export function renderCanonicalAgentDocument(
+  document: CanonicalAgentDocument,
+  translation: CanonicalAgentDocumentTranslation,
 ): Uint8Array {
   const source = verifiedDocuments.get(document);
   if (!source || document.identity !== (document as { identity?: unknown }).identity) {

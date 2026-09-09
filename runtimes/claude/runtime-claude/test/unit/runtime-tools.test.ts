@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifest } from '@mpx/runtime-contracts';
 import { registerClaudeRuntimeTools } from '../../src/runtime-tools.js';
 
 const sha = (value: string) => value.repeat(64);
@@ -15,11 +15,19 @@ const authority = (name: string, routes: string[] = []) => ({
   timeout: { maxMs: 1000 },
   cache: { mode: 'disabled' as const, maxBytes: 4096 },
 });
-const capability = createRuntimeCapabilityManifestV1({
+const capability = createRuntimeCapabilityManifest({
   runtime: 'claude',
   launchKey: sha('a'),
   identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: sha('b') },
-  binding: { projectId: 'app', repositoryId: 'repo', contentScope: 'work' },
+  binding: {
+    projectId: 'app',
+    repositoryId: 'repo',
+    selection: {
+      location: { name: 'work', canonicalRoot: 'C:/work' },
+      packs: ['development'],
+      source: 'project',
+    },
+  },
   executor: 'docker',
   tools: [authority('mcp', ['mcp:chrome'])],
   routes: ['mcp:chrome'],

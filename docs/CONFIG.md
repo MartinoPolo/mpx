@@ -9,26 +9,72 @@ Schemas:
 
 ## User-local configuration
 
-`%APPDATA%/mpx/config.json` owns:
+`%APPDATA%/mpx/config.json` uses `schemaVersion: 2` and owns:
 
-- native runtime identities and roots;
-- domain roots used only to classify a working directory;
-- content scopes and skill packs;
-- modes, skill policies, presets, and launch defaults;
-- host/Docker declarations and network policies;
+- explicit native runtime identities, account roots, and `allowedSkillPacks`;
+- identity domains, which classify authority but never select identity;
+- `locations`, each with canonical `roots` and selected `skillPacks`;
+- optional per-project pack selections under `projects[projectId].skillPacks`;
+- modes, presets, launch defaults, executors, and network policies;
+- ordinary `resourceRoots` for `cloned-repositories`, `computer-control-config`, and `computer-control-executable-settings`;
 - logical local-Issue stores and views.
 
-Identity is always explicit. Working-directory classification never selects identity or grants access. Provider, Git, SSH, and MCP routes are validated labels, not paths, credentials, commands, or permission grants.
+Identity is explicit and immutable for a launch. It is not inferred from the working directory, project, domain, provider, or Git remote. Provider, Git, SSH, and MCP routes remain independent validated labels, not paths, credentials, commands, or permission grants.
 
-Only complete documented `${MPX_*}` tokens are interpolated, and only in domain/content roots. `~` is accepted only for native runtime roots. Missing, ambiguous, unknown, cyclic, widening, secret-like, or unsafe configuration fails closed.
+Only complete documented `${MPX_*}` tokens are interpolated where the schema permits paths. `~` is accepted only for native runtime roots. Missing, ambiguous, unknown, cyclic, widening, secret-like, or unsafe configuration fails closed.
 
-## Content selection
+## Skill selection
 
-Skill packs are `core`, `work`, and `personal`. Exposure is one of `full`, `name-only`, `explicit-only`, or `off`.
+The only canonical packs are `development` and `personal`. An identity's `allowedSkillPacks` is an allowance, not a default. Effective packs resolve in this order:
 
-Content scope selects eligible canonical content. Skill policy may narrow packs and resolves final exposure; it does not grant filesystem access. Project skills opt into managed behavior only through explicit `metadata.mpx`. Native project skills retain native interpretation.
+1. committed `skills.packs` in the discovered `mpxconfig.json`;
+2. user-local `projects[projectId].skillPacks`;
+3. the most-specific canonical containing entry in `locations`.
 
-Launch values resolve per axis from explicit input, project default for the explicit identity, content-scope default for that identity, then safe built-ins. A default cannot silently select host execution, unrestricted mode, or direct workspace.
+An unresolved or ambiguous location fails with actionable guidance. Location matching uses canonical containment and does not fabricate a repository or carry repository configuration across a Git boundary. Once a launch is resolved, changing shell directories does not mutate its inventory.
+
+Requested packs outside the explicit identity allowance are errors; they are never silently filtered. Project and location selection cannot change identity, native account roots, credentials, or provider routes. Configure coding roots with `development`, personal asset/note roots with `personal`, and select both explicitly where needed.
+
+A committed project can select packs without changing the schema version:
+
+```json
+{
+  "schemaVersion": 1,
+  "project": { "id": "owner/project" },
+  "repository": { "provider": "github", "remote": "origin" },
+  "skills": { "packs": ["development"] }
+}
+```
+
+User-local selection has this shape (the complete file must also contain the other schema-required sections):
+
+```json
+{
+  "schemaVersion": 2,
+  "identities": {
+    "personal": {
+      "domain": "personal",
+      "runtimeRoots": { "claude": "~/.claude", "pi": "~/.pi" },
+      "gitAuthorRoute": "personal",
+      "allowedSkillPacks": ["development", "personal"]
+    }
+  },
+  "locations": {
+    "personal-code": { "roots": ["${MPX_PROJECTS}"], "skillPacks": ["development"] },
+    "personal-assets": { "roots": ["${MPX_AI_GENERATED}"], "skillPacks": ["personal"] }
+  }
+}
+```
+
+Named skill policies, content scopes, per-project/per-scope exposure overrides, and `off` no longer exist. There is no global `clean` switch. Canonical and opted-in managed-project skills retain metadata exposure of `full`, `name-only`, or `explicit-only`; omitted exposure on otherwise valid managed metadata defaults to `full`, with bodies still loaded lazily.
+
+## Modes and resources
+
+Supported modes are `project`, `developer`, `computer-control`, and `unrestricted`. Presets contain only `identity`, `mode`, `executor`, `workspace`, and `networkPolicy`; `launchDefaults` keys are `locations` and `projects`.
+
+Mode resource admission is the configured mode plus the canonical selected resource root. Resource names do not confer authority by themselves: in particular, cloned-source access is configured through `cloned-repositories`, not a magical `oss` domain. Domains and resource locations remain separate, so reclassifying a root does not broaden identity authority.
+
+The removed grant mechanism did not mediate reads by a host process. There are no `--grant`, `--skill-policy`, or `--content-scope` launch options. Windows host execution still requires its independent fresh approval; Docker remains unavailable without fallback.
 
 ## Providers
 
@@ -49,5 +95,3 @@ mpx init --cwd . --json
 mpx init --cwd . --confirm --json
 mpx doctor --cwd . --json
 ```
-
-`mpx init` plans by default. Confirmation atomically creates a missing manifest and initializes the main checkout's port projection. It does not overwrite an existing manifest. Docker launch remains unavailable and fails closed; host launch requires explicit one-use approval.

@@ -229,7 +229,7 @@ export function parseCanonical(
   ) {
     throw new Error('metadata.mpx.skillPacks contains an unknown pack');
   }
-  const exposure = mpx.defaultExposure;
+  const exposure = Object.hasOwn(mpx, 'defaultExposure') ? mpx.defaultExposure : 'full';
   if (!EXPOSURES.includes(exposure as Exposure)) {
     throw new Error('metadata.mpx.defaultExposure is invalid');
   }

@@ -3,7 +3,7 @@ import { mkdir, lstat, readFile, readdir, rename, rm, stat, writeFile } from 'no
 import path from 'node:path';
 import { MpxError, type JsonValue } from '@mpx/core';
 
-interface IssueV1 {
+interface NativeIssue {
   readonly schemaVersion: 1;
   readonly id: string;
   readonly title: string;
@@ -13,7 +13,7 @@ interface IssueV1 {
   readonly providerData: Readonly<Record<string, JsonValue>>;
 }
 
-interface IssueCommentV1 {
+interface NativeIssueComment {
   readonly schemaVersion: 1;
   readonly id: string;
   readonly issueId: string;
@@ -34,7 +34,7 @@ export interface LocalDependencies {
   frontier: string[];
   cycle?: boolean;
 }
-export interface LocalIssue extends IssueV1 {
+export interface LocalIssue extends NativeIssue {
   readonly providerData: { readonly local: Readonly<Record<string, JsonValue>> };
 }
 export interface LocalIssueStoreOptions {
@@ -1323,7 +1323,7 @@ export class LocalIssueStore {
     });
   }
   // fallow-ignore-next-line unused-class-member -- public Node issue-store comment API.
-  async comment(id: string, body: string): Promise<IssueCommentV1> {
+  async comment(id: string, body: string): Promise<NativeIssueComment> {
     return this.#locked(async (assertOwned) => {
       const current = await this.#read(id),
         createdAt = new Date().toISOString(),

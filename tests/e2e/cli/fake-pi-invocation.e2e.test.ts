@@ -5,8 +5,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
-import { createPiRuntimeProfileV1, planPiInvocation } from '@mpx/runtime-pi';
+import { createRuntimeContext } from '@mpx/runtime-contracts';
+import { createPiRuntimeProfile, planPiInvocation } from '@mpx/runtime-pi';
 
 const h = (character: string) => character.repeat(64);
 const roots: string[] = [];
@@ -55,18 +55,27 @@ it.each(['native-skill', 'sample'])(
       mkdir(path.join(root, 'project-skills', 'skills', 'sample'), { recursive: true }),
       mkdir(path.join(root, 'instructions', 'pi'), { recursive: true }),
     ]);
-    const context = createRuntimeContextV1({
+    const context = createRuntimeContext({
       launchKey: h('a'),
       launchDescriptor: { reference: 'launch.json', digest: h('e') },
       manifestKey: h('f'),
       runtimeArtifact: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         runtime: 'pi',
         manifestKey: h('f'),
         artifactKey: h('1'),
         fileMapHash: h('2'),
       },
-      binding: { projectId: 'app', repositoryId: 'repo', contentScope: 'personal' },
+      binding: {
+        projectId: 'app',
+        repositoryId: 'repo',
+        identity: 'personal',
+        selection: {
+          location: { name: 'personal', canonicalRoot: process.cwd() },
+          packs: ['personal'],
+          source: 'project',
+        },
+      },
     });
     const agentBytes = Buffer.from('compiled agent\n'),
       skillBytes = Buffer.from('---\nname: sample\ndescription: Managed sample\n---\n# Sample\n'),
@@ -74,8 +83,8 @@ it.each(['native-skill', 'sample'])(
       managedPromptBytes = Buffer.from('Managed fixture instructions.\n'),
       sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex'),
       manifest = {
-        schemaVersion: 1,
-        compilerVersion: '1.1.0',
+        schemaVersion: 2,
+        compilerVersion: '2.0.0',
         runtime: 'pi',
         profileSchemaVersion: 1,
         binding: context.binding,
@@ -180,7 +189,8 @@ it.each(['native-skill', 'sample'])(
     );
     const plan = await planPiInvocation({
       executable: process.execPath,
-      profile: createPiRuntimeProfileV1(
+      executor: 'host',
+      profile: createPiRuntimeProfile(
         {
           schemaVersion: 1,
           runtime: 'pi',

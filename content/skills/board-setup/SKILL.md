@@ -7,7 +7,7 @@ metadata:
   category: setup
   mpx:
     schemaVersion: 1
-    skillPacks: [personal]
+    skillPacks: [development]
     defaultExposure: explicit-only
 ---
 

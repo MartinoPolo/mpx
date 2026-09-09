@@ -41,11 +41,7 @@ async function makeFileLink(target: string, destination: string): Promise<void> 
   }
 }
 import type { UserConfig } from '@mpx/config';
-import {
-  INSTALL_EXECUTABLE_MAX_BYTES,
-  installerDigest,
-  type InstallIntentV1,
-} from '@mpx/installer';
+import { INSTALL_EXECUTABLE_MAX_BYTES, installerDigest, type InstallIntent } from '@mpx/installer';
 import {
   NodeSetupRequestFactory,
   createNodeCurrentInstallationProbe,
@@ -329,7 +325,7 @@ it.each([false, true])(
           },
         ],
       },
-    } as unknown as InstallIntentV1;
+    } as unknown as InstallIntent;
     const probe = createNodeCurrentInstallationProbe(value.environment);
     const emptyArtifacts = path.join(value.root, 'mpx', 'runtime-projections', 'rolled-back');
     await mkdir(emptyArtifacts, { recursive: true });

@@ -2,41 +2,24 @@ import { isPathWithinRoot } from '@mpx/core';
 import { createHash } from 'node:crypto';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { RuntimeBinding, RuntimeSkillArtifactReferenceV4 } from '@mpx/runtime-contracts';
 import {
   catalogError,
   stable,
   type CatalogSkill,
-  type Exposure,
-  type SkillCapability,
   type ResolvedManifest,
-  type Runtime,
   type RuntimeSkillArtifact,
+  type SkillInvocation,
+  type SkillProjectionFile,
+  type SkillProjectionPlan,
+  type SkillProjectionPlanEntry,
 } from './contracts.js';
 import { validateArtifact, verifyRuntimeSkillArtifact } from './artifact.js';
 import { skillResolutionKey } from './identity.js';
 import { directoryDigest, enumerateSkillDirectory } from './inventory.js';
-import { loadSkillBody, type LoadedSkillBody, type SkillInvocation } from './loader.js';
+import { loadSkillBody, type LoadedSkillBody } from './loader.js';
 import { rankSearchCandidates } from './search-ranking.js';
 import { MAX_SKILL_SEARCH_QUERY_LENGTH, MAX_SKILL_SEARCH_RESULTS } from './search.js';
 
-export interface HumanSkillName {
-  identity: string;
-  publicName: string;
-}
-export function humanListSkills(artifact: RuntimeSkillArtifact): HumanSkillName[] {
-  validateArtifact(artifact);
-  return artifact.entries
-    .filter((x) => x.permissions.humanInvocation)
-    .map(({ identity, publicName }) => ({ identity, publicName }))
-    .sort((a, b) => a.identity.localeCompare(b.identity));
-}
-export function humanCompleteSkills(artifact: RuntimeSkillArtifact, prefix: string): string[] {
-  const normalized = prefix.toLowerCase();
-  return humanListSkills(artifact)
-    .map((x) => x.publicName)
-    .filter((x) => x.toLowerCase().startsWith(normalized));
-}
 export function humanSkillDetail(
   artifact: RuntimeSkillArtifact,
   catalog: readonly CatalogSkill[],
@@ -70,55 +53,6 @@ export interface SkillProjectionPlanInput {
   readonly artifact: RuntimeSkillArtifact;
   readonly catalog: readonly CatalogSkill[];
   readonly canonicalRoot: string;
-}
-export interface SkillProjectionFile {
-  readonly relativePath: string;
-  readonly bytes: Uint8Array;
-  readonly sha256: string;
-}
-export interface SkillProjectionDisclosure {
-  readonly identity: string;
-  readonly publicName: string;
-  readonly description?: string;
-  readonly triggers?: string;
-}
-export interface SkillProjectionPlanEntry {
-  readonly identity: string;
-  readonly publicName: string;
-  readonly exposure: Exposure;
-  readonly canonicalDescription: string;
-  readonly argumentHint?: string;
-  readonly capabilities?: readonly SkillCapability[];
-  readonly author?: string;
-  readonly version?: string;
-  readonly category?: string;
-  readonly permissions: Readonly<{ humanInvocation: boolean; modelInvocation: boolean }>;
-  readonly source: Readonly<{
-    kind: 'canonical' | 'project';
-    provenancePath: string;
-    contentHash: string;
-    directoryHash?: string;
-  }>;
-  readonly initialContext?: SkillProjectionDisclosure;
-  readonly humanContext?: SkillProjectionDisclosure;
-  readonly modelSearchContext?: SkillProjectionDisclosure;
-  readonly body: string;
-  readonly wrappedBodies: Readonly<Partial<Record<SkillInvocation, string>>>;
-  readonly provenances: Readonly<Partial<Record<SkillInvocation, LoadedSkillBody['provenance']>>>;
-  readonly skillFile: SkillProjectionFile;
-  readonly files: readonly SkillProjectionFile[];
-}
-export interface SkillProjectionPlan {
-  readonly runtime: Runtime;
-  readonly binding: RuntimeBinding;
-  readonly manifestKey: string;
-  readonly artifactReference: RuntimeSkillArtifactReferenceV4;
-  readonly entries: readonly SkillProjectionPlanEntry[];
-  /** Verified support files shared only by included managed project skills. */
-  readonly projectSharedFiles?: readonly SkillProjectionFile[];
-  readonly initialModelContext: readonly SkillProjectionDisclosure[];
-  readonly humanContext: readonly SkillProjectionDisclosure[];
-  readonly modelSearchContext: readonly SkillProjectionDisclosure[];
 }
 export interface SkillProjectionBodyRequest {
   readonly identity: string;
@@ -292,9 +226,6 @@ export async function createSkillProjectionPlan(
   const catalog = new Map(input.catalog.map((skill) => [skillResolutionKey(skill), skill]));
   const entries: SkillProjectionPlanEntry[] = [];
   for (const artifactEntry of input.artifact.entries) {
-    if (artifactEntry.exposure === 'off') {
-      catalogError('STALE_ARTIFACT', 'projection plans cannot contain excluded skills');
-    }
     const skill = catalog.get(artifactEntry.identity)!;
     const invocation: SkillInvocation = artifactEntry.permissions.modelInvocation
       ? 'model'
@@ -366,8 +297,12 @@ export async function createSkillProjectionPlan(
       description: skill.description,
     };
     const modelSearchDisclosure = {
-      ...humanDisclosure,
-      ...('triggers' in skill && skill.triggers ? { triggers: skill.triggers } : {}),
+      identity: artifactEntry.identity,
+      publicName: artifactEntry.publicName,
+      ...(artifactEntry.exposure === 'full' ? { description: skill.description } : {}),
+      ...(artifactEntry.exposure === 'full' && 'triggers' in skill && skill.triggers
+        ? { triggers: skill.triggers }
+        : {}),
     };
     const initial = artifactEntry.permissions.modelInvocation
       ? {
@@ -514,7 +449,7 @@ export function modelSearchSkillProjection(
 ): SkillProjectionSearchResult[] {
   verifySkillProjectionPlan(plan);
   if (options.artifactKey !== plan.artifactReference.artifactKey) {
-    catalogError('STALE_ARTIFACT', 'runtime operation requires the current exact v4 artifact');
+    catalogError('STALE_ARTIFACT', 'runtime operation requires the current exact v5 artifact');
   }
   if (query.length > MAX_SKILL_SEARCH_QUERY_LENGTH) {
     catalogError(
@@ -522,15 +457,21 @@ export function modelSearchSkillProjection(
       `skill search queries are limited to ${MAX_SKILL_SEARCH_QUERY_LENGTH} characters`,
     );
   }
+  const searchable = plan.entries.filter((entry) => entry.modelSearchContext);
+  const exposure = new Map(searchable.map((entry) => [entry.identity, entry.exposure]));
   return rankSearchCandidates(
-    plan.modelSearchContext.map((item) => ({
-      identity: item.identity,
-      publicName: item.publicName,
-      description: item.description ?? '',
-      ...(item.triggers ? { triggers: item.triggers } : {}),
+    searchable.map((entry) => ({
+      identity: entry.identity,
+      publicName: entry.publicName,
+      description: entry.canonicalDescription,
+      ...(entry.modelSearchContext?.triggers
+        ? { triggers: entry.modelSearchContext.triggers }
+        : {}),
     })),
     query,
     options.limit,
     MAX_SKILL_SEARCH_RESULTS,
+  ).map((result) =>
+    exposure.get(result.identity) === 'full' ? result : { ...result, description: '' },
   );
 }

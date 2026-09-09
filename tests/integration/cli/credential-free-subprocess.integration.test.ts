@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 async function accountFixture() {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx-phase-g-subprocess-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-credential-free-subprocess-'));
   roots.push(root);
   const claude = path.join(root, 'claude'),
     pi = path.join(root, 'pi'),
@@ -32,7 +32,7 @@ async function accountFixture() {
   return { root, claude, pi, state, user, store: new SessionStore(state) };
 }
 
-describe('Phase G credential-free subprocess boundaries', () => {
+describe('credential-free subprocess boundaries', () => {
   it('uses the configured Claude executable, account environment, and JSON for active discovery and resume activity', async () => {
     const f = await accountFixture(),
       capture = path.join(f.root, 'claude-invocations.jsonl'),

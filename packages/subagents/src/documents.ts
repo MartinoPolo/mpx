@@ -1,7 +1,7 @@
 export * from './agent-document-contracts.js';
 export {
   // fallow-ignore-next-line unused-export -- canonical agent document package API.
-  loadCanonicalAgentProjectionInputsV1,
+  loadCanonicalAgentProjectionInputs,
   // fallow-ignore-next-line unused-export -- canonical agent document package API.
-  renderCanonicalAgentDocumentV1,
+  renderCanonicalAgentDocument,
 } from './agent-documents.js';

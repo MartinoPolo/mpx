@@ -48,7 +48,7 @@ describe('portable canonical metadata', () => {
           : '    schemaVersion: 1\n';
     await writeFile(
       path.join(root, 'invalid', 'SKILL.md'),
-      `---\nname: invalid\ndescription: Invalid.\n${top}metadata:\n  mpx:\n${schema}${nested}    skillPacks: [core]\n    defaultExposure: full\n---\nBody.\n`,
+      `---\nname: invalid\ndescription: Invalid.\n${top}metadata:\n  mpx:\n${schema}${nested}    skillPacks: [development]\n    defaultExposure: full\n---\nBody.\n`,
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(message);
   });
@@ -63,7 +63,7 @@ describe('portable canonical metadata', () => {
     await mkdir(path.join(root, 'invalid'));
     await writeFile(
       path.join(root, 'invalid', 'SKILL.md'),
-      `---\nname: invalid\ndescription: Invalid.\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n  ${field}: ${value}\n---\nBody.\n`,
+      `---\nname: invalid\ndescription: Invalid.\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n  ${field}: ${value}\n---\nBody.\n`,
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(
       new RegExp(`metadata\\.${field} must be a non-empty string`, 'u'),
@@ -76,7 +76,7 @@ describe('portable canonical metadata', () => {
     await mkdir(path.join(root, 'invalid'));
     await writeFile(
       path.join(root, 'invalid', 'SKILL.md'),
-      `---\nname: invalid\ndescription: Invalid.\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n  owner: somebody\n---\nBody.\n`,
+      `---\nname: invalid\ndescription: Invalid.\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n  owner: somebody\n---\nBody.\n`,
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(/unknown metadata field: owner/u);
   });
@@ -87,7 +87,7 @@ describe('portable canonical metadata', () => {
     await mkdir(path.join(root, 'create-thing'));
     await writeFile(
       path.join(root, 'create-thing', 'SKILL.md'),
-      `---\nname: create-thing\ndescription: Create a thing exactly.\nargument-hint: <title>\nmetadata:\n  mpx:\n    schemaVersion: 1\n    contentVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n    capabilities: [read, search, shell, write, delegate]\n  author: Personal Author\n  version: 1.2.3\n  category: personal\n---\nBody.\n`,
+      `---\nname: create-thing\ndescription: Create a thing exactly.\nargument-hint: <title>\nmetadata:\n  mpx:\n    schemaVersion: 1\n    contentVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n    capabilities: [read, search, shell, write, delegate]\n  author: Personal Author\n  version: 1.2.3\n  category: personal\n---\nBody.\n`,
     );
     const catalog = await inventoryCanonical(root);
     expect(catalog[0]).toMatchObject({
@@ -101,11 +101,12 @@ describe('portable canonical metadata', () => {
     });
     const manifest = resolveManifest(catalog, {
       repositoryId: 'repo',
-      contentScope: 'test',
       identity: 'test',
-      skillPolicy: 'test',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: ['core'],
+      selection: {
+        location: { name: 'test', canonicalRoot: 'C:/test' },
+        packs: ['development'],
+        source: 'project',
+      },
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
     const plan = await createSkillProjectionPlan({

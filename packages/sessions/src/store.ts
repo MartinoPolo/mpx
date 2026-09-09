@@ -16,16 +16,18 @@ import path from 'node:path';
 import type { RuntimeName } from '@mpx/runtime-contracts';
 import {
   SessionError,
-  parseLifecycleBindingRecordV1,
-  parseNativeBindingRecordV1,
-  parseSessionRecordV1,
-  parseSessionRegistryV1,
-  type IdentityV1,
-  type NativeBindingRecordV1,
-  type SessionLifecycleBindingRecordV1,
-  type SessionRecordV1,
-  type SessionRegistryV1,
+  parseLifecycleBindingRecord,
+  parseNativeBindingRecord,
+  parseSessionRecord,
+  parseSessionRegistry,
+  type Identity,
+  type NativeBindingRecord,
+  type SessionLifecycleBindingRecord,
+  type SessionRecord,
+  type SessionRegistry,
 } from './schemas.js';
+
+export const SESSION_STORE_VERSION = 'v2' as const;
 
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -83,49 +85,28 @@ export class SessionStore {
     this.releaseWait = options.releaseLock?.wait ?? wait;
   }
 
-  partitionDirectory(identity: IdentityV1, runtime: RuntimeName): string {
-    return path.join(
-      this.stateRoot,
-      'sessions',
-      'v1',
+  private storeRoot(...segments: string[]): string {
+    return path.join(this.stateRoot, 'sessions', SESSION_STORE_VERSION, ...segments);
+  }
+  partitionDirectory(identity: Identity, runtime: RuntimeName): string {
+    return this.storeRoot(
       'identities',
       `d-${encode(identity.domain)}`,
       `n-${encode(identity.name)}`,
       runtime,
     );
   }
-  registryPath(identity: IdentityV1, runtime: RuntimeName): string {
+  registryPath(identity: Identity, runtime: RuntimeName): string {
     return path.join(this.partitionDirectory(identity, runtime), 'registry.json');
   }
   nativeBindingPath(ref: string): string {
-    return path.join(
-      this.stateRoot,
-      'sessions',
-      'v1',
-      'private',
-      'native-bindings',
-      `${encode(ref)}.json`,
-    );
+    return this.storeRoot('private', 'native-bindings', `${encode(ref)}.json`);
   }
   lifecycleBindingPath(bindingId: string): string {
-    return path.join(
-      this.stateRoot,
-      'sessions',
-      'v1',
-      'private',
-      'lifecycle-bindings',
-      `${encode(bindingId)}.json`,
-    );
+    return this.storeRoot('private', 'lifecycle-bindings', `${encode(bindingId)}.json`);
   }
   eventDirectory(bindingId: string): string {
-    return path.join(
-      this.stateRoot,
-      'sessions',
-      'v1',
-      'private',
-      'lifecycle-events',
-      encode(bindingId),
-    );
+    return this.storeRoot('private', 'lifecycle-events', encode(bindingId));
   }
   async validateEventDirectory(bindingId: string): Promise<boolean> {
     const expected = path.resolve(this.eventDirectory(bindingId));
@@ -476,14 +457,14 @@ export class SessionStore {
     }
   }
 
-  async read(identity: IdentityV1, runtime: RuntimeName): Promise<SessionRegistryV1> {
+  async read(identity: Identity, runtime: RuntimeName): Promise<SessionRegistry> {
     const file = this.registryPath(identity, runtime);
     try {
-      return parseSessionRegistryV1(await this.readJson(file));
+      return parseSessionRegistry(await this.readJson(file));
     } catch (error) {
       if (missing(error)) {
         return {
-          schemaVersion: 1,
+          schemaVersion: 2,
           identity,
           runtime,
           records: [],
@@ -497,19 +478,18 @@ export class SessionStore {
     }
   }
   async transaction<T>(
-    identity: IdentityV1,
+    identity: Identity,
     runtime: RuntimeName,
     mutate: (
-      registry: SessionRegistryV1,
+      registry: SessionRegistry,
     ) =>
-      | Promise<{ registry: SessionRegistryV1; result: T }>
-      | { registry: SessionRegistryV1; result: T },
+      Promise<{ registry: SessionRegistry; result: T }> | { registry: SessionRegistry; result: T },
   ): Promise<T> {
     const file = this.registryPath(identity, runtime);
     return this.withLock(file, async () => {
       const current = await this.read(identity, runtime);
       const changed = await mutate(current);
-      const valid = parseSessionRegistryV1(changed.registry);
+      const valid = parseSessionRegistry(changed.registry);
       if (
         valid.identity.domain !== identity.domain ||
         valid.identity.name !== identity.name ||
@@ -521,8 +501,8 @@ export class SessionStore {
       return changed.result;
     });
   }
-  async put(record: SessionRecordV1): Promise<SessionRecordV1> {
-    const valid = parseSessionRecordV1(record);
+  async put(record: SessionRecord): Promise<SessionRecord> {
+    const valid = parseSessionRecord(record);
     return this.transaction(valid.identity, valid.runtime, (registry) => {
       const records = [...registry.records],
         index = records.findIndex((item) => item.recordId === valid.recordId);
@@ -534,9 +514,9 @@ export class SessionStore {
       return { registry: { ...registry, records }, result: valid };
     });
   }
-  async partitions(): Promise<SessionRegistryV1[]> {
-    const root = path.join(this.stateRoot, 'sessions', 'v1', 'identities'),
-      result: SessionRegistryV1[] = [];
+  async partitions(): Promise<SessionRegistry[]> {
+    const root = this.storeRoot('identities'),
+      result: SessionRegistry[] = [];
     let domains: string[];
     try {
       domains = await readdir(root);
@@ -573,8 +553,8 @@ export class SessionStore {
     return result;
   }
   // fallow-ignore-next-line unused-class-member -- consumed by application Node session adapters.
-  async listNativeBindings(): Promise<NativeBindingRecordV1[]> {
-    const directory = path.join(this.stateRoot, 'sessions', 'v1', 'private', 'native-bindings');
+  async listNativeBindings(): Promise<NativeBindingRecord[]> {
+    const directory = this.storeRoot('private', 'native-bindings');
     let files: string[];
     try {
       files = await readdir(directory);
@@ -584,7 +564,7 @@ export class SessionStore {
       }
       throw error;
     }
-    const result: NativeBindingRecordV1[] = [];
+    const result: NativeBindingRecord[] = [];
     for (const file of files.sort()) {
       if (!file.endsWith('.json')) {
         continue;
@@ -594,19 +574,19 @@ export class SessionStore {
       if (info.isSymbolicLink() || !info.isFile()) {
         continue;
       }
-      result.push(parseNativeBindingRecordV1(await this.readJson(full)));
+      result.push(parseNativeBindingRecord(await this.readJson(full)));
     }
     return result;
   }
-  async saveNativeBinding(value: NativeBindingRecordV1): Promise<void> {
-    const valid = parseNativeBindingRecordV1(value);
+  async saveNativeBinding(value: NativeBindingRecord): Promise<void> {
+    const valid = parseNativeBindingRecord(value);
     await this.withLock(this.nativeBindingPath(valid.ref), () =>
       this.atomicJson(this.nativeBindingPath(valid.ref), valid),
     );
   }
-  async readNativeBinding(ref: string): Promise<NativeBindingRecordV1> {
+  async readNativeBinding(ref: string): Promise<NativeBindingRecord> {
     try {
-      return parseNativeBindingRecordV1(await this.readJson(this.nativeBindingPath(ref)));
+      return parseNativeBindingRecord(await this.readJson(this.nativeBindingPath(ref)));
     } catch (error) {
       if (missing(error)) {
         throw new SessionError(
@@ -618,7 +598,7 @@ export class SessionStore {
     }
   }
   async listLifecycleBindingIds(): Promise<string[]> {
-    const directory = path.join(this.stateRoot, 'sessions', 'v1', 'private', 'lifecycle-bindings');
+    const directory = this.storeRoot('private', 'lifecycle-bindings');
     let files: string[];
     try {
       files = await readdir(directory);
@@ -642,17 +622,15 @@ export class SessionStore {
     }
     return result;
   }
-  async saveLifecycleBinding(value: SessionLifecycleBindingRecordV1): Promise<void> {
-    const valid = parseLifecycleBindingRecordV1(value);
+  async saveLifecycleBinding(value: SessionLifecycleBindingRecord): Promise<void> {
+    const valid = parseLifecycleBindingRecord(value);
     await this.withLock(this.lifecycleBindingPath(valid.binding.bindingId), () =>
       this.atomicJson(this.lifecycleBindingPath(valid.binding.bindingId), valid),
     );
   }
-  async readLifecycleBinding(bindingId: string): Promise<SessionLifecycleBindingRecordV1> {
+  async readLifecycleBinding(bindingId: string): Promise<SessionLifecycleBindingRecord> {
     try {
-      return parseLifecycleBindingRecordV1(
-        await this.readJson(this.lifecycleBindingPath(bindingId)),
-      );
+      return parseLifecycleBindingRecord(await this.readJson(this.lifecycleBindingPath(bindingId)));
     } catch (error) {
       if (missing(error)) {
         throw new SessionError(

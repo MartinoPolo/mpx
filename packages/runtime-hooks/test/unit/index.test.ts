@@ -21,7 +21,7 @@ import {
   planFileQuality,
   planNotification,
   planSessionContext,
-  projectRuntimeCommandPolicySourceV1,
+  projectRuntimeCommandPolicySource,
   readCompactInstructions,
   resolveGuardObservations,
   scanAddedSecrets,
@@ -366,8 +366,8 @@ describe('projected command policy ownership', () => {
   });
 
   it('returns deterministic frozen source fragments for runtime insertion', () => {
-    const first = projectRuntimeCommandPolicySourceV1();
-    expect(first).toEqual(projectRuntimeCommandPolicySourceV1());
+    const first = projectRuntimeCommandPolicySource();
+    expect(first).toEqual(projectRuntimeCommandPolicySource());
     expect(Object.isFrozen(first)).toBe(true);
     expect(first.packageDecision).toContain('function packageDecision(command,selected=manager())');
     expect(first.preCommitDecision.endsWith('\n')).toBe(true);
@@ -375,7 +375,7 @@ describe('projected command policy ownership', () => {
   });
 
   it('keeps the dependency-free V1 duplicates on their documented canonical parity matrix', () => {
-    const source = projectRuntimeCommandPolicySourceV1();
+    const source = projectRuntimeCommandPolicySource();
     const packageContext = vm.createContext({ manager: () => 'pnpm' });
     vm.runInContext(`${source.packageDecision};this.evaluate=packageDecision`, packageContext);
     const projectedPackage = packageContext.evaluate as (

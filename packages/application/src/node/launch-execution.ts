@@ -18,9 +18,9 @@ import {
   type ExecutorAdapter,
   type ProcessResult,
 } from '@mpx/executors';
-import { createPiRuntimeProfileV1, PI_CAPABILITY_IDS, verifyPiResumeTarget } from '@mpx/runtime-pi';
-import { defaultRuntimeModelSelectionV1 } from '@mpx/config';
-import { readStatusSnapshotV1 } from '@mpx/status';
+import { createPiRuntimeProfile, PI_CAPABILITY_IDS, verifyPiResumeTarget } from '@mpx/runtime-pi';
+import { defaultRuntimeModelSelection } from '@mpx/config';
+import { readStatusSnapshot } from '@mpx/status';
 import {
   executorAdapter,
   productionRuntimeAdapters,
@@ -59,7 +59,7 @@ function productionComposer(
     let runtimeStatusPath: string | undefined;
     const piProfile =
       input.descriptor.runtime === 'pi'
-        ? createPiRuntimeProfileV1(defaultRuntimeModelSelectionV1('pi'), PI_CAPABILITY_IDS)
+        ? createPiRuntimeProfile(defaultRuntimeModelSelection('pi'), PI_CAPABILITY_IDS)
         : undefined;
     const projectionInput: Omit<
       LaunchProjectionBuildInput,
@@ -222,7 +222,7 @@ export const executeResolvedNodeLaunch = async (
                     ? { materializer: input.context.launchStatusSnapshotMaterializer }
                     : {}),
                 }),
-              readSnapshot: input.context.launchStatusSnapshotReader ?? readStatusSnapshotV1,
+              readSnapshot: input.context.launchStatusSnapshotReader ?? readStatusSnapshot,
               materializeRuntimeStatus: (value, signal) =>
                 runtimeMaterializer.materialize(value, signal),
               ...(input.context.launchStatusRefreshClock

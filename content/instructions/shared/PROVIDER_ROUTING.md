@@ -14,7 +14,7 @@ Load exactly the selected [GitHub](providers/GITHUB.md), [GitLab](providers/GITL
 
 ## Explicit GitHub repository creation
 
-The personal `init-github-repo` skill explicitly selects GitHub before repository configuration exists. For that workflow only, use the confirmed GitHub account, owner and name, and visibility rather than requiring an existing configured remote. If existing project configuration selects another repository provider, stop. This exception does not authorize other workflows to infer a provider.
+The development `init-github-repo` skill explicitly selects GitHub before repository configuration exists. For that workflow only, use the confirmed GitHub account, owner and name, and visibility rather than requiring an existing configured remote. If existing project configuration selects another repository provider, stop. This exception does not authorize other workflows to infer a provider.
 
 ## Validate explicit targets
 

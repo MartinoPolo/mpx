@@ -209,7 +209,6 @@ describe('@mpx/application architecture', () => {
     }
     expect(node).toMatchObject({
       executeResolvedNodeLaunch: expect.any(Function),
-      collectNodeExecutorEvidence: expect.any(Function),
       productionRuntimeAdapters: expect.any(Function),
       materializeClaudeGateway: expect.any(Function),
     });

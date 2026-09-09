@@ -1,4 +1,4 @@
-import { defaultRuntimeModelSelectionV1, type ProjectConfig } from '@mpx/config';
+import { defaultRuntimeModelSelection, type ProjectConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
 import type { StartRequest } from '@mpx/dev-services';
 import {
@@ -7,44 +7,42 @@ import {
   ExecutorRegistry,
   HostApprovalStore,
   RuntimeAdapterRegistry,
-  sameVerificationEvidence,
   type DirectTty,
   type ExecutorAdapter,
   type LaunchAuditStore,
   type ProcessResult,
   type RuntimeAdapter,
   type RuntimeLaunchBinding,
-  type VerificationEvidence,
 } from '@mpx/executors';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
-  createRuntimeCapabilityManifestV1,
-  createRuntimeContextV1,
-  parseRuntimeContextV1,
-  parseRuntimeSessionObservationV1,
+  createRuntimeCapabilityManifest,
+  createRuntimeContext,
+  parseRuntimeContext,
+  parseRuntimeSessionObservation,
   validateRuntimeCapabilityBinding,
-  type NativeSessionRefV1,
+  type NativeSessionRef,
   type PublishedRuntimeArtifactReference,
-  type RuntimeCapabilityManifestV1,
-  type RuntimeContextV1,
-  type RuntimeSessionObservationV1,
-  type SessionLifecycleBindingV1,
-  type ToolAuthorityV1,
+  type RuntimeCapabilityManifest,
+  type RuntimeContext,
+  type RuntimeSessionObservation,
+  type SessionLifecycleBinding,
+  type ToolAuthority,
 } from '@mpx/runtime-contracts';
-import type { NativeBindingRecordV1 } from '@mpx/sessions';
+import type { NativeBindingRecord } from '@mpx/sessions';
+import { createSkillProjectionPlan } from '@mpx/skills';
 import {
-  createSkillProjectionPlan,
   type CatalogSkill,
   type ResolvedManifest,
   type RuntimeSkillArtifact,
   type SkillProjectionPlan,
-} from '@mpx/skills';
+} from '@mpx/skills/contracts';
 import {
-  composeRuntimeStatusEnvelopeV1,
-  parseRuntimeStatusEnvelopeV1,
-  parseStatusSnapshotV1,
-  type RuntimeStatusEnvelopeV1,
-  type StatusSnapshotV1,
+  composeRuntimeStatusEnvelope,
+  parseRuntimeStatusEnvelope,
+  parseStatusSnapshot,
+  type RuntimeStatusEnvelope,
+  type StatusSnapshot,
 } from '@mpx/status';
 
 export interface LaunchStatusSnapshotBinding {
@@ -57,33 +55,33 @@ export interface LaunchStatusSnapshotBinding {
 }
 export interface LaunchStatusSnapshotMaterializer {
   materialize(
-    input: { readonly binding: LaunchStatusSnapshotBinding; readonly snapshot: StatusSnapshotV1 },
+    input: { readonly binding: LaunchStatusSnapshotBinding; readonly snapshot: StatusSnapshot },
     signal?: AbortSignal,
   ): Promise<string | undefined>;
 }
-export interface RuntimeStatusEnvelopeAuthorityV1 {
+export interface RuntimeStatusEnvelopeAuthority {
   readonly descriptorDigest: string;
   readonly runtimeRootDigest: string;
 }
 export interface RuntimeStatusEnvelopeMaterializer {
   materialize(
     input: {
-      readonly envelope: RuntimeStatusEnvelopeV1;
-      readonly authority: RuntimeStatusEnvelopeAuthorityV1;
+      readonly envelope: RuntimeStatusEnvelope;
+      readonly authority: RuntimeStatusEnvelopeAuthority;
     },
     signal?: AbortSignal,
   ): Promise<string>;
 }
 
 export interface LaunchRuntimeWiring {
-  readonly capability: RuntimeCapabilityManifestV1;
-  readonly status: RuntimeStatusEnvelopeV1;
+  readonly capability: RuntimeCapabilityManifest;
+  readonly status: RuntimeStatusEnvelope;
   readonly launchBinding: RuntimeLaunchBinding;
 }
 export interface LaunchVerifiedResumeTarget {
   readonly file: string;
 }
-export type LaunchRuntimeResumeTarget = NativeSessionRefV1 | LaunchVerifiedResumeTarget;
+export type LaunchRuntimeResumeTarget = NativeSessionRef | LaunchVerifiedResumeTarget;
 export interface LaunchRuntimePlan {
   readonly adapters: readonly RuntimeAdapter[];
   /** Paths are read only after adapter preparation, allowing projection materialization to remain lazy. */
@@ -94,12 +92,12 @@ export interface LaunchRuntimeComposerInput {
   readonly descriptor: LaunchDescriptor;
   readonly artifact: RuntimeSkillArtifact;
   readonly skillPlan: SkillProjectionPlan;
-  readonly runtimeContext: RuntimeContextV1;
+  readonly runtimeContext: RuntimeContext;
   readonly wiring: LaunchRuntimeWiring;
-  readonly snapshot: StatusSnapshotV1;
+  readonly snapshot: StatusSnapshot;
   readonly materializedRoutes: Readonly<Record<string, string>>;
   readonly lifecycle?: {
-    readonly binding: SessionLifecycleBindingV1;
+    readonly binding: SessionLifecycleBinding;
     readonly eventDirectory: string;
   };
   readonly resumeTarget?: LaunchRuntimeResumeTarget;
@@ -111,14 +109,14 @@ export type LaunchRuntimeComposer = (
 export interface LaunchLifecyclePort {
   prepare(input: {
     readonly descriptor: LaunchDescriptor;
-    readonly runtimeContext: RuntimeContextV1;
+    readonly runtimeContext: RuntimeContext;
     readonly nativeRuntimeRoot: string;
     readonly cwd: string;
-    readonly nativeSessionRef?: NativeSessionRefV1;
-    readonly nativeBinding?: NativeBindingRecordV1;
-  }): Promise<{ readonly binding: SessionLifecycleBindingV1; readonly eventDirectory: string }>;
+    readonly nativeSessionRef?: NativeSessionRef;
+    readonly nativeBinding?: NativeBindingRecord;
+  }): Promise<{ readonly binding: SessionLifecycleBinding; readonly eventDirectory: string }>;
   consume(bindingId: string): Promise<void>;
-  observe?(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
+  observe?(bindingId: string): Promise<RuntimeSessionObservation | undefined>;
 }
 export interface LaunchExecutionRequest {
   readonly descriptor: LaunchDescriptor;
@@ -129,13 +127,13 @@ export interface LaunchExecutionRequest {
   readonly nativeRuntimeRoot: string;
   readonly catalog: readonly CatalogSkill[];
   readonly canonicalRoot: string;
-  readonly statusSnapshot: (signal?: AbortSignal) => Promise<StatusSnapshotV1>;
+  readonly statusSnapshot: (signal?: AbortSignal) => Promise<StatusSnapshot>;
   readonly projectConfig?: ProjectConfig;
   readonly projectRoot?: string;
   readonly signal?: AbortSignal;
   readonly resume?: {
-    readonly nativeBinding: NativeBindingRecordV1;
-    readonly nativeSessionRef: NativeSessionRefV1;
+    readonly nativeBinding: NativeBindingRecord;
+    readonly nativeSessionRef: NativeSessionRef;
   };
 }
 export interface LaunchExecutionDependencies {
@@ -154,31 +152,31 @@ export interface LaunchExecutionDependencies {
   readonly approveHost?: boolean;
   readonly expectedLaunchKey?: string;
   readonly lifecycle?: LaunchLifecyclePort;
-  readonly sessionObservation?: RuntimeSessionObservationV1;
+  readonly sessionObservation?: RuntimeSessionObservation;
   readonly wiringFactory?: (input: {
     readonly descriptor: LaunchDescriptor;
     readonly artifact: RuntimeSkillArtifact;
-    readonly snapshot: StatusSnapshotV1;
+    readonly snapshot: StatusSnapshot;
     readonly cwd: string;
-    readonly sessionObservation?: RuntimeSessionObservationV1;
+    readonly sessionObservation?: RuntimeSessionObservation;
   }) => LaunchRuntimeWiring;
   readonly verifyResumeTarget?: (
     nativeRuntimeRoot: string,
-    ref: NativeSessionRefV1,
+    ref: NativeSessionRef,
   ) => Promise<LaunchVerifiedResumeTarget>;
   readonly beforeChildExecution?: () => Promise<void>;
   readonly liveStatus?: {
     readonly materializeSnapshot: (input: {
       readonly descriptor: LaunchDescriptor;
       readonly repositoryId: string;
-      readonly snapshot: StatusSnapshotV1;
+      readonly snapshot: StatusSnapshot;
       readonly signal?: AbortSignal;
     }) => Promise<string | undefined>;
-    readonly readSnapshot: (file: string, signal?: AbortSignal) => Promise<StatusSnapshotV1>;
+    readonly readSnapshot: (file: string, signal?: AbortSignal) => Promise<StatusSnapshot>;
     readonly materializeRuntimeStatus: (
       input: {
-        readonly envelope: RuntimeStatusEnvelopeV1;
-        readonly authority: RuntimeStatusEnvelopeAuthorityV1;
+        readonly envelope: RuntimeStatusEnvelope;
+        readonly authority: RuntimeStatusEnvelopeAuthority;
       },
       signal?: AbortSignal,
     ) => Promise<string>;
@@ -232,7 +230,7 @@ function authority(
   name: string,
   executor: 'docker' | 'host',
   routes: readonly string[],
-): ToolAuthorityV1 {
+): ToolAuthority {
   return Object.freeze({
     schemaVersion: 1,
     name,
@@ -267,7 +265,7 @@ export function runtimeContextForLaunch(
   descriptor: LaunchDescriptor,
   manifest: ResolvedManifest,
   artifact: RuntimeSkillArtifact,
-): RuntimeContextV1 {
+): RuntimeContext {
   const ref = descriptor.skillArtifact;
   const digest = sha256Canonical({
     schemaVersion: 1,
@@ -278,14 +276,20 @@ export function runtimeContextForLaunch(
     descriptor.intendedPolicy.inputsDigest !== digest ||
     manifest.binding.projectId !== descriptor.binding.projectId ||
     manifest.binding.repositoryId !== descriptor.binding.repositoryId ||
-    manifest.binding.contentScope !== descriptor.contentScope.name ||
+    manifest.binding.identity !== descriptor.identity.name ||
+    sha256Canonical(manifest.binding.selection as unknown as JsonValue) !==
+      sha256Canonical(descriptor.selection as unknown as JsonValue) ||
     artifact.manifestKey !== manifest.manifestKey ||
     artifact.runtime !== descriptor.runtime ||
     ref.runtime !== descriptor.runtime ||
     ref.identity !== descriptor.identity.name ||
-    ref.skillPolicy !== descriptor.skillPolicy ||
-    ref.contentScope !== descriptor.contentScope.name ||
-    ref.projectId !== descriptor.binding.projectId
+    ref.projectId !== descriptor.binding.projectId ||
+    ref.repositoryId !== descriptor.binding.repositoryId ||
+    sha256Canonical({
+      location: ref.location,
+      packs: ref.packs,
+      source: ref.selectionSource,
+    } as unknown as JsonValue) !== sha256Canonical(descriptor.selection as unknown as JsonValue)
   ) {
     throw new MpxError({
       code: 'LAUNCH_RESTART_REQUIRED',
@@ -293,7 +297,7 @@ export function runtimeContextForLaunch(
       remediation: 'Resolve a new launch and restart the runtime process.',
     });
   }
-  return createRuntimeContextV1({
+  return createRuntimeContext({
     launchKey: descriptor.launchKey,
     launchDescriptor: {
       reference: 'launch.json',
@@ -315,7 +319,7 @@ export function currentLaunchTuple(environment: Readonly<Record<string, string |
     });
   }
   try {
-    const context = parseRuntimeContextV1(JSON.parse(raw));
+    const context = parseRuntimeContext(JSON.parse(raw));
     const projection = JSON.parse(rawProjection) as PublishedRuntimeArtifactReference;
     const launchBinding = projection.launchBinding;
     const immutable = [
@@ -367,7 +371,7 @@ export function currentLaunchTuple(environment: Readonly<Record<string, string |
 export function runtimeServiceRequests(
   config: ProjectConfig | undefined,
   projectRoot: string,
-  snapshot: StatusSnapshotV1,
+  snapshot: StatusSnapshot,
   executor: 'host' | 'docker',
 ): Readonly<Record<string, StartRequest>> {
   const ports = new Map(
@@ -422,13 +426,13 @@ export function runtimeServiceRequests(
 export function buildLaunchRuntimeWiring(
   descriptor: LaunchDescriptor,
   artifact: RuntimeSkillArtifact,
-  snapshotInput: StatusSnapshotV1,
+  snapshotInput: StatusSnapshot,
   cwd: string,
   config?: ProjectConfig,
   projectRoot: string = cwd,
-  observation?: RuntimeSessionObservationV1,
+  observation?: RuntimeSessionObservation,
 ): LaunchRuntimeWiring {
-  const snapshot = parseStatusSnapshotV1(snapshotInput);
+  const snapshot = parseStatusSnapshot(snapshotInput);
   const routes = Object.freeze(
     [
       `git:${descriptor.routes.gitAuthor}`,
@@ -444,14 +448,14 @@ export function buildLaunchRuntimeWiring(
       (a, b) => a - b,
     ),
   );
-  const capability = createRuntimeCapabilityManifestV1({
+  const capability = createRuntimeCapabilityManifest({
     runtime: descriptor.runtime,
     launchKey: descriptor.launchKey,
     identity: {
       ...descriptor.identity,
       nativeRuntimeRootDigest: descriptor.nativeRuntimeRootDigest,
     },
-    binding: { ...descriptor.binding, contentScope: descriptor.contentScope.name },
+    binding: { ...descriptor.binding, selection: descriptor.selection },
     executor: descriptor.executor.name,
     tools: tools.map((name) =>
       authority(
@@ -461,18 +465,13 @@ export function buildLaunchRuntimeWiring(
       ),
     ),
     routes,
-    resources: [
-      ...new Set([
-        ...Object.keys(descriptor.intendedPolicy.resources),
-        ...descriptor.grants.map((g) => g.resource),
-      ]),
-    ],
+    resources: [...new Set(Object.keys(descriptor.intendedPolicy.resources))],
     mounts: [`worktree:${sha256Canonical(canonicalPath(worktreeRoot) as unknown as JsonValue)}`],
     destinations: [],
     skills: artifact.entries.filter((e) => e.permissions.modelInvocation).map((e) => e.identity),
     models:
       descriptor.runtime === 'pi'
-        ? defaultRuntimeModelSelectionV1('pi').enabledModels
+        ? defaultRuntimeModelSelection('pi').enabledModels
         : ['haiku', 'opus', 'sonnet'],
     nesting: { depth: 0, maxDepth: 2 },
   });
@@ -498,7 +497,7 @@ export function buildLaunchRuntimeWiring(
       runtimeId: descriptor.runtime,
       repositoryId: descriptor.binding.repositoryId,
     });
-  const launchStatus = composeRuntimeStatusEnvelopeV1({
+  const launchStatus = composeRuntimeStatusEnvelope({
     generatedAt: now,
     binding,
     harness:
@@ -546,7 +545,7 @@ export function buildLaunchRuntimeWiring(
     snapshot,
     deepFreeze({
       capability,
-      status: parseRuntimeStatusEnvelopeV1(status),
+      status: parseRuntimeStatusEnvelope(status),
       launchBinding: {
         launchKey: descriptor.launchKey,
         runtime: descriptor.runtime,
@@ -561,12 +560,12 @@ export function buildLaunchRuntimeWiring(
 }
 export function validateLaunchRuntimeWiring(
   descriptor: LaunchDescriptor,
-  snapshotInput: StatusSnapshotV1,
+  snapshotInput: StatusSnapshot,
   wiring: LaunchRuntimeWiring,
 ): LaunchRuntimeWiring {
   try {
-    const snapshot = parseStatusSnapshotV1(snapshotInput),
-      status = parseRuntimeStatusEnvelopeV1(wiring.status);
+    const snapshot = parseStatusSnapshot(snapshotInput),
+      status = parseRuntimeStatusEnvelope(wiring.status);
     validateRuntimeCapabilityBinding(wiring.capability, {
       manifestKey: wiring.capability.manifestKey,
       launchKey: descriptor.launchKey,
@@ -575,7 +574,7 @@ export function validateLaunchRuntimeWiring(
         ...descriptor.identity,
         nativeRuntimeRootDigest: descriptor.nativeRuntimeRootDigest,
       },
-      binding: { ...descriptor.binding, contentScope: descriptor.contentScope.name },
+      binding: { ...descriptor.binding, selection: descriptor.selection },
       executor: descriptor.executor.name,
     });
     const ports = [
@@ -639,19 +638,6 @@ async function consumeAfter<T>(
     throw primary;
   }
 }
-export async function executorEvidence(
-  dependencies: Pick<LaunchExecutionDependencies, 'executorAdapters'>,
-  name: 'docker' | 'host',
-): Promise<VerificationEvidence> {
-  const adapter = dependencies.executorAdapters.find((a) => a.name === name);
-  if (!adapter) {
-    throw new ExecutionError('EXECUTOR_UNAVAILABLE', `Executor '${name}' is unavailable.`, {
-      executor: name,
-    });
-  }
-  return adapter.verify();
-}
-
 export class LaunchExecutionService {
   async execute(
     request: LaunchExecutionRequest,
@@ -675,14 +661,7 @@ export class LaunchExecutionService {
         { executor: descriptor.executor.name },
       );
     }
-    const evidence = await adapter.verify();
-    if (!sameVerificationEvidence(evidence, descriptor.executorVerification)) {
-      throw new ExecutionError(
-        'LAUNCH_RESTART_REQUIRED',
-        'Executor verification evidence changed before invocation.',
-        { restartRequired: true },
-      );
-    }
+    await adapter.assertReady();
     if (
       dependencies.expectedLaunchKey !== undefined &&
       dependencies.expectedLaunchKey !== descriptor.launchKey
@@ -691,20 +670,6 @@ export class LaunchExecutionService {
         'LAUNCH_RESTART_REQUIRED',
         'Launch rights or binding changed; create a new launch and restart.',
         { restartRequired: true },
-      );
-    }
-    if (evidence.status === 'unavailable') {
-      throw new ExecutionError(
-        'EXECUTOR_UNAVAILABLE',
-        `Executor '${adapter.name}' is unavailable.`,
-        { executor: adapter.name },
-      );
-    }
-    if (evidence.status !== 'verified') {
-      throw new ExecutionError(
-        'EXECUTOR_GATE_UNVERIFIED',
-        `Executor '${adapter.name}' has not been verified.`,
-        { executor: adapter.name },
       );
     }
     if (dependencies.runtimeAdapterMode === 'injected' && dependencies.lifecycle) {
@@ -746,7 +711,7 @@ export class LaunchExecutionService {
                 'Trusted private-route materialization is required before launch.',
               );
             })();
-      const snapshot = parseStatusSnapshotV1(await request.statusSnapshot());
+      const snapshot = parseStatusSnapshot(await request.statusSnapshot());
       const wiring = validateLaunchRuntimeWiring(
         descriptor,
         snapshot,
@@ -801,7 +766,7 @@ export class LaunchExecutionService {
           }
           const work = (async () => {
             try {
-              const next = parseStatusSnapshotV1(await request.statusSnapshot(abort.signal));
+              const next = parseStatusSnapshot(await request.statusSnapshot(abort.signal));
               if (stopped) {
                 return;
               }
@@ -855,7 +820,7 @@ export class LaunchExecutionService {
                 await dependencies.liveStatus!.materializeSnapshot({
                   descriptor,
                   repositoryId: manifest.binding.repositoryId,
-                  snapshot: parseStatusSnapshotV1({
+                  snapshot: parseStatusSnapshot({
                     ...last,
                     portResolution: 'invalid',
                     diagnostics: [
@@ -879,7 +844,7 @@ export class LaunchExecutionService {
         };
         const processAdapter: ExecutorAdapter = {
           name: adapter.name,
-          verify: () => adapter.verify(),
+          assertReady: () => adapter.assertReady(),
           execute: async (child) => {
             const defaultSchedule = (callback: () => Promise<void>, milliseconds: number) => {
               const id = setInterval(() => {
@@ -1017,12 +982,12 @@ export async function executeResolvedLaunch(
 }
 
 export function composeRuntimeSessionObservation(
-  envelopeInput: RuntimeStatusEnvelopeV1,
-  observationInput: RuntimeSessionObservationV1,
+  envelopeInput: RuntimeStatusEnvelope,
+  observationInput: RuntimeSessionObservation,
   now: string = new Date().toISOString(),
-): RuntimeStatusEnvelopeV1 {
-  const envelope = parseRuntimeStatusEnvelopeV1(envelopeInput),
-    observation = parseRuntimeSessionObservationV1(observationInput);
+): RuntimeStatusEnvelope {
+  const envelope = parseRuntimeStatusEnvelope(envelopeInput),
+    observation = parseRuntimeSessionObservation(observationInput);
   if (observation.runtime !== envelope.binding.runtimeId) {
     throw new MpxError({
       code: 'SESSION_OBSERVATION_BINDING_MISMATCH',
@@ -1058,7 +1023,7 @@ export function composeRuntimeSessionObservation(
           diagnostic: null,
           unavailable: null,
         };
-  return composeRuntimeStatusEnvelopeV1({
+  return composeRuntimeStatusEnvelope({
     generatedAt: now,
     binding,
     harness,

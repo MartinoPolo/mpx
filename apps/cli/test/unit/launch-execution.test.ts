@@ -67,28 +67,27 @@ async function explicitLaunchFixture() {
   await writeFile(
     path.join(appData, 'mpx', 'config.json'),
     JSON.stringify({
+      schemaVersion: 2,
       identities: {
         work: {
           domain: 'work',
           runtimeRoots: { claude: claudeRoot, pi: piRoot },
           gitAuthorRoute: 'git-work',
+          allowedSkillPacks: ['development'],
         },
       },
       domains: { work: [cwd] },
-      contentScopes: { work: { roots: [cwd], skillPacks: ['core'] } },
+      locations: { work: { roots: [cwd], skillPacks: ['development'] } },
       modes: {
         project: { resources: { 'selected-project': 'read-write' } },
         developer: {
           resources: { 'identity-domain': 'read-write', 'cloned-repositories': 'read-only' },
         },
       },
-      skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
       presets: {
         'work-project': {
           identity: 'work',
           mode: 'project',
-          skillPolicy: 'clean',
-          contentScope: 'work',
           executor: 'docker',
           workspace: 'clone',
           networkPolicy: 'implementation',
@@ -96,7 +95,7 @@ async function explicitLaunchFixture() {
       },
       launchDefaults: {
         projects: { 'sample/app': { work: 'work-project' } },
-        scopes: { work: { work: 'work-project' } },
+        locations: { work: { work: 'work-project' } },
       },
       networkPolicies: { implementation: { preset: 'balanced' } },
       executors: { host: {}, docker: {} },
@@ -130,11 +129,7 @@ describe('canonical launch dispatch', () => {
       };
       const host: ExecutorAdapter = {
         name: 'host',
-        verify: async () => ({
-          status: 'verified',
-          verifier: 'test-host',
-          evidenceDigest: 'a'.repeat(64),
-        }),
+        assertReady: async () => undefined,
         execute: async () => {
           events.push('child');
           return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -205,11 +200,7 @@ describe('canonical launch dispatch', () => {
     }));
     const host: ExecutorAdapter = {
       name: 'host',
-      verify: async () => ({
-        status: 'verified',
-        verifier: 'test-host',
-        evidenceDigest: 'a'.repeat(64),
-      }),
+      assertReady: async () => undefined,
       execute,
     };
     const prepare = vi.fn<RuntimeAdapter['prepare']>(async ({ descriptor }) => ({
@@ -303,11 +294,7 @@ describe('canonical launch dispatch', () => {
         launchExecutorAdapters: [
           {
             name: 'docker',
-            verify: async () => ({
-              status: 'verified',
-              verifier: 'test-docker',
-              evidenceDigest: 'd'.repeat(64),
-            }),
+            assertReady: async () => undefined,
             execute,
           },
         ],

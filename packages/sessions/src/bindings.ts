@@ -1,9 +1,9 @@
 import type { RuntimeName } from '@mpx/runtime-contracts';
-import { stableDigest, type IdentityV1 } from './schemas.js';
+import { stableDigest, type Identity } from './schemas.js';
 
 /** The sole stable identity for an MPX native runtime root binding. */
 export function deriveNativeBindingRef(
-  identity: IdentityV1,
+  identity: Identity,
   runtime: RuntimeName,
   recordedRootDigest: string,
 ): string {

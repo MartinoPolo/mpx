@@ -1,6 +1,6 @@
 import type { ProjectConfig } from '@mpx/config';
 import type { DevServiceSnapshot } from '@mpx/dev-services';
-import type { StatusSnapshotV1 } from '@mpx/status';
+import type { StatusSnapshot } from '@mpx/status';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
   LifecycleApplicationService,
@@ -47,7 +47,7 @@ const devSnapshot: DevServiceSnapshot = {
   lastError: null,
 };
 
-const statusSnapshot: StatusSnapshotV1 = {
+const statusSnapshot: StatusSnapshot = {
   schemaVersion: 1,
   project: { id: 'example', cwd: '/repo' },
   worktree: { id: null, path: null, role: null, branch: null },
@@ -82,7 +82,7 @@ describe('LifecycleApplicationService', () => {
     ).toEqualTypeOf<Promise<LifecycleDevResult>>();
     expectTypeOf(
       service.currentStatus({ cwd: '/repo', projectRoot: '/repo', config }),
-    ).toEqualTypeOf<Promise<StatusSnapshotV1>>();
+    ).toEqualTypeOf<Promise<StatusSnapshot>>();
   });
 
   it('resolves assigned ports and invokes a configured package development service', async () => {
@@ -308,7 +308,7 @@ describe('LifecycleApplicationService', () => {
     });
     const request = { cwd: '/repo', projectRoot: '/repo', config };
     await expect(service.currentStatus(request)).resolves.toEqual(statusSnapshot);
-    const watched: StatusSnapshotV1[] = [];
+    const watched: StatusSnapshot[] = [];
     await service.watchStatus(request, {
       iterations: 2,
       intervalMs: 0,

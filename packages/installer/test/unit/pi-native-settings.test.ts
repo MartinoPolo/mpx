@@ -52,13 +52,13 @@ const configuredRootDigest = (root: string) =>
 
 const userConfig = (identities: Record<string, unknown>) =>
   JSON.stringify({
+    schemaVersion: 2,
     identities,
     domains: { personal: ['C:\\projects'], work: ['C:\\work'] },
-    contentScopes: {},
+    locations: {},
     modes: {},
-    skillPolicies: {},
     presets: {},
-    launchDefaults: { scopes: {}, projects: {} },
+    launchDefaults: { locations: {}, projects: {} },
     networkPolicies: {},
     executors: { host: {} },
   });
@@ -67,6 +67,7 @@ const identity = (domain: 'personal' | 'work', pi: string) => ({
   domain,
   runtimeRoots: { claude: `C:\\claude-${domain}`, pi },
   gitAuthorRoute: `${domain}-git`,
+  allowedSkillPacks: domain === 'personal' ? ['development', 'personal'] : ['development'],
 });
 
 it('resolves a first-install Pi root from validated intent artifact content', async () => {
@@ -77,7 +78,7 @@ it('resolves a first-install Pi root from validated intent artifact content', as
     resolver.resolvePiNativeRoot({
       identity: 'pi-personal',
       expectedNativeRootDigest: configuredRootDigest(root),
-      userConfigArtifactContent: userConfig({ assistant: identity('personal', root) }),
+      userConfigArtifactContent: userConfig({ personal: identity('personal', root) }),
     }),
   ).resolves.toBe(root);
 });
@@ -176,7 +177,7 @@ it.each([
     resolver.resolvePiNativeRoot({
       identity: runtimeIdentity,
       expectedNativeRootDigest: configuredRootDigest(digestRoot),
-      userConfigArtifactContent: userConfig({ assistant: identity('personal', configured) }),
+      userConfigArtifactContent: userConfig({ personal: identity('personal', configured) }),
     }),
   ).rejects.toMatchObject({ code: 'INSTALL_PI_ROOT_UNAVAILABLE' });
 });
@@ -188,7 +189,7 @@ it('does not require legacy Pi root environment variables', async () => {
     resolver.resolvePiNativeRoot({
       identity: 'pi-personal',
       expectedNativeRootDigest: configuredRootDigest(root),
-      userConfigArtifactContent: userConfig({ assistant: identity('personal', root) }),
+      userConfigArtifactContent: userConfig({ personal: identity('personal', root) }),
     }),
   ).resolves.toBe(root);
 });

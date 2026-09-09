@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifest } from '@mpx/runtime-contracts';
 import {
   activateRuntimeToolGateway,
   createLaunchBoundRuntimeTools,
@@ -32,7 +32,8 @@ function manifest(identity = 'personal') {
     timeout: { maxMs: 5000 },
     cache: { mode: 'read-write' as const, maxBytes: 4096 },
   });
-  return createRuntimeCapabilityManifestV1({
+  const webRoute = `web:${identity}`;
+  return createRuntimeCapabilityManifest({
     runtime: 'pi',
     launchKey: sha('a'),
     identity: {
@@ -40,16 +41,24 @@ function manifest(identity = 'personal') {
       domain: identity,
       nativeRuntimeRootDigest: sha(identity === 'personal' ? 'b' : 'c'),
     },
-    binding: { projectId: null, repositoryId: 'repo', contentScope: identity },
+    binding: {
+      projectId: null,
+      repositoryId: 'repo',
+      selection: {
+        location: { name: `${identity}-location`, canonicalRoot: `C:/projects/${identity}` },
+        packs: identity === 'personal' ? ['personal'] : ['development'],
+        source: 'user-location',
+      },
+    },
     executor: 'docker',
     tools: [
       authority('mcp', ['mcp:docs']),
-      authority('web_search', ['web:personal'], true),
-      authority('fetch_content', ['web:personal']),
+      authority('web_search', [webRoute], true),
+      authority('fetch_content', [webRoute]),
       authority('get_search_content', []),
-      authority('source_check', ['web:personal'], true),
+      authority('source_check', [webRoute], true),
     ],
-    routes: ['mcp:docs', 'web:personal'],
+    routes: ['mcp:docs', webRoute],
     resources: [],
     mounts: [],
     destinations: [
@@ -119,7 +128,7 @@ describe('launch-bound runtime tool projection', () => {
     expect(tools.diagnostics).toEqual([]);
 
     const { manifestKey: _manifestKey, ...withoutKey } = structuredClone(capability);
-    const selected = createRuntimeCapabilityManifestV1({
+    const selected = createRuntimeCapabilityManifest({
       ...withoutKey,
       tools: withoutKey.tools.filter((tool) => tool.name !== 'mcp'),
       routes: withoutKey.routes.filter((route) => route !== 'mcp:docs'),

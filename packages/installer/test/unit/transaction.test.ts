@@ -7,8 +7,8 @@ import {
   MemoryTransactionStore,
   NodeTransactionStore,
   installerDigest,
-  type InstallIntentV1,
-  type InstallOperationV1,
+  type InstallIntent,
+  type InstallOperation,
   type SideEffectAdapter,
   type StoredTransaction,
 } from '../../src/transaction.js';
@@ -40,14 +40,14 @@ class BytesAdapter implements SideEffectAdapter {
   ) {}
   calls = 0;
   restoreFailure: Error | undefined;
-  async observe(operation: InstallOperationV1) {
+  async observe(operation: InstallOperation) {
     const value = this.values.get(operation.target);
     return value ? installerDigest(value.toString('base64')) : null;
   }
-  async capture(operation: InstallOperationV1) {
+  async capture(operation: InstallOperation) {
     return this.values.get(operation.target)?.toString('base64') ?? null;
   }
-  async apply(operation: InstallOperationV1) {
+  async apply(operation: InstallOperation) {
     if (this.calls++ === this.failAt) {
       throw new Error('injected');
     }
@@ -57,7 +57,7 @@ class BytesAdapter implements SideEffectAdapter {
       this.values.set(operation.target, Buffer.from(operation.desiredDigest!));
     }
   }
-  async restore(operation: InstallOperationV1, snapshot: string | null) {
+  async restore(operation: InstallOperation, snapshot: string | null) {
     if (this.restoreFailure) {
       throw this.restoreFailure;
     }
@@ -67,7 +67,7 @@ class BytesAdapter implements SideEffectAdapter {
       this.values.set(operation.target, Buffer.from(snapshot, 'base64'));
     }
   }
-  async receiptLocator(operation: InstallOperationV1) {
+  async receiptLocator(operation: InstallOperation) {
     return operation.id === '01-user-config'
       ? { kind: 'user-config', retention: 'user-owned' }
       : { kind: 'file' };
@@ -79,33 +79,33 @@ class RetainingAdapter implements SideEffectAdapter {
   readonly values = new Map<string, string>();
   readonly hydrated = new Set<string>();
   requireHydrationBeforeObserve = false;
-  async observe(operation: InstallOperationV1) {
+  async observe(operation: InstallOperation) {
     if (this.requireHydrationBeforeObserve && !this.hydrated.has(operation.id)) {
       throw Object.assign(new Error('operation was not hydrated'), { code: 'INSTALL_PLAN_STALE' });
     }
     return this.values.get(operation.target) ?? null;
   }
-  async capture(operation: InstallOperationV1) {
+  async capture(operation: InstallOperation) {
     return this.values.get(operation.target) ?? null;
   }
-  async apply(operation: InstallOperationV1) {
+  async apply(operation: InstallOperation) {
     if (operation.action === 'remove') {
       this.values.delete(operation.target);
     } else {
       this.values.set(operation.target, operation.desiredDigest!);
     }
   }
-  async restore(operation: InstallOperationV1, snapshot: string | null) {
+  async restore(operation: InstallOperation, snapshot: string | null) {
     if (snapshot === null) {
       this.values.delete(operation.target);
     } else {
       this.values.set(operation.target, snapshot);
     }
   }
-  async receiptLocator(operation: InstallOperationV1) {
+  async receiptLocator(operation: InstallOperation) {
     return { kind: operation.id === 'config' ? 'user-owned' : 'installer-owned' };
   }
-  async hydrateReceiptOperation(operation: InstallOperationV1, locator: unknown) {
+  async hydrateReceiptOperation(operation: InstallOperation, locator: unknown) {
     const kind = (locator as { kind?: unknown } | null)?.kind;
     if (
       operation.id === 'config'
@@ -117,7 +117,7 @@ class RetainingAdapter implements SideEffectAdapter {
     this.hydrated.add(operation.id);
   }
 }
-function operationLocators(operations: readonly InstallOperationV1[], spec: unknown = null) {
+function operationLocators(operations: readonly InstallOperation[], spec: unknown = null) {
   return operations.map((operation) => ({
     operationId: operation.id,
     adapter: operation.adapter,
@@ -126,7 +126,7 @@ function operationLocators(operations: readonly InstallOperationV1[], spec: unkn
   }));
 }
 
-const intent: InstallIntentV1 = {
+const intent: InstallIntent = {
   schemaVersion: 1,
   kind: 'install-intent',
   releaseKey: 'a'.repeat(64),
@@ -141,7 +141,7 @@ describe('durable installer transaction state', () => {
       const adapter = new RetainingAdapter();
       const store = new MemoryTransactionStore();
       const releaseKey = installerDigest([]);
-      const operation: InstallOperationV1 = {
+      const operation: InstallOperation = {
         id: 'owned',
         adapter: adapter.name,
         action,
@@ -241,7 +241,7 @@ describe('durable installer transaction state', () => {
   it('quarantines journals whose completed IDs are not the exact eligible prefix', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-invalid-prefix-'));
     await mkdir(root, { recursive: true });
-    const operations: readonly InstallOperationV1[] = ['owned-a', 'owned-b', 'owned-c'].map(
+    const operations: readonly InstallOperation[] = ['owned-a', 'owned-b', 'owned-c'].map(
       (target, index) => ({
         id: `op-${index}`,
         adapter: 'files',
@@ -295,7 +295,7 @@ describe('durable installer transaction state', () => {
   it('rejects an independently malformed snapshot map after valid operation IDs', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-invalid-snapshots-'));
     await mkdir(root, { recursive: true });
-    const operation: InstallOperationV1 = {
+    const operation: InstallOperation = {
       id: 'op',
       adapter: 'files',
       action: 'ensure',
@@ -332,7 +332,7 @@ describe('durable installer transaction state', () => {
   });
 
   it('rejects missing, reordered, duplicate, forged, adapter-mismatched, and malformed locators', async () => {
-    const operations: readonly InstallOperationV1[] = [
+    const operations: readonly InstallOperation[] = [
         {
           id: 'op-0',
           adapter: 'files',
@@ -430,11 +430,11 @@ describe('installer transactions', () => {
       manifest = {
         schemaVersion: 1 as const,
         kind: 'release-manifest' as const,
-        releaseKey: 'a'.repeat(64),
-        convergenceHash: 'a'.repeat(64),
+        releaseKey: installerDigest([]),
+        convergenceHash: installerDigest([]),
         files: [],
       },
-      operation: InstallOperationV1 = {
+      operation: InstallOperation = {
         id: 'native',
         adapter: adapter.name,
         action: 'ensure',
@@ -442,7 +442,14 @@ describe('installer transactions', () => {
         desiredDigest: 'b'.repeat(64),
       };
     const installing = new ImmutableInstallerService({ adapters: [adapter], store, manifest });
-    const plan = await installing.plan(intent, [operation]);
+    const plan = await installing.plan(
+      {
+        ...intent,
+        releaseKey: manifest.releaseKey,
+        convergenceHash: manifest.convergenceHash,
+      },
+      [operation],
+    );
     await installing.apply(plan, plan.confirmationDigest);
     await installing.finalize();
 
@@ -458,7 +465,7 @@ describe('installer transactions', () => {
   it('fails verification closed when a recomputed receipt locator is forged', async () => {
     const adapter = new RetainingAdapter(),
       store = new MemoryTransactionStore(),
-      operation: InstallOperationV1 = {
+      operation: InstallOperation = {
         id: 'config',
         adapter: adapter.name,
         action: 'ensure',
@@ -470,8 +477,8 @@ describe('installer transactions', () => {
     await store.writeReceipt({
       schemaVersion: 2,
       kind: 'ownership-receipt',
-      releaseKey: 'a'.repeat(64),
-      convergenceHash: 'a'.repeat(64),
+      releaseKey: installerDigest([]),
+      convergenceHash: installerDigest([]),
       files: [],
       operations: [operation],
       operationLocators: [
@@ -493,7 +500,7 @@ describe('installer transactions', () => {
   it('does not let a direct caller authorize an upgrade with a receipt hash argument', async () => {
     const store = new MemoryTransactionStore(),
       adapter = new RetainingAdapter(),
-      operationA: InstallOperationV1 = {
+      operationA: InstallOperation = {
         id: 'shared',
         adapter: adapter.name,
         action: 'ensure',
@@ -575,7 +582,7 @@ describe('installer transactions', () => {
           now: () => new Date('2025-01-01'),
         });
       const operations = ['owned-a', 'owned-b', 'owned-c'].map(
-        (target, index): InstallOperationV1 => ({
+        (target, index): InstallOperation => ({
           id: `op-${index}`,
           adapter: 'files',
           action: 'ensure',
@@ -607,15 +614,13 @@ describe('installer transactions', () => {
       adapters: [adapter],
       store: new MemoryTransactionStore(),
     });
-    const operations = ['owned-a', 'owned-b', 'owned-c'].map(
-      (target, index): InstallOperationV1 => ({
-        id: `op-${index}`,
-        adapter: 'files',
-        action: 'ensure',
-        target,
-        desiredDigest: String(index + 1).repeat(64),
-      }),
-    );
+    const operations = ['owned-a', 'owned-b', 'owned-c'].map((target, index): InstallOperation => ({
+      id: `op-${index}`,
+      adapter: 'files',
+      action: 'ensure',
+      target,
+      desiredDigest: String(index + 1).repeat(64),
+    }));
     const plan = await service.plan(intent, operations);
     await expect(service.apply(plan, plan.confirmationDigest)).rejects.toThrow('injected');
     expect(values.get('owned-a')).toBeUndefined();
@@ -631,15 +636,13 @@ describe('installer transactions', () => {
         ['owned-c', Buffer.from('external')],
       ]),
       adapter = new BytesAdapter(values);
-    const operations = ['owned-a', 'owned-b', 'owned-c'].map(
-      (target, index): InstallOperationV1 => ({
-        id: `op-${index}`,
-        adapter: 'files',
-        action: 'ensure',
-        target,
-        desiredDigest: String(index + 1).repeat(64),
-      }),
-    );
+    const operations = ['owned-a', 'owned-b', 'owned-c'].map((target, index): InstallOperation => ({
+      id: `op-${index}`,
+      adapter: 'files',
+      action: 'ensure',
+      target,
+      desiredDigest: String(index + 1).repeat(64),
+    }));
     const snapshot = {
       schemaVersion: 1 as const,
       kind: 'machine-snapshot' as const,
@@ -677,7 +680,7 @@ describe('installer transactions', () => {
       values = new Map([[target, edited]]),
       adapter = new BytesAdapter(values),
       store = new MemoryTransactionStore(),
-      prior: InstallOperationV1 = {
+      prior: InstallOperation = {
         id: '01-user-config',
         adapter: 'files',
         action: 'ensure',
@@ -730,7 +733,7 @@ describe('installer transactions', () => {
       edited = Buffer.from('valid'),
       adapter = new BytesAdapter(new Map([[target, edited]])),
       store = new MemoryTransactionStore(),
-      prior: InstallOperationV1 = {
+      prior: InstallOperation = {
         id: '01-user-config',
         adapter: 'files',
         action: 'ensure',
@@ -782,14 +785,14 @@ describe('installer transactions', () => {
       ),
       store = new MemoryTransactionStore(),
       digest = installerDigest(edited.toString('base64')),
-      config: InstallOperationV1 = {
+      config: InstallOperation = {
         id: '01-user-config',
         adapter: 'files',
         action: 'ensure',
         target: configTarget,
         desiredDigest: 'b'.repeat(64),
       },
-      other: InstallOperationV1 = {
+      other: InstallOperation = {
         id: '20-other',
         adapter: 'files',
         action: 'ensure',
@@ -833,7 +836,7 @@ describe('installer transactions', () => {
       adapter = new BytesAdapter(values),
       store = new MemoryTransactionStore(),
       digest = installerDigest(edited.toString('base64')),
-      operation: InstallOperationV1 = {
+      operation: InstallOperation = {
         id: '01-user-config',
         adapter: 'files',
         action: 'ensure',

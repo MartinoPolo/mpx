@@ -2,13 +2,13 @@ import path from 'node:path';
 import {
   canonicalJson,
   installerDigest,
-  parseReleaseManifestV1,
-  type ReleaseManifestV1,
+  parseReleaseManifest,
+  type ReleaseManifest,
 } from './release-manifest.js';
 import {
   createPiNativePackageRegistration,
   parsePiNativePackageRegistration,
-  type PiNativePackageRegistrationV1,
+  type PiNativePackageRegistration,
 } from './pi-native-package.js';
 export { installerDigest } from './release-manifest.js';
 
@@ -35,25 +35,25 @@ const PROJECTION_ROLES = new Set<ProjectionRole>([
   'agents',
   'licenses',
 ]);
-export interface ExecutableEvidenceV1 {
+export interface ExecutableEvidence {
   readonly path: string;
   readonly sha256: string;
   readonly version: string;
 }
-export interface ProjectionFileV1 {
+export interface ProjectionFile {
   readonly path: string;
   readonly sha256: string;
   readonly bytes: number;
   readonly role: ProjectionRole;
   readonly owner: 'convergence';
 }
-export interface ImmutableProjectionV1 {
+export interface ImmutableProjection {
   readonly rootDigest: string;
-  readonly files: readonly ProjectionFileV1[];
+  readonly files: readonly ProjectionFile[];
   readonly reader: 'canonical';
   readonly activation: 'argv-only';
 }
-export interface RouteLabelsV1 {
+export interface RouteLabels {
   readonly git: string;
   readonly provider: string;
   readonly ssh: string;
@@ -62,9 +62,9 @@ export interface RouteLabelsV1 {
 interface RuntimeRegistrationInputBase {
   readonly domain: AccountDomain;
   readonly nativeRoot: string;
-  readonly executable: ExecutableEvidenceV1;
-  readonly projection: ImmutableProjectionV1;
-  readonly routes: RouteLabelsV1;
+  readonly executable: ExecutableEvidence;
+  readonly projection: ImmutableProjection;
+  readonly routes: RouteLabels;
 }
 export type RuntimeRegistrationInput =
   | (RuntimeRegistrationInputBase & {
@@ -73,7 +73,7 @@ export type RuntimeRegistrationInput =
     })
   | (RuntimeRegistrationInputBase & {
       readonly runtime: 'pi';
-      readonly nativePackage: PiNativePackageRegistrationV1;
+      readonly nativePackage: PiNativePackageRegistration;
     });
 interface RuntimeRegistrationV1Base {
   readonly schemaVersion: 1;
@@ -81,20 +81,20 @@ interface RuntimeRegistrationV1Base {
   readonly identity: RuntimeIdentity;
   readonly domain: AccountDomain;
   readonly nativeRootDigest: string;
-  readonly executable: ExecutableEvidenceV1;
-  readonly projection: ImmutableProjectionV1;
-  readonly routes: RouteLabelsV1;
+  readonly executable: ExecutableEvidence;
+  readonly projection: ImmutableProjection;
+  readonly routes: RouteLabels;
 }
-export type RuntimeRegistrationV1 =
+export type RuntimeRegistration =
   | (RuntimeRegistrationV1Base & { readonly runtime: 'claude'; readonly nativePackage?: never })
   | (RuntimeRegistrationV1Base & {
       readonly runtime: 'pi';
-      readonly nativePackage: PiNativePackageRegistrationV1;
+      readonly nativePackage: PiNativePackageRegistration;
     });
-export interface RuntimeRegistrationMatrixV1 {
+export interface RuntimeRegistrationMatrix {
   readonly schemaVersion: 1;
   readonly kind: 'runtime-registration-matrix';
-  readonly registrations: readonly RuntimeRegistrationV1[];
+  readonly registrations: readonly RuntimeRegistration[];
   readonly matrixDigest: string;
 }
 
@@ -127,17 +127,14 @@ function overlap(left: string, right: string): boolean {
     b = normalized(right);
   return a === b || a.startsWith(`${b}\\`) || b.startsWith(`${a}\\`);
 }
-function executable(value: ExecutableEvidenceV1): ExecutableEvidenceV1 {
+function executable(value: ExecutableEvidence): ExecutableEvidence {
   const location = absolute(value.path, 'Executable path');
   if (!SHA256.test(value.sha256) || !value.version.trim()) {
     fail('REGISTRATION_EXECUTABLE_INVALID', 'Executable evidence requires hash and version.');
   }
   return { path: location, sha256: value.sha256, version: value.version };
 }
-function projection(
-  value: ImmutableProjectionV1,
-  runtime: RegisteredRuntime,
-): ImmutableProjectionV1 {
+function projection(value: ImmutableProjection, runtime: RegisteredRuntime): ImmutableProjection {
   if (
     value.reader !== 'canonical' ||
     value.activation !== 'argv-only' ||
@@ -194,7 +191,7 @@ function projection(
   }
   return { rootDigest: value.rootDigest, files, reader: 'canonical', activation: 'argv-only' };
 }
-function routes(value: RouteLabelsV1, domain: AccountDomain): RouteLabelsV1 {
+function routes(value: RouteLabels, domain: AccountDomain): RouteLabels {
   for (const label of [value.git, value.provider, value.ssh]) {
     if (!label.startsWith(`${domain}:`) || label.length > 128) {
       fail('REGISTRATION_CROSS_DOMAIN', 'Route label crosses its identity domain.');
@@ -203,7 +200,7 @@ function routes(value: RouteLabelsV1, domain: AccountDomain): RouteLabelsV1 {
   return { ...value };
 }
 
-function verifyRuntimeExecutableConsistency(registrations: readonly RuntimeRegistrationV1[]): void {
+function verifyRuntimeExecutableConsistency(registrations: readonly RuntimeRegistration[]): void {
   for (const runtime of ['claude', 'pi'] as const) {
     const executableEvidence = registrations
       .filter((registration) => registration.runtime === runtime)
@@ -250,7 +247,7 @@ function exactRegistrationRecord(value: unknown, keys: readonly string[]): Recor
 
 export function createRuntimeRegistrationMatrix(
   inputs: readonly RuntimeRegistrationInput[],
-): RuntimeRegistrationMatrixV1 {
+): RuntimeRegistrationMatrix {
   if (inputs.length !== 4) {
     fail('REGISTRATION_MATRIX_INCOMPLETE', 'Exactly four runtime identities are required.');
   }
@@ -266,7 +263,7 @@ export function createRuntimeRegistrationMatrix(
     }
   }
   const registrations = inputs
-    .map((input): RuntimeRegistrationV1 => {
+    .map((input): RuntimeRegistration => {
       const identity = `${input.runtime}-${input.domain}` as RuntimeIdentity;
       const base = {
         schemaVersion: 1 as const,
@@ -300,7 +297,7 @@ export function createRuntimeRegistrationMatrix(
   return { ...base, matrixDigest: installerDigest(base) };
 }
 
-export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistrationMatrixV1 {
+export function parseRuntimeRegistrationMatrix(value: unknown): RuntimeRegistrationMatrix {
   const matrix = exactRegistrationRecord(value, [
     'schemaVersion',
     'kind',
@@ -316,7 +313,7 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
   ) {
     fail('REGISTRATION_SCHEMA_INVALID', 'Registration matrix header is invalid.');
   }
-  const registrations = matrix.registrations.map((item): RuntimeRegistrationV1 => {
+  const registrations = matrix.registrations.map((item): RuntimeRegistration => {
     const source = item as Record<string, unknown> | null;
     const registration = exactRegistrationRecord(item, [
       'schemaVersion',
@@ -370,12 +367,12 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
       identity: registration.identity as RuntimeIdentity,
       domain: registration.domain as AccountDomain,
       nativeRootDigest: registration.nativeRootDigest,
-      executable: executable(executableRecord as unknown as ExecutableEvidenceV1),
+      executable: executable(executableRecord as unknown as ExecutableEvidence),
       projection: projection(
-        projectionRecord as unknown as ImmutableProjectionV1,
+        projectionRecord as unknown as ImmutableProjection,
         registration.runtime,
       ),
-      routes: routes(routeRecord as unknown as RouteLabelsV1, registration.domain),
+      routes: routes(routeRecord as unknown as RouteLabels, registration.domain),
     };
     return registration.runtime === 'pi'
       ? {
@@ -404,22 +401,22 @@ export function parseRuntimeRegistrationMatrixV1(value: unknown): RuntimeRegistr
   return { ...base, matrixDigest: matrix.matrixDigest };
 }
 
-export interface RuntimeRegistrationObservationV1 {
+export interface RuntimeRegistrationObservation {
   readonly identity: RuntimeIdentity;
-  readonly executable: ExecutableEvidenceV1;
-  readonly projection: ImmutableProjectionV1;
+  readonly executable: ExecutableEvidence;
+  readonly projection: ImmutableProjection;
 }
-export interface RuntimeRegistrationVerificationV1 {
+export interface RuntimeRegistrationVerification {
   readonly schemaVersion: 1;
   readonly kind: 'runtime-registration-verification';
   readonly healthy: boolean;
   readonly issues: readonly string[];
 }
 export function verifyRuntimeRegistrationMatrix(
-  matrix: RuntimeRegistrationMatrixV1,
-  observations: readonly RuntimeRegistrationObservationV1[],
-): RuntimeRegistrationVerificationV1 {
-  const observed = new Map<RuntimeIdentity, RuntimeRegistrationObservationV1>();
+  matrix: RuntimeRegistrationMatrix,
+  observations: readonly RuntimeRegistrationObservation[],
+): RuntimeRegistrationVerification {
+  const observed = new Map<RuntimeIdentity, RuntimeRegistrationObservation>();
   const issues: string[] = [];
   for (const value of observations) {
     if (observed.has(value.identity)) {
@@ -458,7 +455,7 @@ export function verifyRuntimeRegistrationMatrix(
   };
 }
 
-export interface RuntimeRegistrationReleaseV1 {
+export interface RuntimeRegistrationRelease {
   readonly schemaVersion: 1;
   readonly kind: 'runtime-registration-release';
   readonly releaseKey: string;
@@ -467,11 +464,11 @@ export interface RuntimeRegistrationReleaseV1 {
   readonly bindingDigest: string;
 }
 function releaseBoundRuntimeMatrix(
-  releaseValue: ReleaseManifestV1,
-  matrixValue: RuntimeRegistrationMatrixV1,
-): { readonly release: ReleaseManifestV1; readonly matrix: RuntimeRegistrationMatrixV1 } {
-  const release = parseReleaseManifestV1(releaseValue),
-    matrix = parseRuntimeRegistrationMatrixV1(matrixValue),
+  releaseValue: ReleaseManifest,
+  matrixValue: RuntimeRegistrationMatrix,
+): { readonly release: ReleaseManifest; readonly matrix: RuntimeRegistrationMatrix } {
+  const release = parseReleaseManifest(releaseValue),
+    matrix = parseRuntimeRegistrationMatrix(matrixValue),
     expected = createPiNativePackageRegistration(release),
     piRegistrations = matrix.registrations.filter((registration) => registration.runtime === 'pi');
   if (
@@ -489,16 +486,16 @@ function releaseBoundRuntimeMatrix(
 }
 
 export function assertPiNativePackagesMatchRelease(
-  releaseValue: ReleaseManifestV1,
-  matrixValue: RuntimeRegistrationMatrixV1,
+  releaseValue: ReleaseManifest,
+  matrixValue: RuntimeRegistrationMatrix,
 ): void {
   releaseBoundRuntimeMatrix(releaseValue, matrixValue);
 }
 
 export function bindRuntimeMatrixToRelease(
-  releaseValue: ReleaseManifestV1,
-  matrixValue: RuntimeRegistrationMatrixV1,
-): RuntimeRegistrationReleaseV1 {
+  releaseValue: ReleaseManifest,
+  matrixValue: RuntimeRegistrationMatrix,
+): RuntimeRegistrationRelease {
   const { release, matrix } = releaseBoundRuntimeMatrix(releaseValue, matrixValue);
   const base = {
     schemaVersion: 1 as const,
@@ -509,7 +506,7 @@ export function bindRuntimeMatrixToRelease(
   };
   return { ...base, bindingDigest: installerDigest(base) };
 }
-export function parseRuntimeRegistrationReleaseV1(value: unknown): RuntimeRegistrationReleaseV1 {
+export function parseRuntimeRegistrationRelease(value: unknown): RuntimeRegistrationRelease {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     fail('INSTALL_REGISTRATION_BINDING_INVALID', 'Registration release binding must be an object.');
   }
@@ -535,7 +532,7 @@ export function parseRuntimeRegistrationReleaseV1(value: unknown): RuntimeRegist
   ) {
     fail('INSTALL_REGISTRATION_BINDING_INVALID', 'Registration release binding is invalid.');
   }
-  const parsed = record as unknown as RuntimeRegistrationReleaseV1;
+  const parsed = record as unknown as RuntimeRegistrationRelease;
   const base = {
     schemaVersion: parsed.schemaVersion,
     kind: parsed.kind,
@@ -549,38 +546,38 @@ export function parseRuntimeRegistrationReleaseV1(value: unknown): RuntimeRegist
   return { ...parsed };
 }
 
-export interface NativeRootProbeV1 {
+export interface NativeRootProbe {
   readonly identity: RuntimeIdentity;
   readonly runtime: RegisteredRuntime;
   readonly domain: AccountDomain;
   readonly nativeRootDigest: string;
   readonly status: 'available' | 'unavailable';
 }
-export interface NativeRootRouteVerificationV1 {
+export interface NativeRootRouteVerification {
   readonly identity: RuntimeIdentity;
   readonly healthy: boolean;
   readonly issues: readonly string[];
 }
-export interface NativeRootVerificationV1 {
+export interface NativeRootVerification {
   readonly schemaVersion: 1;
   readonly kind: 'native-root-verification';
   readonly scenario: 'clean' | 'existing';
   readonly healthy: boolean;
-  readonly routes: readonly NativeRootRouteVerificationV1[];
+  readonly routes: readonly NativeRootRouteVerification[];
   readonly issues: readonly string[];
 }
 export function verifyNativeRoots(
-  matrix: RuntimeRegistrationMatrixV1,
-  probes: readonly NativeRootProbeV1[],
-): NativeRootVerificationV1 {
-  const byIdentity = new Map<RuntimeIdentity, NativeRootProbeV1>();
+  matrix: RuntimeRegistrationMatrix,
+  probes: readonly NativeRootProbe[],
+): NativeRootVerification {
+  const byIdentity = new Map<RuntimeIdentity, NativeRootProbe>();
   for (const probe of probes) {
     if (byIdentity.has(probe.identity)) {
       fail('NATIVE_ROOT_PROBE_DUPLICATE', 'Native root probes must be unique.');
     }
     byIdentity.set(probe.identity, probe);
   }
-  const routes = matrix.registrations.map((registration): NativeRootRouteVerificationV1 => {
+  const routes = matrix.registrations.map((registration): NativeRootRouteVerification => {
     const probe = byIdentity.get(registration.identity);
     const issues: string[] = [];
     if (!probe) {
@@ -610,18 +607,18 @@ export function verifyNativeRoots(
   };
 }
 
-export interface StaticMcpRegistrationV1 {
+export interface StaticMcpRegistration {
   readonly schemaVersion: 1;
   readonly kind: 'static-mcp-registration';
   readonly label: string;
-  readonly executable: ExecutableEvidenceV1;
+  readonly executable: ExecutableEvidence;
   readonly argv: readonly string[];
 }
 export function registerStaticMcp(input: {
   readonly label: string;
-  readonly executable: ExecutableEvidenceV1;
+  readonly executable: ExecutableEvidence;
   readonly argv: readonly string[];
-}): StaticMcpRegistrationV1 {
+}): StaticMcpRegistration {
   if (!/^(personal|work):[a-z0-9][a-z0-9.-]{0,63}$/u.test(input.label)) {
     fail('MCP_LABEL_INVALID', 'MCP label must include its identity domain.');
   }
@@ -653,7 +650,7 @@ export function registerStaticMcp(input: {
     argv: [...input.argv],
   };
 }
-export function parseStaticMcpRegistrationV1(value: unknown): StaticMcpRegistrationV1 {
+export function parseStaticMcpRegistration(value: unknown): StaticMcpRegistration {
   const record = exactRegistrationRecord(value, [
     'schemaVersion',
     'kind',
@@ -676,7 +673,7 @@ export function parseStaticMcpRegistrationV1(value: unknown): StaticMcpRegistrat
   ]);
   return registerStaticMcp({
     label: record.label as string,
-    executable: executableRecord as unknown as ExecutableEvidenceV1,
+    executable: executableRecord as unknown as ExecutableEvidence,
     argv: record.argv as string[],
   });
 }
@@ -685,13 +682,13 @@ export interface PrivateLaunchFile {
   readonly content: string;
 }
 export interface PrivateRuntimeLaunch {
-  readonly executable: ExecutableEvidenceV1;
+  readonly executable: ExecutableEvidence;
   readonly argv: readonly string[];
   readonly environment: Readonly<Record<string, string>>;
   readonly privateFiles: readonly PrivateLaunchFile[];
 }
 export function materializePrivateRuntimeLaunch(input: {
-  readonly registration: RuntimeRegistrationV1;
+  readonly registration: RuntimeRegistration;
   readonly launchKey: string;
   readonly nativeRoot: string;
   readonly projectionRoot: string;

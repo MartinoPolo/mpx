@@ -10,7 +10,7 @@ metadata:
   mpx:
     schemaVersion: 1
     contentVersion: 1
-    skillPacks: [work]
+    skillPacks: [development]
     defaultExposure: name-only
     capabilities: [delegate, read, search, shell, write]
 ---

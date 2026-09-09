@@ -105,11 +105,20 @@ async function skillProjection(root: string): Promise<Record<string, string>> {
   }
   const manifestPath = path.join(root, 'active-content.json');
   const manifest = JSON.stringify({
-    schemaVersion: 1,
-    compilerVersion: '1.1.0',
+    schemaVersion: 2,
+    compilerVersion: '2.0.0',
     runtime: 'pi',
     profileSchemaVersion: 1,
-    binding: { projectId: null, repositoryId: 'fixture', contentScope: 'personal' },
+    binding: {
+      projectId: null,
+      repositoryId: 'fixture',
+      identity: 'personal',
+      selection: {
+        location: { name: 'personal', canonicalRoot: process.cwd() },
+        packs: ['personal'],
+        source: 'user-location',
+      },
+    },
     manifestKey: 'a'.repeat(64),
     manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
     skills,

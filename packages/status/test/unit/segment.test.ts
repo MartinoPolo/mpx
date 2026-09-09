@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatPortSegment,
   normalizePortSegment,
-  parseStatusSnapshotV1,
+  parseStatusSnapshot,
   renderClaudePortSegment,
   renderPiPortSegment,
 } from '../../src/index.js';
@@ -31,7 +31,7 @@ async function fixture(name: (typeof fixtureNames)[number]) {
 describe('normalized port segment', () => {
   it('exposes stable runtime-neutral data without mutating the validated snapshot', async () => {
     const { snapshot } = await fixture('external-conflict');
-    const validated = parseStatusSnapshotV1(snapshot);
+    const validated = parseStatusSnapshot(snapshot);
     const before = structuredClone(validated);
 
     const segment = normalizePortSegment(validated);
@@ -45,7 +45,7 @@ describe('normalized port segment', () => {
 
   it.each(fixtureNames)('formats the %s fixture from normalized data', async (name) => {
     const { snapshot, text } = await fixture(name);
-    expect(formatPortSegment(normalizePortSegment(parseStatusSnapshotV1(snapshot)))).toBe(text);
+    expect(formatPortSegment(normalizePortSegment(parseStatusSnapshot(snapshot)))).toBe(text);
   });
 });
 

@@ -16,10 +16,10 @@ metadata:
 Give a project one colour and one icon, then wire both into every surface that opens it. The project comes from the
 invocation input.
 
-This registers a project that already exists on disk. If it has no git repo yet, step 2 initializes one automatically —
-see that step for what it covers and where it still stops to ask.
+This registers a project that already exists on disk, whether or not it has a Git repository. Existing repositories
+are preserved; registration never initializes or publishes one.
 
-Skills referenced below (`init-github-repo`, `board-setup`) are read-and-follow, per the global "Cross-skill references"
+Skills referenced below (`board-setup`, `design-init`) are read-and-follow, per the global "Cross-skill references"
 rule in `instructions/AGENTS.md`.
 
 Resolve links and scripts relative to this loaded skill. For absolute reads, follow
@@ -38,22 +38,21 @@ Scripts live in `./scripts/`:
 
 1. Gate on the Raycast export
 2. Resolve the project
-3. Initialize the repo if needed
-4. Choose the colour
-5. Draw the icon
-6. Add the Windows Terminal profile
-7. Write the VS Code Peacock block
-8. Register dev-server ports
-9. Hand quicklinks to `raycast-config`
-10. Optionally register the project in the Obsidian task overview
-11. Offer the remaining setup skills
+3. Choose the colour
+4. Draw the icon
+5. Add the Windows Terminal profile
+6. Write the VS Code Peacock block
+7. Register dev-server ports
+8. Hand quicklinks to `raycast-config`
+9. Optionally register the project in the Obsidian task overview
+10. Offer the remaining setup skills
 
 ### Step 1: Gate on the Raycast export
 
 Before changing another surface, tell the user: **Raycast → `Ctrl+,` → Advanced → Export Settings & Data**, choose a
 passphrase of 8+ characters, and save to Desktop. Resolve the home directory from the environment. Find
 `Raycast-*.rayconfig` candidates under Desktop and Downloads, offer the newest with modified times, and also offer an
-explicit Raycast skip. Carry a current selected export to step 9; if it predates this session's work, request a fresh
+explicit Raycast skip. Carry a current selected export to step 8; if it predates this session's work, request a fresh
 export.
 
 ### Step 2: Resolve the project
@@ -70,24 +69,18 @@ node "./scripts/peacock.mjs" used
 ls "<project>/.vscode/settings.json"
 ```
 
-### Step 3: Initialize the repo if needed
-
-Check `git -C "<project>" rev-parse --git-dir`. When the project has no repository, read
-[REPOSITORY_INIT.md](REPOSITORY_INIT.md) and follow that branch. It invokes the personal `init-github-repo` skill, including GitHub publication and branch setup,
-and preserves its confirmation gates. When the check succeeds, preserve the existing repository and continue.
-
-### Step 4: Choose the colour
+### Step 3: Choose the colour
 
 One colour drives the Windows Terminal tab, the VS Code chrome and the icon plate, so the project reads the same in
 every window.
 
 Propose a colour that fits what the project _is_ — read its `README.md` for the domain rather than reaching for the next
-unused hue. Check it against both lists from step 1 and pick again when it is close enough to an existing one to be
+unused hue. Check it against both lists from step 2 and pick again when it is close enough to an existing one to be
 confused at a glance; neighbouring shades of the same hue are the common trap.
 
 Confirm the choice with `AskUserQuestion`, offering the suggestion plus two alternatives.
 
-### Step 5: Draw the icon
+### Step 4: Draw the icon
 
 Icons live beside the Windows Terminal settings — `node "./scripts/wt-profile.mjs" icons-dir` prints the folder. Render
 to the session scratchpad first, **show it to the user with `Read`**, and copy it into that folder only once they accept
@@ -104,7 +97,7 @@ When no character carries the meaning, write a motif file defining `draw_motif(d
 calls on a plate already filled, with `size` the supersampled canvas — and pass `--motif <file>`. Keep the shape
 readable at 16px: solid silhouettes, few parts, no thin outlines.
 
-### Step 6: Add the Windows Terminal profile
+### Step 5: Add the Windows Terminal profile
 
 ```bash
 node "./scripts/wt-profile.mjs" add \
@@ -126,7 +119,7 @@ every GUID comment-free JSON (Windows Terminal rejects trailing commas), and rem
 bindings target dropdown _positions_ — inserting into a group above the work section shifts every number below it, so
 tell the user when the numbering moves.
 
-### Step 7: Write the VS Code Peacock colour
+### Step 6: Write the VS Code Peacock colour
 
 ```bash
 node "./scripts/peacock.mjs" write '<project path>' '#RRGGBB'
@@ -137,44 +130,44 @@ tab, which is what makes the two windows match. One property is the single sourc
 activity bar, status bar, title bar and badge colours itself the first time VS Code opens the folder. Any stale derived
 keys left in `workbench.colorCustomizations` by an earlier colour are cleared in the same write.
 
-### Step 8: Optionally register dev-server ports
+### Step 7: Optionally register dev-server ports
 
 When the project serves on localhost, read ports from its own scripts, Vite configuration, or compose files; do not
 assume framework defaults. First resolve whether the active runtime exposes a **documented writable status-line project
-registry capability**. Use its resolved runtime-owned path and update interface only when that capability exists.
-`content/plugins/mp/statusline-projects.json` is not a guaranteed integration point and generated content must never be
-mutated. If no writable capability is available, provide the project key and discovered ports as a manual handoff and
-report the surface as unsupported; skip projects with no server and report why.
+registry capability**. If present, use its runtime-owned path; no repository-local generated-content path should be
+inferred or mutated. If no writable capability is available, provide the project key and discovered ports as a manual
+handoff and report the surface as unsupported; skip projects with no server and report why.
 
-### Step 9: Hand quicklinks to `raycast-config`
+### Step 8: Hand quicklinks to `raycast-config`
 
 Propose a quicklink family, then resolve and read `../raycast-config/SKILL.md` and its referenced material. Carry out
 that skill in this conversation using the export (or skip) from step 1. It owns the export format, identifiers, aliases,
 and import wording. Inputs are: folder = project path; code = `file:///<project path>` with VS Code `openWith`; term =
 `wt -p "<profile name>"`; and remote links are resolved independently: **repo** and **reviews/PRs** come from the
 selected repository provider's native guide, while **issues** comes from the selected Issue provider's native guide.
-Include only links each provider actually exposes when the corresponding repository or project exists. If a provider
-cannot return a browser URL, omit that quicklink and record a manual handoff; do not derive Issue URLs from repository
-URLs, conflate PR/MR and Issue routes, or invent provider commands. Batch multiple projects before the import
+Include only links each provider actually exposes when the corresponding repository or project exists. When the folder
+has no repository, omit repo and reviews/PR quicklinks; do not initialize or publish a repository. If a provider cannot
+return a browser URL, omit that quicklink and record a manual handoff; do not derive Issue URLs from repository URLs,
+conflate PR/MR and Issue routes, or invent provider commands. Batch multiple projects before the import
 round-trip when appropriate.
 
-### Step 10: Register the project in the Obsidian task overview
+### Step 9: Register the project in the Obsidian task overview
 
 Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user uses, read
 [OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch. Do not infer or reconstruct the vault root
 from a home or sync-directory path. When the variable is unavailable or the user keeps no such vault, skip this surface
 and record why.
 
-### Step 11: Offer the remaining setup skills
+### Step 10: Offer the remaining setup skills
 
-`init-github-repo` is no longer in this list — step 3 already ran it if the project needed it. Name the ones that still
-apply and let the user pick — neither runs unless chosen:
+Name the remaining setup skills that apply and let the user pick — neither runs unless chosen:
 
-- [`board-setup`](../board-setup/SKILL.md) — Obsidian board and its `BOARD.md` symlink
-- [`design-init`](../design-init/SKILL.md) — palette, fonts, `designs/tokens.css`
+- `/mpx:board-setup` — Obsidian board and its `BOARD.md` symlink
+- `/mpx:design-init` — palette, fonts, `designs/tokens.css`
 
-If the user picks one, read its `SKILL.md` and carry out its steps yourself in this conversation — this applies to
-`design-init` too for consistency even though its invocation isn't blocked.
+If the user picks one, invoke its public command and carry out its steps in this conversation. If the selected command
+is unavailable, ask the user to include the `development` pack; never load an excluded `SKILL.md` directly, silently
+skip a selected follow-up, or broaden the selected packs automatically.
 
 ## Report
 

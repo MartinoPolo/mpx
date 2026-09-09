@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "project": { "id": "phase-h/database" },
+  "project": { "id": "service-manifests/database" },
   "repository": { "provider": "generic", "remote": "origin" },
   "development": {
     "services": {

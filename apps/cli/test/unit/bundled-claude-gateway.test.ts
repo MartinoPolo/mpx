@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifest } from '@mpx/runtime-contracts';
 
 const launchKey = 'c'.repeat(64);
 const temporaryRoots: string[] = [];
@@ -70,11 +70,19 @@ describe('bundled Claude gateway', () => {
         mcpServers: { fixture: { type: 'stdio', command: process.execPath, args: [] } },
       }),
     );
-    const capability = createRuntimeCapabilityManifestV1({
+    const capability = createRuntimeCapabilityManifest({
       runtime: 'claude',
       launchKey,
       identity: { name: 'personal', domain: 'personal', nativeRuntimeRootDigest: 'd'.repeat(64) },
-      binding: { projectId: 'app', repositoryId: 'repo', contentScope: 'personal' },
+      binding: {
+        projectId: 'app',
+        repositoryId: 'repo',
+        selection: {
+          location: { name: 'personal', canonicalRoot: 'C:/personal' },
+          packs: ['personal'],
+          source: 'project',
+        },
+      },
       executor: 'host',
       tools: [
         {

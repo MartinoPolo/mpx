@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { FakeBinaryFileSystem, FakeJsonResourceStore } from '@mpx/windows';
-import type { InstallIntentV1, ReleaseManifestV1 } from '../../src/immutable-core.js';
+import type { InstallIntent, ReleaseManifest } from '../../src/immutable-core.js';
 import { ProductionInstallerOperationAdapter } from '../../src/production-operation.js';
 
 it('excludes the active-release selector from the reversible operation set', async () => {
@@ -17,7 +17,7 @@ it('excludes the active-release selector from the reversible operation set', asy
     'me',
     { files, resources: new FakeJsonResourceStore() },
   );
-  const intent: InstallIntentV1 = {
+  const intent: InstallIntent = {
     schemaVersion: 1,
     kind: 'install-intent',
     releaseKey,
@@ -30,7 +30,7 @@ it('excludes the active-release selector from the reversible operation set', asy
     releaseKey,
     convergenceHash: releaseKey,
     files: [{ path: 'bin/mpx.mjs', bytes: 3, sha256: 'b'.repeat(64) }],
-  } as ReleaseManifestV1;
+  } as ReleaseManifest;
   const operations = await adapter.operations(intent, manifest);
   expect(operations.automatic.map((item) => item.id)).not.toContain('06-active-release');
   expect(await files.read('C:\\Local\\mpx\\active-release')).toBeUndefined();

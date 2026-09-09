@@ -6,11 +6,11 @@ export {
   readActiveRelease,
 } from './immutable-core.js';
 export type {
-  ReleaseFileV1,
-  ReleaseManifestV1,
-  InstallIntentV1,
-  InstallPlanV1,
-  InstallVerificationV1,
+  ReleaseFile,
+  ReleaseManifest,
+  InstallIntent,
+  InstallPlan,
+  InstallVerification,
 } from './immutable-core.js';
 export { NodeTransactionStore } from './transaction.js';
 export type { TransactionStore } from './transaction.js';

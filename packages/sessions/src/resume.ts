@@ -1,31 +1,31 @@
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { NativeSessionRefV1, RuntimeName } from '@mpx/runtime-contracts';
+import type { NativeSessionRef, RuntimeName } from '@mpx/runtime-contracts';
 import { SessionStore } from './store.js';
 import {
   SessionError,
-  parseSessionRecordV1,
+  parseSessionRecord,
   stableDigest,
-  type IdentityV1,
-  type LaunchSnapshotV1,
-  type SessionRecordV1,
+  type Identity,
+  type LaunchSnapshot,
+  type SessionRecord,
 } from './schemas.js';
 
 export interface ConfiguredNativeRoot {
   readonly root: string;
   readonly canonicalRootDigest: string;
-  readonly identity: IdentityV1;
+  readonly identity: Identity;
   readonly runtime: RuntimeName;
 }
 export interface ResumeDependencies {
   resolveConfiguredRoot(nativeBindingRef: string): Promise<ConfiguredNativeRoot>;
   verifyNativeTarget(
     root: string,
-    ref: NativeSessionRefV1,
+    ref: NativeSessionRef,
     runtimeQualifiedId: string,
   ): Promise<{ valid: boolean; activity: 'active' | 'inactive' | 'unavailable' }>;
 }
-export interface NativeVerifiedResumeSeedV1 {
+export interface NativeVerifiedResumeSeed {
   readonly schemaVersion: 1;
   /** Resume is always a visible relaunch with fresh approval/audit evidence. */
   readonly newLaunchRequired: true;
@@ -33,32 +33,32 @@ export interface NativeVerifiedResumeSeedV1 {
   readonly recordId: string;
   readonly runtimeQualifiedId: string;
   readonly runtime: RuntimeName;
-  readonly identity: IdentityV1;
+  readonly identity: Identity;
   readonly nativeBindingRef: string;
-  readonly nativeSessionRef: NativeSessionRefV1;
+  readonly nativeSessionRef: NativeSessionRef;
   readonly nativeVerificationDigest: string;
   readonly cwd: string;
   readonly projectId: string | null;
   readonly repositoryId: string | null;
-  readonly launch: LaunchSnapshotV1;
+  readonly launch: LaunchSnapshot;
 }
 
-export interface HistoricalResumePlanV1 extends NativeVerifiedResumeSeedV1 {
+export interface HistoricalResumePlan extends NativeVerifiedResumeSeed {
   readonly confirmationDigest: string;
 }
 
-export interface ResumeApprovalV1 {
+export interface ResumeApproval {
   readonly schemaVersion: 1;
   readonly selectedConfigDigest: string;
   readonly recordedLaunchDigest: string;
   readonly resurrection: 'unchanged' | 'confirmation-required';
 }
 
-export interface ResumePlanV1 extends HistoricalResumePlanV1 {
-  readonly approval: ResumeApprovalV1;
+export interface ResumePlan extends HistoricalResumePlan {
+  readonly approval: ResumeApproval;
 }
 
-async function verifyPiHeader(root: string, record: SessionRecordV1): Promise<string> {
+async function verifyPiHeader(root: string, record: SessionRecord): Promise<string> {
   const invalid = () =>
     new SessionError(
       'SESSION_RESUME_NATIVE_TARGET_INVALID',
@@ -125,10 +125,10 @@ async function verifyPiHeader(root: string, record: SessionRecordV1): Promise<st
 
 export async function verifyNativeResumeSeed(
   store: SessionStore,
-  input: SessionRecordV1,
+  input: SessionRecord,
   dependencies: ResumeDependencies,
-): Promise<NativeVerifiedResumeSeedV1> {
-  const record = parseSessionRecordV1(input);
+): Promise<NativeVerifiedResumeSeed> {
+  const record = parseSessionRecord(input);
   if (record.launch === null) {
     throw new SessionError(
       'SESSION_RESUME_LAUNCH_UNBOUND',
@@ -213,8 +213,8 @@ export async function verifyNativeResumeSeed(
 
 async function persistResumeVerification(
   store: SessionStore,
-  record: SessionRecordV1,
-  state: SessionRecordV1['resume']['state'],
+  record: SessionRecord,
+  state: SessionRecord['resume']['state'],
   diagnostic: string | null,
   lastPlanDigest: string | null,
 ): Promise<void> {
@@ -224,7 +224,7 @@ async function persistResumeVerification(
       ...registry,
       records: registry.records.map((candidate) =>
         candidate.recordId === record.recordId
-          ? parseSessionRecordV1({
+          ? parseSessionRecord({
               ...candidate,
               resume: {
                 state,
@@ -243,11 +243,11 @@ async function persistResumeVerification(
 
 export async function planResume(
   store: SessionStore,
-  input: SessionRecordV1,
+  input: SessionRecord,
   dependencies: ResumeDependencies,
-): Promise<HistoricalResumePlanV1> {
-  const record = parseSessionRecordV1(input);
-  let plan: HistoricalResumePlanV1;
+): Promise<HistoricalResumePlan> {
+  const record = parseSessionRecord(input);
+  let plan: HistoricalResumePlan;
   try {
     const seed = await verifyNativeResumeSeed(store, record, dependencies);
     plan = { ...seed, confirmationDigest: stableDigest(seed) };
@@ -267,7 +267,7 @@ export async function planResume(
 }
 
 export function verifyResumeConfirmation(
-  plan: HistoricalResumePlanV1,
+  plan: HistoricalResumePlan,
   confirmationDigest: string,
 ): void {
   const { confirmationDigest: ignored, ...unsigned } = plan;

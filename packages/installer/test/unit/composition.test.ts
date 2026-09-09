@@ -6,17 +6,17 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import { FakeJsonResourceStore } from '@mpx/windows';
 import {
-  parseInstallIntentV1,
-  parseInstallPlanV1,
+  parseInstallIntent,
+  parseInstallPlan,
   installerDigest,
-  type InstallIntentV1,
-  type InstallOperationV1,
-  type OwnershipReceiptV1,
-  type ReleaseManifestV1,
+  type InstallIntent,
+  type InstallOperation,
+  type OwnershipReceipt,
+  type ReleaseManifest,
 } from '../../src/immutable-core.js';
 import {
   createRuntimeRegistrationMatrix,
-  type ProjectionFileV1,
+  type ProjectionFile,
   type RuntimeRegistrationInput,
 } from '../../src/runtime-registration.js';
 import {
@@ -36,7 +36,7 @@ import {
 } from '../../src/transaction.js';
 
 const sha = (value: string) => installerDigest(value);
-function files(runtime: 'claude' | 'pi'): ProjectionFileV1[] {
+function files(runtime: 'claude' | 'pi'): ProjectionFile[] {
   const roles =
     runtime === 'claude'
       ? ([
@@ -77,24 +77,26 @@ function required<T>(value: T | null | undefined, label: string): T {
 
 function piUserConfig(personalRoot: string, workRoot: string): string {
   return JSON.stringify({
+    schemaVersion: 2,
     identities: {
       personal: {
         domain: 'personal',
         runtimeRoots: { claude: 'C:\\claude-personal', pi: personalRoot },
         gitAuthorRoute: 'personal-git',
+        allowedSkillPacks: ['development', 'personal'],
       },
       work: {
         domain: 'work',
         runtimeRoots: { claude: 'C:\\claude-work', pi: workRoot },
         gitAuthorRoute: 'work-git',
+        allowedSkillPacks: ['development'],
       },
     },
     domains: { personal: ['C:\\personal'], work: ['C:\\work'] },
-    contentScopes: {},
+    locations: {},
     modes: {},
-    skillPolicies: {},
     presets: {},
-    launchDefaults: { scopes: {}, projects: {} },
+    launchDefaults: { locations: {}, projects: {} },
     networkPolicies: {},
     executors: { host: {} },
   });
@@ -235,7 +237,7 @@ async function piRestartRollbackFixture() {
           writeFile(path.join(packageRoot, name), body),
         ),
       );
-      const intent = parseInstallIntentV1({
+      const intent = parseInstallIntent({
           schemaVersion: 1,
           kind: 'install-intent',
           releaseKey,
@@ -254,7 +256,7 @@ async function piRestartRollbackFixture() {
           releaseKey,
           convergenceHash: releaseKey,
           files: manifestFiles,
-        } as ReleaseManifestV1;
+        } as ReleaseManifest;
       return { intent, manifest, packageRoot };
     },
     settings = async () =>
@@ -266,8 +268,8 @@ async function piRestartRollbackFixture() {
       writeFile(path.join(personalRoot, 'settings.json'), JSON.stringify(value)),
     operation = async (
       owner: ProductionInstallerOperationAdapter,
-      value: { intent: InstallIntentV1; manifest: ReleaseManifestV1 },
-      priorReceipt?: OwnershipReceiptV1,
+      value: { intent: InstallIntent; manifest: ReleaseManifest },
+      priorReceipt?: OwnershipReceipt,
     ) =>
       required(
         (await owner.operations(value.intent, value.manifest, false, priorReceipt)).automatic.find(
@@ -277,9 +279,9 @@ async function piRestartRollbackFixture() {
       ),
     receipt = async (
       owner: ProductionInstallerOperationAdapter,
-      value: { intent: InstallIntentV1; manifest: ReleaseManifestV1 },
-      ownedOperation: InstallOperationV1,
-    ): Promise<OwnershipReceiptV1> => {
+      value: { intent: InstallIntent; manifest: ReleaseManifest },
+      ownedOperation: InstallOperation,
+    ): Promise<OwnershipReceipt> => {
       const spec = await owner.receiptLocator(ownedOperation);
       return {
         schemaVersion: 2,
@@ -315,9 +317,9 @@ async function piRestartRollbackFixture() {
 async function leaveInterruptedApply(
   adapter: ProductionInstallerOperationAdapter,
   store: TransactionStore,
-  release: { intent: InstallIntentV1; manifest: ReleaseManifestV1 },
-  operation: InstallOperationV1,
-  priorReceipt?: OwnershipReceiptV1,
+  release: { intent: InstallIntent; manifest: ReleaseManifest },
+  operation: InstallOperation,
+  priorReceipt?: OwnershipReceipt,
 ) {
   const service = new ImmutableInstallerService({
       adapters: [adapter],
@@ -351,7 +353,7 @@ async function leaveInterruptedApply(
         }
       : undefined,
     plan = classifiedPlan
-      ? parseInstallPlanV1({
+      ? parseInstallPlan({
           ...classifiedPlan,
           confirmationDigest: installerDigest(classifiedPlan),
         })
@@ -550,7 +552,7 @@ it('registers the native Pi package without exposing or overwriting private root
         },
       },
     );
-    const intent = parseInstallIntentV1({
+    const intent = parseInstallIntent({
         schemaVersion: 1,
         kind: 'install-intent',
         releaseKey,
@@ -569,7 +571,7 @@ it('registers the native Pi package without exposing or overwriting private root
         releaseKey,
         convergenceHash: releaseKey,
         files: manifestFiles,
-      } as ReleaseManifestV1,
+      } as ReleaseManifest,
       operations = await adapter.operations(intent, manifest),
       operation = operations.automatic.find((item) => item.id === '50-pi-settings-personal')!;
     expect(operation.target).toBe('pi:personal:settings-packages');

@@ -69,7 +69,7 @@ describe('native versus managed project skills', () => {
     await mkdir(path.join(canonicalRoot, 'review'), { recursive: true });
     await writeFile(
       path.join(canonicalRoot, 'review', 'SKILL.md'),
-      '---\nname: review\ndescription: Canonical\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
+      '---\nname: review\ndescription: Canonical\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\n',
     );
     const directory = await skill(root, 'review', 'name: review\ndescription: Native review');
     const prefixed = await skill(root, 'mpx-local', 'name: mpx-local\ndescription: Native prefix');
@@ -77,6 +77,48 @@ describe('native versus managed project skills', () => {
     expect(result.skills).toEqual([]);
     expect(result.nativeSkillDirectories).toEqual([prefixed, directory]);
     expect(result.diagnostics).toEqual([]);
+  });
+
+  it('defaults omitted managed project exposure to full without disabling model invocation', async () => {
+    const root = await project();
+    await skill(
+      root,
+      'managed-skill',
+      'name: managed-skill\ndescription: Managed guidance\nmetadata:\n  mpx:',
+    );
+    const result = await inventoryProjectSkills(root);
+    expect(result).toEqual({
+      skills: [
+        expect.objectContaining({
+          identity: 'managed-skill',
+          projectExposure: 'full',
+          disableModelInvocation: false,
+        }),
+      ],
+      nativeSkillDirectories: [],
+      diagnostics: [],
+    });
+  });
+
+  it('rejects disabled model invocation when omitted exposure defaults to full', async () => {
+    const root = await project();
+    await skill(
+      root,
+      'managed-skill',
+      'name: managed-skill\ndescription: Managed guidance\ndisable-model-invocation: true\nmetadata:\n  mpx:',
+    );
+    const result = await inventoryProjectSkills(root);
+    expect(result).toEqual({
+      skills: [],
+      nativeSkillDirectories: [],
+      diagnostics: [
+        expect.objectContaining({
+          code: 'PROJECT_SKILL_INVALID',
+          message:
+            "managed project exposure mismatch: 'full' requires disable-model-invocation: false",
+        }),
+      ],
+    });
   });
 
   it.each(['full', 'explicit-only'] as const)(
@@ -105,7 +147,8 @@ describe('native versus managed project skills', () => {
 
   it.each([
     'metadata:\n  mpx: null',
-    'metadata:\n  mpx:',
+    'metadata:\n  mpx: [full]',
+    'metadata:\n  mpx:\n    projectExposure: full\n    unsupported: value',
     'metadata:\n  "mpx": null',
     '"metadata":\n  mpx:\n    projectExposure: full',
     '"metad\\u0061ta":\n  "m\\u0070x": null',

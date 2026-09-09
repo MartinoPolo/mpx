@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { link, lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { sha256Canonical } from '@mpx/core';
-import { parseLaunchDescriptorV2 } from '@mpx/launch';
+import { parseLaunchDescriptor } from '@mpx/launch';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
-  parseRuntimeSkillArtifactReferenceV4,
+  parseRuntimeSkillArtifactReference,
   validateRuntimeCapabilityBinding,
-  type RuntimeCapabilityManifestV1,
-  type RuntimeSkillArtifactReferenceV4,
+  type RuntimeCapabilityManifest,
+  type RuntimeSkillArtifactReference,
 } from '@mpx/runtime-contracts';
 import {
   ExecutionError,
@@ -25,37 +25,9 @@ export {
   type ProcessResult,
 } from './execution-process.js';
 
-export interface VerificationEvidence {
-  readonly status: 'verified' | 'unverified' | 'unavailable';
-  readonly verifier: string;
-  readonly evidenceDigest: string;
-}
-export function sameVerificationEvidence(left: unknown, right: unknown): boolean {
-  const valid = (value: unknown): value is VerificationEvidence => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      return false;
-    }
-    const record = value as Record<string, unknown>;
-    return (
-      Object.keys(record).sort().join(',') === 'evidenceDigest,status,verifier' &&
-      ['verified', 'unverified', 'unavailable'].includes(record.status as string) &&
-      typeof record.verifier === 'string' &&
-      /^[a-z0-9][a-z0-9._-]*$/u.test(record.verifier) &&
-      typeof record.evidenceDigest === 'string' &&
-      /^[a-f0-9]{64}$/u.test(record.evidenceDigest)
-    );
-  };
-  return (
-    valid(left) &&
-    valid(right) &&
-    left.status === right.status &&
-    left.verifier === right.verifier &&
-    left.evidenceDigest === right.evidenceDigest
-  );
-}
 export interface ExecutorAdapter {
   readonly name: 'docker' | 'host';
-  verify(): Promise<VerificationEvidence>;
+  assertReady(): Promise<void>;
   execute(request: ProcessRequest): Promise<ProcessResult>;
 }
 export class ExecutorRegistry {
@@ -101,7 +73,7 @@ export interface RuntimeAdapter {
   prepare(input: {
     descriptor: LaunchDescriptor;
     routes: Readonly<Record<string, string>>;
-    capability?: RuntimeCapabilityManifestV1;
+    capability?: RuntimeCapabilityManifest;
     statusEnvelope?: unknown;
     launchBinding?: RuntimeLaunchBinding;
   }): Promise<RuntimePreparation>;
@@ -196,8 +168,8 @@ export interface PrivateRuntimeLaunch {
 }
 export interface ExecuteInput {
   readonly descriptor: LaunchDescriptor;
-  readonly artifact: RuntimeSkillArtifactReferenceV4;
-  readonly capability?: RuntimeCapabilityManifestV1;
+  readonly artifact: RuntimeSkillArtifactReference;
+  readonly capability?: RuntimeCapabilityManifest;
   readonly runtimeStatusEnvelope?: unknown;
   readonly runtimeLaunchBinding?: RuntimeLaunchBinding;
   readonly cwd: string;
@@ -225,7 +197,7 @@ export interface LaunchAuditStartRecord {
   readonly identity: string;
   readonly identityDomain: string;
   readonly mode: string;
-  readonly contentScope: string;
+  readonly selectionSource: LaunchDescriptor['selection']['source'];
   readonly projectId: string | null;
   readonly repositoryId: string;
   readonly manifestKey: string;
@@ -347,7 +319,6 @@ export class ExecutionService {
       privateRouteConsumption?: 'required' | 'none';
       audit?: LaunchAuditStore;
       approvals?: HostApprovalStore;
-      production?: boolean;
     },
   ) {
     this.#approvals = dependencies.approvals ?? new HostApprovalStore();
@@ -356,7 +327,7 @@ export class ExecutionService {
     input: Omit<ExecuteInput, 'artifact' | 'hostApproval' | 'tty' | 'approvalNonce'>,
     nonce: string,
   ): HostApprovalRequest {
-    const descriptor = parseLaunchDescriptorV2(input.descriptor);
+    const descriptor = parseLaunchDescriptor(input.descriptor);
     const reason = sanitizeHostReason(descriptor.elevationAudit.reason ?? '');
     return Object.freeze({
       requestDigest: sha256Canonical({
@@ -369,7 +340,7 @@ export class ExecutionService {
     });
   }
   async execute(input: ExecuteInput): Promise<ProcessResult> {
-    const descriptor = parseLaunchDescriptorV2(input.descriptor);
+    const descriptor = parseLaunchDescriptor(input.descriptor);
     if (input.approveHost && descriptor.executor.name !== 'host') {
       fail(
         'HOST_APPROVAL_SCOPE_INVALID',
@@ -386,7 +357,7 @@ export class ExecutionService {
             ...descriptor.identity,
             nativeRuntimeRootDigest: descriptor.nativeRuntimeRootDigest,
           },
-          binding: { ...descriptor.binding, contentScope: descriptor.contentScope.name },
+          binding: { ...descriptor.binding, selection: descriptor.selection },
           executor: descriptor.executor.name,
         });
       } catch {
@@ -396,13 +367,13 @@ export class ExecutionService {
         );
       }
     }
-    let artifact: RuntimeSkillArtifactReferenceV4;
+    let artifact: RuntimeSkillArtifactReference;
     try {
-      artifact = parseRuntimeSkillArtifactReferenceV4(input.artifact);
+      artifact = parseRuntimeSkillArtifactReference(input.artifact);
     } catch {
       return fail(
         'RUNTIME_ARTIFACT_BINDING_INVALID',
-        'Execution requires an exact valid v4 runtime artifact reference.',
+        'Execution requires an exact valid v5 runtime artifact reference.',
       );
     }
     if (artifact.runtime !== descriptor.runtime) {
@@ -420,24 +391,7 @@ export class ExecutionService {
     }
     const privateEnvironment = validatePrivateLaunch(descriptor, input.privateLaunch);
     const executor = this.dependencies.executors.get(descriptor.executor.name);
-    const verification = await executor.verify();
-    if (verification.status === 'unavailable') {
-      fail('EXECUTOR_UNAVAILABLE', `Executor '${executor.name}' is unavailable.`, {
-        executor: executor.name,
-      });
-    }
-    if (verification.status !== 'verified' && this.dependencies.production !== false) {
-      fail('EXECUTOR_GATE_UNVERIFIED', `Executor '${executor.name}' has not been verified.`, {
-        executor: executor.name,
-      });
-    }
-    if (!sameVerificationEvidence(verification, descriptor.executorVerification)) {
-      fail(
-        'LAUNCH_RESTART_REQUIRED',
-        'Executor verification evidence does not match the launch descriptor.',
-        { restartRequired: true },
-      );
-    }
+    await executor.assertReady();
     if (descriptor.runtime === 'pi' && descriptor.routes.mcp.allow.length > 0) {
       fail(
         'RUNTIME_CAPABILITY_UNSUPPORTED',
@@ -525,14 +479,7 @@ export class ExecutionService {
           maxOutputBytes: 65_536,
           ...(input.signal ? { signal: input.signal } : {}),
         };
-        const executionEvidence = await executor.verify();
-        if (!sameVerificationEvidence(executionEvidence, descriptor.executorVerification)) {
-          fail(
-            'LAUNCH_RESTART_REQUIRED',
-            'Executor verification evidence changed before invocation.',
-            { restartRequired: true },
-          );
-        }
+        await executor.assertReady();
         result = await executor.execute(request);
       } finally {
         await prepared.shutdown?.();
@@ -569,7 +516,7 @@ export class ExecutionService {
 
 function launchAuditStart(
   descriptor: LaunchDescriptor,
-  artifact: RuntimeSkillArtifactReferenceV4,
+  artifact: RuntimeSkillArtifactReference,
 ): LaunchAuditStartRecord {
   const reason =
     descriptor.elevationAudit.reason === null
@@ -584,7 +531,7 @@ function launchAuditStart(
     identity: descriptor.identity.name,
     identityDomain: descriptor.identity.domain,
     mode: descriptor.mode,
-    contentScope: descriptor.contentScope.name,
+    selectionSource: descriptor.selection.source,
     projectId: descriptor.binding.projectId,
     repositoryId: descriptor.binding.repositoryId,
     manifestKey: artifact.manifestKey,
@@ -1008,7 +955,6 @@ const TRUSTED_LAUNCH_ENV_ALLOW = new Set([
   'MPX_COMPILED_AGENTS_DIR',
   'MPX_IDENTITY',
   'MPX_MODE',
-  'MPX_SKILL_POLICY',
   'MPX_REPOSITORY_PROVIDER',
   'MPX_ISSUES_PROVIDER',
   'MPX_SESSION_LIFECYCLE_BINDING_ID',
@@ -1055,7 +1001,7 @@ export function createLaunchExecutionAudit(
   descriptorInput: LaunchDescriptor,
   outcome: { started: boolean; errorCode?: string },
 ): Readonly<LaunchExecutionAudit> {
-  const descriptor = parseLaunchDescriptorV2(descriptorInput);
+  const descriptor = parseLaunchDescriptor(descriptorInput);
   return Object.freeze({
     schemaVersion: 1,
     launchKey: descriptor.launchKey,
@@ -1072,7 +1018,7 @@ export function createLaunchExecutionAudit(
   });
 }
 export function compactLaunchBanner(descriptorInput: LaunchDescriptor): string {
-  const descriptor = parseLaunchDescriptorV2(descriptorInput);
+  const descriptor = parseLaunchDescriptor(descriptorInput);
   return `[mpx ${descriptor.runtime}/${descriptor.executor.name} ${descriptor.launchKey.slice(0, 12)}${descriptor.elevationAudit.elevated ? ' ELEVATED' : ''}]`;
 }
 

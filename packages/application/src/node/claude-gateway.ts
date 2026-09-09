@@ -11,15 +11,15 @@ import {
   type McpLaunchDescriptor,
 } from '@mpx/runtime-tools';
 import {
-  parseRuntimeCapabilityManifestV1,
+  parseRuntimeCapabilityManifest,
   type JsonData,
-  type RuntimeCapabilityManifestV1,
+  type RuntimeCapabilityManifest,
 } from '@mpx/runtime-contracts';
 import type { RuntimeLaunchBinding } from '@mpx/executors';
 
 export interface ClaudeGatewayMaterializationInput {
   readonly stateRoot: string;
-  readonly capability: RuntimeCapabilityManifestV1;
+  readonly capability: RuntimeCapabilityManifest;
   readonly launchBinding: RuntimeLaunchBinding;
   readonly routes: Readonly<Record<string, string>>;
 }
@@ -29,7 +29,7 @@ export interface ClaudeGatewayMaterialization {
 }
 interface GatewayState {
   schemaVersion: 1;
-  capability: RuntimeCapabilityManifestV1;
+  capability: RuntimeCapabilityManifest;
   launchBinding: RuntimeLaunchBinding;
   mcpRoutes: Record<string, McpLaunchDescriptor>;
 }
@@ -91,7 +91,7 @@ async function routeDescriptor(file: string, label: string): Promise<McpLaunchDe
 export async function materializeClaudeGateway(
   input: ClaudeGatewayMaterializationInput,
 ): Promise<ClaudeGatewayMaterialization> {
-  const capability = parseRuntimeCapabilityManifestV1(input.capability);
+  const capability = parseRuntimeCapabilityManifest(input.capability);
   if (capability.runtime !== 'claude' || capability.launchKey !== input.launchBinding.launchKey) {
     throw new Error('GATEWAY_BINDING_INVALID');
   }
@@ -255,7 +255,7 @@ async function serve(statePath: string): Promise<void> {
     throw new Error('GATEWAY_STATE_INVALID');
   }
   const state = JSON.parse(await readFile(statePath, 'utf8')) as GatewayState,
-    capability = parseRuntimeCapabilityManifestV1(state.capability);
+    capability = parseRuntimeCapabilityManifest(state.capability);
   if (state.schemaVersion !== 1 || capability.launchKey !== state.launchBinding.launchKey) {
     throw new Error('GATEWAY_STATE_INVALID');
   }

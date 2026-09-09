@@ -1,21 +1,21 @@
 import type { RuntimeName } from '@mpx/runtime-contracts';
 import {
   SessionError,
-  type IdentityV1,
+  type Identity,
   type SessionLiveness,
-  type SessionRecordV1,
+  type SessionRecord,
 } from './schemas.js';
 
-export interface SessionResurrectionRouteV1 {
+export interface SessionResurrectionRoute {
   readonly kind: 'mpx-session-resume';
   readonly executable: 'mpx';
   readonly argv: readonly ['session', 'resume', string, '--approve-resurrection'];
 }
 
-export interface SessionResurrectionRecordV1 {
+export interface SessionResurrectionRecord {
   readonly id: string;
   readonly runtime: RuntimeName;
-  readonly identity: IdentityV1;
+  readonly identity: Identity;
   readonly title: string | null;
   readonly hostCwd: string;
   readonly executor: 'host' | 'docker';
@@ -23,13 +23,13 @@ export interface SessionResurrectionRecordV1 {
   readonly sandboxCwd: string | null;
   readonly nativePathTranslation: null;
   readonly liveness: SessionLiveness;
-  readonly route: SessionResurrectionRouteV1;
+  readonly route: SessionResurrectionRoute;
 }
 
-export interface SessionResurrectionExportV1 {
+export interface SessionResurrectionExport {
   readonly schemaVersion: 1;
   readonly kind: 'session-resurrection-export';
-  readonly records: readonly SessionResurrectionRecordV1[];
+  readonly records: readonly SessionResurrectionRecord[];
 }
 
 const control = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -75,7 +75,7 @@ function nullableText(value: unknown, label: string): string | null {
   return value === null ? null : safeText(value, label);
 }
 
-function parseRecord(value: unknown, index: number): SessionResurrectionRecordV1 {
+function parseRecord(value: unknown, index: number): SessionResurrectionRecord {
   const label = `records[${index}]`;
   const item = exactObject(
     value,
@@ -153,7 +153,7 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecordV1
   };
 }
 
-export function parseSessionResurrectionExportV1(value: unknown): SessionResurrectionExportV1 {
+export function parseSessionResurrectionExport(value: unknown): SessionResurrectionExport {
   const item = exactObject(value, ['schemaVersion', 'kind', 'records'], 'resurrection export');
   if (item.schemaVersion !== 1) {
     fail('SESSION_SCHEMA_VERSION', 'unsupported session resurrection export version');
@@ -172,9 +172,9 @@ export function parseSessionResurrectionExportV1(value: unknown): SessionResurre
   return { schemaVersion: 1, kind: 'session-resurrection-export', records };
 }
 
-export function projectSessionResurrectionRecordV1(
-  record: SessionRecordV1 & { readonly launch: NonNullable<SessionRecordV1['launch']> },
-): SessionResurrectionRecordV1 {
+export function projectSessionResurrectionRecord(
+  record: SessionRecord & { readonly launch: NonNullable<SessionRecord['launch']> },
+): SessionResurrectionRecord {
   const projected = {
     id: record.recordId,
     runtime: record.runtime,

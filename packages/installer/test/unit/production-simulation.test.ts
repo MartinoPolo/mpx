@@ -19,9 +19,9 @@ import { FakeJsonResourceStore } from '@mpx/windows';
 import {
   activateRelease,
   installerDigest,
-  type InstallIntentV1,
-  type OwnershipReceiptV1,
-  type ReleaseManifestV1,
+  type InstallIntent,
+  type OwnershipReceipt,
+  type ReleaseManifest,
 } from '../../src/immutable-core.js';
 import { InstallOrchestrator, NodeCurrentReleaseBuilder } from '../../src/orchestration.js';
 import {
@@ -31,12 +31,12 @@ import {
 import { NodePiNativeSettingsPort } from '../../src/pi-native-settings.js';
 import {
   createRuntimeRegistrationMatrix,
-  type ProjectionFileV1,
+  type ProjectionFile,
 } from '../../src/runtime-registration.js';
 import { ImmutableInstallerService, NodeTransactionStore } from '../../src/transaction.js';
 import {
   createPiNativePackageRegistration,
-  type PiNativePackageRegistrationV1,
+  type PiNativePackageRegistration,
 } from '../../src/pi-native-package.js';
 import { preparePiExtensionBuildFixture } from '../fixtures/pi-extension-build.js';
 
@@ -64,9 +64,9 @@ function registration(
   runtime: 'claude' | 'pi',
   domain: 'personal' | 'work',
   nativeRoot: string,
-  nativePackage: PiNativePackageRegistrationV1,
+  nativePackage: PiNativePackageRegistration,
 ) {
-  const files: ProjectionFileV1[] = roles(runtime).map((role) => {
+  const files: ProjectionFile[] = roles(runtime).map((role) => {
     const body = Buffer.from(`${runtime}:${role}`);
     return {
       path: `${runtime}/${role}.json`,
@@ -173,6 +173,7 @@ async function prepareSimulation(
     await writeFile(path.join(userProfile, '.bashrc'), 'native-profile\r\n');
   }
   const userConfig = {
+    schemaVersion: 2,
     identities: {
       personal: {
         domain: 'personal',
@@ -181,6 +182,7 @@ async function prepareSimulation(
           pi: required(fixtureRoots[2], 'Pi personal fixture root'),
         },
         gitAuthorRoute: 'personal-git',
+        allowedSkillPacks: ['development', 'personal'],
       },
       work: {
         domain: 'work',
@@ -189,17 +191,17 @@ async function prepareSimulation(
           pi: required(fixtureRoots[3], 'Pi work fixture root'),
         },
         gitAuthorRoute: 'work-git',
+        allowedSkillPacks: ['development'],
       },
     },
     domains: {
       personal: [required(fixtureRoots[0], 'Claude personal fixture root')],
       work: [required(fixtureRoots[1], 'Claude work fixture root')],
     },
-    contentScopes: {},
+    locations: {},
     modes: {},
-    skillPolicies: {},
     presets: {},
-    launchDefaults: { scopes: {}, projects: {} },
+    launchDefaults: { locations: {}, projects: {} },
     networkPolicies: {},
     executors: { host: {} },
   };
@@ -294,7 +296,7 @@ async function prepareSimulation(
     ),
     registration('pi', 'work', required(fixtureRoots[3], 'Pi work fixture root'), nativePackage),
   ]);
-  const intent: InstallIntentV1 = {
+  const intent: InstallIntent = {
     schemaVersion: 1,
     kind: 'install-intent',
     releaseKey: manifest.releaseKey,
@@ -728,10 +730,10 @@ it('runs clean and existing-machine production-backed simulations without live w
 }, 300_000);
 
 function projectionIntent(
-  intent: InstallIntentV1,
-  manifest: ReleaseManifestV1,
-  change: (runtime: 'claude' | 'pi', files: readonly ProjectionFileV1[]) => ProjectionFileV1[],
-): InstallIntentV1 {
+  intent: InstallIntent,
+  manifest: ReleaseManifest,
+  change: (runtime: 'claude' | 'pi', files: readonly ProjectionFile[]) => ProjectionFile[],
+): InstallIntent {
   const registrations = intent.runtimeRegistrations!.registrations.map((registration) => {
     const files = change(registration.runtime, registration.projection.files).sort((left, right) =>
       left.path.localeCompare(right.path),
@@ -754,7 +756,7 @@ function projectionIntent(
     releaseKey: manifest.releaseKey,
     convergenceHash: manifest.convergenceHash,
     runtimeRegistrations: { ...matrix, matrixDigest: installerDigest(matrix) },
-  } as InstallIntentV1;
+  } as InstallIntent;
 }
 
 async function projectionUpgradeFixture() {
@@ -801,7 +803,7 @@ async function projectionUpgradeFixture() {
       return { ...operation, id: `61-projection-${identity}-${String(ordinal).padStart(4, '0')}` };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
-  const priorReceipt: OwnershipReceiptV1 = {
+  const priorReceipt: OwnershipReceipt = {
     ...installed,
     operations,
     operationLocators: operations.map((operation) => {
@@ -914,6 +916,27 @@ it('reconciles ordinal inventories by logical path and retains inert historical 
       fixture.priorReceipt,
     );
     expect(regenerated.automatic).toEqual(fixture.priorReceipt.operations);
+    const historicalDescriptors = regenerated.automatic.filter((operation) =>
+      operation.id.startsWith('60-projection-'),
+    );
+    const currentDescriptors = fixture.plan.operations.filter((operation) =>
+      operation.id.startsWith('60-projection-'),
+    );
+    expect(historicalDescriptors.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        '60-projection-claude-personal-descriptor',
+        '60-projection-pi-personal-descriptor',
+      ]),
+    );
+    expect(currentDescriptors.map(({ id }) => id)).toEqual(
+      historicalDescriptors.map(({ id }) => id),
+    );
+    for (const historical of historicalDescriptors) {
+      const current = currentDescriptors.find(({ id }) => id === historical.id)!;
+      expect(current.target.replace(fixture.intent.releaseKey, fixture.oldIntent.releaseKey)).toBe(
+        historical.target,
+      );
+    }
     for (const prior of oldPayloads) {
       const current = fixture.plan.operations.find((operation) => operation.id === prior.id)!;
       if (!fixture.retained.some((operation) => operation.id === current.id)) {
@@ -927,6 +950,15 @@ it('reconciles ordinal inventories by logical path and retains inert historical 
     const modifiedTimes = await Promise.all(
       fixture.retained.map(async (operation) => (await lstat(operation.target)).mtimeMs),
     );
+    const transitionAuthority = await Promise.all(
+      fixture.plan.operations.map(async (operation) => ({
+        operation,
+        locator: await fixture.adapter.receiptLocator(operation),
+      })),
+    );
+    await expect(
+      fixture.adapter.authorizeOwnedOperations(fixture.priorReceipt, transitionAuthority),
+    ).resolves.toBeUndefined();
     const capture = vi.spyOn(fixture.adapter, 'capture');
     const apply = vi.spyOn(fixture.adapter, 'apply');
     const restore = vi.spyOn(fixture.adapter, 'restore');
@@ -983,8 +1015,9 @@ it('reconciles ordinal inventories by logical path and retains inert historical 
     await rm(path.join(fixture.appsRoot, 'mpx', 'releases', fixture.oldIntent.releaseKey), {
       recursive: true,
     });
+    const restartedAdapter = fixture.createAdapter();
     const restarted = new InstallOrchestrator({
-      adapter: fixture.createAdapter(),
+      adapter: restartedAdapter,
       store: fixture.store,
       releases: fixture.releases,
     });
@@ -1002,6 +1035,15 @@ it('reconciles ordinal inventories by logical path and retains inert historical 
       ...files,
     ]);
     const nextPlan = await restarted.plan(nextIntent);
+    const retainedAuthority = await Promise.all(
+      nextPlan.operations.map(async (operation) => ({
+        operation,
+        locator: await restartedAdapter.receiptLocator(operation),
+      })),
+    );
+    await expect(
+      restartedAdapter.authorizeOwnedOperations(receipt, retainedAuthority),
+    ).resolves.toBeUndefined();
     expect(nextPlan.operations.every((operation) => operation.action === 'ensure')).toBe(true);
     expect(nextPlan.operations.map((operation) => operation.id)).toEqual(
       receipt.operations.map((operation) => operation.id),

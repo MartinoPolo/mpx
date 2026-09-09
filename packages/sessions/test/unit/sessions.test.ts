@@ -13,10 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import {
-  createSessionLifecycleBindingV1,
-  createSessionLifecycleEventV1,
-} from '@mpx/runtime-contracts';
+import { createSessionLifecycleBinding, createSessionLifecycleEvent } from '@mpx/runtime-contracts';
 import {
   ClaudeActiveScanner,
   LifecycleEventDirectoryConsumer,
@@ -25,15 +22,16 @@ import {
   SessionService,
   SessionStore,
   deriveNativeBindingRef,
-  parseNativeBindingRecordV1,
-  parseSessionRecordV1,
+  parseNativeBindingRecord,
+  parseSessionRecord,
+  parseSessionRegistry,
   planResume,
   verifyNativeResumeSeed,
-  type LaunchSnapshotV1,
-  type NativeBindingRecordV1,
+  type LaunchSnapshot,
+  type NativeBindingRecord,
   type ProcessInspection,
-  type SessionLifecycleBindingRecordV1,
-  type SessionRecordV1,
+  type SessionLifecycleBindingRecord,
+  type SessionRecord,
 } from '../../src/index.js';
 
 const instant = '2025-01-02T03:04:05.000Z',
@@ -41,16 +39,18 @@ const instant = '2025-01-02T03:04:05.000Z',
   expires = '2099-01-01T00:00:00.000Z',
   digest = 'a'.repeat(64);
 const identity = { domain: 'corp/a', name: 'dev%2Fone' };
-const launch: LaunchSnapshotV1 = {
+const launch: LaunchSnapshot = {
   launchKey: 'key',
   descriptorDigest: digest,
   mode: 'interactive',
-  skillPolicy: 'standard',
-  contentScope: 'repo',
+  selection: {
+    location: { name: 'repo', canonicalRoot: 'C:/repo' },
+    packs: ['development'],
+    source: 'project',
+  },
   executor: { kind: 'host' },
   workspace: 'workspace',
   networkPolicy: 'restricted',
-  grants: [{ access: 'read', resource: 'repo' }],
   artifactKey: 'artifact',
   manifestKey: 'manifest',
 };
@@ -65,7 +65,7 @@ afterEach(async () => {
     temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-function nativeBinding(overrides: Partial<NativeBindingRecordV1> = {}): NativeBindingRecordV1 {
+function nativeBinding(overrides: Partial<NativeBindingRecord> = {}): NativeBindingRecord {
   return {
     schemaVersion: 1,
     ref: 'native:opaque',
@@ -77,10 +77,10 @@ function nativeBinding(overrides: Partial<NativeBindingRecordV1> = {}): NativeBi
     ...overrides,
   };
 }
-function lifecycleBindingRecord(bindingId: string): SessionLifecycleBindingRecordV1 {
+function lifecycleBindingRecord(bindingId: string): SessionLifecycleBindingRecord {
   return {
-    schemaVersion: 1,
-    binding: createSessionLifecycleBindingV1({
+    schemaVersion: 2,
+    binding: createSessionLifecycleBinding({
       bindingId,
       bindingRef: `opaque-${bindingId}`,
       runtime: 'claude',
@@ -101,9 +101,9 @@ function lifecycleBindingRecord(bindingId: string): SessionLifecycleBindingRecor
     location: record().location,
   };
 }
-function record(overrides: Partial<SessionRecordV1> = {}): SessionRecordV1 {
+function record(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     recordId: 'record-abc',
     runtimeQualifiedId: 'claude:abc',
     runtime: 'claude',
@@ -142,7 +142,7 @@ function record(overrides: Partial<SessionRecordV1> = {}): SessionRecordV1 {
 
 it('rejects obsolete account authority fields instead of retaining a legacy reader', () => {
   expect(() =>
-    parseNativeBindingRecordV1({ ...nativeBinding(), accountBindingRef: 'obsolete' }),
+    parseNativeBindingRecord({ ...nativeBinding(), accountBindingRef: 'obsolete' }),
   ).toThrowError(expect.objectContaining({ code: 'SESSION_UNKNOWN_FIELD' }));
 });
 
@@ -163,7 +163,7 @@ it('lists private lifecycle bindings so pending events can be consumed', async (
 });
 
 it('persists process identity and complete workflow metadata', () => {
-  const parsed = parseSessionRecordV1({
+  const parsed = parseSessionRecord({
     ...record(),
     process: { pid: 4312, startFingerprint: '2025-01-02T03:04:05.000Z' },
     workflow: {
@@ -186,7 +186,7 @@ it('persists process identity and complete workflow metadata', () => {
 
 it('rejects impossible canonical dates and unknown sensitive keys', () => {
   expect(() =>
-    parseSessionRecordV1({
+    parseSessionRecord({
       ...record(),
       timestamps: {
         ...record().timestamps,
@@ -195,7 +195,7 @@ it('rejects impossible canonical dates and unknown sensitive keys', () => {
     }),
   ).toThrowError(SessionError);
   expect(() =>
-    parseSessionRecordV1({
+    parseSessionRecord({
       ...record(),
       metadata: { ...record().metadata, transcript: 'secret' },
     }),
@@ -209,6 +209,62 @@ it('persists injective domain+name+runtime partitions', async () => {
   expect(left).not.toBe(right);
   await store.put(record());
   expect(await stat(store.registryPath(identity, 'claude'))).toBeDefined();
+});
+
+it('reports obsolete registry authority as requiring a fresh MPX launch', () => {
+  expect(() =>
+    parseSessionRegistry({ schemaVersion: 1, records: [{ rights: 'legacy' }] }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: 'SESSION_STALE_REGISTRY_AUTHORITY',
+      message: expect.stringMatching(/relaunch/i),
+      remediation: expect.stringMatching(/fresh MPX launch/i),
+    }),
+  );
+});
+
+it('leaves obsolete current-root registry bytes unchanged while reporting relaunch', async () => {
+  const root = await temporary();
+  const store = new SessionStore(root);
+  const registry = store.registryPath(identity, 'claude');
+  const bytes = Buffer.from('{"schemaVersion":1,"records":[{"rights":"legacy"}]}\n');
+  await mkdir(path.dirname(registry), { recursive: true });
+  await writeFile(registry, bytes);
+
+  await expect(store.read(identity, 'claude')).rejects.toMatchObject({
+    code: 'SESSION_STALE_REGISTRY_AUTHORITY',
+    message: expect.stringMatching(/relaunch/i),
+  });
+  expect(await readFile(registry)).toEqual(bytes);
+});
+
+it('creates fresh v2 authority without reading or changing the old v1 store', async () => {
+  const root = await temporary();
+  const store = new SessionStore(root);
+  const oldRegistry = path.join(
+    root,
+    'sessions',
+    'v1',
+    'identities',
+    `d-${Buffer.from(identity.domain).toString('base64url')}`,
+    `n-${Buffer.from(identity.name).toString('base64url')}`,
+    'claude',
+    'registry.json',
+  );
+  const oldBytes = Buffer.from('{"schemaVersion":1,"records":[{"rights":"legacy"}]}\n');
+  await mkdir(path.dirname(oldRegistry), { recursive: true });
+  await writeFile(oldRegistry, oldBytes);
+
+  await expect(store.read(identity, 'claude')).resolves.toMatchObject({ records: [] });
+  await store.put(record());
+
+  expect(store.registryPath(identity, 'claude')).toContain(
+    `${path.sep}sessions${path.sep}v2${path.sep}`,
+  );
+  expect(await readFile(oldRegistry)).toEqual(oldBytes);
+  await expect(new SessionService(store).list()).resolves.toEqual([
+    expect.objectContaining({ recordId: 'record-abc' }),
+  ]);
 });
 
 it('serializes concurrent read-modify-write transactions', async () => {
@@ -375,7 +431,7 @@ it('ingests the runtime lifecycle contract through private binding authority', a
   const store = new SessionStore(await temporary()),
     service = new SessionService(store, () => later);
   await store.saveNativeBinding(nativeBinding());
-  const wire = createSessionLifecycleBindingV1({
+  const wire = createSessionLifecycleBinding({
     bindingId: 'binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -390,8 +446,8 @@ it('ingests the runtime lifecycle contract through private binding authority', a
     createdAt: instant,
     expiresAt: expires,
   });
-  const binding: SessionLifecycleBindingRecordV1 = {
-    schemaVersion: 1,
+  const binding: SessionLifecycleBindingRecord = {
+    schemaVersion: 2,
     binding: wire,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: null,
@@ -399,7 +455,7 @@ it('ingests the runtime lifecycle contract through private binding authority', a
     location: record().location,
   };
   await store.saveLifecycleBinding(binding);
-  const event = createSessionLifecycleEventV1({
+  const event = createSessionLifecycleEvent({
     eventId: 'event-1',
     bindingId: 'binding',
     type: 'start',
@@ -425,7 +481,7 @@ it('rejects an event after its private lifecycle binding expires', async () => {
   const store = new SessionStore(await temporary()),
     service = new SessionService(store, () => later);
   await store.saveNativeBinding(nativeBinding());
-  const binding = createSessionLifecycleBindingV1({
+  const binding = createSessionLifecycleBinding({
     bindingId: 'expired-binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -441,14 +497,14 @@ it('rejects an event after its private lifecycle binding expires', async () => {
     expiresAt: instant,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: null,
     launch,
     location: record().location,
   });
-  const event = createSessionLifecycleEventV1({
+  const event = createSessionLifecycleEvent({
     eventId: 'expired-event',
     bindingId: binding.bindingId,
     type: 'start',
@@ -472,7 +528,7 @@ it('quarantines an expired lifecycle event for diagnosis and continues', async (
   const store = new SessionStore(await temporary()),
     service = new SessionService(store, () => later);
   await store.saveNativeBinding(nativeBinding());
-  const binding = createSessionLifecycleBindingV1({
+  const binding = createSessionLifecycleBinding({
     bindingId: 'expired-directory',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -488,7 +544,7 @@ it('quarantines an expired lifecycle event for diagnosis and continues', async (
     expiresAt: instant,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: null,
@@ -501,7 +557,7 @@ it('quarantines an expired lifecycle event for diagnosis and continues', async (
   await writeFile(
     file,
     JSON.stringify(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'expired-directory-event',
         bindingId: binding.bindingId,
         type: 'activity',
@@ -544,7 +600,7 @@ it('refuses an event directory replaced by an attacker link immediately before e
   await writeFile(
     attackerEvent,
     JSON.stringify(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'attacker-event',
         bindingId: 'replaced-queue',
         type: 'start',
@@ -593,7 +649,7 @@ it('quarantines unsafe lifecycle entries and consumes a later valid event', asyn
   await writeFile(
     path.join(directory, '0003.json'),
     JSON.stringify(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'valid-after-unsafe',
         bindingId: 'unsafe-queue',
         type: 'start',
@@ -635,7 +691,7 @@ it('quarantines malformed lifecycle JSON and consumes later valid events', async
   await writeFile(
     path.join(directory, '0002.json'),
     JSON.stringify(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'valid-after-malformed',
         bindingId: 'malformed-queue',
         type: 'start',
@@ -667,7 +723,7 @@ it('rejects a different native session after a new lifecycle is bound', async ()
   const store = new SessionStore(await temporary()),
     service = new SessionService(store);
   await store.saveNativeBinding(nativeBinding());
-  const wire = createSessionLifecycleBindingV1({
+  const wire = createSessionLifecycleBinding({
     bindingId: 'new-binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -683,7 +739,7 @@ it('rejects a different native session after a new lifecycle is bound', async ()
     expiresAt: expires,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding: wire,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: null,
@@ -691,7 +747,7 @@ it('rejects a different native session after a new lifecycle is bound', async ()
     location: record().location,
   });
   const event = (id: string, nativeId: string, sequence: number) =>
-    createSessionLifecycleEventV1({
+    createSessionLifecycleEvent({
       eventId: id,
       bindingId: 'new-binding',
       type: 'activity',
@@ -716,7 +772,7 @@ it('rejects the first event when a resume lifecycle is prebound', async () => {
   const store = new SessionStore(await temporary()),
     service = new SessionService(store);
   await store.saveNativeBinding(nativeBinding());
-  const wire = createSessionLifecycleBindingV1({
+  const wire = createSessionLifecycleBinding({
     bindingId: 'resume-binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -732,7 +788,7 @@ it('rejects the first event when a resume lifecycle is prebound', async () => {
     expiresAt: expires,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding: wire,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: { kind: 'native-id', value: 'expected' },
@@ -747,7 +803,7 @@ it('rejects the first event when a resume lifecycle is prebound', async () => {
   );
   await expect(
     service.ingest(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'resume-first',
         bindingId: 'resume-binding',
         type: 'start',
@@ -770,7 +826,7 @@ it('removes an event-directory file only after durable lifecycle ingestion', asy
   const store = new SessionStore(await temporary()),
     service = new SessionService(store);
   await store.saveNativeBinding(nativeBinding());
-  const wire = createSessionLifecycleBindingV1({
+  const wire = createSessionLifecycleBinding({
     bindingId: 'directory-binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -786,7 +842,7 @@ it('removes an event-directory file only after durable lifecycle ingestion', asy
     expiresAt: expires,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding: wire,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: { kind: 'native-id', value: 'abc' },
@@ -799,7 +855,7 @@ it('removes an event-directory file only after durable lifecycle ingestion', asy
   await writeFile(
     file,
     JSON.stringify(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'directory-event',
         bindingId: 'directory-binding',
         type: 'activity',
@@ -830,7 +886,7 @@ it('accepts sequence one when a resumed session moves to a new lifecycle binding
   await store.put(
     record({ lifecycle: { bindingId: 'old-binding', sequence: 8, timestamp: instant } }),
   );
-  const binding = createSessionLifecycleBindingV1({
+  const binding = createSessionLifecycleBinding({
     bindingId: 'new-ordering-domain',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -846,7 +902,7 @@ it('accepts sequence one when a resumed session moves to a new lifecycle binding
     expiresAt: expires,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: { kind: 'native-id', value: 'abc' },
@@ -854,7 +910,7 @@ it('accepts sequence one when a resumed session moves to a new lifecycle binding
     location: record().location,
   });
   const resumed = await service.ingest(
-    createSessionLifecycleEventV1({
+    createSessionLifecycleEvent({
       eventId: 'new-domain-event',
       bindingId: 'new-ordering-domain',
       type: 'start',
@@ -888,7 +944,7 @@ it('accepts an older event in a new lifecycle without rolling record timestamps 
     nativeSessionRef: { kind: 'native-id', value: 'abc' },
   });
   const ingested = await service.ingest(
-    createSessionLifecycleEventV1({
+    createSessionLifecycleEvent({
       eventId: 'older-new-domain-event',
       bindingId: 'older-event-binding',
       type: 'activity',
@@ -920,7 +976,7 @@ it('retains shutdown process evidence for later native activity verification', a
   const store = new SessionStore(await temporary()),
     service = new SessionService(store);
   await store.saveNativeBinding(nativeBinding());
-  const binding = createSessionLifecycleBindingV1({
+  const binding = createSessionLifecycleBinding({
     bindingId: 'shutdown-binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -936,7 +992,7 @@ it('retains shutdown process evidence for later native activity verification', a
     expiresAt: expires,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: null,
@@ -944,7 +1000,7 @@ it('retains shutdown process evidence for later native activity verification', a
     location: record().location,
   });
   const shutdown = await service.ingest(
-    createSessionLifecycleEventV1({
+    createSessionLifecycleEvent({
       eventId: 'shutdown-event',
       bindingId: 'shutdown-binding',
       type: 'shutdown',
@@ -970,7 +1026,7 @@ it('allows concurrent lifecycle consumers to durably consume one event once', as
   const store = new SessionStore(await temporary()),
     service = new SessionService(store);
   await store.saveNativeBinding(nativeBinding());
-  const binding = createSessionLifecycleBindingV1({
+  const binding = createSessionLifecycleBinding({
     bindingId: 'concurrent-binding',
     bindingRef: 'opaque',
     runtime: 'claude',
@@ -986,7 +1042,7 @@ it('allows concurrent lifecycle consumers to durably consume one event once', as
     expiresAt: expires,
   });
   await store.saveLifecycleBinding({
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding,
     nativeBindingRef: 'native:opaque',
     nativeSessionRef: null,
@@ -998,7 +1054,7 @@ it('allows concurrent lifecycle consumers to durably consume one event once', as
   await writeFile(
     path.join(directory, '0001.json'),
     JSON.stringify(
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         eventId: 'concurrent-event',
         bindingId: 'concurrent-binding',
         type: 'start',

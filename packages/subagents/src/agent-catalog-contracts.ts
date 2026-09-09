@@ -1,29 +1,28 @@
-export type AgentModelClassV1 = 'mechanical' | 'exploration' | 'standard' | 'advanced' | 'frontier';
-export type AgentThinkingV1 = 'low' | 'medium' | 'high';
-export type AgentCapabilityV1 =
-  'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
+export type AgentModelClass = 'mechanical' | 'exploration' | 'standard' | 'advanced' | 'frontier';
+export type AgentThinking = 'low' | 'medium' | 'high';
+export type AgentCapability = 'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
 
-export interface AgentCatalogEntryV1 {
-  readonly modelClass: AgentModelClassV1;
-  readonly thinking: AgentThinkingV1;
-  readonly capabilities: readonly AgentCapabilityV1[];
+export interface AgentCatalogEntry {
+  readonly modelClass: AgentModelClass;
+  readonly thinking: AgentThinking;
+  readonly capabilities: readonly AgentCapability[];
   readonly nesting: readonly string[];
   readonly outputSchema: string;
 }
 
-export interface AgentCatalogV1 {
+export interface AgentCatalog {
   readonly schemaVersion: 1;
-  readonly agents: Readonly<Record<string, AgentCatalogEntryV1>>;
+  readonly agents: Readonly<Record<string, AgentCatalogEntry>>;
 }
 
-export interface ResolvedAgentCatalogEntryV1 extends Omit<AgentCatalogEntryV1, 'nesting'> {
+export interface ResolvedAgentCatalogEntry extends Omit<AgentCatalogEntry, 'nesting'> {
   readonly nesting: readonly string[];
 }
 
-export interface ResolvedAgentCatalogV1 {
+export interface ResolvedAgentCatalog {
   readonly schemaVersion: 1;
   readonly identities: readonly string[];
-  readonly agents: Readonly<Record<string, ResolvedAgentCatalogEntryV1>>;
+  readonly agents: Readonly<Record<string, ResolvedAgentCatalogEntry>>;
 }
 
 export type AgentCatalogErrorCode =

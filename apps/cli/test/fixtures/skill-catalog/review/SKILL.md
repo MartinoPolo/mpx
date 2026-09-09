@@ -5,7 +5,7 @@ triggers: code inspection
 metadata:
   mpx:
     schemaVersion: 1
-    skillPacks: [core, work]
+    skillPacks: [development]
     defaultExposure: name-only
 ---
 

@@ -11,8 +11,7 @@ treated as an initial installation.
 
 Installer transaction recovery runs under its existing lock before setup admission. After recovery, strict receipt,
 release, selector, native registration, and package checks determine the route. The admitted evidence is bound to the
-subsequent plan and checked again under the apply lock. Existing Pi settings locator compatibility remains unchanged;
-legacy ownership receipt migration still requires its separate authority.
+subsequent plan and checked again under the apply lock. Existing Pi settings locator compatibility remains unchanged.
 
 The service reduces process- and power-interruption risk by:
 

@@ -1,5 +1,5 @@
-import type { PortResolutionState, StatusSnapshotV1 } from './provider.js';
-import { parseStatusSnapshotV1 } from './snapshot.js';
+import type { PortResolutionState, StatusSnapshot } from './provider.js';
+import { parseStatusSnapshot } from './snapshot.js';
 
 export type PortSegmentMarker = '' | '*' | '!' | '?';
 
@@ -16,7 +16,7 @@ export interface PortSegmentData {
   readonly services: readonly PortSegmentService[];
 }
 
-function markerFor(service: StatusSnapshotV1['services'][number]): PortSegmentMarker {
+function markerFor(service: StatusSnapshot['services'][number]): PortSegmentMarker {
   if (service.conflict === 'external') {
     return '!';
   }
@@ -27,7 +27,7 @@ function markerFor(service: StatusSnapshotV1['services'][number]): PortSegmentMa
 }
 
 /** Creates stable, runtime-neutral current-worktree port data. */
-export function normalizePortSegment(snapshot: StatusSnapshotV1): PortSegmentData {
+export function normalizePortSegment(snapshot: StatusSnapshot): PortSegmentData {
   return {
     resolution: snapshot.portResolution,
     services: [...snapshot.services]
@@ -53,16 +53,16 @@ export function formatPortSegment(segment: PortSegmentData): string {
   return `ports ${segment.services.map((service) => `${service.id}:${service.port ?? '?'}${service.marker}`).join(' ')}`;
 }
 
-export function renderPortSegment(snapshot: StatusSnapshotV1): string {
+export function renderPortSegment(snapshot: StatusSnapshot): string {
   return formatPortSegment(normalizePortSegment(snapshot));
 }
 
 /** Validated Claude adapter entrypoint. Surrounding status-line UI remains runtime-specific. */
 export function renderClaudePortSegment(value: unknown): string {
-  return renderPortSegment(parseStatusSnapshotV1(value));
+  return renderPortSegment(parseStatusSnapshot(value));
 }
 
 /** Validated Pi adapter entrypoint. Surrounding footer UI remains runtime-specific. */
 export function renderPiPortSegment(value: unknown): string {
-  return renderPortSegment(parseStatusSnapshotV1(value));
+  return renderPortSegment(parseStatusSnapshot(value));
 }

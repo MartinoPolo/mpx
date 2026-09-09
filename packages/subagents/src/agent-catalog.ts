@@ -1,10 +1,10 @@
 import {
   AgentCatalogError,
-  type AgentCapabilityV1,
-  type AgentCatalogEntryV1,
-  type AgentCatalogV1,
-  type ResolvedAgentCatalogEntryV1,
-  type ResolvedAgentCatalogV1,
+  type AgentCapability,
+  type AgentCatalogEntry,
+  type AgentCatalog,
+  type ResolvedAgentCatalogEntry,
+  type ResolvedAgentCatalog,
 } from './agent-catalog-contracts.js';
 
 const identityPattern = /^mpx-[a-z0-9-]+$/u;
@@ -20,7 +20,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function validEntry(value: unknown): value is AgentCatalogEntryV1 {
+function validEntry(value: unknown): value is AgentCatalogEntry {
   if (!record(value)) {
     return false;
   }
@@ -46,17 +46,17 @@ function validEntry(value: unknown): value is AgentCatalogEntryV1 {
   );
 }
 
-function immutableEntry(value: AgentCatalogEntryV1): AgentCatalogEntryV1 {
+function immutableEntry(value: AgentCatalogEntry): AgentCatalogEntry {
   return Object.freeze({
     modelClass: value.modelClass,
     thinking: value.thinking,
-    capabilities: Object.freeze([...value.capabilities]) as readonly AgentCapabilityV1[],
+    capabilities: Object.freeze([...value.capabilities]) as readonly AgentCapability[],
     nesting: Object.freeze([...value.nesting]),
     outputSchema: value.outputSchema,
   });
 }
 
-export function parseAgentCatalogV1(source: string): AgentCatalogV1 {
+export function parseAgentCatalog(source: string): AgentCatalog {
   let value: unknown;
   try {
     value = JSON.parse(source);
@@ -81,7 +81,7 @@ export function parseAgentCatalogV1(source: string): AgentCatalogV1 {
   const agents = Object.fromEntries(
     Object.entries(value.agents).map(([identity, entry]) => [
       identity,
-      immutableEntry(entry as unknown as AgentCatalogEntryV1),
+      immutableEntry(entry as unknown as AgentCatalogEntry),
     ]),
   );
   return Object.freeze({ schemaVersion: 1, agents: Object.freeze(agents) });
@@ -107,10 +107,10 @@ function wildcardMatch(selector: string, candidate: string): boolean {
   return previous[candidate.length] === 1;
 }
 
-export function resolveAgentCatalogV1(
-  catalog: AgentCatalogV1,
+export function resolveAgentCatalog(
+  catalog: AgentCatalog,
   canonicalIdentities: readonly string[],
-): ResolvedAgentCatalogV1 {
+): ResolvedAgentCatalog {
   const identities = [...canonicalIdentities].sort();
   const metadataIdentities = Object.keys(catalog.agents).sort();
   if (
@@ -130,7 +130,7 @@ export function resolveAgentCatalogV1(
     );
   }
 
-  const agents: Record<string, ResolvedAgentCatalogEntryV1> = {};
+  const agents: Record<string, ResolvedAgentCatalogEntry> = {};
   for (const identity of identities) {
     const entry = catalog.agents[identity]!;
     const nesting: string[] = [];

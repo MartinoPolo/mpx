@@ -3,30 +3,27 @@ import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { lstat, mkdir, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
 import {
-  parseNativeSessionRefV1,
-  parseRuntimeContextV1,
+  parseNativeSessionRef,
+  parseRuntimeContext,
   publishRuntimeArtifact,
   validateRuntimeContext,
-  validateSessionLifecycleBindingV1,
-  type NativeSessionRefV1,
+  validateSessionLifecycleBinding,
+  type CapabilityExecutor,
+  type NativeSessionRef,
   type PublishedRuntimeArtifact,
   type PublishedRuntimeArtifactReference,
   type RuntimeBinding,
-  type RuntimeContextV1,
+  type RuntimeContext,
 } from '@mpx/runtime-contracts';
-import {
-  inventoryProjectSkills,
-  SkillCatalogError,
-  verifySkillProjectionPlan,
-  type SkillProjectionPlan,
-} from '@mpx/skills';
+import { inventoryProjectSkills, SkillCatalogError, verifySkillProjectionPlan } from '@mpx/skills';
+import type { SkillProjectionPlan } from '@mpx/skills/contracts';
 import {
   classifyCompiledSkillSource,
   loadActiveContentProjection,
   verifyCompiledContentTree,
   type CompiledContentTree,
 } from '@mpx/content-compiler';
-import { parsePiRuntimeProfileV1, type PiRuntimeProfileV1 } from './profile.js';
+import { parsePiRuntimeProfile, type PiRuntimeProfile } from './profile.js';
 
 export * from './profile.js';
 export * from './runtime-capabilities.js';
@@ -34,13 +31,13 @@ export * from './runtime-capabilities.js';
 export interface PiProjectionRevalidation {
   readonly directory: string;
   readonly reference: PublishedRuntimeArtifactReference;
-  readonly profile: PiRuntimeProfileV1;
+  readonly profile: PiRuntimeProfile;
 }
 const verifiedPiProjections = new WeakSet<object>();
 export interface PiPublishedProjection {
   readonly directory: string;
   readonly runtimeContextFile: string;
-  readonly profile: PiRuntimeProfileV1;
+  readonly profile: PiRuntimeProfile;
   readonly artifactKey: string;
   readonly reference: PublishedRuntimeArtifactReference;
   readonly files: readonly string[];
@@ -50,13 +47,13 @@ export interface PiPublishedProjection {
 }
 export interface PiInvocationInput {
   executable: string;
+  executor: CapabilityExecutor;
   accountRoot: string;
   cwd: string;
-  runtimeContext: RuntimeContextV1;
+  runtimeContext: RuntimeContext;
   launchIdentity?: {
     readonly name: string;
     readonly mode: string;
-    readonly skillPolicy: string;
   };
   projectProviders?: {
     readonly repository: string;
@@ -67,7 +64,7 @@ export interface PiInvocationInput {
   };
   accountConfigPath?: string;
   immutableProjectionDirectory?: string;
-  profile?: PiRuntimeProfileV1;
+  profile?: PiRuntimeProfile;
   runtimeContextFile?: string;
   projection?: PiPublishedProjection;
   projectionReference?: PublishedRuntimeArtifactReference;
@@ -105,12 +102,12 @@ const verifiedPiResumeTargets = new WeakMap<
 >();
 export async function verifyPiResumeTarget(
   accountRootInput: string,
-  referenceInput: NativeSessionRefV1,
+  referenceInput: NativeSessionRef,
 ): Promise<VerifiedPiResumeTarget> {
-  let accountRoot: string, reference: NativeSessionRefV1;
+  let accountRoot: string, reference: NativeSessionRef;
   try {
     accountRoot = absolute(accountRootInput, 'native account root');
-    reference = parseNativeSessionRefV1(referenceInput);
+    reference = parseNativeSessionRef(referenceInput);
   } catch {
     throw new PiResumeTargetError('PI_RESUME_TARGET_INVALID');
   }
@@ -179,9 +176,7 @@ function absolute(value: string, label: string): string {
   }
   return path.normalize(value).replaceAll('\\', '/');
 }
-function loadPublishedPiProfile(
-  directoryInput: string | undefined,
-): PiRuntimeProfileV1 | undefined {
+function loadPublishedPiProfile(directoryInput: string | undefined): PiRuntimeProfile | undefined {
   if (!directoryInput) {
     return undefined;
   }
@@ -190,14 +185,14 @@ function loadPublishedPiProfile(
   try {
     const stat = lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) {
-      return parsePiRuntimeProfileV1(undefined);
+      return parsePiRuntimeProfile(undefined);
     }
-    return parsePiRuntimeProfileV1(JSON.parse(readFileSync(file, 'utf8')));
+    return parsePiRuntimeProfile(JSON.parse(readFileSync(file, 'utf8')));
   } catch (failure) {
     if ((failure as { code?: unknown }).code === 'PI_RUNTIME_PROFILE_INVALID') {
       throw failure;
     }
-    return parsePiRuntimeProfileV1(undefined);
+    return parsePiRuntimeProfile(undefined);
   }
 }
 
@@ -349,8 +344,8 @@ function compiledAgentsDirectory(directory: string, files: readonly PiProjection
 export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvocationPlan> {
   if (
     input.launchIdentity &&
-    ![input.launchIdentity.name, input.launchIdentity.mode, input.launchIdentity.skillPolicy].every(
-      (value) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(value),
+    ![input.launchIdentity.name, input.launchIdentity.mode].every((value) =>
+      /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(value),
     )
   ) {
     throw new Error('Pi launch identity contains an invalid display field');
@@ -358,7 +353,7 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
   const runtimeContextFile = input.projection?.runtimeContextFile ?? input.runtimeContextFile;
   const profileInput = input.projection?.profile ?? input.profile;
   const profile = profileInput
-    ? parsePiRuntimeProfileV1(profileInput)
+    ? parsePiRuntimeProfile(profileInput)
     : loadPublishedPiProfile(input.immutableProjectionDirectory);
   if (!runtimeContextFile || !profile) {
     throw new Error('validated Pi projection is required');
@@ -372,7 +367,7 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
   ) {
     throw new Error('Pi projection revalidation binding is invalid');
   }
-  const context = parseRuntimeContextV1(input.runtimeContext);
+  const context = parseRuntimeContext(input.runtimeContext);
   const accountRoot = absolute(input.accountRoot, 'native account root');
   const activeContentRoot = absolute(
     input.projection?.directory ??
@@ -444,7 +439,7 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
     )
     .sort();
   const lifecycleBinding = lifecycle
-    ? validateSessionLifecycleBindingV1({
+    ? validateSessionLifecycleBinding({
         binding: lifecycle.binding,
         context,
         runtime: 'pi',
@@ -484,13 +479,13 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
     env: {
       PI_CODING_AGENT_DIR: accountRoot,
       MPX_RUNTIME: 'pi',
+      MPX_RUNTIME_EXECUTOR: input.executor,
       MPX_RUNTIME_CONTEXT: JSON.stringify(context),
       MPX_RUNTIME_CONTEXT_FILE: absolute(runtimeContextFile, 'runtime context'),
       ...(input.launchIdentity
         ? {
             MPX_IDENTITY: input.launchIdentity.name,
             MPX_MODE: input.launchIdentity.mode,
-            MPX_SKILL_POLICY: input.launchIdentity.skillPolicy,
           }
         : {}),
       ...(input.projectProviders
@@ -538,11 +533,11 @@ export async function planPiInvocation(input: PiInvocationInput): Promise<PiInvo
 export interface PiProjectionBuildInput {
   readonly skillPlan: SkillProjectionPlan;
   readonly compiledContent: CompiledContentTree;
-  readonly context: RuntimeContextV1;
+  readonly context: RuntimeContext;
   readonly expectedLaunch: { readonly launchKey: string; readonly descriptorDigest: string };
   readonly currentBinding: RuntimeBinding;
   readonly artifactsRoot: string;
-  readonly piRuntimeProfile: PiRuntimeProfileV1;
+  readonly piRuntimeProfile: PiRuntimeProfile;
   readonly globalInstructions: string;
   readonly piAppendInstructions: string;
   readonly cwd: string;
@@ -681,10 +676,10 @@ async function emit(root: string, relative: string, content: string | Uint8Array
 }
 function freezeProjection(
   published: PublishedRuntimeArtifact,
-  profileInput: PiRuntimeProfileV1,
+  profileInput: PiRuntimeProfile,
 ): PiPublishedProjection {
   const reference = Object.freeze({ ...published.reference });
-  const profile = parsePiRuntimeProfileV1(profileInput);
+  const profile = parsePiRuntimeProfile(profileInput);
   const directory = path.resolve(published.directory);
   const projection = Object.freeze({
     directory,
@@ -704,7 +699,7 @@ function freezeProjection(
 export async function buildPiProjection(
   input: PiProjectionBuildInput,
 ): Promise<PiPublishedProjection> {
-  const piRuntimeProfile = parsePiRuntimeProfileV1(input.piRuntimeProfile);
+  const piRuntimeProfile = parsePiRuntimeProfile(input.piRuntimeProfile);
   const skillPlan = verifySkillProjectionPlan(input.skillPlan);
   const compiledContent = verifyCompiledContentTree(input.compiledContent, {
     runtime: 'pi',
@@ -731,7 +726,7 @@ export async function buildPiProjection(
   if (skillPlan.runtime !== 'pi') {
     throw new Error('Pi projection requires a Pi skill projection plan');
   }
-  const context = parseRuntimeContextV1(input.context);
+  const context = parseRuntimeContext(input.context);
   if (
     skillPlan.manifestKey !== context.manifestKey ||
     skillPlan.artifactReference.artifactKey !== context.runtimeArtifact.artifactKey

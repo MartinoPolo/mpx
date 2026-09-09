@@ -15,6 +15,28 @@ function terminalSafe(value: string): string {
   return value.replace(ansiEscape, '').replace(controls, ' ').replace(/\s+/gu, ' ').trim();
 }
 
+function configInvalidReasons(error: PublicError): string[] {
+  if (error.code !== 'CONFIG_INVALID' || !error.details || typeof error.details !== 'object') {
+    return [];
+  }
+  const errors = (error.details as { errors?: unknown }).errors;
+  if (!Array.isArray(errors)) {
+    return [];
+  }
+  return errors.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+    const { pointer, reason } = entry as { pointer?: unknown; reason?: unknown };
+    if (typeof pointer !== 'string' || typeof reason !== 'string') {
+      return [];
+    }
+    const safePointer = terminalSafe(pointer);
+    const safeReason = terminalSafe(reason);
+    return safePointer && safeReason ? [`${safePointer}: ${safeReason}`] : [];
+  });
+}
+
 function renderSolution(solution: ErrorSolution, color: boolean): string {
   const explanation = terminalSafe(solution.explanation);
   if (!solution.command) {
@@ -50,8 +72,10 @@ export function formatHumanError(
     );
   }
 
+  const configReasons = configInvalidReasons(error);
   const sections = [
     `ERROR [${terminalSafe(error.code)}] - ${reason}`,
+    ...(configReasons.length > 0 ? [`CONFIGURATION DIAGNOSTICS\n${configReasons.join('\n')}`] : []),
     `POSSIBLE SOLUTIONS/WORKAROUNDS\n${rendered.join('\n')}`,
   ];
   if (safeUsage) {

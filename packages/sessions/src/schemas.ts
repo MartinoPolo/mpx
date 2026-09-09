@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { MpxError } from '@mpx/core';
 import {
-  parseNativeSessionRefV1,
-  parseSessionLifecycleBindingV1,
-  type NativeSessionRefV1,
+  parseNativeSessionRef,
+  parseSessionLifecycleBinding,
+  parseSkillSelection,
+  type NativeSessionRef,
+  type ResolvedSkillSelection,
   type RuntimeName,
-  type SessionLifecycleBindingV1,
+  type SessionLifecycleBinding,
 } from '@mpx/runtime-contracts';
 
 export class SessionError extends MpxError {
@@ -13,44 +15,48 @@ export class SessionError extends MpxError {
     code: string,
     message: string,
     details?: Record<string, string | number | boolean | null>,
+    remediation?: string,
   ) {
-    super({ code, message, ...(details === undefined ? {} : { details }) });
+    super({
+      code,
+      message,
+      ...(details === undefined ? {} : { details }),
+      ...(remediation === undefined ? {} : { remediation }),
+    });
     this.name = 'SessionError';
   }
 }
 
-export type IdentityV1 = Readonly<{ domain: string; name: string }>;
+export type Identity = Readonly<{ domain: string; name: string }>;
 export type WorkflowStatus = 'unfinished' | 'needs-review' | 'completed' | 'abandoned' | 'paused';
 export type SessionLiveness = 'active' | 'inactive' | 'unknown';
-export type LaunchSnapshotV1 = Readonly<{
+export type LaunchSnapshot = Readonly<{
   launchKey: string;
   descriptorDigest: string;
   mode: string;
-  skillPolicy: string;
-  contentScope: string;
+  selection: ResolvedSkillSelection;
   executor: Readonly<{ kind: 'host' | 'docker' }>;
   workspace: string;
   networkPolicy: string;
-  grants: readonly Readonly<{ access: string; resource: string }>[];
   artifactKey: string;
   manifestKey: string;
 }>;
-export type SessionLocationV1 = Readonly<{
+export type SessionLocation = Readonly<{
   cwd: string;
   project: string | null;
   repository: string | null;
   worktree: string | null;
 }>;
-export interface SessionRecordV1 {
-  readonly schemaVersion: 1;
+export interface SessionRecord {
+  readonly schemaVersion: 2;
   readonly recordId: string;
   readonly runtimeQualifiedId: string;
   readonly runtime: RuntimeName;
-  readonly identity: IdentityV1;
+  readonly identity: Identity;
   readonly nativeBindingRef: string;
-  readonly nativeSessionRef: NativeSessionRefV1;
-  readonly launch: LaunchSnapshotV1 | null;
-  readonly location: SessionLocationV1;
+  readonly nativeSessionRef: NativeSessionRef;
+  readonly launch: LaunchSnapshot | null;
+  readonly location: SessionLocation;
   readonly metadata: Readonly<{
     title: string | null;
     model: string | null;
@@ -90,29 +96,29 @@ export interface SessionRecordV1 {
     timestamp: string | null;
   }>;
 }
-export interface SessionRegistryV1 {
-  readonly schemaVersion: 1;
-  readonly identity: IdentityV1;
+export interface SessionRegistry {
+  readonly schemaVersion: 2;
+  readonly identity: Identity;
   readonly runtime: RuntimeName;
-  readonly records: readonly SessionRecordV1[];
+  readonly records: readonly SessionRecord[];
   readonly recentEventIds: readonly string[];
 }
-export interface NativeBindingRecordV1 {
+export interface NativeBindingRecord {
   readonly schemaVersion: 1;
   readonly ref: string;
-  readonly identity: IdentityV1;
+  readonly identity: Identity;
   readonly runtime: RuntimeName;
   readonly recordedRootDigest: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
-export interface SessionLifecycleBindingRecordV1 {
-  readonly schemaVersion: 1;
-  readonly binding: SessionLifecycleBindingV1;
+export interface SessionLifecycleBindingRecord {
+  readonly schemaVersion: 2;
+  readonly binding: SessionLifecycleBinding;
   readonly nativeBindingRef: string;
-  readonly nativeSessionRef: NativeSessionRefV1 | null;
-  readonly launch: LaunchSnapshotV1;
-  readonly location: SessionLocationV1;
+  readonly nativeSessionRef: NativeSessionRef | null;
+  readonly launch: LaunchSnapshot;
+  readonly location: SessionLocation;
 }
 const control = /[\u0000-\u001f\u007f-\u009f]/u;
 const digestPattern = /^[a-f0-9]{64}$/u;
@@ -193,7 +199,7 @@ function runtime(value: unknown): RuntimeName {
   }
   return value;
 }
-function identity(value: unknown): IdentityV1 {
+function identity(value: unknown): Identity {
   const item = obj(value, ['domain', 'name'], 'identity');
   return {
     domain: text(item.domain, 'identity.domain', 128),
@@ -207,7 +213,7 @@ function sha(value: unknown, label: string): string {
   }
   return result;
 }
-function location(value: unknown): SessionLocationV1 {
+function location(value: unknown): SessionLocation {
   const item = obj(value, ['cwd', 'project', 'repository', 'worktree'], 'location');
   return {
     cwd: text(item.cwd, 'location.cwd', 4096),
@@ -216,19 +222,17 @@ function location(value: unknown): SessionLocationV1 {
     worktree: nullableText(item.worktree, 'location.worktree'),
   };
 }
-export function parseLaunchSnapshotV1(value: unknown): LaunchSnapshotV1 {
+export function parseLaunchSnapshot(value: unknown): LaunchSnapshot {
   const item = obj(
     value,
     [
       'launchKey',
       'descriptorDigest',
       'mode',
-      'skillPolicy',
-      'contentScope',
+      'selection',
       'executor',
       'workspace',
       'networkPolicy',
-      'grants',
       'artifactKey',
       'manifestKey',
     ],
@@ -238,26 +242,28 @@ export function parseLaunchSnapshotV1(value: unknown): LaunchSnapshotV1 {
   if (executor.kind !== 'host' && executor.kind !== 'docker') {
     fail('SESSION_INVALID_SCHEMA', 'launch.executor.kind is invalid');
   }
-  if (!Array.isArray(item.grants) || item.grants.length > 128) {
-    fail('SESSION_INVALID_SCHEMA', 'launch.grants is invalid');
-  }
-  const grants = item.grants.map((raw, index) => {
-    const grant = obj(raw, ['access', 'resource'], `launch.grants[${index}]`);
-    return {
-      access: text(grant.access, 'grant.access', 64),
-      resource: text(grant.resource, 'grant.resource', 1024),
-    };
-  });
+  const selection = parseSkillSelection(item.selection, (code, message) =>
+    fail(code === 'UNKNOWN_FIELD' ? 'SESSION_UNKNOWN_FIELD' : 'SESSION_INVALID_SCHEMA', message),
+  );
   return {
     launchKey: text(item.launchKey, 'launch.launchKey'),
     descriptorDigest: sha(item.descriptorDigest, 'launch.descriptorDigest'),
     mode: text(item.mode, 'launch.mode', 64),
-    skillPolicy: text(item.skillPolicy, 'launch.skillPolicy', 128),
-    contentScope: text(item.contentScope, 'launch.contentScope', 256),
+    selection: Object.freeze({
+      location: Object.freeze({
+        name: text(selection.location.name, 'launch.selection.location.name', 256),
+        canonicalRoot: text(
+          selection.location.canonicalRoot,
+          'launch.selection.location.canonicalRoot',
+          4096,
+        ),
+      }),
+      packs: selection.packs,
+      source: selection.source,
+    }),
     executor: { kind: executor.kind },
     workspace: text(item.workspace, 'launch.workspace', 1024),
     networkPolicy: text(item.networkPolicy, 'launch.networkPolicy', 128),
-    grants,
     artifactKey: text(item.artifactKey, 'launch.artifactKey'),
     manifestKey: text(item.manifestKey, 'launch.manifestKey'),
   };
@@ -274,7 +280,7 @@ function enumValue<T extends string>(value: unknown, values: readonly T[], label
   }
   return value as T;
 }
-export function parseSessionRecordV1(value: unknown): SessionRecordV1 {
+export function parseSessionRecord(value: unknown): SessionRecord {
   const item = obj(
     value,
     [
@@ -297,11 +303,11 @@ export function parseSessionRecordV1(value: unknown): SessionRecordV1 {
     ],
     'session record',
   );
-  if (item.schemaVersion !== 1) {
+  if (item.schemaVersion !== 2) {
     fail('SESSION_SCHEMA_VERSION', 'unsupported session record schema version');
   }
   const rt = runtime(item.runtime);
-  const nativeRef = parseNativeSessionRefV1(item.nativeSessionRef);
+  const nativeRef = parseNativeSessionRef(item.nativeSessionRef);
   const qualified = text(item.runtimeQualifiedId, 'runtimeQualifiedId');
   if (!qualified.startsWith(`${rt}:`)) {
     fail('SESSION_BINDING_MISMATCH', 'runtimeQualifiedId does not match runtime');
@@ -345,14 +351,14 @@ export function parseSessionRecordV1(value: unknown): SessionRecordV1 {
     fail('SESSION_INVALID_TIMESTAMP', 'updatedAt precedes createdAt');
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     recordId: text(item.recordId, 'recordId'),
     runtimeQualifiedId: qualified,
     runtime: rt,
     identity: identity(item.identity),
     nativeBindingRef: text(item.nativeBindingRef, 'nativeBindingRef'),
     nativeSessionRef: nativeRef,
-    launch: item.launch === null ? null : parseLaunchSnapshotV1(item.launch),
+    launch: item.launch === null ? null : parseLaunchSnapshot(item.launch),
     location: location(item.location),
     metadata: {
       title: nullableText(metadata.title, 'metadata.title'),
@@ -450,14 +456,27 @@ export function parseSessionRecordV1(value: unknown): SessionRecordV1 {
     },
   };
 }
-export function parseSessionRegistryV1(value: unknown): SessionRegistryV1 {
+export function parseSessionRegistry(value: unknown): SessionRegistry {
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).schemaVersion === 1
+  ) {
+    throw new SessionError(
+      'SESSION_STALE_REGISTRY_AUTHORITY',
+      'Session registry authority is obsolete; preserve the existing bytes and relaunch through MPX to create fresh session authority.',
+      undefined,
+      'Start a fresh MPX launch; do not migrate, delete, or overwrite the obsolete registry.',
+    );
+  }
   const item = obj(
     value,
     ['schemaVersion', 'identity', 'runtime', 'records', 'recentEventIds'],
     'registry',
   );
   if (
-    item.schemaVersion !== 1 ||
+    item.schemaVersion !== 2 ||
     !Array.isArray(item.records) ||
     item.records.length > 10_000 ||
     !Array.isArray(item.recentEventIds) ||
@@ -467,7 +486,7 @@ export function parseSessionRegistryV1(value: unknown): SessionRegistryV1 {
   }
   const id = identity(item.identity),
     rt = runtime(item.runtime),
-    records = item.records.map(parseSessionRecordV1),
+    records = item.records.map(parseSessionRecord),
     ids = item.recentEventIds.map((v, i) => text(v, `recentEventIds[${i}]`));
   if (
     new Set(ids).size !== ids.length ||
@@ -481,14 +500,14 @@ export function parseSessionRegistryV1(value: unknown): SessionRegistryV1 {
     fail('SESSION_PARTITION_MISMATCH', 'registry content does not match partition');
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     identity: id,
     runtime: rt,
     records,
     recentEventIds: ids,
   };
 }
-export function parseNativeBindingRecordV1(value: unknown): NativeBindingRecordV1 {
+export function parseNativeBindingRecord(value: unknown): NativeBindingRecord {
   const item = obj(
     value,
     ['schemaVersion', 'ref', 'identity', 'runtime', 'recordedRootDigest', 'createdAt', 'updatedAt'],
@@ -512,17 +531,17 @@ export function parseNativeBindingRecordV1(value: unknown): NativeBindingRecordV
     updatedAt,
   };
 }
-export function parseLifecycleBindingRecordV1(value: unknown): SessionLifecycleBindingRecordV1 {
+export function parseLifecycleBindingRecord(value: unknown): SessionLifecycleBindingRecord {
   const item = obj(
     value,
     ['schemaVersion', 'binding', 'nativeBindingRef', 'nativeSessionRef', 'launch', 'location'],
     'lifecycle binding record',
   );
-  if (item.schemaVersion !== 1) {
+  if (item.schemaVersion !== 2) {
     fail('SESSION_SCHEMA_VERSION', 'unsupported lifecycle binding record version');
   }
-  const binding = parseSessionLifecycleBindingV1(item.binding);
-  const launch = parseLaunchSnapshotV1(item.launch);
+  const binding = parseSessionLifecycleBinding(item.binding);
+  const launch = parseLaunchSnapshot(item.launch);
   if (
     launch.launchKey !== binding.launchKey ||
     launch.descriptorDigest !== binding.launchDescriptorDigest ||
@@ -535,11 +554,11 @@ export function parseLifecycleBindingRecordV1(value: unknown): SessionLifecycleB
     );
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     binding,
     nativeBindingRef: text(item.nativeBindingRef, 'nativeBindingRef'),
     nativeSessionRef:
-      item.nativeSessionRef === null ? null : parseNativeSessionRefV1(item.nativeSessionRef),
+      item.nativeSessionRef === null ? null : parseNativeSessionRef(item.nativeSessionRef),
     launch,
     location: location(item.location),
   };

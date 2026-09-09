@@ -216,7 +216,6 @@ export interface ScheduledSubagent {
 }
 
 export interface ScheduleStoreData {
-  /** For future migrations. */
   version: 1;
   jobs: ScheduledSubagent[];
 }

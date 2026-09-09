@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { discoverProjectConfig } from '../../src/discover.js';
-import { assertValid, validateProject } from '../../src/schema.js';
+import { assertValid, ConfigValidationError, validateProject } from '../../src/schema.js';
 import { parseStrictJson, StrictJsonError } from '../../src/strict-json.js';
 import { isDirectoryProjectConfig } from '../../src/types.js';
 import { parseUserConfig } from '../../src/user-config.js';
@@ -171,29 +171,44 @@ describe('strict json', () => {
   it('schema rejects secret fields', () =>
     expect(() => assertValid(validateProject, { ...base(), token: 'secret' })).toThrow());
 });
-const user = (root: string, pack = 'core') =>
+const user = (root: string, pack = 'development') =>
   JSON.stringify({
+    schemaVersion: 2,
     identities: {},
     domains: { work: [root] },
-    contentScopes: { work: { roots: [root], skillPacks: [pack] } },
+    locations: { work: { roots: [root], skillPacks: [pack] } },
     modes: {},
-    skillPolicies: {},
     presets: {},
-    launchDefaults: { scopes: {}, projects: {} },
+    launchDefaults: { locations: {}, projects: {} },
     networkPolicies: {},
     executors: { host: {} },
   });
 it('interpolates only approved complete MPX root tokens', () => {
   expect(
-    parseUserConfig(user('${MPX_WORK}'), { MPX_WORK: 'C:/work' }).contentScopes.work?.roots,
+    parseUserConfig(user('${MPX_WORK}'), { MPX_WORK: 'C:/work' }).locations.work?.roots,
   ).toEqual(['C:/work']);
   expect(() => parseUserConfig(user('x/${MPX_WORK}'), { MPX_WORK: 'C:/work' })).toThrow();
   expect(() => parseUserConfig(user('${MPX_SECRET}'), { MPX_SECRET: 'secret' })).toThrow();
 });
+it('reports missing and unsupported root variables without echoing configured values', () => {
+  expect.assertions(6);
+  for (const [root, environment, reason, hidden] of [
+    ['${MPX_WORK}', {}, 'requires unavailable environment root MPX_WORK', '${MPX_WORK}'],
+    ['prefix/${MPX_PRIVATE_VALUE}', {}, 'uses an unsupported environment root token', 'prefix/'],
+  ] as const) {
+    try {
+      parseUserConfig(user(root), environment);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigValidationError);
+      expect((error as Error).message).toContain(reason);
+      expect((error as Error).message).not.toContain(hidden);
+    }
+  }
+});
 it('rejects unknown skill packs', () =>
   expect(() => parseUserConfig(user('C:/work', 'unknown'))).toThrow());
-it('accepts the five Phase H service manifest shapes', async () => {
-  const root = new URL('../fixtures/phase-h/', import.meta.url);
+it('accepts the five service manifest shapes', async () => {
+  const root = new URL('../fixtures/service-manifests/', import.meta.url);
   for (const name of [
     'checkout.json',
     'coupled.json',

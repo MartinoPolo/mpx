@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "project": { "id": "phase-h/shared" },
+  "project": { "id": "service-manifests/shared" },
   "repository": { "provider": "generic", "remote": "origin" },
   "development": {
     "services": {

@@ -1,15 +1,20 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, opendir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { parseSkillSelection as parseSkillSelectionInternal } from './skill-selection.js';
+import type { ResolvedSkillSelection } from './skill-selection.js';
 
 export { bareSkillIdentity } from './skill-identity.js';
+/** @public */
+export const parseSkillSelection = parseSkillSelectionInternal;
+export type { ResolvedSkillSelection } from './skill-selection.js';
 
 /** @public */
-export const RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION = 4 as const;
+export const RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION = 5 as const;
 /** @public */
-export const RUNTIME_SKILL_ARTIFACT_SCHEMA_VERSION = 4 as const;
+export const RUNTIME_SKILL_ARTIFACT_SCHEMA_VERSION = 5 as const;
 /** @public */
-export const RUNTIME_CONTEXT_SCHEMA_VERSION = 1 as const;
+export const RUNTIME_CONTEXT_SCHEMA_VERSION = 2 as const;
 /** @public */
 export const RUNTIME_CONTRACT_ERROR_SCHEMA_VERSION = 1 as const;
 /** @public */
@@ -20,13 +25,14 @@ export const SESSION_LIFECYCLE_EVENT_SCHEMA_VERSION = 1 as const;
 export const RUNTIME_SESSION_OBSERVATION_SCHEMA_VERSION = 1 as const;
 
 export type RuntimeName = 'claude' | 'pi';
-export type SkillExposure = 'full' | 'name-only' | 'explicit-only' | 'off';
+export type SkillExposure = 'full' | 'name-only' | 'explicit-only';
 export interface RuntimeBinding {
   readonly projectId: string | null;
   readonly repositoryId: string;
-  readonly contentScope: string;
+  readonly identity: string;
+  readonly selection: ResolvedSkillSelection;
 }
-export interface ResolvedSkillDecisionV4 {
+export interface ResolvedSkillDecision {
   readonly identity: string;
   readonly included: boolean;
   readonly exclusionReasons: readonly string[];
@@ -35,25 +41,25 @@ export interface ResolvedSkillDecisionV4 {
   readonly metadataHash: string;
   readonly sourceHash: string;
 }
-export interface ResolvedSkillManifestV4 {
+export interface ResolvedSkillManifest {
   readonly schemaVersion: typeof RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION;
   readonly manifestKey: string;
   readonly binding: RuntimeBinding;
-  readonly decisions: readonly ResolvedSkillDecisionV4[];
+  readonly decisions: readonly ResolvedSkillDecision[];
 }
-export interface RuntimeSkillArtifactReferenceV4 {
+export interface RuntimeSkillArtifactReference {
   readonly schemaVersion: typeof RUNTIME_SKILL_ARTIFACT_SCHEMA_VERSION;
   readonly runtime: RuntimeName;
   readonly manifestKey: string;
   readonly artifactKey: string;
   readonly fileMapHash: string;
 }
-export interface RuntimeContextV1 {
+export interface RuntimeContext {
   readonly schemaVersion: typeof RUNTIME_CONTEXT_SCHEMA_VERSION;
   readonly launchKey: string;
   readonly launchDescriptor: { readonly reference: string; readonly digest: string };
   readonly manifestKey: string;
-  readonly runtimeArtifact: RuntimeSkillArtifactReferenceV4;
+  readonly runtimeArtifact: RuntimeSkillArtifactReference;
   readonly binding: RuntimeBinding;
 }
 
@@ -139,16 +145,21 @@ function text(value: unknown, label: string): string {
   }
   return value;
 }
+function parseSelection(value: unknown): ResolvedSkillSelection {
+  return parseSkillSelection(value, (code, message) => fail(code, message));
+}
+
 function parseBinding(value: unknown): RuntimeBinding {
   const item = record(value, 'binding');
-  exactKeys(item, ['projectId', 'repositoryId', 'contentScope'], 'binding');
+  exactKeys(item, ['projectId', 'repositoryId', 'identity', 'selection'], 'binding');
   if (item.projectId !== null && typeof item.projectId !== 'string') {
     fail('INVALID_CONTRACT', 'binding.projectId must be a string or null');
   }
   return {
     projectId: item.projectId,
     repositoryId: text(item.repositoryId, 'binding.repositoryId'),
-    contentScope: text(item.contentScope, 'binding.contentScope'),
+    identity: text(item.identity, 'binding.identity'),
+    selection: parseSelection(item.selection),
   };
 }
 function runtime(value: unknown): RuntimeName {
@@ -225,11 +236,11 @@ function lifecycleCreatorInput(value: unknown, keys: readonly string[], label: s
   }
 }
 
-export type NativeSessionRefV1 =
+export type NativeSessionRef =
   | { readonly kind: 'native-id'; readonly value: string }
   | { readonly kind: 'root-relative-file'; readonly value: string };
 /** @public */
-export function parseNativeSessionRefV1(value: unknown): NativeSessionRefV1 {
+export function parseNativeSessionRef(value: unknown): NativeSessionRef {
   const item = record(value, 'nativeSessionRef');
   exactKeys(item, ['kind', 'value'], 'nativeSessionRef');
   if (item.kind === 'native-id') {
@@ -244,7 +255,7 @@ export function parseNativeSessionRefV1(value: unknown): NativeSessionRefV1 {
   return fail('INVALID_CONTRACT', 'nativeSessionRef.kind is invalid');
 }
 
-export interface SessionLifecycleBindingV1 {
+export interface SessionLifecycleBinding {
   readonly schemaVersion: 1;
   readonly bindingId: string;
   readonly bindingRef: string;
@@ -261,9 +272,9 @@ export interface SessionLifecycleBindingV1 {
   readonly expiresAt: string;
 }
 /** @public */
-export function createSessionLifecycleBindingV1(
-  input: Omit<SessionLifecycleBindingV1, 'schemaVersion'> | SessionLifecycleBindingV1,
-): SessionLifecycleBindingV1 {
+export function createSessionLifecycleBinding(
+  input: Omit<SessionLifecycleBinding, 'schemaVersion'> | SessionLifecycleBinding,
+): SessionLifecycleBinding {
   lifecycleCreatorInput(
     input,
     [
@@ -305,7 +316,7 @@ export function createSessionLifecycleBindingV1(
   return result;
 }
 /** @public */
-export function parseSessionLifecycleBindingV1(value: unknown): SessionLifecycleBindingV1 {
+export function parseSessionLifecycleBinding(value: unknown): SessionLifecycleBinding {
   const item = record(value, 'sessionLifecycleBinding');
   exactKeys(
     item,
@@ -333,18 +344,18 @@ export function parseSessionLifecycleBindingV1(value: unknown): SessionLifecycle
       `unsupported session lifecycle binding schema version '${String(item.schemaVersion)}'`,
     );
   }
-  return createSessionLifecycleBindingV1(item as unknown as SessionLifecycleBindingV1);
+  return createSessionLifecycleBinding(item as unknown as SessionLifecycleBinding);
 }
 /** @public */
-export function validateSessionLifecycleBindingV1(input: {
+export function validateSessionLifecycleBinding(input: {
   readonly binding: unknown;
   readonly context: unknown;
   readonly runtime: RuntimeName;
   readonly projectionReference?: PublishedRuntimeArtifactReference;
   readonly now?: string | Date;
-}): SessionLifecycleBindingV1 {
-  const binding = parseSessionLifecycleBindingV1(input.binding),
-    context = parseRuntimeContextV1(input.context),
+}): SessionLifecycleBinding {
+  const binding = parseSessionLifecycleBinding(input.binding),
+    context = parseRuntimeContext(input.context),
     now =
       input.now instanceof Date ? input.now.toISOString() : (input.now ?? new Date().toISOString());
   instant(now, 'now');
@@ -377,7 +388,7 @@ export function validateSessionLifecycleBindingV1(input: {
 }
 
 export type SessionLifecycleEventType = 'start' | 'info' | 'activity' | 'shutdown';
-export interface SessionLifecycleEventV1 {
+export interface SessionLifecycleEvent {
   readonly schemaVersion: 1;
   readonly eventId: string;
   readonly bindingId: string;
@@ -385,7 +396,7 @@ export interface SessionLifecycleEventV1 {
   readonly sequence: number;
   readonly timestamp: string;
   readonly nativeSessionId: string;
-  readonly nativeSessionRef: NativeSessionRefV1;
+  readonly nativeSessionRef: NativeSessionRef;
   readonly cwd: string;
   readonly title: string | null;
   readonly model: string | null;
@@ -394,9 +405,9 @@ export interface SessionLifecycleEventV1 {
   readonly startFingerprint: string;
 }
 /** @public */
-export function createSessionLifecycleEventV1(
-  input: Omit<SessionLifecycleEventV1, 'schemaVersion'> | SessionLifecycleEventV1,
-): SessionLifecycleEventV1 {
+export function createSessionLifecycleEvent(
+  input: Omit<SessionLifecycleEvent, 'schemaVersion'> | SessionLifecycleEvent,
+): SessionLifecycleEvent {
   lifecycleCreatorInput(
     input,
     [
@@ -428,7 +439,7 @@ export function createSessionLifecycleEventV1(
     timestamp: instant(input.timestamp, 'timestamp'),
     nativeSessionId: boundedText(input.nativeSessionId, 'nativeSessionId'),
     nativeSessionRef: (() => {
-      const ref = parseNativeSessionRefV1(input.nativeSessionRef);
+      const ref = parseNativeSessionRef(input.nativeSessionRef);
       if (ref.kind === 'native-id' && ref.value !== input.nativeSessionId) {
         fail('BINDING_MISMATCH', 'native session id and reference differ');
       }
@@ -443,7 +454,7 @@ export function createSessionLifecycleEventV1(
   };
 }
 /** @public */
-export function parseSessionLifecycleEventV1(value: unknown): SessionLifecycleEventV1 {
+export function parseSessionLifecycleEvent(value: unknown): SessionLifecycleEvent {
   const item = record(value, 'sessionLifecycleEvent');
   exactKeys(
     item,
@@ -471,14 +482,14 @@ export function parseSessionLifecycleEventV1(value: unknown): SessionLifecycleEv
       `unsupported session lifecycle event schema version '${String(item.schemaVersion)}'`,
     );
   }
-  return createSessionLifecycleEventV1(item as unknown as SessionLifecycleEventV1);
+  return createSessionLifecycleEvent(item as unknown as SessionLifecycleEvent);
 }
 
 export type RuntimeSessionResumeState = 'resumable' | 'not-resumable' | 'unknown';
 export type RuntimeSessionLifecycleState = 'active' | 'idle' | 'shutdown' | 'unknown';
 export type RuntimeSessionWorkflowStatus =
   'unfinished' | 'needs-review' | 'completed' | 'abandoned' | 'paused';
-export interface RuntimeSessionObservationV1 {
+export interface RuntimeSessionObservation {
   readonly schemaVersion: 1;
   readonly runtime: RuntimeName;
   readonly identityRef: string;
@@ -496,9 +507,9 @@ export interface RuntimeSessionObservationV1 {
   readonly diagnostic: string | null;
 }
 /** @public */
-export function createRuntimeSessionObservationV1(
-  input: Omit<RuntimeSessionObservationV1, 'schemaVersion'> | RuntimeSessionObservationV1,
-): RuntimeSessionObservationV1 {
+export function createRuntimeSessionObservation(
+  input: Omit<RuntimeSessionObservation, 'schemaVersion'> | RuntimeSessionObservation,
+): RuntimeSessionObservation {
   lifecycleCreatorInput(
     input,
     [
@@ -562,7 +573,7 @@ export function createRuntimeSessionObservationV1(
   return result;
 }
 /** @public */
-export function parseRuntimeSessionObservationV1(value: unknown): RuntimeSessionObservationV1 {
+export function parseRuntimeSessionObservation(value: unknown): RuntimeSessionObservation {
   const item = record(value, 'runtimeSessionObservation');
   exactKeys(
     item,
@@ -591,35 +602,43 @@ export function parseRuntimeSessionObservationV1(value: unknown): RuntimeSession
       `unsupported runtime session observation schema version '${String(item.schemaVersion)}'`,
     );
   }
-  return createRuntimeSessionObservationV1(item as unknown as RuntimeSessionObservationV1);
+  return createRuntimeSessionObservation(item as unknown as RuntimeSessionObservation);
 }
 
 /** @public */
-export function createResolvedSkillManifestV4(input: {
+export function createResolvedSkillManifest(input: {
   binding: RuntimeBinding;
-  decisions: readonly ResolvedSkillDecisionV4[];
-}): ResolvedSkillManifestV4 {
+  decisions: readonly ResolvedSkillDecision[];
+}): ResolvedSkillManifest {
   const binding = parseBinding(input.binding);
   const decisions = input.decisions
-    .map((decision) => ({
-      identity: text(decision.identity, 'decision.identity'),
-      included: decision.included,
-      exclusionReasons: [...decision.exclusionReasons].sort(),
-      exposure: decision.exposure,
-      permissions: {
-        humanInvocation: decision.permissions.humanInvocation,
-        modelInvocation: decision.permissions.modelInvocation,
-      },
-      metadataHash: text(decision.metadataHash, 'decision.metadataHash'),
-      sourceHash: text(decision.sourceHash, 'decision.sourceHash'),
-    }))
+    .map((decision) => {
+      if (
+        typeof decision.included !== 'boolean' ||
+        !['full', 'name-only', 'explicit-only'].includes(decision.exposure)
+      ) {
+        fail('INVALID_CONTRACT', 'decision exposure or inclusion is invalid');
+      }
+      return {
+        identity: text(decision.identity, 'decision.identity'),
+        included: decision.included,
+        exclusionReasons: [...decision.exclusionReasons].sort(),
+        exposure: decision.exposure,
+        permissions: {
+          humanInvocation: decision.permissions.humanInvocation,
+          modelInvocation: decision.permissions.modelInvocation,
+        },
+        metadataHash: text(decision.metadataHash, 'decision.metadataHash'),
+        sourceHash: text(decision.sourceHash, 'decision.sourceHash'),
+      };
+    })
     .sort((left, right) => left.identity.localeCompare(right.identity));
   const tuple = { schemaVersion: RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION, binding, decisions };
   return { ...tuple, manifestKey: hash(tuple) };
 }
 
 /** @public */
-export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManifestV4 {
+export function parseResolvedSkillManifest(value: unknown): ResolvedSkillManifest {
   const item = record(value, 'manifest');
   exactKeys(item, ['schemaVersion', 'manifestKey', 'binding', 'decisions'], 'manifest');
   if (item.schemaVersion !== RESOLVED_SKILL_MANIFEST_SCHEMA_VERSION) {
@@ -631,7 +650,7 @@ export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManif
   if (!Array.isArray(item.decisions)) {
     fail('INVALID_CONTRACT', 'manifest.decisions must be an array');
   }
-  const decisions = item.decisions.map((value, index): ResolvedSkillDecisionV4 => {
+  const decisions = item.decisions.map((value, index): ResolvedSkillDecision => {
     const decision = record(value, `decision[${index}]`);
     exactKeys(
       decision,
@@ -653,7 +672,7 @@ export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManif
     ) {
       fail('INVALID_CONTRACT', `decision[${index}] inclusion fields are invalid`);
     }
-    if (!['full', 'name-only', 'explicit-only', 'off'].includes(decision.exposure as string)) {
+    if (!['full', 'name-only', 'explicit-only'].includes(decision.exposure as string)) {
       fail('INVALID_CONTRACT', `decision[${index}].exposure is invalid`);
     }
     const permissions = record(decision.permissions, `decision[${index}].permissions`);
@@ -681,7 +700,7 @@ export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManif
       sourceHash: text(decision.sourceHash, `decision[${index}].sourceHash`),
     };
   });
-  const parsed = createResolvedSkillManifestV4({ binding: parseBinding(item.binding), decisions });
+  const parsed = createResolvedSkillManifest({ binding: parseBinding(item.binding), decisions });
   if (text(item.manifestKey, 'manifest.manifestKey') !== parsed.manifestKey) {
     fail('MANIFEST_KEY_MISMATCH', 'resolved manifest content does not match its manifest key');
   }
@@ -689,9 +708,9 @@ export function parseResolvedSkillManifestV4(value: unknown): ResolvedSkillManif
 }
 
 /** @public */
-export function createRuntimeSkillArtifactReferenceV4(
-  input: Omit<RuntimeSkillArtifactReferenceV4, 'schemaVersion'>,
-): RuntimeSkillArtifactReferenceV4 {
+export function createRuntimeSkillArtifactReference(
+  input: Omit<RuntimeSkillArtifactReference, 'schemaVersion'>,
+): RuntimeSkillArtifactReference {
   return {
     schemaVersion: RUNTIME_SKILL_ARTIFACT_SCHEMA_VERSION,
     runtime: runtime(input.runtime),
@@ -701,9 +720,7 @@ export function createRuntimeSkillArtifactReferenceV4(
   };
 }
 /** @public */
-export function parseRuntimeSkillArtifactReferenceV4(
-  value: unknown,
-): RuntimeSkillArtifactReferenceV4 {
+export function parseRuntimeSkillArtifactReference(value: unknown): RuntimeSkillArtifactReference {
   const item = record(value, 'runtimeArtifact');
   exactKeys(
     item,
@@ -716,7 +733,7 @@ export function parseRuntimeSkillArtifactReferenceV4(
       `unsupported runtime artifact schema version '${String(item.schemaVersion)}'`,
     );
   }
-  return createRuntimeSkillArtifactReferenceV4({
+  return createRuntimeSkillArtifactReference({
     runtime: runtime(item.runtime),
     manifestKey: text(item.manifestKey, 'runtimeArtifact.manifestKey'),
     artifactKey: text(item.artifactKey, 'runtimeArtifact.artifactKey'),
@@ -724,10 +741,10 @@ export function parseRuntimeSkillArtifactReferenceV4(
   });
 }
 /** @public */
-export function createRuntimeContextV1(
-  input: Omit<RuntimeContextV1, 'schemaVersion'> | RuntimeContextV1,
-): RuntimeContextV1 {
-  const artifact = parseRuntimeSkillArtifactReferenceV4(input.runtimeArtifact);
+export function createRuntimeContext(
+  input: Omit<RuntimeContext, 'schemaVersion'> | RuntimeContext,
+): RuntimeContext {
+  const artifact = parseRuntimeSkillArtifactReference(input.runtimeArtifact);
   const manifestKey = text(input.manifestKey, 'manifestKey');
   if (artifact.manifestKey !== manifestKey) {
     fail('BINDING_MISMATCH', 'runtime artifact and context manifest keys differ');
@@ -745,7 +762,7 @@ export function createRuntimeContextV1(
   };
 }
 /** @public */
-export function parseRuntimeContextV1(value: unknown): RuntimeContextV1 {
+export function parseRuntimeContext(value: unknown): RuntimeContext {
   const item = record(value, 'runtimeContext');
   exactKeys(
     item,
@@ -760,14 +777,14 @@ export function parseRuntimeContextV1(value: unknown): RuntimeContextV1 {
   }
   const descriptor = record(item.launchDescriptor, 'launchDescriptor');
   exactKeys(descriptor, ['reference', 'digest'], 'launchDescriptor');
-  return createRuntimeContextV1({
+  return createRuntimeContext({
     launchKey: text(item.launchKey, 'launchKey'),
     launchDescriptor: {
       reference: relativeReference(descriptor.reference),
       digest: text(descriptor.digest, 'launchDescriptor.digest'),
     },
     manifestKey: text(item.manifestKey, 'manifestKey'),
-    runtimeArtifact: parseRuntimeSkillArtifactReferenceV4(item.runtimeArtifact),
+    runtimeArtifact: parseRuntimeSkillArtifactReference(item.runtimeArtifact),
     binding: parseBinding(item.binding),
   });
 }
@@ -779,7 +796,7 @@ export type RuntimeProjectionExecutor<TProjection, TResult = TProjection> = (
 export interface RuntimeProjectionBuilder<TProjection, TResult = TProjection> {
   readonly runtime: RuntimeName;
   project(
-    manifest: ResolvedSkillManifestV4,
+    manifest: ResolvedSkillManifest,
     executor: RuntimeProjectionExecutor<TProjection, TResult>,
   ): Promise<TResult>;
 }
@@ -1296,15 +1313,15 @@ export async function publishRuntimeArtifact(input: {
 
 /** @public */
 export async function validateRuntimeContext(input: {
-  context: RuntimeContextV1;
+  context: RuntimeContext;
   expectedLaunch: { launchKey: string; descriptorDigest: string };
   expectedManifestKey: string;
-  expectedRuntimeArtifact?: RuntimeSkillArtifactReferenceV4;
+  expectedRuntimeArtifact?: RuntimeSkillArtifactReference;
   currentBinding: RuntimeBinding;
   artifactDirectory?: string;
   expectedPublishedArtifact?: PublishedRuntimeArtifactReference;
 }): Promise<{ valid: boolean; diagnostics: RuntimeContractDiagnostic[] }> {
-  const context = parseRuntimeContextV1(input.context);
+  const context = parseRuntimeContext(input.context);
   const current = parseBinding(input.currentBinding);
   const diagnostics: RuntimeContractDiagnostic[] = [];
   const add = (code: string, message: string, restartRequired = true): void => {
@@ -1326,7 +1343,7 @@ export async function validateRuntimeContext(input: {
     input.expectedRuntimeArtifact !== undefined &&
     !same(
       context.runtimeArtifact,
-      parseRuntimeSkillArtifactReferenceV4(input.expectedRuntimeArtifact),
+      parseRuntimeSkillArtifactReference(input.expectedRuntimeArtifact),
     )
   ) {
     add('ARTIFACT_BINDING_CHANGED', 'runtime artifact reference changed');
@@ -1337,8 +1354,11 @@ export async function validateRuntimeContext(input: {
   if (context.binding.repositoryId !== current.repositoryId) {
     add('REPOSITORY_CHANGED', 'repository binding changed');
   }
-  if (context.binding.contentScope !== current.contentScope) {
-    add('CONTENT_SCOPE_CHANGED', 'content-scope binding changed');
+  if (context.binding.identity !== current.identity) {
+    add('IDENTITY_CHANGED', 'identity binding changed');
+  }
+  if (!same(context.binding.selection, current.selection)) {
+    add('SKILL_SELECTION_CHANGED', 'resolved skill selection binding changed');
   }
   if (input.artifactDirectory !== undefined) {
     if (input.expectedPublishedArtifact === undefined) {

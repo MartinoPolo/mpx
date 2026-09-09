@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createRuntimeCapabilityManifestV1,
-  createToolRequestEnvelopeV1,
-  createToolResultEnvelopeV1,
-  createToolErrorEnvelopeV1,
+  createRuntimeCapabilityManifest,
+  createToolRequestEnvelope,
+  createToolResultEnvelope,
+  createToolErrorEnvelope,
   deriveChildAuthority,
   validateRuntimeCapabilityBinding,
-  validateToolCallV1,
-  validateToolResultV1,
-  type ChildLaunchRequestV1,
-  type RuntimeCapabilityManifestV1,
+  validateToolCall,
+  validateToolResult,
+  type ChildLaunchRequest,
+  type RuntimeCapabilityManifest,
 } from '@mpx/runtime-contracts';
 
 const digest = (character: string) => character.repeat(64);
@@ -25,12 +25,20 @@ const tool = {
   timeout: { maxMs: 1_000 },
   cache: { mode: 'read-only' as const, maxBytes: 32 },
 };
-function manifest(): RuntimeCapabilityManifestV1 {
-  return createRuntimeCapabilityManifestV1({
+function manifest(): RuntimeCapabilityManifest {
+  return createRuntimeCapabilityManifest({
     runtime: 'claude',
     launchKey: digest('a'),
     identity: { name: 'personal', domain: 'personal', nativeRuntimeRootDigest: digest('b') },
-    binding: { projectId: 'p', repositoryId: 'r', contentScope: 'personal' },
+    binding: {
+      projectId: 'p',
+      repositoryId: 'r',
+      selection: {
+        location: { name: 'personal', canonicalRoot: 'C:/personal' },
+        packs: ['personal'],
+        source: 'project',
+      },
+    },
     executor: 'docker',
     tools: [tool],
     routes: ['mcp:search', 'git:personal'],
@@ -42,7 +50,7 @@ function manifest(): RuntimeCapabilityManifestV1 {
     nesting: { depth: 0, maxDepth: 2 },
   });
 }
-function childRequest(parent = manifest()): ChildLaunchRequestV1 {
+function childRequest(parent = manifest()): ChildLaunchRequest {
   return {
     schemaVersion: 1,
     parentManifestKey: parent.manifestKey,
@@ -65,7 +73,7 @@ function childRequest(parent = manifest()): ChildLaunchRequestV1 {
 describe('runtime capability contracts', () => {
   it('creates provider-neutral deterministic manifests independent of input ordering', () => {
     const first = manifest();
-    const second = createRuntimeCapabilityManifestV1({
+    const second = createRuntimeCapabilityManifest({
       ...first,
       tools: [...first.tools],
       routes: [...first.routes].reverse(),
@@ -81,7 +89,7 @@ describe('runtime capability contracts', () => {
 
   it('rejects malformed capability input', () => {
     expect(() =>
-      createRuntimeCapabilityManifestV1({ ...manifest(), routes: ['bad route'] }),
+      createRuntimeCapabilityManifest({ ...manifest(), routes: ['bad route'] }),
     ).toThrowError(/INVALID_CAPABILITY/u);
   });
 
@@ -123,7 +131,7 @@ describe('runtime capability contracts', () => {
       cacheMode: 'read-only' as const,
       input: { q: 'ok' },
     };
-    expect(validateToolCallV1(value, createToolRequestEnvelopeV1(base))).toMatchObject({
+    expect(validateToolCall(value, createToolRequestEnvelope(base))).toMatchObject({
       tool: 'search',
     });
     for (const change of [
@@ -136,16 +144,13 @@ describe('runtime capability contracts', () => {
       { input: { q: 'x'.repeat(200) } },
     ]) {
       expect(() =>
-        validateToolCallV1(
-          value,
-          createToolRequestEnvelopeV1({ ...base, ...change } as typeof base),
-        ),
+        validateToolCall(value, createToolRequestEnvelope({ ...base, ...change } as typeof base)),
       ).toThrowError(/TOOL_AUTHORITY_DENIED|ENVELOPE_LIMIT/u);
     }
   });
 
   it('bounds result and error envelopes', () => {
-    const request = createToolRequestEnvelopeV1({
+    const request = createToolRequestEnvelope({
       manifestKey: manifest().manifestKey,
       launchKey: manifest().launchKey,
       tool: 'search',
@@ -158,14 +163,14 @@ describe('runtime capability contracts', () => {
       input: null,
     });
     expect(() =>
-      createToolResultEnvelopeV1({
+      createToolResultEnvelope({
         requestKey: request.requestKey,
         output: 'x'.repeat(65),
         maxOutputBytes: 64,
       }),
     ).toThrowError(/ENVELOPE_LIMIT/u);
     expect(() =>
-      createToolErrorEnvelopeV1({
+      createToolErrorEnvelope({
         requestKey: request.requestKey,
         code: 'BAD',
         message: 'x'.repeat(257),
@@ -175,7 +180,7 @@ describe('runtime capability contracts', () => {
 
   it('enforces the authorized tool output bound per call', () => {
     const value = manifest();
-    const request = createToolRequestEnvelopeV1({
+    const request = createToolRequestEnvelope({
       manifestKey: value.manifestKey,
       launchKey: value.launchKey,
       tool: 'search',
@@ -187,12 +192,12 @@ describe('runtime capability contracts', () => {
       cacheMode: 'disabled',
       input: null,
     });
-    const result = createToolResultEnvelopeV1({
+    const result = createToolResultEnvelope({
       requestKey: request.requestKey,
       output: 'x'.repeat(64),
       maxOutputBytes: 1_000,
     });
-    expect(() => validateToolResultV1(value, request, result)).toThrowError(/ENVELOPE_LIMIT/u);
+    expect(() => validateToolResult(value, request, result)).toThrowError(/ENVELOPE_LIMIT/u);
   });
 });
 

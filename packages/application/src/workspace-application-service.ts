@@ -1,21 +1,21 @@
 import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
 import type { ProjectConfig } from '@mpx/config';
 import type { DevServiceSnapshot, ExecutorKind, StartRequest } from '@mpx/dev-services';
-import type { StatusSnapshotV1 } from '@mpx/status';
+import type { StatusSnapshot } from '@mpx/status';
 import type {
   CreateWorktreeRequest,
   LifecycleResult,
   WorktreeInventoryEntry,
 } from '@mpx/worktrees';
 
-export interface WorkspaceRequestV1 {
+export interface WorkspaceRequest {
   readonly schemaVersion: 1;
   readonly cwd: string;
 }
-export interface WorkspaceShowRequestV1 extends WorkspaceRequestV1 {
+export interface WorkspaceShowRequest extends WorkspaceRequest {
   readonly path?: string;
 }
-export interface WorkspaceCreateRequestV1 extends WorkspaceRequestV1 {
+export interface WorkspaceCreateRequest extends WorkspaceRequest {
   readonly branch: string;
   readonly base?: string;
   readonly sourceRoot?: string;
@@ -23,26 +23,26 @@ export interface WorkspaceCreateRequestV1 extends WorkspaceRequestV1 {
   readonly approval?: string;
   readonly execution?: 'foreground' | 'background' | 'none';
 }
-export interface WorkspaceRemoveRequestV1 extends WorkspaceRequestV1 {
+export interface WorkspaceRemoveRequest extends WorkspaceRequest {
   readonly path: string;
 }
-export interface WorkspaceServiceRequestV1 extends WorkspaceShowRequestV1 {
+export interface WorkspaceServiceRequest extends WorkspaceShowRequest {
   readonly serviceId: string;
 }
-export interface WorkspaceLogsRequestV1 extends WorkspaceServiceRequestV1 {
+export interface WorkspaceLogsRequest extends WorkspaceServiceRequest {
   readonly lines?: number;
 }
-export interface PortKillRequestV1 {
+export interface PortKillRequest {
   readonly schemaVersion: 1;
   readonly pid: number;
 }
 
-export interface WorkspaceDiagnosticV1 {
+export interface WorkspaceDiagnostic {
   readonly code: string;
   readonly severity: 'warning' | 'error';
   readonly message: string;
 }
-export interface WorkspaceSummaryV1 {
+export interface WorkspaceSummary {
   readonly path: string;
   readonly worktreeId: string | null;
   readonly leaseId: string | null;
@@ -51,13 +51,13 @@ export interface WorkspaceSummaryV1 {
   readonly role: 'main' | 'linked';
   readonly ports: Readonly<Record<string, number>>;
 }
-export interface WorkspaceListResultV1 {
+export interface WorkspaceListResult {
   readonly schemaVersion: 1;
   readonly kind: 'workspace-list';
-  readonly workspaces: readonly WorkspaceSummaryV1[];
-  readonly diagnostics: readonly WorkspaceDiagnosticV1[];
+  readonly workspaces: readonly WorkspaceSummary[];
+  readonly diagnostics: readonly WorkspaceDiagnostic[];
 }
-export interface WorkspaceServiceV1 {
+export interface WorkspaceService {
   readonly id: string;
   readonly configured: true;
   readonly managed: boolean;
@@ -68,26 +68,26 @@ export interface WorkspaceServiceV1 {
   readonly conflict: 'none' | 'external' | 'unknown';
   readonly pid: number | null;
 }
-export interface WorkspaceShowResultV1 extends WorkspaceSummaryV1 {
+export interface WorkspaceShowResult extends WorkspaceSummary {
   readonly schemaVersion: 1;
   readonly kind: 'workspace-show';
   readonly projectId: string;
   readonly portResolution: 'valid' | 'missing' | 'invalid' | 'stale';
-  readonly services: readonly WorkspaceServiceV1[];
-  readonly diagnostics: readonly WorkspaceDiagnosticV1[];
+  readonly services: readonly WorkspaceService[];
+  readonly diagnostics: readonly WorkspaceDiagnostic[];
 }
-export interface WorkspaceMutationResultV1 {
+export interface WorkspaceMutationResult {
   readonly schemaVersion: 1;
   readonly kind: 'workspace-mutation';
   readonly operation: 'create' | 'remove';
   readonly status: string;
   readonly path: string | null;
 }
-export interface WorkspaceServiceResultV1 {
+export interface WorkspaceServiceResult {
   readonly schemaVersion: 1;
   readonly kind: 'workspace-service';
   readonly path: string;
-  readonly service: Pick<WorkspaceServiceV1, 'id' | 'managed' | 'state' | 'pid'>;
+  readonly service: Pick<WorkspaceService, 'id' | 'managed' | 'state' | 'pid'>;
 }
 
 interface LeaseView {
@@ -142,7 +142,7 @@ export interface WorkspaceApplicationDependencies {
       projectRoot: string;
       config: ProjectConfig;
       configHash: string;
-    }): Promise<StatusSnapshotV1>;
+    }): Promise<StatusSnapshot>;
   };
   readonly services: {
     forWorkspace(root: string): Promise<WorkspaceDevService> | WorkspaceDevService;
@@ -161,7 +161,7 @@ export interface WorkspaceApplicationDependencies {
 
 const secret =
   /(?:[A-Za-z]:[\\/][^\s,;]+|\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+|\b[A-Za-z_][A-Za-z0-9_]{0,63}\s*=\s*[^\s]+)/giu;
-function diagnostic(error: unknown): WorkspaceDiagnosticV1 {
+function diagnostic(error: unknown): WorkspaceDiagnostic {
   return {
     code: error instanceof MpxError ? error.code : 'WORKSPACE_RECOVERY_FAILED',
     severity: 'warning',
@@ -238,7 +238,7 @@ function singleStatus(
 }
 function publicSnapshot(
   snapshot: Partial<DevServiceSnapshot> & { id: string; state: string },
-): Pick<WorkspaceServiceV1, 'id' | 'managed' | 'state' | 'pid'> {
+): Pick<WorkspaceService, 'id' | 'managed' | 'state' | 'pid'> {
   return { id: snapshot.id, managed: true, state: snapshot.state, pid: snapshot.pid ?? null };
 }
 
@@ -251,8 +251,8 @@ export class WorkspaceApplicationService {
     tolerate: boolean,
     resolvePorts = true,
     statusPass = true,
-  ): Promise<readonly WorkspaceDiagnosticV1[]> {
-    const diagnostics: WorkspaceDiagnosticV1[] = [];
+  ): Promise<readonly WorkspaceDiagnostic[]> {
+    const diagnostics: WorkspaceDiagnostic[] = [];
     const attempt = async (operation: () => Promise<unknown>) => {
       try {
         return await operation();
@@ -309,7 +309,7 @@ export class WorkspaceApplicationService {
       this.dependencies.worktrees.list({ cwd }),
       this.dependencies.ports.list(),
     ]);
-    return worktrees.map((item, index): WorkspaceSummaryV1 => {
+    return worktrees.map((item, index): WorkspaceSummary => {
       const lease = leases.find(
         (candidate) =>
           candidate.worktreePath !== undefined &&
@@ -328,7 +328,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async list(request: WorkspaceRequestV1): Promise<WorkspaceListResultV1> {
+  async list(request: WorkspaceRequest): Promise<WorkspaceListResult> {
     assertSchema(request);
     const diagnostics = await this.recover(request.cwd, true);
     return {
@@ -340,7 +340,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async show(request: WorkspaceShowRequestV1): Promise<WorkspaceShowResultV1> {
+  async show(request: WorkspaceShowRequest): Promise<WorkspaceShowResult> {
     assertSchema(request);
     const diagnostics = [...(await this.recover(request.cwd, true, false, false))];
     const inventory = await this.inventory(request.cwd);
@@ -359,7 +359,7 @@ export class WorkspaceApplicationService {
       });
     }
     const found = await this.dependencies.projects.discover(workspace.path);
-    let snapshot: StatusSnapshotV1;
+    let snapshot: StatusSnapshot;
     try {
       snapshot = await this.dependencies.status.snapshot({
         cwd: workspace.path,
@@ -434,7 +434,7 @@ export class WorkspaceApplicationService {
       }
     }
     const services = Object.entries(found.config.development?.services ?? {}).map(
-      ([id, definition]): WorkspaceServiceV1 => {
+      ([id, definition]): WorkspaceService => {
         const status = snapshot.services.find((item) => item.id === id);
         const process = managerGroups
           .find((group) => group.serviceIds.includes(id))
@@ -472,7 +472,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async create(request: WorkspaceCreateRequestV1): Promise<WorkspaceMutationResultV1> {
+  async create(request: WorkspaceCreateRequest): Promise<WorkspaceMutationResult> {
     assertSchema(request);
     await this.recover(request.cwd, false, false);
     if (this.dependencies.ports.ensure) {
@@ -496,7 +496,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async remove(request: WorkspaceRemoveRequestV1): Promise<WorkspaceMutationResultV1> {
+  async remove(request: WorkspaceRemoveRequest): Promise<WorkspaceMutationResult> {
     assertSchema(request);
     await this.recover(request.cwd, false);
     const target = this.dependencies.path.resolve(request.path);
@@ -544,7 +544,7 @@ export class WorkspaceApplicationService {
     };
   }
 
-  private async serviceContext(request: WorkspaceServiceRequestV1, tolerateRecovery = false) {
+  private async serviceContext(request: WorkspaceServiceRequest, tolerateRecovery = false) {
     assertSchema(request);
     await this.recover(request.cwd, tolerateRecovery);
     const inventory = await this.inventory(request.cwd);
@@ -615,7 +615,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async start(request: WorkspaceServiceRequestV1): Promise<WorkspaceServiceResultV1> {
+  async start(request: WorkspaceServiceRequest): Promise<WorkspaceServiceResult> {
     const {
       found,
       workspace,
@@ -700,7 +700,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async stop(request: WorkspaceServiceRequestV1): Promise<WorkspaceServiceResultV1> {
+  async stop(request: WorkspaceServiceRequest): Promise<WorkspaceServiceResult> {
     const { workspace, manager } = await this.serviceContext(request, true);
     const current = singleStatus(await manager.status(request.serviceId));
     if (!current || current.state === 'stopped' || current.state === 'crashed') {
@@ -720,7 +720,7 @@ export class WorkspaceApplicationService {
   }
 
   // fallow-ignore-next-line unused-class-member -- public workspace operation invoked by CLI dispatch.
-  async logs(request: WorkspaceLogsRequestV1): Promise<{
+  async logs(request: WorkspaceLogsRequest): Promise<{
     schemaVersion: 1;
     kind: 'workspace-service-logs';
     path: string;
@@ -742,7 +742,7 @@ export class WorkspaceApplicationService {
   }
 
   async killPort(
-    request: PortKillRequestV1,
+    request: PortKillRequest,
   ): Promise<{ schemaVersion: 1; kind: 'port-killed'; killed: true; pid: number }> {
     assertSchema(request);
     await this.dependencies.ports.kill(request.pid);

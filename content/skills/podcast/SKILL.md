@@ -119,8 +119,9 @@ prose instead of pasting proprietary code.
 
 Follow [`reference/NOTEBOOKLM_FLOW.md`](reference/NOTEBOOKLM_FLOW.md): create notebook → add the brief as a source →
 wait → `generate audio --prompt-file <prompt> --format deep-dive --length <length> --json` → background
-`general-purpose` waiter with `model: "appropriate runtime class"` → `download audio`. Full CLI surface:
-[`../notebooklm/SKILL.md`](../notebooklm/SKILL.md).
+`general-purpose` waiter with `model: "appropriate runtime class"` → `download audio`. Full CLI surface: `/mpx:notebooklm`. If that required command is unavailable, ask the user to include the
+`development` pack and stop; never load an excluded `SKILL.md` directly, silently skip this step, or broaden the
+selected packs automatically.
 
 Length maps straight through, and the same choice sets the prompt's closing duration line:
 

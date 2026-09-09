@@ -45,24 +45,23 @@ const palette = Object.fromEntries(
   ].map((name) => [name, '']),
 ) as unknown as FooterPalette;
 
-test('resolves independent MPX mode and skill policy without displaying identity', () => {
+test('resolves MPX runtime and mode without retaining the removed skill-policy axis', () => {
   assert.deepEqual(
     resolveFooterSessionIdentity({
       MPX_RUNTIME: 'pi',
       MPX_IDENTITY: 'personal',
       MPX_MODE: 'project',
-      MPX_SKILL_POLICY: 'developer',
+      MPX_SKILL_POLICY: 'obsolete',
     }),
-    { runtimeLabel: 'pi (mpx)', mode: 'project', skillPolicy: 'developer' },
+    { runtimeLabel: 'pi (mpx)', mode: 'project' },
   );
   assert.deepEqual(
     resolveFooterSessionIdentity({
       MPX_RUNTIME: 'pi',
       MPX_IDENTITY: 'work',
       MPX_MODE: 'developer',
-      MPX_SKILL_POLICY: 'developer',
     }),
-    { runtimeLabel: 'piw (mpx)', mode: 'developer', skillPolicy: 'developer' },
+    { runtimeLabel: 'piw (mpx)', mode: 'developer' },
   );
 });
 
@@ -70,29 +69,19 @@ test('uses compact native Pi labels and rejects unsafe display environment field
   assert.deepEqual(resolveFooterSessionIdentity({ PI_CODING_AGENT_DIR: 'C:/Users/me/.pi/agent' }), {
     runtimeLabel: 'pi',
     mode: '',
-    skillPolicy: '',
   });
   assert.deepEqual(
     resolveFooterSessionIdentity({ PI_CODING_AGENT_DIR: 'C:/Users/me/.pi/agent-work' }),
-    { runtimeLabel: 'piw', mode: '', skillPolicy: '' },
+    { runtimeLabel: 'piw', mode: '' },
   );
   assert.deepEqual(
     resolveFooterSessionIdentity({
       MPX_RUNTIME: 'pi',
       MPX_IDENTITY: 'personal\nspoof',
       MPX_MODE: 'developer\nspoof',
-      MPX_SKILL_POLICY: 'developer · spoof',
     }),
-    { runtimeLabel: 'pi (mpx)', mode: '', skillPolicy: '' },
+    { runtimeLabel: 'pi (mpx)', mode: '' },
   );
-});
-
-test('does not infer a missing skill policy from the launch mode', () => {
-  assert.deepEqual(resolveFooterSessionIdentity({ MPX_RUNTIME: 'pi', MPX_MODE: 'developer' }), {
-    runtimeLabel: 'pi (mpx)',
-    mode: 'developer',
-    skillPolicy: '',
-  });
 });
 
 test('maps launch-bound provider environment values and preserves safe unknown providers', () => {
@@ -126,14 +115,12 @@ test('uses unavailable placeholders when launch-bound providers are missing', ()
   assert.deepEqual(resolveFooterProviders({}), { repository: '?', issues: '?' });
 });
 
-test('links all five identity fields to their distinct configured destinations', () => {
+test('links runtime, mode, and provider fields to their distinct configured destinations', () => {
   const sessionIdentity = resolveFooterSessionIdentity({
     MPX_RUNTIME: 'pi',
     MPX_MODE: 'project',
-    MPX_SKILL_POLICY: 'developer',
     MPX_ACCOUNT_CONFIG_PATH: 'C:\\Users\\me\\MPX account.json',
     MPX_PROJECT_CONFIG_PATH: '/workspace/project mpxconfig.json',
-    MPX_SESSION_SKILLS_DIR: '/tmp/session skills',
   });
   const providers = resolveFooterProviders({
     MPX_REPOSITORY_PROVIDER: 'github',
@@ -148,23 +135,21 @@ test('links all five identity fields to their distinct configured destinations',
   for (const destination of [
     'file:///C:/Users/me/MPX%20account.json',
     'file:///workspace/project%20mpxconfig.json',
-    'file:///tmp/session%20skills',
     'https://github.com/example/repo/pull/42',
     'https://kanbanflow.com/board/example',
   ]) {
     assert.ok(row.includes(destination), `missing ${destination}`);
   }
-  assert.match(row, /pi \(mpx\).*mode:project.*skills:developer.*gh.*kf/u);
+  assert.match(row, /pi \(mpx\).*mode:project.*gh.*kf/u);
+  assert.doesNotMatch(row, /skills:/u);
 });
 
 test('leaves identity text unlinked when destinations are missing or unsafe', () => {
   const sessionIdentity = resolveFooterSessionIdentity({
     MPX_RUNTIME: 'pi',
     MPX_MODE: 'project',
-    MPX_SKILL_POLICY: 'developer',
     MPX_ACCOUNT_CONFIG_PATH: 'relative/config.json',
     MPX_PROJECT_CONFIG_PATH: '/safe/path\nspoof',
-    MPX_SESSION_SKILLS_DIR: 'https://example.com/skills',
   });
   const providers = resolveFooterProviders({
     MPX_REPOSITORY_PROVIDER: 'gitlab',
@@ -176,14 +161,13 @@ test('leaves identity text unlinked when destinations are missing or unsafe', ()
   assert.deepEqual(sessionIdentity, {
     runtimeLabel: 'pi (mpx)',
     mode: 'project',
-    skillPolicy: 'developer',
   });
   assert.deepEqual(providers, { repository: 'glab', issues: 'gh' });
   assert.equal(
     renderFooterRows({ palette, sessionIdentity, providers } as FooterSnapshot, [
       buildIdentityRow,
     ])[0],
-    'pi (mpx) · mode:project · skills:developer · glab · gh',
+    'pi (mpx) · mode:project · glab · gh',
   );
 });
 
@@ -198,19 +182,18 @@ test('encodes Unicode and spaces in linked native filesystem paths', () => {
   );
 });
 
-test('renders ordered policies and provider roles without collapsing duplicate badges', () => {
+test('renders ordered mode and provider roles without collapsing duplicate badges', () => {
   const snapshot = {
     palette,
     sessionIdentity: {
       runtimeLabel: 'pi (mpx)',
       mode: 'developer',
-      skillPolicy: 'developer',
     },
     providers: { repository: 'gh', issues: 'gh' },
   } as FooterSnapshot;
 
   assert.deepEqual(renderFooterRows(snapshot, [buildIdentityRow]), [
-    'pi (mpx) · mode:developer · skills:developer · gh · gh',
+    'pi (mpx) · mode:developer · gh · gh',
   ]);
 });
 
@@ -220,13 +203,13 @@ test('renders session details before the identity row', () => {
     sessionName: 'Footer identity',
     sessionShortId: '01a07ce9',
     sessionFileUrl: '',
-    sessionIdentity: { runtimeLabel: 'pi (mpx)', mode: 'developer', skillPolicy: 'developer' },
+    sessionIdentity: { runtimeLabel: 'pi (mpx)', mode: 'developer' },
     providers: { repository: 'glab', issues: 'kf' },
   } as FooterSnapshot;
 
   assert.deepEqual(renderFooterRows(snapshot, [buildSessionRow, buildIdentityRow]), [
     'Footer identity · #01a07ce9',
-    'pi (mpx) · mode:developer · skills:developer · glab · kf',
+    'pi (mpx) · mode:developer · glab · kf',
   ]);
 });
 

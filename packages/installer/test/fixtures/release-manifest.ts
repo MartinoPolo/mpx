@@ -2,20 +2,20 @@ import { createHash } from 'node:crypto';
 import {
   canonicalJson,
   installerDigest,
-  type ReleaseFileV1,
-  type ReleaseManifestV1,
+  type ReleaseFile,
+  type ReleaseManifest,
 } from '../../src/immutable-core.js';
 
 export const releasePayload = 'console.log("manifest-fixture-sentinel");\n';
 
-const evidence: ReleaseFileV1 = {
+const evidence: ReleaseFile = {
   path: 'bin/mpx.mjs',
   bytes: Buffer.byteLength(releasePayload),
   sha256: createHash('sha256').update(releasePayload).digest('hex'),
 };
 const releaseKey = installerDigest([evidence]);
 
-export const validReleaseManifest: ReleaseManifestV1 = {
+export const validReleaseManifest: ReleaseManifest = {
   schemaVersion: 1,
   kind: 'release-manifest',
   releaseKey,

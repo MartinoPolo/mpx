@@ -7,7 +7,7 @@ metadata:
   category: planning
   mpx:
     schemaVersion: 1
-    skillPacks: [work]
+    skillPacks: [development]
     defaultExposure: explicit-only
 ---
 

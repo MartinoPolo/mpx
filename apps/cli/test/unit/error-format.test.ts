@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ContentCompilerError } from '@mpx/content-compiler';
 import type { PublicError } from '@mpx/core';
 import { formatHumanError } from '../../src/error-format.js';
+import { captureIo } from '../../src/io.js';
+import { run } from '../../src/main.js';
 
 function publicError(overrides: Partial<PublicError> = {}): PublicError {
   return {
@@ -35,6 +38,32 @@ describe('human CLI error formatting', () => {
     expect(output).toContain('Try this now');
   });
 
+  it('renders only structured configuration pointer and reason details safely', () => {
+    const output = formatHumanError(
+      publicError({
+        code: 'CONFIG_INVALID',
+        details: {
+          errors: [
+            {
+              pointer: '/locations/work\u001b[31m/roots/0',
+              keyword: 'semantic',
+              reason: 'requires unavailable\n environment root MPX_WORK',
+              value: 'C:/private/SECRET_VALUE',
+            },
+          ],
+          arbitrary: 'DO_NOT_RENDER',
+        },
+      }),
+    );
+
+    expect(output).toContain(
+      '/locations/work/roots/0: requires unavailable environment root MPX_WORK',
+    );
+    expect(output).not.toContain('SECRET_VALUE');
+    expect(output).not.toContain('DO_NOT_RENDER');
+    expect(output).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/u);
+  });
+
   it('styles only commands when terminal color is enabled', () => {
     const output = formatHumanError(publicError({ code: 'PROJECT_REQUIRED' }), undefined, {
       color: true,
@@ -55,5 +84,35 @@ describe('human CLI error formatting', () => {
     );
 
     expect(output.split(usage)).toHaveLength(2);
+  });
+
+  it('reports compiler failures with a stable public code and sanitized guidance', async () => {
+    const io = captureIo();
+    const onInternalError = vi.fn();
+    const execute = vi.fn(async () => {
+      throw new ContentCompilerError(
+        'unresolved canonical reference C:\\private\\catalog\\skills\\broken.md\nfrom selected pack',
+      );
+    });
+
+    expect(
+      await run(['setup'], io, {
+        env: {},
+        onInternalError,
+        setupService: { execute },
+      } as never),
+    ).toBe(1);
+
+    const output = io.err.join('');
+    expect(output).toContain(
+      'ERROR [CONTENT_COMPILATION_FAILED] - unresolved canonical reference [path] from selected pack',
+    );
+    expect(output).toContain('Fix the canonical content reference or selected pack dependency');
+    expect(output).toContain(
+      'rebuild or reinstall the managed release, then retry the original MPX launcher',
+    );
+    expect(output).not.toContain('COMMAND_FAILED');
+    expect(output).not.toContain('C:\\private');
+    expect(onInternalError).not.toHaveBeenCalled();
   });
 });

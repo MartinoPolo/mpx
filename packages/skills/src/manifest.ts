@@ -1,9 +1,5 @@
+import { createResolvedSkillManifest, type ResolvedSkillDecision } from '@mpx/runtime-contracts';
 import {
-  createResolvedSkillManifestV4,
-  type ResolvedSkillDecisionV4,
-} from '@mpx/runtime-contracts';
-import {
-  SkillCatalogError,
   digest,
   type CatalogSkill,
   type ResolveOptions,
@@ -11,59 +7,25 @@ import {
 } from './contracts.js';
 import { skillResolutionKey } from './identity.js';
 import { isProjectSkill, skillSourceHash } from './inventory.js';
-import { effectiveSkillPacks, policyExposure } from './policy.js';
+import { policyExposure } from './policy.js';
 
 export function resolveManifest(
   catalog: readonly CatalogSkill[],
   options: ResolveOptions,
 ): ResolvedManifest {
-  const canonicalIdentities = new Set(
-    catalog.filter((skill) => !isProjectSkill(skill)).map((skill) => skill.identity),
-  );
-  const exposureSettings = [
-    ['skillPolicyConfig.skillExposure', options.skillPolicyConfig.skillExposure],
-    ['contentScopeExposure', options.contentScopeExposure],
-    ['projectExposure', options.projectExposure],
-  ] as const;
-  for (const skill of catalog.filter(isProjectSkill)) {
-    if (canonicalIdentities.has(skill.identity)) {
-      continue;
-    }
-    for (const [setting, exposure] of exposureSettings) {
-      if (Object.hasOwn(exposure?.skills ?? {}, skill.identity)) {
-        throw new SkillCatalogError([
-          {
-            code: 'PROJECT_SKILL_POLICY_KEY_INVALID',
-            message: `${setting}.skills['${skill.identity}'] names a canonical skill, but only the project skill exists. Change the key to '${skillResolutionKey(skill)}' to preserve its exposure restriction`,
-            path: skill.sourcePath,
-          },
-        ]);
-      }
-    }
-  }
-  const enabled = new Set(effectiveSkillPacks(options));
+  const enabled = new Set(options.selection.packs);
   const resolution = {
     identity: options.identity,
-    skillPolicy: options.skillPolicy,
-    skillPolicyConfig: options.skillPolicyConfig,
-    enabledPacks: [...enabled].sort(),
-    contentScopeExposure: options.contentScopeExposure ?? null,
-    projectExposure: options.projectExposure ?? null,
+    selection: options.selection,
     mapping: options.mapping ?? {},
   };
-  const decisions: ResolvedSkillDecisionV4[] = catalog.map((skill) => {
-    const packIncluded =
-      isProjectSkill(skill) || skill.skillPacks.some((pack) => enabled.has(pack));
-    const effective = policyExposure(skill, options);
-    const off = effective.exposure === 'off';
-    const included = packIncluded && !off;
+  const decisions: ResolvedSkillDecision[] = catalog.map((skill) => {
+    const included = isProjectSkill(skill) || skill.skillPacks.some((pack) => enabled.has(pack));
+    const effective = policyExposure(skill);
     return {
       identity: skillResolutionKey(skill),
       included,
-      exclusionReasons: [
-        ...(!packIncluded ? ['pack-excluded'] : []),
-        ...(packIncluded && off ? ['off'] : []),
-      ],
+      exclusionReasons: included ? [] : ['pack-excluded'],
       exposure: effective.exposure,
       permissions: {
         humanInvocation: included,
@@ -83,18 +45,18 @@ export function resolveManifest(
             }
           : { kind: 'canonical' },
         packs: isProjectSkill(skill) ? [] : [...skill.skillPacks].sort(),
-        defaultExposure: isProjectSkill(skill) ? skill.projectExposure : skill.defaultExposure,
-        effectiveExposure: effective.exposure,
+        declaredExposure: effective.exposure,
         exposureSource: effective.source,
       }),
       sourceHash: skillSourceHash(skill),
     };
   });
-  return createResolvedSkillManifestV4({
+  return createResolvedSkillManifest({
     binding: {
       projectId: options.projectId ?? null,
       repositoryId: options.repositoryId,
-      contentScope: options.contentScope,
+      identity: options.identity,
+      selection: options.selection,
     },
     decisions,
   });

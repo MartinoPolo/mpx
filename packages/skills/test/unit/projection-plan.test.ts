@@ -60,11 +60,12 @@ async function projectFixture(
   const catalog = inventory.skills;
   const manifest = resolveManifest(catalog, {
     repositoryId: 'repo',
-    contentScope: 'work',
     identity: 'work',
-    skillPolicy: 'developer',
-    skillPolicyConfig: { skillExposure: { default: 'full' } },
-    enabledPacks: [],
+    selection: {
+      location: { name: 'test', canonicalRoot: 'C:/test' },
+      packs: ['development'],
+      source: 'project',
+    },
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
   return { root, skillsRoot, catalog, manifest, artifact };
@@ -77,13 +78,12 @@ async function fixture() {
     ['full', 'full'],
     ['named', 'name-only'],
     ['explicit', 'explicit-only'],
-    ['off', 'off'],
   ] as const) {
     const directory = path.join(root, name);
     await mkdir(path.join(directory, 'nested'), { recursive: true });
     await writeFile(
       path.join(directory, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${name} café description\ntriggers: ${name} trigger\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\n${name} BODY\n`,
+      `---\nname: ${name}\ndescription: ${name} café description\ntriggers: ${name} trigger\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n---\n${name} BODY\n`,
     );
     if (name === 'full') {
       await writeFile(path.join(directory, 'nested', 'binary.dat'), Buffer.from([0, 255, 1]));
@@ -93,16 +93,12 @@ async function fixture() {
   const catalog = await inventoryCanonical(root);
   const manifest = resolveManifest(catalog, {
     repositoryId: 'repo',
-    contentScope: 'work',
     identity: 'work',
-    skillPolicy: 'developer',
-    skillPolicyConfig: {
-      skillExposure: {
-        default: 'name-only',
-        skills: { full: 'full', named: 'name-only', explicit: 'explicit-only', off: 'off' },
-      },
+    selection: {
+      location: { name: 'test', canonicalRoot: 'C:/test' },
+      packs: ['development'],
+      source: 'project',
     },
-    enabledPacks: ['core'],
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
   return { root, catalog, manifest, artifact };
@@ -147,7 +143,7 @@ describe('process-local skill projection plans', () => {
     ).toEqual(['full', 'named']);
     const enumerable = JSON.stringify({ ...plan });
     expect(enumerable).not.toContain(value.root);
-    expect(enumerable).not.toMatch(/canonicalRoot|projectRoot|realPath|credential|route/iu);
+    expect(enumerable).not.toMatch(/projectRoot|realPath|credential|route/iu);
     expect(() => JSON.stringify(plan)).toThrow();
     (value.artifact.reference as { artifactKey: string }).artifactKey = 'caller mutation';
     value.catalog[0]!.description = 'caller mutation';
@@ -305,11 +301,12 @@ describe('process-local skill projection plans', () => {
     const manifest = resolveManifest(catalog, {
       repositoryId: 'repo',
       projectId: 'project',
-      contentScope: 'work',
       identity: 'work',
-      skillPolicy: 'developer',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: [],
+      selection: {
+        location: { name: 'test', canonicalRoot: 'C:/test' },
+        packs: ['development'],
+        source: 'project',
+      },
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
     const plan = await createSkillProjectionPlan({
@@ -385,11 +382,12 @@ describe('process-local skill projection plans', () => {
     const catalog = [...first.catalog, ...second.catalog];
     const manifest = resolveManifest(catalog, {
       repositoryId: 'repo',
-      contentScope: 'work',
       identity: 'work',
-      skillPolicy: 'test',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: [],
+      selection: {
+        location: { name: 'test', canonicalRoot: 'C:/test' },
+        packs: ['development'],
+        source: 'project',
+      },
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
     await expect(

@@ -2,12 +2,13 @@ import { mkdir, mkdtemp, readFile, readdir, rm, symlink } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { sha256Canonical } from '@mpx/core';
+import { createSkillArtifactReference, sha256Canonical } from '@mpx/core';
 import type { JsonValue } from '@mpx/core';
 import type { LaunchDescriptor } from '@mpx/launch';
-import { createRuntimeCapabilityManifestV1 } from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifest } from '@mpx/runtime-contracts';
 import type { ProcessRequest } from '../../src/index.js';
 import {
+  ExecutionError,
   ExecutorRegistry,
   ExecutionService,
   FileLaunchAuditStore,
@@ -25,7 +26,7 @@ import {
 
 const hash = (value: string) => value.repeat(64);
 const artifactReference = (runtime: 'claude' | 'pi' = 'pi') => ({
-  schemaVersion: 4 as const,
+  schemaVersion: 5 as const,
   runtime,
   manifestKey: hash('7'),
   artifactKey: hash('8'),
@@ -33,13 +34,12 @@ const artifactReference = (runtime: 'claude' | 'pi' = 'pi') => ({
 });
 function descriptor(executor: 'docker' | 'host' = 'docker'): LaunchDescriptor {
   const tuple = {
-    schemaVersion: 2 as const,
+    schemaVersion: 3 as const,
     nativeRuntimeRootDigest: hash('a'),
     runtime: 'pi' as const,
     binding: { projectId: 'sample/app', repositoryId: 'sample/repo' },
     identity: { name: 'personal', domain: 'personal' },
     mode: 'project',
-    skillPolicy: 'clean',
     executor:
       executor === 'docker'
         ? {
@@ -76,11 +76,6 @@ function descriptor(executor: 'docker' | 'host' = 'docker'): LaunchDescriptor {
               limitation: 'No filesystem or confidentiality isolation is enforced.' as const,
             },
           },
-    executorVerification: {
-      status: 'verified' as const,
-      verifier: 'fixture',
-      evidenceDigest: hash('b'),
-    },
     workspace: 'direct' as const,
     networkPolicy: { name: 'minimal', declaration: { preset: 'deny-all' as const } },
     preset: null,
@@ -88,16 +83,17 @@ function descriptor(executor: 'docker' | 'host' = 'docker'): LaunchDescriptor {
       runtime: 'explicit' as const,
       identity: 'explicit' as const,
       mode: 'explicit' as const,
-      skillPolicy: 'explicit' as const,
-      contentScope: 'explicit' as const,
       executor: 'explicit' as const,
       workspace: 'explicit' as const,
       networkPolicy: 'explicit' as const,
     },
     diagnostics: [],
-    contentScope: { name: 'personal' },
-    grants: [],
-    cwdClassification: { domain: 'personal', contentScope: 'personal' },
+    selection: {
+      location: { name: 'coding', canonicalRoot: 'C:/project' },
+      packs: ['development'] as const,
+      source: 'project' as const,
+    },
+    cwdClassification: { domain: 'personal', location: 'coding' },
     routes: {
       gitAuthor: 'git-personal',
       providers: { github: 'gh-personal' },
@@ -107,29 +103,25 @@ function descriptor(executor: 'docker' | 'host' = 'docker'): LaunchDescriptor {
     intendedPolicy: {
       mode: 'project',
       resources: { 'selected-project': 'read-write' as const },
-      grants: [],
       inputsDigest: hash('c'),
-      approvalsDigest: hash('d'),
     },
-    skillArtifact: {
-      schemaVersion: 3 as const,
-      runtime: 'pi' as const,
+    skillArtifact: createSkillArtifactReference({
+      runtime: 'pi',
       identity: 'personal',
-      skillPolicy: 'clean',
-      contentScope: 'personal',
       projectId: 'sample/app',
+      repositoryId: 'sample/repo',
       catalogHash: hash('1'),
-      enabledPacks: [],
-      skillPolicyConfigHash: hash('2'),
-      contentScopeExposureHash: hash('3'),
-      projectExposureHash: hash('4'),
-      effectivePolicyHash: hash('5'),
-      artifactKey: hash('6'),
-    },
+      selection: {
+        location: { name: 'coding', canonicalRoot: 'C:/project' },
+        packs: ['development'],
+        source: 'project',
+      },
+    }),
     elevationAudit: {
       elevated: executor === 'host',
       reason: executor === 'host' ? 'Legacy tool' : null,
-      approvalsDigest: hash('d'),
+      approvalsDigest:
+        executor === 'host' ? hash('d') : sha256Canonical({ unrestricted: null, host: null }),
       banner:
         executor === 'host'
           ? {
@@ -156,6 +148,14 @@ function descriptorWithNativeRoot(
     ...base,
     runtime,
     identity: { name: identity, domain: identity },
+    skillArtifact: createSkillArtifactReference({
+      runtime,
+      identity,
+      projectId: base.binding.projectId,
+      repositoryId: base.binding.repositoryId,
+      catalogHash: hash('1'),
+      selection: base.selection,
+    }),
     nativeRuntimeRootDigest: sha256Canonical(
       root.replaceAll('\\', '/').toLowerCase().replace(/\/$/u, ''),
     ),
@@ -184,47 +184,55 @@ function routesFor(value: LaunchDescriptor): Readonly<Record<string, string>> {
     ),
   };
 }
-function service(verification: 'verified' | 'unverified' | 'unavailable', effects: string[]) {
-  const executors = new ExecutorRegistry();
-  executors.register({
-    name: 'docker',
-    verify: async () => ({ status: verification, verifier: 'fake', evidenceDigest: hash('e') }),
-    execute: async (request) => {
-      effects.push(`process:${request.executable}`);
-      return { exitCode: 0, stdout: 'ok', stderr: '', truncated: false };
-    },
-  });
-  const runtimes = new RuntimeAdapterRegistry();
-  runtimes.register({
-    runtime: 'pi',
-    prepare: async () => ({
-      executable: 'C:/trusted/node.exe',
-      argv: ['C:/trusted/pi.mjs'],
-      environment: { MPX_LAUNCH_KEY: 'bound' },
-    }),
-  });
-  return new ExecutionService({
-    executors,
-    runtimes,
-    routes: {
-      materialize: async (value) => {
-        effects.push('routes');
-        return routesFor(value);
-      },
-    },
-    production: true,
-  });
-}
-
 describe('execution gates', () => {
+  it('rejects an initially unavailable executor before route or process effects', async () => {
+    const effects: string[] = [];
+    const executors = new ExecutorRegistry();
+    executors.register({
+      name: 'docker',
+      assertReady: async () => {
+        throw new ExecutionError('EXECUTOR_UNAVAILABLE', 'Docker is unavailable.');
+      },
+      execute: async () => {
+        effects.push('process');
+        return { exitCode: 0, stdout: '', stderr: '', truncated: false };
+      },
+    });
+    const runtimes = new RuntimeAdapterRegistry();
+    runtimes.register({
+      runtime: 'pi',
+      prepare: async () => ({ executable: 'C:/trusted/pi.exe', argv: [], environment: {} }),
+    });
+    const execution = new ExecutionService({
+      executors,
+      runtimes,
+      routes: {
+        materialize: async () => {
+          effects.push('routes');
+          return {};
+        },
+      },
+    });
+
+    await expect(
+      execution.execute({
+        artifact: artifactReference(),
+        descriptor: descriptor(),
+        cwd: 'C:/project',
+        environment: {},
+      }),
+    ).rejects.toMatchObject({ code: 'EXECUTOR_UNAVAILABLE' });
+    expect(effects).toEqual([]);
+  });
+
   it('admits an exactly launch-bound runtime capability and rejects stale authority before side effects', async () => {
     const effects: string[] = [];
     const selected = descriptor();
-    const capability = createRuntimeCapabilityManifestV1({
+    const capability = createRuntimeCapabilityManifest({
       runtime: selected.runtime,
       launchKey: selected.launchKey,
       identity: { ...selected.identity, nativeRuntimeRootDigest: selected.nativeRuntimeRootDigest },
-      binding: { ...selected.binding, contentScope: selected.contentScope.name },
+      binding: { ...selected.binding, selection: selected.selection },
       executor: selected.executor.name,
       tools: [],
       routes: [],
@@ -238,9 +246,9 @@ describe('execution gates', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => {
+      assertReady: async () => {
         effects.push('verify');
-        return selected.executorVerification;
+        return undefined;
       },
       execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
     });
@@ -264,16 +272,95 @@ describe('execution gates', () => {
       }),
     ).resolves.toMatchObject({ exitCode: 0 });
     effects.length = 0;
-    await expect(
+    const executeWithCapability = (candidate: typeof capability) =>
       execution.execute({
         artifact: artifactReference(),
         descriptor: selected,
-        capability: { ...capability, launchKey: hash('f') },
+        capability: candidate,
+        cwd: 'C:/project',
+        environment: {},
+      });
+    await expect(
+      executeWithCapability({ ...capability, launchKey: hash('f') }),
+    ).rejects.toMatchObject({ code: 'RUNTIME_CAPABILITY_INVALID' });
+    const {
+      manifestKey: _manifestKey,
+      schemaVersion: _schemaVersion,
+      ...capabilityInput
+    } = capability;
+    for (const mismatchedSelection of [
+      {
+        ...selected.selection,
+        location: { ...selected.selection.location, canonicalRoot: 'C:/other' },
+      },
+      { ...selected.selection, packs: ['personal'] as const },
+      { ...selected.selection, source: 'user-location' as const },
+    ]) {
+      await expect(
+        executeWithCapability(
+          createRuntimeCapabilityManifest({
+            ...capabilityInput,
+            binding: { ...selected.binding, selection: mismatchedSelection },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'RUNTIME_CAPABILITY_INVALID' });
+    }
+    await expect(
+      executeWithCapability({ ...capability, schemaVersion: 1 } as unknown as typeof capability),
+    ).rejects.toMatchObject({ code: 'RUNTIME_CAPABILITY_INVALID' });
+    expect(effects).toEqual([]);
+  });
+
+  it('cleans up a prepared runtime when the final readiness gate fails before process invocation', async () => {
+    const effects: string[] = [];
+    let readiness = 0;
+    const executors = new ExecutorRegistry();
+    executors.register({
+      name: 'docker',
+      assertReady: async () => {
+        readiness += 1;
+        effects.push(`ready:${readiness}`);
+        if (readiness === 2) {
+          throw new ExecutionError('EXECUTOR_UNAVAILABLE', 'Docker became unavailable.');
+        }
+      },
+      execute: async () => {
+        effects.push('process');
+        return { exitCode: 0, stdout: '', stderr: '', truncated: false };
+      },
+    });
+    const runtimes = new RuntimeAdapterRegistry();
+    runtimes.register({
+      runtime: 'pi',
+      prepare: async () => {
+        effects.push('prepared');
+        return {
+          executable: 'C:/trusted/pi.exe',
+          argv: [],
+          environment: {},
+          shutdown: async () => {
+            effects.push('cleanup');
+          },
+        };
+      },
+    });
+    const execution = new ExecutionService({
+      executors,
+      runtimes,
+      routes: { materialize: async (value) => routesFor(value) },
+    });
+
+    await expect(
+      execution.execute({
+        artifact: artifactReference(),
+        descriptor: descriptor(),
         cwd: 'C:/project',
         environment: {},
       }),
-    ).rejects.toMatchObject({ code: 'RUNTIME_CAPABILITY_INVALID' });
-    expect(effects).toEqual([]);
+    ).rejects.toMatchObject({ code: 'EXECUTOR_UNAVAILABLE' });
+    expect(effects).toContain('prepared');
+    expect(effects).toContain('cleanup');
+    expect(effects).not.toContain('process');
   });
 
   it('executes Pi through the exact selected Docker executor without host process authority', async () => {
@@ -281,7 +368,7 @@ describe('execution gates', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => descriptor().executorVerification,
+      assertReady: async () => undefined,
       execute: async (request) => {
         effects.push(`process:${request.executable}`);
         expect(request.timeoutMs).toBeUndefined();
@@ -306,7 +393,6 @@ describe('execution gates', () => {
           return routesFor(value);
         },
       },
-      production: true,
     });
     await expect(
       execution.execute({
@@ -319,194 +405,6 @@ describe('execution gates', () => {
     expect(effects).toEqual(['routes', 'process:C:/trusted/node.exe']);
   });
 
-  it('compares exact executor evidence fields semantically immediately before process execution', async () => {
-    const expected = descriptor().executorVerification;
-    const variants: Array<{ evidence: unknown; executes: boolean }> = [
-      {
-        evidence: {
-          evidenceDigest: expected.evidenceDigest,
-          status: expected.status,
-          verifier: expected.verifier,
-        },
-        executes: true,
-      },
-      { evidence: { ...expected, evidenceDigest: hash('f') }, executes: false },
-      { evidence: { status: expected.status, verifier: expected.verifier }, executes: false },
-      { evidence: { ...expected, extra: true }, executes: false },
-      { evidence: { ...expected, verifier: 'INVALID VERIFIER' }, executes: false },
-    ];
-    for (const { evidence, executes } of variants) {
-      const process = vi.fn(async () => ({
-        exitCode: 0,
-        stdout: '',
-        stderr: '',
-        truncated: false,
-      }));
-      const executors = new ExecutorRegistry();
-      executors.register({
-        name: 'docker',
-        verify: async () => evidence as typeof expected,
-        execute: process,
-      });
-      const runtimes = new RuntimeAdapterRegistry();
-      runtimes.register({
-        runtime: 'pi',
-        prepare: async () => ({ executable: 'C:/trusted/pi.exe', argv: [], environment: {} }),
-      });
-      const execution = new ExecutionService({
-        executors,
-        runtimes,
-        routes: { materialize: async (value) => routesFor(value) },
-        production: true,
-      });
-      const result = execution.execute({
-        artifact: artifactReference(),
-        descriptor: descriptor(),
-        cwd: 'C:/project',
-        environment: {},
-      });
-      if (executes) {
-        await expect(result).resolves.toMatchObject({ exitCode: 0 });
-      } else {
-        await expect(result).rejects.toMatchObject({ code: 'LAUNCH_RESTART_REQUIRED' });
-      }
-      expect(process).toHaveBeenCalledTimes(executes ? 1 : 0);
-    }
-  });
-
-  it.each([
-    ['mismatched', { ...descriptor('host').executorVerification, evidenceDigest: hash('f') }],
-    ['extra', { ...descriptor('host').executorVerification, extra: true }],
-    ['missing', { status: 'verified', verifier: 'fixture' }],
-  ])(
-    'rejects %s initial executor evidence before any execution side effects',
-    async (_case, evidence) => {
-      const effects: string[] = [];
-      const selected = descriptor('host');
-      const executors = new ExecutorRegistry();
-      executors.register({
-        name: 'host',
-        verify: async () => evidence as typeof selected.executorVerification,
-        execute: async () => {
-          effects.push('process');
-          return { exitCode: 0, stdout: '', stderr: '', truncated: false };
-        },
-      });
-      const runtimes = new RuntimeAdapterRegistry();
-      runtimes.register({
-        runtime: 'pi',
-        prepare: async () => {
-          effects.push('runtime');
-          return { executable: 'C:/trusted/pi.exe', argv: [], environment: {} };
-        },
-      });
-      const approvals = new HostApprovalStore();
-      const audit: LaunchAuditStore = {
-        start: async () => {
-          effects.push('audit:start');
-          return 'attempt';
-        },
-        terminal: async () => {
-          effects.push('audit:terminal');
-        },
-      };
-      const execution = new ExecutionService({
-        executors,
-        runtimes,
-        approvals,
-        audit,
-        routes: {
-          materialize: async (value) => {
-            effects.push('routes');
-            return routesFor(value);
-          },
-        },
-        production: true,
-      });
-      const tty = { direct: true, confirm: async () => true };
-      const approvalRequest = execution.hostApprovalRequest(
-        { descriptor: selected, cwd: 'C:/project', environment: {} },
-        'nonce',
-      );
-      const approval = await approvals.approve(approvalRequest, tty);
-      const consume = vi.spyOn(approvals, 'consume');
-
-      await expect(
-        execution.execute({
-          artifact: artifactReference(),
-          descriptor: selected,
-          cwd: 'C:/project',
-          environment: {},
-          hostApproval: approval,
-          tty,
-        }),
-      ).rejects.toMatchObject({ code: 'LAUNCH_RESTART_REQUIRED' });
-
-      expect(consume).not.toHaveBeenCalled();
-      expect(effects).toEqual([]);
-    },
-  );
-
-  it('rejects changed complete executor evidence immediately before process execution', async () => {
-    const effects: string[] = [];
-    let checks = 0;
-    const executors = new ExecutorRegistry();
-    executors.register({
-      name: 'docker',
-      verify: async () => {
-        checks += 1;
-        return checks === 1
-          ? descriptor().executorVerification
-          : { ...descriptor().executorVerification, evidenceDigest: hash('f') };
-      },
-      execute: async () => {
-        effects.push('process');
-        return { exitCode: 0, stdout: '', stderr: '', truncated: false };
-      },
-    });
-    const runtimes = new RuntimeAdapterRegistry();
-    runtimes.register({
-      runtime: 'pi',
-      prepare: async () => {
-        effects.push('prepare');
-        return { executable: 'C:/trusted/pi.exe', argv: [], environment: {} };
-      },
-    });
-    const execution = new ExecutionService({
-      executors,
-      runtimes,
-      routes: { materialize: async (value) => routesFor(value) },
-      production: true,
-    });
-    await expect(
-      execution.execute({
-        artifact: artifactReference(),
-        descriptor: descriptor(),
-        cwd: 'C:/project',
-        environment: {},
-      }),
-    ).rejects.toMatchObject({ code: 'LAUNCH_RESTART_REQUIRED' });
-    expect(effects).toEqual(['prepare']);
-  });
-
-  it('returns structured Docker gate errors without host fallback or side effects', async () => {
-    for (const [status, code] of [
-      ['unverified', 'EXECUTOR_GATE_UNVERIFIED'],
-      ['unavailable', 'EXECUTOR_UNAVAILABLE'],
-    ] as const) {
-      const effects: string[] = [];
-      await expect(
-        service(status, effects).execute({
-          artifact: artifactReference(),
-          descriptor: descriptor(),
-          cwd: 'C:/project',
-          environment: {},
-        }),
-      ).rejects.toMatchObject({ code, details: { executor: 'docker' } });
-      expect(effects).toEqual([]);
-    }
-  });
-
   it('rejects non-TTY host execution before route or process access and binds one approval to the exact request', async () => {
     const effects: string[] = [];
     const approvals = new HostApprovalStore();
@@ -514,7 +412,7 @@ describe('execution gates', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'host',
-      verify: async () => hostDescriptor.executorVerification,
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -538,7 +436,6 @@ describe('execution gates', () => {
           return routesFor(value);
         },
       },
-      production: true,
     });
     await expect(
       execution.execute({
@@ -795,13 +692,20 @@ describe('trust and privacy boundaries', () => {
       runtimes: new RuntimeAdapterRegistry(),
       routes: { materialize: async () => ({}) },
       approvals,
-      production: false,
     });
     const hostDescriptor = descriptor('host');
     const sanitizedReason = sanitizeHostReason(reason);
     const descriptorTuple = {
       ...hostDescriptor,
-      elevationAudit: { ...hostDescriptor.elevationAudit, reason: sanitizedReason },
+      elevationAudit: {
+        ...hostDescriptor.elevationAudit,
+        reason: sanitizedReason,
+        banner: {
+          code: 'ELEVATED_LAUNCH' as const,
+          persistent: true as const,
+          message: `ELEVATED LAUNCH — host-compatibility — ${sanitizedReason}`,
+        },
+      },
     } as const;
     const { launchKey: _discardedLaunchKey, ...descriptorIdentity } = descriptorTuple;
     const descriptorReason = {
@@ -828,7 +732,7 @@ describe('trust and privacy boundaries', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => ({ status: 'verified', verifier: 'fixture', evidenceDigest: hash('b') }),
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -846,7 +750,6 @@ describe('trust and privacy boundaries', () => {
       executors,
       runtimes,
       routes: { materialize: async () => ({}) },
-      production: true,
     });
 
     await expect(
@@ -865,7 +768,7 @@ describe('trust and privacy boundaries', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => ({ status: 'verified', verifier: 'fixture', evidenceDigest: hash('b') }),
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -888,7 +791,6 @@ describe('trust and privacy boundaries', () => {
           'git:git-personal': 'relative/path',
         }),
       },
-      production: true,
     });
 
     await expect(
@@ -917,7 +819,7 @@ describe('trust and privacy boundaries', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => rebound.executorVerification,
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -982,7 +884,7 @@ describe('trust and privacy boundaries', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'host',
-      verify: async () => rebound.executorVerification,
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -1063,7 +965,7 @@ describe('trust and privacy boundaries', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => rebound.executorVerification,
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -1157,7 +1059,6 @@ describe('trust and privacy boundaries', () => {
     'MPX_COMPILED_AGENTS_DIR',
     'MPX_IDENTITY',
     'MPX_MODE',
-    'MPX_SKILL_POLICY',
     'MPX_REPOSITORY_PROVIDER',
     'MPX_ISSUES_PROVIDER',
   ])('preserves trusted %s skill context without accepting ambient authority', (key) => {
@@ -1184,11 +1085,7 @@ describe('trust and privacy boundaries', () => {
       const executors = new ExecutorRegistry();
       executors.register({
         name: 'docker',
-        verify: async () => ({
-          status: 'verified',
-          verifier: 'fixture',
-          evidenceDigest: hash('b'),
-        }),
+        assertReady: async () => undefined,
         execute: async (request) => {
           requests.push(request);
           return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -1207,7 +1104,6 @@ describe('trust and privacy boundaries', () => {
               [otherVariable]: 'C:/crossed',
               TOKEN: 'secret',
               ARBITRARY: 'drop',
-              MPX_SKILL_POLICY: 'developer',
               MPX_REPOSITORY_PROVIDER: 'gitlab',
               MPX_ISSUES_PROVIDER: 'kanbanflow',
             },
@@ -1218,7 +1114,6 @@ describe('trust and privacy boundaries', () => {
         executors,
         runtimes,
         routes: { materialize: async () => routeMap },
-        production: true,
       });
 
       await execution.execute({
@@ -1243,7 +1138,6 @@ describe('trust and privacy boundaries', () => {
       expect(requests[0]?.environment).toEqual(
         expect.objectContaining({
           [selectedVariable]: root,
-          MPX_SKILL_POLICY: 'developer',
           MPX_REPOSITORY_PROVIDER: 'gitlab',
           MPX_ISSUES_PROVIDER: 'kanbanflow',
         }),
@@ -1278,9 +1172,9 @@ describe('trust and privacy boundaries', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => {
+      assertReady: async () => {
         effects.push('verify');
-        return { status: 'verified', verifier: 'fixture', evidenceDigest: hash('b') };
+        return undefined;
       },
       execute: async () => {
         effects.push('process');
@@ -1304,7 +1198,6 @@ describe('trust and privacy boundaries', () => {
           return {};
         },
       },
-      production: true,
     });
 
     const error = await execution
@@ -1395,7 +1288,7 @@ describe('persistent launch audit sequencing', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => ({ status: 'verified', verifier: 'fixture', evidenceDigest: hash('b') }),
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('process');
         return process();
@@ -1411,7 +1304,6 @@ describe('persistent launch audit sequencing', () => {
       runtimes,
       routes: { materialize: async (value) => routesFor(value) },
       audit,
-      production: true,
     });
   }
 
@@ -1514,7 +1406,7 @@ describe('persistent launch audit sequencing', () => {
     const executors = new ExecutorRegistry();
     executors.register({
       name: 'docker',
-      verify: async () => ({ status: 'verified', verifier: 'fixture', evidenceDigest: hash('b') }),
+      assertReady: async () => undefined,
       execute: async () => {
         throw new Error('must not execute');
       },
@@ -1531,7 +1423,6 @@ describe('persistent launch audit sequencing', () => {
       runtimes,
       routes: { materialize: async (value) => routesFor(value) },
       audit,
-      production: true,
     });
     await expect(
       execution.execute({
@@ -1610,7 +1501,7 @@ describe('persistent launch audit sequencing', () => {
       identity: 'work',
       identityDomain: 'work',
       mode: 'project',
-      contentScope: 'work',
+      selectionSource: 'project' as const,
       projectId: 'sample/app',
       repositoryId: 'sample/repo',
       manifestKey: 'c'.repeat(64),
@@ -1669,7 +1560,7 @@ describe('persistent launch audit sequencing', () => {
         identity: 'work',
         identityDomain: 'work',
         mode: 'project',
-        contentScope: 'work',
+        selectionSource: 'project' as const,
         projectId: 'sample/app',
         repositoryId: 'sample/repo',
         manifestKey: 'c'.repeat(64),

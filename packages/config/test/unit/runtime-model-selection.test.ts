@@ -2,11 +2,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
-  loadRuntimeProfilesV1,
-  parseRuntimeModelSelectionV1,
-  parseRuntimeProfilesV1,
-  runtimeAgentModelMappingsV1,
-  defaultRuntimeModelSelectionV1,
+  loadRuntimeProfiles,
+  parseRuntimeModelSelection,
+  parseRuntimeProfiles,
+  runtimeAgentModelMappings,
+  defaultRuntimeModelSelection,
 } from '../../src/index.js';
 
 const agentAliases = Object.fromEntries(
@@ -133,12 +133,12 @@ const profile = {
 
 describe('runtime model profiles', () => {
   it('validates exact semantic and runtime coverage while permitting many-to-one mappings', () => {
-    const parsed = parseRuntimeProfilesV1(JSON.stringify(profile));
+    const parsed = parseRuntimeProfiles(JSON.stringify(profile));
     expect(parsed).toEqual(profile);
     expect(Object.isFrozen(parsed)).toBe(true);
     expect(Object.isFrozen(parsed.models)).toBe(true);
     expect(Object.isFrozen(parsed.models.pi)).toBe(true);
-    expect(runtimeAgentModelMappingsV1(parsed, 'pi')).toEqual({
+    expect(runtimeAgentModelMappings(parsed, 'pi')).toEqual({
       schemaVersion: 1,
       runtime: 'pi',
       models: profile.models.pi,
@@ -158,7 +158,7 @@ describe('runtime model profiles', () => {
         models: { ...profile.models, claude: { ...profile.models.claude, luna: 'haiku' } },
       },
     ]) {
-      expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(/runtime profiles/);
+      expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(/runtime profiles/);
     }
   });
 
@@ -193,7 +193,7 @@ describe('runtime model profiles', () => {
       },
     };
 
-    expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(
+    expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(
       'runtime profiles contain invalid content translation',
     );
   });
@@ -208,7 +208,7 @@ describe('runtime model profiles', () => {
           nameOnlyDescriptionTemplate: `MPX {{identity}} ${token}`,
         },
       };
-      expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(
+      expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(
         'runtime profiles contain invalid content translation',
       );
     },
@@ -219,7 +219,7 @@ describe('runtime model profiles', () => {
     (tool) => {
       const invalid = structuredClone(profile);
       invalid.contentTranslation.runtimes.claude.capabilities.mappings.read = [tool];
-      expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(
+      expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(
         'runtime profiles contain invalid content translation',
       );
     },
@@ -259,13 +259,13 @@ describe('runtime model profiles', () => {
   ])('rejects invalid agent translation: %s', (_label, mutate) => {
     const invalid = structuredClone(profile);
     mutate(invalid);
-    expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(
+    expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(
       'runtime profiles contain invalid agent translation',
     );
   });
 
   it('rejects invalid JSON', () => {
-    expect(() => parseRuntimeProfilesV1('{"schemaVersion":1')).toThrow(
+    expect(() => parseRuntimeProfiles('{"schemaVersion":1')).toThrow(
       'runtime profiles must be valid JSON',
     );
   });
@@ -276,7 +276,7 @@ describe('runtime model profiles', () => {
       models: { ...profile.models, claude: { ...profile.models.claude, mechanical: 'bad/model' } },
     };
 
-    expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(
+    expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(
       'runtime profiles contain invalid model mappings',
     );
   });
@@ -287,7 +287,7 @@ describe('runtime model profiles', () => {
       models: { ...profile.models, pi: { ...profile.models.pi, mechanical: 'missing-provider' } },
     };
 
-    expect(() => parseRuntimeProfilesV1(JSON.stringify(invalid))).toThrow(
+    expect(() => parseRuntimeProfiles(JSON.stringify(invalid))).toThrow(
       'runtime profiles contain invalid model mappings',
     );
   });
@@ -295,13 +295,13 @@ describe('runtime model profiles', () => {
   it('loads the tracked profile as the canonical runtime mapping source', async () => {
     const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
     const file = path.resolve(packageRoot, '../../content/runtime-profiles.json');
-    await expect(loadRuntimeProfilesV1(file)).resolves.toEqual(profile);
+    await expect(loadRuntimeProfiles(file)).resolves.toEqual(profile);
   });
 });
 
 describe('runtime model selection', () => {
   it('keeps the immutable Pi session model catalog separate from agent-class mappings', () => {
-    const selection = defaultRuntimeModelSelectionV1('pi');
+    const selection = defaultRuntimeModelSelection('pi');
     expect(selection).toEqual({
       schemaVersion: 1,
       runtime: 'pi',
@@ -315,6 +315,6 @@ describe('runtime model selection', () => {
     });
     expect(Object.isFrozen(selection)).toBe(true);
     expect(Object.isFrozen(selection.enabledModels)).toBe(true);
-    expect(parseRuntimeModelSelectionV1(selection)).toEqual(selection);
+    expect(parseRuntimeModelSelection(selection)).toEqual(selection);
   });
 });

@@ -1,12 +1,11 @@
-import type { ExposureConfig, SkillPack, SkillPolicyConfig } from '@mpx/skills/contracts';
+import type { ResolvedSkillSelection, SkillPack } from '@mpx/skills/contracts';
 
 export {
   EXPOSURES,
   SKILL_PACKS,
   type Exposure,
-  type ExposureConfig,
+  type ResolvedSkillSelection,
   type SkillPack,
-  type SkillPolicyConfig,
 } from '@mpx/skills/contracts';
 
 export type RepositoryProvider = string;
@@ -15,8 +14,6 @@ export const MODE_RESOURCES = [
   'selected-project',
   'identity-domain',
   'cloned-repositories',
-  'assistant-input',
-  'assistant-output',
   'computer-control-config',
   'computer-control-executable-settings',
   'host',
@@ -100,6 +97,7 @@ export interface ProjectConfig {
     postCreate?: { execution: 'foreground' | 'background' | 'none'; steps?: PreparationStep[] };
   };
   development?: { services: Record<string, ServiceConfig> };
+  skills?: { packs: SkillPack[] };
 }
 export type DirectoryProjectConfig = ProjectConfig & {
   project: { id: string; kind: 'directory' };
@@ -117,14 +115,12 @@ export function isRepositoryProjectConfig(
 ): config is RepositoryProjectConfig {
   return config.project.kind === undefined && config.repository !== undefined;
 }
-export interface ContentScope {
+export interface LocationConfig {
   roots: string[];
-  skillPacks?: SkillPack[];
-  skillExposure?: ExposureConfig;
+  skillPacks: SkillPack[];
 }
 export interface ProjectOverride {
-  skillPacks?: SkillPack[];
-  skillExposure?: ExposureConfig;
+  skillPacks: SkillPack[];
 }
 export interface IdentityConfig {
   domain: string;
@@ -133,6 +129,7 @@ export interface IdentityConfig {
   providerRoutes?: Record<string, string>;
   sshRoute?: string;
   mcpSharing?: { allow: string[]; shareNativeAuth: false };
+  allowedSkillPacks: SkillPack[];
 }
 export interface ModeConfig {
   resources: Partial<Record<ModeResource, ResourceAccess>>;
@@ -148,23 +145,24 @@ export interface NetworkPolicyConfig {
 export interface PresetConfig {
   identity: string;
   mode: string;
-  skillPolicy: string;
-  contentScope: string;
   executor: Executor;
   workspace: WorkspaceStrategy;
   networkPolicy: string;
 }
 export type IdentityPresetDefaults = Record<string, string>;
 export interface LaunchDefaultsConfig {
-  scopes: Record<string, IdentityPresetDefaults>;
+  locations: Record<string, IdentityPresetDefaults>;
   projects: Record<string, IdentityPresetDefaults>;
 }
+export type ConfigurableResource =
+  'cloned-repositories' | 'computer-control-config' | 'computer-control-executable-settings';
 export interface UserConfig {
+  schemaVersion: 2;
   identities: Record<string, IdentityConfig>;
   domains: Record<string, string[]>;
-  contentScopes: Record<string, ContentScope>;
+  locations: Record<string, LocationConfig>;
+  resourceRoots?: Partial<Record<ConfigurableResource, string[]>>;
   modes: Record<string, ModeConfig>;
-  skillPolicies: Record<string, SkillPolicyConfig>;
   presets: Record<string, PresetConfig>;
   launchDefaults: LaunchDefaultsConfig;
   networkPolicies: Record<string, NetworkPolicyConfig>;
@@ -175,22 +173,19 @@ export interface UserConfig {
 }
 export type CwdClassification =
   { status: 'known'; domain: string; root: string } | { status: 'unknown' };
-export type ContentScopeClassification =
-  { status: 'known'; contentScope: string; root: string } | { status: 'unknown' };
+export type LocationClassification =
+  { status: 'known'; location: string; canonicalRoot: string } | { status: 'unknown' };
+export type ApplicableResourceClassification =
+  | { status: 'known'; resource: ConfigurableResource; canonicalRoot: string }
+  | { status: 'unknown' };
 export interface ProvenanceEntry {
   pointer: string;
-  source: 'default' | 'project' | 'user-content-scope' | 'user-project' | 'runtime';
+  source: 'default' | 'project' | 'user-location' | 'user-project' | 'runtime';
 }
 export interface ResolvedConfig {
   project: ProjectConfig;
   cwdClassification: CwdClassification & { status: 'known' };
-  contentScope: {
-    name: string;
-    root: string;
-    skillPacks: SkillPack[];
-    skillExposure: ExposureConfig;
-    projectSkillExposure?: ExposureConfig;
-  };
+  selection: ResolvedSkillSelection;
   provenance: ProvenanceEntry[];
 }
 export interface Diagnostic {

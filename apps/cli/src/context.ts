@@ -36,13 +36,13 @@ import {
 } from '@mpx/executors';
 import {
   SessionStore,
-  type IdentityV1,
-  type NativeVerifiedResumeSeedV1,
+  type Identity,
+  type NativeVerifiedResumeSeed,
   type ResumeDependencies,
-  type ResumePlanV1,
+  type ResumePlan,
   type RuntimeDiscovery,
   type SessionProcessInspector,
-  type SessionRecordV1,
+  type SessionRecord,
 } from '@mpx/sessions';
 import {
   activateRelease,
@@ -109,16 +109,16 @@ export interface CliContext extends LaunchExecutionContext {
   sessionDiscoveries?: (scope?: SessionDiscoveryScope) => Promise<
     readonly {
       scanner: RuntimeDiscovery;
-      context?: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
+      context?: { identity: Identity; nativeBindingRef: string; runtime: 'claude' | 'pi' };
     }[]
   >;
   sessionProcessInspector?: SessionProcessInspector;
-  sessionResumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
+  sessionResumeDependencies?: (record: SessionRecord) => Promise<ResumeDependencies>;
   exactNativeRootVerifier?: { verify(root: string): Promise<void> };
   piAuthVerifier?: { verify(root: string): Promise<void> };
-  sessionResumePlanner?: (seed: NativeVerifiedResumeSeedV1) => Promise<ResumePlanV1>;
+  sessionResumePlanner?: (seed: NativeVerifiedResumeSeed) => Promise<ResumePlan>;
   sessionResumeExecutor?: (
-    plan: ResumePlanV1,
+    plan: ResumePlan,
     execution: { readonly approveHost?: boolean },
   ) => Promise<unknown>;
   installOrchestrator?: InstallOrchestrator;

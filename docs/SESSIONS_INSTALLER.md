@@ -7,13 +7,13 @@ mpx session list
 mpx session resume <id>
 ```
 
-MPX stores bounded lifecycle metadata only for sessions it represents. It does not copy native transcripts, prompts, credentials, command output, or private paths.
+MPX stores bounded lifecycle and resume metadata only. It does not copy native transcripts, prompts, credentials, command output, or private paths. Session snapshot and record schemas are version 2. Current authority is written under `sessions/v2`; existing `sessions/v1` bytes remain untouched and are never fallback-read or overwritten. Relaunch through MPX to rebuild fresh bounded authority from native-owned session sources rather than reinterpreting obsolete rights.
 
 ## Discovery and liveness
 
-Listing consumes pending lifecycle events, scans only exact configured runtime roots, and performs bounded reconciliation. Malformed native data becomes a diagnostic rather than deleting durable records. Process liveness uses PID plus start fingerprint; a missing process is marked inactive only after a valid platform snapshot.
+Listing consumes pending lifecycle events, scans exact configured native account roots, and performs bounded reconciliation. Malformed native data becomes a diagnostic rather than deleting durable records. Process liveness uses PID plus start fingerprint.
 
-Pi discovery and resume verify the configured real account root and delegate credential availability to native Pi's bounded `auth check`. Claude discovery and resume share interactive-session parsing, including current `kind` and legacy `type` metadata, while retaining native account-root behavior. Both runtimes keep their native resume argv. Reconciliation and delayed lifecycle events preserve monotonic record timestamps when scans overlap new launches.
+Pi and Claude preserve their real native account roots, authentication ownership, native session formats, and resume argv. MPX never switches identities or credentials based on a project, location, or provider. Reconciliation preserves monotonic record timestamps when scans overlap launches.
 
 ## Resume authorization
 
@@ -23,14 +23,12 @@ A dry run rebuilds the prospective launch from current configuration and artifac
 mpx session resume <id> --dry-run --json
 ```
 
-If the current launch exactly matches the recorded snapshot, unchanged resurrection may use its bounded shortcut. Otherwise inspect the plan and confirm its digest:
+If current launch schema 3, selected packs/provenance, artifact schema 5, executor binding, account root, invocation, and approvals match the schema-2 snapshot, unchanged resurrection may use its bounded shortcut. Otherwise inspect and confirm the rebuilt plan digest:
 
 ```bash
 mpx session resume <id> --confirm-plan <confirmationDigest>
 ```
 
-Preparation rechecks native ownership, session activity, process provenance, configuration, artifacts, and executor authority before materialization and again before spawn. Stale confirmation fails closed. Failed planning does not rewrite session records.
+Preparation rechecks native ownership, liveness/provenance, configuration, compiled artifacts, executor readiness, and authority before materialization and spawn. Stale or incompatible state fails closed and requires a fresh launch; failed planning does not rewrite records. Reload or managed session/worktree replacement refreshes Pi's accepted skill completion inventory rather than retaining stale names.
 
-`mpx session resurrect-export` is an internal route omitted from public help. It exports bounded normalized metadata and exact argv, never shell command text or native session content. Execution requires one-use authority.
-
-Installation and lifecycle recovery use `mpx setup` and `mpx doctor`; legacy import, public reconcile, inbox, capture, handoff, and completion routes are not supported session operations.
+`mpx session resurrect-export` is internal and exports bounded normalized metadata and exact argv, never shell text or native session content. Execution requires one-use authority.

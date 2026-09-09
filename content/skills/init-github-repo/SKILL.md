@@ -8,18 +8,18 @@ metadata:
   category: setup
   mpx:
     schemaVersion: 1
-    skillPacks: [personal]
-    defaultExposure: explicit-only
+    skillPacks: [development]
+    defaultExposure: name-only
 ---
 
 # Initialize GitHub Repository
 
 Initialize a new repository with deterministic local configuration, shared agent instructions, GitHub publication, and
-branch protection. This personal skill continues the original `init-repo` workflow. `dev` is the default development
-branch; `main` is for stable releases.
+branch protection. This skill continues the original `init-repo` workflow. `dev` is the default development branch;
+`main` is for stable releases.
 
-Usually read and followed from [project-register](../project-register/SKILL.md) when the project has no repository.
-Invocation selects GitHub explicitly, not GitLab or another provider. Read [Provider Routing](../shared/PROVIDER_ROUTING.md)
+Invocation selects GitHub explicitly, not GitLab or another provider. Read
+[Provider Routing](../shared/PROVIDER_ROUTING.md)
 and the [GitHub guide](../shared/providers/GITHUB.md); use their repository-creation exception when no project config
 exists yet. Preserve the active GitHub account and launch-bound environment.
 

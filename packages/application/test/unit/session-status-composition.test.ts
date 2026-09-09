@@ -2,21 +2,21 @@ import { expect, it } from 'vitest';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createRuntimeSessionObservationV1 } from '@mpx/runtime-contracts';
+import { createRuntimeSessionObservation } from '@mpx/runtime-contracts';
 import { composeRuntimeSessionObservation } from '@mpx/application';
 import { NodeRuntimeStatusEnvelopeMaterializer } from '@mpx/application/node';
-import { composeRuntimeStatusEnvelopeV1 } from '@mpx/status';
+import { composeRuntimeStatusEnvelope } from '@mpx/status';
 
 it('composes a fresh session observation into the runtime status envelope', () => {
   const generatedAt = '2025-02-02T03:04:05.000Z';
   const binding = { launchKey: 'launch', runtimeId: 'pi', repositoryId: 'repo' };
-  const envelope = composeRuntimeStatusEnvelopeV1({
+  const envelope = composeRuntimeStatusEnvelope({
     generatedAt,
     binding,
     harness: { kind: 'pi', version: null, surface: 'footer' },
     contributions: [],
   });
-  const observation = createRuntimeSessionObservationV1({
+  const observation = createRuntimeSessionObservation({
     runtime: 'pi',
     identityRef: 'personal:me',
     runtimeQualifiedId: 'pi:native',
@@ -63,7 +63,7 @@ it('preserves native runtime session authority over lower-priority cached observ
     diagnostic: null,
     unavailable: null,
   };
-  const envelope = composeRuntimeStatusEnvelopeV1({
+  const envelope = composeRuntimeStatusEnvelope({
     generatedAt,
     binding,
     harness: { kind: 'claude', version: null, surface: 'statusline' },
@@ -75,7 +75,7 @@ it('preserves native runtime session authority over lower-priority cached observ
       },
     ],
   });
-  const observation = createRuntimeSessionObservationV1({
+  const observation = createRuntimeSessionObservation({
     runtime: 'claude',
     identityRef: 'work:me',
     runtimeQualifiedId: 'claude:cached',
@@ -100,7 +100,7 @@ it('preserves native runtime session authority over lower-priority cached observ
 it('maps stale and diagnostic lifecycle observations to explicit freshness', () => {
   const generatedAt = '2025-02-02T03:04:05.000Z';
   const binding = { launchKey: 'launch', runtimeId: 'claude', repositoryId: 'repo' };
-  const envelope = composeRuntimeStatusEnvelopeV1({
+  const envelope = composeRuntimeStatusEnvelope({
     generatedAt,
     binding,
     harness: { kind: 'claude', version: null, surface: 'statusline' },
@@ -124,14 +124,14 @@ it('maps stale and diagnostic lifecycle observations to explicit freshness', () 
   expect(
     composeRuntimeSessionObservation(
       envelope,
-      createRuntimeSessionObservationV1({ ...base, diagnostic: null }),
+      createRuntimeSessionObservation({ ...base, diagnostic: null }),
       '2025-02-02T03:04:06.000Z',
     ).session.state,
   ).toBe('stale');
   expect(
     composeRuntimeSessionObservation(
       envelope,
-      createRuntimeSessionObservationV1({ ...base, diagnostic: 'SESSION_SOURCE_MALFORMED' }),
+      createRuntimeSessionObservation({ ...base, diagnostic: 'SESSION_SOURCE_MALFORMED' }),
       generatedAt,
     ).session,
   ).toMatchObject({
@@ -149,7 +149,7 @@ it('durably refreshes a proof-bound live envelope across process restart and qua
   try {
     const generatedAt = '2025-02-02T03:04:05.000Z';
     const binding = { launchKey: 'a'.repeat(64), runtimeId: 'pi', repositoryId: 'repo' };
-    const initial = composeRuntimeStatusEnvelopeV1({
+    const initial = composeRuntimeStatusEnvelope({
       generatedAt,
       binding,
       harness: { kind: 'pi', version: null, surface: 'footer' },

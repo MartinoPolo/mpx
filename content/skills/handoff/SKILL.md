@@ -7,7 +7,7 @@ metadata:
   category: project-management
   mpx:
     schemaVersion: 1
-    skillPacks: [work]
+    skillPacks: [development]
     defaultExposure: name-only
 ---
 

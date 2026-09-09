@@ -1,14 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
-  parseStatusSnapshotV1,
+  parseStatusSnapshot,
   renderClaudePortSegment,
   renderPiPortSegment,
   renderPortSegment,
-  type StatusSnapshotV1,
+  type StatusSnapshot,
 } from '../../src/index.js';
-const fixture = async (name: string): Promise<{ snapshot: StatusSnapshotV1; text: string }> => ({
-  snapshot: parseStatusSnapshotV1(
+const fixture = async (name: string): Promise<{ snapshot: StatusSnapshot; text: string }> => ({
+  snapshot: parseStatusSnapshot(
     JSON.parse(
       await readFile(new URL(`../fixtures/${name}.json`, import.meta.url), 'utf8'),
     ) as unknown,

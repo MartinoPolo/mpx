@@ -2,7 +2,7 @@ import { sha256Canonical, type JsonValue } from '@mpx/core';
 import type { ProjectConfig } from '@mpx/config';
 import type { DevServiceSnapshot, ExecutorKind, StartRequest } from '@mpx/dev-services';
 import type { LinkedReleaseResult } from '@mpx/ports';
-import type { StatusSnapshotV1 } from '@mpx/status';
+import type { StatusSnapshot } from '@mpx/status';
 import type {
   CreateWorktreeRequest,
   LifecycleResult,
@@ -182,7 +182,7 @@ export interface LifecycleWorktreeService {
 }
 
 export interface LifecycleStatusProvider {
-  snapshot(request: LifecycleProjectRequest & { configHash: string }): Promise<StatusSnapshotV1>;
+  snapshot(request: LifecycleProjectRequest & { configHash: string }): Promise<StatusSnapshot>;
 }
 export interface LifecycleProjectRequest {
   cwd: string;
@@ -440,7 +440,7 @@ export class LifecycleApplicationService {
     ) => Promise<LifecycleWorktreeOperationMap[Action]['result']>;
     return operation.call(service, request);
   }
-  currentStatus(request: LifecycleProjectRequest): Promise<StatusSnapshotV1> {
+  currentStatus(request: LifecycleProjectRequest): Promise<StatusSnapshot> {
     if (!this.dependencies.status) {
       throw new Error('Status is unavailable.');
     }
@@ -454,7 +454,7 @@ export class LifecycleApplicationService {
     options: {
       iterations?: number;
       intervalMs: number;
-      emit(value: StatusSnapshotV1): void | Promise<void>;
+      emit(value: StatusSnapshot): void | Promise<void>;
     },
   ): Promise<void> {
     const pause =

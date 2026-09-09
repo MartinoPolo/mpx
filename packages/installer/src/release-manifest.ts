@@ -3,18 +3,18 @@ import { MpxError } from '@mpx/core';
 
 export const SHA = /^[a-f0-9]{64}$/u;
 
-export interface ReleaseFileV1 {
+export interface ReleaseFile {
   readonly path: string;
   readonly bytes: number;
   readonly sha256: string;
 }
 
-export interface ReleaseManifestV1 {
+export interface ReleaseManifest {
   readonly schemaVersion: 1;
   readonly kind: 'release-manifest';
   readonly releaseKey: string;
   readonly convergenceHash: string;
-  readonly files: readonly ReleaseFileV1[];
+  readonly files: readonly ReleaseFile[];
 }
 
 function fail(code: string, message: string): never {
@@ -62,7 +62,7 @@ export function compareReleasePaths(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function parseFile(value: unknown): ReleaseFileV1 {
+function parseFile(value: unknown): ReleaseFile {
   const file = exact(value, ['path', 'bytes', 'sha256']);
   if (
     !safeRelative(file.path) ||
@@ -73,10 +73,10 @@ function parseFile(value: unknown): ReleaseFileV1 {
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid release file.');
   }
-  return file as unknown as ReleaseFileV1;
+  return file as unknown as ReleaseFile;
 }
 
-export function parseReleaseManifestV1(value: unknown): ReleaseManifestV1 {
+export function parseReleaseManifest(value: unknown): ReleaseManifest {
   const manifest = exact(value, [
     'schemaVersion',
     'kind',

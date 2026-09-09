@@ -6,14 +6,9 @@ import {
   type UserConfig,
 } from '@mpx/config';
 import { MpxError, sha256Canonical, type JsonValue, type SkillArtifactReference } from '@mpx/core';
-import {
-  resolveLaunchSelection,
-  type ExecutorVerificationEvidence,
-  type LaunchDescriptor,
-  type LaunchSelection,
-} from '@mpx/launch';
-import type { LaunchSnapshotV1, NativeVerifiedResumeSeedV1, ResumePlanV1 } from '@mpx/sessions';
-import type { CatalogSkill, ResolvedManifest, RuntimeSkillArtifact } from '@mpx/skills';
+import { resolveLaunchSelection, type LaunchDescriptor, type LaunchSelection } from '@mpx/launch';
+import type { LaunchSnapshot, NativeVerifiedResumeSeed, ResumePlan } from '@mpx/sessions';
+import type { CatalogSkill, ResolvedManifest, RuntimeSkillArtifact } from '@mpx/skills/contracts';
 
 export interface ResumePiPreflight {
   readonly nativeBinding: unknown;
@@ -34,7 +29,7 @@ export interface ResumeSkillFacts {
 }
 
 export interface ResumeExecutionInput extends ResumeSkillFacts {
-  readonly plan: ResumePlanV1;
+  readonly plan: ResumePlan;
   readonly descriptor: LaunchDescriptor;
   readonly selection: LaunchSelection;
   readonly project?: DiscoveredConfig;
@@ -48,21 +43,20 @@ export interface ResumeExecutionInput extends ResumeSkillFacts {
 }
 
 export interface PreparedResumeExecutor {
-  readonly evidence: ExecutorVerificationEvidence;
-  /** This closure is the sole execution authority corresponding to evidence. */
+  readonly assertReady: () => Promise<void>;
   readonly execute: (input: ResumeExecutionInput) => Promise<object>;
 }
 
 export interface SessionResumeLaunchApplicationDependencies {
-  confirmationDigest(plan: Omit<ResumePlanV1, 'confirmationDigest'>): string;
-  verifySeed(seed: NativeVerifiedResumeSeedV1): Promise<NativeVerifiedResumeSeedV1>;
+  confirmationDigest(plan: Omit<ResumePlan, 'confirmationDigest'>): string;
+  verifySeed(seed: NativeVerifiedResumeSeed): Promise<NativeVerifiedResumeSeed>;
   readUserConfig?(current: UserConfig): Promise<UserConfig>;
-  piPreflight(plan: NativeVerifiedResumeSeedV1, userConfig: UserConfig): Promise<ResumePiPreflight>;
+  piPreflight(plan: NativeVerifiedResumeSeed, userConfig: UserConfig): Promise<ResumePiPreflight>;
   isAbsolutePath(value: string): boolean;
   discoverProjectConfig(cwd: string): Promise<DiscoveredConfig | undefined>;
   canonicalRoot(cwd: string): Promise<string>;
   rebuildSkills(input: {
-    readonly plan: NativeVerifiedResumeSeedV1;
+    readonly plan: NativeVerifiedResumeSeed;
     readonly userConfig: UserConfig;
     readonly project?: DiscoveredConfig;
     readonly repositoryId: string;
@@ -70,20 +64,20 @@ export interface SessionResumeLaunchApplicationDependencies {
     readonly selection: LaunchSelection;
   }): Promise<ResumeSkillFacts>;
   prepareExecutor(input: {
-    readonly plan: NativeVerifiedResumeSeedV1;
+    readonly plan: NativeVerifiedResumeSeed;
     readonly userConfig: UserConfig;
     readonly project?: DiscoveredConfig;
     readonly repositoryId: string;
     readonly selection: LaunchSelection;
   }): Promise<PreparedResumeExecutor>;
   resolveDescriptor(input: {
-    readonly plan: NativeVerifiedResumeSeedV1;
+    readonly plan: NativeVerifiedResumeSeed;
     readonly userConfig: UserConfig;
     readonly projectId?: string;
     readonly repositoryId: string;
     readonly selection: LaunchSelection;
     readonly skills: ResumeSkillFacts;
-    readonly evidence: ExecutorVerificationEvidence;
+    readonly project?: DiscoveredConfig;
     readonly selectedConfigDigest: string;
   }): Promise<LaunchDescriptor>;
   descriptorDigest?(descriptor: LaunchDescriptor): string;
@@ -91,13 +85,12 @@ export interface SessionResumeLaunchApplicationDependencies {
   readNativeBinding(ref: string): Promise<unknown>;
 }
 
-export interface ResumeEffectiveAuthorityV1 {
+export interface ResumeEffectiveAuthority {
   readonly schemaVersion: 1;
   readonly resources: readonly {
     readonly selector: ModeResource;
     readonly access: ResourceAccess | 'none';
   }[];
-  readonly grants: readonly { readonly resource: string; readonly access: 'ro' | 'rw' }[];
   readonly network: {
     readonly preset: 'allow-all' | 'balanced' | 'deny-all' | null;
     readonly denyPrivateNetworks: boolean | null;
@@ -115,8 +108,6 @@ export interface ResumeEffectiveAuthorityV1 {
     readonly kind: 'host' | 'docker';
     readonly enforcement: 'advisory' | 'mount-enforced';
     readonly isolation: 'none' | 'container';
-    readonly verification: 'verified' | 'unverified' | 'unavailable';
-    readonly evidenceDigest: string;
   };
   readonly skills: {
     readonly manifestKey: string;
@@ -125,7 +116,7 @@ export interface ResumeEffectiveAuthorityV1 {
       readonly identity: string;
       readonly included: boolean;
       readonly exclusionReasons: readonly string[];
-      readonly exposure: 'full' | 'name-only' | 'explicit-only' | 'off';
+      readonly exposure: 'full' | 'name-only' | 'explicit-only';
       readonly humanInvocation: boolean;
       readonly modelInvocation: boolean;
       readonly metadataHash: string;
@@ -134,14 +125,14 @@ export interface ResumeEffectiveAuthorityV1 {
   };
 }
 
-export interface ProspectiveSessionResumePlanV1 extends ResumePlanV1 {
-  readonly effectiveAuthority: ResumeEffectiveAuthorityV1;
+export interface ProspectiveSessionResumePlan extends ResumePlan {
+  readonly effectiveAuthority: ResumeEffectiveAuthority;
 }
 
 function effectiveAuthority(
   descriptor: LaunchDescriptor,
   skills: ResumeSkillFacts,
-): ResumeEffectiveAuthorityV1 {
+): ResumeEffectiveAuthority {
   const network = descriptor.networkPolicy.declaration;
   return {
     schemaVersion: 1,
@@ -149,7 +140,6 @@ function effectiveAuthority(
       selector,
       access: descriptor.intendedPolicy.resources[selector] ?? 'none',
     })),
-    grants: descriptor.grants.map(({ resource, access }) => ({ resource, access })),
     network: {
       preset: network.preset ?? null,
       denyPrivateNetworks: network.denyPrivateNetworks ?? null,
@@ -169,8 +159,6 @@ function effectiveAuthority(
       kind: descriptor.executor.name,
       enforcement: descriptor.executor.effectiveEnforcement,
       isolation: descriptor.executor.isolation,
-      verification: descriptor.executorVerification.status,
-      evidenceDigest: descriptor.executorVerification.evidenceDigest,
     },
     skills: {
       manifestKey: skills.manifest.manifestKey,
@@ -240,7 +228,7 @@ function assertCommitment(axis: ApprovalAxis, approved: unknown, current: unknow
   }
 }
 
-function nativeAxes(seed: NativeVerifiedResumeSeedV1) {
+function nativeAxes(seed: NativeVerifiedResumeSeed) {
   return {
     schemaVersion: seed.schemaVersion,
     newLaunchRequired: seed.newLaunchRequired,
@@ -259,7 +247,7 @@ function nativeAxes(seed: NativeVerifiedResumeSeedV1) {
 }
 
 function selectedConfigDigest(
-  seed: NativeVerifiedResumeSeedV1,
+  seed: NativeVerifiedResumeSeed,
   user: UserConfig,
   canonicalRoot: string,
   project?: DiscoveredConfig,
@@ -286,12 +274,9 @@ function selectedConfigDigest(
       mcpSharing: identity.mcpSharing ?? null,
     },
     domains: user.domains,
-    scopeRoots: Object.fromEntries(
-      Object.entries(user.contentScopes).map(([key, scope]) => [key, scope.roots]),
-    ),
-    contentScope: user.contentScopes[seed.launch.contentScope],
+    locations: user.locations,
+    selection: seed.launch.selection,
     mode: user.modes[seed.launch.mode],
-    skillPolicy: user.skillPolicies[seed.launch.skillPolicy],
     networkPolicies,
     executor: user.executors[seed.launch.executor.kind],
     projectOverride: user.projects?.[seed.projectId ?? ''] ?? null,
@@ -304,7 +289,7 @@ export class SessionResumeLaunchApplicationService {
   readonly #prepared = new WeakMap<object, PreparedFacts>();
   constructor(private readonly dependencies: SessionResumeLaunchApplicationDependencies) {}
 
-  async #build(plan: NativeVerifiedResumeSeedV1, userConfig: UserConfig) {
+  async #build(plan: NativeVerifiedResumeSeed, userConfig: UserConfig) {
     if (plan.launch.executor.kind === 'docker') {
       throw fail('EXECUTOR_UNAVAILABLE', 'Docker execution is unavailable.', {
         hostFallback: false,
@@ -336,11 +321,11 @@ export class SessionResumeLaunchApplicationService {
         'The recorded launch lacks a repository binding or valid workspace strategy.',
       );
     }
-    // A persisted snapshot is not proof of a trusted grant or unrestricted approval.
-    if (plan.launch.grants.length > 0 || plan.launch.mode === 'unrestricted') {
+    // A persisted snapshot is not proof of unrestricted approval.
+    if (plan.launch.mode === 'unrestricted') {
       throw fail(
         'SESSION_RESUME_APPROVAL_UNAVAILABLE',
-        'Resume cannot reconstruct trusted grant or unrestricted approval evidence.',
+        'Resume cannot reconstruct unrestricted approval evidence.',
       );
     }
     const projectId = plan.projectId ?? undefined;
@@ -350,11 +335,10 @@ export class SessionResumeLaunchApplicationService {
       runtime: plan.runtime,
       identity: plan.identity.name,
       mode: plan.launch.mode,
-      skillPolicy: plan.launch.skillPolicy,
-      contentScope: plan.launch.contentScope,
       executor: plan.launch.executor.kind,
       workspace: plan.launch.workspace as 'clone' | 'host-worktree' | 'direct',
       networkPolicy: plan.launch.networkPolicy,
+      ...(project ? { projectConfig: project.config } : {}),
       ...(projectId ? { projectId } : {}),
     });
     if (selection.identity.domain !== plan.identity.domain) {
@@ -380,6 +364,7 @@ export class SessionResumeLaunchApplicationService {
       repositoryId: plan.repositoryId,
       selection,
     });
+    await preparedExecutor.assertReady();
     const descriptor = immutable(
       await this.dependencies.resolveDescriptor({
         plan,
@@ -388,7 +373,7 @@ export class SessionResumeLaunchApplicationService {
         repositoryId: plan.repositoryId,
         selection,
         skills,
-        evidence: immutable(structuredClone(preparedExecutor.evidence)),
+        ...(project ? { project } : {}),
         selectedConfigDigest: configurationDigest,
       }),
     );
@@ -403,18 +388,16 @@ export class SessionResumeLaunchApplicationService {
         { runtime: descriptor.runtime, identity: descriptor.identity },
       );
     }
-    const launch: LaunchSnapshotV1 = {
+    const launch: LaunchSnapshot = {
       launchKey: descriptor.launchKey,
       descriptorDigest:
         this.dependencies.descriptorDigest?.(descriptor) ??
         sha256Canonical(descriptor as unknown as JsonValue),
       mode: descriptor.mode,
-      skillPolicy: descriptor.skillPolicy,
-      contentScope: descriptor.contentScope.name,
+      selection: structuredClone(descriptor.selection),
       executor: { kind: descriptor.executor.name },
       workspace: descriptor.workspace,
       networkPolicy: descriptor.networkPolicy.name,
-      grants: descriptor.grants,
       artifactKey: skills.artifact.reference.artifactKey,
       manifestKey: skills.manifest.manifestKey,
     };
@@ -433,9 +416,9 @@ export class SessionResumeLaunchApplicationService {
   }
 
   async plan(
-    seed: NativeVerifiedResumeSeedV1,
+    seed: NativeVerifiedResumeSeed,
     userConfig: UserConfig,
-  ): Promise<ProspectiveSessionResumePlanV1> {
+  ): Promise<ProspectiveSessionResumePlan> {
     seed = immutable(structuredClone(seed));
     userConfig = immutable(structuredClone(userConfig));
     const verified = await this.dependencies.verifySeed(seed);
@@ -462,7 +445,7 @@ export class SessionResumeLaunchApplicationService {
     });
   }
 
-  async #verifiedBuild(plan: ResumePlanV1, userConfig: UserConfig) {
+  async #verifiedBuild(plan: ResumePlan, userConfig: UserConfig) {
     const seed = immutable(await this.dependencies.verifySeed(plan));
     assertCommitment('native', nativeAxes(plan), nativeAxes(seed));
     assertCommitment(
@@ -485,7 +468,7 @@ export class SessionResumeLaunchApplicationService {
     return current;
   }
 
-  async prepare(plan: ResumePlanV1, userConfig: UserConfig): Promise<PreparedSessionResumeLaunch> {
+  async prepare(plan: ResumePlan, userConfig: UserConfig): Promise<PreparedSessionResumeLaunch> {
     plan = immutable(structuredClone(plan));
     userConfig = immutable(structuredClone(userConfig));
     if (plan.launch.executor.kind === 'docker') {

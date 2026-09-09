@@ -4,7 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import type { LaunchDescriptor } from '@mpx/launch';
-import { createRuntimeCapabilityManifestV1, createRuntimeContextV1 } from '@mpx/runtime-contracts';
+import {
+  createRuntimeCapabilityManifest,
+  createRuntimeContext,
+  type RuntimeBinding,
+} from '@mpx/runtime-contracts';
 import {
   createRuntimeSkillArtifact,
   createSkillProjectionPlan,
@@ -12,18 +16,29 @@ import {
   inventoryProjectSkills,
   resolveManifest,
 } from '@mpx/skills';
-import { composeRuntimeStatusEnvelopeV1 } from '@mpx/status';
-import { createPiRuntimeProfileV1 } from '@mpx/runtime-pi';
+import { composeRuntimeStatusEnvelope } from '@mpx/status';
+import { createPiRuntimeProfile } from '@mpx/runtime-pi';
 import {
   productionRuntimeAdapters,
   resolveClaudeCanonicalOutputStyle,
   type LaunchExecutionContext,
 } from '../../src/node/index.js';
 
+const selection = {
+  location: { name: 'work', canonicalRoot: 'C:/work' },
+  packs: ['development'] as const,
+  source: 'project' as const,
+};
+const capabilityBinding = (binding: RuntimeBinding) => ({
+  projectId: binding.projectId,
+  repositoryId: binding.repositoryId,
+  selection: binding.selection,
+});
+
 async function projectionContentFixture(
   root: string,
   runtime: 'claude' | 'pi',
-  binding: { projectId: string; repositoryId: string; contentScope: string },
+  binding: RuntimeBinding,
   projectSkill = false,
 ) {
   const contentRoot = path.join(root, 'content');
@@ -37,17 +52,16 @@ async function projectionContentFixture(
     path.join(skillRoot, 'SKILL.md'),
     projectSkill
       ? '---\nname: sample\ndescription: Sample\nmetadata:\n  mpx:\n    projectExposure: full\n---\nSample body.\n'
-      : '---\nname: sample\ndescription: Sample\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nSample body.\n',
+      : '---\nname: sample\ndescription: Sample\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\nSample body.\n',
   );
   const catalog = projectSkill
     ? (await inventoryProjectSkills(root)).skills
     : await inventoryCanonical(canonicalRoot);
   const manifest = resolveManifest(catalog, {
-    ...binding,
-    enabledPacks: projectSkill ? [] : ['core'],
-    identity: 'identity',
-    skillPolicy: 'policy',
-    skillPolicyConfig: { skillExposure: { default: 'full' } },
+    repositoryId: binding.repositoryId,
+    ...(binding.projectId ? { projectId: binding.projectId } : {}),
+    identity: binding.identity,
+    selection: binding.selection,
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime });
   const skillPlan = await createSkillProjectionPlan({ manifest, artifact, catalog, canonicalRoot });
@@ -84,6 +98,122 @@ describe('Node launch execution runtime adapters', () => {
     );
   });
 
+  it.each(['claude', 'pi'] as const)(
+    'binds the %s invocation executor from the production descriptor',
+    async (runtime) => {
+      const stateRoot = await mkdtemp(path.join(tmpdir(), `mpx-${runtime}-executor-`));
+      const launchKey = 'a'.repeat(64);
+      const binding = {
+        projectId: 'sample/app',
+        repositoryId: 'sample/repo',
+        identity: 'work',
+        selection,
+      };
+      const content = await projectionContentFixture(stateRoot, runtime, binding);
+      const descriptor = {
+        runtime,
+        launchKey,
+        identity: { name: 'work', domain: 'work' },
+        mode: 'developer',
+        executor: { name: 'docker' },
+      } as unknown as LaunchDescriptor;
+      const runtimeContext = createRuntimeContext({
+        launchKey,
+        launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
+        manifestKey: content.artifact.reference.manifestKey,
+        runtimeArtifact: content.artifact.reference,
+        binding,
+      });
+      const capability = createRuntimeCapabilityManifest({
+        runtime,
+        launchKey,
+        identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
+        binding: capabilityBinding(binding),
+        executor: 'host',
+        tools: [],
+        routes: [],
+        resources: [],
+        mounts: [],
+        destinations: [],
+        skills: [],
+        models: [],
+        nesting: { depth: 0, maxDepth: 0 },
+      });
+      try {
+        const [adapter] = productionRuntimeAdapters({
+          descriptor,
+          cwd: stateRoot,
+          environment: { MPX_RUNTIME_EXECUTOR: 'host' },
+          nativeRuntimeRoot: `C:/native/${runtime}`,
+          stateRoot,
+          projectionInput: {
+            descriptor,
+            skillPlan: content.skillPlan,
+            agentsRoot: content.agentsRoot,
+            runtimeProfilesFile: content.runtimeProfilesFile,
+            artifactsRoot: stateRoot,
+            runtimeContext,
+            runtimeStatusEnvelope: composeRuntimeStatusEnvelope({
+              generatedAt: '2026-01-01T00:00:00.000Z',
+              binding: { launchKey, runtimeId: runtime, repositoryId: binding.repositoryId },
+              harness:
+                runtime === 'pi'
+                  ? { kind: 'pi', version: null, surface: 'footer' }
+                  : { kind: 'claude', version: null, surface: 'statusline' },
+              contributions: [],
+            }),
+            runtimeCapabilityManifest: capability,
+            ...(runtime === 'pi'
+              ? {
+                  piRuntimeProfile: createPiRuntimeProfile(
+                    {
+                      schemaVersion: 1,
+                      runtime: 'pi',
+                      provider: 'openai-codex',
+                      defaultModel: 'openai-codex/gpt-5.6-sol',
+                      enabledModels: ['openai-codex/gpt-5.6-sol'],
+                    },
+                    [],
+                  ),
+                }
+              : {}),
+            runtimeLaunchBinding: {
+              launchKey,
+              runtime,
+              identity: { name: 'work', domain: 'work' },
+              worktreeRoot: stateRoot,
+              executor: 'host',
+              assignedPorts: [],
+            },
+          },
+          launchBanner: 'launch',
+          initialSnapshot: {
+            schemaVersion: 1,
+            project: { id: 'sample/app', cwd: stateRoot },
+            worktree: { id: null, path: null, role: null, branch: null },
+            portResolution: 'valid',
+            services: [],
+            diagnostics: [],
+          },
+          statusSnapshot: async () => ({}) as never,
+          bindStatusPath: () => undefined,
+          bindRuntimeStatusPath: () => undefined,
+          statusMaterializer: { materialize: async () => undefined },
+          runtimeStatusMaterializer: {
+            materialize: async () => path.join(stateRoot, 'runtime.json'),
+          },
+          trustedExecutable: { executable: process.execPath, argvPrefix: [] },
+        });
+
+        const invocation = await adapter!.prepare({ routes: {} } as never);
+
+        expect(invocation.environment.MPX_RUNTIME_EXECUTOR).toBe('docker');
+      } finally {
+        await rm(stateRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('builds a production projection with the tracked Pi semantic model mapping', async () => {
     const repositoryRoot = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -95,16 +225,19 @@ describe('Node launch execution runtime adapters', () => {
     await mkdir(skillDirectory);
     await writeFile(
       path.join(skillDirectory, 'SKILL.md'),
-      '---\nname: sample\ndescription: Sample skill\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\n# Sample\n',
+      '---\nname: sample\ndescription: Sample skill\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\n# Sample\n',
     );
     const catalog = await inventoryCanonical(canonicalRoot);
-    const binding = { projectId: 'project', repositoryId: 'repository', contentScope: 'scope' };
+    const binding = {
+      projectId: 'project',
+      repositoryId: 'repository',
+      identity: 'identity',
+      selection,
+    };
     const manifest = resolveManifest(catalog, {
       ...binding,
-      enabledPacks: ['core'],
-      identity: 'identity',
-      skillPolicy: 'policy',
-      skillPolicyConfig: { skillPacks: ['core'], skillExposure: { default: 'full' } },
+      identity: binding.identity,
+      selection,
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
     const skillPlan = await createSkillProjectionPlan({
@@ -115,7 +248,7 @@ describe('Node launch execution runtime adapters', () => {
     });
     const launchKey = 'a'.repeat(64);
     const descriptorDigest = 'e'.repeat(64);
-    const runtimeContext = createRuntimeContextV1({
+    const runtimeContext = createRuntimeContext({
       launchKey,
       launchDescriptor: { reference: 'launch.json', digest: descriptorDigest },
       manifestKey: manifest.manifestKey,
@@ -130,17 +263,17 @@ describe('Node launch execution runtime adapters', () => {
       services: [],
       diagnostics: [],
     };
-    const runtimeStatusEnvelope = composeRuntimeStatusEnvelopeV1({
+    const runtimeStatusEnvelope = composeRuntimeStatusEnvelope({
       generatedAt: '2026-01-01T00:00:00.000Z',
       binding: { launchKey, runtimeId: 'pi', repositoryId: 'repository' },
       harness: { kind: 'pi', version: null, surface: 'footer' },
       contributions: [],
     });
-    const runtimeCapabilityManifest = createRuntimeCapabilityManifestV1({
+    const runtimeCapabilityManifest = createRuntimeCapabilityManifest({
       runtime: 'pi',
       launchKey,
       identity: { name: 'identity', domain: 'personal', nativeRuntimeRootDigest: 'f'.repeat(64) },
-      binding,
+      binding: capabilityBinding(binding),
       executor: 'host',
       tools: [],
       routes: [],
@@ -166,7 +299,7 @@ describe('Node launch execution runtime adapters', () => {
         launchKey,
         identity: { name: 'identity', domain: 'personal' },
         mode: 'developer',
-        skillPolicy: 'policy',
+        executor: { name: 'host' },
       } as LaunchDescriptor;
       await writeFile(
         path.join(canonicalRoot, 'mpxconfig.json'),
@@ -199,7 +332,7 @@ describe('Node launch execution runtime adapters', () => {
           runtimeStatusEnvelope,
           runtimeCapabilityManifest,
           runtimeLaunchBinding,
-          piRuntimeProfile: createPiRuntimeProfileV1(
+          piRuntimeProfile: createPiRuntimeProfile(
             {
               schemaVersion: 1,
               runtime: 'pi',
@@ -243,7 +376,6 @@ describe('Node launch execution runtime adapters', () => {
       expect(invocation.environment).toMatchObject({
         MPX_IDENTITY: 'identity',
         MPX_MODE: 'developer',
-        MPX_SKILL_POLICY: 'policy',
         MPX_REPOSITORY_PROVIDER: 'gitlab',
         MPX_ISSUES_PROVIDER: 'kanbanflow',
       });
@@ -267,7 +399,8 @@ describe('Node launch execution runtime adapters', () => {
     const binding = {
       projectId: 'sample/app',
       repositoryId: 'sample/repo',
-      contentScope: 'work',
+      identity: 'work',
+      selection,
     };
     const content = await projectionContentFixture(stateRoot, 'pi', binding);
     const artifactReference = content.artifact.reference;
@@ -277,9 +410,9 @@ describe('Node launch execution runtime adapters', () => {
       runtimeArgs,
       identity: { name: 'identity', domain: 'personal' },
       mode: 'developer',
-      skillPolicy: 'policy',
+      executor: { name: 'host' },
     } as unknown as LaunchDescriptor;
-    const runtimeContext = createRuntimeContextV1({
+    const runtimeContext = createRuntimeContext({
       launchKey,
       launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
       manifestKey: artifactReference.manifestKey,
@@ -287,17 +420,18 @@ describe('Node launch execution runtime adapters', () => {
       binding: {
         projectId: 'sample/app',
         repositoryId: 'sample/repo',
-        contentScope: 'work',
+        identity: 'work',
+        selection,
       },
     });
-    const capability = createRuntimeCapabilityManifestV1({
+    const capability = createRuntimeCapabilityManifest({
       runtime: 'pi',
       launchKey,
       identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
       binding: {
         projectId: 'sample/app',
         repositoryId: 'sample/repo',
-        contentScope: 'work',
+        selection,
       },
       executor: 'host',
       tools: [],
@@ -379,26 +513,28 @@ describe('Node launch execution runtime adapters', () => {
     const binding = {
       projectId: 'sample/app',
       repositoryId: 'sample/repo',
-      contentScope: 'work',
+      identity: 'work',
+      selection,
     };
     const content = await projectionContentFixture(stateRoot, 'claude', binding, true);
     const descriptor = {
       runtime: 'claude',
       launchKey,
       identity: { name: 'work', domain: 'work' },
+      executor: { name: 'host' },
     } as LaunchDescriptor;
-    const runtimeContext = createRuntimeContextV1({
+    const runtimeContext = createRuntimeContext({
       launchKey,
       launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
       manifestKey: content.artifact.reference.manifestKey,
       runtimeArtifact: content.artifact.reference,
       binding,
     });
-    const capability = createRuntimeCapabilityManifestV1({
+    const capability = createRuntimeCapabilityManifest({
       runtime: 'claude',
       launchKey,
       identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
-      binding,
+      binding: capabilityBinding(binding),
       executor: 'host',
       tools: [],
       routes: [],
@@ -423,7 +559,7 @@ describe('Node launch execution runtime adapters', () => {
           runtimeProfilesFile: content.runtimeProfilesFile,
           artifactsRoot: stateRoot,
           runtimeContext,
-          runtimeStatusEnvelope: composeRuntimeStatusEnvelopeV1({
+          runtimeStatusEnvelope: composeRuntimeStatusEnvelope({
             generatedAt: '2026-01-01T00:00:00.000Z',
             binding: { launchKey, runtimeId: 'claude', repositoryId: binding.repositoryId },
             harness: { kind: 'claude', version: null, surface: 'statusline' },
@@ -475,26 +611,28 @@ describe('Node launch execution runtime adapters', () => {
     const binding = {
       projectId: 'sample/app',
       repositoryId: 'sample/repo',
-      contentScope: 'work',
+      identity: 'work',
+      selection,
     };
     const content = await projectionContentFixture(stateRoot, 'claude', binding, true);
     const descriptor = {
       runtime: 'claude',
       launchKey,
       identity: { name: 'work', domain: 'work' },
+      executor: { name: 'host' },
     } as LaunchDescriptor;
-    const runtimeContext = createRuntimeContextV1({
+    const runtimeContext = createRuntimeContext({
       launchKey,
       launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
       manifestKey: content.artifact.reference.manifestKey,
       runtimeArtifact: content.artifact.reference,
       binding,
     });
-    const capability = createRuntimeCapabilityManifestV1({
+    const capability = createRuntimeCapabilityManifest({
       runtime: 'claude',
       launchKey,
       identity: { name: 'work', domain: 'work', nativeRuntimeRootDigest: 'f'.repeat(64) },
-      binding,
+      binding: capabilityBinding(binding),
       executor: 'host',
       tools: [],
       routes: [],
@@ -571,11 +709,12 @@ describe('Node launch execution runtime adapters', () => {
     const binding = {
       projectId: 'sample/app',
       repositoryId: 'sample/repo',
-      contentScope: 'work',
+      identity: 'work',
+      selection,
     };
     const content = await projectionContentFixture(stateRoot, 'claude', binding);
     const artifactReference = content.artifact.reference;
-    const runtimeContext = createRuntimeContextV1({
+    const runtimeContext = createRuntimeContext({
       launchKey,
       launchDescriptor: { reference: 'launch.json', digest: 'e'.repeat(64) },
       manifestKey: artifactReference.manifestKey,
@@ -583,10 +722,11 @@ describe('Node launch execution runtime adapters', () => {
       binding: {
         projectId: 'sample/app',
         repositoryId: 'sample/repo',
-        contentScope: 'work',
+        identity: 'work',
+        selection,
       },
     });
-    const capability = createRuntimeCapabilityManifestV1({
+    const capability = createRuntimeCapabilityManifest({
       runtime: 'claude',
       launchKey,
       identity: {
@@ -597,7 +737,7 @@ describe('Node launch execution runtime adapters', () => {
       binding: {
         projectId: 'sample/app',
         repositoryId: 'sample/repo',
-        contentScope: 'work',
+        selection,
       },
       executor: 'host',
       tools: [],
@@ -609,7 +749,11 @@ describe('Node launch execution runtime adapters', () => {
       models: [],
       nesting: { depth: 0, maxDepth: 0 },
     });
-    const descriptor = { runtime: 'claude', launchKey } as LaunchDescriptor;
+    const descriptor = {
+      runtime: 'claude',
+      launchKey,
+      executor: { name: 'host' },
+    } as LaunchDescriptor;
     const launchBinding = {
       launchKey,
       runtime: 'claude' as const,

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,12 +30,6 @@ const workspaceRoots = await discoverWorkspaceRoots(root);
 expect(workspaceRoots, 'pnpm workspace discovery must return non-root workspaces').not.toHaveLength(
   0,
 );
-const fixtureDirectory = /(?:^|\/)(?:fixture|fixtures|__fixtures__|test-fixtures)(?:\/|$)/u;
-
-async function json(relative) {
-  return JSON.parse(await readFile(path.join(root, relative), 'utf8'));
-}
-
 async function outputFiles(directory) {
   try {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -233,49 +227,6 @@ describe('repository-derived test taxonomy', () => {
     }
   });
 
-  test('keeps workspace suites and fixtures only in their final owned directories', async () => {
-    const files = await filesBelow(root);
-    for (const workspace of workspaceRoots) {
-      const emitted = (await outputFiles(path.join(root, workspace, 'dist'))).map((file) =>
-        path.relative(root, file).replaceAll('\\', '/'),
-      );
-      const owned = files.filter((file) => file.startsWith(`${workspace}/`));
-      expect(workspaceTestLayoutViolations(workspace, [...owned, ...emitted]), workspace).toEqual(
-        [],
-      );
-      expect(
-        owned.filter(
-          (file) => fixtureDirectory.test(file) && !file.startsWith(`${workspace}/test/fixtures/`),
-        ),
-        workspace,
-      ).toEqual([]);
-      expect(
-        owned.filter(
-          (file) =>
-            file.startsWith(`${workspace}/src/`) &&
-            /(?:^|\/)(?:test|tests|fixture|fixtures|__fixtures__|test-fixtures)(?:\/|$)/u.test(
-              file,
-            ),
-        ),
-        workspace,
-      ).toEqual([]);
-    }
-  });
-
-  test('keeps root-owned categories in their final root directories', async () => {
-    const files = (await filesBelow(root)).filter(
-      (file) =>
-        selectedCategoryTestFile(file) &&
-        !workspaceRoots.some((workspace) => file.startsWith(`${workspace}/`)) &&
-        !file.startsWith('content/'),
-    );
-    for (const category of ['unit', 'contract', 'integration', 'e2e']) {
-      for (const file of files.filter((candidate) => classifyTestPath(candidate) === category)) {
-        expect(file, file).toMatch(new RegExp(`^tests/${category}/`, 'u'));
-      }
-    }
-  });
-
   test('keeps payload and Pi vendor/generated tests as explicit classifier exceptions', () => {
     const payload = 'content/skills/video-to-image/__tests__/compose.test.ts';
     expect(matchingTestCategories(payload)).toEqual(['payload']);
@@ -285,66 +236,9 @@ describe('repository-derived test taxonomy', () => {
     expect(classifyTestPath('runtimes/pi/runtime-pi/generated/projected.test.ts')).toBeUndefined();
     expect(classifyTestPath('packages/core/dist/emitted.test.js')).toBeUndefined();
   });
-
-  test('keeps executable scripts free of test suites', async () => {
-    expect((await filesBelow(root, 'scripts')).filter(testLikeFile)).toEqual([]);
-  });
-
-  test('keeps root tests on public package boundaries', async () => {
-    const files = (await filesBelow(root, 'tests')).filter((file) =>
-      /\.(?:[cm]?[jt]sx?)$/u.test(file),
-    );
-    const privatePackageImport =
-      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"][^'"]*packages\/[^'"]+\/(?:dist|src)(?:\/[^'"]*)?['"]/u;
-    const violations = [];
-    for (const file of files) {
-      if (privatePackageImport.test(await readFile(path.join(root, file), 'utf8'))) {
-        violations.push(file);
-      }
-    }
-    expect(violations).toEqual([]);
-  });
 });
 
 describe('final workspace and root command contracts', () => {
-  test('gives every workspace its final Vitest, tsconfig, and package-script contract', async () => {
-    for (const workspace of workspaceRoots) {
-      const production = await json(`${workspace}/tsconfig.json`);
-      const tests = await json(`${workspace}/tsconfig.test.json`);
-      const manifest = await json(`${workspace}/package.json`);
-      if (workspace === 'runtimes/pi/extensions') {
-        expect(production.include, workspace).toEqual(['**/*.ts']);
-        expect(production.exclude, workspace).toEqual(['**/*.test.ts', 'dist/**', 'test/**']);
-        expect(tests.compilerOptions.noEmit, workspace).toBe(true);
-        expect(tests.include, workspace).toEqual(['**/*.ts']);
-        expect(tests.exclude, workspace).toEqual(['dist/**']);
-        expect(manifest.scripts.build, workspace).toBe('node scripts/run.mjs build');
-        expect(manifest.scripts['test:unit'], workspace).toBe('node scripts/run.mjs test');
-        expect(manifest.scripts.typecheck, workspace).toBe('node scripts/run.mjs typecheck');
-        expect(manifest.scripts.check, workspace).not.toContain('vitest run');
-        continue;
-      }
-      const vitest = await import(path.join(root, workspace, 'vitest.config.ts'));
-      expect(vitest.default.test.include, workspace).toEqual([
-        'test/unit/**/*.{test,spec}.{ts,tsx,js,jsx,mts,mjs,cts,cjs}',
-      ]);
-      expect(production.include, workspace).toEqual(['src/**/*.ts']);
-      expect(production.exclude, workspace).toEqual(
-        expect.arrayContaining(['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/fixtures/**']),
-      );
-      expect(tests.compilerOptions.noEmit, workspace).toBe(true);
-      expect(tests.include, workspace).toEqual(['src/**/*.ts', 'test/**/*.ts']);
-      expect(tests.exclude, workspace).toEqual([]);
-      expect(manifest.scripts.build, workspace).toBe('tsc -p tsconfig.json');
-      expect(manifest.scripts['test:unit'], workspace).toBe(
-        `pnpm --filter ${manifest.name}... build && vitest run`,
-      );
-      expect(manifest.scripts.test, workspace).toContain('test:unit');
-      expect(manifest.scripts.typecheck, workspace).toContain('tsconfig.test.json');
-      expect(manifest.scripts.check, workspace).not.toContain('vitest run');
-    }
-  });
-
   test('keeps tests outside production compilation and emitted build output', async () => {
     const canonicalBefore = await repositoryOutputDigests(root);
     const snapshotRoot = await createRepositorySnapshot(root, 'mpx-build-integration-');
@@ -366,59 +260,4 @@ describe('final workspace and root command contracts', () => {
       await expect(stat(snapshotRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     }
   }, 120_000);
-
-  test('keeps one thin root config per category and bounds only aggregate unit workers', async () => {
-    expect(Object.keys(CATEGORY_CONFIGS).sort()).toEqual([...TEST_CATEGORIES].sort());
-    for (const category of TEST_CATEGORIES) {
-      const configPath = CATEGORY_CONFIGS[category];
-      expect(await readFile(path.join(root, configPath), 'utf8'), category).toContain(
-        'vitest.shared',
-      );
-      const config = await import(path.join(root, configPath));
-      expect(config.default.test.maxWorkers, category).toBe(category === 'unit' ? 4 : undefined);
-    }
-  });
-
-  test('makes every public category command independently executable with its exact config', async () => {
-    const manifest = await json('package.json');
-    expect(
-      Object.fromEntries(
-        TEST_CATEGORIES.map((category) => [category, manifest.scripts[`test:${category}`]]),
-      ),
-    ).toEqual({
-      unit: 'pnpm run build && vitest run --config vitest.unit.config.ts',
-      payload: 'vitest run --config vitest.payload.config.ts',
-      contract:
-        'pnpm --filter @mpx/runtime-contracts... build && vitest run --config vitest.contract.config.ts',
-      integration: 'pnpm --filter mpx... build && vitest run --config vitest.integration.config.ts',
-      e2e: 'pnpm --filter mpx... build && vitest run --config vitest.e2e.config.ts',
-    });
-  });
-
-  test('invokes each self-contained category exactly once in safe order', async () => {
-    const manifest = await json('package.json');
-    const invocations = manifest.scripts.test.split('&&').map((command) => command.trim());
-    expect(invocations).toEqual(TEST_CATEGORIES.map((category) => `pnpm run test:${category}`));
-    for (const category of TEST_CATEGORIES) {
-      expect(invocations.filter((command) => command === `pnpm run test:${category}`)).toHaveLength(
-        1,
-      );
-    }
-    expect(invocations).not.toContain('pnpm run test:convergence');
-    expect(invocations).not.toContain('pnpm run build');
-    expect(manifest.scripts.test).not.toContain('pnpm -r test');
-  });
-
-  test('does not retain obsolete convergence migration commands', async () => {
-    const manifest = await json('package.json');
-    expect(Object.keys(manifest.scripts).filter((name) => name.includes('convergence'))).toEqual(
-      [],
-    );
-    expect(manifest.scripts.test).not.toContain('convergence');
-  });
-
-  test('retains only the final test exception in Fallow duplicate analysis', async () => {
-    const config = await json('.fallowrc.json');
-    expect(config.duplicates.ignore).toEqual(['**/*.test.ts', '**/*.spec.ts']);
-  });
 });

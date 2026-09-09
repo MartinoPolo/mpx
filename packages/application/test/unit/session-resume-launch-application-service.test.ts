@@ -3,7 +3,7 @@ import type { UserConfig } from '@mpx/config';
 import {
   stableDigest,
   verifyResumeConfirmation,
-  type NativeVerifiedResumeSeedV1,
+  type NativeVerifiedResumeSeed,
 } from '@mpx/sessions';
 import {
   SessionResumeLaunchApplicationService,
@@ -13,24 +13,25 @@ import {
 const digest = 'a'.repeat(64);
 const cwd = process.cwd();
 const user = {
+  schemaVersion: 2,
   identities: {
     work: {
       domain: 'work',
       runtimeRoots: { claude: '/roots/claude', pi: '/roots/pi' },
       gitAuthorRoute: 'work',
+      allowedSkillPacks: ['development'],
     },
   },
   domains: { work: [cwd] },
-  contentScopes: { work: { roots: [cwd], skillPacks: ['core'] } },
+  locations: { work: { roots: [cwd], skillPacks: ['development'] } },
   modes: { project: { resources: { 'selected-project': 'read-write' } } },
-  skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
   presets: {},
-  launchDefaults: { projects: {}, scopes: {} },
+  launchDefaults: { projects: {}, locations: {} },
   networkPolicies: { implementation: { preset: 'balanced' } },
   executors: { host: {}, docker: {} },
 } satisfies UserConfig;
 
-const seed: NativeVerifiedResumeSeedV1 = {
+const seed: NativeVerifiedResumeSeed = {
   schemaVersion: 1,
   newLaunchRequired: true,
   previousLaunch: { launchKey: 'old', descriptorDigest: digest },
@@ -48,12 +49,14 @@ const seed: NativeVerifiedResumeSeedV1 = {
     launchKey: 'old',
     descriptorDigest: digest,
     mode: 'project',
-    skillPolicy: 'clean',
-    contentScope: 'work',
+    selection: {
+      location: { name: 'work', canonicalRoot: cwd },
+      packs: ['development'],
+      source: 'project',
+    },
     executor: { kind: 'host' },
     workspace: 'direct',
     networkPolicy: 'implementation',
-    grants: [],
     artifactKey: 'old-release-artifact',
     manifestKey: 'manifest',
   },
@@ -113,20 +116,15 @@ function fixture() {
           skillArtifact: { artifactKey: 'capability-artifact' },
         }) as never,
     ),
-    prepareExecutor: async () => ({
-      evidence: { status: 'verified', verifier: 'test', evidenceDigest: digest },
-      execute,
-    }),
+    prepareExecutor: async () => ({ assertReady: async () => undefined, execute }),
     resolveDescriptor: async () =>
       ({
         runtime: recorded.runtime,
         identity: recorded.identity,
         launchKey: 'new',
         mode: 'project',
-        skillPolicy: 'clean',
-        contentScope: { name: 'work' },
+        selection: recorded.launch.selection,
         executor: { name: 'host', effectiveEnforcement: 'advisory', isolation: 'none' },
-        executorVerification: { status: 'verified', evidenceDigest: digest },
         intendedPolicy: { resources: configuration.modes.project!.resources },
         routes: {
           gitAuthor: 'work',
@@ -139,7 +137,6 @@ function fixture() {
           name: 'implementation',
           declaration: configuration.networkPolicies.implementation,
         },
-        grants: [],
       }) as never,
     descriptorDigest: () => 'b'.repeat(64),
     requireExecutionRoots: roots,
@@ -158,7 +155,7 @@ function fixture() {
     setManifest: (value: string) => {
       manifestKey = value;
     },
-    setRecord: (value: NativeVerifiedResumeSeedV1) => {
+    setRecord: (value: NativeVerifiedResumeSeed) => {
       recorded = value;
     },
     setConfig: (value: UserConfig) => {
@@ -233,10 +230,9 @@ describe('SessionResumeLaunchApplicationService', () => {
     'artifact',
     'manifest',
     'mode',
-    'skillPolicy',
     'networkPolicy',
     'inheritedNetworkPolicy',
-    'scope',
+    'location',
     'route',
     'projectOverride',
   ] as const)(
@@ -254,9 +250,7 @@ describe('SessionResumeLaunchApplicationService', () => {
       if (axis === 'mode') {
         changed.modes.project!.resources = {};
       }
-      if (axis === 'skillPolicy') {
-        changed.skillPolicies.clean!.skillExposure.skills = { execute: 'explicit-only' };
-      }
+
       if (axis === 'networkPolicy') {
         changed.networkPolicies.implementation!.denyPrivateNetworks = true;
       }
@@ -264,14 +258,16 @@ describe('SessionResumeLaunchApplicationService', () => {
         changed.networkPolicies.base = { denyPrivateNetworks: true };
         changed.networkPolicies.implementation!.extends = 'base';
       }
-      if (axis === 'scope') {
-        changed.contentScopes.work!.skillPacks = ['core', 'work'];
+      if (axis === 'location') {
+        changed.identities.work!.allowedSkillPacks = ['development', 'personal'];
+        changed.locations.work!.skillPacks = ['personal'];
       }
       if (axis === 'route') {
         changed.identities.work!.gitAuthorRoute = 'changed-route';
       }
       if (axis === 'projectOverride') {
-        changed.projects = { 'sample/app': { skillPacks: ['core'] } };
+        changed.identities.work!.allowedSkillPacks = ['development', 'personal'];
+        changed.projects = { 'sample/app': { skillPacks: ['development', 'personal'] } };
       }
       f.setConfig(changed);
       const failure = await f.service.prepare(approved, changed).catch((error: unknown) => error);
@@ -413,10 +409,9 @@ describe('SessionResumeLaunchApplicationService', () => {
     expect(f.execute).toHaveBeenCalledOnce();
   });
 
-  it('fails closed on Docker and never manufactures grant or unrestricted approvals', async () => {
+  it('fails closed on Docker and never manufactures unrestricted approvals', async () => {
     for (const launch of [
       { ...seed.launch, executor: { kind: 'docker' as const } },
-      { ...seed.launch, grants: [{ access: 'rw', resource: 'host' }] },
       { ...seed.launch, mode: 'unrestricted' },
     ]) {
       const f = fixture();

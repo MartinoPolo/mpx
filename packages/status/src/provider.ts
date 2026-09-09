@@ -6,13 +6,13 @@ import type { LeaseFile, LeaseRecord, ListenerInfo } from '@mpx/ports';
 export type PortResolutionState = 'valid' | 'missing' | 'invalid' | 'stale';
 export type StatusDiagnosticSeverity = 'info' | 'warning' | 'error';
 
-export interface StatusDiagnosticV1 {
+export interface StatusDiagnostic {
   code: string;
   severity: StatusDiagnosticSeverity;
   message: string;
   serviceId: string | null;
 }
-export interface StatusServiceV1 {
+export interface StatusService {
   id: string;
   mode: 'managed' | 'fixed-shared';
   scope: 'checkout' | 'project';
@@ -22,7 +22,7 @@ export interface StatusServiceV1 {
   conflict: 'none' | 'external' | 'unknown';
   pid: number | null;
 }
-export interface StatusSnapshotV1 {
+export interface StatusSnapshot {
   schemaVersion: 1;
   project: { id: string; cwd: string };
   worktree: {
@@ -32,8 +32,8 @@ export interface StatusSnapshotV1 {
     branch: string | null;
   };
   portResolution: PortResolutionState;
-  services: StatusServiceV1[];
-  diagnostics: StatusDiagnosticV1[];
+  services: StatusService[];
+  diagnostics: StatusDiagnostic[];
 }
 export interface StatusRequest {
   cwd: string;
@@ -50,13 +50,13 @@ export interface StatusProviderDependencies {
   portService: ReadOnlyPortService;
 }
 export interface StatusProvider {
-  snapshot(request: StatusRequest): Promise<StatusSnapshotV1>;
+  snapshot(request: StatusRequest): Promise<StatusSnapshot>;
 }
 
 type Resolution = {
   state: PortResolutionState;
   lease: LeaseFile | null;
-  diagnostic: StatusDiagnosticV1 | null;
+  diagnostic: StatusDiagnostic | null;
 };
 
 function diagnostic(
@@ -64,7 +64,7 @@ function diagnostic(
   severity: StatusDiagnosticSeverity,
   message: string,
   serviceId: string | null = null,
-): StatusDiagnosticV1 {
+): StatusDiagnostic {
   return { code, severity, message, serviceId };
 }
 function errorCode(error: unknown): string {
@@ -150,7 +150,7 @@ function branchName(branch: string | undefined): string | null {
 function listenerConflict(
   listener: ListenerInfo | undefined,
   worktreePath: string | undefined,
-): StatusServiceV1['conflict'] {
+): StatusService['conflict'] {
   if (!listener) {
     return 'none';
   }
@@ -169,7 +169,7 @@ function compareListeners(left: ListenerInfo, right: ListenerInfo): number {
 
 export class StatusSnapshotProvider implements StatusProvider {
   constructor(private readonly dependencies: StatusProviderDependencies) {}
-  async snapshot(request: StatusRequest): Promise<StatusSnapshotV1> {
+  async snapshot(request: StatusRequest): Promise<StatusSnapshot> {
     let resolution: Resolution;
     try {
       resolution = {
@@ -181,7 +181,7 @@ export class StatusSnapshotProvider implements StatusProvider {
       resolution = classify(error);
     }
 
-    const diagnostics: StatusDiagnosticV1[] = resolution.diagnostic ? [resolution.diagnostic] : [];
+    const diagnostics: StatusDiagnostic[] = resolution.diagnostic ? [resolution.diagnostic] : [];
     let records: readonly LeaseRecord[] = [];
     try {
       records = await this.dependencies.portService.list();
@@ -216,7 +216,7 @@ export class StatusSnapshotProvider implements StatusProvider {
     const configured = Object.entries(request.config.development?.services ?? {}).sort(([a], [b]) =>
       a.localeCompare(b),
     );
-    const services: StatusServiceV1[] = configured.map(([id, service]) => {
+    const services: StatusService[] = configured.map(([id, service]) => {
       const port = resolution.state === 'valid' ? (resolution.lease?.services[id] ?? null) : null;
       const listener = port === null ? undefined : listenerByPort.get(port);
       const duplicateShared =

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import {
-  createPiRuntimeProfileV1,
-  parsePiRuntimeProfileV1,
+  createPiRuntimeProfile,
+  parsePiRuntimeProfile,
   PiRuntimeProfileError,
 } from '../../src/profile.js';
 
@@ -40,7 +40,7 @@ it('rejects malformed runtime profiles with a stable Pi diagnostic', () => {
   ];
 
   for (const value of malformed) {
-    expect(() => parsePiRuntimeProfileV1(value)).toThrowError(
+    expect(() => parsePiRuntimeProfile(value)).toThrowError(
       expect.objectContaining({
         constructor: PiRuntimeProfileError,
         code: 'PI_RUNTIME_PROFILE_INVALID',
@@ -52,7 +52,7 @@ it('rejects malformed runtime profiles with a stable Pi diagnostic', () => {
 
 it('returns an immutable copy that cannot be changed through mutable input aliases', () => {
   const input = validProfileInput();
-  const parsed = parsePiRuntimeProfileV1(input);
+  const parsed = parsePiRuntimeProfile(input);
   input.models[0] = 'openai-codex/changed';
   input.capabilityIds[0] = 'changed';
 
@@ -65,11 +65,11 @@ it('returns an immutable copy that cannot be changed through mutable input alias
 
 it('parses a valid serialized profile without changing its value', () => {
   const input = validProfileInput();
-  expect(parsePiRuntimeProfileV1(JSON.parse(JSON.stringify(input)))).toEqual(input);
+  expect(parsePiRuntimeProfile(JSON.parse(JSON.stringify(input)))).toEqual(input);
 });
 
 it('translates supplied model selection into an immutable account-safe profile', () => {
-  const profile = createPiRuntimeProfileV1(
+  const profile = createPiRuntimeProfile(
     {
       schemaVersion: 1,
       runtime: 'pi',

@@ -9,10 +9,10 @@ import {
   SessionStore,
   deriveNativeBindingRef,
   parseClaudeActiveAgents,
-  type IdentityV1,
+  type Identity,
   type ProcessInspector,
   type ResumeDependencies,
-  type SessionRecordV1,
+  type SessionRecord,
   type RuntimeDiscovery,
 } from '@mpx/sessions';
 import { PiResumeTargetError, verifyPiResumeTarget } from '@mpx/runtime-pi';
@@ -46,7 +46,7 @@ export function productionSessionResumeDependencies(input: {
   exactNativeRootVerifier?: { verify(root: string): Promise<void> };
   piAuthVerifier?: PiAuthVerifier;
   cwd?: string;
-}): (record: SessionRecordV1) => Promise<ResumeDependencies> {
+}): (record: SessionRecord) => Promise<ResumeDependencies> {
   const {
     user,
     store,
@@ -181,7 +181,7 @@ export async function productionSessionDiscoveries(input: {
 }): Promise<
   readonly {
     scanner: RuntimeDiscovery;
-    context: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
+    context: { identity: Identity; nativeBindingRef: string; runtime: 'claude' | 'pi' };
   }[]
 > {
   const { user, store, environment, options = {}, scope } = input;
@@ -200,7 +200,7 @@ export async function productionSessionDiscoveries(input: {
     options.piProcessInspector ?? new WindowsProcessCapabilities().asProcessInspector();
   const result: {
     scanner: RuntimeDiscovery;
-    context: { identity: IdentityV1; nativeBindingRef: string; runtime: 'claude' | 'pi' };
+    context: { identity: Identity; nativeBindingRef: string; runtime: 'claude' | 'pi' };
   }[] = [];
   for (const [name, configured] of Object.entries(user.identities).sort(([a], [b]) =>
     a.localeCompare(b),

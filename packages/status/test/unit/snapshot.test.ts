@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest';
 import {
   createRuntimeStatusSnapshotReader,
   createStatusSnapshotRefreshController,
-  parseStatusSnapshotV1,
-  readStatusSnapshotV1,
-  type StatusSnapshotV1,
+  parseStatusSnapshot,
+  readStatusSnapshot,
+  type StatusSnapshot,
 } from '../../src/index.js';
 
-const validSnapshot: StatusSnapshotV1 = {
+const validSnapshot: StatusSnapshot = {
   schemaVersion: 1,
   project: { id: 'acme/web', cwd: 'C:/repo' },
   worktree: { id: 'main', path: 'C:/repo', role: 'main', branch: 'main' },
@@ -30,10 +30,10 @@ const validSnapshot: StatusSnapshotV1 = {
   diagnostics: [],
 };
 
-describe('StatusSnapshotV1 parsing', () => {
+describe('StatusSnapshot parsing', () => {
   it('returns an independently normalized snapshot after strict validation', () => {
     const input = structuredClone(validSnapshot);
-    const parsed = parseStatusSnapshotV1(input);
+    const parsed = parseStatusSnapshot(input);
 
     expect(parsed).toEqual(validSnapshot);
     expect(parsed).not.toBe(input);
@@ -79,7 +79,7 @@ describe('StatusSnapshotV1 parsing', () => {
       },
     ],
   ])('rejects %s snapshots', (_name, input) => {
-    expect(() => parseStatusSnapshotV1(input)).toThrow(/status snapshot/i);
+    expect(() => parseStatusSnapshot(input)).toThrow(/status snapshot/i);
   });
 });
 
@@ -143,6 +143,6 @@ describe('runtime status snapshot reader', () => {
     const snapshotPath = path.join(directory, 'runtime-status.json');
     await writeFile(snapshotPath, JSON.stringify(validSnapshot), 'utf8');
 
-    await expect(readStatusSnapshotV1(snapshotPath)).resolves.toEqual(validSnapshot);
+    await expect(readStatusSnapshot(snapshotPath)).resolves.toEqual(validSnapshot);
   });
 });

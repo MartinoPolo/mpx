@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { SKILL_CAPABILITIES, type SkillCapability } from '@mpx/skills';
+import { SKILL_CAPABILITIES, type SkillCapability } from '@mpx/skills/contracts';
 import type { Runtime } from './types.js';
 
-export interface RuntimeModelSelectionV1 {
+export interface RuntimeModelSelection {
   readonly schemaVersion: 1;
   readonly runtime: Runtime;
   readonly provider: string;
@@ -10,35 +10,35 @@ export interface RuntimeModelSelectionV1 {
   readonly enabledModels: readonly string[];
 }
 
-export type RuntimeAgentModelClassV1 =
+export type RuntimeAgentModelClass =
   'mechanical' | 'exploration' | 'standard' | 'advanced' | 'frontier';
 
-export interface RuntimeAgentModelMappingsV1 {
+export interface RuntimeAgentModelMappings {
   readonly schemaVersion: 1;
   readonly runtime: Runtime;
-  readonly models: Readonly<Record<RuntimeAgentModelClassV1, string>>;
+  readonly models: Readonly<Record<RuntimeAgentModelClass, string>>;
 }
 
-export type RuntimeFeatureSupportV1 = 'supported' | 'unsupported';
-export type RuntimeCapabilityGrantSupportV1 = 'preapproved' | 'unsupported';
-export type SemanticSkillCapabilityV1 = SkillCapability;
-export interface RuntimeContentTranslationV1 {
-  readonly argumentHint: RuntimeFeatureSupportV1;
+export type RuntimeFeatureSupport = 'supported' | 'unsupported';
+export type RuntimeCapabilityGrantSupport = 'preapproved' | 'unsupported';
+export type SemanticSkillCapability = SkillCapability;
+export interface RuntimeContentTranslation {
+  readonly argumentHint: RuntimeFeatureSupport;
   readonly capabilities: Readonly<{
-    readonly support: RuntimeCapabilityGrantSupportV1;
-    readonly mappings: Readonly<Partial<Record<SemanticSkillCapabilityV1, readonly string[]>>>;
+    readonly support: RuntimeCapabilityGrantSupport;
+    readonly mappings: Readonly<Partial<Record<SemanticSkillCapability, readonly string[]>>>;
   }>;
   readonly frontmatter: Readonly<{
     readonly argumentHint: 'argument-hint' | null;
     readonly capabilityGrant: 'allowed-tools' | null;
   }>;
 }
-export type SemanticAgentCapabilityV1 =
+export type SemanticAgentCapability =
   'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
-export interface RuntimeAgentTranslationV1 {
+export interface RuntimeAgentTranslation {
   readonly aliases: Readonly<Record<string, string>>;
   readonly capabilities: Readonly<{
-    readonly mappings: Readonly<Record<SemanticAgentCapabilityV1, readonly string[]>>;
+    readonly mappings: Readonly<Record<SemanticAgentCapability, readonly string[]>>;
   }>;
   readonly frontmatter: Readonly<{
     readonly model: 'model';
@@ -50,18 +50,18 @@ export interface RuntimeAgentTranslationV1 {
   readonly separators: Readonly<{ readonly tools: string; readonly nesting: string }>;
   readonly nestingRequiredTools: readonly string[];
 }
-export interface RuntimeProfilesV1 {
+export interface RuntimeProfiles {
   readonly schemaVersion: 1;
   readonly models: Readonly<{
-    readonly claude: Readonly<Record<RuntimeAgentModelClassV1, string>>;
-    readonly pi: Readonly<Record<RuntimeAgentModelClassV1, string>>;
+    readonly claude: Readonly<Record<RuntimeAgentModelClass, string>>;
+    readonly pi: Readonly<Record<RuntimeAgentModelClass, string>>;
   }>;
   readonly agentTranslation: Readonly<{
-    readonly runtimes: Readonly<Record<Runtime, RuntimeAgentTranslationV1>>;
+    readonly runtimes: Readonly<Record<Runtime, RuntimeAgentTranslation>>;
   }>;
   readonly contentTranslation: Readonly<{
     readonly nameOnlyDescriptionTemplate: string;
-    readonly runtimes: Readonly<Record<Runtime, RuntimeContentTranslationV1>>;
+    readonly runtimes: Readonly<Record<Runtime, RuntimeContentTranslation>>;
   }>;
 }
 
@@ -91,13 +91,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function freeze<T extends RuntimeModelSelectionV1>(value: T): T {
+function freeze<T extends RuntimeModelSelection>(value: T): T {
   Object.freeze(value.enabledModels);
   return Object.freeze(value);
 }
 
 /** Validates the process-local, provider-neutral model selection passed to a runtime adapter. */
-export function parseRuntimeModelSelectionV1(value: unknown): RuntimeModelSelectionV1 {
+export function parseRuntimeModelSelection(value: unknown): RuntimeModelSelection {
   if (!record(value)) {
     throw new TypeError('runtime model selection must be an object');
   }
@@ -148,7 +148,7 @@ export function parseRuntimeModelSelectionV1(value: unknown): RuntimeModelSelect
 }
 
 /** Parses the single tracked source of semantic-agent mappings for every runtime. */
-export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
+export function parseRuntimeProfiles(source: string): RuntimeProfiles {
   let input: unknown;
   try {
     input = JSON.parse(source);
@@ -165,7 +165,7 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
   if (!record(input.models) || !exactKeys(input.models, RUNTIMES)) {
     throw new TypeError('runtime profiles must exactly cover runtimes');
   }
-  const parsed: Record<string, Readonly<Record<RuntimeAgentModelClassV1, string>>> = {};
+  const parsed: Record<string, Readonly<Record<RuntimeAgentModelClass, string>>> = {};
   for (const runtime of RUNTIMES) {
     const models = input.models[runtime];
     if (!record(models) || !exactKeys(models, MODEL_CLASSES)) {
@@ -196,7 +196,7 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
   ) {
     throw new TypeError('runtime profiles contain invalid agent translation');
   }
-  const agentRuntimeTranslations: Partial<Record<Runtime, RuntimeAgentTranslationV1>> = {};
+  const agentRuntimeTranslations: Partial<Record<Runtime, RuntimeAgentTranslation>> = {};
   const expectedFields = {
     claude: {
       model: 'model',
@@ -274,7 +274,7 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
               capability,
               Object.freeze([...(tools as string[])]),
             ]),
-          ) as Record<SemanticAgentCapabilityV1, readonly string[]>,
+          ) as Record<SemanticAgentCapability, readonly string[]>,
         ),
       }),
       frontmatter: Object.freeze({ ...expectedFields[runtime] }),
@@ -299,7 +299,7 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
   ) {
     throw new TypeError('runtime profiles contain invalid content translation');
   }
-  const runtimeTranslations: Partial<Record<Runtime, RuntimeContentTranslationV1>> = {};
+  const runtimeTranslations: Partial<Record<Runtime, RuntimeContentTranslation>> = {};
   for (const runtime of RUNTIMES) {
     const value = translation.runtimes[runtime];
     if (
@@ -334,9 +334,9 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
       throw new TypeError('runtime profiles contain invalid content translation');
     }
     runtimeTranslations[runtime] = Object.freeze({
-      argumentHint: value.argumentHint as RuntimeFeatureSupportV1,
+      argumentHint: value.argumentHint as RuntimeFeatureSupport,
       capabilities: Object.freeze({
-        support: value.capabilities.support as RuntimeCapabilityGrantSupportV1,
+        support: value.capabilities.support as RuntimeCapabilityGrantSupport,
         mappings: Object.freeze(
           Object.fromEntries(
             Object.entries(value.capabilities.mappings).map(([key, tools]) => [
@@ -368,32 +368,32 @@ export function parseRuntimeProfilesV1(source: string): RuntimeProfilesV1 {
   });
 }
 
-export async function loadRuntimeProfilesV1(file: string): Promise<RuntimeProfilesV1> {
-  return parseRuntimeProfilesV1(await readFile(file, 'utf8'));
+export async function loadRuntimeProfiles(file: string): Promise<RuntimeProfiles> {
+  return parseRuntimeProfiles(await readFile(file, 'utf8'));
 }
 
 /** Selects one immutable runtime mapping for adapter consumption. */
-export function runtimeAgentModelMappingsV1<R extends Runtime>(
-  profiles: RuntimeProfilesV1,
+export function runtimeAgentModelMappings<R extends Runtime>(
+  profiles: RuntimeProfiles,
   runtime: R,
-): RuntimeAgentModelMappingsV1 & { readonly runtime: R } {
+): RuntimeAgentModelMappings & { readonly runtime: R } {
   return Object.freeze({ schemaVersion: 1, runtime, models: profiles.models[runtime] });
 }
 
 /** Current built-in session selection, independent of semantic agent classes. */
-export function defaultRuntimeModelSelectionV1(
+export function defaultRuntimeModelSelection(
   runtime: 'pi',
-): RuntimeModelSelectionV1 & { readonly runtime: 'pi' };
-export function defaultRuntimeModelSelectionV1(
+): RuntimeModelSelection & { readonly runtime: 'pi' };
+export function defaultRuntimeModelSelection(
   runtime: 'claude',
-): RuntimeModelSelectionV1 & { readonly runtime: 'claude' };
-export function defaultRuntimeModelSelectionV1(runtime: Runtime): RuntimeModelSelectionV1;
-export function defaultRuntimeModelSelectionV1(runtime: Runtime): RuntimeModelSelectionV1 {
+): RuntimeModelSelection & { readonly runtime: 'claude' };
+export function defaultRuntimeModelSelection(runtime: Runtime): RuntimeModelSelection;
+export function defaultRuntimeModelSelection(runtime: Runtime): RuntimeModelSelection {
   const enabledModels =
     runtime === 'pi'
       ? ['openai-codex/gpt-5.6-luna', 'openai-codex/gpt-5.6-sol', 'openai-codex/gpt-5.6-terra']
       : ['anthropic/haiku', 'anthropic/opus', 'anthropic/sonnet'];
-  return parseRuntimeModelSelectionV1({
+  return parseRuntimeModelSelection({
     schemaVersion: 1,
     runtime,
     provider: runtime === 'pi' ? 'openai-codex' : 'anthropic',

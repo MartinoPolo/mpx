@@ -1,40 +1,40 @@
-import type { ResolvedAgentCatalogEntryV1 } from './agent-catalog-contracts.js';
+import type { ResolvedAgentCatalogEntry } from './agent-catalog-contracts.js';
 
 declare const verifiedCanonicalAgentDocument: unique symbol;
-export interface CanonicalAgentDocumentV1 {
+export interface CanonicalAgentDocument {
   readonly schemaVersion: 1;
   readonly identity: string;
   readonly [verifiedCanonicalAgentDocument]: true;
 }
-export interface CanonicalAgentProjectionEntryV1 {
+export interface CanonicalAgentProjectionEntry {
   readonly identity: string;
-  readonly document: CanonicalAgentDocumentV1;
-  readonly metadata: ResolvedAgentCatalogEntryV1;
+  readonly document: CanonicalAgentDocument;
+  readonly metadata: ResolvedAgentCatalogEntry;
   readonly sourcePath: string;
   readonly sourceSha256: string;
   readonly sourceByteCount: number;
 }
-export interface CanonicalAgentSupportFileV1 {
+export interface CanonicalAgentSupportFile {
   readonly relativePath: string;
   readonly bytes: Uint8Array;
 }
-export interface CanonicalAgentProjectionInputsV1 {
+export interface CanonicalAgentProjectionInputs {
   readonly schemaVersion: 1;
-  readonly entries: readonly CanonicalAgentProjectionEntryV1[];
-  readonly supportFiles: readonly CanonicalAgentSupportFileV1[];
+  readonly entries: readonly CanonicalAgentProjectionEntry[];
+  readonly supportFiles: readonly CanonicalAgentSupportFile[];
 }
-export interface CanonicalAgentRuntimeFieldV1 {
+export interface CanonicalAgentRuntimeField {
   readonly name: string;
   readonly value: string;
 }
-export interface CanonicalAgentDocumentTranslationV1 {
+export interface CanonicalAgentDocumentTranslation {
   readonly name: string;
-  readonly fields: readonly CanonicalAgentRuntimeFieldV1[];
+  readonly fields: readonly CanonicalAgentRuntimeField[];
 }
-export interface CanonicalAgentProjectionLoadOptionsV1 {
+export interface CanonicalAgentProjectionLoadOptions {
   readonly allowMissingMetadata?: boolean;
 }
-export interface CanonicalAgentDocumentFileSystemV1 {
+export interface CanonicalAgentDocumentFileSystem {
   lstat(path: string): Promise<{
     isFile(): boolean;
     isDirectory(): boolean;

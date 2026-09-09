@@ -1,7 +1,7 @@
 export const PI_RUNTIME_PROFILE_SCHEMA_VERSION = 1 as const;
 
 /** Structural boundary supplied by config composition; runtime-pi does not select providers or models. */
-export interface PiModelSelectionV1 {
+export interface PiModelSelection {
   readonly schemaVersion: 1;
   readonly runtime: 'pi';
   readonly provider: string;
@@ -9,7 +9,7 @@ export interface PiModelSelectionV1 {
   readonly enabledModels: readonly string[];
 }
 
-export interface PiRuntimeProfileV1 {
+export interface PiRuntimeProfile {
   readonly schemaVersion: 1;
   readonly provider: string;
   readonly model: string;
@@ -61,7 +61,7 @@ function uniqueNonemptyStrings(value: unknown): value is string[] {
 }
 
 /** Fail-closed public boundary for projected Pi runtime profiles. */
-export function parsePiRuntimeProfileV1(value: unknown): PiRuntimeProfileV1 {
+export function parsePiRuntimeProfile(value: unknown): PiRuntimeProfile {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return invalidProfile();
   }
@@ -115,10 +115,10 @@ export function parsePiRuntimeProfileV1(value: unknown): PiRuntimeProfileV1 {
 }
 
 /** Account-safe Pi translation only; model identity selection belongs to config composition. */
-export function createPiRuntimeProfileV1(
-  modelSelection: PiModelSelectionV1,
+export function createPiRuntimeProfile(
+  modelSelection: PiModelSelection,
   capabilityIds: readonly string[],
-): PiRuntimeProfileV1 {
+): PiRuntimeProfile {
   const prefix = `${modelSelection.provider}/`;
   if (
     modelSelection.runtime !== 'pi' ||
@@ -127,7 +127,7 @@ export function createPiRuntimeProfileV1(
   ) {
     throw new TypeError('Pi model selection is inconsistent');
   }
-  return parsePiRuntimeProfileV1({
+  return parsePiRuntimeProfile({
     schemaVersion: PI_RUNTIME_PROFILE_SCHEMA_VERSION,
     provider: modelSelection.provider,
     model: modelSelection.defaultModel.slice(prefix.length),

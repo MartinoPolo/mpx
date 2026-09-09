@@ -2,7 +2,7 @@ import { MpxError } from '@mpx/core';
 import type {
   InstallIntentBuilder,
   InstallOrchestrator,
-  InstallVerificationV1,
+  InstallVerification,
   CurrentInstallationProbe,
 } from '@mpx/installer';
 
@@ -10,7 +10,7 @@ export interface SetupRequestFactory {
   create(): Promise<unknown>;
 }
 
-export interface SetupResultV1 {
+export interface SetupResult {
   readonly schemaVersion: 1;
   readonly kind: 'setup-result';
   readonly releaseKey: string;
@@ -36,7 +36,7 @@ export interface SetupApplicationDependencies {
 export class SetupApplicationService {
   constructor(private readonly dependencies: SetupApplicationDependencies) {}
 
-  async execute(): Promise<SetupResultV1> {
+  async execute(): Promise<SetupResult> {
     const request = await this.dependencies.requestFactory.create();
     const built = await this.dependencies.builder.build(request);
     const admission = await this.dependencies.orchestrator.admitCurrentInstallation(
@@ -50,7 +50,7 @@ export class SetupApplicationService {
     await this.dependencies.legacyPiExtensionsCleanup.run();
     const plan = await this.dependencies.orchestrator.plan(built.intent, admission);
     await this.dependencies.orchestrator.apply(plan, plan.confirmationDigest);
-    const verified: InstallVerificationV1 = await this.dependencies.orchestrator.verify(true);
+    const verified: InstallVerification = await this.dependencies.orchestrator.verify(true);
     if (!verified.healthy) {
       throw new MpxError({
         code: 'SETUP_VERIFICATION_FAILED',

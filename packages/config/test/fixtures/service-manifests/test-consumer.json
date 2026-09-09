@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "project": { "id": "phase-h/tests" },
+  "project": { "id": "service-manifests/tests" },
   "repository": { "provider": "generic", "remote": "origin" },
   "development": {
     "services": {

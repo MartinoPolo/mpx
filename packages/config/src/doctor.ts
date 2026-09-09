@@ -24,11 +24,11 @@ export function doctor(project: ProjectConfig, user?: UserConfig): Diagnostic[] 
   if (user && !Object.keys(user.domains).length) {
     out.push({ code: 'NO_USER_DOMAINS', severity: 'info', message: 'No user domains configured' });
   }
-  if (user && !Object.keys(user.contentScopes).length) {
+  if (user && !Object.keys(user.locations).length) {
     out.push({
-      code: 'NO_CONTENT_SCOPES',
+      code: 'NO_LOCATIONS',
       severity: 'info',
-      message: 'No content scopes configured',
+      message: 'No locations configured',
     });
   }
   return out.sort(

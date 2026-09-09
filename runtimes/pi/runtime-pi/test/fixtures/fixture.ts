@@ -2,22 +2,21 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRuntimeContextV1 } from '@mpx/runtime-contracts';
+import { createRuntimeContext } from '@mpx/runtime-contracts';
 import {
   createRuntimeSkillArtifact,
   createSkillProjectionPlan,
   inventoryCanonical,
   resolveManifest,
 } from '@mpx/skills';
-import { createPiRuntimeProfileV1 } from '../../src/profile.js';
-import { loadRuntimeProfilesV1 } from '@mpx/config';
+import { createPiRuntimeProfile } from '../../src/profile.js';
+import { loadRuntimeProfiles } from '@mpx/config';
 import { compileContent } from '@mpx/content-compiler';
 
 const exposures = [
   ['full', 'full', 'Full skill', 'full trigger'],
   ['named', 'name-only', 'Named skill', ''],
   ['explicit', 'explicit-only', 'Explicit skill', ''],
-  ['off', 'off', 'Off skill', ''],
   ['excluded', 'full', 'Excluded skill', ''],
 ] as const;
 export async function fixture() {
@@ -27,24 +26,25 @@ export async function fixture() {
     await mkdir(dir);
     await writeFile(
       path.join(dir, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: ${description}\n${triggers ? `triggers: ${triggers}\n` : ''}metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [${name === 'excluded' ? 'personal' : 'core'}]\n    defaultExposure: ${exposure}\n---\n# ${name}\n`,
+      `---\nname: ${name}\ndescription: ${description}\n${triggers ? `triggers: ${triggers}\n` : ''}metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [${name === 'excluded' ? 'personal' : 'development'}]\n    defaultExposure: ${exposure}\n---\n# ${name}\n`,
     );
   }
   const catalog = await inventoryCanonical(canonicalRoot);
-  const currentBinding = { projectId: 'p', repositoryId: 'repo', contentScope: 'scope' };
-  const manifest = resolveManifest(catalog, {
-    ...currentBinding,
+  const currentBinding = {
     projectId: 'p',
-    enabledPacks: ['core'],
+    repositoryId: 'repo',
     identity: 'id',
-    skillPolicy: 'policy',
-    skillPolicyConfig: {
-      skillPacks: ['core'],
-      skillExposure: {
-        default: 'full',
-        skills: { named: 'name-only', explicit: 'explicit-only', off: 'off' },
-      },
+    selection: {
+      location: { name: 'scope', canonicalRoot },
+      packs: ['development'] as const,
+      source: 'project' as const,
     },
+  };
+  const manifest = resolveManifest(catalog, {
+    repositoryId: currentBinding.repositoryId,
+    projectId: currentBinding.projectId,
+    identity: currentBinding.identity,
+    selection: currentBinding.selection,
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'pi' });
   const skillPlan = await createSkillProjectionPlan({
@@ -56,7 +56,7 @@ export async function fixture() {
   const sharedInstructionRoot = fileURLToPath(
     new URL('../../../../../content/instructions/shared/', import.meta.url),
   );
-  const runtimeProfiles = await loadRuntimeProfilesV1(
+  const runtimeProfiles = await loadRuntimeProfiles(
     fileURLToPath(new URL('../../../../../content/runtime-profiles.json', import.meta.url)),
   );
   const agentRoot = fileURLToPath(new URL('../../../../../content/agents/', import.meta.url));
@@ -67,14 +67,14 @@ export async function fixture() {
     sharedInstructionRoot,
     agentRoot,
   });
-  const context = createRuntimeContextV1({
+  const context = createRuntimeContext({
     launchKey: 'launch',
     launchDescriptor: { reference: 'launch.json', digest: 'digest' },
     manifestKey: manifest.manifestKey,
     runtimeArtifact: artifact.reference,
     binding: currentBinding,
   });
-  const piRuntimeProfile = createPiRuntimeProfileV1(
+  const piRuntimeProfile = createPiRuntimeProfile(
     {
       schemaVersion: 1,
       runtime: 'pi',

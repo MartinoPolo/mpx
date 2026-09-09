@@ -7,9 +7,9 @@ import { FakeBinaryFileSystem, FakeJsonResourceStore } from '@mpx/windows';
 import {
   canonicalJson,
   installerDigest,
-  type InstallIntentV1,
-  type OwnershipReceiptV1,
-  type ReleaseManifestV1,
+  type InstallIntent,
+  type OwnershipReceipt,
+  type ReleaseManifest,
 } from '../../src/immutable-core.js';
 import {
   NodeBinaryFileSystem,
@@ -28,18 +28,18 @@ function required<T>(value: T | undefined, label: string): T {
 
 const userConfigContent = (extra: Record<string, unknown> = {}) =>
   canonicalJson({
+    schemaVersion: 2,
     identities: {},
     domains: {},
-    contentScopes: {},
+    locations: {},
     modes: {},
-    skillPolicies: {},
     presets: {},
-    launchDefaults: { scopes: {}, projects: {} },
+    launchDefaults: { locations: {}, projects: {} },
     networkPolicies: {},
     executors: { host: {} },
     ...extra,
   });
-const withUserConfig = (releaseKey: string, content = userConfigContent()): InstallIntentV1 => ({
+const withUserConfig = (releaseKey: string, content = userConfigContent()): InstallIntent => ({
   schemaVersion: 1,
   kind: 'install-intent',
   releaseKey,
@@ -51,7 +51,7 @@ const withUserConfig = (releaseKey: string, content = userConfigContent()): Inst
     sha256: installerDigest(JSON.parse(content)),
   },
 });
-const releaseManifest = (releaseKey: string): ReleaseManifestV1 => ({
+const releaseManifest = (releaseKey: string): ReleaseManifest => ({
   schemaVersion: 1,
   kind: 'release-manifest',
   releaseKey,
@@ -205,7 +205,7 @@ it('rejects malformed edited user-config bytes before they can become adoption e
       content: malformed,
       sha256: createHash('sha256').update(malformed).digest('hex'),
     },
-  } satisfies InstallIntentV1;
+  } satisfies InstallIntent;
   await expect(
     adapter.operations(malformedIntent, releaseManifest(releaseKey)),
   ).rejects.toBeDefined();
@@ -300,7 +300,7 @@ it('preserves a different user config created concurrently during apply', async 
 });
 
 it('hash-verifies user-config drift and rolls back its creation when a later operation fails', async () => {
-  const releaseKey = 'a'.repeat(64),
+  const releaseKey = installerDigest([{ path: 'bin/mpx.mjs', bytes: 3, sha256: 'b'.repeat(64) }]),
     target = 'C:\\Roaming\\mpx\\config.json',
     files = new FakeBinaryFileSystem();
   const adapter = new ProductionInstallerOperationAdapter(
@@ -432,14 +432,14 @@ it('keeps concurrent plans bound to their own roots and resources', async () => 
     'me',
     { files, resources },
   );
-  const intent = (releaseKey: string): InstallIntentV1 => ({
+  const intent = (releaseKey: string): InstallIntent => ({
     schemaVersion: 1,
     kind: 'install-intent',
     releaseKey,
     convergenceHash: releaseKey,
     components: ['cli'],
   });
-  const manifest = (releaseKey: string, cliSha: string): ReleaseManifestV1 => ({
+  const manifest = (releaseKey: string, cliSha: string): ReleaseManifest => ({
     schemaVersion: 1,
     kind: 'release-manifest',
     releaseKey,
@@ -688,7 +688,7 @@ it('never inspects, plans, or writes Windows Terminal while retaining managed in
     'me',
     { files, resources },
   );
-  const intent: InstallIntentV1 = {
+  const intent: InstallIntent = {
     schemaVersion: 1,
     kind: 'install-intent',
     releaseKey,
@@ -701,7 +701,7 @@ it('never inspects, plans, or writes Windows Terminal while retaining managed in
     releaseKey,
     convergenceHash: releaseKey,
     files: [{ path: 'bin/mpx.mjs', bytes: 3, sha256: 'b'.repeat(64) }],
-  } as ReleaseManifestV1;
+  } as ReleaseManifest;
   const operations = await adapter.operations(intent, manifest);
   const selector = 'C:\\Apps\\mpx\\bin\\mpx.cmd';
   expect(operations.automatic.map((item) => item.id)).toContain('05-cli-selector');
@@ -807,6 +807,144 @@ it('preserves a concurrently changed managed launcher during rollback', async ()
   expect(await files.read(launcher.target)).toEqual(concurrent);
 });
 
+async function completeOwnershipFixture() {
+  const releaseKey = 'a'.repeat(64);
+  const adapter = new ProductionInstallerOperationAdapter(
+    {
+      MPX_APPS: 'C:\\Apps',
+      APPDATA: 'C:\\Roaming',
+      LOCALAPPDATA: 'C:\\Local',
+      USERPROFILE: 'C:\\Users\\me',
+      MPX_NODE_EXECUTABLE: 'C:\\Node\\node.exe',
+    },
+    'me',
+    { files: new FakeBinaryFileSystem(), resources: new FakeJsonResourceStore() },
+  );
+  const installIntent = withUserConfig(releaseKey);
+  const manifest = releaseManifest(releaseKey);
+  const current = await adapter.operations(installIntent, manifest);
+  const desired = await Promise.all(
+    current.automatic.map(async (operation) => ({
+      operation,
+      locator: await adapter.receiptLocator(operation),
+    })),
+  );
+  const receipt: OwnershipReceipt = {
+    schemaVersion: 2,
+    kind: 'ownership-receipt',
+    releaseKey,
+    convergenceHash: releaseKey,
+    installIntent,
+    files: manifest.files,
+    operations: current.automatic,
+    operationLocators: desired.map(({ operation, locator: spec }) => ({
+      operationId: operation.id,
+      adapter: operation.adapter,
+      spec,
+      bindingDigest: installerDigest({ operation, spec }),
+    })),
+    installedAt: '2025-01-01T00:00:00.000Z',
+  };
+  await expect(adapter.authorizeOwnedOperations(receipt, desired)).resolves.toBeUndefined();
+  return { adapter, receipt, desired };
+}
+
+it('rejects complete historical ownership with the selector and its locator removed', async () => {
+  const { adapter, receipt, desired } = await completeOwnershipFixture();
+  const incomplete = {
+    ...receipt,
+    operations: receipt.operations.filter(({ id }) => id !== '05-cli-selector'),
+    operationLocators: receipt.operationLocators.filter(
+      ({ operationId }) => operationId !== '05-cli-selector',
+    ),
+  };
+  await expect(adapter.authorizeOwnedOperations(incomplete, desired)).rejects.toMatchObject({
+    code: 'INSTALL_CURRENT_UNVERIFIED',
+    message:
+      'Historical ownership is incomplete: required operation or locator is missing for 05-cli-selector.',
+  });
+});
+
+it('accepts complete historical ownership without the post-schema node entry', async () => {
+  const { adapter, receipt, desired } = await completeOwnershipFixture();
+  expect(desired.some(({ operation }) => operation.id === '06-node-entry')).toBe(true);
+  const historical = {
+    ...receipt,
+    operations: receipt.operations.filter(({ id }) => id !== '06-node-entry'),
+    operationLocators: receipt.operationLocators.filter(
+      ({ operationId }) => operationId !== '06-node-entry',
+    ),
+  };
+  await expect(adapter.authorizeOwnedOperations(historical, desired)).resolves.toBeUndefined();
+});
+
+it('rejects a self-consistent historical file target outside the current approved footprint', async () => {
+  const { adapter, receipt, desired } = await completeOwnershipFixture();
+  const selector = required(
+    receipt.operations.find((operation) => operation.id === '05-cli-selector'),
+    'selector operation',
+  );
+  const forged = { ...selector, target: 'C:\\Apps\\unapproved\\forged.cmd' };
+  const spec = { kind: 'file' };
+  const forgedReceipt = {
+    ...receipt,
+    operations: receipt.operations.map((operation) =>
+      operation.id === forged.id ? forged : operation,
+    ),
+    operationLocators: receipt.operationLocators.map((locator) =>
+      locator.operationId === forged.id
+        ? {
+            operationId: forged.id,
+            adapter: forged.adapter,
+            spec,
+            bindingDigest: installerDigest({ operation: forged, spec }),
+          }
+        : locator,
+    ),
+  };
+
+  await expect(adapter.authorizeOwnedOperations(forgedReceipt, desired)).rejects.toMatchObject({
+    code: 'INSTALL_CURRENT_UNVERIFIED',
+    message: 'File ownership changed for 05-cli-selector.',
+  });
+});
+
+it('rejects historical user-environment ownership with broader desired keys', async () => {
+  const { adapter, receipt, desired } = await completeOwnershipFixture();
+  const environment = required(
+    receipt.operations.find((operation) => operation.id === '20-user-environment'),
+    'user environment operation',
+  );
+  const currentLocator = required(
+    desired.find(({ operation }) => operation.id === environment.id),
+    'user environment authority',
+  ).locator as { kind: 'resource'; spec: { desired: Record<string, unknown> } };
+  const spec = structuredClone(currentLocator);
+  spec.spec.desired.MPX_FORGED = 'broader';
+  const forged = { ...environment, desiredDigest: installerDigest(spec.spec.desired) };
+  const forgedReceipt = {
+    ...receipt,
+    operations: receipt.operations.map((operation) =>
+      operation.id === forged.id ? forged : operation,
+    ),
+    operationLocators: receipt.operationLocators.map((locator) =>
+      locator.operationId === forged.id
+        ? {
+            operationId: forged.id,
+            adapter: forged.adapter,
+            spec,
+            bindingDigest: installerDigest({ operation: forged, spec }),
+          }
+        : locator,
+    ),
+  };
+
+  await expect(adapter.authorizeOwnedOperations(forgedReceipt, desired)).rejects.toMatchObject({
+    code: 'INSTALL_CURRENT_UNVERIFIED',
+    message: 'Native resource ownership changed for 20-user-environment.',
+  });
+});
+
 it('accepts only desired or exact prior runtime registration receipts during an upgrade', async () => {
   const local = await mkdtemp(path.join(tmpdir(), 'mpx-registration-upgrade-')),
     executable = path.join(local, 'runtime.exe'),
@@ -859,9 +997,9 @@ it('accepts only desired or exact prior runtime registration receipts during an 
       convergenceHash: 'a'.repeat(64),
       components: ['runtime-registration'],
       runtimeRegistrations: matrix,
-    } as InstallIntentV1,
+    } as InstallIntent,
     intentB = { ...intentA, releaseKey: 'b'.repeat(64), convergenceHash: 'b'.repeat(64) },
-    prior = { releaseKey: intentA.releaseKey, installIntent: intentA } as OwnershipReceiptV1,
+    prior = { releaseKey: intentA.releaseKey, installIntent: intentA } as OwnershipReceipt,
     receiptTarget = path.join(local, 'mpx', 'installer', 'registrations', `${identity}.json`),
     inspector = new ReadOnlyRuntimeRegistrationInspector({ LOCALAPPDATA: local });
   await mkdir(path.dirname(receiptTarget), { recursive: true });

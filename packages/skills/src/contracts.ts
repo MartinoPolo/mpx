@@ -1,44 +1,57 @@
 import { createHash } from 'node:crypto';
 import type {
-  ResolvedSkillManifestV4,
-  RuntimeSkillArtifactReferenceV4,
+  ResolvedSkillManifest,
+  ResolvedSkillSelection,
+  RuntimeBinding,
+  RuntimeSkillArtifactReference,
 } from '@mpx/runtime-contracts';
 
-export const SKILL_PACKS = ['core', 'work', 'personal'] as const;
-export const EXPOSURES = ['full', 'name-only', 'explicit-only', 'off'] as const;
+export const SKILL_PACKS = ['development', 'personal'] as const;
+export const EXPOSURES = ['full', 'name-only', 'explicit-only'] as const;
+/** @public Runtime capability vocabulary consumed by config packages. */
 export const SKILL_CAPABILITIES = ['read', 'search', 'shell', 'write', 'delegate'] as const;
 
 export type SkillPack = (typeof SKILL_PACKS)[number];
 export type Exposure = (typeof EXPOSURES)[number];
+/** @public Emitted declaration consumed by compiler packages. */
 export type SkillCapability = (typeof SKILL_CAPABILITIES)[number];
+export type { ResolvedSkillSelection } from '@mpx/runtime-contracts';
 
-export interface ExposureConfig {
-  default?: Exposure;
-  skills?: Record<string, Exposure>;
-}
-
-export interface SkillPolicyConfig {
-  skillPacks?: SkillPack[];
-  skillExposure: ExposureConfig & { default: Exposure };
-}
-
-export interface EffectiveSkillPackOptions {
-  readonly contentScopeSkillPacks?: readonly SkillPack[] | undefined;
-  readonly projectSkillPacks?: readonly SkillPack[] | undefined;
-  readonly skillPolicySkillPacks?: readonly SkillPack[] | undefined;
-}
-
-export function resolveEffectiveSkillPacks(options: EffectiveSkillPackOptions): SkillPack[] {
-  const selectedPacks = options.projectSkillPacks ?? options.contentScopeSkillPacks ?? ['core'];
-  const allowedPacks = options.skillPolicySkillPacks
-    ? new Set(options.skillPolicySkillPacks)
-    : undefined;
-  return [
-    ...new Set(selectedPacks.filter((pack) => !allowedPacks || allowedPacks.has(pack))),
-  ].sort();
+export function resolveEffectiveSkillPacks(
+  selectedPacks: readonly SkillPack[],
+  identityAllowedPacks: readonly SkillPack[],
+): SkillPack[] {
+  if (selectedPacks.length === 0) {
+    throw new Error('selected skill packs must contain at least one pack');
+  }
+  if (identityAllowedPacks.length === 0) {
+    throw new Error('identity allowed skill packs must contain at least one pack');
+  }
+  const unsupported = [...selectedPacks, ...identityAllowedPacks].find(
+    (pack) => !SKILL_PACKS.includes(pack),
+  );
+  if (unsupported) {
+    throw new Error(`unsupported skill pack '${unsupported}'`);
+  }
+  const allowed = new Set(identityAllowedPacks);
+  const unallowed = selectedPacks.find((pack) => !allowed.has(pack));
+  if (unallowed) {
+    throw new Error(`selected skill pack '${unallowed}' is not allowed by the identity`);
+  }
+  return [...new Set(selectedPacks)].sort();
 }
 
 export type Runtime = 'claude' | 'pi';
+
+export type SkillInvocation = 'model' | 'human-explicit';
+
+export interface SkillBodyProvenance {
+  artifactKey: string;
+  contentHash: string;
+  invocation: SkillInvocation;
+  runtime: Runtime;
+  sourcePath: string;
+}
 
 export interface Diagnostic {
   code: string;
@@ -72,10 +85,11 @@ export interface CanonicalSkill {
   realPath: string;
   contentHash: string;
 }
+/** @public Emitted declaration consumed by application packages. */
 export interface ProjectSkill {
   identity: string;
   description: string;
-  projectExposure: 'full' | 'explicit-only';
+  projectExposure: Exposure;
   disableModelInvocation: boolean;
   sourcePath: string;
   realPath: string;
@@ -84,23 +98,18 @@ export interface ProjectSkill {
   projectRoot: string;
   realProjectRoot: string;
 }
+/** @public Emitted declaration consumed by application and compiler packages. */
 export type CatalogSkill = CanonicalSkill | ProjectSkill;
-export type ExposureSettings = ExposureConfig;
 export interface ResolveOptions {
   repositoryId: string;
-  contentScope: string;
   projectId?: string;
-  enabledPacks: readonly SkillPack[];
   identity: string;
-  skillPolicy: string;
-  skillPolicyConfig: SkillPolicyConfig;
-  contentScopeExposure?: ExposureSettings;
-  projectExposure?: ExposureSettings;
+  selection: ResolvedSkillSelection;
   /** Public command-name mapping. It is resolution input and therefore manifest-key material. */
   mapping?: Readonly<Record<string, string>>;
 }
-export const SKILL_MANIFEST_SCHEMA_VERSION = 4 as const;
-export type ResolvedManifest = ResolvedSkillManifestV4;
+/** @public Emitted declaration consumed by application packages. */
+export type ResolvedManifest = ResolvedSkillManifest;
 
 export interface RuntimeSkillEntry {
   identity: string;
@@ -123,12 +132,64 @@ export interface RuntimeSkillEntry {
       };
   permissions: { humanInvocation: boolean; modelInvocation: boolean };
 }
+/** @public Emitted declaration consumed by application and runtime adapter packages. */
 export interface RuntimeSkillArtifact {
-  schemaVersion: 4;
+  schemaVersion: 5;
   runtime: Runtime;
   manifestKey: string;
-  reference: RuntimeSkillArtifactReferenceV4;
+  reference: RuntimeSkillArtifactReference;
   entries: RuntimeSkillEntry[];
+}
+
+export interface SkillProjectionFile {
+  readonly relativePath: string;
+  readonly bytes: Uint8Array;
+  readonly sha256: string;
+}
+export interface SkillProjectionDisclosure {
+  readonly identity: string;
+  readonly publicName: string;
+  readonly description?: string;
+  readonly triggers?: string;
+}
+export interface SkillProjectionPlanEntry {
+  readonly identity: string;
+  readonly publicName: string;
+  readonly exposure: Exposure;
+  readonly canonicalDescription: string;
+  readonly argumentHint?: string;
+  readonly capabilities?: readonly SkillCapability[];
+  readonly author?: string;
+  readonly version?: string;
+  readonly category?: string;
+  readonly permissions: Readonly<{ humanInvocation: boolean; modelInvocation: boolean }>;
+  readonly source: Readonly<{
+    kind: 'canonical' | 'project';
+    provenancePath: string;
+    contentHash: string;
+    directoryHash?: string;
+  }>;
+  readonly initialContext?: SkillProjectionDisclosure;
+  readonly humanContext?: SkillProjectionDisclosure;
+  readonly modelSearchContext?: SkillProjectionDisclosure;
+  readonly body: string;
+  readonly wrappedBodies: Readonly<Partial<Record<SkillInvocation, string>>>;
+  readonly provenances: Readonly<Partial<Record<SkillInvocation, SkillBodyProvenance>>>;
+  readonly skillFile: SkillProjectionFile;
+  readonly files: readonly SkillProjectionFile[];
+}
+/** @public Emitted declaration consumed by compiler and runtime adapter packages. */
+export interface SkillProjectionPlan {
+  readonly runtime: Runtime;
+  readonly binding: RuntimeBinding;
+  readonly manifestKey: string;
+  readonly artifactReference: RuntimeSkillArtifactReference;
+  readonly entries: readonly SkillProjectionPlanEntry[];
+  /** Verified support files shared only by included managed project skills. */
+  readonly projectSharedFiles?: readonly SkillProjectionFile[];
+  readonly initialModelContext: readonly SkillProjectionDisclosure[];
+  readonly humanContext: readonly SkillProjectionDisclosure[];
+  readonly modelSearchContext: readonly SkillProjectionDisclosure[];
 }
 
 export function stable(value: unknown): string {

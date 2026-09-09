@@ -8,7 +8,7 @@ metadata:
   category: utility
   mpx:
     schemaVersion: 1
-    skillPacks: [core]
+    skillPacks: [development]
     defaultExposure: name-only
 ---
 

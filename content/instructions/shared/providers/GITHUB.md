@@ -7,7 +7,7 @@ Installed `gh 2.86.0 --help` verifies the forms below. Prefer `--body-file <file
 
 ## Repository initialization
 
-The explicitly invoked personal `init-github-repo` skill owns repository creation, initial pushes, default-branch
+The explicitly invoked development `init-github-repo` skill owns repository creation, initial pushes, default-branch
 selection, and protection setup. Its reviewed native commands are `gh repo create OWNER/REPO --private|--public
 --source=. --remote=origin --push`, and `gh api --hostname github.com` for `user`, `repos/OWNER/REPO`, and
 `repos/OWNER/REPO/branches/BRANCH[/protection]`. Confirm owner/name and visibility before creating; bind API paths to

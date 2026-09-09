@@ -1,12 +1,11 @@
 import type { DiscoveredConfig, UserConfig } from '@mpx/config';
-import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
+import { MpxError, type Diagnostic } from '@mpx/core';
 import {
   canonicalRuntimeArgs,
   resolveLaunch,
   validateLaunchDomain,
   resolveLaunchSelection,
   serializeLaunchPublic,
-  type ExecutorVerificationEvidence,
   type HostApproval,
   type LaunchDescriptor,
   type LaunchSelection,
@@ -19,8 +18,8 @@ import type {
   ProjectSkill,
   ResolvedManifest,
   RuntimeSkillArtifact,
-} from '@mpx/skills';
-import { parseStatusSnapshotV1, type StatusSnapshotV1 } from '@mpx/status';
+} from '@mpx/skills/contracts';
+import { parseStatusSnapshot, type StatusSnapshot } from '@mpx/status';
 import { resolveLaunchSkills } from './launch-skill-resolution.js';
 
 export type LaunchApplicationOperation = 'explain' | 'launch';
@@ -33,8 +32,6 @@ export interface LaunchApplicationRequest {
   readonly identity?: string;
   readonly alias?: ShortLaunchAlias;
   readonly mode?: string;
-  readonly skillPolicy?: string;
-  readonly contentScope?: string;
   readonly executor?: 'host' | 'docker';
   readonly workspace?: 'clone' | 'host-worktree' | 'direct';
   readonly networkPolicy?: string;
@@ -53,8 +50,6 @@ export interface ExplainLaunchSelectionRequest {
   readonly identity?: string;
   readonly alias?: ShortLaunchAlias;
   readonly mode?: string;
-  readonly skillPolicy?: string;
-  readonly contentScope?: string;
   readonly executor?: 'host' | 'docker';
   readonly workspace?: 'clone' | 'host-worktree' | 'direct';
   readonly networkPolicy?: string;
@@ -62,8 +57,7 @@ export interface ExplainLaunchSelectionRequest {
 }
 export interface PublicLaunchSelection {
   readonly mode: { readonly name: string };
-  readonly skillPolicy: { readonly name: string };
-  readonly contentScope: { readonly name: string };
+  readonly selection: LaunchSelection['selection'];
   readonly executor: 'host' | 'docker';
   readonly workspace: 'clone' | 'host-worktree' | 'direct';
   readonly networkPolicy: { readonly name: string };
@@ -74,8 +68,7 @@ export interface PublicLaunchSelection {
 export function serializeLaunchSelection(selection: LaunchSelection): PublicLaunchSelection {
   return {
     mode: { name: selection.mode.name },
-    skillPolicy: { name: selection.skillPolicy.name },
-    contentScope: selection.contentScope,
+    selection: selection.selection,
     executor: selection.executor,
     workspace: selection.workspace,
     networkPolicy: { name: selection.networkPolicy.name },
@@ -95,12 +88,11 @@ interface PreparedFacts {
   readonly manifest: ResolvedManifest;
   readonly artifact: RuntimeSkillArtifact;
   readonly skillArtifact: Awaited<ReturnType<typeof resolveLaunchSkills>>['skillArtifact'];
-  readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
+  readonly statusSnapshot: () => Promise<StatusSnapshot>;
   readonly warnings: readonly Diagnostic[];
 }
 interface ResolvedFacts extends PreparedFacts {
   readonly descriptor: LaunchDescriptor;
-  readonly evidence: ExecutorVerificationEvidence;
   readonly preparedExecutor?: PreparedLaunchExecutor;
 }
 declare const preparedBrand: unique symbol;
@@ -120,12 +112,12 @@ export interface LaunchExecutionInput {
   readonly canonicalRoot: string;
   readonly cwd: string;
   readonly nativeRuntimeRoot: string;
-  readonly statusSnapshot: () => Promise<StatusSnapshotV1>;
+  readonly statusSnapshot: () => Promise<StatusSnapshot>;
   readonly project?: DiscoveredConfig;
   readonly beforeChildExecution?: () => Promise<void>;
 }
 export interface PreparedLaunchExecutor {
-  readonly evidence: ExecutorVerificationEvidence;
+  readonly assertReady: () => Promise<void>;
   readonly execute: (input: LaunchExecutionInput) => Promise<{ readonly exitCode: number }>;
 }
 
@@ -147,8 +139,7 @@ export interface LaunchApplicationDependencies {
     readonly cwd: string;
     readonly projectRoot: string;
     readonly config: DiscoveredConfig['config'];
-  }): Promise<StatusSnapshotV1>;
-  executorEvidence(executor: 'host' | 'docker'): Promise<ExecutorVerificationEvidence>;
+  }): Promise<StatusSnapshot>;
   prepareExecutor?(executor: 'host' | 'docker'): Promise<PreparedLaunchExecutor>;
   approveHost?(selection: Readonly<LaunchSelection>): Promise<HostApproval>;
   piPreflight?(input: {
@@ -158,7 +149,6 @@ export interface LaunchApplicationDependencies {
   launchExecution?(input: LaunchExecutionInput): Promise<{ readonly exitCode: number }>;
 }
 export interface ResolvePreparedLaunchInput {
-  readonly grants?: readonly string[];
   readonly reason?: string;
   readonly hostApproval?: HostApproval;
 }
@@ -198,12 +188,11 @@ export class LaunchApplicationService {
       ...(request.identity ? { identity: request.identity } : {}),
       ...(request.alias ? { alias: request.alias } : {}),
       ...(request.mode ? { mode: request.mode } : {}),
-      ...(request.skillPolicy ? { skillPolicy: request.skillPolicy } : {}),
-      ...(request.contentScope ? { contentScope: request.contentScope } : {}),
       ...(request.executor ? { executor: request.executor } : {}),
       ...(request.workspace ? { workspace: request.workspace } : {}),
       ...(request.networkPolicy ? { networkPolicy: request.networkPolicy } : {}),
       ...(request.preset ? { preset: request.preset } : {}),
+      ...(found ? { projectConfig: found.config } : {}),
       ...(projectId ? { projectId } : {}),
       ...(!found ? { automaticModeFallback: 'missing-project-config' as const } : {}),
     });
@@ -232,6 +221,7 @@ export class LaunchApplicationService {
         cwd: request.cwd,
         runtime: request.runtime ?? 'pi',
         identity,
+        ...(found ? { projectConfig: found.config } : {}),
         ...(projectId ? { projectId } : {}),
       });
       candidates.push({
@@ -269,12 +259,11 @@ export class LaunchApplicationService {
       ...(request.identity ? { identity: request.identity } : {}),
       ...(request.alias ? { alias: request.alias } : {}),
       ...(request.mode ? { mode: request.mode } : {}),
-      ...(request.skillPolicy ? { skillPolicy: request.skillPolicy } : {}),
-      ...(request.contentScope ? { contentScope: request.contentScope } : {}),
       ...(request.executor ? { executor: request.executor } : {}),
       ...(request.workspace ? { workspace: request.workspace } : {}),
       ...(request.networkPolicy ? { networkPolicy: request.networkPolicy } : {}),
       ...(request.preset ? { preset: request.preset } : {}),
+      ...(found ? { projectConfig: found.config } : {}),
       ...(projectId ? { projectId } : {}),
       ...(!found ? { automaticModeFallback: 'missing-project-config' } : {}),
     };
@@ -295,12 +284,10 @@ export class LaunchApplicationService {
     }
     const { catalog, manifest, artifact, skillArtifact } = await resolveLaunchSkills(
       {
-        userConfig: request.userConfig,
         ...(found ? { project: found } : {}),
         canonicalRoot: request.catalogRoot,
         identity: selection.identity.name,
-        skillPolicy: selection.skillPolicy.name,
-        contentScope: selection.contentScope.name,
+        selection: selection.selection,
         runtime: selection.runtime,
       },
       this.dependencies,
@@ -314,7 +301,7 @@ export class LaunchApplicationService {
               config: found.config,
             })
         : async () =>
-            parseStatusSnapshotV1({
+            parseStatusSnapshot({
               schemaVersion: 1,
               project: { id: repositoryId, cwd: request.cwd },
               worktree: { id: null, path: null, role: null, branch: null },
@@ -359,17 +346,9 @@ export class LaunchApplicationService {
     const preparedExecutor = readOnly
       ? undefined
       : await this.dependencies.prepareExecutor?.(facts.selection.executor);
-    const evidence = readOnly
-      ? {
-          status: 'unverified' as const,
-          verifier: 'launch-explain',
-          evidenceDigest: sha256Canonical({
-            executor: facts.selection.executor,
-            operation: facts.request.operation,
-          } as unknown as JsonValue),
-        }
-      : (preparedExecutor?.evidence ??
-        (await this.dependencies.executorEvidence(facts.selection.executor)));
+    if (preparedExecutor) {
+      await preparedExecutor.assertReady();
+    }
     const hostApproval =
       input.hostApproval ??
       (!readOnly && facts.selection.executor === 'host'
@@ -380,12 +359,11 @@ export class LaunchApplicationService {
       cwd: facts.request.cwd,
       runtime: facts.selection.runtime,
       identity: facts.selection.identity.name,
+      ...(facts.found ? { projectConfig: facts.found.config } : {}),
       ...(facts.request.alias ? { alias: facts.request.alias } : {}),
       ...(facts.selection.provenance.mode !== 'automatic-fallback' && facts.request.mode
         ? { mode: facts.request.mode }
         : {}),
-      ...(facts.request.skillPolicy ? { skillPolicy: facts.request.skillPolicy } : {}),
-      ...(facts.request.contentScope ? { contentScope: facts.request.contentScope } : {}),
       executor: facts.selection.executor,
       workspace: facts.selection.workspace,
       networkPolicy: facts.selection.networkPolicy.name,
@@ -394,7 +372,6 @@ export class LaunchApplicationService {
         ? { automaticModeFallback: 'missing-project-config' as const }
         : {}),
       ...(facts.request.runtimeArgs ? { runtimeArgs: facts.request.runtimeArgs } : {}),
-      ...(input.grants ? { grants: input.grants } : {}),
       ...(input.reason ? { reason: input.reason } : {}),
       ...(hostApproval ? { hostApproval } : {}),
       skillArtifact: facts.skillArtifact,
@@ -404,13 +381,6 @@ export class LaunchApplicationService {
         ],
       ...(facts.projectId ? { projectId: facts.projectId } : {}),
       repositoryId: facts.repositoryId,
-      dockerAvailability:
-        evidence.status === 'verified'
-          ? 'available'
-          : evidence.status === 'unavailable'
-            ? 'unavailable'
-            : 'unverified',
-      executorVerification: evidence,
       policyInputs: {
         schemaVersion: 1,
         manifestKey: facts.manifest.manifestKey,
@@ -421,7 +391,6 @@ export class LaunchApplicationService {
     this.#resolved.set(token as object, {
       ...facts,
       descriptor,
-      evidence,
       ...(preparedExecutor ? { preparedExecutor } : {}),
     });
     return token;
@@ -449,7 +418,7 @@ export class LaunchApplicationService {
       return { data: serializeLaunchPublic(facts.descriptor), warnings: facts.warnings };
     }
     let beforeChildExecution: (() => Promise<void>) | undefined;
-    if (facts.selection.runtime === 'pi' && facts.evidence.status === 'verified') {
+    if (facts.selection.runtime === 'pi') {
       const result = await this.dependencies.piPreflight?.({
         runtimeRoot:
           facts.request.userConfig.identities[facts.selection.identity.name]!.runtimeRoots.pi,

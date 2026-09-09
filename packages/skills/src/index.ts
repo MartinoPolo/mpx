@@ -1,24 +1,5 @@
-export {
-  EXPOSURES,
-  SKILL_CAPABILITIES,
-  SKILL_MANIFEST_SCHEMA_VERSION,
-  SKILL_PACKS,
-  SkillCatalogError,
-  type CanonicalSkill,
-  type CatalogSkill,
-  type Diagnostic,
-  type Exposure,
-  type ExposureSettings,
-  type ProjectSkill,
-  type ResolveOptions,
-  type ResolvedManifest,
-  type Runtime,
-  type RuntimeSkillArtifact,
-  type RuntimeSkillEntry,
-  type SkillPack,
-  type SkillCapability,
-  type SkillPolicyConfig,
-} from './contracts.js';
+export { SkillCatalogError, type Exposure, resolveEffectiveSkillPacks } from './contracts.js';
+
 export { createRuntimeSkillArtifact, verifyRuntimeSkillArtifact } from './artifact.js';
 export {
   MAX_PROJECT_SKILL_CANDIDATES,
@@ -32,46 +13,18 @@ export {
   enumerateSkillDirectory,
   inventoryCanonical,
   inventoryProjectSkills,
-  type ProjectSkillDirectory,
   type ProjectSkillDirectoryEntry,
   type ProjectSkillFileSystem,
-  type SkillDirectoryFile,
 } from './inventory.js';
-export {
-  MAX_SKILL_BODY_BYTES,
-  loadSkillBody,
-  type LoadedSkillBody,
-  type SkillBodyRequest,
-  type SkillInvocation,
-} from './loader.js';
+export { MAX_SKILL_BODY_BYTES, loadSkillBody } from './loader.js';
 export { resolveManifest } from './manifest.js';
-export { explainSkill } from './policy.js';
 export { rankSearchCandidatesSource } from './search-ranking.js';
 export {
   createSkillProjectionPlan,
-  humanCompleteSkills,
-  humanListSkills,
   humanSkillDetail,
   initialModelContext,
   loadSkillProjectionBody,
   modelSearchSkillProjection,
   verifySkillProjectionPlan,
-  type HumanSkillName,
-  type ModelSearchSkillProjectionOptions,
-  type SkillProjectionBodyRequest,
-  type SkillProjectionDisclosure,
-  type SkillProjectionFile,
-  type SkillProjectionPlan,
-  type SkillProjectionPlanEntry,
-  type SkillProjectionPlanInput,
-  type SkillProjectionSearchResult,
 } from './projection.js';
-export {
-  MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH,
-  MAX_HUMAN_SKILL_SEARCH_RESULTS,
-  MAX_SKILL_SEARCH_QUERY_LENGTH,
-  MAX_SKILL_SEARCH_RESULTS,
-  humanSearchSkills,
-  modelSearchSkills,
-  searchSkills,
-} from './search.js';
+export { humanSearchSkills, modelSearchSkills } from './search.js';

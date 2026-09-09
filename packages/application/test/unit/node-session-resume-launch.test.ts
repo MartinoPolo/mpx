@@ -6,7 +6,7 @@ import type { UserConfig } from '@mpx/config';
 import {
   SessionStore,
   verifyNativeResumeSeed,
-  type SessionRecordV1,
+  type SessionRecord,
   type ResumeDependencies,
 } from '@mpx/sessions';
 
@@ -39,19 +39,20 @@ afterEach(async () => {
 const cwd = process.cwd();
 const digest = 'a'.repeat(64);
 const user = {
+  schemaVersion: 2,
   identities: {
     work: {
       domain: 'work',
       runtimeRoots: { claude: '/roots/claude', pi: '/roots/pi' },
       gitAuthorRoute: 'work',
+      allowedSkillPacks: ['development'],
     },
   },
   domains: { work: [cwd] },
-  contentScopes: { work: { roots: [cwd], skillPacks: ['core'] } },
+  locations: { work: { roots: [cwd], skillPacks: ['development'] } },
   modes: { project: { resources: { 'selected-project': 'read-write' } } },
-  skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
   presets: {},
-  launchDefaults: { projects: {}, scopes: {} },
+  launchDefaults: { projects: {}, locations: {} },
   networkPolicies: { implementation: { preset: 'balanced' } },
   executors: { host: {}, docker: {} },
 } satisfies UserConfig;
@@ -63,7 +64,7 @@ async function fixture(runtime: 'claude' | 'pi' = 'claude') {
   directories.push(directory);
   let catalogRoot = path.join(directory, 'catalog');
   const skillBody =
-    '---\nname: review\ndescription: Review source safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nSECRET SKILL BODY\n';
+    '---\nname: review\ndescription: Review source safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\nSECRET SKILL BODY\n';
   const writeCatalog = async (root: string) => {
     await mkdir(path.join(root, 'review'), { recursive: true });
     await writeFile(path.join(root, 'review', 'SKILL.md'), skillBody);
@@ -91,8 +92,8 @@ async function fixture(runtime: 'claude' | 'pi' = 'claude') {
     createdAt: timestamp,
     updatedAt: timestamp,
   });
-  const record: SessionRecordV1 = {
-    schemaVersion: 1,
+  const record: SessionRecord = {
+    schemaVersion: 2,
     recordId: 'record-native',
     runtimeQualifiedId: `${runtime}:native`,
     runtime,
@@ -106,12 +107,14 @@ async function fixture(runtime: 'claude' | 'pi' = 'claude') {
       launchKey: 'old',
       descriptorDigest: digest,
       mode: 'project',
-      skillPolicy: 'clean',
-      contentScope: 'work',
+      selection: {
+        location: { name: 'work', canonicalRoot: cwd },
+        packs: ['development'],
+        source: 'project',
+      },
       executor: { kind: 'host' },
       workspace: 'direct',
       networkPolicy: 'implementation',
-      grants: [],
       artifactKey: 'old-artifact',
       manifestKey: 'manifest',
     },
@@ -232,11 +235,11 @@ describe('Node session resume launch composition', () => {
     );
   });
 
-  it('replays a completed production proposal with an exactly stable snapshot, while retaining fresh final provenance', async () => {
+  it('relaunches completed production metadata while retaining stable effective authority', async () => {
     const f = await fixture();
     const first = await f.service.plan(f.seed, user);
     await f.service.execute(await f.service.prepare(first, user));
-    const completed: SessionRecordV1 = {
+    const completed: SessionRecord = {
       ...f.record,
       launch: first.launch,
       process: { pid: 456, startFingerprint: 'completed-child' },
@@ -246,9 +249,18 @@ describe('Node session resume launch composition', () => {
     await f.store.put(completed);
     const replayed = await verifyNativeResumeSeed(f.store, completed, f.dependencies);
     const next = await f.service.plan(replayed, user);
-    expect(next.launch).toEqual(first.launch);
+    expect(next.launch).toMatchObject({
+      mode: first.launch.mode,
+      selection: first.launch.selection,
+      executor: first.launch.executor,
+      workspace: first.launch.workspace,
+      networkPolicy: first.launch.networkPolicy,
+      artifactKey: first.launch.artifactKey,
+      manifestKey: first.launch.manifestKey,
+    });
+    expect(next.launch.launchKey).not.toBe(first.launch.launchKey);
     expect(next.effectiveAuthority).toEqual(first.effectiveAuthority);
-    expect(next.approval.resurrection).toBe('unchanged');
+    expect(next.approval.resurrection).toBe('confirmation-required');
     expect(next.previousLaunch).toEqual({
       launchKey: first.launch.launchKey,
       descriptorDigest: first.launch.descriptorDigest,
@@ -304,16 +316,15 @@ describe('Node session resume launch composition', () => {
         kind: 'host',
         enforcement: 'advisory',
         isolation: 'none',
-        verification: 'verified',
       },
       skills: {
         decisions: [
           {
             identity: 'review',
             included: true,
-            exposure: 'explicit-only',
+            exposure: 'full',
             humanInvocation: true,
-            modelInvocation: false,
+            modelInvocation: true,
             metadataHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
             sourceHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
           },
@@ -333,11 +344,10 @@ describe('Node session resume launch composition', () => {
     }
     const expanded = structuredClone(configuration);
     expanded.modes.project!.resources['identity-domain'] = 'read-write';
-    expanded.skillPolicies.clean!.skillExposure.default = 'full';
     f.setConfig(expanded);
     const second = await f.service.plan(f.seed, expanded);
     expect(second.launch.mode).toBe(first.launch.mode);
-    expect(second.launch.skillPolicy).toBe(first.launch.skillPolicy);
+    expect(second.launch.selection).toEqual(first.launch.selection);
     expect(second.effectiveAuthority.resources).toContainEqual({
       selector: 'identity-domain',
       access: 'read-write',

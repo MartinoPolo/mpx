@@ -23,16 +23,16 @@ import {
 } from '@mpx/executors';
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
-  parseRuntimeStatusEnvelopeV1,
-  parseStatusSnapshotV1,
-  readStatusSnapshotV1,
-  type RuntimeStatusEnvelopeV1,
-  type StatusSnapshotV1,
+  parseRuntimeStatusEnvelope,
+  parseStatusSnapshot,
+  readStatusSnapshot,
+  type RuntimeStatusEnvelope,
+  type StatusSnapshot,
 } from '@mpx/status';
 import type {
   LaunchStatusSnapshotBinding,
   LaunchStatusSnapshotMaterializer,
-  RuntimeStatusEnvelopeAuthorityV1,
+  RuntimeStatusEnvelopeAuthority,
   RuntimeStatusEnvelopeMaterializer,
 } from '../launch-execution-service.js';
 
@@ -49,10 +49,10 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 export class NodeRuntimeStatusEnvelopeMaterializer implements RuntimeStatusEnvelopeMaterializer {
   constructor(readonly stateRoot: string) {}
   async materialize(
-    input: { envelope: RuntimeStatusEnvelopeV1; authority: RuntimeStatusEnvelopeAuthorityV1 },
+    input: { envelope: RuntimeStatusEnvelope; authority: RuntimeStatusEnvelopeAuthority },
     signal?: AbortSignal,
   ): Promise<string> {
-    const envelope = parseRuntimeStatusEnvelopeV1(input.envelope);
+    const envelope = parseRuntimeStatusEnvelope(input.envelope);
     if (
       !SHA256.test(input.authority.descriptorDigest) ||
       !SHA256.test(input.authority.runtimeRootDigest)
@@ -110,7 +110,7 @@ export class NodeRuntimeStatusEnvelopeMaterializer implements RuntimeStatusEnvel
       );
       if (prior !== undefined) {
         try {
-          const parsed = parseRuntimeStatusEnvelopeV1(JSON.parse(prior));
+          const parsed = parseRuntimeStatusEnvelope(JSON.parse(prior));
           if (
             JSON.stringify(parsed.binding) !== JSON.stringify(envelope.binding) ||
             parsed.harness.kind !== envelope.harness.kind
@@ -162,7 +162,7 @@ function pathWithin(root: string, candidate: string): boolean {
 function statusBinding(
   descriptor: LaunchDescriptor,
   repositoryId: string,
-  snapshot: StatusSnapshotV1,
+  snapshot: StatusSnapshot,
 ): LaunchStatusSnapshotBinding {
   return Object.freeze({
     schemaVersion: 1,
@@ -177,7 +177,7 @@ function statusBinding(
 export class NodeLaunchStatusSnapshotMaterializer implements LaunchStatusSnapshotMaterializer {
   constructor(readonly stateRoot: string) {}
   async materialize(
-    input: { binding: LaunchStatusSnapshotBinding; snapshot: StatusSnapshotV1 },
+    input: { binding: LaunchStatusSnapshotBinding; snapshot: StatusSnapshot },
     signal?: AbortSignal,
   ): Promise<string> {
     try {
@@ -289,14 +289,14 @@ export async function resolveLaunchStatusSnapshotPath(input: {
   stateRoot: string;
   descriptor: LaunchDescriptor;
   repositoryId: string;
-  snapshot: StatusSnapshotV1;
+  snapshot: StatusSnapshot;
   materializer?: LaunchStatusSnapshotMaterializer;
   signal?: AbortSignal;
 }): Promise<string | undefined> {
   const expected = statusBinding(
     input.descriptor,
     input.repositoryId,
-    parseStatusSnapshotV1(input.snapshot),
+    parseStatusSnapshot(input.snapshot),
   );
   const statusRoot = path.join(input.stateRoot, 'status');
   let candidate: string | undefined;
@@ -351,7 +351,7 @@ export async function resolveLaunchStatusSnapshotPath(input: {
       realpath(statusRoot),
       realpath(candidate),
       readFile(`${candidate}.binding.json`, 'utf8').then((text) => JSON.parse(text) as unknown),
-      readStatusSnapshotV1(candidate),
+      readStatusSnapshot(candidate),
     ]);
     if (!pathWithin(canonicalRoot, canonicalFile)) {
       throw statusError(
@@ -384,19 +384,14 @@ export async function resolveLaunchStatusSnapshotPath(input: {
 export type TrustedRuntimeExecutable = { executable: string; argvPrefix: readonly string[] };
 
 const unavailableResult = (): never => {
-  throw new ExecutionError(
-    'EXECUTOR_GATE_UNVERIFIED',
-    'Docker execution is gated until runtime containment evidence is available.',
-    { executor: 'docker' },
-  );
+  throw new ExecutionError('EXECUTOR_UNAVAILABLE', 'Docker execution is unavailable.', {
+    executor: 'docker',
+    hostFallback: false,
+  });
 };
 export const nodeDockerGate: ExecutorAdapter = {
   name: 'docker',
-  verify: async () => ({
-    status: 'unverified',
-    verifier: 'whole-agent-sandbox-pending',
-    evidenceDigest: sha256Canonical({ executor: 'docker', integration: 'pending' }),
-  }),
+  assertReady: async () => unavailableResult(),
   execute: async () => unavailableResult(),
 };
 
@@ -430,11 +425,14 @@ function inheritedProcess(request: ProcessRequest): Promise<ProcessResult> {
 }
 export const nodeHostExecutor: ExecutorAdapter = {
   name: 'host',
-  verify: async () => ({
-    status: 'verified',
-    verifier: 'direct-host',
-    evidenceDigest: sha256Canonical({ executor: 'host', invocation: 'direct-inherited-stdio' }),
-  }),
+  assertReady: async () => {
+    if (process.platform !== 'win32') {
+      throw new ExecutionError('EXECUTOR_UNAVAILABLE', 'Host execution requires Windows.', {
+        executor: 'host',
+        hostFallback: false,
+      });
+    }
+  },
   execute: inheritedProcess,
 };
 const MAX_JS_WRAPPER_BYTES = 131_072;

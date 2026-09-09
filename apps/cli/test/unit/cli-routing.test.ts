@@ -4,14 +4,14 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canonicalNativeRootDigest } from '@mpx/launch';
 import type { UserConfig } from '@mpx/config';
-import type { ProspectiveSessionResumePlanV1 } from '@mpx/application';
+import type { ProspectiveSessionResumePlan } from '@mpx/application';
 import { createNodeSessionResumeLaunchApplicationService } from '@mpx/application/node';
 import {
   deriveNativeBindingRef,
   SessionStore,
   stableDigest,
-  type NativeVerifiedResumeSeedV1,
-  type ResumePlanV1,
+  type NativeVerifiedResumeSeed,
+  type ResumePlan,
 } from '@mpx/sessions';
 import { run } from '../../src/main.js';
 import { captureIo } from '../../src/io.js';
@@ -55,7 +55,7 @@ const deletedRoutes = [
   ['piw'],
 ] as const;
 
-async function prospectivePlan(seed: NativeVerifiedResumeSeedV1): Promise<ResumePlanV1> {
+async function prospectivePlan(seed: NativeVerifiedResumeSeed): Promise<ResumePlan> {
   const unsigned = {
     ...seed,
     approval: {
@@ -101,7 +101,7 @@ async function resumableCliFixture() {
     updatedAt: '2025-01-01T00:00:00.000Z',
   });
   await store.put({
-    schemaVersion: 1,
+    schemaVersion: 2,
     recordId: 'record-confirm',
     runtimeQualifiedId: 'claude:confirm',
     runtime: 'claude',
@@ -112,12 +112,14 @@ async function resumableCliFixture() {
       launchKey: 'launch',
       descriptorDigest: 'a'.repeat(64),
       mode: 'interactive',
-      skillPolicy: 'standard',
-      contentScope: 'repo',
+      selection: {
+        location: { name: 'repo', canonicalRoot: nativeRoot },
+        packs: ['development'],
+        source: 'user-location',
+      },
       executor: { kind: 'host' },
       workspace: 'direct',
       networkPolicy: 'restricted',
-      grants: [],
       artifactKey: 'artifact',
       manifestKey: 'manifest',
     },
@@ -204,6 +206,16 @@ describe('canonical CLI dispatch', () => {
     expect(io.err.join('')).toContain('USAGE_ERROR');
   });
 
+  it.each(['--skill-policy', '--content-scope', '--grant'])(
+    'rejects removed launch option %s before loading configuration',
+    async (option) => {
+      const io = captureIo();
+
+      expect(await run(['launch', 'pi', option, 'legacy'], io, { env: {} })).toBe(2);
+      expect(io.err.join('')).toContain(`Unknown option: ${option}`);
+    },
+  );
+
   it('formats human usage failures with solutions and preserved command help', async () => {
     const io = captureIo();
 
@@ -239,6 +251,60 @@ describe('canonical CLI dispatch', () => {
     expect(io.err).toEqual([]);
   });
 
+  it('reports safe schema and strict JSON configuration reasons in human and JSON output', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-cli-config-errors-'));
+    temporaryRoots.push(root);
+    const appData = path.join(root, 'roaming');
+    const configFile = path.join(appData, 'mpx', 'config.json');
+    await mkdir(path.dirname(configFile), { recursive: true });
+    await writeFile(
+      configFile,
+      JSON.stringify({ schemaVersion: 2, extraField: 'opaque-value-7391' }),
+    );
+
+    const humanIo = captureIo();
+    expect(
+      await run(['launch', 'pi', '--identity', 'main'], humanIo, { env: { APPDATA: appData } }),
+    ).toBe(1);
+    const human = humanIo.err.join('');
+    expect(human).toContain("/: missing required field 'identities'");
+    expect(human).toContain("/: unknown field 'extraField'");
+    expect(human).not.toContain('opaque-value-7391');
+    expect(human).not.toContain('mpx doctor');
+
+    const jsonIo = captureIo();
+    expect(
+      await run(['launch', 'pi', '--identity', 'main', '--json'], jsonIo, {
+        env: { APPDATA: appData },
+      }),
+    ).toBe(1);
+    const envelope = JSON.parse(jsonIo.out.join(''));
+    expect(envelope.error).toMatchObject({
+      code: 'CONFIG_INVALID',
+      details: {
+        errors: expect.arrayContaining([
+          expect.objectContaining({ reason: "missing required field 'identities'" }),
+        ]),
+      },
+    });
+    expect(JSON.stringify(envelope)).not.toContain('opaque-value-7391');
+
+    await writeFile(configFile, '{"schemaVersion":2,"schemaVersion":2,"secret":"HIDDEN"}');
+    const malformedIo = captureIo();
+    expect(
+      await run(['launch', 'pi', '--identity', 'main', '--json'], malformedIo, {
+        env: { APPDATA: appData },
+      }),
+    ).toBe(1);
+    const malformed = JSON.parse(malformedIo.out.join(''));
+    expect(malformed.error.details.errors[0]).toMatchObject({
+      pointer: '/',
+      keyword: 'syntax',
+      reason: expect.stringContaining('Duplicate object key'),
+    });
+    expect(JSON.stringify(malformed)).not.toContain('HIDDEN');
+  });
+
   it('uses production Pi discovery to normalize stale durable liveness without touching host roots', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-cli-production-list-'));
     temporaryRoots.push(root);
@@ -257,19 +323,20 @@ describe('canonical CLI dispatch', () => {
     await writeFile(
       path.join(appData, 'mpx', 'config.json'),
       JSON.stringify({
+        schemaVersion: 2,
         identities: {
           main: {
             domain: 'personal',
             runtimeRoots: { claude: claudeRoot, pi: piRoot },
             gitAuthorRoute: 'git-main',
+            allowedSkillPacks: ['personal'],
           },
         },
         domains: { personal: [root] },
-        contentScopes: { personal: { roots: [root], skillPacks: [] } },
+        locations: { personal: { roots: [root], skillPacks: ['personal'] } },
         modes: {},
-        skillPolicies: {},
         presets: {},
-        launchDefaults: { projects: {}, scopes: {} },
+        launchDefaults: { projects: {}, locations: {} },
         networkPolicies: {},
         executors: { host: {} },
       }),
@@ -304,7 +371,7 @@ describe('canonical CLI dispatch', () => {
       }),
     );
     await store.put({
-      schemaVersion: 1,
+      schemaVersion: 2,
       recordId: 'durable-pi',
       runtimeQualifiedId: 'pi:native',
       runtime: 'pi',
@@ -365,7 +432,7 @@ describe('canonical CLI dispatch', () => {
   it('fails closed on a wrong plan confirmation and executes only the exact freshly planned digest', async () => {
     const fixture = await resumableCliFixture();
     const executor = vi.fn(
-      async (_plan: ResumePlanV1, _authority: { readonly approveHost?: boolean }) => ({
+      async (_plan: ResumePlan, _authority: { readonly approveHost?: boolean }) => ({
         resumed: true,
       }),
     );
@@ -485,7 +552,7 @@ describe('canonical CLI dispatch', () => {
       updatedAt: '2025-01-01T00:00:00.000Z',
     });
     await store.put({
-      schemaVersion: 1,
+      schemaVersion: 2,
       recordId: 'record-abc',
       runtimeQualifiedId: 'claude:abc',
       runtime: 'claude',
@@ -496,12 +563,14 @@ describe('canonical CLI dispatch', () => {
         launchKey: 'launch',
         descriptorDigest: 'a'.repeat(64),
         mode: 'interactive',
-        skillPolicy: 'standard',
-        contentScope: 'repo',
+        selection: {
+          location: { name: 'repo', canonicalRoot: nativeRoot },
+          packs: ['development'],
+          source: 'user-location',
+        },
         executor: { kind: 'host' },
         workspace: 'direct',
         networkPolicy: 'restricted',
-        grants: [],
         artifactKey: 'artifact',
         manifestKey: 'manifest',
       },
@@ -527,7 +596,7 @@ describe('canonical CLI dispatch', () => {
       lifecycle: { bindingId: null, sequence: 0, timestamp: null },
     });
     const executor = vi.fn(
-      async (plan: ResumePlanV1, _authority: { readonly approveHost?: boolean }) => ({
+      async (plan: ResumePlan, _authority: { readonly approveHost?: boolean }) => ({
         digest: plan.confirmationDigest,
       }),
     );
@@ -569,7 +638,7 @@ describe('canonical CLI dispatch', () => {
     const before = await fixture.store.read({ domain: 'personal', name: 'main' }, 'claude');
     let artifactKey = 'relocated-release-artifact';
     const sessionResumePlanner = vi.fn(
-      async (seed: NativeVerifiedResumeSeedV1): Promise<ResumePlanV1> => {
+      async (seed: NativeVerifiedResumeSeed): Promise<ResumePlan> => {
         const proposal = await prospectivePlan(seed);
         const { confirmationDigest: ignored, ...unsigned } = proposal;
         void ignored;
@@ -593,7 +662,7 @@ describe('canonical CLI dispatch', () => {
     expect(
       await run(['session', 'resume', 'record-confirm', '--dry-run', '--json'], dryRun, context),
     ).toBe(0);
-    const approved = JSON.parse(dryRun.out.join('')).data as ResumePlanV1;
+    const approved = JSON.parse(dryRun.out.join('')).data as ResumePlan;
     expect(approved.launch.artifactKey).toBe(artifactKey);
     const automatic = captureIo();
     expect(
@@ -636,7 +705,7 @@ describe('canonical CLI dispatch', () => {
     expect(
       await run(['session', 'resume', 'record-confirm', '--dry-run', '--json'], fresh, context),
     ).toBe(0);
-    const freshPlan = JSON.parse(fresh.out.join('')).data as ResumePlanV1;
+    const freshPlan = JSON.parse(fresh.out.join('')).data as ResumePlan;
     expect(
       await run(
         [
@@ -669,25 +738,26 @@ describe('canonical CLI dispatch', () => {
       await mkdir(path.join(catalogRoot, 'review'), { recursive: true });
       await writeFile(
         path.join(catalogRoot, 'review', 'SKILL.md'),
-        '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nSECRET SKILL BODY\n',
+        '---\nname: review\ndescription: Review safely\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\nSECRET SKILL BODY\n',
       );
     };
     await writeCatalog();
     const user: UserConfig = {
+      schemaVersion: 2,
       identities: {
         main: {
           domain: 'personal',
           runtimeRoots: { claude: cwd, pi: cwd },
           gitAuthorRoute: 'personal',
+          allowedSkillPacks: ['development'],
         },
       },
       domains: { personal: [cwd] },
-      contentScopes: { repo: { roots: [cwd], skillPacks: ['core'] } },
+      locations: { repo: { roots: [cwd], skillPacks: ['development'] } },
       modes: { interactive: { resources: { 'selected-project': 'read-only' } } },
-      skillPolicies: { standard: { skillExposure: { default: 'explicit-only' } } },
       networkPolicies: { restricted: { preset: 'deny-all' } },
       presets: {},
-      launchDefaults: { projects: {}, scopes: {} },
+      launchDefaults: { projects: {}, locations: {} },
       executors: { host: {} },
     };
     const service = createNodeSessionResumeLaunchApplicationService({
@@ -704,7 +774,7 @@ describe('canonical CLI dispatch', () => {
         artifactsRoot: fixture.localAppData,
       }),
     });
-    const executor = vi.fn(async (plan: ResumePlanV1) => {
+    const executor = vi.fn(async (plan: ResumePlan) => {
       await service.prepare(plan, user);
       const current = (await fixture.store.read(record.identity, record.runtime)).records[0]!;
       await fixture.store.put({
@@ -719,7 +789,7 @@ describe('canonical CLI dispatch', () => {
       env: { LOCALAPPDATA: fixture.localAppData },
       sessionStore: fixture.store,
       sessionResumeDependencies: fixture.dependencies,
-      sessionResumePlanner: (seed: NativeVerifiedResumeSeedV1) => service.plan(seed, user),
+      sessionResumePlanner: (seed: NativeVerifiedResumeSeed) => service.plan(seed, user),
       sessionResumeExecutor: executor,
     };
     const invoke = async (...options: string[]) => {
@@ -733,7 +803,7 @@ describe('canonical CLI dispatch', () => {
     };
     const initial = await invoke('--dry-run');
     expect(initial.code).toBe(0);
-    const first = initial.envelope.data as ProspectiveSessionResumePlanV1;
+    const first = initial.envelope.data as ProspectiveSessionResumePlan;
     expect(first.approval.resurrection).toBe('confirmation-required');
     expect(first.effectiveAuthority.resources).toContainEqual({
       selector: 'selected-project',
@@ -744,14 +814,14 @@ describe('canonical CLI dispatch', () => {
       'SESSION_RESUME_CONFIRMATION_REQUIRED',
     );
     expect((await invoke('--confirm-plan', first.confirmationDigest)).code).toBe(0);
-    const repeated = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    const repeated = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlan;
     expect(repeated.launch).toEqual(first.launch);
     expect(repeated.approval.resurrection).toBe('unchanged');
     expect(repeated.confirmationDigest).not.toBe(first.confirmationDigest);
     expect((await invoke('--approve-resurrection')).code).toBe(0);
 
     user.modes.interactive!.resources['identity-domain'] = 'read-write';
-    const expanded = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    const expanded = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlan;
     expect(expanded.launch.mode).toBe(first.launch.mode);
     expect(expanded.effectiveAuthority.resources).toContainEqual({
       selector: 'identity-domain',
@@ -767,11 +837,11 @@ describe('canonical CLI dispatch', () => {
       'SESSION_RESUME_CONFIRMATION_MISMATCH',
     );
     expect(executor).toHaveBeenCalledTimes(calls);
-    const current = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    const current = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlan;
     expect((await invoke('--confirm-plan', current.confirmationDigest)).code).toBe(0);
     catalogRoot = path.join(fixture.localAppData, 'relocated-catalog');
     await writeCatalog();
-    const relocated = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlanV1;
+    const relocated = (await invoke('--dry-run')).envelope.data as ProspectiveSessionResumePlan;
     expect(relocated.launch.artifactKey).not.toBe(current.launch.artifactKey);
     expect((await invoke('--approve-resurrection')).envelope.error.code).toBe(
       'SESSION_RESUME_CONFIRMATION_REQUIRED',

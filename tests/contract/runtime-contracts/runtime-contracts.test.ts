@@ -21,27 +21,25 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   RuntimeContractError,
-  createResolvedSkillManifestV4,
-  parseResolvedSkillManifestV4,
-  createRuntimeContextV1,
-  createRuntimeSkillArtifactReferenceV4,
-  parseRuntimeContextV1,
+  createResolvedSkillManifest,
+  parseResolvedSkillManifest,
+  createRuntimeContext,
+  createRuntimeSkillArtifactReference,
+  parseRuntimeContext,
   publishRuntimeArtifact,
   revalidateRuntimeArtifact,
   validateRuntimeContext,
-  type RuntimeProjectionBuilder,
-  createSessionLifecycleBindingV1,
-  parseSessionLifecycleBindingV1,
-  createSessionLifecycleEventV1,
-  parseSessionLifecycleEventV1,
-  createRuntimeSessionObservationV1,
-  parseRuntimeSessionObservationV1,
-  validateSessionLifecycleBindingV1,
+  createSessionLifecycleBinding,
+  parseSessionLifecycleBinding,
+  createSessionLifecycleEvent,
+  parseSessionLifecycleEvent,
+  createRuntimeSessionObservation,
+  parseRuntimeSessionObservation,
+  validateSessionLifecycleBinding,
 } from '@mpx/runtime-contracts';
 
 const roots: string[] = [];
@@ -65,7 +63,16 @@ const decisions = [
     sourceHash: 'source',
   },
 ];
-const binding = { projectId: 'project-1', repositoryId: 'repo-1', contentScope: 'work' };
+const binding = {
+  projectId: 'project-1',
+  repositoryId: 'repo-1',
+  identity: 'work',
+  selection: {
+    location: { name: 'work', canonicalRoot: 'C:/work' },
+    packs: ['development'] as const,
+    source: 'project' as const,
+  },
+};
 const launchBinding = (launchKey = 'launch') => ({
   launchKey,
   descriptorDigest: 'descriptor',
@@ -75,7 +82,7 @@ const launchBinding = (launchKey = 'launch') => ({
 });
 
 describe('private lifecycle v1 contracts', () => {
-  const lifecycleBinding = createSessionLifecycleBindingV1({
+  const lifecycleBinding = createSessionLifecycleBinding({
     bindingId: 'binding-1',
     bindingRef: 'binding-ref-1',
     runtime: 'pi',
@@ -92,20 +99,20 @@ describe('private lifecycle v1 contracts', () => {
   });
 
   it('strictly parses private lifecycle bindings and rejects unknown or malformed data', () => {
-    expect(parseSessionLifecycleBindingV1(lifecycleBinding)).toEqual(lifecycleBinding);
-    expect(() => parseSessionLifecycleBindingV1({ ...lifecycleBinding, extra: true })).toThrowError(
+    expect(parseSessionLifecycleBinding(lifecycleBinding)).toEqual(lifecycleBinding);
+    expect(() => parseSessionLifecycleBinding({ ...lifecycleBinding, extra: true })).toThrowError(
       /UNKNOWN_FIELD/u,
     );
     expect(() =>
-      parseSessionLifecycleBindingV1({ ...lifecycleBinding, schemaVersion: 2 }),
+      parseSessionLifecycleBinding({ ...lifecycleBinding, schemaVersion: 2 }),
     ).toThrowError(/UNKNOWN_SCHEMA_VERSION/u);
     expect(() =>
-      createSessionLifecycleBindingV1({ ...lifecycleBinding, identityRef: 'bad\nidentity' }),
+      createSessionLifecycleBinding({ ...lifecycleBinding, identityRef: 'bad\nidentity' }),
     ).toThrowError(/INVALID_CONTRACT/u);
   });
 
   it('keeps lifecycle events prompt-blind and validates safe native references', () => {
-    const event = createSessionLifecycleEventV1({
+    const event = createSessionLifecycleEvent({
       eventId: 'event-1',
       bindingId: lifecycleBinding.bindingId,
       type: 'start',
@@ -120,13 +127,13 @@ describe('private lifecycle v1 contracts', () => {
       pid: 12,
       startFingerprint: 'pid-12-start',
     });
-    expect(parseSessionLifecycleEventV1(event)).toEqual(event);
+    expect(parseSessionLifecycleEvent(event)).toEqual(event);
     expect(JSON.stringify(event)).not.toMatch(/prompt|message|transcript/iu);
-    expect(() => parseSessionLifecycleEventV1({ ...event, prompt: 'secret' })).toThrowError(
+    expect(() => parseSessionLifecycleEvent({ ...event, prompt: 'secret' })).toThrowError(
       /UNKNOWN_FIELD/u,
     );
     expect(() =>
-      createSessionLifecycleEventV1({
+      createSessionLifecycleEvent({
         ...event,
         nativeSessionRef: { kind: 'root-relative-file', value: '../secret' },
       }),
@@ -134,12 +141,12 @@ describe('private lifecycle v1 contracts', () => {
   });
 
   it('rejects expired or launch-mismatched lifecycle bindings', () => {
-    const context = createRuntimeContextV1({
+    const context = createRuntimeContext({
       launchKey: 'launch',
       launchDescriptor: { reference: 'launch.json', digest: 'digest' },
       manifestKey: 'manifest',
       runtimeArtifact: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         runtime: 'pi',
         manifestKey: 'manifest',
         artifactKey: 'artifact',
@@ -148,7 +155,7 @@ describe('private lifecycle v1 contracts', () => {
       binding,
     });
     expect(
-      validateSessionLifecycleBindingV1({
+      validateSessionLifecycleBinding({
         binding: lifecycleBinding,
         context,
         runtime: 'pi',
@@ -156,7 +163,7 @@ describe('private lifecycle v1 contracts', () => {
       }),
     ).toEqual(lifecycleBinding);
     expect(() =>
-      validateSessionLifecycleBindingV1({
+      validateSessionLifecycleBinding({
         binding: lifecycleBinding,
         context,
         runtime: 'pi',
@@ -164,7 +171,7 @@ describe('private lifecycle v1 contracts', () => {
       }),
     ).toThrowError(/LIFECYCLE_BINDING_EXPIRED/u);
     expect(() =>
-      validateSessionLifecycleBindingV1({
+      validateSessionLifecycleBinding({
         binding: { ...lifecycleBinding, artifactKey: 'wrong' },
         context,
         runtime: 'pi',
@@ -174,7 +181,7 @@ describe('private lifecycle v1 contracts', () => {
   });
 
   it('strictly parses bounded runtime observations without native content', () => {
-    const observation = createRuntimeSessionObservationV1({
+    const observation = createRuntimeSessionObservation({
       runtime: 'claude',
       identityRef: 'identity-1',
       runtimeQualifiedId: 'claude:native-1',
@@ -190,33 +197,33 @@ describe('private lifecycle v1 contracts', () => {
       source: 'lifecycle-event',
       diagnostic: null,
     });
-    expect(parseRuntimeSessionObservationV1(observation)).toEqual(observation);
+    expect(parseRuntimeSessionObservation(observation)).toEqual(observation);
     expect(() =>
-      parseRuntimeSessionObservationV1({ ...observation, title: 'x'.repeat(513) }),
+      parseRuntimeSessionObservation({ ...observation, title: 'x'.repeat(513) }),
     ).toThrowError(/INVALID_CONTRACT/u);
-    expect(() => parseRuntimeSessionObservationV1({ ...observation, messages: [] })).toThrowError(
+    expect(() => parseRuntimeSessionObservation({ ...observation, messages: [] })).toThrowError(
       /UNKNOWN_FIELD/u,
     );
   });
 });
 
-describe('runtime-neutral v4 contracts', () => {
+describe('runtime-neutral v5 contracts', () => {
   it('shares one body-free, path-free manifest key across runtime projections', () => {
-    const manifest = createResolvedSkillManifestV4({ binding, decisions });
-    const claude = createRuntimeSkillArtifactReferenceV4({
+    const manifest = createResolvedSkillManifest({ binding, decisions });
+    const claude = createRuntimeSkillArtifactReference({
       runtime: 'claude',
       manifestKey: manifest.manifestKey,
       artifactKey: 'a',
       fileMapHash: 'f',
     });
-    const pi = createRuntimeSkillArtifactReferenceV4({
+    const pi = createRuntimeSkillArtifactReference({
       runtime: 'pi',
       manifestKey: manifest.manifestKey,
       artifactKey: 'b',
       fileMapHash: 'g',
     });
-    expect(manifest.schemaVersion).toBe(4);
-    expect(claude.schemaVersion).toBe(4);
+    expect(manifest.schemaVersion).toBe(5);
+    expect(claude.schemaVersion).toBe(5);
     expect(pi.manifestKey).toBe(claude.manifestKey);
     expect(JSON.stringify(manifest)).not.toMatch(/body|[A-Z]:\\|realPath|absolutePath/u);
     expect(manifest.decisions[0]).toMatchObject({
@@ -227,69 +234,40 @@ describe('runtime-neutral v4 contracts', () => {
       metadataHash: 'meta',
       sourceHash: 'source',
     });
-    expect(parseResolvedSkillManifestV4(JSON.parse(JSON.stringify(manifest)))).toEqual(manifest);
-    expect(() => parseResolvedSkillManifestV4({ ...manifest, schemaVersion: 3 })).toThrowError(
+    expect(parseResolvedSkillManifest(JSON.parse(JSON.stringify(manifest)))).toEqual(manifest);
+    expect(() => parseResolvedSkillManifest({ ...manifest, schemaVersion: 3 })).toThrowError(
       /UNKNOWN_SCHEMA_VERSION/u,
     );
   });
 
-  it('publishes strict portable JSON schemas for both v4 contracts', async () => {
-    const schemaRoot = fileURLToPath(new URL('../../../packages/skills/schemas/', import.meta.url));
-    const manifestSchema = JSON.parse(
-      await readFile(path.join(schemaRoot, 'resolved-skill-manifest-v4.schema.json'), 'utf8'),
-    ) as Record<string, any>;
-    const artifactSchema = JSON.parse(
-      await readFile(
-        path.join(schemaRoot, 'runtime-skill-artifact-reference-v4.schema.json'),
-        'utf8',
-      ),
-    ) as Record<string, any>;
-    expect(manifestSchema.properties.schemaVersion.const).toBe(4);
-    expect(manifestSchema.additionalProperties).toBe(false);
-    expect(manifestSchema.properties.decisions.items.properties).not.toHaveProperty('body');
-    expect(artifactSchema.properties.schemaVersion.const).toBe(4);
-    expect(artifactSchema.additionalProperties).toBe(false);
-  });
-
   it('binds runtime context and fails closed on unknown versions and fields', () => {
-    const manifest = createResolvedSkillManifestV4({ binding, decisions });
-    const artifact = createRuntimeSkillArtifactReferenceV4({
+    const manifest = createResolvedSkillManifest({ binding, decisions });
+    const artifact = createRuntimeSkillArtifactReference({
       runtime: 'pi',
       manifestKey: manifest.manifestKey,
       artifactKey: 'artifact',
       fileMapHash: 'map',
     });
-    const context = createRuntimeContextV1({
+    const context = createRuntimeContext({
       launchKey: 'launch',
       launchDescriptor: { reference: 'launch.json', digest: 'digest' },
       manifestKey: manifest.manifestKey,
       runtimeArtifact: artifact,
       binding,
     });
-    expect(parseRuntimeContextV1(JSON.parse(JSON.stringify(context)))).toEqual(context);
-    expect(() => parseRuntimeContextV1({ ...context, schemaVersion: 2 })).toThrowError(
+    expect(parseRuntimeContext(JSON.parse(JSON.stringify(context)))).toEqual(context);
+    expect(() => parseRuntimeContext({ ...context, schemaVersion: 1 })).toThrowError(
       RuntimeContractError,
     );
-    expect(() => parseRuntimeContextV1({ ...context, surprise: true })).toThrowError(
+    expect(() => parseRuntimeContext({ ...context, schemaVersion: 3 })).toThrowError(
+      RuntimeContractError,
+    );
+    expect(() => parseRuntimeContext({ ...context, surprise: true })).toThrowError(
       /UNKNOWN_FIELD/u,
     );
-    expect(() => createRuntimeContextV1({ ...context, manifestKey: 'different' })).toThrowError(
+    expect(() => createRuntimeContext({ ...context, manifestKey: 'different' })).toThrowError(
       /BINDING_MISMATCH/u,
     );
-  });
-
-  it('exposes projection builders and executor injection without runtime imports', async () => {
-    const builder: RuntimeProjectionBuilder<{ names: string[] }> = {
-      runtime: 'pi',
-      project: async (manifest, executor) =>
-        executor({
-          names: manifest.decisions.filter((item) => item.included).map((item) => item.identity),
-        }),
-    };
-    const manifest = createResolvedSkillManifestV4({ binding, decisions });
-    await expect(builder.project(manifest, async (projection) => projection)).resolves.toEqual({
-      names: ['review'],
-    });
   });
 });
 
@@ -526,13 +504,13 @@ describe('runtime context validation', () => {
       artifactsRoot,
       launchBinding: launchBinding(),
     });
-    const runtimeArtifact = createRuntimeSkillArtifactReferenceV4({
+    const runtimeArtifact = createRuntimeSkillArtifactReference({
       runtime: 'pi',
       manifestKey: 'manifest',
       artifactKey: 'skills',
       fileMapHash: 'skill-map',
     });
-    const context = createRuntimeContextV1({
+    const context = createRuntimeContext({
       launchKey: 'launch',
       launchDescriptor: { reference: 'launch.json', digest: 'expected' },
       manifestKey: 'manifest',
@@ -558,15 +536,15 @@ describe('runtime context validation', () => {
     );
   });
 
-  it('emits restart-required diagnostics when project or content scope changes', async () => {
-    const manifest = createResolvedSkillManifestV4({ binding, decisions });
-    const artifact = createRuntimeSkillArtifactReferenceV4({
+  it('emits restart-required diagnostics when project or skill selection changes', async () => {
+    const manifest = createResolvedSkillManifest({ binding, decisions });
+    const artifact = createRuntimeSkillArtifactReference({
       runtime: 'claude',
       manifestKey: manifest.manifestKey,
       artifactKey: 'a',
       fileMapHash: 'f',
     });
-    const context = createRuntimeContextV1({
+    const context = createRuntimeContext({
       launchKey: 'launch',
       launchDescriptor: { reference: 'launch.json', digest: 'digest' },
       manifestKey: manifest.manifestKey,
@@ -577,11 +555,19 @@ describe('runtime context validation', () => {
       context,
       expectedLaunch: { launchKey: 'launch', descriptorDigest: 'digest' },
       expectedManifestKey: manifest.manifestKey,
-      currentBinding: { ...binding, projectId: 'project-2', contentScope: 'personal' },
+      currentBinding: {
+        ...binding,
+        projectId: 'project-2',
+        selection: {
+          location: { name: 'personal', canonicalRoot: 'C:/personal' },
+          packs: ['personal'],
+          source: 'project',
+        },
+      },
     });
     expect(
       result.diagnostics.filter((item) => item.restartRequired).map((item) => item.code),
-    ).toEqual(['PROJECT_CHANGED', 'CONTENT_SCOPE_CHANGED']);
+    ).toEqual(['PROJECT_CHANGED', 'SKILL_SELECTION_CHANGED']);
   });
 });
 

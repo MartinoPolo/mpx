@@ -21,122 +21,122 @@ import {
   compareReleasePaths,
   exact,
   installerDigest,
-  parseReleaseManifestV1,
+  parseReleaseManifest,
   safeRelative,
   SHA,
-  type ReleaseFileV1,
-  type ReleaseManifestV1,
+  type ReleaseFile,
+  type ReleaseManifest,
 } from './release-manifest.js';
 import {
-  parseRuntimeRegistrationMatrixV1,
-  parseStaticMcpRegistrationV1,
-  type RuntimeRegistrationMatrixV1,
-  type StaticMcpRegistrationV1,
+  parseRuntimeRegistrationMatrix,
+  parseStaticMcpRegistration,
+  type RuntimeRegistrationMatrix,
+  type StaticMcpRegistration,
 } from './runtime-registration.js';
 import { withInstallerCleanup } from './failure.js';
 
-export { canonicalJson, installerDigest, parseReleaseManifestV1 } from './release-manifest.js';
-export type { ReleaseFileV1, ReleaseManifestV1 } from './release-manifest.js';
+export { canonicalJson, installerDigest, parseReleaseManifest } from './release-manifest.js';
+export type { ReleaseFile, ReleaseManifest } from './release-manifest.js';
 
 export const USER_CONFIG_ARTIFACT_MAX_BYTES = 65_536;
 
-export interface UserConfigArtifactV1 {
+export interface UserConfigArtifact {
   readonly target: '%APPDATA%/mpx/config.json';
   readonly content: string;
   readonly sha256: string;
 }
-export interface InstallIntentV1 {
+export interface InstallIntent {
   readonly schemaVersion: 1;
   readonly kind: 'install-intent';
   readonly releaseKey: string;
   readonly convergenceHash: string;
   readonly components: readonly string[];
-  readonly userConfigArtifact?: UserConfigArtifactV1;
-  readonly runtimeRegistrations?: RuntimeRegistrationMatrixV1;
-  readonly staticMcpRegistrations?: readonly StaticMcpRegistrationV1[];
+  readonly userConfigArtifact?: UserConfigArtifact;
+  readonly runtimeRegistrations?: RuntimeRegistrationMatrix;
+  readonly staticMcpRegistrations?: readonly StaticMcpRegistration[];
 }
-export interface MachineObservationV1 {
+export interface MachineObservation {
   readonly id: string;
   readonly digest: string | null;
 }
-export interface InstallOperationV1 {
+export interface InstallOperation {
   readonly id: string;
   readonly adapter: string;
   readonly action: 'ensure' | 'remove';
   readonly target: string;
   readonly desiredDigest: string | null;
 }
-export interface InstallPlanReferenceV1 {
+export interface InstallPlanReference {
   readonly id: string;
   readonly planDigest: string;
   readonly verifierRef: string;
 }
-export interface InstallOperationClassificationsV1 {
+export interface InstallOperationClassifications {
   readonly automatic: readonly string[];
-  readonly confirmationRequired: readonly InstallPlanReferenceV1[];
+  readonly confirmationRequired: readonly InstallPlanReference[];
 }
-export interface InstallPlanV1 {
+export interface InstallPlan {
   readonly schemaVersion: 1;
   readonly kind: 'install-plan';
-  readonly intent: InstallIntentV1;
-  readonly observations: readonly MachineObservationV1[];
-  readonly operations: readonly InstallOperationV1[];
-  readonly classifications?: InstallOperationClassificationsV1;
+  readonly intent: InstallIntent;
+  readonly observations: readonly MachineObservation[];
+  readonly operations: readonly InstallOperation[];
+  readonly classifications?: InstallOperationClassifications;
   readonly confirmationDigest: string;
 }
-export interface InstallOperationLocatorV1 {
+export interface InstallOperationLocator {
   readonly operationId: string;
   readonly adapter: string;
   readonly spec: unknown;
   readonly bindingDigest: string;
 }
-export interface OwnershipReceiptV1 {
+export interface OwnershipReceipt {
   readonly schemaVersion: 2;
   readonly kind: 'ownership-receipt';
   readonly releaseKey: string;
   readonly convergenceHash: string;
-  readonly files: readonly ReleaseFileV1[];
-  readonly operations: readonly InstallOperationV1[];
-  readonly operationLocators: readonly InstallOperationLocatorV1[];
-  readonly installIntent?: InstallIntentV1;
+  readonly files: readonly ReleaseFile[];
+  readonly operations: readonly InstallOperation[];
+  readonly operationLocators: readonly InstallOperationLocator[];
+  readonly installIntent?: InstallIntent;
   readonly installedAt: string;
 }
-export interface InstallVerificationComponentV1 {
+export interface InstallVerificationComponent {
   readonly id: string;
   readonly automatic: true;
   readonly status: 'actual-state-verified' | 'unhealthy';
 }
-export interface InstallVerificationV1 {
+export interface InstallVerification {
   readonly schemaVersion: 1;
   readonly kind: 'install-verification';
   readonly releaseKey: string;
   readonly healthy: boolean;
   readonly issues: readonly string[];
   readonly checkedAt: string;
-  readonly components?: readonly InstallVerificationComponentV1[];
+  readonly components?: readonly InstallVerificationComponent[];
 }
-export interface MachineSnapshotV1 {
+export interface MachineSnapshot {
   readonly schemaVersion: 1;
   readonly kind: 'machine-snapshot';
   readonly transactionId: string;
-  readonly observations: readonly MachineObservationV1[];
+  readonly observations: readonly MachineObservation[];
   readonly capturedAt: string;
 }
-export interface TransactionJournalV1 {
+export interface TransactionJournal {
   readonly schemaVersion: 1;
   readonly kind: 'transaction-journal';
   readonly transactionId: string;
   readonly phase: 'applying' | 'committed' | 'rolled-back';
   readonly completedOperationIds: readonly string[];
   readonly inFlightOperationId?: string;
-  readonly snapshot: MachineSnapshotV1;
+  readonly snapshot: MachineSnapshot;
 }
 
 function fail(code: string, message: string): never {
   throw new MpxError({ code, message });
 }
 
-export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
+export function parseInstallIntent(value: unknown): InstallIntent {
   const record = value as Record<string, unknown> | null;
   const has = (key: string): boolean =>
     Boolean(record && Object.prototype.hasOwnProperty.call(record, key));
@@ -166,7 +166,7 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid install intent.');
   }
-  let userConfigArtifact: UserConfigArtifactV1 | undefined;
+  let userConfigArtifact: UserConfigArtifact | undefined;
   if (hasUserConfig) {
     const artifact = exact(intent.userConfigArtifact, ['target', 'content', 'sha256']);
     if (
@@ -186,14 +186,14 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
     if (createHash('sha256').update(artifact.content, 'utf8').digest('hex') !== artifact.sha256) {
       fail('INSTALL_SCHEMA_INVALID', 'User-config artifact content or digest is invalid.');
     }
-    userConfigArtifact = artifact as unknown as UserConfigArtifactV1;
+    userConfigArtifact = artifact as unknown as UserConfigArtifact;
   }
   const runtimeRegistrations = hasRuntime
-    ? parseRuntimeRegistrationMatrixV1(intent.runtimeRegistrations)
+    ? parseRuntimeRegistrationMatrix(intent.runtimeRegistrations)
     : undefined;
   const staticMcpRegistrations =
     hasMcp && Array.isArray(intent.staticMcpRegistrations)
-      ? intent.staticMcpRegistrations.map(parseStaticMcpRegistrationV1)
+      ? intent.staticMcpRegistrations.map(parseStaticMcpRegistration)
       : hasMcp
         ? fail('INSTALL_SCHEMA_INVALID', 'Static MCP registrations must be an array.')
         : undefined;
@@ -218,7 +218,7 @@ export function parseInstallIntentV1(value: unknown): InstallIntentV1 {
     ...(staticMcpRegistrations ? { staticMcpRegistrations } : {}),
   };
 }
-function parseObservation(value: unknown): MachineObservationV1 {
+function parseObservation(value: unknown): MachineObservation {
   const x = exact(value, ['id', 'digest']);
   if (
     typeof x.id !== 'string' ||
@@ -227,9 +227,9 @@ function parseObservation(value: unknown): MachineObservationV1 {
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid observation.');
   }
-  return x as unknown as MachineObservationV1;
+  return x as unknown as MachineObservation;
 }
-export function parseInstallOperationV1(value: unknown): InstallOperationV1 {
+export function parseInstallOperation(value: unknown): InstallOperation {
   const x = exact(value, ['id', 'adapter', 'action', 'target', 'desiredDigest']);
   if (
     typeof x.id !== 'string' ||
@@ -246,7 +246,7 @@ export function parseInstallOperationV1(value: unknown): InstallOperationV1 {
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid operation.');
   }
-  return x as unknown as InstallOperationV1;
+  return x as unknown as InstallOperation;
 }
 function orderedUnique<T extends { id: string }>(values: T[]): boolean {
   return (
@@ -254,9 +254,9 @@ function orderedUnique<T extends { id: string }>(values: T[]): boolean {
     values.every((x, i) => i === 0 || values[i - 1]!.id.localeCompare(x.id) < 0)
   );
 }
-function parseReferences(value: unknown): InstallOperationClassificationsV1 {
+function parseReferences(value: unknown): InstallOperationClassifications {
   const record = exact(value, ['automatic', 'confirmationRequired']);
-  const references = (items: unknown): InstallPlanReferenceV1[] => {
+  const references = (items: unknown): InstallPlanReference[] => {
     if (!Array.isArray(items)) {
       fail('INSTALL_SCHEMA_INVALID', 'Plan references must be arrays.');
     }
@@ -272,7 +272,7 @@ function parseReferences(value: unknown): InstallOperationClassificationsV1 {
       ) {
         fail('INSTALL_SCHEMA_INVALID', 'Plan reference is invalid.');
       }
-      return ref as unknown as InstallPlanReferenceV1;
+      return ref as unknown as InstallPlanReference;
     });
   };
   if (
@@ -287,7 +287,7 @@ function parseReferences(value: unknown): InstallOperationClassificationsV1 {
   };
   return parsed;
 }
-export function parseInstallPlanV1(value: unknown): InstallPlanV1 {
+export function parseInstallPlan(value: unknown): InstallPlan {
   const source = value as Record<string, unknown> | null,
     hasClassifications = Boolean(
       source && Object.prototype.hasOwnProperty.call(source, 'classifications'),
@@ -314,9 +314,9 @@ export function parseInstallPlanV1(value: unknown): InstallPlanV1 {
   const parsed = {
     schemaVersion: 1 as const,
     kind: 'install-plan' as const,
-    intent: parseInstallIntentV1(plan.intent),
+    intent: parseInstallIntent(plan.intent),
     observations: plan.observations.map(parseObservation),
-    operations: plan.operations.map(parseInstallOperationV1),
+    operations: plan.operations.map(parseInstallOperation),
     ...(hasClassifications ? { classifications: parseReferences(plan.classifications) } : {}),
   };
   if (
@@ -372,14 +372,14 @@ function boundedLocatorSpec(value: unknown): unknown {
   return parsed;
 }
 
-export function parseInstallOperationLocatorsV1(
+export function parseInstallOperationLocators(
   value: unknown,
-  operations: readonly InstallOperationV1[],
-): readonly InstallOperationLocatorV1[] {
+  operations: readonly InstallOperation[],
+): readonly InstallOperationLocator[] {
   if (!Array.isArray(value) || value.length !== operations.length) {
     fail('INSTALL_SCHEMA_INVALID', 'Operation locators must be ordered and complete.');
   }
-  return value.map((item, index): InstallOperationLocatorV1 => {
+  return value.map((item, index): InstallOperationLocator => {
     const locator = exact(item, ['operationId', 'adapter', 'spec', 'bindingDigest']),
       operation = operations[index]!,
       spec = boundedLocatorSpec(locator.spec);
@@ -401,7 +401,7 @@ export function parseInstallOperationLocatorsV1(
   });
 }
 
-export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
+export function parseOwnershipReceipt(value: unknown): OwnershipReceipt {
   const source = value as Record<string, unknown> | null,
     hasIntent = Boolean(source && Object.prototype.hasOwnProperty.call(source, 'installIntent'));
   const receipt = exact(value, [
@@ -425,19 +425,19 @@ export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
   ) {
     fail('INSTALL_SCHEMA_INVALID', 'Invalid or legacy-ambiguous ownership receipt.');
   }
-  const manifest = parseReleaseManifestV1({
+  const manifest = parseReleaseManifest({
     schemaVersion: 1,
     kind: 'release-manifest',
     releaseKey: receipt.releaseKey,
     convergenceHash: receipt.convergenceHash,
     files: receipt.files,
   });
-  const operations = receipt.operations.map(parseInstallOperationV1);
+  const operations = receipt.operations.map(parseInstallOperation);
   if (!orderedUnique(operations)) {
     fail('INSTALL_SCHEMA_INVALID', 'Receipt operations must be sorted and unique.');
   }
-  const operationLocators = parseInstallOperationLocatorsV1(receipt.operationLocators, operations);
-  const installIntent = hasIntent ? parseInstallIntentV1(receipt.installIntent) : undefined;
+  const operationLocators = parseInstallOperationLocators(receipt.operationLocators, operations);
+  const installIntent = hasIntent ? parseInstallIntent(receipt.installIntent) : undefined;
   if (installIntent && installIntent.releaseKey !== manifest.releaseKey) {
     fail('INSTALL_SCHEMA_INVALID', 'Receipt intent does not match its release.');
   }
@@ -453,7 +453,7 @@ export function parseOwnershipReceiptV1(value: unknown): OwnershipReceiptV1 {
     installedAt: receipt.installedAt,
   };
 }
-export function parseMachineSnapshotV1(value: unknown): MachineSnapshotV1 {
+export function parseMachineSnapshot(value: unknown): MachineSnapshot {
   const snapshot = exact(value, [
     'schemaVersion',
     'kind',
@@ -489,12 +489,12 @@ async function walk(
   root: string,
   relative = '',
   excludeDependencies = false,
-): Promise<ReleaseFileV1[]> {
+): Promise<ReleaseFile[]> {
   const directory = path.join(root, ...relative.split('/').filter(Boolean));
   const names = (await readdir(directory))
     .filter((name) => !excludeDependencies || name !== 'node_modules')
     .sort(compareReleasePaths);
-  const result: ReleaseFileV1[] = [];
+  const result: ReleaseFile[] = [];
   for (const name of names) {
     const rel = relative ? `${relative}/${name}` : name;
     if (!safeRelative(rel)) {
@@ -518,7 +518,7 @@ async function walk(
   }
   return result;
 }
-export async function buildReleaseManifest(sourceDirectory: string): Promise<ReleaseManifestV1> {
+export async function buildReleaseManifest(sourceDirectory: string): Promise<ReleaseManifest> {
   const info = await lstat(sourceDirectory).catch(() =>
     fail('INSTALL_RELEASE_SOURCE_INVALID', 'Release source is unavailable.'),
   );
@@ -540,7 +540,7 @@ export async function buildReleaseManifest(sourceDirectory: string): Promise<Rel
 async function copyManifest(
   source: string,
   destination: string,
-  manifest: ReleaseManifestV1,
+  manifest: ReleaseManifest,
 ): Promise<void> {
   for (const file of manifest.files) {
     const target = path.join(destination, ...file.path.split('/'));
@@ -556,7 +556,7 @@ async function copyManifest(
     fail('INSTALL_RELEASE_COPY_DRIFT', 'Staged release differs from source.');
   }
 }
-async function buildReleaseManifestWithoutMetadata(root: string): Promise<ReleaseManifestV1> {
+async function buildReleaseManifestWithoutMetadata(root: string): Promise<ReleaseManifest> {
   const all = await walk(root);
   const files = all
     .filter((x) => x.path !== 'release-manifest.json')
@@ -574,7 +574,7 @@ export async function publishRelease(options: {
   sourceDirectory: string;
   appsRoot: string;
   releaseKey?: string;
-}): Promise<ReleaseManifestV1> {
+}): Promise<ReleaseManifest> {
   const manifest = await buildReleaseManifest(options.sourceDirectory);
   if (options.releaseKey !== undefined && options.releaseKey !== manifest.releaseKey) {
     fail('INSTALL_RELEASE_KEY_MISMATCH', 'Requested key does not describe source content.');
@@ -633,7 +633,7 @@ export class NodeInstalledReleaseAuthority {
   constructor(
     private readonly options: {
       appsRoot: string;
-      receipt: () => Promise<OwnershipReceiptV1 | undefined>;
+      receipt: () => Promise<OwnershipReceipt | undefined>;
       prohibitedRoots?: readonly string[];
     },
   ) {}
@@ -747,7 +747,7 @@ async function verifyPiExtensionArtifact(repositoryRoot: string): Promise<void> 
 
 async function verifyImmutableReleaseSource(
   repositoryRoot: string,
-): Promise<ReleaseManifestV1 | undefined> {
+): Promise<ReleaseManifest | undefined> {
   const resolved = path.resolve(repositoryRoot),
     releaseKey = path.basename(resolved),
     releases = path.dirname(resolved);
@@ -768,7 +768,7 @@ async function verifyImmutableReleaseSource(
     if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink()) {
       throw new Error('Immutable release manifest is unsafe');
     }
-    const manifest = parseReleaseManifestV1(parseStrictJson(await readFile(manifestPath, 'utf8')));
+    const manifest = parseReleaseManifest(parseStrictJson(await readFile(manifestPath, 'utf8')));
     if (manifest.releaseKey !== releaseKey) {
       throw new Error('Immutable release basename does not match its manifest');
     }
@@ -859,12 +859,12 @@ async function withCurrentReleaseSource<T>(
 }
 export async function buildCurrentReleaseManifest(
   options: CurrentReleaseOptions,
-): Promise<ReleaseManifestV1> {
+): Promise<ReleaseManifest> {
   return withCurrentReleaseSource(options, buildReleaseManifest);
 }
 export async function publishCurrentRelease(
   options: CurrentReleaseOptions & { readonly appsRoot: string },
-): Promise<ReleaseManifestV1> {
+): Promise<ReleaseManifest> {
   return withCurrentReleaseSource(options, (sourceDirectory) =>
     publishRelease({ sourceDirectory, appsRoot: options.appsRoot }),
   );

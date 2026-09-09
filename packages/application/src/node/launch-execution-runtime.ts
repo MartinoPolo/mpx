@@ -24,9 +24,8 @@ import {
   type LaunchAuditStore,
   type RuntimeAdapter,
   type RuntimeLaunchBinding,
-  type VerificationEvidence,
 } from '@mpx/executors';
-import { discoverProjectConfig, loadRuntimeProfilesV1 } from '@mpx/config';
+import { discoverProjectConfig, loadRuntimeProfiles } from '@mpx/config';
 import {
   compileContent,
   verifyCompiledContentTree,
@@ -35,14 +34,14 @@ import {
 import type { LaunchDescriptor } from '@mpx/launch';
 import {
   revalidateRuntimeArtifact,
-  type NativeSessionRefV1,
+  type NativeSessionRef,
   type PublishedRuntimeArtifactReference,
-  type RuntimeCapabilityManifestV1,
-  type RuntimeContextV1,
-  type RuntimeSessionObservationV1,
-  type SessionLifecycleBindingV1,
+  type RuntimeCapabilityManifest,
+  type RuntimeContext,
+  type RuntimeSessionObservation,
+  type SessionLifecycleBinding,
 } from '@mpx/runtime-contracts';
-import type { NativeBindingRecordV1 } from '@mpx/sessions';
+import type { NativeBindingRecord } from '@mpx/sessions';
 import {
   createClaudeInvocationPlan,
   publishClaudeProjection,
@@ -53,11 +52,11 @@ import {
   buildPiProjection,
   planPiInvocation,
   type PiPublishedProjection,
-  type PiRuntimeProfileV1,
+  type PiRuntimeProfile,
   type VerifiedPiResumeTarget,
 } from '@mpx/runtime-pi';
-import type { SkillProjectionPlan, RuntimeSkillArtifact } from '@mpx/skills';
-import type { RuntimeStatusEnvelopeV1, StatusSnapshotV1 } from '@mpx/status';
+import type { RuntimeSkillArtifact, SkillProjectionPlan } from '@mpx/skills/contracts';
+import type { RuntimeStatusEnvelope, StatusSnapshot } from '@mpx/status';
 import {
   productionTrustedExecutablePolicy,
   resolveTrustedExecutable,
@@ -185,7 +184,7 @@ export interface LaunchProjection {
   readonly artifactKey?: string;
   readonly files?: readonly string[];
   readonly runtimeContextFile?: string;
-  readonly profile?: PiRuntimeProfileV1;
+  readonly profile?: PiRuntimeProfile;
 }
 export interface LaunchProjectionBuildInput {
   readonly descriptor: LaunchDescriptor;
@@ -198,12 +197,12 @@ export interface LaunchProjectionBuildInput {
   readonly piAppendInstructions?: string;
   readonly runtimeProfilesFile: string;
   readonly artifactsRoot: string;
-  readonly runtimeContext: RuntimeContextV1;
-  readonly statusSnapshot: StatusSnapshotV1;
-  readonly runtimeStatusEnvelope: RuntimeStatusEnvelopeV1;
-  readonly runtimeCapabilityManifest: RuntimeCapabilityManifestV1;
+  readonly runtimeContext: RuntimeContext;
+  readonly statusSnapshot: StatusSnapshot;
+  readonly runtimeStatusEnvelope: RuntimeStatusEnvelope;
+  readonly runtimeCapabilityManifest: RuntimeCapabilityManifest;
   readonly runtimeLaunchBinding: RuntimeLaunchBinding;
-  readonly piRuntimeProfile?: PiRuntimeProfileV1;
+  readonly piRuntimeProfile?: PiRuntimeProfile;
   readonly launchBanner: string;
   readonly artifactRevalidator?: typeof revalidateRuntimeArtifact;
 }
@@ -236,13 +235,13 @@ export interface LaunchExecutionContext {
   launchRuntimeWiringFactory?: (input: {
     descriptor: LaunchDescriptor;
     artifact: RuntimeSkillArtifact;
-    snapshot: StatusSnapshotV1;
+    snapshot: StatusSnapshot;
     cwd: string;
-    sessionObservation?: RuntimeSessionObservationV1;
+    sessionObservation?: RuntimeSessionObservation;
   }) => RuntimeLaunchWiring;
-  launchSessionObservation?: RuntimeSessionObservationV1;
+  launchSessionObservation?: RuntimeSessionObservation;
   launchStatusSnapshotMaterializer?: LaunchStatusSnapshotMaterializer;
-  launchStatusSnapshotReader?: (file: string, signal?: AbortSignal) => Promise<StatusSnapshotV1>;
+  launchStatusSnapshotReader?: (file: string, signal?: AbortSignal) => Promise<StatusSnapshot>;
   launchStatusRefreshClock?: {
     schedule(callback: () => Promise<void>, intervalMs: number): () => void;
   };
@@ -251,14 +250,14 @@ export interface LaunchExecutionContext {
   launchLifecycleBridge?: {
     prepare(input: {
       descriptor: LaunchDescriptor;
-      runtimeContext: RuntimeContextV1;
+      runtimeContext: RuntimeContext;
       nativeRuntimeRoot: string;
       cwd: string;
-      nativeSessionRef?: NativeSessionRefV1;
-      nativeBinding?: NativeBindingRecordV1;
-    }): Promise<{ binding: SessionLifecycleBindingV1; eventDirectory: string }>;
+      nativeSessionRef?: NativeSessionRef;
+      nativeBinding?: NativeBindingRecord;
+    }): Promise<{ binding: SessionLifecycleBinding; eventDirectory: string }>;
     consume(bindingId: string): Promise<void>;
-    observe?(bindingId: string): Promise<RuntimeSessionObservationV1 | undefined>;
+    observe?(bindingId: string): Promise<RuntimeSessionObservation | undefined>;
   };
 }
 
@@ -284,13 +283,6 @@ export function executorAdapter(
     context.launchExecutorAdapters?.find((adapter) => adapter.name === name) ??
     (name === 'docker' ? nodeDockerGate : nodeHostExecutor)
   );
-}
-
-export async function collectNodeExecutorEvidence(
-  context: LaunchExecutionContext,
-  name: 'docker' | 'host',
-): Promise<VerificationEvidence> {
-  return executorAdapter(context, name).verify();
 }
 
 const CLAUDE_MODEL_TOOLS = Object.freeze([
@@ -324,7 +316,7 @@ const PI_MODEL_TOOLS = Object.freeze([
   'write',
 ]);
 export interface RuntimeLaunchWiring extends LaunchRuntimeWiring {
-  readonly runtimeProfile?: PiRuntimeProfileV1;
+  readonly runtimeProfile?: PiRuntimeProfile;
 }
 export function resolveClaudeCanonicalOutputStyle(agentsRoot: string): string {
   return path.join(agentsRoot, '..', 'output-styles', 'mpx-terse.md');
@@ -394,11 +386,11 @@ export function productionRuntimeAdapters(input: {
     | 'piAppendInstructions'
   >;
   launchBanner: string;
-  initialSnapshot: StatusSnapshotV1;
-  statusSnapshot: (signal?: AbortSignal) => Promise<StatusSnapshotV1>;
+  initialSnapshot: StatusSnapshot;
+  statusSnapshot: (signal?: AbortSignal) => Promise<StatusSnapshot>;
   bindStatusPath: (value: string | undefined) => void;
   bindRuntimeStatusPath: (value: string) => void;
-  lifecycle?: { binding: SessionLifecycleBindingV1; eventDirectory: string };
+  lifecycle?: { binding: SessionLifecycleBinding; eventDirectory: string };
   resumeTarget?: LaunchRuntimeResumeTarget;
   statusMaterializer?: LaunchStatusSnapshotMaterializer;
   runtimeStatusMaterializer?: RuntimeStatusEnvelopeMaterializer;
@@ -432,7 +424,7 @@ export function productionRuntimeAdapters(input: {
       input.bindRuntimeStatusPath(runtimeStatusPath);
     }
     const customBuilder = input.builder !== undefined;
-    const runtimeProfiles = await loadRuntimeProfilesV1(input.projectionInput.runtimeProfilesFile);
+    const runtimeProfiles = await loadRuntimeProfiles(input.projectionInput.runtimeProfilesFile);
     const compiledContent = await compileContent({
       runtime,
       plan: input.projectionInput.skillPlan,
@@ -547,6 +539,7 @@ export function productionRuntimeAdapters(input: {
           }
           const plan = createClaudeInvocationPlan({
             executable: input.trustedExecutable.executable,
+            executor: input.descriptor.executor.name,
             pluginDirectory,
             ...(publishedProjection ? { projection: publishedProjection } : {}),
             accountRoot: input.nativeRuntimeRoot,
@@ -604,6 +597,7 @@ export function productionRuntimeAdapters(input: {
         const publishedProjection = built as Partial<PiPublishedProjection>;
         const plan = await planPiInvocation({
           executable: input.trustedExecutable.executable,
+          executor: input.descriptor.executor.name,
           ...((built.profile ?? input.projectionInput.piRuntimeProfile)
             ? { profile: built.profile ?? input.projectionInput.piRuntimeProfile }
             : {}),
@@ -613,7 +607,6 @@ export function productionRuntimeAdapters(input: {
           launchIdentity: {
             name: input.descriptor.identity.name,
             mode: input.descriptor.mode,
-            skillPolicy: input.descriptor.skillPolicy,
           },
           projectProviders: await readPiFooterProviders(input.cwd),
           ...(typeof input.environment.APPDATA === 'string' &&

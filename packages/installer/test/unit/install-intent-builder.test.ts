@@ -6,10 +6,10 @@ import {
   INSTALL_EXECUTABLE_MAX_BYTES,
   InstallIntentBuilder,
   installerDigest,
-  parseInstallIntentRequestV1,
+  parseInstallIntentRequest,
   type CurrentReleaseBuilder,
-  type InstallIntentRequestV1,
-  type ReleaseManifestV1,
+  type InstallIntentRequest,
+  type ReleaseManifest,
 } from '../../src/index.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -30,7 +30,7 @@ afterEach(async () => {
 });
 
 const sha = (letter: string): string => letter.repeat(64);
-const baseRequest = (): InstallIntentRequestV1 => ({
+const baseRequest = (): InstallIntentRequest => ({
   schemaVersion: 1,
   kind: 'install-intent-request',
   userConfigPath: 'C:\\config\\config.json',
@@ -46,10 +46,10 @@ const baseRequest = (): InstallIntentRequestV1 => ({
   },
 });
 
-describe('InstallIntentRequestV1', () => {
+describe('InstallIntentRequest', () => {
   it('rejects unknown, duplicate, and unsorted request data', () => {
     const unknown = { ...baseRequest(), surprise: true };
-    expect(() => parseInstallIntentRequestV1(unknown)).toThrowError(/unknown|missing/i);
+    expect(() => parseInstallIntentRequest(unknown)).toThrowError(/unknown|missing/i);
 
     const duplicate = {
       ...baseRequest(),
@@ -61,7 +61,7 @@ describe('InstallIntentRequestV1', () => {
         ],
       },
     };
-    expect(() => parseInstallIntentRequestV1(duplicate)).toThrowError(/unique|sorted/i);
+    expect(() => parseInstallIntentRequest(duplicate)).toThrowError(/unique|sorted/i);
   });
 });
 
@@ -94,7 +94,7 @@ async function createBuildFixture() {
     })),
   ].sort((a, b) => a.path.localeCompare(b.path));
   const releaseKey = installerDigest(files);
-  const manifest: ReleaseManifestV1 = {
+  const manifest: ReleaseManifest = {
     schemaVersion: 1,
     kind: 'release-manifest',
     releaseKey,
@@ -110,6 +110,7 @@ async function createBuildFixture() {
     verify: vi.fn(async () => []),
   };
   const config = {
+    schemaVersion: 2,
     identities: {
       home: {
         domain: 'personal',
@@ -120,6 +121,7 @@ async function createBuildFixture() {
         gitAuthorRoute: 'git-home',
         providerRoutes: { github: 'gh-home' },
         sshRoute: 'ssh-home',
+        allowedSkillPacks: ['development', 'personal'],
       },
       office: {
         domain: 'work',
@@ -130,20 +132,20 @@ async function createBuildFixture() {
         gitAuthorRoute: 'git-work',
         providerRoutes: { gitlab: 'gl-work' },
         sshRoute: 'ssh-work',
+        allowedSkillPacks: ['development'],
       },
     },
     domains: { personal: ['${MPX_PROJECTS}'], work: ['${MPX_WORK}'] },
-    contentScopes: {},
+    locations: {},
     modes: {},
-    skillPolicies: {},
     presets: {},
-    launchDefaults: { projects: {}, scopes: {} },
+    launchDefaults: { projects: {}, locations: {} },
     networkPolicies: {},
     executors: { host: {} },
   };
   const configSource = `${JSON.stringify(config, null, 2)}\n`;
   await writeFile(configPath, configSource);
-  const request: InstallIntentRequestV1 = {
+  const request: InstallIntentRequest = {
     ...baseRequest(),
     userConfigPath: configPath,
     executables: { claude: { path: claude, version: '1.0.0' }, pi: { path: pi, version: '2.0.0' } },

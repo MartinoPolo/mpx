@@ -4,13 +4,15 @@ MPX is a private-first local control plane for Claude Code and Pi. It compiles s
 
 ## Use
 
-For repository development:
+For repository development, install the checkout's exact dependency graph before running repository commands:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
 pnpm test
 ```
+
+To install that checkout as an immutable release, run `pnpm run setup`; the setup command already builds and bundles the release before publishing and verifying it. In a local checkout, `bin/mpx.mjs` and `bin/claude-gateway.js` are ignored generated outputs, rebuilt during setup before use; immutable installed releases are self-contained and do not depend on those checkout files.
 
 For an already installed MPX CLI:
 
@@ -37,4 +39,4 @@ The generated CLI references under `content/instructions/shared/MPX_CLI_*.md` ar
 - Native Pi and Claude own authentication, session formats, and runtime behavior. MPX supplies validated launch data and compiled content.
 - Windows is the accepted host platform. Linux, macOS, and whole-agent sandbox execution are not currently supported release paths.
 
-Current implementation decisions are indexed in [`decisions.md`](decisions.md). ADRs under [`docs/adr`](docs/adr) preserve rationale and history.
+Durable implementation policy and rationale are maintained in [`decisions.md`](decisions.md).

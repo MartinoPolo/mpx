@@ -1,17 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  composeRuntimeStatusEnvelopeV1,
+  composeRuntimeStatusEnvelope,
   createRuntimeStatusRefreshController,
-  getRuntimeStatusCapabilitiesV1,
-  parseRuntimeStatusCapabilitiesV1,
-  parseRuntimeStatusEnvelopeV1,
-  projectRuntimeStatusEnvelopeV1,
-  type RuntimeStatusBindingV1,
-  type RuntimeStatusEnvelopeV1,
+  getRuntimeStatusCapabilities,
+  parseRuntimeStatusCapabilities,
+  parseRuntimeStatusEnvelope,
+  projectRuntimeStatusEnvelope,
+  type RuntimeStatusBinding,
+  type RuntimeStatusEnvelope,
 } from '../../src/index.js';
 
-const binding: RuntimeStatusBindingV1 = {
+const binding: RuntimeStatusBinding = {
   launchKey: 'launch-123',
   runtimeId: 'runtime-1',
   repositoryId: 'repo-123',
@@ -25,7 +25,7 @@ const current = {
   unavailable: null,
 };
 
-function envelope(): RuntimeStatusEnvelopeV1 {
+function envelope(): RuntimeStatusEnvelope {
   return {
     schemaVersion: 1,
     generatedAt: '2025-06-01T12:00:00.000Z',
@@ -69,7 +69,7 @@ function envelope(): RuntimeStatusEnvelopeV1 {
   };
 }
 
-describe('RuntimeStatusEnvelopeV1 schema', () => {
+describe('RuntimeStatusEnvelope schema', () => {
   it('requires explicit provenance, state, lifetime, diagnostic, and unavailability metadata on every group', () => {
     const metadata = {
       source: 'native',
@@ -97,7 +97,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
       const group = candidate[name] as Record<string, unknown>;
       Object.assign(group, metadata);
     }
-    expect(parseRuntimeStatusEnvelopeV1(candidate).identity).toMatchObject(metadata);
+    expect(parseRuntimeStatusEnvelope(candidate).identity).toMatchObject(metadata);
   });
 
   it('parses all Claude/Pi personal/work fixtures with every status group present', async () => {
@@ -107,7 +107,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
       'runtime-pi-personal',
       'runtime-pi-work',
     ]) {
-      const parsed = parseRuntimeStatusEnvelopeV1(
+      const parsed = parseRuntimeStatusEnvelope(
         JSON.parse(await readFile(new URL(`../fixtures/${name}.json`, import.meta.url), 'utf8')),
       );
       expect(Object.keys(parsed)).toEqual(
@@ -143,13 +143,13 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
       { ...envelope(), harness: { kind: 'claude', version: '1', surface: 'footer' } },
     ],
   ])('rejects strict %s violations', (_name, candidate) => {
-    expect(() => parseRuntimeStatusEnvelopeV1(candidate)).toThrow(/runtime status envelope/i);
+    expect(() => parseRuntimeStatusEnvelope(candidate)).toThrow(/runtime status envelope/i);
   });
 
   it.each(['accountId', 'root', 'credential', 'prompt', 'transcriptPath', 'rawHeaders'])(
     'rejects privacy field %s',
     (field) => {
-      expect(() => parseRuntimeStatusEnvelopeV1({ ...envelope(), [field]: 'sensitive' })).toThrow(
+      expect(() => parseRuntimeStatusEnvelope({ ...envelope(), [field]: 'sensitive' })).toThrow(
         /runtime status envelope/i,
       );
     },
@@ -157,13 +157,13 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
 
   it('rejects secrets and machine paths even when placed in an allowed label', () => {
     expect(() =>
-      parseRuntimeStatusEnvelopeV1({
+      parseRuntimeStatusEnvelope({
         ...envelope(),
         location: { ...envelope().location, label: 'C:\\Users\\alice\\secret' },
       }),
     ).toThrow(/privacy/i);
     expect(() =>
-      parseRuntimeStatusEnvelopeV1({
+      parseRuntimeStatusEnvelope({
         ...envelope(),
         identity: { ...envelope().identity, label: 'Bearer abcdefghijklmnop' },
       }),
@@ -172,7 +172,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
 
   it('enforces state discriminants and fails closed on the replaced freshness shape', () => {
     expect(() =>
-      parseRuntimeStatusEnvelopeV1({
+      parseRuntimeStatusEnvelope({
         ...envelope(),
         cost: {
           ...envelope().cost,
@@ -194,7 +194,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
       ...values
     } = envelope().identity;
     expect(() =>
-      parseRuntimeStatusEnvelopeV1({
+      parseRuntimeStatusEnvelope({
         ...envelope(),
         identity: {
           freshness: { state: 'current', observedAt: envelope().generatedAt, errorCode: null },
@@ -203,7 +203,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
       }),
     ).toThrow(/runtime status envelope/i);
     expect(() =>
-      parseRuntimeStatusEnvelopeV1({
+      parseRuntimeStatusEnvelope({
         ...envelope(),
         identity: {
           ...envelope().identity,
@@ -215,14 +215,14 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
   });
 
   it('preserves explicit units without floating point currency ambiguity', () => {
-    const parsed = parseRuntimeStatusEnvelopeV1(envelope());
+    const parsed = parseRuntimeStatusEnvelope(envelope());
     expect(parsed.cost).toMatchObject({ currency: 'USD', amountMicros: 125000 });
     expect(parsed.providerUsage.unit).toBe('percent');
   });
 
   it('strictly validates and freezes the exhaustive per-field capability map', () => {
-    const capabilities = getRuntimeStatusCapabilitiesV1('claude');
-    expect(parseRuntimeStatusCapabilitiesV1(capabilities)).toEqual(capabilities);
+    const capabilities = getRuntimeStatusCapabilities('claude');
+    expect(parseRuntimeStatusCapabilities(capabilities)).toEqual(capabilities);
     expect(Object.keys(capabilities.fields)).toHaveLength(35);
     expect(Object.isFrozen(capabilities.fields)).toBe(true);
     expect(capabilities.fields['model.modelId']).toEqual({ support: 'native' });
@@ -243,7 +243,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
         },
       },
     ]) {
-      expect(() => parseRuntimeStatusCapabilitiesV1(candidate)).toThrow(/capabilit/i);
+      expect(() => parseRuntimeStatusCapabilities(candidate)).toThrow(/capabilit/i);
     }
   });
 });
@@ -251,7 +251,7 @@ describe('RuntimeStatusEnvelopeV1 schema', () => {
 describe('runtime status composition', () => {
   it('rejects launch, runtime, and repository binding mismatches', () => {
     expect(() =>
-      composeRuntimeStatusEnvelopeV1({
+      composeRuntimeStatusEnvelope({
         generatedAt: envelope().generatedAt,
         binding,
         harness: envelope().harness,
@@ -276,7 +276,7 @@ describe('runtime status composition', () => {
         groups: { location: { ...current, label: 'repository' } },
       },
     ];
-    const result = composeRuntimeStatusEnvelopeV1({
+    const result = composeRuntimeStatusEnvelope({
       generatedAt: envelope().generatedAt,
       binding,
       harness: envelope().harness,
@@ -284,7 +284,7 @@ describe('runtime status composition', () => {
     });
     expect(result.location.label).toBe('runtime');
     expect(
-      composeRuntimeStatusEnvelopeV1({
+      composeRuntimeStatusEnvelope({
         generatedAt: envelope().generatedAt,
         binding,
         harness: envelope().harness,
@@ -294,7 +294,7 @@ describe('runtime status composition', () => {
   });
 
   it('keeps absent providers explicitly unavailable', () => {
-    const result = composeRuntimeStatusEnvelopeV1({
+    const result = composeRuntimeStatusEnvelope({
       generatedAt: envelope().generatedAt,
       binding,
       harness: envelope().harness,
@@ -307,10 +307,10 @@ describe('runtime status composition', () => {
 
 describe('runtime status refresh and projection', () => {
   it('is single-flight, bounded, abortable, and retains stale prior data after failure', async () => {
-    let resolve!: (value: RuntimeStatusEnvelopeV1) => void;
+    let resolve!: (value: RuntimeStatusEnvelope) => void;
     const read = vi.fn(
       (_signal: AbortSignal) =>
-        new Promise<RuntimeStatusEnvelopeV1>((done) => {
+        new Promise<RuntimeStatusEnvelope>((done) => {
           resolve = done;
         }),
     );
@@ -366,19 +366,19 @@ describe('runtime status refresh and projection', () => {
   });
 
   it('exposes harness capabilities and only width-safe semantic actions', () => {
-    expect(getRuntimeStatusCapabilitiesV1('claude').surface).toBe('statusline');
-    expect(getRuntimeStatusCapabilitiesV1('pi').surface).toBe('footer');
-    expect(projectRuntimeStatusEnvelopeV1(envelope(), 'narrow').actions).toEqual([
+    expect(getRuntimeStatusCapabilities('claude').surface).toBe('statusline');
+    expect(getRuntimeStatusCapabilities('pi').surface).toBe('footer');
+    expect(projectRuntimeStatusEnvelope(envelope(), 'narrow').actions).toEqual([
       { id: 'refresh', enabled: true, label: '↻' },
     ]);
-    expect(projectRuntimeStatusEnvelopeV1(envelope(), 'wide').actions[0]?.label).toBe(
+    expect(projectRuntimeStatusEnvelope(envelope(), 'wide').actions[0]?.label).toBe(
       'Refresh status',
     );
   });
 
   it('returns an immutable detached renderer projection without performing I/O', () => {
     const source = envelope();
-    const projection = projectRuntimeStatusEnvelopeV1(source, 'wide');
+    const projection = projectRuntimeStatusEnvelope(source, 'wide');
     expect(Object.isFrozen(projection)).toBe(true);
     expect(projection.repository).not.toBe(source.repository);
     expect(() => {

@@ -1,5 +1,7 @@
 export {
   compileContent,
+  // fallow-ignore-next-line unused-export -- CLI error-mapping contract.
+  ContentCompilerError,
   verifyCompiledContentTree,
   // fallow-ignore-next-line unused-type -- package-boundary runtime contract.
   type CompiledContentTree,

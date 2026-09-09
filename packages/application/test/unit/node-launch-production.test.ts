@@ -13,32 +13,31 @@ vi.mock('../../src/node/launch-execution.js', async (importActual) => ({
 import { createNodeLaunchApplicationService } from '../../src/node/index.js';
 
 const user: UserConfig = {
+  schemaVersion: 2,
   identities: {
     work: {
       domain: 'work',
       runtimeRoots: { claude: 'C:/native/work/claude', pi: 'C:/native/work/pi' },
       gitAuthorRoute: 'git-work',
+      allowedSkillPacks: ['development'],
     },
   },
   domains: { work: [process.cwd()] },
-  contentScopes: { work: { roots: [process.cwd()], skillPacks: ['core'] } },
+  locations: { work: { roots: [process.cwd()], skillPacks: ['development'] } },
   modes: {
     developer: { resources: { 'selected-project': 'read-write' } },
     project: { resources: { 'selected-project': 'read-write' } },
   },
-  skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
   presets: {
     standard: {
       identity: 'work',
       mode: 'project',
-      skillPolicy: 'clean',
-      contentScope: 'work',
       executor: 'host',
       workspace: 'direct',
       networkPolicy: 'implementation',
     },
   },
-  launchDefaults: { projects: {}, scopes: {} },
+  launchDefaults: { projects: {}, locations: {} },
   networkPolicies: { implementation: { preset: 'balanced' } },
   executors: { host: {}, docker: {} },
 };
@@ -47,11 +46,7 @@ const catalogRoot = path.resolve(import.meta.dirname, '../../../../content/skill
 
 const verifiedHost = {
   name: 'host' as const,
-  verify: async () => ({
-    status: 'verified' as const,
-    verifier: 'test-host',
-    evidenceDigest: 'd'.repeat(64),
-  }),
+  assertReady: async () => undefined,
   execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
 };
 
@@ -133,11 +128,7 @@ describe('Node launch production factory', () => {
     });
     const host = {
       name: 'host' as const,
-      verify: async () => ({
-        status: 'verified' as const,
-        verifier: 'test-host',
-        evidenceDigest: 'a'.repeat(64),
-      }),
+      assertReady: async () => undefined,
       execute: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false }),
     };
     const service = factory({

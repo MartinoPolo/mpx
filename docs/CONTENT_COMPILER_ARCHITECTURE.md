@@ -2,48 +2,35 @@
 
 ## Purpose
 
-`@mpx/content-compiler` is the only component that parses canonical skills and agents and renders their final runtime files. Runtime adapters publish and launch those files without rewriting their bytes.
+`@mpx/content-compiler` is the sole parser and final-byte renderer for canonical skills and agents. Runtime adapters publish verified output unchanged.
 
-## Inputs
+## Inputs and contracts
 
-- canonical skills under `content/skills`;
-- canonical agents under `content/agents`;
-- shared instructions and provider guides under `content/instructions`;
-- runtime mappings in `content/runtime-profiles.json`;
-- validated launch bindings, skill packs, exposure policy, and managed project skills.
+Inputs are canonical `content/skills`, `content/agents`, shared instructions/provider guides, `content/runtime-profiles.json`, immutable launch bindings, effective selected packs with provenance, and explicitly opted-in managed project skills. Current versioned boundaries are runtime/resolved manifests and runtime artifacts schema 5, runtime context schema 2, active-content manifest schema 2 with compiler version 2.0.0, runtime profile schema 1, core skill artifact schema 4, and launch descriptor schema 3. Unknown or stale versions fail closed; normal operation has no legacy readers.
 
-Canonical content uses semantic model classes and capabilities rather than vendor model IDs or harness-specific tool names. Unknown fields, classes, capabilities, placeholders, references, or required runtime features fail closed.
-
-## Outputs
-
-Each launch compiles a runtime-specific tree containing native `SKILL.md` files, agents, required shared references, runtime context, and `active-content.json`. The manifest records the launch and policy bindings, inclusion decisions, effective descriptions, model mappings, final paths, and hashes without credentials or session content.
-
-Published trees are immutable, content-addressed, and inspectable. Publication validates source containment, deterministic output, reference closure, and final hashes. Inspection reads the persisted manifest and files; it does not recompile them.
+Canonical packs are `development` and `personal`. Identity allowance and project/location selection occur before compilation. The compiler does not infer identity, credentials, provider roles, repositories, or pack authority from paths.
 
 ## Exposure
 
-| Exposure        | Model discovery      | Human discovery | Explicit load |
-| --------------- | -------------------- | --------------- | ------------- |
-| `full`          | full description     | yes             | yes           |
-| `name-only`     | neutral name trigger | yes             | yes           |
-| `explicit-only` | no                   | yes             | yes           |
-| `off`           | no                   | no              | no            |
+| Exposure        | Model discovery              | Human discovery | Explicit lazy load |
+| --------------- | ---------------------------- | --------------- | ------------------ |
+| `full`          | description/trigger metadata | yes             | yes                |
+| `name-only`     | neutral name trigger         | yes             | yes                |
+| `explicit-only` | no                           | yes             | yes                |
 
-For `name-only`, the compiler emits a neutral description that permits invocation only when the skill name is explicitly mentioned. Runtime-specific controls represent `explicit-only`; unsupported required behavior fails compilation.
+A valid managed skill with omitted exposure defaults to `full`; explicit values are preserved. `full` never eagerly loads the body. `off`, named policies, and contextual exposure overrides are not supported.
 
-## Runtime projections
+Canonical assignment follows purpose: personal contains `clean-pc`, `podcast`, `project-register`, `raycast-config`, `tutorial-create`, and `video-to-image`; other reviewed canonical workflows are development. `board-setup` and `board-to-issues` are explicit-only; `init-github-repo` and `notebooklm` are name-only; `project-register` is personal and explicit-only. Other explicit metadata remains unchanged. This rule avoids brittle count tables as the catalog evolves.
 
-Claude receives an immutable core plugin named `mpx` plus, when managed project skills are present, a second immutable nested plugin named `skill`; repeated `--plugin-dir` arguments preserve native `/mpx:<name>` and `/skill:<name>` namespaces. Pi receives compiled content plus launch context; the checked-in package under `runtimes/pi/extensions` registers canonical commands as `/mpx:<name>` and lazily reads verified compiler-owned bodies. Managed project skills keep a bare source directory and frontmatter name, resolve internally as `skill:<name>`, compile under `project-skills/skills/<name>/`, and retain the native Pi command `/skill:<name>`. Canonical skills keep their bare resolution identity and compile under `skills/<name>/`. The separate generated roots prevent same-name canonical and project payloads from overwriting one another.
+## Outputs and ownership
 
-Project discovery ignores ordinary directories without a `SKILL.md` entry, such as shared reference folders. Existing malformed skill files, non-file entries, unsafe links, and I/O failures remain errors; support directories still count toward bounded inventory traversal.
+Each launch compiles a runtime-specific immutable, content-addressed tree with native skill files, agents, references, runtime context, and `active-content.json`. The manifest records selection provenance, inclusion, effective descriptions, mappings, paths, and hashes without credentials or session content. Publication validates containment, deterministic output, reference closure, and hashes; inspection reads persisted output rather than recompiling.
 
-Skill-specific exposure settings use bare keys for canonical skills and `skill:<name>` keys for managed project skills. A bare override matching only a project skill fails with migration guidance rather than silently dropping its restriction.
+Canonical skills retain `/mpx:<name>`. Valid managed-project opt-in uses `metadata.mpx.projectExposure` (`full`, `name-only`, or `explicit-only`) and retains `/skill:<name>`. Unmarked project skills remain native. Canonical/project identities and generated roots stay separate, so same-name entries remain distinguishable. Malformed metadata, ambiguous ownership, collisions, unsafe links, escapes, or changed input fail closed.
 
-Shared references are compiler inputs and projection files. Relative links must resolve exactly in the published tree. For included managed project skills, `.agents/skills/shared` is an optional support-only directory: planning snapshots it once from the artifact-verified project root, rejects links, escapes, multiple project roots, and any nested `SKILL.md`, and binds the snapshot to plan verification. The compiler performs no project source reads and publishes that snapshot under `project-skills/skills/shared/`, distinct from canonical `skills/shared/`. Provider workflows select the configured role and load a shipped native-command guide; the compiler does not create provider facade commands.
+Claude receives immutable `mpx` and optional `skill` plugins. Pi receives compiled content and launch context; its checked-in extension registers accepted inventory, offers human name completion without body reads, and lazily verifies bodies on intended exact invocation. Runtime adapters implement native controls without claiming unsupported API parity or rewriting compiler bytes.
 
-## Translation profile
-
-`content/runtime-profiles.json` owns semantic model mappings, runtime aliases, capability mappings, supported frontmatter, exposure fields, and the bounded placeholder registry. Secrets and credential paths are not valid substitutions.
+Provider workflows use independently selected repository/Issue roles and shipped native-command guides. The compiler creates no provider facade and never owns credentials.
 
 ## CLI
 
@@ -54,8 +41,4 @@ mpx content inspect agent <identity-or-projected-name>
 mpx content check
 ```
 
-The generated basic and complete CLI references come from the command registry and are validated as generated artifacts.
-
-## Ownership boundary
-
-Runtime adapters own native projection assembly, settings/hooks wiring, invocation, and runtime capability probes. They do not parse canonical metadata, choose agent mappings, alter compiled skill or agent bytes, or implement provider workflow semantics.
+Generated CLI references come from the command registry and are not hand-edited.

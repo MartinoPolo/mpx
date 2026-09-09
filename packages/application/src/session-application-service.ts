@@ -1,14 +1,14 @@
 import { MpxError } from '@mpx/core';
 import type {
-  IdentityV1,
-  NativeVerifiedResumeSeedV1,
+  Identity,
+  NativeVerifiedResumeSeed,
   ResumeDependencies,
-  ResumePlanV1,
+  ResumePlan,
   RuntimeDiscovery,
   SessionListFilter,
-  SessionRecordV1,
+  SessionRecord,
   SessionReconcileScope,
-  SessionResurrectionExportV1,
+  SessionResurrectionExport,
 } from '@mpx/sessions';
 
 export type SessionDiscoveryScope = SessionReconcileScope;
@@ -16,15 +16,15 @@ export type SessionDiscoveryScope = SessionReconcileScope;
 export interface SessionDiscoveryInput {
   readonly scanner: RuntimeDiscovery;
   readonly context?: {
-    readonly identity: IdentityV1;
+    readonly identity: Identity;
     readonly nativeBindingRef: string;
     readonly runtime: 'claude' | 'pi';
   };
 }
 
 export interface SessionOperations {
-  list(filter?: SessionListFilter): Promise<SessionRecordV1[]>;
-  show(id: string): Promise<SessionRecordV1>;
+  list(filter?: SessionListFilter): Promise<SessionRecord[]>;
+  show(id: string): Promise<SessionRecord>;
   reconcile(
     discoveries: readonly SessionDiscoveryInput[],
     bindingIds: readonly string[],
@@ -38,7 +38,7 @@ export interface SessionNativeBindingOperations {
 
 export interface SessionListDiagnostic {
   readonly runtime: 'claude' | 'pi' | null;
-  readonly identity: IdentityV1 | null;
+  readonly identity: Identity | null;
   readonly status: 'unavailable' | 'malformed';
   readonly code: 'SESSION_DISCOVERY_UNAVAILABLE' | 'SESSION_DISCOVERY_MALFORMED';
 }
@@ -48,17 +48,17 @@ export interface SessionApplicationDependencies {
   readonly nativeBindings: SessionNativeBindingOperations;
   readonly consumePending: (scope?: SessionReconcileScope) => Promise<number>;
   readonly projectResurrectionRecord: (
-    record: SessionRecordV1 & { readonly launch: NonNullable<SessionRecordV1['launch']> },
-  ) => SessionResurrectionExportV1['records'][number];
+    record: SessionRecord & { readonly launch: NonNullable<SessionRecord['launch']> },
+  ) => SessionResurrectionExport['records'][number];
   readonly planResume: (
-    record: SessionRecordV1,
+    record: SessionRecord,
     dependencies: ResumeDependencies,
-  ) => Promise<NativeVerifiedResumeSeedV1>;
-  readonly planCurrentResume: (seed: NativeVerifiedResumeSeedV1) => Promise<ResumePlanV1>;
-  readonly verifyResumeConfirmation: (plan: ResumePlanV1, confirmation: string) => void;
-  readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
+  ) => Promise<NativeVerifiedResumeSeed>;
+  readonly planCurrentResume: (seed: NativeVerifiedResumeSeed) => Promise<ResumePlan>;
+  readonly verifyResumeConfirmation: (plan: ResumePlan, confirmation: string) => void;
+  readonly resumeDependencies?: (record: SessionRecord) => Promise<ResumeDependencies>;
   readonly executeConfirmedResume?: (
-    plan: ResumePlanV1,
+    plan: ResumePlan,
     execution: { readonly approveHost?: boolean },
   ) => Promise<unknown>;
   readonly discoveries?: (
@@ -70,10 +70,10 @@ export interface SessionApplication {
   list(request?: { filter?: SessionListFilter; limit?: number }): Promise<{
     readonly schemaVersion: 1;
     readonly kind: 'session-list';
-    readonly records: readonly SessionRecordV1[];
+    readonly records: readonly SessionRecord[];
     readonly diagnostics: readonly SessionListDiagnostic[];
   }>;
-  resurrectionExport(): Promise<SessionResurrectionExportV1>;
+  resurrectionExport(): Promise<SessionResurrectionExport>;
   resume(request: {
     id: string;
     confirmation?: string;
@@ -203,11 +203,11 @@ export class SessionApplicationService implements SessionApplication {
     };
   }
 
-  async resurrectionExport(): Promise<SessionResurrectionExportV1> {
+  async resurrectionExport(): Promise<SessionResurrectionExport> {
     await this.#dependencies.consumePending();
     const records = (await this.#sessions.list())
       .filter(
-        (record): record is SessionRecordV1 & { launch: NonNullable<SessionRecordV1['launch']> } =>
+        (record): record is SessionRecord & { launch: NonNullable<SessionRecord['launch']> } =>
           record.launch !== null &&
           record.workflow.status !== 'completed' &&
           record.workflow.status !== 'abandoned',

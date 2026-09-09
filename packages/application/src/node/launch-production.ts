@@ -13,8 +13,8 @@ import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-av
 import { ExactNativeRootVerifier } from './exact-native-root.js';
 import { executeResolvedNodeLaunch } from './launch-execution.js';
 import {
-  collectNodeExecutorEvidence,
   directProcessTty,
+  executorAdapter,
   type LaunchExecutionContext,
 } from './launch-execution-runtime.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
@@ -83,11 +83,13 @@ export function createNodeLaunchApplicationService(
         config,
         configHash: sha256Canonical(config as unknown as JsonValue),
       }),
-    executorEvidence: (executor) => collectNodeExecutorEvidence(context, executor),
-    prepareExecutor: async (executor) => ({
-      evidence: await collectNodeExecutorEvidence(context, executor),
-      execute: (execution) => execute(execution, context),
-    }),
+    prepareExecutor: async (executor) => {
+      const adapter = executorAdapter(context, executor);
+      return {
+        assertReady: () => adapter.assertReady(),
+        execute: (execution) => execute(execution, context),
+      };
+    },
     approveHost: async (selection) => {
       const tty = input.interaction.tty ?? directProcessTty();
       const reason = input.interaction.reason;

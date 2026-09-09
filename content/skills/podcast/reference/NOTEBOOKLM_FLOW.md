@@ -3,9 +3,8 @@
 The generation path, validated end to end on 2026-07-24 (Shadow DOM, 33.5 min, zero manual browser steps) with
 `notebooklm-py` 0.7.3.
 
-Full CLI surface — every command, flag and JSON schema — lives in
-[`../../notebooklm/SKILL.md`](../../notebooklm/SKILL.md). This file covers only the podcast path and the quirks the test
-run exposed.
+Full CLI surface — every command, flag and JSON schema — is exposed by `/mpx:notebooklm`. This file covers only the
+podcast path and the quirks the test run exposed.
 
 Pass `-n <notebook_id>` (or `--notebook`) on every command. Relying on the CLI's implicit context breaks the moment two
 agents run at once.

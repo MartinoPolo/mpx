@@ -4,13 +4,13 @@ import {
   createRuntimeRegistrationMatrix,
   installerDigest,
   materializePrivateRuntimeLaunch,
-  parseRuntimeRegistrationMatrixV1,
-  parseRuntimeRegistrationReleaseV1,
+  parseRuntimeRegistrationMatrix,
+  parseRuntimeRegistrationRelease,
   registerStaticMcp,
   verifyNativeRoots,
   verifyRuntimeRegistrationMatrix,
-  type ImmutableProjectionV1,
-  type ProjectionFileV1,
+  type ImmutableProjection,
+  type ProjectionFile,
   type ProjectionRole,
   type RuntimeRegistrationInput,
 } from '../../src/runtime-registration.js';
@@ -24,12 +24,12 @@ function required<T>(value: T | undefined, label: string): T {
 }
 
 const sha = (value: string) => installerDigest(value);
-const projection = (runtime: 'claude' | 'pi'): ImmutableProjectionV1 => {
+const projection = (runtime: 'claude' | 'pi'): ImmutableProjection => {
   const roles: readonly ProjectionRole[] =
     runtime === 'claude'
       ? ['plugin', 'hooks', 'status', 'settings', 'canonical-content', 'agents', 'licenses']
       : ['profile', 'canonical-content', 'agents', 'licenses'];
-  const files: ProjectionFileV1[] = roles.map((role) => ({
+  const files: ProjectionFile[] = roles.map((role) => ({
     path: `${role}/owned`,
     sha256: sha(role),
     bytes: role.length,
@@ -148,7 +148,7 @@ describe('immutable runtime registration', () => {
 
   it('registers Pi with only the thin adapter and compiler projection roles', () => {
     const thinRoles = ['profile', 'canonical-content', 'agents', 'licenses'] as const;
-    const files: ProjectionFileV1[] = thinRoles.map((role) => ({
+    const files: ProjectionFile[] = thinRoles.map((role) => ({
       path: `${role}/owned`,
       sha256: sha(role),
       bytes: role.length,
@@ -180,7 +180,7 @@ describe('immutable runtime registration', () => {
         role: 'extension',
         owner: 'convergence',
       },
-    ] as unknown as ProjectionFileV1[];
+    ] as unknown as ProjectionFile[];
 
     expect(() =>
       createRuntimeRegistrationMatrix([
@@ -202,9 +202,9 @@ describe('immutable runtime registration', () => {
       input('pi', 'personal', 'C:\\native\\pi-personal'),
       input('pi', 'work', 'C:\\native\\pi-work'),
     ]);
-    expect(parseRuntimeRegistrationMatrixV1(JSON.parse(JSON.stringify(matrix)))).toEqual(matrix);
+    expect(parseRuntimeRegistrationMatrix(JSON.parse(JSON.stringify(matrix)))).toEqual(matrix);
     expect(() =>
-      parseRuntimeRegistrationMatrixV1({ ...matrix, auth: { token: 'secret' } }),
+      parseRuntimeRegistrationMatrix({ ...matrix, auth: { token: 'secret' } }),
     ).toThrowError(/REGISTRATION_SCHEMA_INVALID/u);
 
     const missingNativeBase = {
@@ -219,7 +219,7 @@ describe('immutable runtime registration', () => {
       }),
     };
     expect(() =>
-      parseRuntimeRegistrationMatrixV1({
+      parseRuntimeRegistrationMatrix({
         ...missingNativeBase,
         matrixDigest: installerDigest(missingNativeBase),
       }),
@@ -233,7 +233,7 @@ describe('immutable runtime registration', () => {
       ),
     };
     expect(() =>
-      parseRuntimeRegistrationMatrixV1({
+      parseRuntimeRegistrationMatrix({
         ...claudeNativeBase,
         matrixDigest: installerDigest(claudeNativeBase),
       }),
@@ -395,9 +395,9 @@ describe('immutable runtime registration', () => {
       files: releaseFiles,
     };
     const binding = bindRuntimeMatrixToRelease(release, matrix);
-    expect(parseRuntimeRegistrationReleaseV1(binding)).toEqual(binding);
+    expect(parseRuntimeRegistrationRelease(binding)).toEqual(binding);
     expect(() =>
-      parseRuntimeRegistrationReleaseV1({ ...binding, registrationMatrixDigest: sha('other') }),
+      parseRuntimeRegistrationRelease({ ...binding, registrationMatrixDigest: sha('other') }),
     ).toThrowError(/INSTALL_REGISTRATION_BINDING_INVALID/u);
 
     const alternateInventories = [

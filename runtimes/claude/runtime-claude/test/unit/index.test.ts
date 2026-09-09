@@ -24,8 +24,8 @@ import {
 } from '../../src/index.js';
 import { renderClaudePortSegment } from '@mpx/status';
 import { classifyDangerousCommand, dangerousCommandPolicyModuleSource } from '@mpx/runtime-hooks';
-import { createRuntimeContextV1, revalidateRuntimeArtifact } from '@mpx/runtime-contracts';
-import { loadRuntimeProfilesV1, parseRuntimeProfilesV1 } from '@mpx/config';
+import { createRuntimeContext, revalidateRuntimeArtifact } from '@mpx/runtime-contracts';
+import { loadRuntimeProfiles, parseRuntimeProfiles } from '@mpx/config';
 import { compileContent } from '@mpx/content-compiler';
 
 const execFile = promisify(execFileCallback);
@@ -100,12 +100,11 @@ async function fixture() {
     full: 'full',
     named: 'name-only',
     explicit: 'explicit-only',
-    off: 'off',
   })) {
     await mkdir(path.join(canonical, name));
     await writeFile(
       path.join(canonical, name, 'SKILL.md'),
-      `---\nname: ${name}\ndescription: secret ${name} description\ntriggers: trigger ${name}\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nBODY ${name}${name === 'full' ? ' café' : ''}\n`,
+      `---\nname: ${name}\ndescription: secret ${name} description\ntriggers: trigger ${name}\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n---\nBODY ${name}${name === 'full' ? ' café' : ''}\n`,
     );
   }
   await mkdir(path.join(canonical, 'full', 'references'));
@@ -133,16 +132,12 @@ async function fixture() {
   const catalog = await inventoryCanonical(canonical);
   const manifest = resolveManifest(catalog, {
     repositoryId: 'repo',
-    contentScope: 'personal',
     identity: 'id',
-    skillPolicy: 'p',
-    skillPolicyConfig: {
-      skillExposure: {
-        default: 'full',
-        skills: { full: 'full', named: 'name-only', explicit: 'explicit-only', off: 'off' },
-      },
+    selection: {
+      location: { name: 'personal', canonicalRoot: 'C:/fixture/skills' },
+      packs: ['development'],
+      source: 'user-location',
     },
-    enabledPacks: ['core'],
   });
   const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
   const skillPlan = await createSkillProjectionPlan({
@@ -151,14 +146,14 @@ async function fixture() {
     catalog,
     canonicalRoot: canonical,
   });
-  const trackedProfiles = await loadRuntimeProfilesV1(
+  const trackedProfiles = await loadRuntimeProfiles(
     fileURLToPath(new URL('../../../../../content/runtime-profiles.json', import.meta.url)),
   );
   const profileInput = structuredClone(trackedProfiles);
   (profileInput.agentTranslation.runtimes.claude as { aliases: unknown }).aliases = {
     'mpx-explorer': 'Explore',
   };
-  const runtimeProfiles = parseRuntimeProfilesV1(JSON.stringify(profileInput));
+  const runtimeProfiles = parseRuntimeProfiles(JSON.stringify(profileInput));
   const compiledContent = await compileContent({
     runtime: 'claude',
     plan: skillPlan,
@@ -166,7 +161,7 @@ async function fixture() {
     sharedInstructionRoot: shared,
     agentRoot: agents,
   });
-  const runtimeContext = createRuntimeContextV1({
+  const runtimeContext = createRuntimeContext({
     launchKey: 'a'.repeat(64),
     launchDescriptor: { reference: 'launch.json', digest: 'b'.repeat(64) },
     manifestKey: manifest.manifestKey,
@@ -553,7 +548,7 @@ describe('Claude projection', () => {
     await mkdir(canonicalDirectory);
     await writeFile(
       path.join(canonicalDirectory, 'SKILL.md'),
-      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nCANONICAL COMMIT BODY\n',
+      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\nCANONICAL COMMIT BODY\n',
     );
     const canonicalCatalog = await inventoryCanonical(f.canonical);
     const directory = path.join(projectRoot, '.agents', 'skills', 'commit');
@@ -568,11 +563,12 @@ describe('Claude projection', () => {
     const manifest = resolveManifest(catalog, {
       repositoryId: 'repo',
       projectId: 'repo',
-      contentScope: 'personal',
       identity: 'id',
-      skillPolicy: 'p',
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
-      enabledPacks: ['core'],
+      selection: {
+        location: { name: 'project', canonicalRoot: projectRoot },
+        packs: ['development'],
+        source: 'project',
+      },
     });
     const artifact = createRuntimeSkillArtifact(manifest, catalog, { runtime: 'claude' });
     const skillPlan = await createSkillProjectionPlan({
@@ -581,7 +577,7 @@ describe('Claude projection', () => {
       catalog,
       canonicalRoot: f.canonical,
     });
-    const runtimeContext = createRuntimeContextV1({
+    const runtimeContext = createRuntimeContext({
       ...f.runtimeContext,
       manifestKey: manifest.manifestKey,
       runtimeArtifact: artifact.reference,
@@ -634,6 +630,7 @@ describe('Claude projection', () => {
     };
     const launch = createClaudeInvocationPlan({
       executable: 'C:/tools/claude.exe',
+      executor: 'host',
       projection: publishedProjection,
       accountRoot: 'C:/native/claude/account-a',
       runtimeContext: { launchKey: 'k' },
@@ -748,7 +745,7 @@ describe('Claude projection', () => {
     const f = await fixture(),
       artifactsRoot = path.join(f.root, 'published');
     const first = await publishClaudeProjection({ ...f, artifactsRoot });
-    const secondContext = createRuntimeContextV1({
+    const secondContext = createRuntimeContext({
       ...f.runtimeContext,
       launchKey: 'd'.repeat(64),
     });
@@ -1173,9 +1170,27 @@ it('renders the validated shared status segment with the compact launch banner',
     `${launchBanner} | ${renderClaudePortSegment(statusSnapshot)}`,
   );
 });
+it.each(['host', 'docker'] as const)(
+  'binds the selected %s executor instead of an inherited ambient executor',
+  (executor) => {
+    const plan = createClaudeInvocationPlan({
+      executable: 'C:/tools/claude.exe',
+      executor,
+      pluginDirectory: 'C:/artifact',
+      accountRoot: 'C:/native/claude/account-a',
+      runtimeContext: { launchKey: 'k' },
+      projectionReference,
+      environment: { MPX_RUNTIME_EXECUTOR: executor === 'host' ? 'docker' : 'host' },
+    });
+
+    expect(plan.env.MPX_RUNTIME_EXECUTOR).toBe(executor);
+  },
+);
+
 it('preserves argv-only launch context and fails closed on legacy namespace conflict', () => {
   const plan = createClaudeInvocationPlan({
     executable: 'C:/tools/claude.exe',
+    executor: 'host',
     pluginDirectory: 'C:/artifact',
     accountRoot: 'C:/native/claude/account-a',
     runtimeContext: { launchKey: 'k' },
@@ -1198,6 +1213,7 @@ it('preserves argv-only launch context and fails closed on legacy namespace conf
 it('exposes only one private aggregate gateway config with strict isolation', () => {
   const plan = createClaudeInvocationPlan({
     executable: 'C:/tools/claude.exe',
+    executor: 'host',
     pluginDirectory: 'C:/artifact',
     accountRoot: 'C:/native/claude/account-a',
     runtimeContext: { launchKey: 'k' },
@@ -1216,6 +1232,7 @@ it('exposes only one private aggregate gateway config with strict isolation', ()
   expect(() =>
     createClaudeInvocationPlan({
       executable: 'C:/tools/claude.exe',
+      executor: 'host',
       pluginDirectory: 'C:/artifact',
       accountRoot: 'C:/native/claude/account-a',
       runtimeContext: { launchKey: 'k' },
@@ -1229,6 +1246,7 @@ it('binds the privately selected Claude account root only in the child environme
   const accountRoot = 'C:/native/claude/account-a';
   const plan = createClaudeInvocationPlan({
     executable: 'C:/tools/claude.exe',
+    executor: 'host',
     pluginDirectory: 'C:/artifact',
     accountRoot,
     runtimeContext: { launchKey: 'k' },
@@ -1240,6 +1258,7 @@ it('binds the privately selected Claude account root only in the child environme
     args: ['--plugin-dir', 'C:/artifact'],
     env: {
       CLAUDE_CONFIG_DIR: accountRoot,
+      MPX_RUNTIME_EXECUTOR: 'host',
       MPX_RUNTIME_CONTEXT: '{"launchKey":"k"}',
       MPX_RUNTIME_PROJECTION_REFERENCE: expect.any(String),
       MPX_ACTIVE_CONTENT_ROOT: 'C:/artifact',
@@ -1250,6 +1269,7 @@ it('binds the privately selected Claude account root only in the child environme
 it('binds the live status snapshot path privately in the Claude child environment', () => {
   const plan = createClaudeInvocationPlan({
     executable: 'C:/tools/claude.exe',
+    executor: 'host',
     pluginDirectory: 'C:/artifact',
     accountRoot: 'C:/native/claude/account-a',
     runtimeContext: { launchKey: 'k' },
@@ -1264,6 +1284,7 @@ it('rejects a missing privately selected Claude account root', () => {
   expect(() =>
     createClaudeInvocationPlan({
       executable: 'C:/tools/claude.exe',
+      executor: 'host',
       pluginDirectory: 'C:/artifact',
       accountRoot: undefined as unknown as string,
       runtimeContext: { launchKey: 'k' },
@@ -1276,6 +1297,7 @@ it('rejects a relative privately selected Claude account root', () => {
   expect(() =>
     createClaudeInvocationPlan({
       executable: 'C:/tools/claude.exe',
+      executor: 'host',
       pluginDirectory: 'C:/artifact',
       accountRoot: 'native/claude/account-a',
       runtimeContext: { launchKey: 'k' },
@@ -1288,6 +1310,7 @@ it('rejects an inherited Claude config root that mismatches the private selectio
   expect(() =>
     createClaudeInvocationPlan({
       executable: 'C:/tools/claude.exe',
+      executor: 'host',
       pluginDirectory: 'C:/artifact',
       accountRoot: 'C:/native/claude/account-a',
       runtimeContext: { launchKey: 'k' },
@@ -1300,6 +1323,7 @@ it('rejects a relative Claude executable without changing argv construction', ()
   expect(() =>
     createClaudeInvocationPlan({
       executable: 'tools/claude.exe',
+      executor: 'host',
       pluginDirectory: 'C:/artifact',
       accountRoot: 'C:/native/claude/account-a',
       runtimeContext: { launchKey: 'k' },
@@ -1435,7 +1459,7 @@ it('binds dev_server to the selected launch/executor and fails closed for Docker
   expect(capability.tool).toMatchObject({ name: 'dev_server', launchKey: 'a'.repeat(64) });
 });
 
-it('projects only the launch-bound RuntimeStatusEnvelopeV1 when supplied', async () => {
+it('projects only the launch-bound RuntimeStatusEnvelope when supplied', async () => {
   const f = await fixture(),
     out = path.join(f.root, 'runtime-status-out');
   const runtimeStatusEnvelope = JSON.parse(

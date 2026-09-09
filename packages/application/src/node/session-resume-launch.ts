@@ -8,12 +8,12 @@ import {
   stableDigest,
   verifyNativeResumeSeed,
   type ResumeDependencies,
-  type ResumePlanV1,
-  type SessionRecordV1,
+  type ResumePlan,
+  type SessionRecord,
   type SessionStore,
 } from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
-import { parseStatusSnapshotV1, type StatusProvider, type StatusSnapshotV1 } from '@mpx/status';
+import { parseStatusSnapshot, type StatusProvider, type StatusSnapshot } from '@mpx/status';
 import {
   SessionResumeLaunchApplicationService,
   type ResumeExecutionRoots,
@@ -21,10 +21,7 @@ import {
 import { resolveLaunchSkills } from '../launch-skill-resolution.js';
 import { createPiAuthAvailabilityProbe, type PiAuthVerifier } from './pi-auth-availability.js';
 import { ExactNativeRootVerifier } from './exact-native-root.js';
-import {
-  collectNodeExecutorEvidence,
-  type LaunchExecutionContext,
-} from './launch-execution-runtime.js';
+import { executorAdapter, type LaunchExecutionContext } from './launch-execution-runtime.js';
 import { directProcessTty } from './launch-execution-runtime.js';
 import { executeResolvedNodeLaunch } from './launch-execution.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
@@ -45,7 +42,7 @@ export interface NodeSessionResumeLaunchInput {
   status(): StatusProvider;
   executionRoots(): Promise<ResumeExecutionRoots>;
   readonly discoverProjectConfig?: typeof discoverProjectConfig;
-  readonly resumeDependencies?: (record: SessionRecordV1) => Promise<ResumeDependencies>;
+  readonly resumeDependencies?: (record: SessionRecord) => Promise<ResumeDependencies>;
   readonly readUserConfig: () => Promise<UserConfig>;
 }
 
@@ -65,8 +62,8 @@ function piAuth(input: NodeSessionResumeLaunchInput, cwd: string): PiAuthVerifie
   });
 }
 
-function emptyStatus(cwd: string, repositoryId: string): StatusSnapshotV1 {
-  return parseStatusSnapshotV1({
+function emptyStatus(cwd: string, repositoryId: string): StatusSnapshot {
+  return parseStatusSnapshot({
     schemaVersion: 1,
     project: { id: repositoryId, cwd },
     worktree: { id: null, path: null, role: null, branch: null },
@@ -146,16 +143,21 @@ export function createNodeSessionResumeLaunchApplicationService(
     isAbsolutePath: path.isAbsolute,
     discoverProjectConfig: input.discoverProjectConfig ?? discoverProjectConfig,
     canonicalRoot: input.catalogRoot,
-    rebuildSkills: async ({ plan, userConfig, project, repositoryId, canonicalRoot }) =>
+    rebuildSkills: async ({
+      plan,
+      userConfig: _userConfig,
+      project,
+      repositoryId,
+      canonicalRoot,
+      selection,
+    }) =>
       resolveLaunchSkills(
         {
-          userConfig,
           ...(project ? { project } : {}),
           repositoryId,
           canonicalRoot,
           identity: plan.identity.name,
-          skillPolicy: plan.launch.skillPolicy,
-          contentScope: plan.launch.contentScope,
+          selection: selection.selection,
           runtime: plan.runtime,
         },
         { inventoryCanonical, inventoryProjectSkills },
@@ -168,9 +170,9 @@ export function createNodeSessionResumeLaunchApplicationService(
       selection: _selection,
     }) => {
       const resumeContext = context;
-      const evidence = await collectNodeExecutorEvidence(resumeContext, plan.launch.executor.kind);
+      const adapter = executorAdapter(resumeContext, plan.launch.executor.kind);
       return {
-        evidence,
+        assertReady: () => adapter.assertReady(),
         execute: async (execution) => {
           const nativeBinding = execution.nativeBinding as Awaited<
             ReturnType<SessionStore['readNativeBinding']>
@@ -183,14 +185,14 @@ export function createNodeSessionResumeLaunchApplicationService(
                   launchLifecycleBridge: new ProductionSessionLifecycleBridge({ store }),
                 };
           const statusSnapshot = project
-            ? async (): Promise<StatusSnapshotV1> =>
+            ? async (): Promise<StatusSnapshot> =>
                 input.status().snapshot({
                   cwd: plan.cwd,
                   projectRoot: project.root,
                   config: project.config,
                   configHash: sha256Canonical(project.config as unknown as JsonValue),
                 })
-            : async (): Promise<StatusSnapshotV1> => emptyStatus(plan.cwd, repositoryId);
+            : async (): Promise<StatusSnapshot> => emptyStatus(plan.cwd, repositoryId);
           return executeResolvedNodeLaunch({
             descriptor: execution.descriptor,
             manifest: execution.manifest,
@@ -225,7 +227,7 @@ export function createNodeSessionResumeLaunchApplicationService(
       projectId,
       repositoryId,
       skills,
-      evidence,
+      project,
       selectedConfigDigest,
     }) =>
       resolveLaunch({
@@ -234,12 +236,9 @@ export function createNodeSessionResumeLaunchApplicationService(
         runtime: plan.runtime,
         identity: plan.identity.name,
         mode: plan.launch.mode,
-        skillPolicy: plan.launch.skillPolicy,
-        contentScope: plan.launch.contentScope,
         executor: plan.launch.executor.kind,
         workspace: plan.launch.workspace as 'clone' | 'host-worktree' | 'direct',
         networkPolicy: plan.launch.networkPolicy,
-        grants: plan.launch.grants.map((grant) => `${grant.access}:${grant.resource}`),
         ...(plan.launch.executor.kind === 'host'
           ? {
               reason: 'confirmed session resume',
@@ -259,12 +258,10 @@ export function createNodeSessionResumeLaunchApplicationService(
                   projectId: plan.projectId,
                   repositoryId: plan.repositoryId,
                   mode: plan.launch.mode,
-                  skillPolicy: plan.launch.skillPolicy,
-                  contentScope: plan.launch.contentScope,
+                  selection: plan.launch.selection,
                   executor: plan.launch.executor,
                   workspace: plan.launch.workspace,
                   networkPolicy: plan.launch.networkPolicy,
-                  grants: plan.launch.grants,
                   runtimeArtifactKey: skills.artifact.reference.artifactKey,
                   manifestKey: skills.manifest.manifestKey,
                   selectedConfigDigest,
@@ -275,15 +272,9 @@ export function createNodeSessionResumeLaunchApplicationService(
         skillArtifact: skills.skillArtifact,
         selectedNativeRuntimeRoot:
           userConfig.identities[plan.identity.name]!.runtimeRoots[plan.runtime],
+        ...(project ? { projectConfig: project.config } : {}),
         ...(projectId ? { projectId } : {}),
         repositoryId,
-        dockerAvailability:
-          evidence.status === 'verified'
-            ? 'available'
-            : evidence.status === 'unavailable'
-              ? 'unavailable'
-              : 'unverified',
-        executorVerification: evidence,
         policyInputs: {
           schemaVersion: 1,
           manifestKey: skills.manifest.manifestKey,
@@ -298,7 +289,7 @@ export function createNodeSessionResumeLaunchApplicationService(
 
 export async function executeNodeSessionResumeLaunch(
   input: NodeSessionResumeLaunchInput,
-  plan: ResumePlanV1,
+  plan: ResumePlan,
   userConfig: UserConfig,
   authority: { readonly approveHost?: boolean } = {},
 ): Promise<unknown> {

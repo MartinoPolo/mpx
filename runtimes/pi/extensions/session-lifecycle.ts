@@ -1,11 +1,12 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import {
-  createSessionLifecycleEventV1,
-  parseNativeSessionRefV1,
-  parseRuntimeContextV1,
-  validateSessionLifecycleBindingV1,
-  type SessionLifecycleEventV1,
+  createSessionLifecycleEvent,
+  parseNativeSessionRef,
+  parseRuntimeContext,
+  validateSessionLifecycleBinding,
+  type SessionLifecycleEvent,
 } from '@mpx/runtime-contracts';
+import { SESSION_STORE_VERSION } from '@mpx/sessions';
 import { createHash, randomUUID } from 'node:crypto';
 import { link, lstat, open, readdir, realpath, rm, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,7 +18,7 @@ const writerKey = Symbol.for('@mpx/session-lifecycle/writers');
 type Environment = Readonly<Record<string, string | undefined>>;
 
 type Snapshot = Pick<
-  SessionLifecycleEventV1,
+  SessionLifecycleEvent,
   'nativeSessionId' | 'nativeSessionRef' | 'cwd' | 'title' | 'model' | 'effort'
 >;
 
@@ -43,7 +44,7 @@ interface Writer {
   active: boolean;
   retired: boolean;
   replacementWarned: boolean;
-  pending: SessionLifecycleEventV1[];
+  pending: SessionLifecycleEvent[];
 }
 
 const processState = globalThis as typeof globalThis & { [writerKey]?: Map<string, Writer> };
@@ -132,7 +133,11 @@ async function withRegularFile<T>(
   }
 }
 
-async function readPrivateRecord(file: string, keys: string): Promise<Record<string, unknown>> {
+async function readPrivateRecord(
+  file: string,
+  keys: string,
+  schemaVersion = 1,
+): Promise<Record<string, unknown>> {
   return withRegularFile(file, async (handle) => {
     const information = await handle.stat();
     if (!information.isFile() || information.size > maximumEventBytes) {
@@ -148,7 +153,7 @@ async function readPrivateRecord(file: string, keys: string): Promise<Record<str
       !value ||
       typeof value !== 'object' ||
       Array.isArray(value) ||
-      (value as { schemaVersion?: unknown }).schemaVersion !== 1 ||
+      (value as { schemaVersion?: unknown }).schemaVersion !== schemaVersion ||
       Object.keys(value).sort().join('\0') !== keys
     ) {
       reject('invalid private binding record');
@@ -218,7 +223,7 @@ async function processFingerprint(pi: ExtensionAPI): Promise<string> {
   return fingerprint;
 }
 
-function serializeEvent(event: SessionLifecycleEventV1): string {
+function serializeEvent(event: SessionLifecycleEvent): string {
   const content = `${JSON.stringify(event)}\n`;
   if (Buffer.byteLength(content) > maximumEventBytes) {
     reject('event exceeds its file bound');
@@ -229,7 +234,7 @@ function serializeEvent(event: SessionLifecycleEventV1): string {
 async function publish(
   directory: string,
   binding: PathIdentity[],
-  event: SessionLifecycleEventV1,
+  event: SessionLifecycleEvent,
 ): Promise<void> {
   const content = serializeEvent(event);
   await assertPathBinding(binding);
@@ -299,7 +304,7 @@ export default function sessionLifecycle(
       path.basename(directory) !== encodedBinding ||
       path.basename(path.dirname(directory)) !== 'lifecycle-events' ||
       path.basename(privateDirectory) !== 'private' ||
-      path.basename(path.dirname(privateDirectory)) !== 'v1' ||
+      path.basename(path.dirname(privateDirectory)) !== SESSION_STORE_VERSION ||
       path.basename(path.dirname(path.dirname(privateDirectory))) !== 'sessions' ||
       configuredDirectory.replaceAll('\\', '/') !== directory.replaceAll('\\', '/')
     ) {
@@ -310,7 +315,7 @@ export default function sessionLifecycle(
       directory,
       bindingFile: path.join(privateDirectory, 'lifecycle-bindings', `${encodedBinding}.json`),
       nativeRoot: path.resolve(environment.PI_CODING_AGENT_DIR),
-      context: parseRuntimeContextV1(JSON.parse(environment.MPX_RUNTIME_CONTEXT)),
+      context: parseRuntimeContext(JSON.parse(environment.MPX_RUNTIME_CONTEXT)),
     };
   };
   let writer: Writer | undefined;
@@ -324,7 +329,7 @@ export default function sessionLifecycle(
     }
     const resolved = path.resolve(context.cwd, file);
     // Native replacement may leave the launch root, but malformed references still fail validation.
-    parseNativeSessionRefV1({
+    parseNativeSessionRef({
       kind: 'root-relative-file',
       value: path.relative(path.parse(resolved).root, resolved).replaceAll('\\', '/'),
     });
@@ -343,7 +348,7 @@ export default function sessionLifecycle(
     }
     return {
       nativeSessionId,
-      nativeSessionRef: parseNativeSessionRefV1({
+      nativeSessionRef: parseNativeSessionRef({
         kind: 'root-relative-file',
         value: path.relative(configurationValue.nativeRoot, file).replaceAll('\\', '/'),
       }),
@@ -354,7 +359,7 @@ export default function sessionLifecycle(
     };
   }
 
-  function enqueue(type: SessionLifecycleEventV1['type'], snapshotValue?: Snapshot): Promise<void> {
+  function enqueue(type: SessionLifecycleEvent['type'], snapshotValue?: Snapshot): Promise<void> {
     if (!writer || !configurationValue) {
       return Promise.resolve();
     }
@@ -371,7 +376,7 @@ export default function sessionLifecycle(
         reject('launch binding cannot own a replacement session');
       }
       const timestamp = new Date(Math.max(Date.now(), Date.parse(owner.timestamp))).toISOString();
-      const event = createSessionLifecycleEventV1({
+      const event = createSessionLifecycleEvent({
         ...current,
         eventId: randomUUID(),
         bindingId,
@@ -463,8 +468,9 @@ export default function sessionLifecycle(
     const recorded = await readPrivateRecord(
       bindingFile,
       'binding\0launch\0location\0nativeBindingRef\0nativeSessionRef\0schemaVersion',
+      2,
     );
-    const binding = validateSessionLifecycleBindingV1({
+    const binding = validateSessionLifecycleBinding({
       binding: recorded.binding,
       context: configurationValue.context,
       runtime: 'pi',
@@ -509,7 +515,7 @@ export default function sessionLifecycle(
     }
     const current = snapshot(context);
     if (recorded.nativeSessionRef !== null) {
-      const reference = parseNativeSessionRefV1(recorded.nativeSessionRef);
+      const reference = parseNativeSessionRef(recorded.nativeSessionRef);
       if (
         reference.kind !== current.nativeSessionRef.kind ||
         reference.value !== current.nativeSessionRef.value
@@ -526,7 +532,7 @@ export default function sessionLifecycle(
       const startFingerprint = await processFingerprint(pi);
       await assertPathBinding(directoryBinding);
       await assertPathBinding(nativeRootBinding);
-      const receipt = createSessionLifecycleEventV1({
+      const receipt = createSessionLifecycleEvent({
         ...current,
         eventId: randomUUID(),
         bindingId,

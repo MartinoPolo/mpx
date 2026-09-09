@@ -13,7 +13,7 @@ import {
   type CurrentInstallationProbe,
   PiLegacyDetachService,
   type InstallIntentBuilder,
-  type InstallIntentRequestV1,
+  type InstallIntentRequest,
   type InstallOrchestrator,
   type PiLegacyDetachConfig,
 } from '@mpx/installer';
@@ -283,7 +283,7 @@ export class NodeSetupRequestFactory implements SetupRequestFactory {
     return this.#config ?? invalid('SETUP_CONFIG_INVALID', 'Setup configuration is unavailable.');
   }
 
-  async create(): Promise<InstallIntentRequestV1> {
+  async create(): Promise<InstallIntentRequest> {
     const appData = absoluteEnvironment(this.environment, 'APPDATA');
     absoluteEnvironment(this.environment, 'LOCALAPPDATA');
     absoluteEnvironment(this.environment, 'MPX_PROJECTS');

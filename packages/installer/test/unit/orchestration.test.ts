@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type InstallIntentV1, type InstallOperationV1 } from '../../src/immutable-core.js';
+import { type InstallIntent, type InstallOperation } from '../../src/immutable-core.js';
 import {
   MemoryTransactionStore,
   installerDigest,
@@ -19,18 +19,19 @@ class FixtureAdapter implements InstallerOperationAdapter {
   applyCalls: string[] = [];
   statusCalls: string[] = [];
   restoreFailure: Error | undefined;
-  constructor(public automatic: readonly InstallOperationV1[]) {}
+  constructor(public automatic: readonly InstallOperation[]) {}
   async operations() {
     this.statusCalls.push('operations');
     return { automatic: this.automatic };
   }
-  async observe(operation: InstallOperationV1) {
+  async authorizeOwnedOperations() {}
+  async observe(operation: InstallOperation) {
     return this.values.get(operation.target) ?? null;
   }
-  async capture(operation: InstallOperationV1) {
+  async capture(operation: InstallOperation) {
     return this.values.get(operation.target) ?? null;
   }
-  async apply(operation: InstallOperationV1) {
+  async apply(operation: InstallOperation) {
     this.applyCalls.push(operation.id);
     if (operation.action === 'remove') {
       this.values.delete(operation.target);
@@ -38,7 +39,7 @@ class FixtureAdapter implements InstallerOperationAdapter {
       this.values.set(operation.target, operation.desiredDigest!);
     }
   }
-  async restore(operation: InstallOperationV1, snapshot: string | null) {
+  async restore(operation: InstallOperation, snapshot: string | null) {
     if (this.restoreFailure) {
       throw this.restoreFailure;
     }
@@ -56,7 +57,7 @@ async function fixture() {
   await writeFile(path.join(repositoryRoot, 'dist', 'mpx.js'), 'current-release');
   const builder = new NodeCurrentReleaseBuilder({ repositoryRoot, appsRoot, assetPaths: ['dist'] });
   const manifest = await builder.build();
-  const intent: InstallIntentV1 = {
+  const intent: InstallIntent = {
     schemaVersion: 1,
     kind: 'install-intent',
     releaseKey: manifest.releaseKey,
@@ -65,7 +66,7 @@ async function fixture() {
   };
   return { repositoryRoot, appsRoot, builder, manifest, intent };
 }
-const operation = (id: string, target = id): InstallOperationV1 => ({
+const operation = (id: string, target = id): InstallOperation => ({
   id,
   adapter: 'fixture',
   action: 'ensure',
@@ -73,7 +74,7 @@ const operation = (id: string, target = id): InstallOperationV1 => ({
   desiredDigest: installerDigest(id),
 });
 
-function interruptedTransaction(item: InstallOperationV1): StoredTransaction {
+function interruptedTransaction(item: InstallOperation): StoredTransaction {
   const snapshot = {
     schemaVersion: 1 as const,
     kind: 'machine-snapshot' as const,
@@ -163,42 +164,6 @@ describe('Phase I install orchestration', () => {
     await expect(
       readFile(path.join(f.appsRoot, 'mpx', 'releases', f.manifest.releaseKey, 'dist', 'mpx.js')),
     ).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it('migrates a legacy v1 receipt through its confirmation-bound plan and apply flow', async () => {
-    const f = await fixture(),
-      store = new MemoryTransactionStore(),
-      owned = operation('10-owned', 'owned-target'),
-      adapter = new FixtureAdapter([owned]),
-      orchestrator = new InstallOrchestrator({ adapter, store, releases: f.builder });
-    adapter.values.set(owned.target, owned.desiredDigest!);
-    await f.builder.publish(f.intent.releaseKey);
-    await store.writeLegacyReceiptForMigration({
-      schemaVersion: 1,
-      kind: 'ownership-receipt',
-      releaseKey: f.manifest.releaseKey,
-      convergenceHash: f.manifest.convergenceHash,
-      files: f.manifest.files,
-      operations: [owned],
-      installedAt: '2025-01-01T00:00:00.000Z',
-    });
-
-    const plan = await orchestrator.plan(f.intent);
-    expect(plan.classifications?.confirmationRequired).toContainEqual(
-      expect.objectContaining({
-        id: 'ownership-receipt-v1-migration',
-        verifierRef: 'installer:ownership-receipt-v2',
-      }),
-    );
-    const receipt = await orchestrator.apply(plan, plan.confirmationDigest);
-
-    expect(receipt).toMatchObject({
-      schemaVersion: 2,
-      releaseKey: f.intent.releaseKey,
-      operations: [owned],
-      installedAt: '2025-01-01T00:00:00.000Z',
-    });
-    expect(await store.readLegacyReceiptForMigration()).toBeUndefined();
   });
 
   it('upgrades a healthy prior-owned shared target to the current immutable release', async () => {

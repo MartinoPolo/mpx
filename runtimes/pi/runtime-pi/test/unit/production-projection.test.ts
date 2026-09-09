@@ -100,6 +100,7 @@ it('publishes managed instructions and project context in broad-to-specific orde
     await expect(
       planPiInvocation({
         executable: path.join(artifactsRoot, 'pi.cmd'),
+        executor: 'host',
         accountRoot: artifactsRoot,
         cwd,
         runtimeContext: input.context,
@@ -132,6 +133,7 @@ it('publishes managed instructions and project context in broad-to-specific orde
     await expect(
       planPiInvocation({
         executable: path.join(artifactsRoot, 'pi.cmd'),
+        executor: 'host',
         accountRoot: artifactsRoot,
         cwd,
         runtimeContext: input.context,

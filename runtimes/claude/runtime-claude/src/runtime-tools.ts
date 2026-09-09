@@ -10,8 +10,8 @@ import {
   type RuntimeToolUnsupportedDiagnostic,
 } from '@mpx/runtime-tools';
 import {
-  parseRuntimeCapabilityManifestV1,
-  type RuntimeCapabilityManifestV1,
+  parseRuntimeCapabilityManifest,
+  type RuntimeCapabilityManifest,
 } from '@mpx/runtime-contracts';
 import type { DevServerToolAdapter } from '@mpx/dev-services';
 
@@ -21,7 +21,7 @@ export interface ClaudeRuntimeToolRegistrationInput {
     execute: (input: any) => Promise<unknown>,
   ) => void;
   readonly publish: (event: Readonly<Record<string, unknown>>) => void;
-  readonly capability: RuntimeCapabilityManifestV1;
+  readonly capability: RuntimeCapabilityManifest;
   readonly executor: GatewayExecutor;
   readonly mcpRoutes: Readonly<Record<string, McpLaunchDescriptor>>;
   readonly providers: readonly ProviderAdapter[];
@@ -36,7 +36,7 @@ function configured(name: RuntimeToolName, input: ClaudeRuntimeToolRegistrationI
 }
 /** Binds Claude model tools to the same aggregate gateway used by Pi; raw routes remain private launch material. */
 export function registerClaudeRuntimeTools(input: ClaudeRuntimeToolRegistrationInput) {
-  const manifest = parseRuntimeCapabilityManifestV1(input.capability);
+  const manifest = parseRuntimeCapabilityManifest(input.capability);
   if (manifest.runtime !== 'claude') {
     throw new Error(
       'RUNTIME_MISMATCH: Claude tool projection requires a Claude capability manifest',

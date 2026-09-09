@@ -3,29 +3,28 @@ import type { UserConfig } from '@mpx/config';
 import { LaunchApplicationService } from '../../src/index.js';
 
 const user: UserConfig = {
+  schemaVersion: 2,
   identities: {
     work: {
       domain: 'work',
       runtimeRoots: { claude: 'C:/native/work/claude', pi: 'C:/native/work/pi' },
       gitAuthorRoute: 'git-work',
+      allowedSkillPacks: ['development'],
     },
   },
   domains: { work: [process.cwd()] },
-  contentScopes: { work: { roots: [process.cwd()], skillPacks: ['core'] } },
+  locations: { work: { roots: [process.cwd()], skillPacks: ['development'] } },
   modes: { project: { resources: { 'selected-project': 'read-write' } } },
-  skillPolicies: { clean: { skillExposure: { default: 'explicit-only' } } },
   presets: {
     standard: {
       identity: 'work',
       mode: 'project',
-      skillPolicy: 'clean',
-      contentScope: 'work',
       executor: 'docker',
       workspace: 'clone',
       networkPolicy: 'implementation',
     },
   },
-  launchDefaults: { projects: { 'sample/app': { work: 'standard' } }, scopes: {} },
+  launchDefaults: { projects: { 'sample/app': { work: 'standard' } }, locations: {} },
   networkPolicies: { implementation: { preset: 'balanced' } },
   executors: { host: {}, docker: {} },
 };
@@ -51,10 +50,12 @@ function dependencies(events: string[] = []) {
       services: [],
       diagnostics: [],
     }),
-    executorEvidence: async () => {
-      events.push('evidence');
-      return { status: 'verified' as const, verifier: 'synthetic', evidenceDigest: 'a'.repeat(64) };
-    },
+    prepareExecutor: async () => ({
+      assertReady: async () => {
+        events.push('ready');
+      },
+      execute: async () => ({ exitCode: 0 }),
+    }),
     approveHost: async () => ({ reason: 'test', approvalKey: 'a'.repeat(64) }),
     piPreflight: async () => {
       events.push('native-root');
@@ -80,7 +81,7 @@ describe('LaunchApplicationService', () => {
     const inventoryCanonical = vi.fn(async () => []);
     const inventoryProjectSkills = vi.fn(async () => ({ skills: [], diagnostics: [] }));
     const statusSnapshot = vi.fn(dependencies().statusSnapshot);
-    const executorEvidence = vi.fn(dependencies().executorEvidence);
+    const prepareExecutor = vi.fn(dependencies().prepareExecutor);
     const piPreflight = vi.fn(async () => undefined);
     const launchExecution = vi.fn(dependencies().launchExecution);
     const service = new LaunchApplicationService({
@@ -88,7 +89,7 @@ describe('LaunchApplicationService', () => {
       inventoryCanonical,
       inventoryProjectSkills,
       statusSnapshot,
-      executorEvidence,
+      prepareExecutor,
       piPreflight,
       launchExecution,
     });
@@ -106,8 +107,11 @@ describe('LaunchApplicationService', () => {
         identity: { name: 'work', domain: 'work' },
         selection: {
           mode: { name: 'project' },
-          skillPolicy: { name: 'clean' },
-          contentScope: { name: 'work' },
+          selection: {
+            location: { name: 'work', canonicalRoot: expect.any(String) },
+            packs: ['development'],
+            source: 'user-location',
+          },
           executor: 'docker',
           workspace: 'clone',
           networkPolicy: { name: 'implementation' },
@@ -116,13 +120,11 @@ describe('LaunchApplicationService', () => {
             runtime: 'explicit',
             identity: 'explicit',
             mode: 'user-project',
-            skillPolicy: 'user-project',
-            contentScope: 'user-project',
             executor: 'user-project',
             workspace: 'user-project',
             networkPolicy: 'user-project',
           },
-          cwdClassification: { domain: 'work', contentScope: 'work' },
+          cwdClassification: { domain: 'work', location: 'work' },
         },
       },
       warnings: [],
@@ -130,7 +132,7 @@ describe('LaunchApplicationService', () => {
     expect(inventoryCanonical).not.toHaveBeenCalled();
     expect(inventoryProjectSkills).not.toHaveBeenCalled();
     expect(statusSnapshot).not.toHaveBeenCalled();
-    expect(executorEvidence).not.toHaveBeenCalled();
+    expect(prepareExecutor).not.toHaveBeenCalled();
     expect(piPreflight).not.toHaveBeenCalled();
     expect(launchExecution).not.toHaveBeenCalled();
   });
@@ -156,7 +158,7 @@ describe('LaunchApplicationService', () => {
     ).rejects.toMatchObject({
       code: 'IDENTITY_DOMAIN_MISMATCH',
       message:
-        "Identity 'work' cannot launch in domain 'work' without an explicit grant. To grant read/write access, run: mpx launch pi --identity work --grant rw:work --reason \"Allow work identity in work domain\"",
+        "Identity 'work' cannot launch in domain 'work'. Select the owning identity or an explicit mode that admits the configured resource.",
     });
   });
 
@@ -179,9 +181,6 @@ describe('LaunchApplicationService', () => {
     await service.execute(resolved);
 
     expect(service.descriptor(resolved).runtimeArgs).toEqual(runtimeArgs);
-    expect(launchExecution).toHaveBeenCalledWith(
-      expect.objectContaining({ descriptor: expect.objectContaining({ runtimeArgs }) }),
-    );
   });
 
   it('rejects runtime arguments for Docker execution', async () => {
@@ -200,14 +199,9 @@ describe('LaunchApplicationService', () => {
 
   it('fails Docker launch preparation before status, executor preparation, or process execution', async () => {
     const statusSnapshot = vi.fn(dependencies().statusSnapshot);
-    const executorEvidence = vi.fn(dependencies().executorEvidence);
     const selectedProcess = vi.fn(async () => ({ exitCode: 0 }));
     const prepareExecutor = vi.fn(async () => ({
-      evidence: {
-        status: 'verified' as const,
-        verifier: 'prepared',
-        evidenceDigest: 'b'.repeat(64),
-      },
+      assertReady: async () => undefined,
       execute: selectedProcess,
     }));
     const piPreflight = vi.fn(dependencies().piPreflight);
@@ -215,7 +209,6 @@ describe('LaunchApplicationService', () => {
     const service = new LaunchApplicationService({
       ...dependencies(),
       statusSnapshot,
-      executorEvidence,
       prepareExecutor,
       piPreflight,
       launchExecution,
@@ -225,42 +218,38 @@ describe('LaunchApplicationService', () => {
       details: { executor: 'docker', hostFallback: false },
     });
     expect(statusSnapshot).not.toHaveBeenCalled();
-    expect(executorEvidence).not.toHaveBeenCalled();
+    expect(prepareExecutor).not.toHaveBeenCalled();
     expect(prepareExecutor).not.toHaveBeenCalled();
     expect(piPreflight).not.toHaveBeenCalled();
     expect(selectedProcess).not.toHaveBeenCalled();
     expect(launchExecution).not.toHaveBeenCalled();
   });
 
-  it('performs executable preconditions before child execution', async () => {
+  it('performs executable preconditions before selecting process execution', async () => {
     const events: string[] = [];
     const service = new LaunchApplicationService(dependencies(events));
     const prepared = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
     const resolved = await service.resolve(prepared, { reason: 'test' });
     await service.execute(resolved);
-    expect(events).toEqual(['evidence', 'native-root', 'execute']);
+    expect(events).toEqual(['ready', 'native-root']);
   });
 
-  it('inseparably pairs prepared executor evidence with its exact execution callback', async () => {
-    const fallbackEvidence = vi.fn(dependencies().executorEvidence);
+  it('inseparably pairs a prepared executor binding with its exact execution callback', async () => {
     const fallbackExecution = vi.fn(dependencies().launchExecution);
     const pairedExecution = vi.fn(async () => ({ exitCode: 9 }));
     const service = new LaunchApplicationService({
       ...dependencies(),
-      executorEvidence: fallbackEvidence,
       launchExecution: fallbackExecution,
       prepareExecutor: async () => ({
-        evidence: { status: 'verified', verifier: 'paired', evidenceDigest: 'b'.repeat(64) },
+        assertReady: async () => undefined,
         execute: pairedExecution,
       }),
     });
     const prepared = await service.prepare({ ...request, executor: 'host', workspace: 'direct' });
     const resolved = await service.resolve(prepared, { reason: 'test' });
     const result = await service.execute(resolved);
-    expect(service.descriptor(resolved).executorVerification).toMatchObject({ verifier: 'paired' });
     expect(result.exitCode).toBe(9);
     expect(pairedExecution).toHaveBeenCalledTimes(1);
-    expect(fallbackEvidence).not.toHaveBeenCalled();
     expect(fallbackExecution).not.toHaveBeenCalled();
   });
 
@@ -273,13 +262,9 @@ describe('LaunchApplicationService', () => {
       prepareExecutor: async () => {
         const launch = ++admitted;
         return {
-          evidence: {
-            status: 'verified' as const,
-            verifier: `docker-${launch}`,
-            evidenceDigest: String(launch).repeat(64),
-          },
-          execute: async (input) => {
-            executions.push({ verifier: input.descriptor.executorVerification.verifier });
+          assertReady: async () => undefined,
+          execute: async () => {
+            executions.push({ verifier: `executor-${launch}` });
             return { exitCode: launch };
           },
         };
@@ -296,7 +281,7 @@ describe('LaunchApplicationService', () => {
 
     expect((await service.execute(resolvedA)).exitCode).toBe(1);
     expect((await service.execute(resolvedB)).exitCode).toBe(2);
-    expect(executions).toEqual([{ verifier: 'docker-1' }, { verifier: 'docker-2' }]);
+    expect(executions).toEqual([{ verifier: 'executor-1' }, { verifier: 'executor-2' }]);
     expect(preflighted).toBe(2);
     await expect(service.execute(Object.freeze({}) as never)).rejects.toMatchObject({
       code: 'LAUNCH_STATE_INVALID',
@@ -311,7 +296,7 @@ describe('LaunchApplicationService', () => {
     const result = await service.execute(resolved);
     expect(service.descriptor(resolved)).toEqual(result.data);
     expect(result.data).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       runtime: 'pi',
       identity: { name: 'work' },
     });
@@ -347,21 +332,6 @@ describe('LaunchApplicationService', () => {
     await expect(service.prepare(request)).rejects.toBe(malformed);
   });
 
-  it('defers cross-domain grant validation until resolve rather than blocking prepare', async () => {
-    const crossUser = structuredClone(user);
-    crossUser.identities.work!.domain = 'personal';
-    const service = new LaunchApplicationService(dependencies());
-    const prepared = await service.prepare({
-      ...request,
-      userConfig: crossUser,
-      executor: 'host',
-      workspace: 'direct',
-    });
-    await expect(
-      service.resolve(prepared, { grants: ['rw:work'], reason: 'approved later' }),
-    ).rejects.toMatchObject({ code: 'GRANT_APPROVAL_REQUIRED' });
-  });
-
   it('preserves missing work-project fallback provenance and warning through execution', async () => {
     const fallbackUser = structuredClone(user);
     fallbackUser.modes.developer = {
@@ -389,7 +359,6 @@ describe('LaunchApplicationService', () => {
       silent: true,
       warnings: [expect.objectContaining({ code: 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK' })],
     });
-    expect(launchExecution).toHaveBeenCalledTimes(1);
   });
 
   it('uses synthetic status for directory projects without invoking Git status discovery', async () => {

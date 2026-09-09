@@ -2,8 +2,8 @@ import path from 'node:path';
 import {
   canonicalJson,
   installerDigest,
-  parseReleaseManifestV1,
-  type ReleaseManifestV1,
+  parseReleaseManifest,
+  type ReleaseManifest,
 } from './release-manifest.js';
 
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -28,16 +28,16 @@ export function resolvePiNativePackageSource(releaseRoot: string, packageRoot: u
   fail('PI_SETTINGS_PATH_INVALID', 'Pi release root must be absolute.');
 }
 
-export interface PiNativePackageFileV1 {
+export interface PiNativePackageFile {
   readonly path: string;
   readonly sha256: string;
   readonly bytes: number;
 }
-export interface PiNativePackageRegistrationV1 {
+export interface PiNativePackageRegistration {
   readonly name: typeof PI_NATIVE_PACKAGE_NAME;
   readonly packageRoot: typeof PI_NATIVE_PACKAGE_ROOT;
   readonly artifactRootDigest: string;
-  readonly files: readonly PiNativePackageFileV1[];
+  readonly files: readonly PiNativePackageFile[];
 }
 
 export class PiNativePackageError extends Error {
@@ -83,7 +83,7 @@ function safeRelative(value: unknown): value is string {
     .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
 }
 
-export function parsePiNativePackageRegistration(value: unknown): PiNativePackageRegistrationV1 {
+export function parsePiNativePackageRegistration(value: unknown): PiNativePackageRegistration {
   const record = exact(
     value,
     ['name', 'packageRoot', 'artifactRootDigest', 'files'],
@@ -99,7 +99,7 @@ export function parsePiNativePackageRegistration(value: unknown): PiNativePackag
   ) {
     fail('PI_NATIVE_SCHEMA_INVALID', 'Pi native package header is invalid.');
   }
-  const files = record.files.map((value): PiNativePackageFileV1 => {
+  const files = record.files.map((value): PiNativePackageFile => {
     const file = exact(value, ['path', 'sha256', 'bytes'], 'Pi native package file');
     if (
       !safeRelative(file.path) ||
@@ -136,9 +136,9 @@ export function parsePiNativePackageRegistration(value: unknown): PiNativePackag
 }
 
 export function createPiNativePackageRegistration(
-  releaseValue: ReleaseManifestV1,
-): PiNativePackageRegistrationV1 {
-  const release = parseReleaseManifestV1(releaseValue);
+  releaseValue: ReleaseManifest,
+): PiNativePackageRegistration {
+  const release = parseReleaseManifest(releaseValue);
   const prefix = `${PI_NATIVE_PACKAGE_ROOT}/`;
   const files = release.files
     .filter((file) => file.path.startsWith(prefix))
@@ -156,7 +156,7 @@ export function createPiNativePackageRegistration(
 }
 
 export type PiSettings = Readonly<Record<string, unknown>>;
-export interface PiPackageSettingsPlanV1 {
+export interface PiPackageSettingsPlan {
   readonly desiredSource: string;
   readonly packagesBefore: readonly unknown[];
   readonly packagesAfter: readonly unknown[];
@@ -237,7 +237,7 @@ function normalizeAbsolute(value: string): string {
 function validateDesired(
   releaseRoot: string,
   desired: string,
-  registration: PiNativePackageRegistrationV1,
+  registration: PiNativePackageRegistration,
 ): void {
   parsePiNativePackageRegistration(registration);
   const windows = windowsPath(releaseRoot);
@@ -278,9 +278,9 @@ export function planPiNativePackageSettings(input: {
   readonly settings: unknown | undefined;
   readonly releaseRoot: string;
   readonly desiredSource: string;
-  readonly nativePackage: PiNativePackageRegistrationV1;
+  readonly nativePackage: PiNativePackageRegistration;
   readonly priorOwnedSources: readonly string[];
-}): PiPackageSettingsPlanV1 {
+}): PiPackageSettingsPlan {
   validateDesired(input.releaseRoot, input.desiredSource, input.nativePackage);
   const settings = parsePiSettings(input.settings);
   const owned = trustedPriorOwnedSources(input.priorOwnedSources);
@@ -345,7 +345,7 @@ function exactPlanRecord(
   return record;
 }
 
-export function parsePiPackageSettingsPlanV1(value: unknown): PiPackageSettingsPlanV1 {
+export function parsePiPackageSettingsPlan(value: unknown): PiPackageSettingsPlan {
   try {
     const record = exactPlanRecord(
       value,
@@ -463,7 +463,7 @@ export function parsePiPackageSettingsPlanV1(value: unknown): PiPackageSettingsP
     ) {
       fail('PI_SETTINGS_DRIFT', 'Pi settings plan rollback evidence is inconsistent.');
     }
-    return { ...base, planDigest: record.planDigest } as PiPackageSettingsPlanV1;
+    return { ...base, planDigest: record.planDigest } as PiPackageSettingsPlan;
   } catch (failure) {
     if (failure instanceof PiNativePackageError) {
       throw failure;
@@ -484,7 +484,7 @@ export function invertPiNativePackageSettings(input: {
   readonly afterDigest: string;
 } {
   const settings = parsePiSettings(input.settings),
-    plan = parsePiPackageSettingsPlanV1(input.plan);
+    plan = parsePiPackageSettingsPlan(input.plan);
   const trustedSources = trustedPriorOwnedSources(input.priorOwnedSources);
   const currentRegistrationSource = normalizeAbsolute(plan.desiredSource);
   if (
@@ -499,7 +499,7 @@ export function invertPiNativePackageSettings(input: {
   const authorizedSources = new Set(trustedSources);
   authorizedSources.add(currentRegistrationSource);
   let unownedBefore = 0;
-  const expectedPriorOwnedEntries: PiPackageSettingsPlanV1['priorOwnedEntries'][number][] = [];
+  const expectedPriorOwnedEntries: PiPackageSettingsPlan['priorOwnedEntries'][number][] = [];
   for (const [packagesBeforeIndex, entry] of plan.packagesBefore.entries()) {
     const isExpectedOwned =
       typeof entry === 'string' &&

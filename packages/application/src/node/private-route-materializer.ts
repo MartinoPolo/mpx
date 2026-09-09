@@ -1,7 +1,7 @@
 import { lstat, opendir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { MpxError } from '@mpx/core';
-import { parseLaunchDescriptorV2, type LaunchDescriptor } from '@mpx/launch';
+import { parseLaunchDescriptor, type LaunchDescriptor } from '@mpx/launch';
 import type { RouteMaterializer } from '@mpx/executors';
 
 function privateRouteError(
@@ -168,7 +168,7 @@ export class NodePrivateRouteMaterializer implements RouteMaterializer {
     const selections = privateRouteSelections(descriptorInput);
     let descriptor: LaunchDescriptor;
     try {
-      descriptor = parseLaunchDescriptorV2(descriptorInput);
+      descriptor = parseLaunchDescriptor(descriptorInput);
     } catch {
       throw privateRouteError(
         'PRIVATE_ROUTE_UNAVAILABLE',

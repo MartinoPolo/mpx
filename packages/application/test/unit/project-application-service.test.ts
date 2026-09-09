@@ -9,6 +9,7 @@ const project: ProjectConfig = {
   repository: { provider: 'generic', remote: 'origin' },
 };
 const user: UserConfig = {
+  schemaVersion: 2,
   identities: {
     zed: {
       domain: 'work',
@@ -16,14 +17,14 @@ const user: UserConfig = {
       gitAuthorRoute: 'git-z',
       providerRoutes: { zeta: 'z', alpha: 'a' },
       mcpSharing: { allow: ['z', 'a'], shareNativeAuth: false },
+      allowedSkillPacks: ['development'],
     },
   },
   domains: { work: ['C:/work'] },
-  contentScopes: { work: { roots: ['C:/work'], skillPacks: ['core'] } },
+  locations: { work: { roots: ['C:/work'], skillPacks: ['development'] } },
   modes: {},
-  skillPolicies: {},
   presets: {},
-  launchDefaults: { projects: {}, scopes: {} },
+  launchDefaults: { projects: {}, locations: {} },
   networkPolicies: {},
   executors: { host: {} },
 };
@@ -37,7 +38,11 @@ function setup(overrides: Record<string, unknown> = {}) {
     resolveConfig: async () => ({
       project,
       cwdClassification: { status: 'known', domain: 'work', root: 'C:/work' },
-      contentScope: { name: 'work', root: 'C:/work', skillPacks: ['core'], skillExposure: {} },
+      selection: {
+        location: { name: 'work', canonicalRoot: 'C:/work' },
+        packs: ['development'],
+        source: 'user-location',
+      },
       provenance: [],
     }),
     path: {
@@ -150,7 +155,11 @@ describe('ProjectApplicationService', () => {
         return {
           project: managedProject,
           cwdClassification: { status: 'known', domain: 'work', root: 'C:/work' },
-          contentScope: { name: 'work', root: 'C:/work', skillPacks: [], skillExposure: {} },
+          selection: {
+            location: { name: 'work', canonicalRoot: 'C:/work' },
+            packs: ['development'],
+            source: 'project',
+          },
           provenance: [],
         };
       },

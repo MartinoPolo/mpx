@@ -1,7 +1,7 @@
 import {
   isSafeRouteLabel,
-  resolveEffectiveSkillPacks,
   resolveKnownLaunchCwdClassification,
+  resolveSkillSelection,
 } from '@mpx/config';
 import type { NetworkPolicyConfig } from '@mpx/config';
 import {
@@ -16,7 +16,6 @@ import { canonicalRuntimeArgs } from './runtime-args.js';
 import type {
   EffectiveExecutor,
   LaunchDescriptor,
-  LaunchGrant,
   LaunchProvenance,
   LaunchSelection,
   ResolveLaunchInput,
@@ -24,51 +23,16 @@ import type {
   ShortLaunchAlias,
 } from './types.js';
 
-const resourcePattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
-
 function fail(code: string, message: string, remediation?: string): never {
   throw new MpxError({ code, message, ...(remediation ? { remediation } : {}) });
 }
 
 export function identityDomainMismatchMessage(
-  runtime: 'claude' | 'pi',
+  _runtime: 'claude' | 'pi',
   identityName: string,
   domain: string,
 ): string {
-  const grantCommand = `mpx launch ${runtime} --identity ${identityName} --grant rw:${domain} --reason "Allow ${identityName} identity in ${domain} domain"`;
-  return `Identity '${identityName}' cannot launch in domain '${domain}' without an explicit grant. To grant read/write access, run: ${grantCommand}`;
-}
-
-export function parseGrant(value: string): LaunchGrant {
-  const match = /^(?:(ro|rw):)?(.+)$/u.exec(value);
-  const access = match?.[1] ?? 'ro';
-  const resource = match?.[2];
-  if (!resource || !resourcePattern.test(resource)) {
-    fail(
-      'GRANT_INVALID',
-      `Invalid grant '${value}'.`,
-      'Use ro:<resource> or rw:<resource>; omitted access defaults to ro.',
-    );
-  }
-  return { access: access as 'ro' | 'rw', resource };
-}
-
-function normalizeGrants(values: readonly string[]): LaunchGrant[] {
-  const byResource = new Map<string, LaunchGrant>();
-  for (const value of values) {
-    const grant = parseGrant(value);
-    const previous = byResource.get(grant.resource);
-    if (previous && previous.access !== grant.access) {
-      fail(
-        'GRANT_CONFLICT',
-        `Resource '${grant.resource}' has contradictory read-only and read/write grants.`,
-      );
-    }
-    byResource.set(grant.resource, grant);
-  }
-  return [...byResource.values()].sort((left, right) =>
-    left.resource.localeCompare(right.resource),
-  );
+  return `Identity '${identityName}' cannot launch in domain '${domain}'. Select the owning identity or an explicit mode that admits the configured resource.`;
 }
 
 function sanitizeReason(value: string): string {
@@ -85,12 +49,7 @@ function sanitizeReason(value: string): string {
 const sha256Pattern = /^[a-f0-9]{64}$/u;
 
 function validateSkillArtifact(input: ResolveLaunchInput['skillArtifact']): void {
-  if (
-    ![input.artifactKey, input.catalogHash, input.effectivePolicyHash].every((value) =>
-      sha256Pattern.test(value),
-    ) ||
-    !isValidSkillArtifactReference(input)
-  ) {
+  if (!isValidSkillArtifactReference(input)) {
     fail(
       'SKILL_ARTIFACT_INVALID',
       'Skill artifact reference is not a valid canonical resolved artifact tuple.',
@@ -195,56 +154,6 @@ function resolvedAxis(
   return explicit ?? presetValue ?? fallback;
 }
 
-export function validateLaunchDomain(
-  selection: LaunchSelection,
-  grants: readonly LaunchGrant[] = [],
-): void {
-  const domain = selection.cwdClassification.domain;
-  if (selection.identity.domain === domain || grants.some((grant) => grant.resource === domain)) {
-    return;
-  }
-  if (
-    selection.mode.name === 'developer' &&
-    (domain === 'oss' || domain === 'cloned-repositories') &&
-    selection.mode.declaration.resources['cloned-repositories'] !== undefined
-  ) {
-    return;
-  }
-  const specialMode =
-    (selection.mode.name === 'personal-assistant' &&
-      (domain === 'assistant-input' || domain === 'assistant-output')) ||
-    (selection.mode.name === 'computer-control' &&
-      (domain === 'computer-control-config' || domain === 'computer-control-executable-settings'));
-  const intentionallySelected =
-    selection.provenance.mode === 'explicit' ||
-    (selection.preset !== null && selection.identity.domain === 'personal');
-  if (
-    selection.identity.domain === 'personal' &&
-    specialMode &&
-    intentionallySelected &&
-    selection.mode.declaration.resources[domain] !== undefined
-  ) {
-    return;
-  }
-  fail(
-    'IDENTITY_DOMAIN_MISMATCH',
-    identityDomainMismatchMessage(selection.runtime, selection.identity.name, domain),
-  );
-}
-
-function inferredModeName(domain: string): string {
-  if (domain === 'assistant-input' || domain === 'assistant-output') {
-    return 'personal-assistant';
-  }
-  if (domain === 'computer-control-config' || domain === 'computer-control-executable-settings') {
-    return 'computer-control';
-  }
-  if (domain === 'oss' || domain === 'cloned-repositories') {
-    return 'developer';
-  }
-  return 'project';
-}
-
 function effectiveNetworkPolicy(
   name: string,
   policies: ResolveLaunchSelectionInput['userConfig']['networkPolicies'],
@@ -255,6 +164,26 @@ function effectiveNetworkPolicy(
   }
   const parent = declaration.extends ? effectiveNetworkPolicy(declaration.extends, policies) : {};
   return { ...parent, ...structuredClone(declaration) };
+}
+
+export function validateLaunchDomain(selection: LaunchSelection): void {
+  const { domain, applicableResource } = selection.cwdClassification;
+  if (selection.identity.domain === domain) {
+    return;
+  }
+  const explicitlyAdmitted =
+    selection.provenance.mode === 'explicit' &&
+    applicableResource !== undefined &&
+    selection.mode.declaration.resources[
+      applicableResource as keyof typeof selection.mode.declaration.resources
+    ] !== undefined;
+  if (explicitlyAdmitted) {
+    return;
+  }
+  fail(
+    'IDENTITY_DOMAIN_MISMATCH',
+    identityDomainMismatchMessage(selection.runtime, selection.identity.name, domain),
+  );
 }
 
 export async function resolveLaunchSelection(
@@ -279,18 +208,26 @@ export async function resolveLaunchSelection(
   if (input.projectId !== undefined && !projectIdPattern.test(input.projectId)) {
     fail('PROJECT_ID_INVALID', 'Project id must be a canonical owner/repository id.');
   }
+  if (
+    input.projectConfig &&
+    input.projectId &&
+    input.projectConfig.project.id !== input.projectId
+  ) {
+    fail('PROJECT_ID_MISMATCH', 'Project config id does not match the selected project id.');
+  }
 
   const cwdClassification = await resolveKnownLaunchCwdClassification(input.cwd, input.userConfig);
   let presetName = input.preset;
   let presetSource: LaunchProvenance = 'explicit';
-  if (presetName === undefined && input.projectId !== undefined) {
-    presetName = input.userConfig.launchDefaults.projects[input.projectId]?.[identityName];
+  const selectedProjectId = input.projectConfig?.project.id ?? input.projectId;
+  if (presetName === undefined && selectedProjectId !== undefined) {
+    presetName = input.userConfig.launchDefaults.projects[selectedProjectId]?.[identityName];
     presetSource = 'user-project';
   }
   if (presetName === undefined) {
     presetName =
-      input.userConfig.launchDefaults.scopes[cwdClassification.contentScope]?.[identityName];
-    presetSource = 'user-scope';
+      input.userConfig.launchDefaults.locations[cwdClassification.location]?.[identityName];
+    presetSource = 'user-location';
   }
   const preset = presetName === undefined ? undefined : input.userConfig.presets[presetName];
   if (presetName !== undefined && !preset) {
@@ -303,25 +240,15 @@ export async function resolveLaunchSelection(
     );
   }
 
-  const normallySelectedMode = resolvedAxis(
-    input.mode,
-    preset?.mode,
-    inferredModeName(cwdClassification.domain),
-  );
+  const normalMode = resolvedAxis(input.mode, preset?.mode, 'project');
   const useAutomaticFallback =
     input.automaticModeFallback === 'missing-project-config' &&
-    normallySelectedMode === 'project' &&
+    normalMode === 'project' &&
     identity.domain === 'work' &&
     cwdClassification.domain === 'work' &&
     input.mode === undefined &&
     input.preset === undefined;
-  const modeName = useAutomaticFallback ? 'developer' : normallySelectedMode;
-  const skillPolicyName = resolvedAxis(input.skillPolicy, preset?.skillPolicy, 'clean');
-  const contentScopeName = resolvedAxis(
-    input.contentScope,
-    preset?.contentScope,
-    cwdClassification.contentScope,
-  );
+  const modeName = useAutomaticFallback ? 'developer' : normalMode;
   const executor = resolvedAxis(input.executor, preset?.executor, 'docker') as 'host' | 'docker';
   const workspace = resolvedAxis(input.workspace, preset?.workspace, 'clone') as
     'clone' | 'host-worktree' | 'direct';
@@ -334,15 +261,7 @@ export async function resolveLaunchSelection(
   if (!modeDeclaration) {
     fail('MODE_UNKNOWN', `Unknown mode '${modeName}'.`);
   }
-  const skillPolicyDeclaration = input.userConfig.skillPolicies[skillPolicyName];
-  if (!skillPolicyDeclaration) {
-    fail('SKILL_POLICY_UNKNOWN', `Unknown skill policy '${skillPolicyName}'.`);
-  }
-  if (!input.userConfig.contentScopes[contentScopeName]) {
-    fail('CONTENT_SCOPE_UNKNOWN', `Unknown content scope '${contentScopeName}'.`);
-  }
-  const networkPolicyDeclaration = input.userConfig.networkPolicies[networkPolicyName];
-  if (!networkPolicyDeclaration) {
+  if (!input.userConfig.networkPolicies[networkPolicyName]) {
     fail('NETWORK_POLICY_UNKNOWN', `Unknown network policy '${networkPolicyName}'.`);
   }
   if (executor === 'host' && workspace === 'clone') {
@@ -351,22 +270,17 @@ export async function resolveLaunchSelection(
 
   const source = (explicit: string | undefined): LaunchProvenance =>
     explicit !== undefined ? 'explicit' : preset ? presetSource : 'built-in';
-  const provenance = {
-    runtime: 'explicit' as const,
-    identity: 'explicit' as const,
-    mode: useAutomaticFallback ? ('automatic-fallback' as const) : source(input.mode),
-    skillPolicy: source(input.skillPolicy),
-    contentScope: source(input.contentScope),
-    executor: source(input.executor),
-    workspace: source(input.workspace),
-    networkPolicy: source(input.networkPolicy),
-  };
-  return deepFreeze({
+  const result = {
     runtime,
     identity: { name: identityName, domain: identity.domain },
     mode: { name: modeName, declaration: structuredClone(modeDeclaration) },
-    skillPolicy: { name: skillPolicyName, declaration: structuredClone(skillPolicyDeclaration) },
-    contentScope: { name: contentScopeName },
+    selection: await resolveSkillSelection(
+      input.projectConfig,
+      input.userConfig,
+      input.cwd,
+      identityName,
+      input.projectId,
+    ),
     executor,
     workspace,
     networkPolicy: {
@@ -374,9 +288,34 @@ export async function resolveLaunchSelection(
       declaration: effectiveNetworkPolicy(networkPolicyName, input.userConfig.networkPolicies),
     },
     preset: presetName ?? null,
-    provenance,
+    provenance: {
+      runtime: 'explicit' as const,
+      identity: 'explicit' as const,
+      mode: useAutomaticFallback ? ('automatic-fallback' as const) : source(input.mode),
+      executor: source(input.executor),
+      workspace: source(input.workspace),
+      networkPolicy: source(input.networkPolicy),
+    },
     cwdClassification,
-  }) as LaunchSelection;
+  };
+  return deepFreeze(result) as LaunchSelection;
+}
+
+function exactApproval(
+  approval: Readonly<{ reason: string; approvalKey: string }> | undefined,
+  rawReason: string | undefined,
+  code: string,
+  message: string,
+): { reason: string; approvalKey: string } {
+  if (
+    !approval ||
+    approval.reason.trim() !== rawReason?.trim() ||
+    !approval.reason.trim() ||
+    !sha256Pattern.test(approval.approvalKey)
+  ) {
+    fail(code, message);
+  }
+  return { reason: sanitizeReason(approval.reason), approvalKey: approval.approvalKey };
 }
 
 export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDescriptor> {
@@ -384,8 +323,7 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
     fail('REPOSITORY_ID_INVALID', 'Repository id must be a canonical owner/repository id.');
   }
   const selection = await resolveLaunchSelection(input);
-  const grants = normalizeGrants(input.grants ?? []);
-  validateLaunchDomain(selection, grants);
+  validateLaunchDomain(selection);
   validateSkillArtifact(input.skillArtifact);
   if (input.skillArtifact.runtime !== selection.runtime) {
     fail(
@@ -393,64 +331,45 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
       'Skill artifact runtime does not match the launch runtime.',
     );
   }
-  const identityName = selection.identity.name;
-  const identity = input.userConfig.identities[identityName]!;
-  const mode = selection.mode.name;
-  if (mode === 'project' && input.projectId === undefined) {
+  const projectId = input.projectConfig?.project.id ?? input.projectId ?? null;
+  const repositoryId = input.repositoryId ?? projectId ?? 'unbound';
+  if (selection.mode.name === 'project' && projectId === null) {
     fail('PROJECT_REQUIRED', 'Project mode requires a canonical project id.');
   }
-  const modeDeclaration = selection.mode.declaration;
-  const skillPolicy = selection.skillPolicy.name;
-  const contentScope = selection.contentScope.name;
-  const executor = selection.executor;
-  const workspace = selection.workspace;
-  if (input.skillArtifact.identity !== identityName) {
+  if (input.skillArtifact.identity !== selection.identity.name) {
     fail(
       'SKILL_ARTIFACT_IDENTITY_MISMATCH',
       'Skill artifact identity does not match the resolved launch identity.',
     );
   }
-  if (
-    input.skillArtifact.skillPolicy !== skillPolicy ||
-    input.skillArtifact.skillPolicyConfigHash !==
-      sha256Canonical(selection.skillPolicy.declaration as unknown as JsonValue)
-  ) {
-    fail(
-      'SKILL_ARTIFACT_POLICY_MISMATCH',
-      'Skill artifact policy does not match the resolved launch policy.',
-    );
-  }
-  if (input.skillArtifact.contentScope !== contentScope) {
-    fail(
-      'SKILL_ARTIFACT_CONTENT_SCOPE_MISMATCH',
-      'Skill artifact content scope does not match the resolved launch content scope.',
-    );
-  }
-  if (input.skillArtifact.projectId !== (input.projectId ?? null)) {
+  if (input.skillArtifact.projectId !== projectId) {
     fail(
       'SKILL_ARTIFACT_PROJECT_MISMATCH',
       'Skill artifact project does not match the resolved launch project.',
     );
   }
-  const scope = input.userConfig.contentScopes[contentScope]!;
-  const project = input.projectId ? input.userConfig.projects?.[input.projectId] : undefined;
-  const expectedPacks = resolveEffectiveSkillPacks({
-    contentScopeSkillPacks: scope.skillPacks,
-    projectSkillPacks: project?.skillPacks,
-    skillPolicySkillPacks: selection.skillPolicy.declaration.skillPacks,
-  });
-  if (
-    JSON.stringify(input.skillArtifact.enabledPacks) !== JSON.stringify(expectedPacks) ||
-    input.skillArtifact.contentScopeExposureHash !==
-      sha256Canonical((scope.skillExposure ?? {}) as unknown as JsonValue) ||
-    input.skillArtifact.projectExposureHash !==
-      sha256Canonical((project?.skillExposure ?? null) as unknown as JsonValue)
-  ) {
+  if (input.skillArtifact.repositoryId !== repositoryId) {
     fail(
-      'SKILL_ARTIFACT_POLICY_MISMATCH',
-      'Skill artifact effective policy facts do not match the resolved launch configuration.',
+      'SKILL_ARTIFACT_REPOSITORY_MISMATCH',
+      'Skill artifact repository does not match the resolved launch repository.',
     );
   }
+  const artifactSelection = {
+    location: input.skillArtifact.location,
+    packs: input.skillArtifact.packs,
+    source: input.skillArtifact.selectionSource,
+  };
+  if (
+    sha256Canonical(artifactSelection as unknown as JsonValue) !==
+    sha256Canonical(selection.selection as unknown as JsonValue)
+  ) {
+    fail(
+      'SKILL_ARTIFACT_SELECTION_MISMATCH',
+      'Skill artifact selection does not match the resolved launch selection.',
+    );
+  }
+
+  const identity = input.userConfig.identities[selection.identity.name]!;
   const configuredNativeRoot = canonicalNativeRoot(identity.runtimeRoots[selection.runtime]);
   const selectedNativeRoot = canonicalNativeRoot(input.selectedNativeRuntimeRoot);
   if (selectedNativeRoot !== configuredNativeRoot) {
@@ -459,104 +378,41 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
       'Selected native runtime root does not match the resolved identity runtime root.',
     );
   }
-  const nativeRuntimeRootDigest = canonicalNativeRootDigest(selectedNativeRoot);
-  const cwdDomain = { status: 'known' as const, domain: selection.cwdClassification.domain };
-  const cwdContent = {
-    status: 'known' as const,
-    contentScope: selection.cwdClassification.contentScope,
-  };
-
-  const crossDomainGrant =
-    identity.domain === cwdDomain.domain
-      ? undefined
-      : grants.find((grant) => grant.resource === cwdDomain.domain);
-  const effectiveResources = structuredClone(modeDeclaration.resources);
-  if (
-    crossDomainGrant &&
-    mode === 'project' &&
-    crossDomainGrant.access !== 'rw' &&
-    effectiveResources['selected-project'] === 'read-write'
-  ) {
-    effectiveResources['selected-project'] = 'read-only';
-  }
-  if (executor === 'host' && selection.provenance.executor !== 'explicit') {
+  if (selection.executor === 'host' && input.executor !== 'host') {
     fail(
       'HOST_EXPLICIT_REQUIRED',
       'Host execution is elevated compatibility mode and must be explicitly selected.',
     );
   }
-  const elevated = mode === 'unrestricted' || grants.length > 0 || executor === 'host';
+
+  const elevated = selection.mode.name === 'unrestricted' || selection.executor === 'host';
   const reason = elevated ? sanitizeReason(input.reason ?? '') : null;
-  const approvals = input.grantApprovals ?? [];
-  const matchedApprovals = grants.map((grant) => {
-    const approved = approvals.find(
-      (approval) =>
-        approval.access === grant.access &&
-        approval.resource === grant.resource &&
-        approval.reason.trim() === input.reason?.trim() &&
-        approval.reason.trim().length > 0 &&
-        sha256Pattern.test(approval.approvalKey),
-    );
-    if (!approved) {
-      fail(
-        'GRANT_APPROVAL_REQUIRED',
-        `Grant '${grant.access}:${grant.resource}' requires a separate exact trusted approval with the launch reason.`,
-        'Confirm the grant through the trusted launch flow and relaunch.',
-      );
-    }
-    return { ...grant, reason, approvalKey: approved.approvalKey };
-  });
-  let unrestrictedApproval: { reason: string; approvalKey: string } | null = null;
-  if (mode === 'unrestricted') {
-    const approval = input.elevationApproval;
-    if (
-      !approval ||
-      approval.reason.trim() !== input.reason?.trim() ||
-      !approval.reason.trim() ||
-      !sha256Pattern.test(approval.approvalKey)
-    ) {
-      fail(
-        'GRANT_APPROVAL_REQUIRED',
-        'Unrestricted mode requires a separate exact trusted approval with the launch reason.',
-        'Confirm unrestricted elevation through the trusted launch flow and relaunch.',
-      );
-    }
-    unrestrictedApproval = { reason: reason!, approvalKey: approval.approvalKey };
-  }
-  let hostApproval: { reason: string; approvalKey: string } | null = null;
-  if (executor === 'host') {
-    const approval = input.hostApproval;
-    if (
-      !approval ||
-      approval.reason.trim() !== input.reason?.trim() ||
-      !approval.reason.trim() ||
-      !sha256Pattern.test(approval.approvalKey)
-    ) {
-      fail(
-        'HOST_APPROVAL_REQUIRED',
-        'Host compatibility execution requires a separate exact trusted approval with the human reason.',
-        'Confirm elevated host compatibility mode through the trusted launch flow and relaunch.',
-      );
-    }
-    hostApproval = { reason: reason!, approvalKey: approval.approvalKey };
-  }
+  const unrestrictedApproval =
+    selection.mode.name === 'unrestricted'
+      ? exactApproval(
+          input.elevationApproval,
+          input.reason,
+          'ELEVATION_APPROVAL_REQUIRED',
+          'Unrestricted mode requires a separate exact trusted approval with the launch reason.',
+        )
+      : null;
+  const hostApproval =
+    selection.executor === 'host'
+      ? exactApproval(
+          input.hostApproval,
+          input.reason,
+          'HOST_APPROVAL_REQUIRED',
+          'Host compatibility execution requires a separate exact trusted approval with the human reason.',
+        )
+      : null;
   const approvalsDigest = sha256Canonical({
-    grants: matchedApprovals,
     unrestricted: unrestrictedApproval,
     host: hostApproval,
-  } as unknown as JsonValue);
+  });
   const elevationTargets = [
-    ...(executor === 'host' ? ['host-compatibility'] : []),
-    ...(mode === 'unrestricted' ? ['unrestricted'] : []),
-    ...grants.map((grant) => `${grant.access}:${grant.resource}`),
+    ...(selection.executor === 'host' ? ['host-compatibility'] : []),
+    ...(selection.mode.name === 'unrestricted' ? ['unrestricted'] : []),
   ];
-  const banner = elevated
-    ? {
-        code: 'ELEVATED_LAUNCH' as const,
-        persistent: true as const,
-        message: `ELEVATED LAUNCH — ${elevationTargets.join(', ')} — ${reason}`,
-      }
-    : null;
 
   const providerRoutes = Object.fromEntries(
     Object.entries(identity.providerRoutes ?? {})
@@ -566,25 +422,7 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
   const mcpAllow = [...(identity.mcpSharing?.allow ?? [])]
     .sort()
     .map((route) => routeLabel(route, 'MCP route'));
-
   const dockerAvailability = input.dockerAvailability ?? 'unverified';
-  const executorVerification = input.executorVerification ?? {
-    status: executor === 'docker' ? dockerAvailability : 'unverified',
-    verifier: 'not-verified',
-    evidenceDigest: sha256Canonical({
-      executor,
-      status: executor === 'docker' ? dockerAvailability : 'unverified',
-    }),
-  };
-  if (
-    !executorVerification.verifier.trim() ||
-    !sha256Pattern.test(executorVerification.evidenceDigest)
-  ) {
-    fail(
-      'EXECUTOR_EVIDENCE_INVALID',
-      'Executor verification evidence must name its verifier and contain a SHA-256 evidence digest.',
-    );
-  }
   const diagnostics = [
     ...(selection.provenance.mode === 'automatic-fallback'
       ? [
@@ -598,7 +436,7 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
           },
         ]
       : []),
-    ...(executor === 'docker' && dockerAvailability !== 'available'
+    ...(selection.executor === 'docker' && dockerAvailability !== 'available'
       ? [
           {
             code:
@@ -622,35 +460,26 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
   ];
 
   const tuple = {
-    schemaVersion: 2 as const,
-    nativeRuntimeRootDigest,
+    schemaVersion: 3 as const,
+    nativeRuntimeRootDigest: canonicalNativeRootDigest(selectedNativeRoot),
     runtime: selection.runtime,
     ...(input.runtimeArgs && input.runtimeArgs.length > 0
       ? { runtimeArgs: canonicalRuntimeArgs(input.runtimeArgs) }
       : {}),
-    binding: {
-      projectId: input.projectId ?? null,
-      repositoryId: input.repositoryId ?? input.projectId ?? 'unbound',
-    },
-    identity: { name: identityName, domain: identity.domain },
-    mode,
-    skillPolicy,
+    binding: { projectId, repositoryId },
+    identity: selection.identity,
+    mode: selection.mode.name,
+    selection: structuredClone(selection.selection),
     executor: {
-      ...effectiveExecutor(executor),
-      ...(executor === 'docker' ? { availability: dockerAvailability } : {}),
+      ...effectiveExecutor(selection.executor),
+      ...(selection.executor === 'docker' ? { availability: dockerAvailability } : {}),
     },
-    executorVerification: structuredClone(executorVerification),
-    workspace,
-    networkPolicy: {
-      name: selection.networkPolicy.name,
-      declaration: structuredClone(selection.networkPolicy.declaration),
-    },
+    workspace: selection.workspace,
+    networkPolicy: structuredClone(selection.networkPolicy),
     preset: selection.preset,
     provenance: selection.provenance,
     diagnostics,
-    contentScope: { name: contentScope },
-    grants,
-    cwdClassification: { domain: cwdDomain.domain, contentScope: cwdContent.contentScope },
+    cwdClassification: selection.cwdClassification,
     routes: {
       gitAuthor: routeLabel(identity.gitAuthorRoute, 'Git author route'),
       providers: providerRoutes,
@@ -658,17 +487,28 @@ export async function resolveLaunch(input: ResolveLaunchInput): Promise<LaunchDe
       mcp: { allow: mcpAllow, shareNativeAuth: false as const },
     },
     intendedPolicy: {
-      mode,
+      mode: selection.mode.name,
       resources: Object.fromEntries(
-        Object.entries(effectiveResources).sort(([left], [right]) => left.localeCompare(right)),
+        Object.entries(selection.mode.declaration.resources).sort(([a], [b]) => a.localeCompare(b)),
       ),
-      grants,
       inputsDigest: sha256Canonical(input.policyInputs),
-      approvalsDigest,
     },
     skillArtifact: canonicalSkillArtifactReference(input.skillArtifact),
-    elevationAudit: { elevated, reason, approvalsDigest, banner },
+    elevationAudit: {
+      elevated,
+      reason,
+      approvalsDigest,
+      banner: elevated
+        ? {
+            code: 'ELEVATED_LAUNCH' as const,
+            persistent: true as const,
+            message: `ELEVATED LAUNCH — ${elevationTargets.join(', ')} — ${reason}`,
+          }
+        : null,
+    },
   };
-  const launchKey = sha256Canonical(tuple as unknown as JsonValue);
-  return deepFreeze({ ...tuple, launchKey }) as LaunchDescriptor;
+  return deepFreeze({
+    ...tuple,
+    launchKey: sha256Canonical(tuple as unknown as JsonValue),
+  }) as LaunchDescriptor;
 }

@@ -23,14 +23,14 @@ describe('public skill identity continuity', () => {
     }
   });
 
-  it('keeps GitHub repository initialization personal and explicitly invoked', async () => {
+  it('keeps GitHub repository initialization in development and name-only', async () => {
     const catalog = await inventoryCanonical(canonicalRoot);
 
     expect(catalog.find(({ identity }) => identity === 'init-github-repo')).toMatchObject({
       author: 'MartinoPolo',
       category: 'setup',
-      skillPacks: ['personal'],
-      defaultExposure: 'explicit-only',
+      skillPacks: ['development'],
+      defaultExposure: 'name-only',
     });
   });
 });

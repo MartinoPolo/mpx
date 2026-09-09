@@ -2,25 +2,25 @@ import { randomUUID } from 'node:crypto';
 import { lstat, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  createRuntimeSessionObservationV1,
-  parseSessionLifecycleEventV1,
+  createRuntimeSessionObservation,
+  parseSessionLifecycleEvent,
   type RuntimeName,
-  type RuntimeSessionObservationV1,
-  type SessionLifecycleEventV1,
+  type RuntimeSessionObservation,
+  type SessionLifecycleEvent,
 } from '@mpx/runtime-contracts';
 import { SessionStore } from './store.js';
 import {
   SessionError,
-  parseSessionRecordV1,
+  parseSessionRecord,
   stableDigest,
-  type IdentityV1,
+  type Identity,
   type SessionLiveness,
-  type SessionRecordV1,
+  type SessionRecord,
   type WorkflowStatus,
 } from './schemas.js';
 
 export interface SessionListFilter {
-  readonly identity?: IdentityV1;
+  readonly identity?: Identity;
   readonly runtime?: RuntimeName;
   readonly liveness?: SessionLiveness;
   readonly workflowStatus?: WorkflowStatus;
@@ -34,7 +34,7 @@ export interface DiscoveryResult {
 }
 export interface DiscoveredSession {
   readonly nativeSessionId: string;
-  readonly nativeSessionRef: SessionRecordV1['nativeSessionRef'];
+  readonly nativeSessionRef: SessionRecord['nativeSessionRef'];
   readonly cwd: string;
   readonly title: string | null;
   readonly pid: number;
@@ -45,7 +45,7 @@ export interface RuntimeDiscovery {
   scan(): Promise<DiscoveryResult>;
 }
 export interface DiscoveryContext {
-  readonly identity: IdentityV1;
+  readonly identity: Identity;
   readonly nativeBindingRef: string;
   readonly runtime: RuntimeName;
 }
@@ -89,16 +89,16 @@ async function inspectProcesses(
 }
 
 const now = (): string => new Date().toISOString();
-const sameIdentity = (left: IdentityV1, right: IdentityV1): boolean =>
+const sameIdentity = (left: Identity, right: Identity): boolean =>
   left.domain === right.domain && left.name === right.name;
-function idFor(identity: IdentityV1, runtime: RuntimeName, nativeId: string): string {
+function idFor(identity: Identity, runtime: RuntimeName, nativeId: string): string {
   return `${runtime}-${stableDigest({ identity, nativeId }).slice(0, 24)}`;
 }
-function activityLiveness(type: SessionLifecycleEventV1['type']): SessionLiveness {
+function activityLiveness(type: SessionLifecycleEvent['type']): SessionLiveness {
   return type === 'shutdown' ? 'inactive' : 'active';
 }
 
-function monotonicUpdatedAt(candidate: string, current?: SessionRecordV1): string {
+function monotonicUpdatedAt(candidate: string, current?: SessionRecord): string {
   const parsed = new Date(candidate);
   if (
     Number.isNaN(parsed.valueOf()) ||
@@ -112,7 +112,7 @@ function monotonicUpdatedAt(candidate: string, current?: SessionRecordV1): strin
   );
 }
 
-function monotonicActivityAt(candidate: string, current?: SessionRecordV1): string {
+function monotonicActivityAt(candidate: string, current?: SessionRecord): string {
   const previous = current?.timestamps.lastActivityAt;
   return previous !== null && previous !== undefined && previous > candidate ? previous : candidate;
 }
@@ -123,7 +123,7 @@ export class SessionService {
     private readonly clock: () => string = now,
     private readonly processInspector?: SessionProcessInspector,
   ) {}
-  async list(filter: SessionListFilter = {}): Promise<SessionRecordV1[]> {
+  async list(filter: SessionListFilter = {}): Promise<SessionRecord[]> {
     return (await this.store.partitions())
       .flatMap((partition) => partition.records)
       .filter(
@@ -136,7 +136,7 @@ export class SessionService {
           filter.workflowStatus === undefined || record.workflow.status === filter.workflowStatus,
       );
   }
-  async show(query: string): Promise<SessionRecordV1> {
+  async show(query: string): Promise<SessionRecord> {
     const records = await this.list();
     const exact = records.filter(
       (record) => record.recordId === query || record.runtimeQualifiedId === query,
@@ -155,8 +155,8 @@ export class SessionService {
     }
     return abbreviated[0]!;
   }
-  async ingest(input: SessionLifecycleEventV1): Promise<SessionRecordV1> {
-    const event = parseSessionLifecycleEventV1(input);
+  async ingest(input: SessionLifecycleEvent): Promise<SessionRecord> {
+    const event = parseSessionLifecycleEvent(input);
     const privateBinding = await this.store.readLifecycleBinding(event.bindingId);
     if (Date.parse(this.clock()) >= Date.parse(privateBinding.binding.expiresAt)) {
       throw new SessionError(
@@ -247,8 +247,8 @@ export class SessionService {
         return { registry: { ...registry, recentEventIds }, result: current };
       }
       const createdAt = current?.timestamps.createdAt ?? event.timestamp;
-      const record = parseSessionRecordV1({
-        schemaVersion: 1,
+      const record = parseSessionRecord({
+        schemaVersion: 2,
         recordId,
         runtimeQualifiedId: qualified,
         runtime,
@@ -312,8 +312,8 @@ export class SessionService {
     }[],
     lifecycleBindingIds: readonly string[] = [],
     scope: SessionReconcileScope = {},
-  ): Promise<RuntimeSessionObservationV1[]> {
-    const matchesScope = (candidate: { runtime: RuntimeName; identity: IdentityV1 }) =>
+  ): Promise<RuntimeSessionObservation[]> {
+    const matchesScope = (candidate: { runtime: RuntimeName; identity: Identity }) =>
       (scope.runtime === undefined || candidate.runtime === scope.runtime) &&
       (scope.identity === undefined || sameIdentity(candidate.identity, scope.identity));
     const consumer = new LifecycleEventDirectoryConsumer(this.store, this);
@@ -321,7 +321,7 @@ export class SessionService {
       await consumer.consume(bindingId, scope);
     }
     const capturedAt = this.clock(),
-      observations: RuntimeSessionObservationV1[] = [],
+      observations: RuntimeSessionObservation[] = [],
       observed = new Set<string>(),
       processVerified = new Set<string>(),
       lifecycleFactTimes = new Map<string, string>();
@@ -329,7 +329,7 @@ export class SessionService {
       const partitions = (await this.store.partitions()).filter(
         (candidate) => candidate.runtime === 'pi' && matchesScope(candidate),
       );
-      const eligible = (record: SessionRecordV1) =>
+      const eligible = (record: SessionRecord) =>
         (record.liveness === 'active' || record.liveness === 'unknown') && record.process !== null;
       const processInspections = await inspectProcesses(this.processInspector, [
         ...new Set(
@@ -386,7 +386,7 @@ export class SessionService {
                 );
                 return record.liveness === 'active'
                   ? record
-                  : parseSessionRecordV1({
+                  : parseSessionRecord({
                       ...record,
                       liveness: 'active',
                       timestamps: {
@@ -399,7 +399,7 @@ export class SessionService {
                 processVerified.add(
                   `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`,
                 );
-                return parseSessionRecordV1({
+                return parseSessionRecord({
                   ...record,
                   liveness: 'inactive',
                   process: null,
@@ -409,7 +409,7 @@ export class SessionService {
                   },
                 });
               }
-              return parseSessionRecordV1({
+              return parseSessionRecord({
                 ...record,
                 liveness: 'unknown',
                 timestamps: {
@@ -455,7 +455,7 @@ export class SessionService {
                 record.nativeBindingRef === item.context!.nativeBindingRef &&
                 record.liveness === 'active' &&
                 !activeRefs.has(`${record.nativeSessionRef.kind}\0${record.nativeSessionRef.value}`)
-                  ? parseSessionRecordV1({
+                  ? parseSessionRecord({
                       ...record,
                       liveness: 'inactive',
                       process: null,
@@ -482,7 +482,7 @@ export class SessionService {
         }
         observed.add(observationKey);
         observations.push(
-          createRuntimeSessionObservationV1({
+          createRuntimeSessionObservation({
             runtime: record.runtime,
             identityRef: `${record.identity.domain}:${record.identity.name}`,
             runtimeQualifiedId: record.runtimeQualifiedId,
@@ -525,7 +525,7 @@ export class SessionService {
       }
       observed.add(observationKey);
       observations.push(
-        createRuntimeSessionObservationV1({
+        createRuntimeSessionObservation({
           runtime: record.runtime,
           identityRef: `${record.identity.domain}:${record.identity.name}`,
           runtimeQualifiedId: record.runtimeQualifiedId,
@@ -576,8 +576,8 @@ export class SessionService {
     const recordId = idFor(context.identity, context.runtime, session.nativeSessionId);
     await this.store.transaction(context.identity, context.runtime, (registry) => {
       const current = registry.records.find((record) => record.recordId === recordId);
-      const record = parseSessionRecordV1({
-        schemaVersion: 1,
+      const record = parseSessionRecord({
+        schemaVersion: 2,
         recordId,
         runtimeQualifiedId: `${context.runtime}:${session.nativeSessionId}`,
         runtime: context.runtime,
@@ -725,9 +725,9 @@ export class LifecycleEventDirectoryConsumer {
         }
         throw error;
       }
-      let event: SessionLifecycleEventV1;
+      let event: SessionLifecycleEvent;
       try {
-        event = parseSessionLifecycleEventV1(raw);
+        event = parseSessionLifecycleEvent(raw);
       } catch (error) {
         await this.quarantine(
           file,

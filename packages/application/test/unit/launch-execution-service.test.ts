@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { sha256Canonical, type JsonValue } from '@mpx/core';
-import type { ExecutorAdapter, RuntimeAdapter } from '@mpx/executors';
+import { createSkillArtifactReference, sha256Canonical, type JsonValue } from '@mpx/core';
+import { ExecutionError, type ExecutorAdapter, type RuntimeAdapter } from '@mpx/executors';
 import { canonicalNativeRootDigest, type LaunchDescriptor } from '@mpx/launch';
 import { createRuntimeSkillArtifact, resolveManifest } from '@mpx/skills';
 import {
@@ -12,41 +12,36 @@ import {
 } from '@mpx/application';
 
 const hash = (value: string) => value.repeat(64);
+const selection = {
+  location: { name: 'personal', canonicalRoot: 'C:/project' },
+  packs: ['development'] as const,
+  source: 'project' as const,
+};
 
 function fixture(executor: 'docker' | 'host' = 'docker') {
   const manifest = resolveManifest([], {
     repositoryId: 'sample/repo',
     projectId: 'sample/app',
-    contentScope: 'personal',
     identity: 'personal',
-    skillPolicy: 'clean',
-    skillPolicyConfig: { skillExposure: { default: 'off' } },
-    enabledPacks: [],
+    selection,
   });
   const artifact = createRuntimeSkillArtifact(manifest, [], { runtime: 'pi' });
-  const skillArtifact = {
-    schemaVersion: 3 as const,
-    runtime: 'pi' as const,
+  const skillArtifact = createSkillArtifactReference({
+    runtime: 'pi',
     identity: 'personal',
-    skillPolicy: 'clean',
-    contentScope: 'personal',
     projectId: 'sample/app',
+    repositoryId: 'sample/repo',
     catalogHash: hash('1'),
-    enabledPacks: [],
-    skillPolicyConfigHash: hash('2'),
-    contentScopeExposureHash: hash('3'),
-    projectExposureHash: hash('4'),
-    effectivePolicyHash: hash('5'),
-    artifactKey: hash('6'),
-  };
+    selection,
+  });
   const tuple = {
-    schemaVersion: 2 as const,
+    schemaVersion: 3 as const,
     nativeRuntimeRootDigest: canonicalNativeRootDigest('C:/native/pi'),
     runtime: 'pi' as const,
     binding: { projectId: 'sample/app', repositoryId: 'sample/repo' },
     identity: { name: 'personal', domain: 'personal' },
     mode: 'project',
-    skillPolicy: 'clean',
+    selection,
     executor:
       executor === 'docker'
         ? {
@@ -62,7 +57,8 @@ function fixture(executor: 'docker' | 'host' = 'docker') {
             confidentiality: {
               isolated: 'mount-dependent' as const,
               hostReadable: true as const,
-              limitation: 'Mounted content remains host-readable.' as const,
+              limitation:
+                'Mounted content, host services, and direct extra mounts remain confidentiality limitations.' as const,
             },
             availability: 'available' as const,
           }
@@ -82,11 +78,6 @@ function fixture(executor: 'docker' | 'host' = 'docker') {
               limitation: 'No filesystem or confidentiality isolation is enforced.' as const,
             },
           },
-    executorVerification: {
-      status: 'verified' as const,
-      verifier: 'fixture',
-      evidenceDigest: hash('b'),
-    },
     workspace: 'direct' as const,
     networkPolicy: { name: 'minimal', declaration: { preset: 'deny-all' as const } },
     preset: null,
@@ -94,16 +85,12 @@ function fixture(executor: 'docker' | 'host' = 'docker') {
       runtime: 'explicit' as const,
       identity: 'explicit' as const,
       mode: 'explicit' as const,
-      skillPolicy: 'explicit' as const,
-      contentScope: 'explicit' as const,
       executor: 'explicit' as const,
       workspace: 'explicit' as const,
       networkPolicy: 'explicit' as const,
     },
     diagnostics: [],
-    contentScope: { name: 'personal' },
-    grants: [],
-    cwdClassification: { domain: 'personal', contentScope: 'personal' },
+    cwdClassification: { domain: 'personal', location: 'personal' },
     routes: {
       gitAuthor: 'git-personal',
       providers: {},
@@ -113,25 +100,26 @@ function fixture(executor: 'docker' | 'host' = 'docker') {
     intendedPolicy: {
       mode: 'project',
       resources: { 'selected-project': 'read-write' as const },
-      grants: [],
       inputsDigest: sha256Canonical({
         schemaVersion: 1,
         manifestKey: manifest.manifestKey,
         skillArtifactKey: skillArtifact.artifactKey,
       }),
-      approvalsDigest: hash('d'),
     },
     skillArtifact,
     elevationAudit: {
       elevated: executor === 'host',
       reason: executor === 'host' ? 'fixture' : null,
-      approvalsDigest: hash('d'),
+      approvalsDigest: sha256Canonical({
+        unrestricted: null,
+        host: executor === 'host' ? { reason: 'fixture', approvalKey: hash('d') } : null,
+      }),
       banner:
         executor === 'host'
           ? {
               code: 'ELEVATED_LAUNCH' as const,
               persistent: true as const,
-              message: 'ELEVATED LAUNCH — fixture',
+              message: 'ELEVATED LAUNCH — host-compatibility — fixture',
             }
           : null,
     },
@@ -164,9 +152,8 @@ function fixture(executor: 'docker' | 'host' = 'docker') {
 function dependencies(effects: string[] = []): LaunchExecutionDependencies {
   const executor: ExecutorAdapter = {
     name: 'docker',
-    verify: async () => {
-      effects.push('verify');
-      return { status: 'verified', verifier: 'fixture', evidenceDigest: hash('b') };
+    assertReady: async () => {
+      effects.push('ready');
     },
     execute: async () => {
       effects.push('execute');
@@ -266,18 +253,23 @@ describe('launch execution application service', () => {
 
   it('accepts only the exact context/projection tuple and sanitizes every invalid binding', () => {
     const context = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       launchKey: hash('a'),
       launchDescriptor: { reference: 'launch.json', digest: hash('b') },
       manifestKey: hash('c'),
       runtimeArtifact: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         runtime: 'pi',
         manifestKey: hash('c'),
         artifactKey: hash('d'),
         fileMapHash: hash('e'),
       },
-      binding: { projectId: 'sample/app', repositoryId: 'sample/repo', contentScope: 'personal' },
+      binding: {
+        projectId: 'sample/app',
+        repositoryId: 'sample/repo',
+        identity: 'personal',
+        selection,
+      },
     };
     const projection = {
       projectionKey: hash('f'),
@@ -300,6 +292,7 @@ describe('launch execution application service', () => {
     });
     const secret = 'RAW-PRIVATE-CONTEXT';
     const invalid = [
+      { context: { ...context, schemaVersion: 1 }, projection },
       { context: secret, projection },
       { context, projection: { ...projection, extra: true } },
       {
@@ -317,7 +310,7 @@ describe('launch execution application service', () => {
         },
       },
       {
-        context: { ...context, binding: { ...context.binding, contentScope: 42 } },
+        context: { ...context, binding: { ...context.binding, selection: 42 } },
         projection,
       },
     ];
@@ -326,7 +319,10 @@ describe('launch execution application service', () => {
         currentLaunchTuple(environment(candidate.context, candidate.projection));
         throw new Error('expected rejection');
       } catch (error) {
-        expect(error).toMatchObject({ code: 'LAUNCH_CONTEXT_INVALID' });
+        expect(error).toMatchObject({
+          code: 'LAUNCH_CONTEXT_INVALID',
+          remediation: 'Relaunch and restart the runtime process.',
+        });
         expect(String((error as Error).message)).not.toContain(secret);
       }
     }
@@ -383,29 +379,25 @@ describe('launch execution application service', () => {
       effects.push('lifecycle');
       return lifecycleBinding(request.descriptor);
     });
-    const unavailableEvidence = {
-      status: 'unavailable' as const,
-      verifier: 'fixture',
-      evidenceDigest: hash('b'),
-    };
-    const descriptor = withVerification(request.descriptor, unavailableEvidence);
     const gated = {
       ...deps,
       executorAdapters: [
         {
           ...deps.executorAdapters[0]!,
-          verify: async () => {
-            effects.push('verify');
-            return unavailableEvidence;
+          assertReady: async () => {
+            effects.push('ready');
+            throw new ExecutionError('EXECUTOR_UNAVAILABLE', 'fixture unavailable');
           },
         },
       ],
       lifecycle: { prepare, consume: vi.fn() },
     };
     await expect(
-      executeResolvedLaunch({ ...request, descriptor, statusSnapshot }, gated),
-    ).rejects.toMatchObject({ code: 'EXECUTOR_UNAVAILABLE' });
-    expect(effects).toEqual(['verify']);
+      executeResolvedLaunch({ ...request, statusSnapshot }, gated),
+    ).rejects.toMatchObject({
+      code: 'EXECUTOR_UNAVAILABLE',
+    });
+    expect(effects).toEqual(['ready']);
     expect(statusSnapshot).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
   });
@@ -424,7 +416,7 @@ describe('launch execution application service', () => {
     await expect(
       executeResolvedLaunch(request, { ...deps, runtimeAdapterMode: 'injected', lifecycle }),
     ).rejects.toMatchObject({ code: 'RUNTIME_LIFECYCLE_CAPABILITY_REQUIRED' });
-    expect(effects).toEqual(['verify']);
+    expect(effects).toEqual(['ready']);
   });
 
   it('runs runtime preflight after immutable gates and before resume or launch side effects', async () => {
@@ -456,15 +448,15 @@ describe('launch execution application service', () => {
       },
     });
     expect(effects).toEqual([
-      'verify',
+      'ready',
       'preflight',
       'resume',
       'lifecycle',
       'routes',
       'composer',
-      'verify',
+      'ready',
       'runtime',
-      'verify',
+      'ready',
       'execute',
     ]);
   });
@@ -512,7 +504,7 @@ describe('launch execution application service', () => {
         verifyResumeTarget,
       }),
     ).rejects.toThrow('stale resume');
-    expect(effects).toEqual(['verify', 'resume']);
+    expect(effects).toEqual(['ready', 'resume']);
     expect(prepare).not.toHaveBeenCalled();
     expect(consume).not.toHaveBeenCalled();
   });
@@ -556,7 +548,7 @@ describe('launch execution application service', () => {
         executorAdapters: [
           {
             name: 'host',
-            verify: async () => request.descriptor.executorVerification,
+            assertReady: async () => undefined,
             execute: vi.fn(),
           },
         ],
@@ -623,7 +615,7 @@ describe('launch execution application service', () => {
     const deps = dependencies(effects);
     const host: ExecutorAdapter = {
       name: 'host',
-      verify: async () => request.descriptor.executorVerification,
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('execute');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -646,7 +638,7 @@ describe('launch execution application service', () => {
     const deps = dependencies(effects);
     const host: ExecutorAdapter = {
       name: 'host',
-      verify: async () => request.descriptor.executorVerification,
+      assertReady: async () => undefined,
       execute: async () => {
         effects.push('execute');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -680,11 +672,7 @@ describe('launch execution application service', () => {
     };
     const host: ExecutorAdapter = {
       name: 'host',
-      verify: async () => ({
-        status: 'verified',
-        verifier: 'host-process',
-        evidenceDigest: hash('c'),
-      }),
+      assertReady: async () => undefined,
       execute: vi.fn(async () => {
         effects.push('host-process');
         return { exitCode: 0, stdout: '', stderr: '', truncated: false };
@@ -756,40 +744,7 @@ describe('launch execution application service', () => {
     await refreshWork;
     expect(readSnapshot).not.toHaveBeenCalled();
   });
-
-  it('rejects changed immutable executor evidence before downstream effects', async () => {
-    const effects: string[] = [];
-    const { request } = fixture();
-    const deps = dependencies(effects);
-    await expect(
-      executeResolvedLaunch(request, {
-        ...deps,
-        executorAdapters: [
-          {
-            ...deps.executorAdapters[0]!,
-            verify: async () => {
-              effects.push('verify');
-              return { status: 'verified', verifier: 'fixture', evidenceDigest: hash('f') };
-            },
-          },
-        ],
-      }),
-    ).rejects.toMatchObject({ code: 'LAUNCH_RESTART_REQUIRED' });
-    expect(effects).toEqual(['verify']);
-  });
 });
-
-function withVerification(
-  descriptor: LaunchDescriptor,
-  executorVerification: LaunchDescriptor['executorVerification'],
-): LaunchDescriptor {
-  const { launchKey: _launchKey, ...rest } = descriptor;
-  const tuple = { ...rest, executorVerification };
-  return {
-    ...tuple,
-    launchKey: sha256Canonical(tuple as unknown as JsonValue),
-  } as LaunchDescriptor;
-}
 
 function lifecycleBinding(descriptor: LaunchDescriptor) {
   return {

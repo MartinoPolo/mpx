@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import {
+  CombinedAutocompleteProvider,
+  Editor,
+  TuiMainScreen,
+  type EditorTheme,
+  type Terminal,
+} from '@earendil-works/pi-tui';
 import { beforeEach, test, vi } from 'vitest';
 
 const compiler = vi.hoisted(() => ({
@@ -39,25 +50,44 @@ function active(skills: SkillEntry[]) {
   return { root: 'C:/active', manifestPath: env.MPX_ACTIVE_CONTENT_MANIFEST, manifest: { skills } };
 }
 
-function harness() {
+function harness(nativeCommands: unknown[] = []) {
   const commands = new Map<string, CommandRegistration>();
   const events = new Map<string, (...args: any[]) => unknown>();
   const sent: Array<{ content: string; options?: unknown }> = [];
+  const autocompleteFactories: Array<(current: any) => any> = [];
   const api = {
     registerCommand: (name: string, command: CommandRegistration) => {
       assert.equal(commands.has(name), false, `duplicate command ${name}`);
       commands.set(name, command);
     },
     on: (name: string, handler: (...args: any[]) => unknown) => events.set(name, handler),
+    getCommands: () => nativeCommands,
     sendUserMessage: (content: string, options?: unknown) => sent.push({ content, options }),
   } as unknown as ExtensionAPI;
-  return { api, commands, events, sent };
+  const sessionContext = {
+    ui: {
+      addAutocompleteProvider: (factory: (current: any) => any) => {
+        autocompleteFactories.push(factory);
+      },
+    },
+  };
+  return {
+    api,
+    commands,
+    events,
+    sent,
+    sessionContext,
+    autocompleteFactories,
+    autocomplete: (current: any) => autocompleteFactories.at(-1)?.(current),
+  };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   compiler.classifyCompiledSkillSource.mockImplementation((entry: SkillEntry) =>
-    entry.sourcePath?.startsWith('project:') ? 'project' : 'canonical',
+    entry.sourcePath?.startsWith('project:') || entry.sourcePath?.startsWith('.agents/')
+      ? 'project'
+      : 'canonical',
   );
 });
 
@@ -308,4 +338,597 @@ test('command invocation uses supported follow-up delivery while the agent is st
   await state.commands.get('mpx:alpha')!.handler('', { isIdle: () => false });
 
   assert.deepEqual(state.sent[0]?.options, { deliverAs: 'followUp' });
+});
+
+test('autocomplete offers active canonical and accepted project skill names without descriptions or body reads', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(
+    active([
+      {
+        identity: 'review',
+        exposure: 'full',
+        canonicalDescription: 'Secret',
+        effectiveDescription: 'Secret',
+        generatedPath: 'skills/review/SKILL.md',
+      },
+      {
+        identity: 'manual',
+        exposure: 'explicit-only',
+        canonicalDescription: 'Manual secret',
+        effectiveDescription: 'Manual secret',
+        generatedPath: 'skills/manual/SKILL.md',
+      },
+      {
+        identity: 'skill:diagnose',
+        exposure: 'explicit-only',
+        canonicalDescription: 'Project secret',
+        effectiveDescription: 'Project secret',
+        sourcePath: '.agents/skills/diagnose/SKILL.md',
+        generatedPath: 'project-skills/skills/diagnose/SKILL.md',
+      },
+    ]),
+  );
+  const state = harness([
+    {
+      name: 'skill:deploy',
+      description: 'Deploy secret',
+      source: 'skill',
+      sourceInfo: {
+        path: 'C:/repo/.agents/skills/deploy/SKILL.md',
+        source: 'project',
+        scope: 'project',
+        origin: 'top-level',
+        baseDir: 'C:/repo',
+      },
+    },
+  ]);
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+  const delegated = {
+    getSuggestions: vi.fn(),
+    applyCompletion: vi.fn(),
+    shouldTriggerFileCompletion: vi.fn(),
+  };
+  const provider = state.autocomplete(delegated);
+
+  const canonical = await provider.getSuggestions(['Please /mpx:'], 0, 12, {});
+  const project = await provider.getSuggestions(['/skill:d'], 0, 8, {});
+
+  assert.deepEqual(canonical, {
+    prefix: '/mpx:',
+    items: [
+      { value: '/mpx:manual', label: '/mpx:manual' },
+      { value: '/mpx:review', label: '/mpx:review' },
+    ],
+  });
+  assert.deepEqual(project, {
+    prefix: '/skill:d',
+    items: [
+      { value: '/skill:deploy', label: '/skill:deploy' },
+      { value: '/skill:diagnose', label: '/skill:diagnose' },
+    ],
+  });
+  assert.equal(compiler.readActiveSkill.mock.calls.length, 0);
+});
+
+test('autocomplete replaces the whole reference at the cursor without corrupting trailing prose', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(
+    active([
+      {
+        identity: 'review',
+        exposure: 'full',
+        canonicalDescription: 'Review',
+        effectiveDescription: 'Review',
+        generatedPath: 'skills/review/SKILL.md',
+      },
+    ]),
+  );
+  const state = harness();
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+  const current = {
+    getSuggestions: vi.fn(),
+    applyCompletion: vi.fn().mockReturnValue({ lines: ['wrong'], cursorLine: 0, cursorCol: 5 }),
+  };
+  const provider = state.autocomplete(current);
+  const suggestions = await provider.getSuggestions(['Use /mpx:review later'], 0, 14, {});
+
+  const applied = provider.applyCompletion(
+    ['Use /mpx:review later'],
+    0,
+    14,
+    suggestions.items[0],
+    suggestions.prefix,
+  );
+
+  assert.deepEqual(applied, {
+    lines: ['Use /mpx:review later'],
+    cursorLine: 0,
+    cursorCol: 15,
+  });
+});
+
+test('autocomplete delegates unrelated slash and path completion', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(active([]));
+  const state = harness();
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+  const expected = { prefix: './', items: [] };
+  const current = {
+    getSuggestions: vi.fn().mockResolvedValue(expected),
+    applyCompletion: vi.fn(),
+    shouldTriggerFileCompletion: vi.fn().mockReturnValue(false),
+  };
+  const provider = state.autocomplete(current);
+
+  assert.equal(await provider.getSuggestions(['open ./'], 0, 7, {}), expected);
+  assert.equal(provider.shouldTriggerFileCompletion(['open ./'], 0, 7), false);
+});
+
+test('same-name canonical and managed project skills register distinct qualified commands', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(
+    active([
+      {
+        identity: 'review',
+        exposure: 'full',
+        canonicalDescription: 'Canonical review',
+        effectiveDescription: 'Canonical review',
+        generatedPath: 'skills/review/SKILL.md',
+      },
+      {
+        identity: 'skill:review',
+        exposure: 'name-only',
+        canonicalDescription: 'Project secret',
+        effectiveDescription: 'Project review',
+        sourcePath: '.agents/skills/review/SKILL.md',
+        generatedPath: 'project-skills/skills/review/SKILL.md',
+      },
+    ]),
+  );
+  compiler.readActiveSkill.mockResolvedValue({
+    body: 'Body',
+    filePath: 'C:/active/skill/SKILL.md',
+    baseDirectory: 'C:/active/skill',
+  });
+  const state = harness();
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+
+  await state.commands.get('mpx:review')!.handler('', { isIdle: () => true });
+  await state.commands.get('skill:review')!.handler('', { isIdle: () => true });
+
+  assert.deepEqual([...state.commands.keys()], ['mpx:review', 'skill:review']);
+  assert.deepEqual(
+    compiler.readActiveSkill.mock.calls.map((call) => call.slice(1)),
+    [
+      ['review', 'canonical'],
+      ['review', 'project'],
+    ],
+  );
+});
+
+test('factory initialization does not query session-bound commands before session_start', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(
+    active([
+      {
+        identity: 'skill:deploy',
+        exposure: 'full',
+        canonicalDescription: 'Deploy',
+        effectiveDescription: 'Deploy',
+        sourcePath: '.agents/skills/deploy/SKILL.md',
+        generatedPath: 'project-skills/skills/deploy/SKILL.md',
+      },
+    ]),
+  );
+  const state = harness();
+  let sessionStarted = false;
+  (state.api as unknown as { getCommands(): unknown[] }).getCommands = () => {
+    if (!sessionStarted) {
+      throw new Error('Extension runtime not initialized');
+    }
+    return [];
+  };
+
+  await canonicalSkills(state.api, env);
+  sessionStarted = true;
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+
+  assert.equal(state.commands.has('skill:deploy'), true);
+});
+
+test('managed project commands defer to a conflicting native projected skill command', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(
+    active([
+      {
+        identity: 'skill:deploy',
+        exposure: 'full',
+        canonicalDescription: 'Deploy',
+        effectiveDescription: 'Deploy',
+        sourcePath: '.agents/skills/deploy/SKILL.md',
+        generatedPath: 'project-skills/skills/deploy/SKILL.md',
+      },
+    ]),
+  );
+  const state = harness([
+    {
+      name: 'skill:deploy',
+      source: 'skill',
+      sourceInfo: { source: 'cli', scope: 'explicit', path: 'C:/active/deploy/SKILL.md' },
+    },
+  ]);
+
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+
+  assert.equal(state.commands.has('skill:deploy'), false);
+});
+
+test('project skill discovery accepts Pi project scope regardless of the SDK source label', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(active([]));
+  const state = harness([
+    {
+      name: 'skill:deploy',
+      source: 'skill',
+      sourceInfo: {
+        path: 'C:/repo/.agents/skills/deploy/SKILL.md',
+        source: 'local',
+        scope: 'project',
+        origin: 'top-level',
+        baseDir: 'C:/repo',
+      },
+    },
+  ]);
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+  const provider = state.autocomplete({
+    getSuggestions: vi.fn(),
+    applyCompletion: vi.fn(),
+  });
+
+  const result = await provider.getSuggestions(['/skill:d'], 0, 8, {});
+
+  assert.deepEqual(result.items, [{ value: '/skill:deploy', label: '/skill:deploy' }]);
+});
+
+test('repeated session_start refreshes one autocomplete layer with the current inventory', async () => {
+  compiler.loadActiveContentProjection
+    .mockResolvedValueOnce(
+      active([
+        {
+          identity: 'old',
+          exposure: 'full',
+          canonicalDescription: 'Old',
+          effectiveDescription: 'Old',
+          generatedPath: 'skills/old/SKILL.md',
+        },
+      ]),
+    )
+    .mockResolvedValueOnce(active([]))
+    .mockResolvedValue(
+      active([
+        {
+          identity: 'current',
+          exposure: 'full',
+          canonicalDescription: 'Current',
+          effectiveDescription: 'Current',
+          generatedPath: 'skills/current/SKILL.md',
+        },
+      ]),
+    );
+  const state = harness();
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+  await state.events.get('session_start')?.({ reason: 'resume' }, state.sessionContext);
+  const delegated = {
+    getSuggestions: vi.fn().mockResolvedValue({ prefix: './', items: [] }),
+    applyCompletion: vi.fn(),
+  };
+  const provider = state.autocomplete(delegated);
+
+  const managed = await provider.getSuggestions(['/mpx:'], 0, 5, {});
+  await provider.getSuggestions(['open ./'], 0, 7, {});
+
+  assert.equal(state.autocompleteFactories.length, 1);
+  assert.deepEqual(managed.items, [{ value: '/mpx:current', label: '/mpx:current' }]);
+  assert.equal(delegated.getSuggestions.mock.calls.length, 1);
+});
+
+test('failed validation clears cached completion names before any later suggestion', async () => {
+  const trusted = active([
+    {
+      identity: 'trusted',
+      exposure: 'full',
+      canonicalDescription: 'Trusted',
+      effectiveDescription: 'Trusted',
+      generatedPath: 'skills/trusted/SKILL.md',
+    },
+  ]);
+  compiler.loadActiveContentProjection
+    .mockResolvedValueOnce(trusted)
+    .mockResolvedValueOnce(trusted)
+    .mockRejectedValue(new Error('ACTIVE_CONTENT_TAMPERED'));
+  const state = harness();
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+  await assert.rejects(
+    Promise.resolve(state.events.get('before_agent_start')?.({ systemPrompt: 'base' })),
+    /TAMPERED/,
+  );
+  const provider = state.autocomplete({ getSuggestions: vi.fn(), applyCompletion: vi.fn() });
+
+  const result = await provider.getSuggestions(['/mpx:t'], 0, 6, {});
+
+  assert.deepEqual(result.items, []);
+  assert.equal(compiler.readActiveSkill.mock.calls.length, 0);
+});
+
+test('submitting both managed namespaces loads each qualified identity once and preserves every reference', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(
+    active([
+      {
+        identity: 'review',
+        exposure: 'full',
+        canonicalDescription: 'Canonical',
+        effectiveDescription: 'Canonical',
+        generatedPath: 'skills/review/SKILL.md',
+      },
+      {
+        identity: 'skill:review',
+        exposure: 'full',
+        canonicalDescription: 'Project',
+        effectiveDescription: 'Project',
+        sourcePath: '.agents/skills/review/SKILL.md',
+        generatedPath: 'project-skills/skills/review/SKILL.md',
+      },
+    ]),
+  );
+  compiler.readActiveSkill.mockImplementation(async (_active, _identity, source) => ({
+    body: `${source} body`,
+    filePath: `C:/active/${source}/SKILL.md`,
+    baseDirectory: `C:/active/${source}`,
+  }));
+  const state = harness();
+  await canonicalSkills(state.api, env);
+  await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+
+  const result = (await state.events.get('input')?.(
+    {
+      text: 'First /mpx:review, then /skill:review and /mpx:review.',
+      source: 'interactive',
+      streamingBehavior: 'followUp',
+    },
+    {},
+  )) as { text: string };
+
+  assert.equal(compiler.readActiveSkill.mock.calls.length, 2);
+  assert.deepEqual(
+    compiler.readActiveSkill.mock.calls.map((call) => call.slice(1)),
+    [
+      ['review', 'canonical'],
+      ['review', 'project'],
+    ],
+  );
+  assert.match(result.text, /^First <skill name="mpx:review"/);
+  assert.match(result.text, /then <skill name="skill:review"/);
+  assert.match(result.text, /and <skill name="mpx:review"[\s\S]*\.$/);
+});
+
+test('submitting an exact inline canonical reference lazily inserts its verified body while preserving prose', async () => {
+  const entry = {
+    identity: 'review',
+    exposure: 'full' as const,
+    canonicalDescription: 'Review',
+    effectiveDescription: 'Review',
+    generatedPath: 'skills/review/SKILL.md',
+  };
+  compiler.loadActiveContentProjection.mockResolvedValue(active([entry]));
+  compiler.readActiveSkill.mockResolvedValue({
+    entry,
+    body: 'Review body',
+    filePath: 'C:/active/skills/review/SKILL.md',
+    baseDirectory: 'C:/active/skills/review',
+  });
+  const state = harness();
+  await canonicalSkills(state.api, env);
+
+  const result = await state.events.get('input')?.(
+    { text: 'Please /mpx:review this change', source: 'interactive' },
+    {},
+  );
+
+  assert.match(
+    (result as { text: string }).text,
+    /^Please <skill name="mpx:review"[\s\S]*Review body[\s\S]*<\/skill> this change$/,
+  );
+  assert.equal(compiler.readActiveSkill.mock.calls.length, 1);
+});
+
+async function realProjectionFixture() {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-pi-canonical-skills-'));
+  const canonicalPath = 'skills/deploy/SKILL.md';
+  const projectPath = 'project-skills/skills/deploy/SKILL.md';
+  const canonicalBytes = Buffer.from('canonical projected body\n');
+  const projectBytes = Buffer.from('managed projected body\n');
+  const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+  await mkdir(path.join(root, 'skills', 'deploy'), { recursive: true });
+  await mkdir(path.join(root, 'project-skills', 'skills', 'deploy'), { recursive: true });
+  await writeFile(path.join(root, ...canonicalPath.split('/')), canonicalBytes);
+  await writeFile(path.join(root, ...projectPath.split('/')), projectBytes);
+  const manifest = {
+    schemaVersion: 2,
+    compilerVersion: '2.0.0',
+    runtime: 'pi',
+    profileSchemaVersion: 1,
+    binding: {
+      projectId: 'project',
+      repositoryId: 'repo',
+      identity: 'test',
+      selection: {
+        location: { name: 'test', canonicalRoot: root },
+        packs: ['development'],
+        source: 'project',
+      },
+    },
+    manifestKey: 'manifest-key',
+    manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
+    skills: [
+      {
+        identity: 'deploy',
+        exposure: 'full',
+        canonicalDescription: 'Canonical deploy.',
+        effectiveDescription: 'Canonical deploy.',
+        sourcePath: 'content/skills/deploy/SKILL.md',
+        generatedPath: canonicalPath,
+        generatedSha256: sha256(canonicalBytes),
+        bodyByteOffset: 0,
+        omittedOptionalFeatures: [],
+      },
+      {
+        identity: 'skill:deploy',
+        exposure: 'full',
+        canonicalDescription: 'Managed deploy.',
+        effectiveDescription: 'Managed deploy.',
+        sourcePath: '.agents/skills/deploy/SKILL.md',
+        generatedPath: projectPath,
+        generatedSha256: sha256(projectBytes),
+        bodyByteOffset: 0,
+        omittedOptionalFeatures: [],
+      },
+    ],
+    agents: [],
+    files: [
+      {
+        relativePath: projectPath,
+        sha256: sha256(projectBytes),
+        byteCount: projectBytes.byteLength,
+      },
+      {
+        relativePath: canonicalPath,
+        sha256: sha256(canonicalBytes),
+        byteCount: canonicalBytes.byteLength,
+      },
+    ],
+  };
+  const manifestPath = path.join(root, 'active-content.json');
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(manifestPath, manifestBytes);
+  return {
+    root,
+    projectFile: path.join(root, ...projectPath.split('/')),
+    environment: {
+      MPX_RUNTIME: 'pi',
+      MPX_ACTIVE_CONTENT_ROOT: root,
+      MPX_ACTIVE_CONTENT_MANIFEST: manifestPath,
+      MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: JSON.stringify({
+        sha256: sha256(manifestBytes),
+        byteCount: manifestBytes.byteLength,
+      }),
+    },
+  };
+}
+
+async function loadCanonicalSkillsWithRealProjection() {
+  vi.doUnmock('@mpx/content-compiler/active');
+  vi.resetModules();
+  return (await import('../../../canonical-skills.js')).default;
+}
+
+test('real projection rejects different-path native authority while canonical identity remains independent', async () => {
+  const fixture = await realProjectionFixture();
+  try {
+    const realCanonicalSkills = await loadCanonicalSkillsWithRealProjection();
+    const state = harness([
+      {
+        name: 'skill:deploy',
+        source: 'skill',
+        sourceInfo: {
+          path: path.join(fixture.root, 'different', 'SKILL.md'),
+          source: 'local',
+          scope: 'project',
+          origin: 'top-level',
+        },
+      },
+    ]);
+    await realCanonicalSkills(state.api, fixture.environment);
+    await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+
+    const result = (await state.events.get('input')?.(
+      { text: 'Use /skill:deploy and /mpx:deploy', source: 'interactive' },
+      {},
+    )) as { text: string };
+
+    assert.match(result.text, /^Use \/skill:deploy and <skill name="mpx:deploy"/);
+    assert.doesNotMatch(result.text, /managed projected body/);
+    assert.match(result.text, /canonical projected body/);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('real projected native path completes an inline managed reference through the real editor on Tab', async () => {
+  const fixture = await realProjectionFixture();
+  try {
+    const realCanonicalSkills = await loadCanonicalSkillsWithRealProjection();
+    const state = harness([
+      {
+        name: 'skill:deploy',
+        source: 'skill',
+        sourceInfo: {
+          path: fixture.projectFile,
+          source: 'local',
+          scope: 'project',
+          origin: 'top-level',
+        },
+      },
+    ]);
+    await realCanonicalSkills(state.api, fixture.environment);
+    await state.events.get('session_start')?.({ reason: 'startup' }, state.sessionContext);
+
+    const terminal = {
+      columns: 120,
+      rows: 40,
+      kittyProtocolActive: false,
+      start: vi.fn(),
+      stop: vi.fn(),
+      drainInput: vi.fn(async () => {}),
+      write: vi.fn(),
+      moveBy: vi.fn(),
+      hideCursor: vi.fn(),
+      showCursor: vi.fn(),
+      clearLine: vi.fn(),
+      clearFromCursor: vi.fn(),
+      clearScreen: vi.fn(),
+      setTitle: vi.fn(),
+      setProgress: vi.fn(),
+    } satisfies Terminal;
+    const tui = new TuiMainScreen(terminal);
+    const plain = (text: string) => text;
+    const theme: EditorTheme = {
+      borderColor: plain,
+      selectList: {
+        selectedPrefix: plain,
+        selectedText: plain,
+        description: plain,
+        scrollInfo: plain,
+        noMatch: plain,
+      },
+    };
+    const editor = new Editor(tui, theme);
+    tui.addChild(editor);
+    tui.setFocus(editor);
+    editor.setAutocompleteProvider(
+      state.autocomplete(new CombinedAutocompleteProvider(undefined, fixture.root, null)),
+    );
+
+    editor.handleInput('Please use /mpx:dep');
+    editor.handleInput('\t');
+
+    await vi.waitFor(() => assert.equal(editor.getText(), 'Please use /mpx:deploy'), {
+      timeout: 500,
+      interval: 5,
+    });
+    assert.deepEqual(editor.getCursor(), { line: 0, col: 22 });
+    assert.equal(state.commands.has('skill:deploy'), false);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
 });

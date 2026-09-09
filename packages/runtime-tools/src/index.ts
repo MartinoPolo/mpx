@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
-  createToolRequestEnvelopeV1,
-  createToolResultEnvelopeV1,
-  parseRuntimeCapabilityManifestV1,
-  validateToolCallV1,
-  validateToolResultV1,
+  createToolRequestEnvelope,
+  createToolResultEnvelope,
+  parseRuntimeCapabilityManifest,
+  validateToolCall,
+  validateToolResult,
   type JsonData,
-  type RuntimeCapabilityManifestV1,
-  type ToolAuthorityV1,
+  type RuntimeCapabilityManifest,
+  type ToolAuthority,
 } from '@mpx/runtime-contracts';
 
 export class GatewayError extends Error {
@@ -122,7 +122,7 @@ export interface ManagedDevService {
   readonly port: number;
 }
 export interface RuntimeToolGatewayOptions {
-  readonly capability: RuntimeCapabilityManifestV1;
+  readonly capability: RuntimeCapabilityManifest;
   readonly executor: GatewayExecutor;
   readonly mcpRoutes: Readonly<Record<string, McpLaunchDescriptor>>;
   readonly providers: readonly ProviderAdapter[];
@@ -195,10 +195,10 @@ export interface LaunchBoundRuntimeTools {
 }
 /** Projects only immutable-manifest authorities. Missing selections remain callable solely to return a stable diagnostic. */
 export function createLaunchBoundRuntimeTools(input: {
-  readonly capability: RuntimeCapabilityManifestV1;
+  readonly capability: RuntimeCapabilityManifest;
   readonly gateway: RuntimeToolGateway;
 }): LaunchBoundRuntimeTools {
-  const manifest = parseRuntimeCapabilityManifestV1(input.capability);
+  const manifest = parseRuntimeCapabilityManifest(input.capability);
   const selected = new Set(manifest.tools.map((tool) => tool.name));
   const available = RUNTIME_GATEWAY_TOOL_NAMES.filter((name) => selected.has(name)).sort();
   const diagnostics = RUNTIME_GATEWAY_TOOL_NAMES.filter((name) => !selected.has(name)).map((tool) =>
@@ -314,7 +314,7 @@ function privateAddress(address: string): boolean {
     a >= 224
   );
 }
-function authority(manifest: RuntimeCapabilityManifestV1, name: string): ToolAuthorityV1 {
+function authority(manifest: RuntimeCapabilityManifest, name: string): ToolAuthority {
   return (
     manifest.tools.find((tool) => tool.name === name) ??
     fail('TOOL_AUTHORITY_DENIED', `aggregate '${name}' is not authorized`)
@@ -332,7 +332,7 @@ function safeText(value: string, maximum: number, code = 'INPUT_LIMIT'): string 
 }
 
 export function activateRuntimeToolGateway(options: RuntimeToolGatewayOptions): RuntimeToolGateway {
-  const manifest = parseRuntimeCapabilityManifestV1(options.capability);
+  const manifest = parseRuntimeCapabilityManifest(options.capability);
   if (options.executor.name !== manifest.executor) {
     fail('EXECUTOR_MISMATCH', 'gateway executor differs from immutable capability');
   }
@@ -378,7 +378,7 @@ export function activateRuntimeToolGateway(options: RuntimeToolGatewayOptions): 
     } = {},
   ) {
     const policy = authority(manifest, name);
-    const request = createToolRequestEnvelopeV1({
+    const request = createToolRequestEnvelope({
       manifestKey: manifest.manifestKey,
       launchKey: manifest.launchKey,
       tool: name,
@@ -390,7 +390,7 @@ export function activateRuntimeToolGateway(options: RuntimeToolGatewayOptions): 
       cacheMode: values.cache ?? 'disabled',
       input,
     });
-    validateToolCallV1(manifest, request);
+    validateToolCall(manifest, request);
     return { policy, request };
   }
   function bounded<T extends JsonData>(
@@ -398,10 +398,10 @@ export function activateRuntimeToolGateway(options: RuntimeToolGatewayOptions): 
     admission: ReturnType<typeof admit>,
     output: T,
   ): T {
-    validateToolResultV1(
+    validateToolResult(
       manifest,
       admission.request,
-      createToolResultEnvelopeV1({
+      createToolResultEnvelope({
         requestKey: admission.request.requestKey,
         output,
         maxOutputBytes: admission.policy.output.maxBytes,

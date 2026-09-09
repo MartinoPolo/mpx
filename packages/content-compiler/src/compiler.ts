@@ -1,23 +1,18 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import {
-  parseRuntimeProfilesV1,
-  type RuntimeProfilesV1,
-  type SemanticSkillCapabilityV1,
+  parseRuntimeProfiles,
+  type RuntimeProfiles,
+  type SemanticSkillCapability,
 } from '@mpx/config';
 import {
-  loadCanonicalAgentProjectionInputsV1,
-  renderCanonicalAgentDocumentV1,
+  loadCanonicalAgentProjectionInputs,
+  renderCanonicalAgentDocument,
 } from '@mpx/subagents/documents';
-import type { AgentCapabilityV1, AgentModelClassV1, AgentThinkingV1 } from '@mpx/subagents';
+import type { AgentCapability, AgentModelClass, AgentThinking } from '@mpx/subagents';
 import { bareSkillIdentity } from '@mpx/runtime-contracts';
-import {
-  enumerateSkillDirectory,
-  verifySkillProjectionPlan,
-  type Runtime,
-  type SkillCapability,
-  type SkillProjectionPlan,
-} from '@mpx/skills';
+import { enumerateSkillDirectory, verifySkillProjectionPlan } from '@mpx/skills';
+import type { Runtime, SkillCapability, SkillProjectionPlan } from '@mpx/skills/contracts';
 import {
   CONTENT_COMPILER_VERSION,
   CONTENT_MANIFEST_SCHEMA_VERSION,
@@ -28,9 +23,9 @@ export type ContentFeature = 'argument-hint' | 'capability-grants';
 export interface CompileContentInput {
   readonly runtime: Runtime;
   readonly plan: SkillProjectionPlan;
-  readonly runtimeProfiles: RuntimeProfilesV1;
+  readonly runtimeProfiles: RuntimeProfiles;
   readonly requiredFeatures?: readonly ContentFeature[];
-  readonly requiredCapabilityGrants?: readonly SemanticSkillCapabilityV1[];
+  readonly requiredCapabilityGrants?: readonly SemanticSkillCapability[];
   readonly sharedInstructionRoot: string;
   readonly agentRoot: string;
 }
@@ -58,10 +53,10 @@ export interface CompiledSkillManifestEntry {
 export interface CompiledAgentManifestEntry {
   readonly canonicalIdentity: string;
   readonly projectedIdentity: string;
-  readonly semanticModel: AgentModelClassV1;
+  readonly semanticModel: AgentModelClass;
   readonly concreteModel: string;
-  readonly thinking: AgentThinkingV1;
-  readonly capabilities: readonly AgentCapabilityV1[];
+  readonly thinking: AgentThinking;
+  readonly capabilities: readonly AgentCapability[];
   readonly tools: readonly string[];
   readonly nesting: Readonly<{
     readonly canonical: readonly string[];
@@ -77,7 +72,7 @@ export interface CompiledAgentManifestEntry {
   readonly generatedByteCount: number;
 }
 export interface ContentInspectionManifest {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: typeof CONTENT_MANIFEST_SCHEMA_VERSION;
   readonly compilerVersion: typeof CONTENT_COMPILER_VERSION;
   readonly runtime: Runtime;
   readonly profileSchemaVersion: 1;
@@ -104,7 +99,7 @@ export interface VerifyCompiledContentTreeInput {
   readonly plan: SkillProjectionPlan;
 }
 
-class ContentCompilerError extends Error {
+export class ContentCompilerError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ContentCompilerError';
@@ -132,7 +127,7 @@ function generatedSkillPath(
 function renderedSkill(
   entry: SkillProjectionPlan['entries'][number],
   runtime: Runtime,
-  profiles: RuntimeProfilesV1,
+  profiles: RuntimeProfiles,
 ): {
   bytes: Uint8Array;
   bodyByteOffset: number;
@@ -399,7 +394,7 @@ export function verifyCompiledContentTree(
 }
 
 export async function compileContent(input: CompileContentInput): Promise<CompiledContentTree> {
-  const runtimeProfiles = parseRuntimeProfilesV1(JSON.stringify(input.runtimeProfiles));
+  const runtimeProfiles = parseRuntimeProfiles(JSON.stringify(input.runtimeProfiles));
   const plan = verifySkillProjectionPlan(input.plan);
   if (plan.runtime !== input.runtime) {
     throw new ContentCompilerError(
@@ -447,9 +442,6 @@ export async function compileContent(input: CompileContentInput): Promise<Compil
   };
   const skills: CompiledSkillManifestEntry[] = [];
   for (const entry of plan.entries) {
-    if (entry.exposure === 'off') {
-      throw new ContentCompilerError(`off skill entered verified plan: ${entry.identity}`);
-    }
     const generatedPath = generatedSkillPath(entry.identity, entry.source.kind);
     const rendered = renderedSkill(entry, input.runtime, runtimeProfiles);
     add(generatedPath, rendered.bytes);
@@ -487,7 +479,7 @@ export async function compileContent(input: CompileContentInput): Promise<Compil
     add(`skills/shared/${file.relativePath}`, file.bytes);
   }
 
-  const canonicalAgents = await loadCanonicalAgentProjectionInputsV1(input.agentRoot);
+  const canonicalAgents = await loadCanonicalAgentProjectionInputs(input.agentRoot);
   const agentProfile = runtimeProfiles.agentTranslation.runtimes[input.runtime];
   const canonicalIdentities = canonicalAgents.entries.map((entry) => entry.identity).sort();
   const aliasIdentities = Object.keys(agentProfile.aliases).sort();
@@ -532,7 +524,7 @@ export async function compileContent(input: CompileContentInput): Promise<Compil
     const generatedPath = `agents/${projectedIdentity}.md`;
     add(
       generatedPath,
-      renderCanonicalAgentDocumentV1(entry.document, { name: projectedIdentity, fields }),
+      renderCanonicalAgentDocument(entry.document, { name: projectedIdentity, fields }),
     );
     const generated = files.get(generatedPath)!;
     agents.push({

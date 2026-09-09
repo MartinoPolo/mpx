@@ -11,8 +11,8 @@ import { rankSearchCandidates } from './search-ranking.js';
 
 export const MAX_SKILL_SEARCH_QUERY_LENGTH = 200;
 export const MAX_SKILL_SEARCH_RESULTS = 20;
-export const MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH = 200;
-export const MAX_HUMAN_SKILL_SEARCH_RESULTS = 20;
+const MAX_HUMAN_SKILL_SEARCH_QUERY_LENGTH = 200;
+const MAX_HUMAN_SKILL_SEARCH_RESULTS = 20;
 
 type SearchResult = {
   identity: string;
@@ -28,6 +28,7 @@ interface SearchPipelineOptions {
   maxResults: number;
   queryDescription: string;
   allowsEntry(entry: RuntimeSkillEntry): boolean;
+  discloseDescription(entry: RuntimeSkillEntry): boolean;
 }
 
 function runSearchPipeline(
@@ -58,25 +59,12 @@ function runSearchPipeline(
       },
     ];
   });
-  return rankSearchCandidates(candidates, query, options.limit, options.maxResults);
-}
-
-export function searchSkills(
-  artifact: RuntimeSkillArtifact,
-  catalog: readonly CatalogSkill[],
-  query: string,
-  options: { artifactKey?: string; runtime?: boolean; limit?: number } = {},
-): SearchResult[] {
-  return runSearchPipeline(artifact, catalog, query, {
-    maxQueryLength: MAX_SKILL_SEARCH_QUERY_LENGTH,
-    maxResults: MAX_SKILL_SEARCH_RESULTS,
-    queryDescription: 'skill search queries',
-    allowsEntry: (entry) =>
-      (entry.exposure === 'full' || entry.exposure === 'name-only') &&
-      entry.permissions.modelInvocation,
-    ...(options.runtime ? { artifactKey: options.artifactKey } : {}),
-    ...(options.limit === undefined ? {} : { limit: options.limit }),
-  });
+  const byIdentity = new Map(artifact.entries.map((entry) => [entry.identity, entry]));
+  return rankSearchCandidates(candidates, query, options.limit, options.maxResults).map((result) =>
+    options.discloseDescription(byIdentity.get(result.identity)!)
+      ? result
+      : { ...result, description: '' },
+  );
 }
 
 export function modelSearchSkills(
@@ -85,9 +73,15 @@ export function modelSearchSkills(
   query: string,
   options: { artifactKey: string; limit?: number },
 ): SearchResult[] {
-  return searchSkills(artifact, catalog, query, {
-    runtime: true,
+  return runSearchPipeline(artifact, catalog, query, {
     artifactKey: options.artifactKey,
+    maxQueryLength: MAX_SKILL_SEARCH_QUERY_LENGTH,
+    maxResults: MAX_SKILL_SEARCH_RESULTS,
+    queryDescription: 'skill search queries',
+    allowsEntry: (entry) =>
+      (entry.exposure === 'full' || entry.exposure === 'name-only') &&
+      entry.permissions.modelInvocation,
+    discloseDescription: (entry) => entry.exposure === 'full',
     ...(options.limit === undefined ? {} : { limit: options.limit }),
   });
 }
@@ -103,6 +97,7 @@ export function humanSearchSkills(
     maxResults: MAX_HUMAN_SKILL_SEARCH_RESULTS,
     queryDescription: 'human skill search queries',
     allowsEntry: (entry) => entry.permissions.humanInvocation,
+    discloseDescription: () => true,
     ...(options.limit === undefined ? {} : { limit: options.limit }),
   });
 }

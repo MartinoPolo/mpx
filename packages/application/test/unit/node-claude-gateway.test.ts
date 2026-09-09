@@ -3,11 +3,11 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createRuntimeCapabilityManifestV1, type ToolAuthorityV1 } from '@mpx/runtime-contracts';
+import { createRuntimeCapabilityManifest, type ToolAuthority } from '@mpx/runtime-contracts';
 import { materializeClaudeGateway } from '../../src/node/index.js';
 
 const launchKey = 'a'.repeat(64);
-const authority = (name: string, routes: string[] = []): ToolAuthorityV1 => ({
+const authority = (name: string, routes: string[] = []): ToolAuthority => ({
   schemaVersion: 1,
   name,
   executors: ['host'],
@@ -20,11 +20,19 @@ const authority = (name: string, routes: string[] = []): ToolAuthorityV1 => ({
   cache: { mode: 'disabled', maxBytes: 0 },
 });
 function capability(identity: 'personal' | 'work', routes = ['mcp:fixture']) {
-  return createRuntimeCapabilityManifestV1({
+  return createRuntimeCapabilityManifest({
     runtime: 'claude',
     launchKey,
     identity: { name: identity, domain: identity, nativeRuntimeRootDigest: 'b'.repeat(64) },
-    binding: { projectId: 'app', repositoryId: 'repo', contentScope: identity },
+    binding: {
+      projectId: 'app',
+      repositoryId: 'repo',
+      selection: {
+        location: { name: identity, canonicalRoot: process.cwd() },
+        packs: [identity === 'personal' ? 'personal' : 'development'],
+        source: 'project',
+      },
+    },
     executor: 'host',
     tools: [authority('mcp', routes), authority('dev_server')],
     routes,

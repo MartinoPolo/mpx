@@ -6,7 +6,7 @@
  */
 
 import { truncateToWidth } from '@earendil-works/pi-tui';
-// VENDOR EDIT (mpx-pi, Phase 7 row 11): the footer owns the gauge vocabulary,
+// VENDOR EDIT (mpx-pi): the footer owns the gauge vocabulary,
 // so the panel's thinking column and the main bar's stay one definition.
 import { thinkingGauge } from '../../footer.js';
 import type { AgentManager } from '../agent-manager.js';
@@ -211,7 +211,7 @@ export function buildInvocationTags(invocation: AgentInvocation | undefined): {
 }
 
 /**
- * VENDOR EDIT (mpx-pi, Phase 7 row 11): the model and thinking cells the
+ * VENDOR EDIT (mpx-pi): the model and thinking cells the
  * upstream widget never drew, so a running agent says which model it is
  * spending and at what effort - the two facts the Claude sub-agent panel puts
  * first and the ones that decide what a parallel fan-out costs.
@@ -410,7 +410,7 @@ export class AgentWidget {
       statusText = theme.fg('warning', ' aborted');
     }
 
-    // VENDOR EDIT (mpx-pi, Phase 7 row 11): model and thinking lead the stats so
+    // VENDOR EDIT (mpx-pi): model and thinking lead the stats so
     // they line up with the running rows and with the main footer's agent bar.
     const parts: string[] = buildModelThinkingCells(a.invocation, theme);
     const activity = this.agentActivity.get(a.id);
@@ -478,7 +478,7 @@ export class AgentWidget {
       const tokenText =
         tokens > 0 ? formatSessionTokens(tokens, contextPercent, theme, a.compactionCount) : '';
 
-      // VENDOR EDIT (mpx-pi, Phase 7 row 11): model and thinking columns.
+      // VENDOR EDIT (mpx-pi): model and thinking columns.
       const parts: string[] = buildModelThinkingCells(a.invocation, theme);
       if (bg) {
         parts.push(formatTurns(bg.turnCount, bg.maxTurns));

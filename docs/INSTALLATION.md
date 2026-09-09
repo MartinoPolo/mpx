@@ -6,7 +6,9 @@ Configure `%APPDATA%/mpx/config.json`, set the required `MPX_*` machine roots, t
 mpx setup
 ```
 
-`mpx setup` validates and repairs the currently installed immutable release. It does not build changes from the directory where you run it. Installed releases are checked against their complete content-addressed manifest without requiring development dependencies.
+`mpx setup` validates and repairs the currently installed immutable release. It does not build changes from the directory where you run it. Installed releases are checked against their complete content-addressed manifest without requiring development dependencies and are fully self-contained; installed selectors do not depend on local checkout `bin/mpx.mjs` or `bin/claude-gateway.js` artifacts.
+
+`bin/mpx.mjs` and `bin/claude-gateway.js` in the source checkout are ignored generated files. The documented setup/build flow regenerates them before checkout binaries are used in release creation.
 
 ## Install changes from the Windows checkout
 
@@ -16,7 +18,7 @@ From the MPX repository in Git Bash, run:
 pnpm run setup
 ```
 
-This builds and verifies the Pi extension, bundles the CLI, then publishes, selects, and strictly verifies the new immutable release. A failed build stops before installation. The setup wrapper reads missing MPX values from your existing Windows user environment; it does not add or persist environment variables. Repository dependencies must already be installed (`pnpm install` for a fresh checkout).
+This builds and verifies the Pi extension, bundles the CLI, then publishes, selects, and strictly verifies the new immutable release. A failed build stops before installation. The setup wrapper reads missing MPX values from your existing Windows user environment; it does not add or persist environment variables. In a fresh checkout, first install the exact locked dependency graph with `pnpm install --frozen-lockfile`; `pnpm run setup` already performs the required build and bundling, including regenerating `bin/mpx.mjs` and `bin/claude-gateway.js` for the release artifacts.
 
 Use `pnpm run setup`, not `pnpm setup`: the latter is pnpm's own shell-configuration command. After setup succeeds, restart your MPX runtime to load the new release. Native account data and credentials remain untouched.
 
@@ -29,7 +31,7 @@ Use `pnpm run setup`, not `pnpm setup`: the latter is pnpm's own shell-configura
 - Pending authorized transactions recover under the installer lock. Failed applies roll back automatically from durable journals and snapshots.
 - Planning, rollback, recovery, and legacy detach are internal to `mpx setup`; there are no public rollback, uninstall, or external-action commands.
 
-A fresh installation may perform the narrow legacy Pi-link detach defined in [ADR 0002](adr/0002-no-permanent-legacy-readers.md) and [the durability contract](pi-legacy-detach-durability.md). Normal operation never reads legacy configuration.
+A fresh installation may perform the narrow legacy Pi-link detach defined by the [current-only contracts and migration policy](../decisions.md#current-only-contracts-and-migration) and [the durability contract](pi-legacy-detach-durability.md). Normal operation never reads legacy configuration.
 
 ## Installed entrypoints
 

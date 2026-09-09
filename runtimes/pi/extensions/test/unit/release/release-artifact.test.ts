@@ -54,6 +54,7 @@ const productionSourceInputs = [
   '../../../packages/runtime-contracts/src/capabilities.ts',
   '../../../packages/runtime-contracts/src/index.ts',
   '../../../packages/runtime-contracts/src/skill-identity.ts',
+  '../../../packages/runtime-contracts/src/skill-selection.ts',
   'agent-resurrect.ts',
   'auto-title.ts',
   'canonical-skills.ts',
@@ -90,6 +91,7 @@ const productionSourceInputs = [
   'package.json',
   'scripts/release.mjs',
   'session-lifecycle.ts',
+  'skill-references.ts',
   'subagents/LICENSE',
   'subagents/abortable.ts',
   'subagents/agent-file-policy.ts',
@@ -191,6 +193,22 @@ test('source digest tracks the lifecycle producer and its contract source bytes'
     'session-lifecycle.ts',
     '../../../packages/runtime-contracts/src/capabilities.ts',
     '../../../packages/runtime-contracts/src/index.ts',
+  ]) {
+    assert.notEqual(
+      digest,
+      recomputeSourceTreeDigest((relativePath) => {
+        const bytes = readFileSync(path.join(packageRoot, relativePath));
+        return relativePath === changed ? Buffer.concat([bytes, Buffer.from('changed')]) : bytes;
+      }),
+    );
+  }
+});
+
+test('source digest tracks inline-reference and shared-selection source bytes', () => {
+  const digest = recomputeSourceTreeDigest();
+  for (const changed of [
+    'skill-references.ts',
+    '../../../packages/runtime-contracts/src/skill-selection.ts',
   ]) {
     assert.notEqual(
       digest,

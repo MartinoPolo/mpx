@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "project": { "id": "phase-h/coupled" },
+  "project": { "id": "service-manifests/coupled" },
   "repository": { "provider": "generic", "remote": "origin" },
   "development": {
     "services": {

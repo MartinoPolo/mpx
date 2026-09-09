@@ -1,7 +1,7 @@
 import { lstat, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createSessionLifecycleEventV1, type RuntimeContextV1 } from '@mpx/runtime-contracts';
+import { createSessionLifecycleEvent, type RuntimeContext } from '@mpx/runtime-contracts';
 import type { LaunchDescriptor } from '@mpx/launch';
 import { SessionStore } from '@mpx/sessions';
 import { describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import { ProductionSessionLifecycleBridge } from '../../src/node/session-lifecyc
 const hash = (character: string) => character.repeat(64);
 function launchFixture(root: string): {
   descriptor: LaunchDescriptor;
-  runtimeContext: RuntimeContextV1;
+  runtimeContext: RuntimeContext;
   cwd: string;
 } {
   const cwd = path.join(root, 'repository');
@@ -20,18 +20,20 @@ function launchFixture(root: string): {
     launchKey: hash('a'),
     binding: { projectId: 'sample/project', repositoryId: 'sample/repository' },
     mode: 'project',
-    skillPolicy: 'clean',
-    contentScope: { name: 'personal' },
+    selection: {
+      location: { name: 'personal', canonicalRoot: cwd },
+      packs: ['personal'],
+      source: 'project',
+    },
     executor: { name: 'host' },
     workspace: 'direct',
     networkPolicy: { name: 'minimal' },
-    grants: [],
   } as unknown as LaunchDescriptor;
   const runtimeContext = {
     launchDescriptor: { digest: hash('b') },
     runtimeArtifact: { artifactKey: hash('c') },
     manifestKey: hash('d'),
-  } as RuntimeContextV1;
+  } as RuntimeContext;
   return { descriptor, runtimeContext, cwd };
 }
 
@@ -64,7 +66,7 @@ describe('ProductionSessionLifecycleBridge', () => {
       await bridge.prepare(input);
       expect(await store.listNativeBindings()).toHaveLength(1);
 
-      const event = createSessionLifecycleEventV1({
+      const event = createSessionLifecycleEvent({
         eventId: 'event-1',
         bindingId: prepared.binding.bindingId,
         type: 'start',

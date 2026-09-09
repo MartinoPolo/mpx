@@ -7,7 +7,6 @@ import {
   loadUserConfig,
   planInit,
   resolveConfig,
-  resolveEffectiveSkillPacks,
   rollbackConfirmedInit,
   type Diagnostic as ConfigDiagnostic,
   type DiscoveredConfig,
@@ -16,12 +15,7 @@ import {
   type UserConfig,
 } from '@mpx/config';
 import { MpxError, sha256Canonical, type Diagnostic, type JsonValue } from '@mpx/core';
-import {
-  doctor as skillDoctor,
-  inventoryCanonical,
-  inventoryProjectSkills,
-  type ResolveOptions,
-} from '@mpx/skills';
+import { doctor as skillDoctor, inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
 import type { ApplicationOperationResult } from './contracts.js';
 
 export interface ProjectPathOperations {
@@ -72,13 +66,13 @@ export interface ProjectApplicationDependencies {
   }): Promise<ProjectEnsureResult>;
 }
 const emptyUserConfig = (): UserConfig => ({
+  schemaVersion: 2,
   identities: {},
   domains: {},
-  contentScopes: {},
+  locations: {},
   modes: {},
-  skillPolicies: {},
   presets: {},
-  launchDefaults: { projects: {}, scopes: {} },
+  launchDefaults: { projects: {}, locations: {} },
   networkPolicies: {},
   executors: { host: {} },
 });
@@ -103,48 +97,6 @@ const requiredError = (absolute: boolean): MpxError =>
       ? 'Create %APPDATA%/mpx/config.json.'
       : 'Create %APPDATA%/mpx/config.json and set APPDATA to an absolute path.',
   });
-
-export function resolveProjectSkillOptions(
-  user: UserConfig,
-  binding: {
-    identity: string;
-    skillPolicy: string;
-    contentScope: string;
-    repositoryId: string;
-    projectId?: string;
-  },
-): ResolveOptions {
-  const configuredScope = user.contentScopes[binding.contentScope];
-  if (!configuredScope) {
-    throw new MpxError({
-      code: 'CONTENT_SCOPE_UNKNOWN',
-      message: `Unknown content scope '${binding.contentScope}'.`,
-    });
-  }
-  const policy = user.skillPolicies[binding.skillPolicy];
-  if (!policy) {
-    throw new MpxError({
-      code: 'SKILL_POLICY_UNKNOWN',
-      message: `Unknown skill policy '${binding.skillPolicy}'.`,
-    });
-  }
-  const override = binding.projectId ? user.projects?.[binding.projectId] : undefined;
-  return {
-    repositoryId: binding.repositoryId,
-    contentScope: binding.contentScope,
-    ...(binding.projectId ? { projectId: binding.projectId } : {}),
-    enabledPacks: resolveEffectiveSkillPacks({
-      contentScopeSkillPacks: configuredScope.skillPacks,
-      projectSkillPacks: override?.skillPacks,
-      skillPolicySkillPacks: policy.skillPacks,
-    }),
-    identity: binding.identity,
-    skillPolicy: binding.skillPolicy,
-    skillPolicyConfig: policy,
-    contentScopeExposure: configuredScope.skillExposure ?? {},
-    ...(override?.skillExposure ? { projectExposure: override.skillExposure } : {}),
-  };
-}
 
 export class ProjectApplicationService {
   constructor(private readonly dependencies: ProjectApplicationDependencies) {}
@@ -317,7 +269,7 @@ export class ProjectApplicationService {
     ApplicationOperationResult<{
       diagnostics: Diagnostic[];
       cwdClassification: ResolvedConfig['cwdClassification'];
-      resolvedContentScope: string;
+      resolvedSelection: ResolvedConfig['selection'];
     }>
   > {
     const found = await this.discover(request.cwd);
@@ -391,10 +343,18 @@ export class ProjectApplicationService {
         })),
       );
     }
+    const identityName = Object.keys(user.identities).sort()[0];
+    if (!identityName) {
+      throw new MpxError({
+        code: 'IDENTITY_REQUIRED',
+        message: 'Configuration diagnostics require at least one configured identity.',
+      });
+    }
     const resolved = await (this.dependencies.resolveConfig ?? resolveConfig)(
       found.config,
       user,
       request.cwd,
+      identityName,
     );
     const diagnostics: Diagnostic[] = [
       ...(this.dependencies.configDoctor ?? configDoctor)(found.config, user).map(
@@ -419,7 +379,7 @@ export class ProjectApplicationService {
       data: {
         diagnostics,
         cwdClassification: resolved.cwdClassification,
-        resolvedContentScope: resolved.contentScope.name,
+        resolvedSelection: resolved.selection,
       },
       exitCode: diagnostics.some((item) => item.severity === 'error') ? 1 : 0,
     };

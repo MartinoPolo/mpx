@@ -24,6 +24,7 @@ import {
   type Diagnostic,
   type JsonValue,
 } from '@mpx/core';
+import { ContentCompilerError } from '@mpx/content-compiler';
 import { ExecutionError } from '@mpx/executors';
 import { expandBranchTemplate } from '@mpx/worktrees';
 import { inventoryCanonical, inventoryProjectSkills, SkillCatalogError } from '@mpx/skills';
@@ -111,16 +112,13 @@ function parse(argv: readonly string[]): Parsed {
         'limit',
         'lines',
         'identity',
-        'skill-policy',
         'runtime',
-        'content-scope',
         'mode',
         'executor',
         'workspace',
         'network-policy',
         'preset',
         'reason',
-        'grant',
         'base',
         'template',
         'slug',
@@ -157,7 +155,7 @@ function parse(argv: readonly string[]): Parsed {
       ) {
         throw new UsageError(`--${name} requires a value`);
       }
-      if (['grant', 'runtime-arg'].includes(name!)) {
+      if (name === 'runtime-arg') {
         options.set(name!, [...((options.get(name!) as string[] | undefined) ?? []), value]);
       } else {
         options.set(name!, value);
@@ -227,8 +225,41 @@ function sanitizePublicMessage(message: string): string {
     .slice(0, 256);
 }
 
-function invalidConfigError(): MpxError {
-  return new MpxError({ code: 'CONFIG_INVALID', message: 'Configuration is invalid.' });
+const safeConfigField = /^[A-Za-z0-9][A-Za-z0-9._~-]*$/u;
+const sensitiveConfigField = /(?:secret|token|password|credential|api[._-]?key|private[._-]?key)/iu;
+
+function safeFieldName(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    safeConfigField.test(value) &&
+    !sensitiveConfigField.test(value)
+    ? value
+    : undefined;
+}
+
+function safeConfigPointer(instancePath: string): string {
+  if (!instancePath) {
+    return '/';
+  }
+  const segments = instancePath.split('/').slice(1);
+  return segments.length > 0 && segments.every((segment) => safeFieldName(segment) !== undefined)
+    ? `/${segments.join('/')}`
+    : '/[field]';
+}
+
+function invalidConfigError(error: SyntaxError): MpxError {
+  return new MpxError({
+    code: 'CONFIG_INVALID',
+    message: 'Configuration is invalid.',
+    details: {
+      errors: [
+        {
+          pointer: '/',
+          keyword: 'syntax',
+          reason: sanitizePublicMessage(error.message),
+        },
+      ],
+    },
+  });
 }
 
 function normalizeConfigError(error: ConfigValidationError): MpxError {
@@ -236,10 +267,21 @@ function normalizeConfigError(error: ConfigValidationError): MpxError {
     code: 'CONFIG_INVALID',
     message: 'Configuration is invalid.',
     details: {
-      errors: error.errors.map(({ instancePath, keyword }) => ({
-        pointer: instancePath || '/',
-        keyword,
-      })),
+      errors: error.errors.map(({ instancePath, keyword, message, params }) => {
+        const parameter =
+          keyword === 'required'
+            ? safeFieldName(params.missingProperty)
+            : keyword === 'additionalProperties'
+              ? safeFieldName(params.additionalProperty)
+              : undefined;
+        const reason =
+          keyword === 'required' && parameter
+            ? `missing required field '${parameter}'`
+            : keyword === 'additionalProperties' && parameter
+              ? `unknown field '${parameter}'`
+              : sanitizePublicMessage(message ?? 'does not match the current schema');
+        return { pointer: safeConfigPointer(instancePath), keyword, reason };
+      }),
     },
   });
 }
@@ -575,10 +617,8 @@ async function execute(parsed: Parsed, context: CliContext, io: CliIo): Promise<
     };
     const runtime = action;
     const identityOption = stringOption('identity'),
-      modeOption = stringOption('mode'),
-      skillPolicyOption = stringOption('skill-policy');
-    const contentScopeOption = stringOption('content-scope'),
-      presetOption = stringOption('preset'),
+      modeOption = stringOption('mode');
+    const presetOption = stringOption('preset'),
       reasonOption = stringOption('reason');
     const executorOption = stringOption('executor'),
       workspaceOption = stringOption('workspace'),
@@ -638,8 +678,6 @@ async function execute(parsed: Parsed, context: CliContext, io: CliIo): Promise<
       runtime,
       ...(identityOption ? { identity: identityOption } : {}),
       ...(modeOption ? { mode: modeOption } : {}),
-      ...(skillPolicyOption ? { skillPolicy: skillPolicyOption } : {}),
-      ...(contentScopeOption ? { contentScope: contentScopeOption } : {}),
       ...(executorOption === 'host' || executorOption === 'docker'
         ? { executor: executorOption }
         : {}),
@@ -652,11 +690,7 @@ async function execute(parsed: Parsed, context: CliContext, io: CliIo): Promise<
       ...(presetOption ? { preset: presetOption } : {}),
       ...(runtimeArgs ? { runtimeArgs } : {}),
     });
-    const grantOptions = parsed.options.get('grant');
-    const resolved = await service.resolve(prepared, {
-      ...(Array.isArray(grantOptions) ? { grants: grantOptions } : {}),
-      ...(reasonOption ? { reason: reasonOption } : {}),
-    });
+    const resolved = await service.resolve(prepared, reasonOption ? { reason: reasonOption } : {});
     const descriptor = service.descriptor(resolved);
     const prelaunchWarnings = descriptor.diagnostics.filter(
       (diagnostic) => diagnostic.code === 'PROJECT_CONFIG_MISSING_DEVELOPER_FALLBACK',
@@ -771,11 +805,16 @@ export async function run(
                 code: skillDiagnostic.code,
                 message: sanitizePublicMessage(skillDiagnostic.message),
               })
-            : error instanceof StrictJsonError
-              ? invalidConfigError()
-              : error instanceof ConfigValidationError
-                ? normalizeConfigError(error)
-                : unexpectedCommandError(error, context);
+            : error instanceof ContentCompilerError
+              ? new MpxError({
+                  code: 'CONTENT_COMPILATION_FAILED',
+                  message: sanitizePublicMessage(error.message),
+                })
+              : error instanceof StrictJsonError
+                ? invalidConfigError(error)
+                : error instanceof ConfigValidationError
+                  ? normalizeConfigError(error)
+                  : unexpectedCommandError(error, context);
     if (parsed?.json || argv.includes('--json')) {
       io.stdout(JSON.stringify(errorEnvelope(normalized)) + '\n');
     } else {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AgentCatalogError, parseAgentCatalogV1, resolveAgentCatalogV1 } from '../../src/index.js';
+import { AgentCatalogError, parseAgentCatalog, resolveAgentCatalog } from '../../src/index.js';
 
 const agent = {
   modelClass: 'standard',
@@ -24,15 +24,13 @@ function expectCode(action: () => unknown, code: string): void {
 describe('agent catalog V1', () => {
   it('accepts exactly the semantic model classes and rejects legacy classes', () => {
     for (const modelClass of ['mechanical', 'exploration', 'standard', 'advanced', 'frontier']) {
-      expect(parseAgentCatalogV1(catalog({ 'mpx-alpha': { ...agent, modelClass } }))).toMatchObject(
-        {
-          agents: { 'mpx-alpha': { modelClass } },
-        },
-      );
+      expect(parseAgentCatalog(catalog({ 'mpx-alpha': { ...agent, modelClass } }))).toMatchObject({
+        agents: { 'mpx-alpha': { modelClass } },
+      });
     }
     for (const modelClass of ['luna', 'terra', 'sol']) {
       expectCode(
-        () => parseAgentCatalogV1(catalog({ 'mpx-alpha': { ...agent, modelClass } })),
+        () => parseAgentCatalog(catalog({ 'mpx-alpha': { ...agent, modelClass } })),
         'AGENT_CATALOG_SCHEMA_INVALID',
       );
     }
@@ -40,7 +38,7 @@ describe('agent catalog V1', () => {
 
   it('retains the native SyntaxError cause for malformed JSON', () => {
     try {
-      parseAgentCatalogV1('{');
+      parseAgentCatalog('{');
       throw new Error('expected catalog error');
     } catch (error) {
       expect(error).toBeInstanceOf(AgentCatalogError);
@@ -86,13 +84,13 @@ describe('agent catalog V1', () => {
       { schemaVersion: 1, agents: { 'mpx-alpha': { ...agent, outputSchema: '' } } },
     ],
   ])('rejects malformed %s fields with the stable schema code', (_name, value) => {
-    expectCode(() => parseAgentCatalogV1(JSON.stringify(value)), 'AGENT_CATALOG_SCHEMA_INVALID');
+    expectCode(() => parseAgentCatalog(JSON.stringify(value)), 'AGENT_CATALOG_SCHEMA_INVALID');
   });
 
   it('reports immutable missing and unexpected identities for coverage failures', () => {
-    const parsed = parseAgentCatalogV1(catalog({ 'mpx-alpha': agent, 'mpx-extra': agent }));
+    const parsed = parseAgentCatalog(catalog({ 'mpx-alpha': agent, 'mpx-extra': agent }));
     try {
-      resolveAgentCatalogV1(parsed, ['mpx-alpha', 'mpx-missing']);
+      resolveAgentCatalog(parsed, ['mpx-alpha', 'mpx-missing']);
       throw new Error('expected catalog error');
     } catch (error) {
       expect(error).toMatchObject({
@@ -116,7 +114,7 @@ describe('agent catalog V1', () => {
     ['selector length', 'mpx-parent', ['x'.repeat(256)]],
     ['wildcard count', 'mpx-parent', [`mpx-${'*'.repeat(16)}`]],
   ])('accepts catalogs at the exact maximum %s', (_label, identity, nesting) => {
-    expect(parseAgentCatalogV1(catalog({ [identity]: { ...agent, nesting } }))).toMatchObject({
+    expect(parseAgentCatalog(catalog({ [identity]: { ...agent, nesting } }))).toMatchObject({
       schemaVersion: 1,
     });
   });
@@ -127,39 +125,39 @@ describe('agent catalog V1', () => {
     ['wildcard count', 'mpx-parent', [`mpx-${'*'.repeat(17)}`]],
   ])('rejects catalogs over the fixed %s safety limit', (_label, identity, nesting) => {
     expectCode(
-      () => parseAgentCatalogV1(catalog({ [identity]: { ...agent, nesting } })),
+      () => parseAgentCatalog(catalog({ [identity]: { ...agent, nesting } })),
       'AGENT_CATALOG_SCHEMA_INVALID',
     );
   });
 
   it('treats regex punctuation literally', () => {
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': { ...agent, nesting: ['mpx-reviewer.+*'] },
         'mpx-reviewer-a': agent,
       }),
     );
     expectCode(
-      () => resolveAgentCatalogV1(parsed, ['mpx-parent', 'mpx-reviewer-a']),
+      () => resolveAgentCatalog(parsed, ['mpx-parent', 'mpx-reviewer-a']),
       'AGENT_CATALOG_SELECTOR_UNRESOLVED',
     );
   });
 
   it('anchors wildcard selectors to the complete identity', () => {
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': { ...agent, nesting: ['reviewer-*'] },
         'mpx-reviewer-a': agent,
       }),
     );
     expectCode(
-      () => resolveAgentCatalogV1(parsed, ['mpx-parent', 'mpx-reviewer-a']),
+      () => resolveAgentCatalog(parsed, ['mpx-parent', 'mpx-reviewer-a']),
       'AGENT_CATALOG_SELECTOR_UNRESOLVED',
     );
   });
 
   it('matches repeated wildcards observably', () => {
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': { ...agent, nesting: ['mpx-**reviewer***-a'] },
         'mpx-reviewer-a': agent,
@@ -167,21 +165,21 @@ describe('agent catalog V1', () => {
     );
 
     expect(
-      resolveAgentCatalogV1(parsed, ['mpx-parent', 'mpx-reviewer-a']).agents['mpx-parent'],
+      resolveAgentCatalog(parsed, ['mpx-parent', 'mpx-reviewer-a']).agents['mpx-parent'],
     ).toMatchObject({ nesting: ['mpx-reviewer-a'] });
   });
 
   it('bounds adversarial wildcard nonmatches', () => {
     const selector = `${'*a'.repeat(16)}b`;
     const candidate = `mpx-${'a'.repeat(124)}`;
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': { ...agent, nesting: [selector] },
         [candidate]: agent,
       }),
     );
     expectCode(
-      () => resolveAgentCatalogV1(parsed, ['mpx-parent', candidate]),
+      () => resolveAgentCatalog(parsed, ['mpx-parent', candidate]),
       'AGENT_CATALOG_SELECTOR_UNRESOLVED',
     );
   });
@@ -189,11 +187,9 @@ describe('agent catalog V1', () => {
   it.each(['mpx-missing', 'mpx-missing*'])(
     'fails an unresolved literal or wildcard selector',
     (selector) => {
-      const parsed = parseAgentCatalogV1(
-        catalog({ 'mpx-alpha': { ...agent, nesting: [selector] } }),
-      );
+      const parsed = parseAgentCatalog(catalog({ 'mpx-alpha': { ...agent, nesting: [selector] } }));
       expectCode(
-        () => resolveAgentCatalogV1(parsed, ['mpx-alpha']),
+        () => resolveAgentCatalog(parsed, ['mpx-alpha']),
         'AGENT_CATALOG_SELECTOR_UNRESOLVED',
       );
     },
@@ -201,7 +197,7 @@ describe('agent catalog V1', () => {
 
   it('uses bytewise default sort without locale comparison', () => {
     const identities = ['mpx-zed', 'mpx-reviewer-b', 'mpx-parent', 'mpx-reviewer-a'];
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': { ...agent, nesting: ['mpx-reviewer-*'] },
         'mpx-reviewer-b': agent,
@@ -213,7 +209,7 @@ describe('agent catalog V1', () => {
       throw new Error('localeCompare is forbidden');
     });
     try {
-      const resolved = resolveAgentCatalogV1(parsed, identities);
+      const resolved = resolveAgentCatalog(parsed, identities);
       expect(resolved.identities).toEqual([...identities].sort());
       expect(resolved.agents['mpx-parent']?.nesting).toEqual(['mpx-reviewer-a', 'mpx-reviewer-b']);
     } finally {
@@ -222,7 +218,7 @@ describe('agent catalog V1', () => {
   });
 
   it('uses selector order, sorted wildcard matches, and first-occurrence dedupe', () => {
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': {
           ...agent,
@@ -233,7 +229,7 @@ describe('agent catalog V1', () => {
         'mpx-zed': agent,
       }),
     );
-    const resolved = resolveAgentCatalogV1(parsed, [
+    const resolved = resolveAgentCatalog(parsed, [
       'mpx-zed',
       'mpx-reviewer-b',
       'mpx-parent',
@@ -253,7 +249,7 @@ describe('agent catalog V1', () => {
   });
 
   it('does not mutate parsed catalogs or caller identity arrays', () => {
-    const parsed = parseAgentCatalogV1(
+    const parsed = parseAgentCatalog(
       catalog({
         'mpx-parent': { ...agent, nesting: ['mpx-child*'] },
         'mpx-child': agent,
@@ -261,7 +257,7 @@ describe('agent catalog V1', () => {
     );
     const before = JSON.stringify(parsed);
     const identities = ['mpx-parent', 'mpx-child'];
-    resolveAgentCatalogV1(parsed, identities);
+    resolveAgentCatalog(parsed, identities);
     expect(JSON.stringify(parsed)).toBe(before);
     expect(identities).toEqual(['mpx-parent', 'mpx-child']);
   });

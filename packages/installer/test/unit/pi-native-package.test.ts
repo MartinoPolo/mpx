@@ -10,11 +10,11 @@ import {
   parsePiSettings,
   planPiNativePackageSettings,
   resolvePiNativePackageSource,
-  type ReleaseFileV1,
+  type ReleaseFile,
 } from '../../src/index.js';
 
 const sha = (value: string) => installerDigest(value);
-const files = (paths: readonly string[]): ReleaseFileV1[] =>
+const files = (paths: readonly string[]): ReleaseFile[] =>
   paths.map((file, index) => ({
     path: `${PI_NATIVE_PACKAGE_ROOT}/${file}`,
     sha256: sha(file),

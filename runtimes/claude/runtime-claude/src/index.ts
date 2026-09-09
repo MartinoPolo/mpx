@@ -1,35 +1,37 @@
 import { lstat, mkdir, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { verifySkillProjectionPlan, type SkillProjectionPlan } from '@mpx/skills';
+import { verifySkillProjectionPlan } from '@mpx/skills';
+import type { SkillProjectionPlan } from '@mpx/skills/contracts';
 import { verifyCompiledContentTree, type CompiledContentTree } from '@mpx/content-compiler';
 import {
-  parseRuntimeCapabilityManifestV1,
-  parseRuntimeContextV1,
+  parseRuntimeCapabilityManifest,
+  parseRuntimeContext,
   publishRuntimeArtifact,
   validateRuntimeContext,
-  validateSessionLifecycleBindingV1,
-  type NativeSessionRefV1,
+  validateSessionLifecycleBinding,
+  type CapabilityExecutor,
+  type NativeSessionRef,
   type PublishedRuntimeArtifactReference,
-  type RuntimeContextV1,
+  type RuntimeContext,
   type RuntimeContractDiagnostic,
 } from '@mpx/runtime-contracts';
 import {
   classifyDangerousCommand,
   dangerousCommandPolicyModuleSource,
   evaluatePackagePolicy,
-  projectRuntimeCommandPolicySourceV1,
+  projectRuntimeCommandPolicySource,
   type PackageManager,
 } from '@mpx/runtime-hooks';
 import {
-  composeRuntimeStatusEnvelopeV1,
+  composeRuntimeStatusEnvelope,
   createRuntimeStatusRefreshController,
-  parseRuntimeStatusEnvelopeV1,
-  parseStatusSnapshotV1,
+  parseRuntimeStatusEnvelope,
+  parseStatusSnapshot,
   renderClaudePortSegment,
-  type RuntimeStatusBindingV1,
+  type RuntimeStatusBinding,
   type RuntimeStatusEnvelopeReader,
-  type RuntimeStatusEnvelopeV1,
-  type StatusSnapshotV1,
+  type RuntimeStatusEnvelope,
+  type StatusSnapshot,
 } from '@mpx/status';
 import {
   createDevServerToolAdapter,
@@ -63,10 +65,10 @@ export interface ClaudeBuildInput {
   readonly globalInstructions: string;
   readonly claudeInstructions: string;
   readonly outputRoot: string;
-  readonly statusSnapshot: StatusSnapshotV1;
-  readonly runtimeStatusEnvelope?: RuntimeStatusEnvelopeV1;
+  readonly statusSnapshot: StatusSnapshot;
+  readonly runtimeStatusEnvelope?: RuntimeStatusEnvelope;
   readonly launchBanner: string;
-  readonly runtimeContext: RuntimeContextV1;
+  readonly runtimeContext: RuntimeContext;
 }
 export interface ClaudeProjection {
   readonly directory: string;
@@ -281,16 +283,16 @@ async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
   }
 }
 function statusSnapshotFile(snapshot: unknown): string {
-  return `${JSON.stringify(parseStatusSnapshotV1(snapshot), null, 2)}\n`;
+  return `${JSON.stringify(parseStatusSnapshot(snapshot), null, 2)}\n`;
 }
 function runtimeStatusFile(envelope: unknown): string {
-  return `${JSON.stringify(parseRuntimeStatusEnvelopeV1(envelope), null, 2)}\n`;
+  return `${JSON.stringify(parseRuntimeStatusEnvelope(envelope), null, 2)}\n`;
 }
 const hookCommand = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/runtime-guard.mjs"';
 const hook = (timeout = 5) => ({ type: 'command', command: hookCommand, timeout });
 const hooksJson = `${JSON.stringify({ hooks: { SessionStart: [{ hooks: [hook()] }], UserPromptSubmit: [{ hooks: [hook()] }], PreToolUse: [{ matcher: 'Skill|Agent|Task|Bash', hooks: [hook(125)] }], PostToolUse: [{ matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash', hooks: [hook(125)] }], PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook()] }], PreCompact: [{ hooks: [hook()] }], Notification: [{ hooks: [hook()] }], Stop: [{ hooks: [hook()] }] } }, null, 2)}\n`;
 function runtimeGuard(): string {
-  const policySource = projectRuntimeCommandPolicySourceV1();
+  const policySource = projectRuntimeCommandPolicySource();
   return String.raw`import {spawnSync} from "node:child_process";
 import {createHash,randomUUID} from "node:crypto";
 import {existsSync,readFileSync} from "node:fs";
@@ -451,9 +453,9 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     'claude',
     'CLAUDE.md',
   ]);
-  const runtimeContext = parseRuntimeContextV1(input.runtimeContext),
+  const runtimeContext = parseRuntimeContext(input.runtimeContext),
     runtimeStatus = input.runtimeStatusEnvelope
-      ? parseRuntimeStatusEnvelopeV1(input.runtimeStatusEnvelope)
+      ? parseRuntimeStatusEnvelope(input.runtimeStatusEnvelope)
       : undefined;
   if (
     runtimeStatus &&
@@ -561,7 +563,7 @@ export async function publishClaudeProjection(
   input: ClaudePublishInput,
 ): Promise<ClaudePublishedProjection> {
   const skillPlan = verifySkillProjectionPlan(input.skillPlan),
-    context = parseRuntimeContextV1(input.runtimeContext);
+    context = parseRuntimeContext(input.runtimeContext);
   await mkdir(input.artifactsRoot, { recursive: true });
   const staging = await mkdtemp(path.join(input.artifactsRoot, '.claude-build-'));
   await rm(staging, { recursive: true, force: true });
@@ -620,19 +622,19 @@ export function adaptClaudePreBash(command: string, manager: PackageManager | nu
 export interface ClaudeRuntimeStatusProducer {
   readonly refresh: () => Promise<void>;
   readonly render: (input: { launchBanner: string; width?: 'narrow' | 'wide' }) => string;
-  readonly current: () => RuntimeStatusEnvelopeV1 | undefined;
+  readonly current: () => RuntimeStatusEnvelope | undefined;
   readonly abort: () => void;
 }
 // fallow-ignore-next-line unused-export -- stable runtime automation contract.
 export function createClaudeRuntimeStatusProducer(
   reader: RuntimeStatusEnvelopeReader,
-  binding: RuntimeStatusBindingV1,
-  initial?: RuntimeStatusEnvelopeV1,
+  binding: RuntimeStatusBinding,
+  initial?: RuntimeStatusEnvelope,
 ): ClaudeRuntimeStatusProducer {
   const controller = createRuntimeStatusRefreshController(
     {
       read: async (signal) => {
-        const value = parseRuntimeStatusEnvelopeV1(await reader.read(signal));
+        const value = parseRuntimeStatusEnvelope(await reader.read(signal));
         if (
           value.binding.launchKey !== binding.launchKey ||
           value.binding.runtimeId !== binding.runtimeId ||
@@ -690,8 +692,8 @@ export function adaptClaudeNativeStatus(
   base: unknown,
   native: ClaudeNativeStatusInput,
   options: ClaudeNativeStatusAdaptOptions = {},
-): RuntimeStatusEnvelopeV1 {
-  const envelope = parseRuntimeStatusEnvelopeV1(base),
+): RuntimeStatusEnvelope {
+  const envelope = parseRuntimeStatusEnvelope(base),
     capturedAt = options.capturedAt ?? new Date().toISOString(),
     freshnessMs = options.freshnessMs ?? 60_000;
   if (
@@ -748,7 +750,7 @@ export function adaptClaudeNativeStatus(
     development: preserve(envelope.development),
     actions: preserve(envelope.actions),
   };
-  return composeRuntimeStatusEnvelopeV1({
+  return composeRuntimeStatusEnvelope({
     generatedAt: capturedAt,
     binding: envelope.binding,
     harness: envelope.harness,
@@ -807,7 +809,7 @@ export function renderClaudeStatusLine(
   input: { launchBanner: string; width?: 'narrow' | 'wide' },
 ): string {
   try {
-    const status = parseRuntimeStatusEnvelopeV1(value),
+    const status = parseRuntimeStatusEnvelope(value),
       wide = input.width !== 'narrow',
       parts = [
         input.launchBanner,
@@ -838,7 +840,7 @@ export function renderClaudeStatusLine(
       ];
     return parts.filter(Boolean).join(' | ');
   } catch {
-    const snapshot = parseStatusSnapshotV1(value);
+    const snapshot = parseStatusSnapshot(value);
     return `${input.launchBanner} | ${renderClaudePortSegment(snapshot)}`;
   }
 }
@@ -900,8 +902,8 @@ export interface ClaudePluginRuntimeActivationInput extends Omit<
   readonly devServer: Omit<ClaudeDevServerCapabilityInput, 'launchKey' | 'publish'>;
   readonly status: {
     readonly reader: RuntimeStatusEnvelopeReader;
-    readonly binding: RuntimeStatusBindingV1;
-    readonly initial?: RuntimeStatusEnvelopeV1;
+    readonly binding: RuntimeStatusBinding;
+    readonly initial?: RuntimeStatusEnvelope;
   };
 }
 export interface ClaudePluginRuntimeActivation {
@@ -914,7 +916,7 @@ export interface ClaudePluginRuntimeActivation {
 export function activateClaudePluginRuntime(
   input: ClaudePluginRuntimeActivationInput,
 ): ClaudePluginRuntimeActivation {
-  const capability = parseRuntimeCapabilityManifestV1(input.capability);
+  const capability = parseRuntimeCapabilityManifest(input.capability);
   const devServer = createClaudeDevServerCapability({
     ...input.devServer,
     launchKey: capability.launchKey,
@@ -964,6 +966,7 @@ export type ClaudeInvocationProjection = Pick<
 >;
 export interface ClaudeInvocationInput {
   readonly executable: string;
+  readonly executor: CapabilityExecutor;
   readonly pluginDirectory?: string;
   readonly projection?: ClaudeInvocationProjection;
   readonly accountRoot: string;
@@ -981,7 +984,7 @@ export interface ClaudeInvocationInput {
   readonly environment: Readonly<Record<string, string | undefined>>;
   readonly legacyPluginNames?: readonly string[];
   readonly lifecycle?: { readonly eventDirectory: string; readonly binding: unknown };
-  readonly resumeTarget?: NativeSessionRefV1;
+  readonly resumeTarget?: NativeSessionRef;
 }
 export interface ClaudeInvocationPlan {
   readonly executable: string;
@@ -1088,7 +1091,7 @@ export function createClaudeInvocationPlan(input: ClaudeInvocationInput): Claude
   }
   const lifecycle = input.lifecycle,
     lifecycleBinding = lifecycle
-      ? validateSessionLifecycleBindingV1({
+      ? validateSessionLifecycleBinding({
           binding: lifecycle.binding,
           context: input.runtimeContext,
           runtime: 'claude',
@@ -1106,6 +1109,7 @@ export function createClaudeInvocationPlan(input: ClaudeInvocationInput): Claude
     ],
     env: {
       CLAUDE_CONFIG_DIR: accountRoot,
+      MPX_RUNTIME_EXECUTOR: input.executor,
       MPX_RUNTIME_CONTEXT: stable(input.runtimeContext),
       MPX_RUNTIME_PROJECTION_REFERENCE: stable(projectionReference),
       MPX_ACTIVE_CONTENT_ROOT: pluginDirectory,

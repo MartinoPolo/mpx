@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { parseSkillSelection } from './skill-selection.js';
+import type { ResolvedSkillSelection } from './skill-selection.js';
 
-export const RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION = 2 as const;
 export const TOOL_AUTHORITY_SCHEMA_VERSION = 1 as const;
 export const TOOL_ENVELOPE_SCHEMA_VERSION = 1 as const;
 export const CHILD_LAUNCH_AUTHORITY_SCHEMA_VERSION = 1 as const;
@@ -18,9 +20,9 @@ export interface CapabilityIdentity {
 export interface CapabilityBinding {
   readonly projectId: string | null;
   readonly repositoryId: string;
-  readonly contentScope: string;
+  readonly selection: ResolvedSkillSelection;
 }
-export interface ToolAuthorityV1 {
+export interface ToolAuthority {
   readonly schemaVersion: typeof TOOL_AUTHORITY_SCHEMA_VERSION;
   readonly name: string;
   readonly executors: readonly CapabilityExecutor[];
@@ -35,7 +37,7 @@ export interface ToolAuthorityV1 {
   readonly timeout: { readonly maxMs: number };
   readonly cache: { readonly mode: CacheMode; readonly maxBytes: number };
 }
-export interface RuntimeCapabilityManifestV1 {
+export interface RuntimeCapabilityManifest {
   readonly schemaVersion: typeof RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION;
   readonly manifestKey: string;
   readonly runtime: CapabilityRuntime;
@@ -43,7 +45,7 @@ export interface RuntimeCapabilityManifestV1 {
   readonly identity: CapabilityIdentity;
   readonly binding: CapabilityBinding;
   readonly executor: CapabilityExecutor;
-  readonly tools: readonly ToolAuthorityV1[];
+  readonly tools: readonly ToolAuthority[];
   readonly routes: readonly string[];
   readonly resources: readonly string[];
   readonly mounts: readonly string[];
@@ -52,9 +54,9 @@ export interface RuntimeCapabilityManifestV1 {
   readonly models: readonly string[];
   readonly nesting: { readonly depth: number; readonly maxDepth: number };
 }
-export type RuntimeCapabilityManifestInputV1 =
-  | Omit<RuntimeCapabilityManifestV1, 'schemaVersion' | 'manifestKey'>
-  | Omit<RuntimeCapabilityManifestV1, 'manifestKey'>;
+export type RuntimeCapabilityManifestInput =
+  | Omit<RuntimeCapabilityManifest, 'schemaVersion' | 'manifestKey'>
+  | Omit<RuntimeCapabilityManifest, 'manifestKey'>;
 
 export class CapabilityContractError extends Error {
   readonly name = 'CapabilityContractError';
@@ -124,6 +126,17 @@ function labels(values: readonly string[], field: string): readonly string[] {
 function same(left: unknown, right: unknown): boolean {
   return stable(left) === stable(right);
 }
+function exactKeys(value: object, expected: readonly string[], field: string): void {
+  const keys = Object.keys(value);
+  const extra = keys.find((key) => !expected.includes(key));
+  if (extra) {
+    fail('INVALID_CAPABILITY', `${field} contains unknown field '${extra}'`);
+  }
+  const missing = expected.find((key) => !Object.hasOwn(value, key));
+  if (missing) {
+    fail('INVALID_CAPABILITY', `${field} is missing '${missing}'`);
+  }
+}
 function identity(value: CapabilityIdentity): CapabilityIdentity {
   return Object.freeze({
     name: label(value?.name, 'identity.name'),
@@ -135,21 +148,25 @@ function identity(value: CapabilityIdentity): CapabilityIdentity {
   });
 }
 function binding(value: CapabilityBinding): CapabilityBinding {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    fail('INVALID_CAPABILITY', 'binding must be an object');
+  }
+  exactKeys(value, ['projectId', 'repositoryId', 'selection'], 'binding');
   if (
-    value?.projectId !== null &&
-    (typeof value?.projectId !== 'string' || !LABEL.test(value.projectId))
+    value.projectId !== null &&
+    (typeof value.projectId !== 'string' || !LABEL.test(value.projectId))
   ) {
     fail('INVALID_CAPABILITY', 'binding.projectId is invalid');
   }
   return Object.freeze({
     projectId: value.projectId,
-    repositoryId: label(value?.repositoryId, 'binding.repositoryId'),
-    contentScope: label(value?.contentScope, 'binding.contentScope'),
+    repositoryId: label(value.repositoryId, 'binding.repositoryId'),
+    selection: parseSkillSelection(value.selection, (_code, message) =>
+      fail('INVALID_CAPABILITY', message),
+    ),
   });
 }
-function toolAuthority(
-  value: Omit<ToolAuthorityV1, 'schemaVersion'> | ToolAuthorityV1,
-): ToolAuthorityV1 {
+function toolAuthority(value: Omit<ToolAuthority, 'schemaVersion'> | ToolAuthority): ToolAuthority {
   const mode = value.network?.mode;
   if (mode !== 'deny-all' && mode !== 'allow-list') {
     fail('INVALID_CAPABILITY', 'tool network mode is invalid');
@@ -190,9 +207,18 @@ function toolAuthority(
     }),
   });
 }
-export function createRuntimeCapabilityManifestV1(
-  input: RuntimeCapabilityManifestInputV1,
-): RuntimeCapabilityManifestV1 {
+export function createRuntimeCapabilityManifest(
+  input: RuntimeCapabilityManifestInput,
+): RuntimeCapabilityManifest {
+  if (
+    'schemaVersion' in input &&
+    input.schemaVersion !== RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION
+  ) {
+    fail('UNKNOWN_SCHEMA_VERSION', 'runtime capability manifest version is unsupported');
+  }
+  if (!Array.isArray(input.tools)) {
+    fail('INVALID_CAPABILITY', 'tools must be a bounded array');
+  }
   const depth = integer(input.nesting?.depth, 'nesting.depth', 32),
     maxDepth = integer(input.nesting?.maxDepth, 'nesting.maxDepth', 32);
   if (depth > maxDepth) {
@@ -205,7 +231,7 @@ export function createRuntimeCapabilityManifestV1(
     fail('INVALID_CAPABILITY', 'tool names must be unique');
   }
   const tuple = Object.freeze({
-    schemaVersion: 1 as const,
+    schemaVersion: RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION,
     runtime: runtime(input.runtime),
     launchKey: digest(input.launchKey, 'launchKey'),
     identity: identity(input.identity),
@@ -231,21 +257,42 @@ export function createRuntimeCapabilityManifestV1(
   }
   return Object.freeze({ ...tuple, manifestKey: hash(tuple) });
 }
-export function parseRuntimeCapabilityManifestV1(value: unknown): RuntimeCapabilityManifestV1 {
+export function parseRuntimeCapabilityManifest(value: unknown): RuntimeCapabilityManifest {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     fail('INVALID_CAPABILITY', 'manifest must be an object');
   }
-  const item = value as RuntimeCapabilityManifestV1;
-  if (item.schemaVersion !== 1) {
+  exactKeys(
+    value,
+    [
+      'schemaVersion',
+      'manifestKey',
+      'runtime',
+      'launchKey',
+      'identity',
+      'binding',
+      'executor',
+      'tools',
+      'routes',
+      'resources',
+      'mounts',
+      'destinations',
+      'skills',
+      'models',
+      'nesting',
+    ],
+    'manifest',
+  );
+  const item = value as RuntimeCapabilityManifest;
+  if (item.schemaVersion !== RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION) {
     fail('UNKNOWN_SCHEMA_VERSION', 'runtime capability manifest version is unsupported');
   }
-  const parsed = createRuntimeCapabilityManifestV1(item);
+  const parsed = createRuntimeCapabilityManifest(item);
   if (item.manifestKey !== parsed.manifestKey) {
     fail('CAPABILITY_KEY_MISMATCH', 'manifest key does not match its contents');
   }
   return parsed;
 }
-export interface RuntimeCapabilityBindingV1 {
+export interface RuntimeCapabilityBinding {
   readonly manifestKey: string;
   readonly launchKey: string;
   readonly runtime: CapabilityRuntime;
@@ -254,10 +301,10 @@ export interface RuntimeCapabilityBindingV1 {
   readonly executor: CapabilityExecutor;
 }
 export function validateRuntimeCapabilityBinding(
-  manifestInput: RuntimeCapabilityManifestV1,
-  expected: RuntimeCapabilityBindingV1,
-): RuntimeCapabilityManifestV1 {
-  const manifest = parseRuntimeCapabilityManifestV1(manifestInput);
+  manifestInput: RuntimeCapabilityManifest,
+  expected: RuntimeCapabilityBinding,
+): RuntimeCapabilityManifest {
+  const manifest = parseRuntimeCapabilityManifest(manifestInput);
   const actual = {
     manifestKey: manifest.manifestKey,
     launchKey: manifest.launchKey,
@@ -272,7 +319,7 @@ export function validateRuntimeCapabilityBinding(
   return manifest;
 }
 
-export interface ToolRequestEnvelopeV1 {
+export interface ToolRequestEnvelope {
   readonly schemaVersion: 1;
   readonly requestKey: string;
   readonly manifestKey: string;
@@ -286,7 +333,7 @@ export interface ToolRequestEnvelopeV1 {
   readonly cacheMode: CacheMode;
   readonly input: JsonData;
 }
-export type ToolRequestInputV1 = Omit<ToolRequestEnvelopeV1, 'schemaVersion' | 'requestKey'>;
+export type ToolRequestInput = Omit<ToolRequestEnvelope, 'schemaVersion' | 'requestKey'>;
 function jsonBytes(value: unknown): number {
   let encoded: string | undefined;
   try {
@@ -299,7 +346,7 @@ function jsonBytes(value: unknown): number {
   }
   return Buffer.byteLength(encoded);
 }
-export function createToolRequestEnvelopeV1(input: ToolRequestInputV1): ToolRequestEnvelopeV1 {
+export function createToolRequestEnvelope(input: ToolRequestInput): ToolRequestEnvelope {
   const cacheMode = input.cacheMode;
   if (!(['disabled', 'read-only', 'read-write'] as const).includes(cacheMode)) {
     fail('INVALID_CAPABILITY', 'cache mode is invalid');
@@ -322,33 +369,33 @@ export function createToolRequestEnvelopeV1(input: ToolRequestInputV1): ToolRequ
   };
   return Object.freeze({ ...tuple, requestKey: hash(tuple) });
 }
-export interface ToolResultEnvelopeV1 {
+export interface ToolResultEnvelope {
   readonly schemaVersion: 1;
   readonly requestKey: string;
   readonly output: JsonData;
 }
-export function createToolResultEnvelopeV1(input: {
+export function createToolResultEnvelope(input: {
   requestKey: string;
   output: JsonData;
   maxOutputBytes: number;
-}): ToolResultEnvelopeV1 {
+}): ToolResultEnvelope {
   digest(input.requestKey, 'requestKey');
   if (jsonBytes(input.output) > integer(input.maxOutputBytes, 'maxOutputBytes', 16 * 1024 * 1024)) {
     fail('ENVELOPE_LIMIT', 'tool output exceeds its bound');
   }
   return Object.freeze({ schemaVersion: 1, requestKey: input.requestKey, output: input.output });
 }
-export interface ToolErrorEnvelopeV1 {
+export interface ToolErrorEnvelope {
   readonly schemaVersion: 1;
   readonly requestKey: string;
   readonly code: string;
   readonly message: string;
 }
-export function createToolErrorEnvelopeV1(input: {
+export function createToolErrorEnvelope(input: {
   requestKey: string;
   code: string;
   message: string;
-}): ToolErrorEnvelopeV1 {
+}): ToolErrorEnvelope {
   digest(input.requestKey, 'requestKey');
   const code = label(input.code, 'error.code');
   if (typeof input.message !== 'string' || Buffer.byteLength(input.message) > 256) {
@@ -364,12 +411,12 @@ export function createToolErrorEnvelopeV1(input: {
 function cacheRank(mode: CacheMode): number {
   return { disabled: 0, 'read-only': 1, 'read-write': 2 }[mode];
 }
-export function validateToolCallV1(
-  manifestInput: RuntimeCapabilityManifestV1,
-  request: ToolRequestEnvelopeV1,
-): ToolRequestEnvelopeV1 {
-  const manifest = parseRuntimeCapabilityManifestV1(manifestInput);
-  const parsed = createToolRequestEnvelopeV1(request);
+export function validateToolCall(
+  manifestInput: RuntimeCapabilityManifest,
+  request: ToolRequestEnvelope,
+): ToolRequestEnvelope {
+  const manifest = parseRuntimeCapabilityManifest(manifestInput);
+  const parsed = createToolRequestEnvelope(request);
   if (parsed.requestKey !== request.requestKey) {
     fail('CAPABILITY_KEY_MISMATCH', 'request key does not match its contents');
   }
@@ -399,25 +446,25 @@ export function validateToolCallV1(
   }
   return parsed;
 }
-export function validateToolResultV1(
-  manifestInput: RuntimeCapabilityManifestV1,
-  request: ToolRequestEnvelopeV1,
-  result: ToolResultEnvelopeV1,
-): ToolResultEnvelopeV1 {
-  const manifest = parseRuntimeCapabilityManifestV1(manifestInput);
-  const admitted = validateToolCallV1(manifest, request);
+export function validateToolResult(
+  manifestInput: RuntimeCapabilityManifest,
+  request: ToolRequestEnvelope,
+  result: ToolResultEnvelope,
+): ToolResultEnvelope {
+  const manifest = parseRuntimeCapabilityManifest(manifestInput);
+  const admitted = validateToolCall(manifest, request);
   if (result.schemaVersion !== 1 || result.requestKey !== admitted.requestKey) {
     fail('CAPABILITY_STALE', 'tool result belongs to another request');
   }
   const authority = manifest.tools.find((item) => item.name === admitted.tool)!;
-  return createToolResultEnvelopeV1({
+  return createToolResultEnvelope({
     requestKey: result.requestKey,
     output: result.output,
     maxOutputBytes: authority.output.maxBytes,
   });
 }
 
-export interface ChildLaunchRequestV1 {
+export interface ChildLaunchRequest {
   readonly schemaVersion: 1;
   readonly parentManifestKey: string;
   readonly parentLaunchKey: string;
@@ -434,14 +481,14 @@ export interface ChildLaunchRequestV1 {
   readonly models: readonly string[];
   readonly nesting: { readonly depth: number; readonly maxDepth: number };
 }
-export interface ChildLaunchAuthorityV1 extends ChildLaunchRequestV1 {
+export interface ChildLaunchAuthority extends ChildLaunchRequest {
   readonly childKey: string;
 }
 export function deriveChildAuthority(
-  parentInput: RuntimeCapabilityManifestV1,
-  request: ChildLaunchRequestV1,
-): ChildLaunchAuthorityV1 {
-  const parent = parseRuntimeCapabilityManifestV1(parentInput);
+  parentInput: RuntimeCapabilityManifest,
+  request: ChildLaunchRequest,
+): ChildLaunchAuthority {
+  const parent = parseRuntimeCapabilityManifest(parentInput);
   if (request.schemaVersion !== 1) {
     fail('UNKNOWN_SCHEMA_VERSION', 'child authority request version is unsupported');
   }

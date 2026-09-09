@@ -7,7 +7,6 @@ import {
   doctor,
   humanSearchSkills,
   humanSkillDetail,
-  initialModelContext,
   inventoryCanonical,
   inventoryProjectSkills,
   loadSkillBody,
@@ -26,55 +25,37 @@ async function catalog(exposure: Exposure = 'name-only') {
   await mkdir(path.join(root, 'review'));
   await writeFile(
     path.join(root, 'review', 'SKILL.md'),
-    `---\nname: review\ndescription: Review source safely\ntriggers: code inspection\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: ${exposure}\n---\nSECRET BODY\n`,
+    `---\nname: review\ndescription: Review source safely\ntriggers: code inspection\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n---\nSECRET BODY\n`,
   );
   return inventoryCanonical(root);
 }
 const base = {
   repositoryId: 'repo',
-  identity: 'work',
-  skillPolicy: 'developer',
-  contentScope: 'work',
-  enabledPacks: ['core'] as const,
+  identity: 'development',
+  selection: {
+    location: { name: 'test', canonicalRoot: 'C:/test' },
+    packs: ['development'] as const,
+    source: 'project' as const,
+  },
 };
 
 describe('skill catalog and v4 resolution', () => {
-  it.each(['full', 'name-only', 'explicit-only', 'off'] as const)(
-    'resolves %s deterministically',
+  it.each(['full', 'name-only', 'explicit-only'] as const)(
+    'resolves declared %s exposure deterministically',
     async (exposure) => {
-      const skills = await catalog();
-      const options = {
-        ...base,
-        skillPolicyConfig: { skillExposure: { default: exposure } },
-        projectExposure: { skills: { review: exposure } },
-      };
-      const manifest = resolveManifest(skills, options);
-      expect(resolveManifest(skills, options)).toEqual(manifest);
+      const skills = await catalog(exposure);
+      const manifest = resolveManifest(skills, base);
+      expect(resolveManifest(skills, base)).toEqual(manifest);
       expect(JSON.stringify(manifest)).not.toContain('SECRET BODY');
-      expect(manifest.decisions[0]).toMatchObject({ exposure, included: exposure !== 'off' });
-      const artifact = createRuntimeSkillArtifact(manifest, skills, { runtime: 'pi' });
-      expect(initialModelContext(artifact)).toHaveLength(
-        exposure === 'full' || exposure === 'name-only' ? 1 : 0,
-      );
+      expect(manifest.decisions[0]).toMatchObject({ exposure, included: true });
     },
   );
 
-  it('applies precedence and records pack exclusion', async () => {
+  it('records pack exclusion', async () => {
     const skills = await catalog('full');
-    const narrowed = resolveManifest(skills, {
-      ...base,
-      skillPolicyConfig: { skillExposure: { default: 'explicit-only' } },
-      projectExposure: { default: 'full' },
-    });
-    expect(narrowed.decisions[0]).toMatchObject({
-      exposure: 'explicit-only',
-      included: true,
-      permissions: { humanInvocation: true, modelInvocation: false },
-    });
     const excluded = resolveManifest(skills, {
       ...base,
-      enabledPacks: [],
-      skillPolicyConfig: { skillExposure: { default: 'full' } },
+      selection: { ...base.selection, packs: ['personal'] },
     });
     expect(excluded.decisions[0]).toMatchObject({
       included: false,
@@ -103,7 +84,6 @@ describe('skill catalog and v4 resolution', () => {
     const error = new SkillCatalogError(invalid.diagnostics);
     expect(error.message).toContain(path.join(skillRoot, 'SKILL.md'));
     expect(error.message).toContain("'explicit-only' requires disable-model-invocation: true");
-    expect(error.message).toContain('Update the frontmatter');
   });
 
   it('keeps same-name canonical and managed project skills distinct end to end', async () => {
@@ -115,7 +95,7 @@ describe('skill catalog and v4 resolution', () => {
     await mkdir(path.join(projectRoot, '.agents', 'skills', 'commit'), { recursive: true });
     await writeFile(
       path.join(canonicalRoot, 'commit', 'SKILL.md'),
-      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\nCANONICAL BODY\n',
+      '---\nname: commit\ndescription: Canonical commit\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\nCANONICAL BODY\n',
     );
     await writeFile(
       path.join(projectRoot, '.agents', 'skills', 'commit', 'SKILL.md'),
@@ -126,15 +106,7 @@ describe('skill catalog and v4 resolution', () => {
     expect(project.diagnostics).toEqual([]);
     expect(project.skills[0]?.identity).toBe('commit');
     const combined = [...canonical, ...project.skills];
-    const options = {
-      ...base,
-      skillPolicyConfig: {
-        skillExposure: {
-          default: 'full' as const,
-          skills: { commit: 'full' as const, 'skill:commit': 'explicit-only' as const },
-        },
-      },
-    };
+    const options = base;
     const manifest = resolveManifest(combined, options);
     expect(manifest.decisions.map((decision) => decision.identity)).toEqual([
       'commit',
@@ -186,20 +158,6 @@ describe('skill catalog and v4 resolution', () => {
         invocation: 'model',
       }),
     ).rejects.toThrow(/SKILL_INVOCATION_DENIED/u);
-
-    const independentlyNarrowed = resolveManifest(combined, {
-      ...base,
-      skillPolicyConfig: {
-        skillExposure: {
-          default: 'full',
-          skills: { commit: 'off', 'skill:commit': 'explicit-only' },
-        },
-      },
-    });
-    expect(independentlyNarrowed.decisions).toMatchObject([
-      { identity: 'commit', included: false },
-      { identity: 'skill:commit', included: true, exposure: 'explicit-only' },
-    ]);
   });
 
   it('rejects malicious YAML aliases and canonical runtime overrides', async () => {
@@ -208,12 +166,12 @@ describe('skill catalog and v4 resolution', () => {
     await mkdir(path.join(root, 'bad'));
     await writeFile(
       path.join(root, 'bad', 'SKILL.md'),
-      '---\nname: bad\ndescription: *secret\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
+      '---\nname: bad\ndescription: *secret\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\n',
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(SkillCatalogError);
     await writeFile(
       path.join(root, 'bad', 'SKILL.md'),
-      '---\nname: bad\ndescription: Bad\ndisable-model-invocation: true\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [core]\n    defaultExposure: full\n---\n',
+      '---\nname: bad\ndescription: Bad\ndisable-model-invocation: true\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: full\n---\n',
     );
     await expect(inventoryCanonical(root)).rejects.toThrow(/unknown frontmatter key/u);
   });

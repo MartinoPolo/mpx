@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "project": { "id": "phase-h/checkout" },
+  "project": { "id": "service-manifests/checkout" },
   "repository": { "provider": "generic", "remote": "origin" },
   "development": {
     "services": {

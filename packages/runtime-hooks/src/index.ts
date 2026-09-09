@@ -1649,7 +1649,7 @@ function createDefaultProjectedRuntimePolicies(
 
 export const defaultProjectedRuntimePolicies = createDefaultProjectedRuntimePolicies();
 
-export interface RuntimeCommandPolicySourcePlanV1 {
+export interface RuntimeCommandPolicySourcePlan {
   readonly schemaVersion: 1;
   readonly packageDecision: string;
   readonly preCommitDecision: string;
@@ -1665,7 +1665,7 @@ export interface RuntimeCommandPolicySourcePlanV1 {
  * `shouldScanStagedFile` skips them. Do not broaden a parity claim or change projected bytes
  * without updating that matrix and the compatibility note.
  */
-export function projectRuntimeCommandPolicySourceV1(): RuntimeCommandPolicySourcePlanV1 {
+export function projectRuntimeCommandPolicySource(): RuntimeCommandPolicySourcePlan {
   return Object.freeze({
     schemaVersion: 1,
     packageDecision: String.raw`function packageDecision(command,selected=manager()){if(!selected)return null;const primary=typeof command==="string"?command.trim().split(/\s+/u)[0]:"";if(["npm","pnpm","yarn","bun"].includes(primary)&&primary!==selected)return{code:"WRONG_PACKAGE_MANAGER",message:"This project uses "+selected+"; use it instead of "+primary+"."};if(selected==="bun"&&/(?:^|\s)npx\s/u.test(command))return{code:"WRONG_PACKAGE_RUNNER",message:"This project uses bunx instead of npx."};if(/(?:^|[;&|]\s*|\s)npx\s+tsc(?:\s|$)/u.test(command))return{code:"DIRECT_TSC",message:"Use "+selected+" run typecheck or the project check script."};return null}
