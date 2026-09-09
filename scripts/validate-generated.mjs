@@ -16,8 +16,8 @@ const ACTIVE_COMPATIBILITY_DOCS = new Set([
   'docs/RUNTIME_ADAPTERS.md',
   'runtimes/claude/runtime-claude/COMPATIBILITY.md',
 ]);
-// Ordinary text validation is intentionally bounded to 1 MiB per file. The generated,
-// tracked CLI bundle has its own narrow bound because bundling legitimately exceeds it.
+// Ordinary text validation is intentionally bounded to 1 MiB per file. Generated CLI
+// bundles have their own narrow bound because bundling legitimately exceeds it.
 const MAX_TEXT_FILE_BYTES = 1024 * 1024;
 const MAX_GENERATED_CLI_BUNDLE_BYTES = 2 * 1024 * 1024;
 const GENERATED_CLI_BUNDLES = new Set(['bin/mpx.mjs', 'bin/claude-gateway.js']);
@@ -96,7 +96,7 @@ export function validateFiles(files, options = {}) {
           diagnostic(
             'STALE_CLAUDE_FULL_STATUS_REVALIDATION',
             file,
-            'Claude status validates live StatusSnapshotV1, not the full projection',
+            'Claude status validates live StatusSnapshot, not the full projection',
           ),
         );
       }
@@ -278,12 +278,9 @@ export async function repositoryFiles(root, names, options = {}) {
   const statPath = options.lstat ?? lstat;
   const openFile = options.open ?? open;
   const configuredMaxFileBytes = options.maxFileBytes;
-  const trackedFiles = new Set((options.trackedFiles ?? []).map(normalized));
   const maxBytesFor = (file) =>
     configuredMaxFileBytes ??
-    (GENERATED_CLI_BUNDLES.has(file) && trackedFiles.has(file)
-      ? MAX_GENERATED_CLI_BUNDLE_BYTES
-      : MAX_TEXT_FILE_BYTES);
+    (GENERATED_CLI_BUNDLES.has(file) ? MAX_GENERATED_CLI_BUNDLE_BYTES : MAX_TEXT_FILE_BYTES);
   const concurrency = Math.min(
     FILE_READ_CONCURRENCY,
     Math.max(1, Math.floor(options.concurrency ?? FILE_READ_CONCURRENCY)),
@@ -396,47 +393,58 @@ async function run() {
       .split('\0')
       .filter(Boolean),
   );
-  const names = output
-    .toString('utf8')
-    .split('\0')
-    .filter((name) => Boolean(name) && !deleted.has(name));
+  const names = [
+    ...new Set([
+      ...output
+        .toString('utf8')
+        .split('\0')
+        .filter((name) => Boolean(name) && !deleted.has(name)),
+      ...GENERATED_CLI_BUNDLES,
+    ]),
+  ];
   const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root })
     .toString('utf8')
     .split('\0')
     .filter((name) => Boolean(name) && !deleted.has(name));
   const files = await repositoryFiles(root, names, { trackedFiles: tracked });
 
-  const bundles = spawnSync(
-    process.execPath,
-    [path.join(root, 'scripts/bundle-cli.mjs'), '--check'],
-    {
-      cwd: root,
-      encoding: 'utf8',
-    },
-  );
-  const bundleDiagnostics =
-    bundles.status === 0
-      ? []
-      : (bundles.stderr || bundles.stdout || 'BUNDLE_CHECK_FAILED: bundle check failed')
-          .trim()
-          .split(/\r?\n/u)
-          .filter(Boolean)
-          .map((message) => diagnostic('GENERATED_BUNDLE_INVALID', 'bin', message));
-  const cliDocs = spawnSync(
-    process.execPath,
-    [path.join(root, 'scripts/generate-cli-docs.mjs'), '--check'],
-    { cwd: root, encoding: 'utf8' },
-  );
-  const cliDocDiagnostics =
-    cliDocs.status === 0
-      ? []
-      : [
-          diagnostic(
-            'GENERATED_CLI_DOCS_DRIFT',
-            'content/instructions/shared',
-            cliDocs.stderr.trim() || cliDocs.stdout.trim() || 'generated CLI references are stale',
-          ),
-        ];
+  let bundleDiagnostics = [];
+  let cliDocDiagnostics = [];
+  if (files.diagnostics.length === 0) {
+    const bundles = spawnSync(
+      process.execPath,
+      [path.join(root, 'scripts/bundle-cli.mjs'), '--check'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+      },
+    );
+    bundleDiagnostics =
+      bundles.status === 0
+        ? []
+        : (bundles.stderr || bundles.stdout || 'BUNDLE_CHECK_FAILED: bundle check failed')
+            .trim()
+            .split(/\r?\n/u)
+            .filter(Boolean)
+            .map((message) => diagnostic('GENERATED_BUNDLE_INVALID', 'bin', message));
+    const cliDocs = spawnSync(
+      process.execPath,
+      [path.join(root, 'scripts/generate-cli-docs.mjs'), '--check'],
+      { cwd: root, encoding: 'utf8' },
+    );
+    cliDocDiagnostics =
+      cliDocs.status === 0
+        ? []
+        : [
+            diagnostic(
+              'GENERATED_CLI_DOCS_DRIFT',
+              'content/instructions/shared',
+              cliDocs.stderr.trim() ||
+                cliDocs.stdout.trim() ||
+                'generated CLI references are stale',
+            ),
+          ];
+  }
   const diagnostics = [
     ...files.diagnostics,
     ...bundleDiagnostics,

@@ -1,6 +1,8 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { copyFile, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import {
   repositoryFiles,
@@ -9,6 +11,7 @@ import {
   validateSharedInstructionLinks,
 } from '../../../scripts/validate-generated.mjs';
 
+const executeFile = promisify(execFile);
 const messages = (diagnostics) => diagnostics.map((item) => item.code);
 
 function files(path, content) {
@@ -328,7 +331,39 @@ describe('generated repository validation', () => {
     ]);
   });
 
-  it('allows only the tracked generated CLI bundle to use the larger text-read bound', async () => {
+  it('enumerates ignored generated bundles and rejects them before generated checks run', async () => {
+    const fixture = await mkdtemp(path.join(tmpdir(), 'mpx-ignored-generated-bundle-'));
+    try {
+      await mkdir(path.join(fixture, 'scripts'));
+      await mkdir(path.join(fixture, 'bin'));
+      await copyFile(
+        path.resolve(import.meta.dirname, '../../../scripts/validate-generated.mjs'),
+        path.join(fixture, 'scripts', 'validate-generated.mjs'),
+      );
+      await writeFile(path.join(fixture, '.gitignore'), 'bin/\n');
+      await writeFile(path.join(fixture, 'bin', 'mpx.mjs'), Buffer.alloc(2 * 1024 * 1024 + 1, 97));
+      await writeFile(path.join(fixture, 'bin', 'claude-gateway.js'), 'export {};\n');
+      await executeFile('git', ['init', '--quiet'], { cwd: fixture });
+      await executeFile('git', ['add', '.gitignore', 'scripts/validate-generated.mjs'], {
+        cwd: fixture,
+      });
+
+      const result = await executeFile(
+        process.execPath,
+        [path.join(fixture, 'scripts', 'validate-generated.mjs')],
+        { cwd: fixture },
+      ).catch((failure) => failure);
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('FILE_TOO_LARGE: bin/mpx.mjs');
+      expect(result.stderr).not.toContain('GENERATED_BUNDLE_INVALID');
+      expect(result.stderr).not.toContain('GENERATED_CLI_DOCS_DRIFT');
+    } finally {
+      await rm(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it('allows only generated CLI bundle paths to use the larger text-read bound', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-generated-limit-'));
     await Promise.all([mkdir(path.join(root, 'bin')), mkdir(path.join(root, 'content'))]);
     const oversized = Buffer.alloc(1024 * 1024 + 1, 97);
@@ -345,10 +380,9 @@ describe('generated repository validation', () => {
         expect.objectContaining({ code: 'FILE_TOO_LARGE', file: 'content/large.md' }),
       ]);
 
-      const untrackedBundle = await repositoryFiles(root, ['bin/mpx.mjs']);
-      expect([...untrackedBundle.diagnostics]).toEqual([
-        expect.objectContaining({ code: 'FILE_TOO_LARGE', file: 'bin/mpx.mjs' }),
-      ]);
+      const generatedBundle = await repositoryFiles(root, ['bin/mpx.mjs']);
+      expect(generatedBundle.get('bin/mpx.mjs')?.length).toBe(oversized.length);
+      expect([...generatedBundle.diagnostics]).toEqual([]);
 
       await writeFile(path.join(root, 'bin', 'mpx.mjs'), Buffer.alloc(2 * 1024 * 1024 + 1, 97));
       const overBundleBound = await repositoryFiles(root, ['bin/mpx.mjs']);

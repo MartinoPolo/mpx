@@ -19,7 +19,7 @@
     "lint": "oxlint . --deny-warnings --report-unused-disable-directives",
     "lint:fix": "oxlint . --fix --report-unused-disable-directives && prettier --write .",
     "test": "pnpm run test:unit && pnpm run test:payload && pnpm run test:contract && pnpm run test:integration && pnpm run test:e2e",
-    "test:unit": "pnpm run build && vitest run --config vitest.unit.config.ts",
+    "test:unit": "pnpm run build && pnpm run bundle:cli && vitest run --config vitest.unit.config.ts",
     "test:payload": "vitest run --config vitest.payload.config.ts",
     "test:contract": "pnpm --filter @mpx/runtime-contracts... build && vitest run --config vitest.contract.config.ts",
     "test:integration": "pnpm --filter mpx... build && vitest run --config vitest.integration.config.ts",
@@ -29,6 +29,7 @@
     "bundle:generate": "pnpm run bundle:cli",
     "cli-docs:generate": "node scripts/generate-cli-docs.mjs",
     "cli-docs:check": "node scripts/generate-cli-docs.mjs --check",
+    "prevalidate:generated": "pnpm run bundle:cli",
     "validate:generated": "node scripts/validate-generated.mjs",
     "validate:structure": "node scripts/validate-structure.mjs"
   },

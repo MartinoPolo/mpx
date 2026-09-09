@@ -10,3 +10,5 @@ coverage/
 .local/
 artifacts/
 .worktree-install.log
+/bin/mpx.mjs
+/bin/claude-gateway.js

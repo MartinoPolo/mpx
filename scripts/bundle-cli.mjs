@@ -199,21 +199,23 @@ export async function buildBundleBytes(options = {}) {
 }
 
 export async function checkBundles(options = {}) {
-  const expected = await buildBundleBytes({ sourceOverrides: options.sourceOverrides });
-  const readTrackedBundle =
-    options.readTrackedBundle ?? ((name) => readFile(path.join(root, name)));
+  const buildCanonical = options.buildCanonical ?? buildBundleBytes;
+  const buildOptions = { sourceOverrides: options.sourceOverrides };
+  const expected = await buildCanonical(buildOptions);
+  const readGeneratedBundle =
+    options.readGeneratedBundle ?? ((name) => readFile(path.join(root, name)));
   const diagnostics = [];
   for (const [name, bytes] of expected) {
     try {
-      const actual = await readTrackedBundle(name);
+      const actual = await readGeneratedBundle(name);
       if (!actual.equals(bytes)) {
         diagnostics.push(
-          `BUNDLE_DRIFT: ${name}: tracked bundle differs from canonical source build`,
+          `BUNDLE_DRIFT: ${name}: generated bundle differs from canonical source build`,
         );
       }
     } catch (failure) {
       if (failure?.code === 'ENOENT') {
-        diagnostics.push(`BUNDLE_MISSING: ${name}: tracked bundle is missing`);
+        diagnostics.push(`BUNDLE_MISSING: ${name}: generated bundle is missing`);
       } else {
         throw failure;
       }
@@ -236,7 +238,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       diagnostics.forEach((item) => console.error(item));
       process.exitCode = 1;
     } else {
-      console.log('Tracked CLI bundles match canonical source builds.');
+      console.log('Generated CLI bundles match canonical source builds.');
     }
   } else {
     await writeBundles();
