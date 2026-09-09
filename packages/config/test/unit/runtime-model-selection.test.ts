@@ -51,7 +51,7 @@ const profile = {
       exploration: 'openai-codex/gpt-5.6-luna',
       standard: 'openai-codex/gpt-5.6-terra',
       advanced: 'openai-codex/gpt-5.6-sol',
-      frontier: 'openai-codex/gpt-5.6-sol',
+      frontier: 'openai-codex/gpt-6-astra',
     },
   },
   agentTranslation: {
