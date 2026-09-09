@@ -1330,7 +1330,7 @@ export function createSystemRuntime(): RuntimeAdapter {
     },
     async stop(child) {
       if (process.platform === 'win32') {
-        await windows.terminate({ pid: child.pid, startFingerprint: child.fingerprint });
+        await windows.terminateTree({ pid: child.pid, startFingerprint: child.fingerprint });
       } else {
         try {
           process.kill(-child.pid, 'SIGTERM');

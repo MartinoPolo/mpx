@@ -361,30 +361,6 @@ export class WindowsProcessCapabilities {
     };
   }
 
-  async terminate(process: OwnedWindowsProcess): Promise<void> {
-    const parsed = record(
-      await this.invoke(KILL_SCRIPT, {
-        PidValue: String(process.pid),
-        StartedAt: process.startFingerprint,
-      }),
-    );
-    if (parsed.status === 'killed') {
-      return;
-    }
-    if (parsed.status === 'missing') {
-      throw new MpxError({
-        code: 'PROCESS_DISAPPEARED',
-        message: 'The process disappeared before it could be terminated.',
-      });
-    }
-    if (parsed.status === 'mismatch') {
-      throw new MpxError({
-        code: 'PROCESS_FINGERPRINT_MISMATCH',
-        message: 'The PID now belongs to a different process.',
-      });
-    }
-    throw malformed();
-  }
   async terminateTree(process: OwnedWindowsProcess): Promise<void> {
     const parsed = record(
       await this.invoke(TREE_KILL_SCRIPT, {
