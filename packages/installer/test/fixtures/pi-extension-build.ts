@@ -1,4 +1,4 @@
-import { cp, mkdir } from 'node:fs/promises';
+import { cp, mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -16,18 +16,38 @@ export async function preparePiExtensionBuildFixture(
     filter: (source) => !['dist', 'node_modules'].includes(path.basename(source)),
   });
 
-  for (const dependency of ['croner', 'nanoid']) {
+  const configDependencyRoot = path.dirname(
+    path.dirname(
+      await realpath(path.join(checkoutRoot, 'packages', 'config', 'node_modules', 'ajv')),
+    ),
+  );
+  for (const [dependency, sourceRoot] of [
+    ['ajv', configDependencyRoot],
+    ['fast-deep-equal', configDependencyRoot],
+    ['fast-uri', configDependencyRoot],
+    ['json-schema-traverse', configDependencyRoot],
+    ['require-from-string', configDependencyRoot],
+    ['croner', sourceExtensionRoot],
+    ['nanoid', sourceExtensionRoot],
+  ] as const) {
     await cp(
-      path.join(sourceExtensionRoot, 'node_modules', dependency),
+      path.join(sourceRoot, 'node_modules', dependency),
       path.join(extensionRoot, 'node_modules', dependency),
       { recursive: true, dereference: true },
     );
   }
 
-  for (const dependency of ['content-compiler', 'runtime-contracts']) {
+  for (const dependency of [
+    'config',
+    'content-compiler',
+    'core',
+    'runtime-contracts',
+    'skills',
+    'subagents',
+  ]) {
     const destination = path.join(extensionRoot, 'node_modules', '@mpx', dependency);
     await mkdir(path.dirname(destination), { recursive: true });
-    await cp(path.join(sourceExtensionRoot, 'node_modules', '@mpx', dependency), destination, {
+    await cp(path.join(checkoutRoot, 'packages', dependency), destination, {
       recursive: true,
       dereference: true,
       filter: (source) => !['node_modules', 'test', 'tests'].includes(path.basename(source)),

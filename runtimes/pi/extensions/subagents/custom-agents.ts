@@ -5,6 +5,8 @@
 import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
+import { loadActiveContentProjection, readActiveContentEntry } from '@mpx/content-compiler';
+import { parseRuntimeContext } from '@mpx/runtime-contracts';
 import {
   bindNativeAgentDirectory,
   type NativeAgentDirectory,
@@ -20,20 +22,12 @@ import { BUILTIN_TOOL_NAMES } from './agent-types.js';
 import type { AgentConfig, MemoryScope, ThinkingLevel } from './types.js';
 
 /**
- * Scan for custom agent .md files from multiple locations.
- * Discovery hierarchy (higher priority wins):
- *   1. Project:   <cwd>/.pi/agents/*.md (authoritative — also where /agents writes)
- *   2. Workspace: <cwd>/.agents/agents/*.md (shared cross-tool .agents workspace, read-only)
- *   3. Global:    $PI_CODING_AGENT_DIR/agents/*.md (default: ~/.pi/agent/agents/*.md)
- *   4. Compiled:  $MPX_COMPILED_AGENTS_DIR/*.md (compiler-owned immutable base layer)
+ * Scan for agent definitions within one discovery boundary.
  *
- * Project-level agents override global ones with the same name. On a name clash
- * between the two project locations, .pi/agents wins — .pi stays the project
- * authority; .agents/agents is an additional read location.
- * Names matching defaults (e.g. "Explore") override them.
- * Native roots may be linked; discovery pins their canonical directory identity for
- * the whole scan and reads only verified direct regular files. Linked roots are
- * read-only in /agents. Compiler-owned roots retain strict ancestor validation.
+ * Managed MPX launches expose only the compiler-owned catalog. Native Pi launches
+ * retain global, shared-workspace, and project discovery with their existing
+ * precedence. Native roots may be linked; discovery pins their canonical directory
+ * identity for the whole scan and reads only verified direct regular files.
  */
 export interface CompiledAgentsFileSystem {
   lstat(path: string): {
@@ -96,12 +90,150 @@ export function resolveCompiledAgentsDirectory(
 export interface AgentDiscoveryOptions {
   nativeFiles?: Map<string, NativeAgentFile>;
   onDiagnostic?: (message: string) => void;
+  onBoundary?: (boundary: 'managed' | 'native') => void;
 }
 
-export function loadCustomAgents(
+const MANAGED_DISCOVERY_ENVIRONMENT = [
+  'MPX_RUNTIME',
+  'MPX_RUNTIME_CONTEXT',
+  'MPX_ACTIVE_CONTENT_ROOT',
+  'MPX_ACTIVE_CONTENT_MANIFEST',
+  'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
+  'MPX_COMPILED_AGENTS_DIR',
+  'MPX_RUNTIME_PROJECTION_REFERENCE',
+  'MPX_IDENTITY',
+  'MPX_MODE',
+] as const;
+
+function environmentRecord(value: string, label: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(`Invalid managed agent discovery binding: ${label}`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`Invalid managed agent discovery binding: ${label}`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function bindingText(record: Record<string, unknown>, field: string, label: string): string {
+  const value = record[field];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Invalid managed agent discovery binding: ${label}.${field}`);
+  }
+  return value;
+}
+
+async function resolveManagedAgentsDirectory(
+  environment: NodeJS.ProcessEnv,
+  configuredCompiledDirectory: string | undefined,
+) {
+  const present = MANAGED_DISCOVERY_ENVIRONMENT.filter((name) => environment[name] !== undefined);
+  if (present.length === 0) {
+    return undefined;
+  }
+
+  const required = MANAGED_DISCOVERY_ENVIRONMENT.slice(0, 7);
+  if (required.some((name) => !environment[name])) {
+    throw new Error('Invalid managed agent discovery binding: partial environment');
+  }
+  if ((environment.MPX_IDENTITY === undefined) !== (environment.MPX_MODE === undefined)) {
+    throw new Error('Invalid managed agent discovery binding: partial identity');
+  }
+  if (
+    environment.MPX_IDENTITY !== undefined &&
+    ![environment.MPX_IDENTITY, environment.MPX_MODE].every((value) =>
+      /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(value!),
+    )
+  ) {
+    throw new Error('Invalid managed agent discovery binding: identity');
+  }
+  if (environment.MPX_RUNTIME !== 'pi') {
+    throw new Error('Invalid managed agent discovery binding: runtime');
+  }
+
+  const activeRoot = environment.MPX_ACTIVE_CONTENT_ROOT!;
+  const manifest = environment.MPX_ACTIVE_CONTENT_MANIFEST!;
+  const compiled = configuredCompiledDirectory!;
+  if (
+    !isAbsolute(activeRoot) ||
+    comparablePath(manifest) !== comparablePath(join(activeRoot, 'active-content.json')) ||
+    comparablePath(compiled) !== comparablePath(join(activeRoot, 'agents'))
+  ) {
+    throw new Error('Invalid managed agent discovery binding: projection paths');
+  }
+
+  const context = parseRuntimeContext(
+    environmentRecord(environment.MPX_RUNTIME_CONTEXT!, 'runtime context'),
+  );
+  const reference = environmentRecord(
+    environment.MPX_RUNTIME_PROJECTION_REFERENCE!,
+    'projection reference',
+  );
+  const launchDescriptor = context.launchDescriptor;
+  const runtimeArtifact = context.runtimeArtifact;
+  const launchBinding = reference.launchBinding;
+  if (
+    typeof launchDescriptor !== 'object' ||
+    launchDescriptor === null ||
+    typeof launchBinding !== 'object' ||
+    launchBinding === null
+  ) {
+    throw new Error('Invalid managed agent discovery binding: projection identity');
+  }
+  const descriptor = launchDescriptor as Record<string, unknown>;
+  const binding = launchBinding as Record<string, unknown>;
+  const digest = (value: string): boolean => /^[a-f0-9]{64}$/u.test(value);
+  if (
+    !digest(bindingText(reference, 'projectionKey', 'projection reference')) ||
+    !digest(bindingText(reference, 'fileMapHash', 'projection reference')) ||
+    runtimeArtifact.fileMapHash !== bindingText(reference, 'fileMapHash', 'projection reference') ||
+    context.launchKey !== bindingText(binding, 'launchKey', 'projection reference') ||
+    descriptor.digest !== bindingText(binding, 'descriptorDigest', 'projection reference') ||
+    context.manifestKey !== bindingText(binding, 'manifestKey', 'projection reference') ||
+    runtimeArtifact.artifactKey !==
+      bindingText(binding, 'runtimeArtifactKey', 'projection reference') ||
+    runtimeArtifact.runtime !== 'pi' ||
+    binding.runtime !== 'pi'
+  ) {
+    throw new Error('Invalid managed agent discovery binding: projection identity');
+  }
+
+  const integrity = environmentRecord(
+    environment.MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY!,
+    'manifest integrity',
+  );
+  if (
+    !/^[a-f0-9]{64}$/u.test(bindingText(integrity, 'sha256', 'manifest integrity')) ||
+    !Number.isSafeInteger(integrity.byteCount) ||
+    (integrity.byteCount as number) < 0
+  ) {
+    throw new Error('Invalid managed agent discovery binding: manifest integrity');
+  }
+
+  resolveCompiledAgentsDirectory(compiled);
+  const active = await loadActiveContentProjection({
+    root: activeRoot,
+    manifestPath: manifest,
+    expected: {
+      runtime: 'pi',
+      manifestKey: context.manifestKey,
+      binding: context.binding,
+      manifestFile: {
+        sha256: bindingText(integrity, 'sha256', 'manifest integrity'),
+        byteCount: integrity.byteCount as number,
+      },
+    },
+  });
+  return active;
+}
+
+export async function loadCustomAgents(
   cwd: string,
   options: AgentDiscoveryOptions = {},
-): Map<string, AgentConfig> {
+): Promise<Map<string, AgentConfig>> {
   const globalDir = join(getAgentDir(), 'agents');
   const workspaceProjectDir = join(cwd, '.agents', 'agents');
   const projectDir = join(cwd, '.pi', 'agents');
@@ -118,20 +250,24 @@ export function loadCustomAgents(
       );
     }
   };
-  const compiledDir = process.env.MPX_COMPILED_AGENTS_DIR;
-  if (compiledDir !== undefined) {
-    try {
-      loadFromDir(
-        resolveCompiledAgentsDirectory(compiledDir),
-        agents,
-        'compiled',
-        options,
-        diagnose,
+  const managed = await resolveManagedAgentsDirectory(
+    process.env,
+    process.env.MPX_COMPILED_AGENTS_DIR,
+  );
+  if (managed !== undefined) {
+    options.onBoundary?.('managed');
+    for (const entry of managed.manifest.agents) {
+      const content = (
+        await readActiveContentEntry(managed, 'agent', entry.projectedIdentity)
+      ).toString('utf8');
+      agents.set(
+        entry.projectedIdentity,
+        parseAgentConfig(entry.projectedIdentity, content, 'compiled'),
       );
-    } catch (error) {
-      diagnose(error);
     }
+    return agents;
   }
+  options.onBoundary?.('native');
   loadFromDir(globalDir, agents, 'global', options, diagnose);
   loadFromDir(workspaceProjectDir, agents, 'project', options, diagnose);
   loadFromDir(projectDir, agents, 'project', options, diagnose);
@@ -182,37 +318,7 @@ function loadFromDir(
       continue;
     }
 
-    const { frontmatter: fm, body } = parseFrontmatter<Record<string, unknown>>(content);
-
-    const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
-
-    discoveredAgents.set(name, {
-      name,
-      displayName: str(fm.display_name),
-      description: str(fm.description) ?? name,
-      builtinToolNames,
-      extSelectors,
-      disallowedTools: csvListOptional(fm.disallowed_tools),
-      extensions: inheritField(fm.extensions ?? fm.inherit_extensions),
-      excludeExtensions: csvListOptional(fm.exclude_extensions),
-      skills: inheritField(fm.skills ?? fm.inherit_skills),
-      model: str(fm.model),
-      thinking: str(fm.thinking) as ThinkingLevel | undefined,
-      maxTurns: nonNegativeInt(fm.max_turns),
-      persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
-      outputTranscript: fm.output_transcript != null ? fm.output_transcript !== false : undefined,
-      sessionDir: str(fm.session_dir),
-      allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
-      systemPrompt: body.trim(),
-      promptMode: fm.prompt_mode === 'append' ? 'append' : 'replace',
-      inheritContext: fm.inherit_context != null ? fm.inherit_context === true : undefined,
-      runInBackground: fm.run_in_background != null ? fm.run_in_background === true : undefined,
-      isolated: fm.isolated != null ? fm.isolated === true : undefined,
-      memory: parseMemory(fm.memory),
-      isolation: fm.isolation === 'worktree' ? 'worktree' : undefined,
-      enabled: fm.enabled !== false, // default true; explicitly false disables
-      source,
-    });
+    discoveredAgents.set(name, parseAgentConfig(name, content, source));
   }
   try {
     if (directory) {
@@ -229,6 +335,42 @@ function loadFromDir(
       options.nativeFiles?.set(name, file);
     }
   }
+}
+
+function parseAgentConfig(
+  name: string,
+  content: string,
+  source: 'compiled' | 'project' | 'global',
+): AgentConfig {
+  const { frontmatter: fm, body } = parseFrontmatter<Record<string, unknown>>(content);
+  const { builtinToolNames, extSelectors } = parseToolsField(fm.tools);
+  return {
+    name,
+    displayName: str(fm.display_name),
+    description: str(fm.description) ?? name,
+    builtinToolNames,
+    extSelectors,
+    disallowedTools: csvListOptional(fm.disallowed_tools),
+    extensions: inheritField(fm.extensions ?? fm.inherit_extensions),
+    excludeExtensions: csvListOptional(fm.exclude_extensions),
+    skills: inheritField(fm.skills ?? fm.inherit_skills),
+    model: str(fm.model),
+    thinking: str(fm.thinking) as ThinkingLevel | undefined,
+    maxTurns: nonNegativeInt(fm.max_turns),
+    persistSession: fm.persist_session != null ? fm.persist_session === true : undefined,
+    outputTranscript: fm.output_transcript != null ? fm.output_transcript !== false : undefined,
+    sessionDir: str(fm.session_dir),
+    allowedSubagents: parseAllowedSubagents(fm.allowed_subagents),
+    systemPrompt: body.trim(),
+    promptMode: fm.prompt_mode === 'append' ? 'append' : 'replace',
+    inheritContext: fm.inherit_context != null ? fm.inherit_context === true : undefined,
+    runInBackground: fm.run_in_background != null ? fm.run_in_background === true : undefined,
+    isolated: fm.isolated != null ? fm.isolated === true : undefined,
+    memory: parseMemory(fm.memory),
+    isolation: fm.isolation === 'worktree' ? 'worktree' : undefined,
+    enabled: fm.enabled !== false,
+    source,
+  };
 }
 
 // ---- Field parsers ----

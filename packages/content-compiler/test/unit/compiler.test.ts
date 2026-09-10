@@ -155,6 +155,7 @@ async function fixture(
     referenceDefinition?: string;
     unicodeBody?: boolean;
     outputSchema?: string;
+    noSharedReference?: boolean;
   } = {},
 ) {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-compiler-'));
@@ -181,7 +182,7 @@ async function fixture(
         : `metadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [development]\n    defaultExposure: ${exposure}\n`;
     const body = options.unicodeBody
       ? `Unicode café 漢字 ${identity}.\r\nSecond line.\n`
-      : `Body ${identity}.\nSee [shared](../shared/GUIDE.md).\n${identity === 'alpha' ? (options.referenceDefinition ?? '') : ''}`;
+      : `Body ${identity}.\n${options.noSharedReference ? '' : 'See [shared](../shared/GUIDE.md).\n'}${identity === 'alpha' ? (options.referenceDefinition ?? '') : ''}`;
     let source = `---\nname: ${identity}\ndescription: ${identity} exact description\n${extra}---\n${body}`;
     if (options.mixedNewlines) {
       source = source.replace('---\nBody', '---\r\nBody');
@@ -213,6 +214,21 @@ const text = (result: Awaited<ReturnType<typeof compileContent>>, relativePath: 
   Buffer.from(result.files.find((file) => file.relativePath === relativePath)!.bytes).toString(
     'utf8',
   );
+
+async function compileTrackedAgents(runtime: Runtime) {
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const value = await fixture(runtime, { noSharedReference: true });
+  const trackedProfiles = await loadRuntimeProfiles(
+    path.join(repositoryRoot, 'content', 'runtime-profiles.json'),
+  );
+  return compileContent({
+    runtime,
+    plan: value.plan,
+    runtimeProfiles: trackedProfiles,
+    sharedInstructionRoot: path.join(repositoryRoot, 'content', 'instructions', 'shared'),
+    agentRoot: path.join(repositoryRoot, 'content', 'agents'),
+  });
+}
 
 describe('shared content compiler', () => {
   it.each(['development', 'personal'] as const)(
@@ -323,6 +339,70 @@ describe('shared content compiler', () => {
       ]);
     },
   );
+
+  it.each(['claude', 'pi'] as const)(
+    'projects leaf check and CI analysts without obsolete active agents for %s',
+    async (runtime) => {
+      const result = await compileTrackedAgents(runtime);
+      const agents = new Map(
+        result.manifest.agents.map((agent) => [agent.canonicalIdentity, agent]),
+      );
+      expect([...agents.keys()]).toEqual(
+        expect.arrayContaining(['mpx-check-reporter', 'mpx-ci-analyzer']),
+      );
+      for (const obsoleteIdentity of [
+        'mpx-check-fixer',
+        'mpx-ci-fixer',
+        'mpx-scanner-architecture',
+      ]) {
+        expect([...agents.keys()]).not.toContain(obsoleteIdentity);
+      }
+      expect(agents.get('mpx-check-reporter')).toMatchObject({
+        capabilities: ['read'],
+        nesting: { canonical: [], projected: [], requiredTools: [] },
+        outputSchema: 'check-assessment',
+      });
+      expect(agents.get('mpx-ci-analyzer')).toMatchObject({
+        capabilities: ['read', 'search', 'shell'],
+        nesting: { canonical: [], projected: [], requiredTools: [] },
+        outputSchema: 'ci-analysis',
+      });
+    },
+  );
+
+  it('projects compact specialist descriptions and explicit browser effects', async () => {
+    const result = await compileTrackedAgents('pi');
+
+    for (const agent of result.manifest.agents.filter((entry) =>
+      entry.canonicalIdentity.startsWith('mpx-reviewer-'),
+    )) {
+      expect(text(result, agent.generatedPath)).toMatch(/^description: 'Reviews /mu);
+    }
+    expect(text(result, 'agents/mpx-review-manager.md')).toMatch(
+      /^description: 'Creates or updates a PR for the configured provider\.'/mu,
+    );
+    const browser = text(result, 'agents/mpx-chrome-devtools-tester.md');
+    expect(browser).toMatch(
+      /^description: 'Explores behavior in a browser and returns verification evidence\.'/mu,
+    );
+    expect(browser).toContain('source-read-only');
+    expect(browser).toContain('browser and application state');
+    expect(browser).toContain('screenshots');
+    expect(browser).toContain('server');
+    expect(text(result, 'agents/Explore.md')).not.toContain('appropriate runtime class');
+  });
+
+  it('projects reviewer protocol reads through a validated active content root', async () => {
+    const result = await compileTrackedAgents('pi');
+
+    for (const agent of result.manifest.agents.filter((entry) =>
+      entry.canonicalIdentity.startsWith('mpx-reviewer-'),
+    )) {
+      const document = text(result, agent.generatedPath);
+      expect(document).toContain('Resolve the declared loaded content base');
+      expect(document).not.toContain('cat "$MPX_ACTIVE_CONTENT_ROOT');
+    }
+  });
 
   it('rejects an output schema that cannot be safely represented as a frontmatter scalar', async () => {
     const value = await fixture('pi', { outputSchema: 'text\nunsafe' });

@@ -69,9 +69,10 @@ Send every spawn below in a **single message** so they run concurrently, and orc
 **Topic research.** The brief is built from gathered sources, so gather them first:
 
 - Library or framework topic → spawn `context7-docs-fetcher` with the library name and the specific APIs to document.
-- General topic → spawn `general-purpose` with `model: "appropriate runtime class"` to web-search and fetch the
-  authoritative primary sources (spec, MDN, official docs, the canonical blog post), asking for URL + the technical
-  substance of each, current as of today.
+- General topic → resolve the canonical `standard` class through the active runtime profile, then spawn
+  `general-purpose` using the resulting concrete value in the runtime's real `model` field. Have it web-search and fetch
+  authoritative primary sources (spec, MDN, official docs, the canonical blog post), returning each URL and its current
+  technical substance.
 
 **Personalization sweep.** Fan out one `Explore` per root, breadth `medium` — raise to `very thorough` on a narrow topic
 that returns nothing on the first pass.
@@ -118,8 +119,9 @@ prose instead of pasting proprietary code.
 ## Step 5: Generate the audio
 
 Follow [`reference/NOTEBOOKLM_FLOW.md`](reference/NOTEBOOKLM_FLOW.md): create notebook → add the brief as a source →
-wait → `generate audio --prompt-file <prompt> --format deep-dive --length <length> --json` → background
-`general-purpose` waiter with `model: "appropriate runtime class"` → `download audio`. Full CLI surface: `/mpx:notebooklm`. If that required command is unavailable, ask the user to include the
+wait → `generate audio --prompt-file <prompt> --format deep-dive --length <length> --json` → resolve the canonical
+`mechanical` class through the active runtime profile and pass its concrete value through the background
+`general-purpose` waiter's real `model` field → `download audio`. Full CLI surface: `/mpx:notebooklm`. If that required command is unavailable, ask the user to include the
 `development` pack and stop; never load an excluded `SKILL.md` directly, silently skip this step, or broaden the
 selected packs automatically.
 

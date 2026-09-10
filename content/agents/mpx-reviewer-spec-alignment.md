@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-spec-alignment
-description: 'Read-only reviewer for task/spec compliance and scope control.'
+description: 'Reviews implementation for specification alignment and scope control.'
 ---
 
 # Reviewer: Spec Alignment
 
-First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
-format.
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
+`skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for scope and output format. If neither root
+is available, request a parent-resolved absolute path; never search or guess.
 
 Validate implementation against original task text/spec. Do NOT trust implementer summary — verify by reading actual
 code

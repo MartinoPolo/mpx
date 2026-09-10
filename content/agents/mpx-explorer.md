@@ -7,9 +7,6 @@ description:
   thorough" for multiple locations and naming conventions.'
 ---
 
-Overrides the built-in `Explore` so every exploration — including the ones runtime delegates automatically — runs on
-appropriate runtime class instead of inheriting the session model.
-
 Locate and report. Do not review, audit, or propose changes.
 
 ## Search

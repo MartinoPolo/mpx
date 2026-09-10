@@ -40,9 +40,14 @@ export const CONFIG_ASSETS = Object.freeze([
   'config/subagents.json',
 ]);
 
+export const CONFIG_SCHEMA_ASSETS = Object.freeze([
+  'schemas/mpxconfig.schema.json',
+  'schemas/user-config.schema.json',
+]);
 export const VENDORED_LICENSE_ASSETS = Object.freeze(['subagents/LICENSE']);
 export const PACKAGE_ASSETS = Object.freeze([
   ...CONFIG_ASSETS,
+  ...CONFIG_SCHEMA_ASSETS,
   ...GUARD_ASSETS,
   ...VENDORED_LICENSE_ASSETS,
 ]);
@@ -89,11 +94,18 @@ const BUNDLER_OPTIONS = Object.freeze({
   sourcemap: false,
   target: 'node22',
 });
+const CONFIG_SCHEMA_LOADER_TRANSFORM = Object.freeze({
+  packageName: '@mpx/config',
+  module: 'dist/schema.js',
+  expected: 'new URL(`../schemas/${name}`, import.meta.url)',
+  replacement: 'new URL(`./schemas/${name}`, import.meta.url)',
+});
 const BUNDLER_CONFIG = Object.freeze({
   entryPoint: 'index.ts',
   outputFile: 'mpx-extension.mjs',
   esbuildVersion,
   options: BUNDLER_OPTIONS,
+  sourceTransforms: [CONFIG_SCHEMA_LOADER_TRANSFORM],
 });
 const releaseManifest = {
   name: '@mpx/pi-extensions',
@@ -254,13 +266,18 @@ async function productionInputs() {
         .map((file) => `${prefix}/src/${file}`),
     );
   }
+  const configRoot = await dependencyPackageRoot(CONFIG_SCHEMA_LOADER_TRANSFORM.packageName);
+  const configPrefix = path.relative(packageRoot, configRoot).replaceAll('\\', '/');
+  const schemaInputs = CONFIG_SCHEMA_ASSETS.map((asset) => `${configPrefix}/${asset}`);
   return [
     ...new Set([
       ...sourceFiles,
       ...workspaceInputs,
+      `${configPrefix}/${CONFIG_SCHEMA_LOADER_TRANSFORM.module}`,
+      ...schemaInputs,
       'package.json',
       'scripts/release.mjs',
-      ...PACKAGE_ASSETS,
+      ...PACKAGE_ASSETS.filter((asset) => !CONFIG_SCHEMA_ASSETS.includes(asset)),
     ]),
   ].sort();
 }
@@ -303,6 +320,42 @@ async function dependencyLicense(packageName) {
   return readRequiredFile(root, 'LICENSE');
 }
 
+async function packageAsset(asset) {
+  if (CONFIG_SCHEMA_ASSETS.includes(asset)) {
+    const configRoot = await dependencyPackageRoot(CONFIG_SCHEMA_LOADER_TRANSFORM.packageName);
+    return readRequiredFile(configRoot, asset);
+  }
+  return readRequiredFile(packageRoot, asset);
+}
+
+function replaceConfigSchemaLoader(source) {
+  const { expected, replacement } = CONFIG_SCHEMA_LOADER_TRANSFORM;
+  const firstMatch = source.indexOf(expected);
+  if (firstMatch < 0 || firstMatch !== source.lastIndexOf(expected)) {
+    throw new Error(
+      `Expected ${CONFIG_SCHEMA_LOADER_TRANSFORM.packageName} schema loader URL pattern exactly once in ${CONFIG_SCHEMA_LOADER_TRANSFORM.module}`,
+    );
+  }
+  return source.replace(expected, replacement);
+}
+
+async function configSchemaLoaderPlugin() {
+  const configRoot = await dependencyPackageRoot(CONFIG_SCHEMA_LOADER_TRANSFORM.packageName);
+  const schemaLoaderPath = path.resolve(configRoot, CONFIG_SCHEMA_LOADER_TRANSFORM.module);
+  return {
+    name: 'relocate-config-schema-loader',
+    setup(build) {
+      build.onLoad({ filter: /schema\.js$/ }, async (args) => {
+        if (path.resolve(args.path) !== schemaLoaderPath) {
+          return undefined;
+        }
+        const source = await readFile(schemaLoaderPath, 'utf8');
+        return { contents: replaceConfigSchemaLoader(source), loader: 'js' };
+      });
+    },
+  };
+}
+
 async function artifactFiles(root) {
   return walkRegularFiles(root, { inspectPath: assertAllowedArtifactPath });
 }
@@ -330,12 +383,13 @@ async function createArtifact(destination) {
     absWorkingDir: packageRoot,
     entryPoints: [path.join(packageRoot, BUNDLER_CONFIG.entryPoint)],
     outfile: path.join(destination, BUNDLER_CONFIG.outputFile),
+    plugins: [await configSchemaLoaderPlugin()],
   });
 
   for (const asset of PACKAGE_ASSETS) {
     const output = path.join(destination, asset);
     await mkdir(path.dirname(output), { recursive: true });
-    await writeFile(output, await readRequiredFile(packageRoot, asset));
+    await writeFile(output, await packageAsset(asset));
   }
 
   for (const { packageName, output } of dependencyLicenses) {

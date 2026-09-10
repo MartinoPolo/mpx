@@ -28,6 +28,8 @@ interface ToolResult {
 }
 
 type AgentTool = {
+  description: string;
+  promptGuidelines?: string[];
   execute(
     id: string,
     parameters: Record<string, unknown>,
@@ -43,7 +45,19 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'mpx-agent-invocation-'));
   vi.useFakeTimers();
   vi.stubEnv('PI_CODING_AGENT_DIR', join(root, 'global'));
-  vi.stubEnv('MPX_COMPILED_AGENTS_DIR', join(root, 'compiled'));
+  for (const name of [
+    'MPX_RUNTIME',
+    'MPX_RUNTIME_CONTEXT',
+    'MPX_ACTIVE_CONTENT_ROOT',
+    'MPX_ACTIVE_CONTENT_MANIFEST',
+    'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
+    'MPX_COMPILED_AGENTS_DIR',
+    'MPX_RUNTIME_PROJECTION_REFERENCE',
+    'MPX_IDENTITY',
+    'MPX_MODE',
+  ]) {
+    vi.stubEnv(name, undefined);
+  }
   vi.spyOn(process, 'cwd').mockReturnValue(root);
   setDefaultsDisabled(true);
 });
@@ -76,7 +90,7 @@ function record(type = 'Specialist'): AgentRecord {
   };
 }
 
-function harness() {
+async function harness() {
   const tools = new Map<string, AgentTool>();
   const commands = new Map<
     string,
@@ -122,7 +136,7 @@ function harness() {
   const transcriptWrite = vi
     .spyOn(outputFiles, 'writeInitialEntry')
     .mockImplementation(() => undefined);
-  subagents(api);
+  await subagents(api);
   emit.mockClear();
   const execute = (parameters: Record<string, unknown>) =>
     tools.get('Agent')!.execute(
@@ -138,6 +152,7 @@ function harness() {
     );
   return {
     execute,
+    agentTool: tools.get('Agent')!,
     commands,
     context,
     spawn,
@@ -150,7 +165,7 @@ function harness() {
   };
 }
 
-function assertNoExecutionSideEffects(execution: ReturnType<typeof harness>) {
+function assertNoExecutionSideEffects(execution: Awaited<ReturnType<typeof harness>>) {
   for (const operation of [
     execution.spawn,
     execution.spawnAndWait,
@@ -179,7 +194,7 @@ for (const mode of [{}, { run_in_background: true }, { schedule: 'in 1 hour' }])
       if (disabled) {
         await defineAgent('Specialist', 'enabled: false\n');
       }
-      const execution = harness();
+      const execution = await harness();
       await assert.rejects(
         execution.execute({ subagent_type: 'specialist', ...mode }),
         disabled ? /disabled/ : /Unknown agent type/,
@@ -195,15 +210,33 @@ test('linked-root specialist names resolve case-insensitively without changing t
   const alias = join(root, 'global', 'agents');
   await rename(alias, target);
   await symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir');
-  const execution = harness();
+  const execution = await harness();
   const result = await execution.execute({ subagent_type: 'sPeCiAlIsT' });
   assert.notEqual(result.isError, true);
   assert.equal(execution.spawnAndWait.mock.calls[0][2], 'Specialist');
   assert.equal(result.details?.subagentType, 'Specialist');
 });
 
+test('ordinary instructions reserve Explore for broad evidence gathering', async () => {
+  const execution = await harness();
+  const instructions = [
+    execution.agentTool.description,
+    ...(execution.agentTool.promptGuidelines ?? []),
+  ].join('\n');
+
+  assert.match(
+    instructions,
+    /Explore.*broad codebase (?:discovery|exploration).*exploration class.*facts and evidence.*parent decides/is,
+  );
+  assert.match(
+    instructions,
+    /(?:known small reads.*direct tools|target is already known.*direct tool)/is,
+  );
+  assert.doesNotMatch(instructions, /used proactively|matches an agent type's description/i);
+});
+
 test('explicit general-purpose remains available with defaults disabled', async () => {
-  const execution = harness();
+  const execution = await harness();
   const result = await execution.execute({ subagent_type: 'GENERAL-PURPOSE' });
   assert.notEqual(result.isError, true);
   assert.equal(execution.spawnAndWait.mock.calls[0][2], 'general-purpose');
@@ -212,7 +245,7 @@ test('explicit general-purpose remains available with defaults disabled', async 
 
 test('an explicitly disabled general-purpose does not bypass validation', async () => {
   await defineAgent('general-purpose', 'enabled: false\n');
-  const execution = harness();
+  const execution = await harness();
   await assert.rejects(
     execution.execute({ subagent_type: 'GENERAL-PURPOSE' }),
     /Agent type "GENERAL-PURPOSE" is disabled\./,
@@ -222,7 +255,7 @@ test('an explicitly disabled general-purpose does not bypass validation', async 
 
 for (const invalidResume of ['missing', 'nested', 'inactive'] as const) {
   test(`invalid ${invalidResume} resume rejects without execution side effects`, async () => {
-    const execution = harness();
+    const execution = await harness();
     const existing = record();
     if (invalidResume === 'nested') {
       existing.parentAgentId = 'parent-agent';
@@ -242,7 +275,7 @@ for (const invalidResume of ['missing', 'nested', 'inactive'] as const) {
 }
 
 test('failed resume rejects instead of returning a successful tool result', async () => {
-  const execution = harness();
+  const execution = await harness();
   vi.spyOn(AgentManager.prototype, 'getRecord').mockReturnValue(record());
   execution.resume.mockResolvedValue(undefined);
   await assert.rejects(
@@ -256,7 +289,7 @@ test('failed resume rejects instead of returning a successful tool result', asyn
 
 test('resume uses stored identity even when the requested type is unknown or disabled', async () => {
   await defineAgent('Disabled', 'enabled: false\n');
-  const execution = harness();
+  const execution = await harness();
   vi.spyOn(AgentManager.prototype, 'getRecord').mockReturnValue(record('StoredSpecialist'));
   execution.resume.mockResolvedValue(record('StoredSpecialist'));
   for (const requested of ['Missing', 'Disabled']) {
@@ -288,7 +321,7 @@ test('linked-root management is visibly read-only and cannot edit a lower-preced
   await writeFile(join(target, 'Specialist.md'), '---\ndescription: Linked\n---\nLinked role');
   await symlink(target, projectDirectory, process.platform === 'win32' ? 'junction' : 'dir');
   await defineAgent('Specialist');
-  const execution = harness();
+  const execution = await harness();
   execution.context.ui.custom.mockResolvedValueOnce('Specialist').mockResolvedValue(undefined);
   execution.context.ui.select.mockResolvedValueOnce('Agent types (1)');
   await execution.commands

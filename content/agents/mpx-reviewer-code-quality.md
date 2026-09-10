@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-code-quality
-description: 'Read-only reviewer for DRY, SoC, dead code, duplication, naming, constants, and maintainability.'
+description: 'Reviews changed code for quality and maintainability.'
 ---
 
 # Reviewer: Code Quality
 
-First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
-format.
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
+`skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for scope and output format. If neither root
+is available, request a parent-resolved absolute path; never search or guess.
 
 Review provided diff/scope for code quality issues. Report high-confidence issues.
 

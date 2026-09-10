@@ -13,7 +13,9 @@ metadata:
 
 # Check & Fix
 
-Deterministic check execution and fix loop based on the bundled `detect-check-scripts.mjs`.
+Deterministic parent-owned check and repair loop based on the bundled `detect-check-scripts.mjs`. Follow
+[Parent-owned Check and CI Repair](../shared/REPAIR_ORCHESTRATION.md). This end-user skill still fixes accepted problems;
+the report-only specialist does not.
 
 This skill accepts no arguments. Ignore argument-based filtering and follow detector output only.
 
@@ -61,43 +63,33 @@ Per scope, build two tiers from detector output:
 Run exactly what the detector output specifies, regardless of any user arguments. Use fast-tier commands for feedback
 while fixing; after all planned fixes, run the full tier once as final verification.
 
-## Step 3: Run Checks
+## Step 3: Collect and assess results
 
-Run fast-tier commands in deterministic order.
+Dispatch `mpx-checker` with the fast-tier commands in deterministic order and their exact working directories:
 
 - `CHECK_ALL` mode: `CHECK_ALL`
 - Individual mode: `TYPECHECK` -> `LINT` -> `FORMAT`
 
-For monorepo keys, run from `*_DIR`:
+Supply its bounded result to `mpx-check-reporter`. Require assessment, evidence, file/line locations, suggested repairs,
+blockers, uncertainty, and verification commands. The parent evaluates the report; neither specialist edits files or
+chooses which findings to accept.
 
-```bash
-cd <DIR> && <COMMAND>
-```
+## Step 4: Repair accepted findings
 
-Run sequentially. Stop at first failing command, fix it, then continue.
+For each accepted finding, send a bounded precise repair with exact files and failed command to `mpx-executor`. Use
+`mpx-tdd-executor` when a behavioral bug and test setup permit a focused red/green cycle. Fix root causes rather than
+suppressing diagnostics, and change a test only when it is demonstrably wrong against intended behavior.
 
-## Step 4: Fix Errors
+After repairs, re-dispatch `mpx-checker` for the failed command and send the fresh result to `mpx-check-reporter` for
+assessment. The parent evaluates it and repeats up to three iterations per failed command. Mark a remaining failure
+`Failed` and continue; a repair requiring architectural work outside this skill is a blocker.
 
-If a check fails:
+## Step 5: Continue and run final verification
 
-1. Parse failing files and diagnostics from command output.
-2. Read relevant files and identify root cause.
-3. TDD-first when practical:
-
-- If there is a clear behavioral bug and test setup exists, add/update a focused failing test first (red).
-- Implement minimal fix (green).
-- Refactor only if needed.
-
-4. Re-run the failed command.
-
-Repeat up to **3 iterations** per failed command. If still failing, mark as `Failed` and continue.
-
-## Step 5: Continue and Run Final Verification
-
-Continue through remaining fast-tier commands. Each command has its own 3-iteration fix budget. Then run the full tier
-once in this order: `CHECK_ALL` or `TYPECHECK` -> `LINT` -> `FORMAT`, followed by `BUILD` -> `TEST_UNIT` or `TEST` ->
-`TEST_E2E`. Stop final verification at the first failure and report it; do not start another fix loop that duplicates
-the completed feedback phase.
+Continue through remaining fast-tier commands under the same parent-owned loop. Then dispatch `mpx-checker` once with
+the complete full tier in this order: `CHECK_ALL` or `TYPECHECK` -> `LINT` -> `FORMAT`, followed by `BUILD` ->
+`TEST_UNIT` or `TEST` -> `TEST_E2E`. Treat this fresh result as the final gate. Stop at its first failure and report it;
+do not start another fix loop that duplicates the completed feedback phase.
 
 ## Step 6: Report Results
 

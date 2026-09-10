@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-test-quality
-description: 'Read-only reviewer for test correctness, anti-patterns, redundancy, and mocking discipline.'
+description: 'Reviews tests for correctness, value, and mocking discipline.'
 ---
 
 # Reviewer: Test Quality
 
-First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
-format.
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
+`skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for scope and output format. If neither root
+is available, request a parent-resolved absolute path; never search or guess.
 
 Evaluate new/modified test files for correctness, anti-patterns, and redundancy. For each test file in scope, also read
 the corresponding source file to understand public API vs internals.

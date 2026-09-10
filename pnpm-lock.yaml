@@ -552,9 +552,15 @@ importers:
       '@mpx/application':
         specifier: workspace:*
         version: link:../../../packages/application
+      '@mpx/config':
+        specifier: workspace:*
+        version: link:../../../packages/config
       '@mpx/sessions':
         specifier: workspace:*
         version: link:../../../packages/sessions
+      '@mpx/skills':
+        specifier: workspace:*
+        version: link:../../../packages/skills
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1

@@ -52,6 +52,7 @@ export class SubagentScheduler {
   private pi: ExtensionAPI | undefined;
   private ctx: ExtensionContext | undefined;
   private manager: AgentManager | undefined;
+  private reloadAgents: (() => Promise<void>) | undefined;
 
   /** Start the scheduler: bind to a session's store and arm enabled jobs. */
   start(
@@ -59,11 +60,13 @@ export class SubagentScheduler {
     ctx: ExtensionContext,
     manager: AgentManager,
     store: ScheduleStore,
+    reloadAgents: () => Promise<void>,
   ): void {
     this.pi = pi;
     this.ctx = ctx;
     this.manager = manager;
     this.store = store;
+    this.reloadAgents = reloadAgents;
 
     for (const job of store.list()) {
       if (job.enabled) {
@@ -86,6 +89,7 @@ export class SubagentScheduler {
     this.pi = undefined;
     this.ctx = undefined;
     this.manager = undefined;
+    this.reloadAgents = undefined;
   }
 
   /** True if start() has bound a store and the scheduler is active. */
@@ -240,12 +244,13 @@ export class SubagentScheduler {
    * queue), persist completion. Fire-and-forget: the timer tick returns
    * immediately so other jobs keep firing.
    */
-  private executeJob(id: string): void {
+  private async executeJob(id: string): Promise<void> {
     const store = this.store;
     const pi = this.pi;
     const ctx = this.ctx;
     const manager = this.manager;
-    if (!store || !pi || !ctx || !manager) {
+    const reloadAgents = this.reloadAgents;
+    if (!store || !pi || !ctx || !manager || !reloadAgents) {
       return;
     }
     const job = store.get(id);
@@ -254,6 +259,14 @@ export class SubagentScheduler {
     }
 
     store.update(id, { lastStatus: 'running' });
+    try {
+      await reloadAgents();
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      store.update(id, { lastRun: new Date().toISOString(), lastStatus: 'error' });
+      this.emit({ type: 'error', jobId: id, error });
+      return;
+    }
 
     // Resolve model at fire time — registry contents may have changed since the
     // job was created (auth added/removed). Fall back silently to spawn-default

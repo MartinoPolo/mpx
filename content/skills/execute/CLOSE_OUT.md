@@ -1,5 +1,7 @@
 # Execute: Mergeability, CI, and Close-out
 
+Follow [Parent-owned Check and CI Repair](../shared/REPAIR_ORCHESTRATION.md).
+
 Read [Provider Routing](../shared/PROVIDER_ROUTING.md), independently resolve `repository.provider`, and use only that
 provider's native PR and CI commands from its guide. `<review-id>`, `<branch>`, and `<base>` remain explicit immutable
 values.
@@ -19,18 +21,17 @@ retries, report the bounded summary and blockers to the user and stop before CI/
 
 ## CI green gate
 
-Use the repository provider guide to watch all PR checks. Local checks are not a substitute. If checks fail, obtain
-the native run/pipeline ID and invoke `mpx-ci-fixer`:
+Use the repository provider guide to watch all PR checks. Local checks are not a substitute. If checks fail, obtain the
+explicit native run/pipeline and job identity, validate it against `<review-id>` and `<branch>`, and dispatch
+`mpx-ci-analyzer` with those immutable identities and the exact discovered local commands. Evaluate its bounded
+evidence and suggestions; send each accepted precise repair to `mpx-executor` or behavioral repair to
+`mpx-tdd-executor`. Run the exact local verification, commit and push only through the authorized parent workflow, then
+request a new native CI run or wait for the provider-triggered run. Repeat at most three times. Route unresolved findings
+through triage and blockers to the user; the analyzer never repairs, reruns, commits, pushes, or confirms completion.
 
-> Fix failing run `<run-id>` on `<branch>` for PR `<review-id>`. Local verify commands: [exact discovered commands].
-> Return ONLY your JSON contract.
-
-The agent owns logs, diagnosis, fixes, commit/push, retry, and re-watch, up to three attempts. Route `clean` to an
-independent native status confirmation. Route `issues_remaining` through unresolved triage, then continue only if CI is
-green. Route `blocked` to the user with `summary` and `blockers`; do not declare completion.
-
-Before finalization confirm: every commit is remote, every applicable check passed, the PR remains mergeable, and the
-worktree is clean. If no checks exist, report that fact and proceed only when repository policy permits.
+After any repair, independently query fresh native status for the explicit PR and latest identity-bound run. Before
+finalization confirm: every commit is remote, every applicable check passed, the PR remains mergeable, and the worktree
+is clean. If no checks exist, report that fact and proceed only when repository policy permits.
 
 ## Finalization
 

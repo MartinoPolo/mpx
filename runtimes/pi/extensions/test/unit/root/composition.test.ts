@@ -15,6 +15,18 @@ import mpxPiExtensions, {
   type ExtensionComponent,
 } from '../../../index.js';
 
+const MANAGED_DISCOVERY_ENVIRONMENT = [
+  'MPX_RUNTIME',
+  'MPX_RUNTIME_CONTEXT',
+  'MPX_ACTIVE_CONTENT_ROOT',
+  'MPX_ACTIVE_CONTENT_MANIFEST',
+  'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
+  'MPX_COMPILED_AGENTS_DIR',
+  'MPX_RUNTIME_PROJECTION_REFERENCE',
+  'MPX_IDENTITY',
+  'MPX_MODE',
+] as const;
+
 const EXPECTED_COMPONENTS = [
   'session-lifecycle',
   'agent-resurrect',
@@ -32,11 +44,9 @@ const EXPECTED_COMPONENTS = [
 ];
 
 beforeEach(() => {
-  vi.stubEnv('MPX_RUNTIME', 'pi');
-  vi.stubEnv(
-    'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
-    JSON.stringify({ sha256: '0'.repeat(64), byteCount: 0 }),
-  );
+  for (const name of MANAGED_DISCOVERY_ENVIRONMENT) {
+    vi.stubEnv(name, undefined);
+  }
 });
 
 afterEach(() => vi.unstubAllEnvs());

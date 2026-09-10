@@ -43,9 +43,12 @@ export function setDefaultsDisabled(b: boolean): void {
  * Pure — callers that must not disturb the process-wide registry (nested
  * delegation resolving agents from its own config root) build their own map.
  */
-export function buildAgentRegistry(userAgents: Map<string, AgentConfig>): Map<string, AgentConfig> {
+export function buildAgentRegistry(
+  userAgents: Map<string, AgentConfig>,
+  includeDefaults = true,
+): Map<string, AgentConfig> {
   const registry = new Map<string, AgentConfig>();
-  if (!disableDefaults) {
+  if (includeDefaults && !disableDefaults) {
     for (const [name, config] of DEFAULT_AGENTS) {
       registry.set(name, config);
     }
@@ -61,9 +64,9 @@ export function buildAgentRegistry(userAgents: Map<string, AgentConfig>): Map<st
  * Starts with DEFAULT_AGENTS, then overlays user agents (overrides defaults with same name).
  * Disabled agents (enabled === false) are kept in the registry but excluded from spawning.
  */
-export function registerAgents(userAgents: Map<string, AgentConfig>): void {
+export function registerAgents(userAgents: Map<string, AgentConfig>, includeDefaults = true): void {
   agents.clear();
-  for (const [name, config] of buildAgentRegistry(userAgents)) {
+  for (const [name, config] of buildAgentRegistry(userAgents, includeDefaults)) {
     agents.set(name, config);
   }
 }
@@ -114,7 +117,7 @@ export function isValidTypeIn(registry: Map<string, AgentConfig>, type: string):
 }
 
 /** Get all enabled type names in a registry (for spawning and tool descriptions). */
-export function getAvailableTypesIn(registry: Map<string, AgentConfig>): string[] {
+function getAvailableTypesIn(registry: Map<string, AgentConfig>): string[] {
   return [...registry.entries()]
     .filter(([, config]) => config.enabled !== false)
     .map(([name]) => name);

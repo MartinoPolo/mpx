@@ -76,7 +76,7 @@ async function runNode(
   });
 }
 
-async function skillProjection(root: string): Promise<Record<string, string>> {
+async function managedNativeDiscoveryProjection(root: string): Promise<Record<string, string>> {
   const files: Array<{ relativePath: string; sha256: string; byteCount: number }> = [];
   const skills = [];
   for (const [identity, exposure, source, relativePath] of [
@@ -103,36 +103,77 @@ async function skillProjection(root: string): Promise<Record<string, string>> {
       omittedOptionalFeatures: [],
     });
   }
+  const binding = {
+    projectId: null,
+    repositoryId: 'fixture',
+    identity: 'personal',
+    selection: {
+      location: { name: 'personal', canonicalRoot: process.cwd() },
+      packs: ['personal'],
+      source: 'user-location',
+    },
+  };
+  const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
+  const manifestKey = digest(JSON.stringify({ runtime: 'pi', binding, skills, files }));
   const manifestPath = path.join(root, 'active-content.json');
   const manifest = JSON.stringify({
     schemaVersion: 2,
     compilerVersion: '2.0.0',
     runtime: 'pi',
     profileSchemaVersion: 1,
-    binding: {
-      projectId: null,
-      repositoryId: 'fixture',
-      identity: 'personal',
-      selection: {
-        location: { name: 'personal', canonicalRoot: process.cwd() },
-        packs: ['personal'],
-        source: 'user-location',
-      },
-    },
-    manifestKey: 'a'.repeat(64),
+    binding,
+    manifestKey,
     manifestEnvelope: { path: 'active-content.json', includedInFileMap: false },
     skills,
     agents: [],
     files,
   });
-  await writeFile(manifestPath, manifest);
+  const manifestBytes = Buffer.from(manifest);
+  await Promise.all([
+    mkdir(path.join(root, 'agents'), { recursive: true }),
+    writeFile(manifestPath, manifestBytes),
+  ]);
+
+  const fileMapHash = digest(JSON.stringify(files));
+  const runtimeArtifactKey = digest(
+    JSON.stringify({ schemaVersion: 5, runtime: 'pi', manifestKey, fileMapHash }),
+  );
+  const descriptorDigest = digest(manifest);
+  const launchKey = digest(JSON.stringify({ descriptorDigest, runtimeArtifactKey }));
+  const projectionKey = digest(JSON.stringify({ launchKey, manifestKey, fileMapHash }));
   return {
     MPX_RUNTIME: 'pi',
+    MPX_RUNTIME_CONTEXT: JSON.stringify({
+      schemaVersion: 2,
+      launchKey,
+      launchDescriptor: { reference: 'native-package-discovery.json', digest: descriptorDigest },
+      manifestKey,
+      runtimeArtifact: {
+        schemaVersion: 5,
+        runtime: 'pi',
+        manifestKey,
+        artifactKey: runtimeArtifactKey,
+        fileMapHash,
+      },
+      binding,
+    }),
     MPX_ACTIVE_CONTENT_ROOT: root,
     MPX_ACTIVE_CONTENT_MANIFEST: manifestPath,
     MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY: JSON.stringify({
-      sha256: createHash('sha256').update(manifest).digest('hex'),
-      byteCount: Buffer.byteLength(manifest),
+      sha256: digest(manifest),
+      byteCount: manifestBytes.byteLength,
+    }),
+    MPX_COMPILED_AGENTS_DIR: path.join(root, 'agents'),
+    MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify({
+      projectionKey,
+      fileMapHash,
+      launchBinding: {
+        launchKey,
+        descriptorDigest,
+        runtimeArtifactKey,
+        runtime: 'pi',
+        manifestKey,
+      },
     }),
   };
 }
@@ -145,7 +186,7 @@ afterEach(async () => {
   );
 });
 
-it('discovers the release once and separates MPX commands from native project skills', async () => {
+it('discovers the native Pi package and separates commands within a managed launch', async () => {
   const workspaceRoot = path.resolve(import.meta.dirname, '../../..');
   const artifactRoot = path.join(workspaceRoot, 'runtimes/pi/extensions/dist/package');
   const releaseScript = path.join(workspaceRoot, 'runtimes/pi/extensions/scripts/release.mjs');
@@ -182,7 +223,7 @@ it('discovers the release once and separates MPX commands from native project sk
   const authDigest = createHash('sha256').update(emptyAuth).digest('hex');
 
   const activeRoot = path.join(disposable, 'active');
-  const skillEnvironment = await skillProjection(activeRoot);
+  const managedEnvironment = await managedNativeDiscoveryProjection(activeRoot);
   const child = spawn(
     process.execPath,
     [
@@ -201,7 +242,7 @@ it('discovers the release once and separates MPX commands from native project sk
           Object.fromEntries(
             Object.entries(process.env).filter(([name]) => !/^(?:MPX_|PI_)/u.test(name)),
           ),
-          skillEnvironment,
+          managedEnvironment,
         ),
         PI_CODING_AGENT_DIR: agentRoot,
       },
@@ -285,9 +326,9 @@ it('discovers the release once and separates MPX commands from native project sk
 
   const { DefaultResourceLoader } = await import(piEntryUrl);
   const previousContentEnvironment = Object.fromEntries(
-    Object.keys(skillEnvironment).map((name) => [name, process.env[name]]),
+    Object.keys(managedEnvironment).map((name) => [name, process.env[name]]),
   );
-  Object.assign(process.env, skillEnvironment);
+  Object.assign(process.env, managedEnvironment);
   try {
     const loader = new DefaultResourceLoader({ cwd, agentDir: agentRoot, noSkills: true });
     for (let reload = 0; reload < 2; reload += 1) {

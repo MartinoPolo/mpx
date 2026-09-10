@@ -11,10 +11,10 @@ import {
 
 const agentAliases = Object.fromEntries(
   [
-    'mpx-check-fixer',
+    'mpx-check-reporter',
     'mpx-checker',
     'mpx-chrome-devtools-tester',
-    'mpx-ci-fixer',
+    'mpx-ci-analyzer',
     'mpx-context7-docs-fetcher',
     'mpx-executor',
     'mpx-explorer',
@@ -29,7 +29,6 @@ const agentAliases = Object.fromEntries(
     'mpx-reviewer-security',
     'mpx-reviewer-spec-alignment',
     'mpx-reviewer-test-quality',
-    'mpx-scanner-architecture',
     'mpx-tdd-executor',
     'mpx-ui-variant-generator',
     'mpx-unresolved-issue-tracker',

@@ -54,6 +54,7 @@ describe('generated repository validation', () => {
         'PLAYWRIGHT_TESTING.md',
         'PROJECT_DOC_TEMPLATES.md',
         'PROVIDER_ROUTING.md',
+        'REPAIR_ORCHESTRATION.md',
         'REVIEWER_PROTOCOL.md',
         'SENTRY.md',
         'SUBAGENT_PROTOCOL.md',

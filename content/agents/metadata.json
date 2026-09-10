@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "agents": {
-    "mpx-check-fixer": {
+    "mpx-check-reporter": {
       "modelClass": "advanced",
       "thinking": "high",
-      "capabilities": ["read", "search", "shell"],
-      "nesting": ["mpx-checker", "mpx-reviewer-*", "mpx-executor", "mpx-chrome-devtools-tester"],
-      "outputSchema": "bounded-json"
+      "capabilities": ["read"],
+      "nesting": [],
+      "outputSchema": "check-assessment"
     },
     "mpx-checker": {
       "modelClass": "mechanical",
@@ -22,12 +22,12 @@
       "nesting": [],
       "outputSchema": "findings"
     },
-    "mpx-ci-fixer": {
+    "mpx-ci-analyzer": {
       "modelClass": "advanced",
       "thinking": "high",
-      "capabilities": ["read", "search", "shell", "write"],
-      "nesting": ["mpx-executor", "mpx-checker", "mpx-git-committer"],
-      "outputSchema": "bounded-json"
+      "capabilities": ["read", "search", "shell"],
+      "nesting": [],
+      "outputSchema": "ci-analysis"
     },
     "mpx-context7-docs-fetcher": {
       "modelClass": "mechanical",
@@ -121,13 +121,6 @@
       "outputSchema": "findings"
     },
     "mpx-reviewer-test-quality": {
-      "modelClass": "standard",
-      "thinking": "medium",
-      "capabilities": ["read", "search", "shell"],
-      "nesting": [],
-      "outputSchema": "findings"
-    },
-    "mpx-scanner-architecture": {
       "modelClass": "standard",
       "thinking": "medium",
       "capabilities": ["read", "search", "shell"],

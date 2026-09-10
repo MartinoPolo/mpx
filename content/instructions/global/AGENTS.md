@@ -48,9 +48,10 @@ Name the agent type at every spawn. Only a structured runtime parameter selects 
 Follow [SUBAGENT_PROTOCOL.md](../shared/SUBAGENT_PROTOCOL.md) for semantic model classes, effort, tools, nesting, and
 bounded result contracts.
 
-Delegate broad codebase searches to the projected `Explore` agent and state breadth as quick, medium, or very thorough.
-Give every agent a self-contained prompt because it cannot assume repository instructions, parent state, machine roots,
-or provider identity. Prefer direct tools for known paths and single-fact lookups.
+Delegate broad codebase discovery to the projected `Explore` agent, which uses the exploration class, and state breadth
+as quick, medium, or very thorough. Explore returns facts and evidence; the parent evaluates them and makes decisions.
+Use direct tools for known paths and small targeted reads. Give every agent a self-contained prompt because it cannot
+assume repository instructions, parent state, machine roots, or provider identity.
 
 For library or framework documentation, check the configured `MPX_CLONED` collection first, then use the approved
 Context7 documentation agent. Do not guess an unavailable API.

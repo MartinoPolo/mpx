@@ -39,12 +39,15 @@ canonical agent that declares it or accept documented inheritance.
 
 ## Orchestration and nesting
 
-Fan out from the parent by default. Sub-agents must not assume they can spawn children or inherit the parent's tools,
-repository instructions, git status, machine roots, or provider identity. Prompts include the bounded context needed for
-the job. An agent without delegation authority returns the exact capability needed to its parent.
+Fan out from the parent by default. Parent-owned workflows are a deliberate control-flow choice, not a claim that
+nesting is unavailable: Pi's extension and Claude Code support bounded nested delegation when an active workflow grants
+it. Sub-agents must not assume they can spawn children or inherit the parent's tools, repository instructions, git
+status, machine roots, or provider identity. Prompts include the bounded context needed for the job. An agent without
+delegation authority returns the exact capability needed to its parent.
 
-Runtime ceilings and nesting behavior drift. Adapters declare tested runtime versions and fail closed when a required
-grant is unavailable; canonical policy does not encode version-specific tool names.
+Runtime ceilings and nesting behavior drift. Adapters declare supported and statically verified behavior separately from
+live execution evidence and fail closed when a required grant is unavailable; canonical policy does not encode version-
+specific tool names or claim live testing without structured evidence.
 
 ## Tool grants
 

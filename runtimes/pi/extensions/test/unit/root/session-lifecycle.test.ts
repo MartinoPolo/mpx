@@ -30,6 +30,17 @@ const { link: originalLink } =
 
 const temporaryRoots: string[] = [];
 const fingerprint = '2025-01-02T03:04:05.000Z';
+const MANAGED_DISCOVERY_ENVIRONMENT = [
+  'MPX_RUNTIME',
+  'MPX_RUNTIME_CONTEXT',
+  'MPX_ACTIVE_CONTENT_ROOT',
+  'MPX_ACTIVE_CONTENT_MANIFEST',
+  'MPX_ACTIVE_CONTENT_MANIFEST_INTEGRITY',
+  'MPX_COMPILED_AGENTS_DIR',
+  'MPX_RUNTIME_PROJECTION_REFERENCE',
+  'MPX_IDENTITY',
+  'MPX_MODE',
+] as const;
 
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -970,10 +981,18 @@ it('loads the producer through production composition before active-registry cle
   for (const [name, value] of Object.entries(environment)) {
     vi.stubEnv(name, value);
   }
-  // Keep unrelated content loading disabled during factory composition, then restore the launch guard.
-  vi.stubEnv('MPX_RUNTIME', undefined);
+  // Keep unrelated managed discovery disabled during native factory composition,
+  // then restore the complete launch environment before lifecycle hooks run.
+  const managedEnvironment = new Map(
+    MANAGED_DISCOVERY_ENVIRONMENT.map((name) => [name, process.env[name]]),
+  );
+  for (const name of MANAGED_DISCOVERY_ENVIRONMENT) {
+    vi.stubEnv(name, undefined);
+  }
   await mpxPiExtensions(extension.api);
-  vi.stubEnv('MPX_RUNTIME', 'pi');
+  for (const [name, value] of managedEnvironment) {
+    vi.stubEnv(name, value);
+  }
   expect(DEFAULT_EXTENSION_COMPONENTS.slice(0, 2).map(({ name }) => name)).toEqual([
     'session-lifecycle',
     'agent-resurrect',

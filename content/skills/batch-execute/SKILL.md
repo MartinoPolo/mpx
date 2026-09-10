@@ -16,8 +16,9 @@ metadata:
 
 Here, PR means a GitHub pull request, GitLab merge request, or Gerrit change, as applicable.
 
-Read [REFERENCE](REFERENCE.md), [Provider Routing](../shared/PROVIDER_ROUTING.md), and
-[Content Paths](../shared/CONTENT_PATHS.md). Independently resolve `issues.provider` and `repository.provider` from
+Read [REFERENCE](REFERENCE.md), [Provider Routing](../shared/PROVIDER_ROUTING.md),
+[Content Paths](../shared/CONTENT_PATHS.md), and
+[Parent-owned Check and CI Repair](../shared/REPAIR_ORCHESTRATION.md). Independently resolve `issues.provider` and `repository.provider` from
 `mpxconfig.json`; load each selected native provider guide from `../shared/providers/`. Never invent MPX facade provider
 actions. Preserve immutable launch identity.
 
@@ -62,13 +63,14 @@ each commit, and integrate each onto the batch branch. Resolve conflicts before 
 
 ## Integrated verification
 
-Run once on the integrated branch. Invoke `mpx-check-fixer` with exact static/test commands
-and default four reviewers; add security/performance/error-handling for `--full-review`; use no reviewers for
-`--no-review` but still run checks/tests. E2E and assertion-based browser verification apply to changed
-UI/source/config/dependency surfaces and run in selected fix-list order, with stale-server/worktree sanity first and
-explicit PASS/FAIL per surface. Route bounded JSON: `clean`; `issues_remaining` to `mpx-unresolved-issue-tracker`;
-`blocked` stops publication. Maximum three repair iterations. Commit accepted review fixes through `mpx-git-committer`,
-then rerun exact checks.
+Run once on the integrated branch. Dispatch `mpx-checker` with exact static/test commands and dispatch the default four
+reviewers; add security/performance/error-handling for `--full-review`; use no reviewers for `--no-review` but still run
+checks/tests. E2E and assertion-based browser verification apply to changed UI/source/config/dependency surfaces, with
+stale-server/worktree sanity first and explicit PASS/FAIL per surface. Supply all results to `mpx-check-reporter`, then
+evaluate its assessment. Send accepted precise repairs to `mpx-executor` or behavioral repairs to `mpx-tdd-executor`.
+Route unresolved findings to `mpx-unresolved-issue-tracker`; blockers stop publication. Main owns at most three repair
+iterations, commits accepted repairs through `mpx-git-committer`, re-dispatches affected checks/reviewers, and requires a
+fresh complete local verification before publication.
 
 ## Board writeback
 
@@ -80,10 +82,11 @@ entries by exact text. Do not lose attached image links.
 
 Push only as authorized by invocation/repository policy. Use the selected repository provider's native commands to
 create exactly one PR containing the commit→Issue table, parent/child body links, provider closing references, and
-unresolved findings. Capture explicit PR ID and URL. Run native CI status/watch and delegate failures to
-`mpx-ci-fixer` (bounded JSON, maximum three attempts); never read raw logs in the orchestrator. Green CI completes batch
-publication; merge only when separately requested or unambiguously authorized by repository policy—batch execution does
-not require automatic merge.
+unresolved findings. Capture explicit PR ID and URL. Run native CI status/watch. For a failure, validate the explicit provider run/job identity and dispatch
+`mpx-ci-analyzer`; evaluate its bounded evidence and delegate accepted precise repairs to an executor. Verify locally,
+commit/push only through the authorized parent workflow, and request or await another run, for at most three attempts.
+Independently confirm fresh green status for the explicit PR before completing publication. Merge only when separately
+requested or unambiguously authorized by repository policy—batch execution does not require automatic merge.
 
 Report Issue→commit mappings, skips and gate decisions, exact checks, review fixes/findings, visual PASS/FAIL per
 surface, board moves, PR ID/URL, CI, merge state, and blockers.

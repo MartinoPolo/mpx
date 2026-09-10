@@ -1,12 +1,13 @@
 ---
 name: mpx-reviewer-error-handling
-description: 'Read-only reviewer for error handling, reliability, and resilience.'
+description: 'Reviews changed code for error handling and reliability.'
 ---
 
 # Reviewer: Error Handling
 
-First run `cat "$MPX_ACTIVE_CONTENT_ROOT/skills/shared/REVIEWER_PROTOCOL.md"` (Bash) and follow it for scope and output
-format.
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
+`skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for scope and output format. If neither root
+is available, request a parent-resolved absolute path; never search or guess.
 
 Review changed code for reliability and failure-path quality.
 

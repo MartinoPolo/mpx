@@ -22,6 +22,7 @@ import { test } from 'vitest';
 
 import {
   CONFIG_ASSETS,
+  CONFIG_SCHEMA_ASSETS,
   GUARD_ASSETS,
   HOST_EXTERNALS,
   PACKAGE_ASSETS,
@@ -44,6 +45,9 @@ const payloadFiles = [
 ].sort();
 const completeArtifactFiles = [...payloadFiles, 'build-metadata.json'].sort();
 const productionSourceInputs = [
+  '../../../packages/config/dist/schema.js',
+  '../../../packages/config/schemas/mpxconfig.schema.json',
+  '../../../packages/config/schemas/user-config.schema.json',
   '../../../packages/content-compiler/package.json',
   '../../../packages/content-compiler/src/active.ts',
   '../../../packages/content-compiler/src/compiler.ts',
@@ -170,9 +174,30 @@ function recomputeBundlerConfigDigest(target = 'node22'): string {
       sourcemap: false,
       target,
     },
+    sourceTransforms: [
+      {
+        packageName: '@mpx/config',
+        module: 'dist/schema.js',
+        expected: 'new URL(`../schemas/${name}`, import.meta.url)',
+        replacement: 'new URL(`./schemas/${name}`, import.meta.url)',
+      },
+    ],
   };
   return createHash('sha256').update(canonicalJson(exactBundleConfig)).digest('hex');
 }
+
+test('source digest tracks the config schema loader source bytes', () => {
+  const digest = recomputeSourceTreeDigest();
+  assert.notEqual(
+    digest,
+    recomputeSourceTreeDigest((relativePath) => {
+      const bytes = readFileSync(path.join(packageRoot, relativePath));
+      return relativePath === '../../../packages/config/dist/schema.js'
+        ? Buffer.concat([bytes, Buffer.from('changed')])
+        : bytes;
+    }),
+  );
+});
 
 test('source digest tracks the persisted content loader source bytes', () => {
   const digest = recomputeSourceTreeDigest();
@@ -351,6 +376,10 @@ test('release uses the immutable asset inventory and includes every license', ()
     'config/keybindings.json',
     'config/settings.json',
     'config/subagents.json',
+  ]);
+  assert.deepEqual(CONFIG_SCHEMA_ASSETS, [
+    'schemas/mpxconfig.schema.json',
+    'schemas/user-config.schema.json',
   ]);
   assert.deepEqual(GUARD_ASSETS, [
     'guards/dangerous-command-guard.mjs',
@@ -611,12 +640,17 @@ test('verification rejects a real directory symlink or junction', async () => {
   }
 });
 
-test('complete relocated package resolves COMPACT and guard paths inside itself', async () => {
+test('complete relocated package resolves runtime assets inside itself', async () => {
   runRelease('build');
   const relocatedRoot = path.join(distRoot, '.relocated-package');
+  const siblingSchemasRoot = path.join(distRoot, 'schemas');
   try {
     await rm(relocatedRoot, { recursive: true, force: true });
     await cp(artifactRoot, relocatedRoot, { recursive: true });
+    await assert.rejects(lstat(siblingSchemasRoot), { code: 'ENOENT' });
+    for (const schema of ['mpxconfig.schema.json', 'user-config.schema.json']) {
+      assert.ok(statSync(path.join(relocatedRoot, 'schemas', schema)).isFile());
+    }
     const relocatedModule = (await import(
       `${pathToFileURL(path.join(relocatedRoot, 'mpx-extension.mjs')).href}?relocated=1`
     )) as {

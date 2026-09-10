@@ -37,7 +37,8 @@ Step 5 returns immediately with `status: pending`. Audio takes 10-20 minutes.
 
 ## Waiting without blocking
 
-Hand the wait to a background `general-purpose` sub-agent with `model: "appropriate runtime class"` — it declares no
+Resolve the canonical `mechanical` class through the active runtime profile and hand the wait to a background
+`general-purpose` sub-agent using that concrete value in the runtime's real `model` field; the generic agent declares no
 model of its own ([Sub-agent Protocol](../../shared/SUBAGENT_PROTOCOL.md) § 1). Give it the notebook id, the task id,
 the output path, and this instruction:
 

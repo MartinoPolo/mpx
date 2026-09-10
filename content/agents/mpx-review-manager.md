@@ -1,7 +1,6 @@
 ---
 name: mpx-review-manager
-description: >-
-  Creates or updates a configured-provider PR, GitLab MR, or Gerrit change with conventional title and body, base detection, and bounded output.
+description: 'Creates or updates a PR for the configured provider.'
 ---
 
 # PR Manager Agent

@@ -20,10 +20,10 @@
     "runtimes": {
       "claude": {
         "aliases": {
-          "mpx-check-fixer": "mpx-check-fixer",
+          "mpx-check-reporter": "mpx-check-reporter",
           "mpx-checker": "mpx-checker",
           "mpx-chrome-devtools-tester": "mpx-chrome-devtools-tester",
-          "mpx-ci-fixer": "mpx-ci-fixer",
+          "mpx-ci-analyzer": "mpx-ci-analyzer",
           "mpx-context7-docs-fetcher": "mpx-context7-docs-fetcher",
           "mpx-executor": "mpx-executor",
           "mpx-explorer": "Explore",
@@ -38,7 +38,6 @@
           "mpx-reviewer-security": "mpx-reviewer-security",
           "mpx-reviewer-spec-alignment": "mpx-reviewer-spec-alignment",
           "mpx-reviewer-test-quality": "mpx-reviewer-test-quality",
-          "mpx-scanner-architecture": "mpx-scanner-architecture",
           "mpx-tdd-executor": "mpx-tdd-executor",
           "mpx-ui-variant-generator": "mpx-ui-variant-generator",
           "mpx-unresolved-issue-tracker": "mpx-unresolved-issue-tracker"
@@ -69,10 +68,10 @@
       },
       "pi": {
         "aliases": {
-          "mpx-check-fixer": "mpx-check-fixer",
+          "mpx-check-reporter": "mpx-check-reporter",
           "mpx-checker": "mpx-checker",
           "mpx-chrome-devtools-tester": "mpx-chrome-devtools-tester",
-          "mpx-ci-fixer": "mpx-ci-fixer",
+          "mpx-ci-analyzer": "mpx-ci-analyzer",
           "mpx-context7-docs-fetcher": "mpx-context7-docs-fetcher",
           "mpx-executor": "mpx-executor",
           "mpx-explorer": "Explore",
@@ -87,7 +86,6 @@
           "mpx-reviewer-security": "mpx-reviewer-security",
           "mpx-reviewer-spec-alignment": "mpx-reviewer-spec-alignment",
           "mpx-reviewer-test-quality": "mpx-reviewer-test-quality",
-          "mpx-scanner-architecture": "mpx-scanner-architecture",
           "mpx-tdd-executor": "mpx-tdd-executor",
           "mpx-ui-variant-generator": "mpx-ui-variant-generator",
           "mpx-unresolved-issue-tracker": "mpx-unresolved-issue-tracker"

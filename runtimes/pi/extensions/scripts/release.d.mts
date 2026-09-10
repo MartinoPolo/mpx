@@ -5,6 +5,8 @@ export const GUARD_ASSETS: readonly string[];
 // fallow-ignore-next-line unused-export -- declaration companion for the release test API.
 export const CONFIG_ASSETS: readonly string[];
 // fallow-ignore-next-line unused-export -- declaration companion for the release test API.
+export const CONFIG_SCHEMA_ASSETS: readonly string[];
+// fallow-ignore-next-line unused-export -- declaration companion for the release test API.
 export const VENDORED_LICENSE_ASSETS: readonly string[];
 // fallow-ignore-next-line unused-export -- declaration companion for the release test API.
 export const PACKAGE_ASSETS: readonly string[];

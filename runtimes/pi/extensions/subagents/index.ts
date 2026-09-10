@@ -340,7 +340,29 @@ function buildNotificationDetails(
   };
 }
 
-export default function (pi: ExtensionAPI) {
+export async function reloadAgentRegistry(
+  cwd: string,
+  nativeAgentFiles: Map<string, NativeAgentFile>,
+): Promise<{ agents: Map<string, AgentConfig>; boundary: 'managed' | 'native' }> {
+  let boundary: 'managed' | 'native' = 'native';
+  try {
+    const agents = await loadCustomAgents(cwd, {
+      nativeFiles: nativeAgentFiles,
+      onDiagnostic: (message) => console.warn(`[pi-subagents] ${message}`),
+      onBoundary: (discoveredBoundary) => {
+        boundary = discoveredBoundary;
+      },
+    });
+    registerAgents(agents, boundary === 'native');
+    return { agents, boundary };
+  } catch (error) {
+    nativeAgentFiles.clear();
+    registerAgents(new Map(), false);
+    throw error;
+  }
+}
+
+export default async function (pi: ExtensionAPI): Promise<void> {
   // Child AgentSessions load normal extensions. Re-entering this extension there
   // would create another manager and leak handlers. Nested orchestration is
   // injected as scoped custom tools by the existing manager instead.
@@ -414,17 +436,24 @@ export default function (pi: ExtensionAPI) {
 
   const nativeAgentFiles = new Map<string, NativeAgentFile>();
 
+  let loadedAgents = new Map<string, AgentConfig>();
+  let loadedBoundary: 'managed' | 'native' = 'native';
+
   /** Reload agents from project/global custom agent dirs and merge with defaults (called on init and each Agent invocation). */
-  const reloadCustomAgents = () => {
-    const userAgents = loadCustomAgents(process.cwd(), {
-      nativeFiles: nativeAgentFiles,
-      onDiagnostic: (message) => console.warn(`[pi-subagents] ${message}`),
-    });
-    registerAgents(userAgents);
+  const reloadCustomAgents = async (): Promise<void> => {
+    try {
+      const reloaded = await reloadAgentRegistry(process.cwd(), nativeAgentFiles);
+      loadedAgents = reloaded.agents;
+      loadedBoundary = reloaded.boundary;
+    } catch (error) {
+      loadedAgents = new Map();
+      loadedBoundary = 'managed';
+      throw error;
+    }
   };
 
   // Initial load
-  reloadCustomAgents();
+  await reloadCustomAgents();
 
   // ---- Agent activity tracking + widget ----
   const agentActivity = new Map<string, AgentActivity>();
@@ -702,7 +731,7 @@ export default function (pi: ExtensionAPI) {
       } // sessionId not yet available — try again on next event
       const path = resolveStorePath(ctx.cwd, sessionId);
       const store = new ScheduleStore(path);
-      scheduler.start(pi, ctx, manager, store);
+      scheduler.start(pi, ctx, manager, store, reloadCustomAgents);
       pi.events.emit('subagents:scheduler_ready', { sessionId, jobCount: store.list().length });
     } catch (err) {
       // Scheduling is non-essential — log and move on so the rest of the
@@ -832,7 +861,7 @@ export default function (pi: ExtensionAPI) {
   // needs it; this wrapper just re-registers after flipping it.
   function setDisableDefaultAgents(b: boolean): void {
     setDefaultsDisabled(b);
-    reloadCustomAgents(); // re-register with new setting
+    registerAgents(loadedAgents, loadedBoundary === 'native');
   }
 
   // ---- Agent tool description mode ----
@@ -1004,6 +1033,7 @@ Custom agents: .pi/agents/<name>.md (project) or ${getAgentDir()}/agents/<name>.
 
 Notes:
 - description: 3-5 words (shown in UI). Prompts must be self-contained — the agent has not seen this conversation.
+- Use Explore for broad codebase discovery. It is the exploration class: request facts and evidence; the parent decides what to do. Use direct tools for known small reads.
 - Parallel work: one message, multiple Agent calls, run_in_background: true on each. You are notified when background agents finish — never poll or sleep.
 - The result is not shown to the user — summarize it for them. Verify an agent's claimed code changes before reporting work done.
 - resume continues a previous agent by ID; steer_subagent messages a running one.
@@ -1020,7 +1050,7 @@ When using the Agent tool, specify a subagent_type parameter to select which age
 
 ## When not to use
 
-If the target is already known, use a direct tool — \`read\` for a known path, \`grep\`/\`find\` for a specific symbol or string. Reserve this tool for open-ended questions that span the codebase, or tasks that match an available agent type.
+If the target is already known, use a direct tool — \`read\` for a known path, \`grep\`/\`find\` for a specific symbol or string. Use Explore for broad codebase discovery. It is the exploration class: request facts and evidence; the parent decides what to do.
 
 ## Usage notes
 
@@ -1033,7 +1063,6 @@ If the target is already known, use a direct tool — \`read\` for a known path,
 - Use resume with an agent ID to continue a previous agent's work. A new (non-resume) Agent call starts a fresh agent with no memory of prior runs, so the prompt must be self-contained.
 - Use steer_subagent to send mid-run messages to a running background agent.
 - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, etc.), since it is not aware of the user's intent.
-- If an agent's description says it should be used proactively, try to use it without the user having to ask for it first.
 - Use model to specify a different model (as "provider/modelId", or fuzzy e.g. "haiku", "sonnet").
 - Use thinking to control extended thinking level.
 - Use inherit_context if the agent needs the parent conversation history.
@@ -1122,8 +1151,8 @@ Terse command-style prompts produce shallow, generic work.
       description: agentToolDescription,
       promptSnippet: 'Launch autonomous sub-agents for complex multi-step tasks',
       promptGuidelines: [
-        "Use Agent with specialized agents when the task matches an agent type's description. Subagents are valuable for parallelizing independent queries or for protecting the main context window from excessive results, but should not be used excessively when not needed. Importantly, avoid duplicating work that subagents are already doing — if you delegate research to a subagent, do not also perform the same searches yourself.",
-        'For broad codebase exploration or research, spawn Agent with an appropriate subagent_type (e.g. Explore). Otherwise use direct tools (read, grep, find) when the target is already known.',
+        'Use Agent to parallelize independent queries or protect the main context window from excessive results. Avoid duplicating delegated work.',
+        'Use Explore for broad codebase discovery. It is the exploration class: request facts and evidence; the parent decides what to do. For known small reads, use direct tools (read, grep, find).',
         'When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.',
         "Trust but verify: an agent's summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.",
       ],
@@ -1303,7 +1332,7 @@ Terse command-style prompts produce shallow, generic work.
         widget.setUICtx(ctx.ui as UICtx);
 
         // Reload custom agents so new project/global .md files are picked up without restart
-        reloadCustomAgents();
+        await reloadCustomAgents();
 
         // Resume the stored role, even if its definition is no longer discoverable.
         if (params.resume && !params.schedule) {
@@ -1942,7 +1971,7 @@ Terse command-style prompts produce shallow, generic work.
   }
 
   async function showAgentsMenu(ctx: ExtensionCommandContext) {
-    reloadCustomAgents();
+    await reloadCustomAgents();
     const allNames = getAllTypes();
 
     // Build select options
@@ -2207,7 +2236,7 @@ Terse command-style prompts produce shallow, generic work.
       const edited = await ctx.ui.editor(`Edit ${name}`, content);
       if (edited !== undefined && edited !== content) {
         writeExistingAgentFile(file, edited);
-        reloadCustomAgents();
+        await reloadCustomAgents();
         ctx.ui.notify(`Updated ${file.path}`, 'info');
       }
     } else if (choice === 'Delete') {
@@ -2218,7 +2247,7 @@ Terse command-style prompts produce shallow, generic work.
         );
         if (confirmed) {
           deleteExistingAgentFile(file);
-          reloadCustomAgents();
+          await reloadCustomAgents();
           ctx.ui.notify(`Deleted ${file.path}`, 'info');
         }
       }
@@ -2229,7 +2258,7 @@ Terse command-style prompts produce shallow, generic work.
       );
       if (confirmed) {
         deleteExistingAgentFile(file);
-        reloadCustomAgents();
+        await reloadCustomAgents();
         ctx.ui.notify(`Restored default ${name}`, 'info');
       }
     } else if (choice.startsWith('Eject')) {
@@ -2349,7 +2378,7 @@ Terse command-style prompts produce shallow, generic work.
     const content = `---\n${fmFields.join('\n')}\n---\n\n${cfg.systemPrompt}\n`;
 
     writeAgentFile(targetDir, name, content, allowExisting);
-    reloadCustomAgents();
+    await reloadCustomAgents();
     ctx.ui.notify(`Ejected ${name} to ${targetPath}`, 'info');
   }
 
@@ -2364,7 +2393,7 @@ Terse command-style prompts produce shallow, generic work.
       }
       const updated = content.replace(/^---\n/, '---\nenabled: false\n');
       writeExistingAgentFile(file, updated);
-      reloadCustomAgents();
+      await reloadCustomAgents();
       ctx.ui.notify(`Disabled ${name} (${file.path})`, 'info');
       return;
     }
@@ -2378,7 +2407,7 @@ Terse command-style prompts produce shallow, generic work.
     ensureAgentDirectory(targetDir);
 
     const targetPath = writeAgentFile(targetDir, name, '---\nenabled: false\n---\n', false);
-    reloadCustomAgents();
+    await reloadCustomAgents();
     ctx.ui.notify(`Disabled ${name} (${targetPath})`, 'info');
   }
 
@@ -2395,11 +2424,11 @@ Terse command-style prompts produce shallow, generic work.
     // If the file was just a stub ("---\n---\n"), delete it to restore the built-in default
     if (updated.trim() === '---\n---' || updated.trim() === '---\n---\n') {
       deleteExistingAgentFile(file);
-      reloadCustomAgents();
+      await reloadCustomAgents();
       ctx.ui.notify(`Enabled ${name} (removed ${file.path})`, 'info');
     } else {
       writeExistingAgentFile(file, updated);
-      reloadCustomAgents();
+      await reloadCustomAgents();
       ctx.ui.notify(`Enabled ${name} (${file.path})`, 'info');
     }
   }
@@ -2504,7 +2533,7 @@ Return only the agent definition markdown.`;
     }
 
     writeAgentFile(targetDir, name, record.result, allowExisting);
-    reloadCustomAgents();
+    await reloadCustomAgents();
     ctx.ui.notify(`Created ${targetPath}`, 'info');
   }
 
@@ -2617,7 +2646,7 @@ ${systemPrompt}
     }
 
     writeAgentFile(targetDir, name, content, allowExisting);
-    reloadCustomAgents();
+    await reloadCustomAgents();
     ctx.ui.notify(`Created ${targetPath}`, 'info');
   }
 

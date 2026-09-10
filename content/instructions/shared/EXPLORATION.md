@@ -4,8 +4,9 @@ Canonical policy for finding files, symbols, conventions, and subsystem boundari
 
 ## Delegate broad search
 
-Keep broad search output out of the orchestration context. Delegate to `mpx-explorer` and retain its conclusion. Reading
-two or three already-known files is not exploration and may be done directly.
+Keep broad search output out of the orchestration context. Delegate to the projected `Explore` agent and retain its
+bounded facts and evidence; the parent evaluates them and makes decisions. Reading two or three already-known files is
+not exploration and may be done directly.
 
 State the breadth and a stopping condition:
 
@@ -15,9 +16,9 @@ State the breadth and a stopping condition:
 | `medium`        | obvious locations plus one alternate naming convention                      |
 | `very thorough` | exhaust relevant conventions, sibling directories, configuration, and tests |
 
-Breadth controls search scope, not reasoning effort. `mpx-explorer` declares the `exploration` model class and medium
-effort in runtime projections. It resolves to Sonnet in Claude Code and Luna in Pi, so callers do not pass a concrete
-model.
+Breadth controls search scope, not reasoning effort. The canonical explorer declares the `exploration` model class and
+medium effort. Runtime profiles resolve that semantic class to a concrete model accepted by the runtime's real `model`
+field, so callers of the declaring agent omit model selection.
 
 ## Prompt context explicitly
 

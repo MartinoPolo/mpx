@@ -11,7 +11,6 @@ import { abortable } from './abortable.js';
 import {
   buildAgentRegistry,
   getAgentConfigIn,
-  getAvailableTypesIn,
   isValidTypeIn,
   resolveTypeIn,
 } from './agent-types.js';
@@ -147,18 +146,19 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
   // Agents resolve from a registry built for THIS branch's config root (under
   // worktree isolation, the copy). Never via registerAgents — that is
   // process-global state shared with the main session and every other agent.
-  const loadRegistry = () => buildAgentRegistry(loadCustomAgents(context.configCwd));
+  const loadRegistry = async () => {
+    let discoveryBoundary: 'managed' | 'native' = 'native';
+    const discovered = await loadCustomAgents(context.configCwd, {
+      onBoundary: (boundary) => {
+        discoveryBoundary = boundary;
+      },
+    });
+    return buildAgentRegistry(discovered, discoveryBoundary === 'native');
+  };
   const allowedTypesIn = (registry: Map<string, AgentConfig>): Set<string> | undefined =>
     context.allowedSubagents === 'all'
       ? undefined
       : new Set(context.allowedSubagents.map((name) => resolveTypeIn(registry, name) ?? name));
-  const availableIn = (registry: Map<string, AgentConfig>): string[] => {
-    const allowed = allowedTypesIn(registry);
-    return getAvailableTypesIn(registry).filter(
-      (name) => allowed === undefined || allowed.has(name),
-    );
-  };
-
   const agentTool = defineTool({
     name: NESTED_TOOL_NAMES[0],
     label: 'Agent',
@@ -169,7 +169,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
       prompt: Type.String({ description: 'Self-contained task for the nested agent.' }),
       description: Type.String({ description: 'Short 3-5 word task description.' }),
       subagent_type: Type.String({
-        description: `Allowed nested agent type. Available: ${availableIn(loadRegistry()).join(', ') || 'none'}.`,
+        description: 'Allowed nested agent type. Availability is verified at invocation time.',
       }),
       model: Type.Optional(Type.String({ description: 'Optional provider/model override.' })),
       thinking: Type.Optional(Type.String({ description: 'Optional thinking level.' })),
@@ -205,7 +205,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
       }
 
       // Reloaded per call so new agent files are picked up without a restart.
-      const registry = loadRegistry();
+      const registry = await loadRegistry();
       const rawType = params.subagent_type;
       const resolvedType = resolveTypeIn(registry, rawType);
       if (!resolvedType || !isValidTypeIn(registry, resolvedType)) {

@@ -1,6 +1,6 @@
 ---
 name: mpx-reviewer-best-practices
-description: 'Read-only reviewer for language/framework best practices and conventions.'
+description: 'Reviews changed code for language and framework best practices.'
 ---
 
 # Reviewer: Best Practices

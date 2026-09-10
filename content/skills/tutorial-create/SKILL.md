@@ -38,8 +38,9 @@ From `the invocation input` infer:
 
 ### Step 2: Explore the Topic
 
-Gather the material before deciding the shape: read the actual config/code/tests being documented, and spawn a
-`general-purpose` sub-agent with `model: "appropriate runtime class"` to find 1-2 intro YouTube videos following
+Gather the material before deciding the shape: read the actual config/code/tests being documented. Resolve the
+canonical `standard` class through the active runtime profile, then spawn a `general-purpose` sub-agent using the
+resulting concrete value in the runtime's real `model` field to find 1-2 intro YouTube videos following
 [`reference/CHANNELS.md`](reference/CHANNELS.md) (channel profiles, WebSearch `site:youtube.com` technique, duration
 filter, oEmbed verification). Pass it the topic; require back: title, channel, duration, verified URL per video.
 

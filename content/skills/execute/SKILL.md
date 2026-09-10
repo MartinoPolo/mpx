@@ -17,7 +17,9 @@ metadata:
 Unified execution for a single Issue or inline tasks. Invocation explicitly authorizes the
 original end-to-end defaults: implement, commit, push, create/update a PR, GitLab MR, or Gerrit change, wait for CI, and merge after green unless
 `--no-auto-merge` opts out of merging. Inline work commits locally without push, PR, or CI.
-Main is a pure orchestrator: agents own raw findings, failures, and logs; main routes bounded contracts.
+Main is the parent orchestrator: specialists return bounded evidence, while main evaluates findings, decides repairs,
+and owns retries, publication, and final verification. Follow the shared
+[parent-owned repair workflow](../shared/REPAIR_ORCHESTRATION.md).
 Use concise normal prose for progress updates and a professional final report.
 
 Before any provider command, read [Provider Routing](../shared/PROVIDER_ROUTING.md), then load `mpxconfig.json` and
@@ -93,24 +95,22 @@ discovered commands. Have the executor read [tests](tests.md) and [mocking](mock
 red → minimal green → refactor for each behavior and only its executor contract in return. Route `Completed` to
 verification; route `Partial` with completed evidence and remaining items to one bounded retry; route `Blocked` to the
 user without continuing to review or publication. Never weaken a correct test. Correct a test only when its
-assertion, selector, or setup is demonstrably wrong against the acceptance criteria; require the executor/check fixer
-to return the reason and carry it into the commit message.
+assertion, selector, or setup is demonstrably wrong against the acceptance criteria; require the executor to return the
+reason and carry it into the commit message.
 
 ## 5. Verify and review
 
-Invoke `mpx-check-fixer` with:
+Follow [Parent-owned Check and CI Repair](../shared/REPAIR_ORCHESTRATION.md). Dispatch `mpx-checker` with the exact
+static and test command arrays. In parallel where supported, dispatch the default reviewers
+`mpx-reviewer-code-quality`, `mpx-reviewer-best-practices`, `mpx-reviewer-spec-alignment`, and
+`mpx-reviewer-test-quality`; add `mpx-reviewer-security`, `mpx-reviewer-performance`, and
+`mpx-reviewer-error-handling` for `--full-review`. Give each specialist the context, acceptance criteria, Design Mapping
+constraints, branch, and changed files. Use `mpx-chrome-devtools-tester` only where UI interaction lacks e2e coverage.
 
-- exact static and test command arrays;
-- context and acceptance criteria;
-- Design Mapping constraints;
-- branch and changed files;
-- browser verification only where UI interaction lacks e2e coverage;
-- reviewers: default `mpx-reviewer-code-quality`, `mpx-reviewer-best-practices`, `mpx-reviewer-spec-alignment`,
-  `mpx-reviewer-test-quality`; add `mpx-reviewer-security`, `mpx-reviewer-performance`, and
-  `mpx-reviewer-error-handling` for `--full-review`.
-
-Require bounded JSON only. Route `clean` onward; route `issues_remaining` and its `unresolved_findings` verbatim to
-triage; on `blocked`, do not push—report `summary` and `blockers`. Maximum three fix/review iterations.
+Supply all bounded checker, reviewer, and browser results to `mpx-check-reporter`. Evaluate its assessment and send only
+accepted, precise repairs to `mpx-executor` or behavior repairs to `mpx-tdd-executor`. Recheck after repairs. Route
+remaining unresolved findings to triage; on a blocker, do not push. Main owns a maximum of three repair/review
+iterations and a fresh complete local verification before publication.
 
 ## 6. Unresolved triage
 
