@@ -10,7 +10,9 @@ const record = (overrides: Record<string, unknown> = {}) =>
     nativeBindingRef: 'binding',
     nativeSessionRef: { kind: 'native-id', value: 'native' },
     launch: { launchKey: 'launch' },
+    liveness: 'inactive',
     workflow: { status: 'unfinished' },
+    lifecycle: { bindingId: 'lifecycle', sequence: 1, timestamp: null },
     ...overrides,
   }) as never;
 
@@ -19,16 +21,15 @@ function service(overrides: Partial<SessionApplicationDependencies> = {}) {
     sessions: {
       list: vi.fn(async () => []),
       show: vi.fn(async () => record()),
-      reconcile: vi.fn(async () => []),
+      reconcile: vi.fn(async () => ({ records: [record()], diagnostics: [] })),
     },
     nativeBindings: { listLifecycleBindingIds: vi.fn(async () => []) },
-    consumePending: vi.fn(async () => 0),
     projectResurrectionRecord: vi.fn((value) => ({ id: value.recordId }) as never),
-    planResume: vi.fn(async () => ({ confirmationDigest: 'confirmed' }) as never),
+    planResume: vi.fn(async () => ({ native: 'fresh' }) as never),
     planCurrentResume: vi.fn(
-      async (seed) =>
+      async () =>
         ({
-          ...seed,
+          confirmationDigest: 'confirmed',
           launch: { executor: { kind: 'host' } },
           approval: { resurrection: 'unchanged' },
         }) as never,
@@ -38,54 +39,81 @@ function service(overrides: Partial<SessionApplicationDependencies> = {}) {
   });
 }
 
-describe('SessionApplicationService retained operations', () => {
-  it('exports eligible resurrection records without triggering discovery', async () => {
-    const discoveries = vi.fn();
+describe('SessionApplicationService managed inventory', () => {
+  it('exports one fresh inventory snapshot with v2 diagnostics and only managed unfinished records', async () => {
+    const reconciled = vi.fn(async () => ({
+      records: [
+        record({ recordId: 'z' }),
+        record({ recordId: 'a' }),
+        record({ recordId: 'unbound', launch: null }),
+        record({ recordId: 'done', workflow: { status: 'completed' } }),
+      ],
+      diagnostics: [
+        {
+          runtime: 'pi' as const,
+          identity: null,
+          status: 'unknown' as const,
+          code: 'INSPECTOR_UNKNOWN',
+        },
+      ],
+    }));
+    const project = vi.fn((value) => ({ id: value.recordId }) as never);
     const application = service({
-      sessions: {
-        list: vi.fn(async () => [
-          record({ recordId: 'z' }),
-          record({ recordId: 'a' }),
-          record({ recordId: 'done', workflow: { status: 'completed' } }),
-        ]),
-        show: vi.fn(),
-        reconcile: vi.fn(),
-      },
-      discoveries,
+      sessions: { list: vi.fn(), show: vi.fn(), reconcile: reconciled },
+      nativeBindings: { listLifecycleBindingIds: vi.fn(async () => ['binding']) },
+      projectResurrectionRecord: project,
     });
 
-    const result = await application.resurrectionExport();
-
-    expect(result.records.map((item) => item.id)).toEqual(['a', 'z']);
-    expect(discoveries).not.toHaveBeenCalled();
+    await expect(application.resurrectionExport()).resolves.toEqual({
+      schemaVersion: 2,
+      kind: 'session-resurrection-export',
+      records: [{ id: 'a' }, { id: 'z' }],
+      diagnostics: [
+        { runtime: 'pi', identity: null, status: 'unknown', code: 'INSPECTOR_UNKNOWN' },
+      ],
+    });
+    expect(reconciled).toHaveBeenCalledExactlyOnceWith(['binding']);
+    expect(project).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects a mismatched confirmation before invoking resume execution', async () => {
-    const executeConfirmedResume = vi.fn(async () => 'must-not-execute');
+  it('reconciles only the selected record and lifecycle binding before resume authorization', async () => {
+    const selected = record();
+    const reconcile = vi.fn(async () => ({ records: [selected], diagnostics: [] }));
     const application = service({
+      sessions: { list: vi.fn(), show: vi.fn(async () => selected), reconcile },
       resumeDependencies: vi.fn(async () => ({}) as never),
-      planResume: vi.fn(async () => ({ confirmationDigest: 'fresh-confirmation' }) as never),
-      verifyResumeConfirmation: vi.fn((_plan, confirmation) => {
-        if (confirmation !== 'fresh-confirmation') {
-          throw new Error('SESSION_RESUME_CONFIRMATION_MISMATCH');
-        }
-      }),
-      executeConfirmedResume,
     });
 
-    await expect(
-      application.resume({ id: 'record', confirmation: 'wrong-confirmation' }),
-    ).rejects.toThrow('SESSION_RESUME_CONFIRMATION_MISMATCH');
-    expect(executeConfirmedResume).not.toHaveBeenCalled();
+    await application.resume({ id: 'record', dryRun: true });
+
+    expect(reconcile).toHaveBeenCalledExactlyOnceWith(['lifecycle'], {
+      runtime: 'claude',
+      identity: { domain: 'personal', name: 'main' },
+      recordId: 'record',
+      lifecycleBindingId: 'lifecycle',
+    });
   });
 
-  it('executes only the freshly replanned resume when its exact confirmation is supplied', async () => {
-    const stale = { confirmationDigest: 'stale-confirmation' } as never;
-    const fresh = { confirmationDigest: 'fresh-confirmation', exact: 'fresh-plan' } as never;
+  it('executes only the freshly authorized final plan when its exact confirmation is supplied', async () => {
+    const staleRecord = record({ liveness: 'active' });
+    const freshRecord = record({ liveness: 'inactive' });
+    const planResume = vi.fn(async (value) => ({ native: value.liveness }) as never);
+    const fresh = {
+      confirmationDigest: 'fresh-confirmation',
+      exact: 'fresh-plan',
+      launch: { executor: { kind: 'host' } },
+      approval: { resurrection: 'unchanged' },
+    } as never;
     const executeConfirmedResume = vi.fn(async () => 'executed');
     const application = service({
+      sessions: {
+        list: vi.fn(),
+        show: vi.fn(async () => staleRecord),
+        reconcile: vi.fn(async () => ({ records: [freshRecord], diagnostics: [] })),
+      },
       resumeDependencies: vi.fn(async () => ({}) as never),
-      planResume: vi.fn().mockResolvedValueOnce(stale).mockResolvedValueOnce(fresh),
+      planResume,
+      planCurrentResume: vi.fn(async () => fresh),
       verifyResumeConfirmation: vi.fn((_plan, confirmation) => {
         if (confirmation !== 'fresh-confirmation') {
           throw new Error('SESSION_RESUME_CONFIRMATION_MISMATCH');
@@ -97,72 +125,44 @@ describe('SessionApplicationService retained operations', () => {
     await expect(
       application.resume({ id: 'record', confirmation: 'fresh-confirmation' }),
     ).resolves.toMatchObject({ kind: 'session-resume', result: 'executed' });
-    expect(executeConfirmedResume).toHaveBeenCalledWith(expect.objectContaining(fresh), {
-      approveHost: true,
-    });
+    expect(planResume).toHaveBeenCalledExactlyOnceWith(freshRecord, {});
+    expect(executeConfirmedResume).toHaveBeenCalledExactlyOnceWith(fresh, { approveHost: true });
   });
 
-  it.each([true, false])(
-    'validates a supplied stale confirmation even when dryRun is %s',
-    async (dryRun) => {
-      const executeConfirmedResume = vi.fn();
-      const application = service({
-        resumeDependencies: vi.fn(async () => ({}) as never),
-        executeConfirmedResume,
-        verifyResumeConfirmation: () => {
-          throw new Error('SESSION_RESUME_CONFIRMATION_MISMATCH');
-        },
-      });
-      await expect(
-        application.resume({ id: 'record', confirmation: 'stale', dryRun }),
-      ).rejects.toThrow('SESSION_RESUME_CONFIRMATION_MISMATCH');
-      expect(executeConfirmedResume).not.toHaveBeenCalled();
-    },
-  );
-
-  it('requires explicit confirmation of changed evidence and never falls back to historical planning', async () => {
+  it('fails closed when selected inventory liveness is unknown', async () => {
     const executeConfirmedResume = vi.fn();
     const application = service({
+      sessions: {
+        list: vi.fn(),
+        show: vi.fn(async () => record()),
+        reconcile: vi.fn(async () => ({
+          records: [record({ liveness: 'unknown' })],
+          diagnostics: [],
+        })),
+      },
       resumeDependencies: vi.fn(async () => ({}) as never),
-      planCurrentResume: vi.fn(
-        async () => ({ approval: { resurrection: 'confirmation-required' } }) as never,
-      ),
       executeConfirmedResume,
     });
-    await expect(
-      application.resume({ id: 'record', approveResurrection: true }),
-    ).rejects.toMatchObject({ code: 'SESSION_RESUME_CONFIRMATION_REQUIRED' });
-    await expect(
-      service({ resumeDependencies: vi.fn(), planCurrentResume: undefined as never }).resume({
-        id: 'record',
-        dryRun: true,
-      }),
-    ).rejects.toMatchObject({ code: 'SESSION_RESUME_NOT_CONFIGURED' });
+
+    await expect(application.resume({ id: 'record', dryRun: true })).rejects.toMatchObject({
+      code: 'SESSION_RESUME_LIVENESS_UNKNOWN',
+    });
     expect(executeConfirmedResume).not.toHaveBeenCalled();
   });
 
-  it('replans after lifecycle consumption and sends the exact confirmed plan and authority to execution', async () => {
-    const first = record({ recordId: 'first' });
-    const current = record({ recordId: 'current' });
-    const show = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(current);
-    const planned = { confirmationDigest: 'confirmed', exact: 'plan' } as never;
-    const planResume = vi
-      .fn()
-      .mockResolvedValueOnce({ confirmationDigest: 'old' })
-      .mockResolvedValueOnce(planned);
-    const executeConfirmedResume = vi.fn(async () => 'executed');
+  it('rejects a stale confirmation against the final plan before execution', async () => {
+    const executeConfirmedResume = vi.fn();
     const application = service({
-      sessions: { list: vi.fn(), show, reconcile: vi.fn() },
       resumeDependencies: vi.fn(async () => ({}) as never),
-      planResume,
+      verifyResumeConfirmation: vi.fn(() => {
+        throw new Error('SESSION_RESUME_CONFIRMATION_MISMATCH');
+      }),
       executeConfirmedResume,
     });
 
-    await expect(
-      application.resume({ id: 'record', approveResurrection: true }),
-    ).resolves.toMatchObject({ kind: 'session-resume', result: 'executed' });
-    expect(executeConfirmedResume).toHaveBeenCalledWith(expect.objectContaining(planned), {
-      approveHost: true,
-    });
+    await expect(application.resume({ id: 'record', confirmation: 'stale' })).rejects.toThrow(
+      'SESSION_RESUME_CONFIRMATION_MISMATCH',
+    );
+    expect(executeConfirmedResume).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, parse, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +23,7 @@ import {
   inventoryCanonical,
   resolveManifest,
 } from '@mpx/skills';
+import { publishRuntimeArtifact } from '@mpx/runtime-contracts';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import {
@@ -164,7 +175,22 @@ async function bindManagedLaunch(root: string): Promise<string> {
   const launchKey = 'a'.repeat(64);
   const descriptorDigest = 'b'.repeat(64);
   const manifestKey = tree.manifest.manifestKey;
-  const runtimeArtifactKey = 'd'.repeat(64);
+  const runtimeArtifactKey = artifact.reference.artifactKey;
+  const published = await publishRuntimeArtifact({
+    sourceRoot: root,
+    artifactsRoot: join(root, '..', 'artifacts'),
+    launchBinding: {
+      launchKey,
+      descriptorDigest,
+      runtimeArtifactKey,
+      runtime: 'pi',
+      manifestKey,
+    },
+  });
+  await writeFile(
+    join(root, '.mpx-runtime-artifact.json'),
+    await readFile(join(published.directory, '.mpx-runtime-artifact.json')),
+  );
   const manifestBytes = tree.files.find(
     (file) => file.relativePath === 'active-content.json',
   )!.bytes;
@@ -186,21 +212,11 @@ async function bindManagedLaunch(root: string): Promise<string> {
       runtime: 'pi',
       manifestKey,
       artifactKey: runtimeArtifactKey,
-      fileMapHash: '1'.repeat(64),
+      fileMapHash: artifact.reference.fileMapHash,
     },
     binding: tree.manifest.binding,
   });
-  process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify({
-    projectionKey: 'f'.repeat(64),
-    fileMapHash: '1'.repeat(64),
-    launchBinding: {
-      launchKey,
-      descriptorDigest,
-      runtimeArtifactKey,
-      runtime: 'pi',
-      manifestKey,
-    },
-  });
+  process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(published.reference);
   return compiled;
 }
 
@@ -228,6 +244,17 @@ test('managed discovery exposes only the compiled catalog', async () => {
     const cwd = join(root, 'project');
     const globalRoot = join(root, 'global');
     await bindManagedLaunch(join(root, 'projection'));
+    const runtimeContext = JSON.parse(process.env.MPX_RUNTIME_CONTEXT!) as {
+      runtimeArtifact: { fileMapHash: string };
+    };
+    const projectionReference = JSON.parse(process.env.MPX_RUNTIME_PROJECTION_REFERENCE!) as {
+      fileMapHash: string;
+    };
+    assert.notEqual(
+      runtimeContext.runtimeArtifact.fileMapHash,
+      projectionReference.fileMapHash,
+      'skill artifact and published projection inventories must remain distinct',
+    );
     await agent(join(globalRoot, 'agents'), 'Explore', 'native conflict');
     await agent(join(cwd, '.agents', 'agents'), 'legacy-workspace', 'legacy workspace');
     await agent(join(cwd, '.pi', 'agents'), 'legacy-project', 'legacy project');
@@ -264,7 +291,7 @@ test('managed registry reload removes stale identities after compiled bytes are 
 
     await assert.rejects(
       () => reloadAgentRegistry(join(root, 'project'), new Map()),
-      /Active content file 'agents\/Explore\.md' is missing or changed/,
+      /Invalid managed agent discovery binding: projection integrity/,
     );
     assert.deepEqual(getAvailableTypes(), []);
   } finally {
@@ -287,7 +314,7 @@ test('rejects tampered compiled agent bytes without native fallback', async () =
 
     await assert.rejects(
       async () => await loadCustomAgents(join(root, 'project')),
-      /Active content file 'agents\/Explore\.md' is missing or changed/,
+      /Invalid managed agent discovery binding: projection integrity/,
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -330,7 +357,7 @@ test('rejects mismatched active manifest bytes without native fallback', async (
   }
 });
 
-test('rejects mismatched managed file map hashes before native discovery', async () => {
+test('rejects mismatched managed projection file map hashes before native discovery', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-mismatched-file-map-'));
   try {
     const cwd = join(root, 'project');
@@ -353,9 +380,48 @@ test('rejects mismatched managed file map hashes before native discovery', async
             boundary = discoveredBoundary;
           },
         }),
-      /Invalid managed agent discovery binding: projection identity/,
+      /Invalid managed agent discovery binding: projection integrity/,
     );
     assert.equal(boundary, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects corrupted managed projection metadata without native fallback', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mpx-corrupt-projection-metadata-'));
+  try {
+    const projection = join(root, 'projection');
+    await bindManagedLaunch(projection);
+    await writeFile(join(projection, '.mpx-runtime-artifact.json'), '{}\n');
+    await agent(join(root, 'global', 'agents'), 'native', 'native');
+    process.env.PI_CODING_AGENT_DIR = join(root, 'global');
+
+    await assert.rejects(
+      () => loadCustomAgents(join(root, 'project')),
+      /Invalid managed agent discovery binding: projection integrity/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a mismatched managed launch binding without native fallback', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mpx-mismatched-launch-binding-'));
+  try {
+    await bindManagedLaunch(join(root, 'projection'));
+    await agent(join(root, 'global', 'agents'), 'native', 'native');
+    process.env.PI_CODING_AGENT_DIR = join(root, 'global');
+    const reference = JSON.parse(process.env.MPX_RUNTIME_PROJECTION_REFERENCE!) as {
+      launchBinding: { launchKey: string };
+    };
+    reference.launchBinding.launchKey = '0'.repeat(64);
+    process.env.MPX_RUNTIME_PROJECTION_REFERENCE = JSON.stringify(reference);
+
+    await assert.rejects(
+      () => loadCustomAgents(join(root, 'project')),
+      /Invalid managed agent discovery binding: projection identity/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -517,8 +583,10 @@ test('missing optional native discovery roots are silent', async () => {
 test('ignores stray compiled files and does not expose native defaults', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-compiled-agents-'));
   try {
-    const compiled = await bindManagedLaunch(join(root, 'projection'));
+    const projection = join(root, 'projection');
+    const compiled = join(projection, 'agents');
     await agent(compiled, 'stray', 'unlisted compiled file');
+    await bindManagedLaunch(projection);
     await agent(join(root, 'global', 'agents'), 'native', 'native fallback');
     process.env.PI_CODING_AGENT_DIR = join(root, 'global');
 

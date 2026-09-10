@@ -26,6 +26,61 @@ test('POSIX launches a detached process group', () => {
   });
 });
 
+test('production runtime suppresses browser auto-open without mutating the parent environment', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pi-runtime-env-'));
+  const helperPath = path.join(directory, 'environment.cjs');
+  const inheritedKey = 'MPX_DEV_SERVER_ENV_TEST';
+  const original = {
+    BROWSER: process.env.BROWSER,
+    BROWSER_ARGS: process.env.BROWSER_ARGS,
+    inherited: process.env[inheritedKey],
+  };
+
+  try {
+    await writeFile(
+      helperPath,
+      `process.stdout.write(JSON.stringify({
+  browser: process.env.BROWSER,
+  browserArgs: process.env.BROWSER_ARGS,
+  inherited: process.env.${inheritedKey}
+}));`,
+    );
+    process.env.BROWSER = 'personal-browser';
+    process.env.BROWSER_ARGS = '--personal-profile';
+    process.env[inheritedKey] = 'preserved-value';
+
+    const child = createSystemRuntime().spawn({ command: 'node environment.cjs', cwd: directory });
+    let stdout = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    const exit = await child.closed;
+
+    assert.deepEqual(exit, { code: 0, signal: null });
+    assert.deepEqual(JSON.parse(stdout), {
+      browser: 'none',
+      inherited: 'preserved-value',
+    });
+    assert.equal(process.env.BROWSER, 'personal-browser');
+    assert.equal(process.env.BROWSER_ARGS, '--personal-profile');
+    assert.equal(process.env[inheritedKey], 'preserved-value');
+  } finally {
+    for (const [key, value] of [
+      ['BROWSER', original.BROWSER],
+      ['BROWSER_ARGS', original.BROWSER_ARGS],
+      [inheritedKey, original.inherited],
+    ] as const) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test(
   'production Windows stop terminates a disposable command tree',
   { skip: process.platform !== 'win32', timeout: 15_000 },

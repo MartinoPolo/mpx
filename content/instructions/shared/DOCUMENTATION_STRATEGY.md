@@ -18,17 +18,19 @@ Keep implementation maps, diagrams, stack minutiae, and pixel specifications els
 
 ## `.mpx/DECISIONS.md` — why choices were made
 
-Write-heavy; target roughly 200–300 lines. Group decisions by domain and use:
+Group decisions by domain. Write each decision as one concise, clear, inline bullet.
 
-```markdown
-### Decision title
+- State the decision directly
+- Prefix new entries with `YYYY-MM-DD:` (current date)
+- Include rationale naturally in the same entry only when it materially clarifies the decision.
+- Mention rejected alternatives only when the user explicitly rejected them in their own words. Choosing an option does not
+  reject the others
+- Record only confirmed decisions. Keep unresolved questions in the conversation.
+- Replace superseded decisions and briefly identify reversals rather than retaining contradictory rules.
 
-Decided: YYYY-MM-DD What: One sentence describing the choice. Why: One sentence explaining the rationale. Rejected:
-Alternatives considered and why they lost.
-```
+Example, when the user explicitly rejected sharp corners:
 
-The date is when the decision was made. Everything in the file is accepted; avoid status bureaucracy. When reversing a
-decision, replace the old entry and note the reversal rather than leaving contradictory active rules.
+- 2026-09-10: Use rounded corners on all buttons for visual consistency. Sharp corners were explicitly rejected.
 
 ## Domain language
 

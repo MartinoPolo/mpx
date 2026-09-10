@@ -13,6 +13,20 @@ Discover the project's runner, dev-server command and port, authentication route
 instructions and configuration. Credentials may be read from approved private local configuration but never hardcoded,
 echoed, copied into evidence, or committed.
 
+## Browser isolation
+
+Keep manual development-server auto-open behavior separate from automation. Start agent and E2E servers through the
+project's automation entry point with browser auto-open suppressed (`BROWSER=none` for Vite). Apply that environment
+only to the server child process, not the user's shell. Never use the OS-default browser as an automation fallback.
+
+Use Google Chrome explicitly for Chromium automation (`channel: 'chrome'`) with temporary Playwright contexts. If Chrome
+is unavailable, report the missing prerequisite rather than selecting Brave or another personal browser. Tests requiring
+sideloaded extensions may explicitly use Playwright's bundled Chromium with a test-owned profile, because branded Chrome
+blocks those extension flags; this is not a default-browser fallback. Interactive Chrome MCP must use an explicitly
+configured Chrome executable and a dedicated agent-owned persistent profile. Never
+reuse, copy, clean up, or change permissions on personal profiles; never kill personal browser processes. A persistent
+agent profile needs exclusive ownership: report contention rather than deleting locks or terminating another owner.
+
 ## Reliability principles
 
 1. **Prove checkout freshness first.** Assert a DOM or computed-style fact introduced by the change. A mismatch means
@@ -35,7 +49,7 @@ re-verifying untouched pages.
 import { chromium } from 'playwright';
 
 const base = process.env.BASE_URL ?? 'http://localhost:5173';
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: 'chrome' });
 const context = await browser.newContext();
 
 const gate = await context.newPage();

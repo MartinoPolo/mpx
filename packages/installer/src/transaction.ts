@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as wait } from 'node:timers/promises';
 import { MpxError, parseStrictJson } from '@mpx/core';
 import {
   acquireAtomicOwnerLock,
@@ -172,10 +173,26 @@ export class MemoryTransactionStore implements TransactionStore {
   }
 }
 
+interface AtomicWriteDependencies {
+  readonly platform: NodeJS.Platform;
+  readonly rename: (source: string, destination: string) => Promise<void>;
+  readonly wait: (delayMs: number) => Promise<void>;
+}
+
+const atomicWriteDefaults: AtomicWriteDependencies = {
+  platform: process.platform,
+  rename,
+  wait,
+};
+const windowsRenameRetryDelaysMs = [10, 25, 50, 100, 200] as const;
+
 /** Durable, atomic installer state. The directory is private and never contains credentials. */
 export class NodeTransactionStore implements TransactionStore {
   private tail: Promise<void> = Promise.resolve();
-  constructor(private readonly directory: string) {}
+  constructor(
+    private readonly directory: string,
+    private readonly atomicWrite: AtomicWriteDependencies = atomicWriteDefaults,
+  ) {}
   private file(name: string): string {
     return path.join(this.directory, name);
   }
@@ -195,9 +212,27 @@ export class NodeTransactionStore implements TransactionStore {
       if (process.platform !== 'win32') {
         await chmod(temporary, 0o600);
       }
-      await rename(temporary, target);
+      await this.renameTemporary(temporary, target);
     } finally {
       await rm(temporary, { force: true });
+    }
+  }
+  private async renameTemporary(temporary: string, target: string): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.atomicWrite.rename(temporary, target);
+        return;
+      } catch (failure) {
+        const delay = windowsRenameRetryDelaysMs[attempt];
+        if (
+          this.atomicWrite.platform !== 'win32' ||
+          (failure as NodeJS.ErrnoException).code !== 'EPERM' ||
+          delay === undefined
+        ) {
+          throw failure;
+        }
+        await this.atomicWrite.wait(delay);
+      }
     }
   }
   private async read(name: string): Promise<unknown | undefined> {

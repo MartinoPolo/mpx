@@ -15,6 +15,8 @@ export interface SessionResurrectionRoute {
 export interface SessionResurrectionRecord {
   readonly id: string;
   readonly runtime: RuntimeName;
+  readonly nativeSessionId: string;
+  readonly nativeSessionRef: string | null;
   readonly identity: Identity;
   readonly title: string | null;
   readonly hostCwd: string;
@@ -26,10 +28,18 @@ export interface SessionResurrectionRecord {
   readonly route: SessionResurrectionRoute;
 }
 
+export interface SessionInventoryDiagnostic {
+  readonly runtime: RuntimeName | null;
+  readonly identity: Identity | null;
+  readonly status: 'unavailable' | 'malformed' | 'unknown';
+  readonly code: string;
+}
+
 export interface SessionResurrectionExport {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly kind: 'session-resurrection-export';
   readonly records: readonly SessionResurrectionRecord[];
+  readonly diagnostics: readonly SessionInventoryDiagnostic[];
 }
 
 const control = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -82,6 +92,8 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecord {
     [
       'id',
       'runtime',
+      'nativeSessionId',
+      'nativeSessionRef',
       'identity',
       'title',
       'hostCwd',
@@ -98,6 +110,8 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecord {
   if (item.runtime !== 'claude' && item.runtime !== 'pi') {
     fail('SESSION_INVALID_RUNTIME', `${label}.runtime is invalid`);
   }
+  const nativeSessionId = safeText(item.nativeSessionId, `${label}.nativeSessionId`, 512);
+  const nativeSessionRef = nullableText(item.nativeSessionRef, `${label}.nativeSessionRef`);
   const identity = exactObject(item.identity, ['name', 'domain'], `${label}.identity`);
   if (identity.domain !== 'personal' && identity.domain !== 'work') {
     fail('SESSION_INVALID_SCHEMA', `${label}.identity.domain is invalid`);
@@ -134,6 +148,8 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecord {
   return {
     id,
     runtime: item.runtime,
+    nativeSessionId,
+    nativeSessionRef,
     identity: {
       name: safeText(identity.name, `${label}.identity.name`, 128),
       domain: identity.domain,
@@ -153,15 +169,49 @@ function parseRecord(value: unknown, index: number): SessionResurrectionRecord {
   };
 }
 
+function parseDiagnostic(value: unknown, index: number): SessionInventoryDiagnostic {
+  const label = `diagnostics[${index}]`;
+  const item = exactObject(value, ['runtime', 'identity', 'status', 'code'], label);
+  if (item.runtime !== null && item.runtime !== 'claude' && item.runtime !== 'pi') {
+    fail('SESSION_INVALID_RUNTIME', `${label}.runtime is invalid`);
+  }
+  if (item.status !== 'unavailable' && item.status !== 'malformed' && item.status !== 'unknown') {
+    fail('SESSION_INVALID_SCHEMA', `${label}.status is invalid`);
+  }
+  let identity: Identity | null = null;
+  if (item.identity !== null) {
+    const parsed = exactObject(item.identity, ['name', 'domain'], `${label}.identity`);
+    if (parsed.domain !== 'personal' && parsed.domain !== 'work') {
+      fail('SESSION_INVALID_SCHEMA', `${label}.identity.domain is invalid`);
+    }
+    identity = {
+      name: safeText(parsed.name, `${label}.identity.name`, 128),
+      domain: parsed.domain,
+    };
+  }
+  return {
+    runtime: item.runtime,
+    identity,
+    status: item.status,
+    code: safeText(item.code, `${label}.code`, 128),
+  };
+}
+
 export function parseSessionResurrectionExport(value: unknown): SessionResurrectionExport {
-  const item = exactObject(value, ['schemaVersion', 'kind', 'records'], 'resurrection export');
-  if (item.schemaVersion !== 1) {
+  const item = exactObject(
+    value,
+    ['schemaVersion', 'kind', 'records', 'diagnostics'],
+    'resurrection export',
+  );
+  if (item.schemaVersion !== 2) {
     fail('SESSION_SCHEMA_VERSION', 'unsupported session resurrection export version');
   }
   if (
     item.kind !== 'session-resurrection-export' ||
     !Array.isArray(item.records) ||
-    item.records.length > 10_000
+    !Array.isArray(item.diagnostics) ||
+    item.records.length > 10_000 ||
+    item.diagnostics.length > 128
   ) {
     fail('SESSION_INVALID_SCHEMA', 'session resurrection export is invalid');
   }
@@ -169,7 +219,12 @@ export function parseSessionResurrectionExport(value: unknown): SessionResurrect
   if (new Set(records.map((record) => record.id)).size !== records.length) {
     fail('SESSION_INVALID_SCHEMA', 'session resurrection record IDs must be unique');
   }
-  return { schemaVersion: 1, kind: 'session-resurrection-export', records };
+  return {
+    schemaVersion: 2,
+    kind: 'session-resurrection-export',
+    records,
+    diagnostics: item.diagnostics.map(parseDiagnostic),
+  };
 }
 
 export function projectSessionResurrectionRecord(
@@ -178,6 +233,8 @@ export function projectSessionResurrectionRecord(
   const projected = {
     id: record.recordId,
     runtime: record.runtime,
+    nativeSessionId: record.runtimeQualifiedId.slice(record.runtime.length + 1),
+    nativeSessionRef: record.nativeSessionRef.value,
     identity: record.identity,
     title: record.metadata.title,
     hostCwd: record.location.cwd,

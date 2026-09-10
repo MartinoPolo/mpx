@@ -18,11 +18,22 @@ mpx port kill <pid>
 path, which makes it suitable for shell `cd` wrappers.
 
 Pi's main-session worktree handoff snapshots Git's worktree inventory before asking the workspace Hub to create a
-checkout. On Windows it invokes the authenticated MPX Node entry directly because shell-free child processes do not
+checkout. A create request without an explicit base reuses the current canonical checkout when it already has the
+requested branch; an explicit base is never silently ignored. Entering the checkout that is already Pi's canonical
+working directory continues the task in the current session without forking or switching.
+
+A native Pi session can fork its history and switch to another validated worktree root. An MPX-managed Pi launch cannot
+safely rebind its launch-fixed context, projection, skills, and lifecycle resources in place. For a managed cross-root
+request, MPX prepares and preserves the destination but refuses the session fork before switching or sending the task;
+start a fresh managed Pi launch in that destination. The source session remains active. Any managed launch marker,
+even a partial or malformed one, fails closed rather than falling back to native behavior.
+
+On Windows the handoff invokes the authenticated MPX Node entry directly because shell-free child processes do not
 resolve the installed `mpx.cmd` selector. If the Hub fails after Git has created the requested branch checkout, the
-handoff validates and enters only that newly reported worktree. It never treats a pre-existing checkout as the result of
-the failed request. When no new checkout exists, the error leaves the current session usable and gives a manual Git plus
-`/worktree --enter` recovery path.
+handoff validates and enters only that newly reported worktree and surfaces the bounded Hub diagnostic as a warning.
+This is a narrow safe recovery: it never treats a pre-existing checkout as the result of the failed request or converts
+an unknown failure into permission to run the task in the old directory. When no new checkout exists, the error leaves
+the current session usable and gives a manual Git plus `/worktree --enter` recovery path.
 
 Normal operations perform one bounded recovery pass. If that pass reports a structurally valid, bounded orphan set and
 its generated exact approval, the application performs at most one second reconcile with that approval; it never loops.

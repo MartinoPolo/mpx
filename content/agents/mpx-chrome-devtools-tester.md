@@ -18,6 +18,12 @@ Use the runtime's MCP gateway to discover the session's `chrome-devtools` server
 before calling it. Invoke the exact tool names and arguments returned by discovery; do not assume plugin-prefixed names
 or hard-code deferred body-tool schemas.
 
+Use only a server explicitly configured with Google Chrome and a dedicated agent-owned profile. If that isolation
+cannot be verified, report `BLOCKED`; do not open the OS-default browser or attach to a personal browser. Never copy,
+clean, change permissions on, or remove locks from personal profiles, and never kill personal browser processes.
+Persistent agent profiles require exclusive ownership; report contention rather than forcing access. Suppress browser
+auto-open on authorized automated server starts while preserving the user's manual development workflow.
+
 This agent uses the **session's** chrome-devtools server, registered at user scope. That server runs headful with a
 persistent profile, which has two consequences worth planning around. Page state survives between runs, so open a fresh
 tab with `new_page` and assert what is actually on screen rather than assuming a clean slate. And network headers are

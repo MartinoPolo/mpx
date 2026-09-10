@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -134,6 +134,20 @@ const intent: InstallIntent = {
   components: ['cli'],
 };
 
+function emptyOwnershipReceipt() {
+  const releaseKey = installerDigest([]);
+  return {
+    schemaVersion: 2 as const,
+    kind: 'ownership-receipt' as const,
+    releaseKey,
+    convergenceHash: releaseKey,
+    files: [],
+    operations: [],
+    operationLocators: [],
+    installedAt: '2025-01-01T00:00:00.000Z',
+  };
+}
+
 describe('durable installer transaction state', () => {
   it.each(['ensure', 'remove'] as const)(
     'skips capture and mutation state for unchanged %s after locked observation validation',
@@ -194,20 +208,86 @@ describe('durable installer transaction state', () => {
     },
   );
 
+  it('retries the same Windows atomic rename after transient EPERM failures', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-installer-rename-retry-'));
+    const target = path.join(root, 'receipt.json');
+    const sources: string[] = [];
+    const temporaryBytes: string[] = [];
+    let attempts = 0;
+    const wait = vi.fn(async () => {});
+    const store = new NodeTransactionStore(root, {
+      platform: 'win32',
+      wait,
+      rename: async (source, destination) => {
+        sources.push(source);
+        temporaryBytes.push(await readFile(source, 'utf8'));
+        attempts += 1;
+        if (attempts < 3) {
+          throw Object.assign(new Error('temporarily blocked'), { code: 'EPERM' });
+        }
+        await rename(source, destination);
+      },
+    });
+    const receipt = emptyOwnershipReceipt();
+
+    await store.writeReceipt(receipt);
+
+    expect(new Set(sources)).toHaveLength(1);
+    expect(new Set(temporaryBytes)).toEqual(new Set([`${JSON.stringify(receipt)}\n`]));
+    expect(await readFile(target, 'utf8')).toBe(`${JSON.stringify(receipt)}\n`);
+    expect(wait.mock.calls).toEqual([[10], [25]]);
+  });
+
+  it('preserves the target and cleans the temporary file after persistent Windows EPERM', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-installer-rename-exhausted-'));
+    const target = path.join(root, 'receipt.json');
+    await writeFile(target, 'original receipt bytes');
+    const failure = Object.assign(new Error('persistently blocked'), { code: 'EPERM' });
+    const renameAttempt = vi.fn(async () => {
+      throw failure;
+    });
+    const wait = vi.fn(async () => {});
+    const store = new NodeTransactionStore(root, {
+      platform: 'win32',
+      rename: renameAttempt,
+      wait,
+    });
+
+    await expect(store.writeReceipt(emptyOwnershipReceipt())).rejects.toBe(failure);
+
+    expect(renameAttempt).toHaveBeenCalledTimes(6);
+    expect(wait.mock.calls).toEqual([[10], [25], [50], [100], [200]]);
+    expect(await readFile(target, 'utf8')).toBe('original receipt bytes');
+    expect(await readdir(root)).toEqual(['receipt.json']);
+  });
+
+  it.each([
+    ['non-EPERM errors on Windows', 'win32', 'EACCES'],
+    ['EPERM errors outside Windows', 'linux', 'EPERM'],
+  ] as const)('does not retry %s', async (_case, platform, code) => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mpx-installer-rename-no-retry-'));
+    const failure = Object.assign(new Error('rename failed'), { code });
+    const renameAttempt = vi.fn(async () => {
+      throw failure;
+    });
+    const wait = vi.fn(async () => {});
+    const store = new NodeTransactionStore(root, {
+      platform,
+      rename: renameAttempt,
+      wait,
+    });
+
+    await expect(store.writeReceipt(emptyOwnershipReceipt())).rejects.toBe(failure);
+
+    expect(renameAttempt).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+    expect(await readdir(root)).toEqual([]);
+  });
+
   it('atomically persists private receipts and in-flight snapshots across process instances', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-installer-state-'));
     const store = new NodeTransactionStore(root);
-    const releaseKey = installerDigest([]);
-    const receipt = {
-      schemaVersion: 2 as const,
-      kind: 'ownership-receipt' as const,
-      releaseKey,
-      convergenceHash: releaseKey,
-      files: [],
-      operations: [],
-      operationLocators: [],
-      installedAt: '2025-01-01T00:00:00.000Z',
-    };
+    const receipt = emptyOwnershipReceipt();
     const snapshot = {
       schemaVersion: 1 as const,
       kind: 'machine-snapshot' as const,

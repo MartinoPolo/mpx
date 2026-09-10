@@ -8,6 +8,8 @@ import {
 const exportedRecord = {
   id: 'opaque-record',
   runtime: 'claude',
+  nativeSessionId: 'private-native-id',
+  nativeSessionRef: 'private-native-id',
   identity: { name: 'me', domain: 'personal' },
   title: null,
   hostCwd: 'C:/repo',
@@ -66,38 +68,38 @@ const sourceRecord = {
     lastActivityAt: null,
   },
   lifecycle: { bindingId: 'private-lifecycle', sequence: 1, timestamp: null },
-} as unknown as SessionRecord & {
-  readonly launch: NonNullable<SessionRecord['launch']>;
-};
+} as unknown as SessionRecord & { readonly launch: NonNullable<SessionRecord['launch']> };
 
-describe('session resurrection export protocol', () => {
-  it('parses the exact versioned public DTO including liveness', () => {
-    expect(
-      parseSessionResurrectionExport({
-        schemaVersion: 1,
-        kind: 'session-resurrection-export',
-        records: [exportedRecord],
-      }),
-    ).toEqual({ schemaVersion: 1, kind: 'session-resurrection-export', records: [exportedRecord] });
+const diagnostic = {
+  runtime: 'pi',
+  identity: { name: 'work', domain: 'work' },
+  status: 'unknown',
+  code: 'SESSION_PROCESS_INSPECTION_UNKNOWN',
+} as const;
+
+const envelope = {
+  schemaVersion: 2,
+  kind: 'session-resurrection-export',
+  records: [exportedRecord],
+  diagnostics: [diagnostic],
+} as const;
+
+describe('session resurrection export v2 protocol', () => {
+  it('round-trips exact native session fields and sanitized inventory diagnostics', () => {
+    expect(parseSessionResurrectionExport(envelope)).toEqual(envelope);
   });
 
-  it('rejects unknown fields, versions, control characters, and forged routes', () => {
-    const envelope = {
-      schemaVersion: 1,
-      kind: 'session-resurrection-export',
-      records: [exportedRecord],
-    };
+  it('strictly rejects unknown fields, old versions, malformed diagnostics, and forged routes', () => {
     for (const malicious of [
       { ...envelope, credentials: 'secret' },
-      { ...envelope, schemaVersion: 2 },
+      { ...envelope, schemaVersion: 1 },
       { ...envelope, records: [{ ...exportedRecord, title: 'bad\u0000title' }] },
-      { ...envelope, records: [{ ...exportedRecord, nativeSessionId: 'secret' }] },
-      {
-        ...envelope,
-        records: [{ ...exportedRecord, identity: { name: 'me', domain: 'other' } }],
-      },
+      { ...envelope, records: [{ ...exportedRecord, nativeSessionId: '' }] },
+      { ...envelope, diagnostics: [{ ...diagnostic, detail: 'private' }] },
+      { ...envelope, diagnostics: [{ ...diagnostic, status: 'active' }] },
+      { ...envelope, diagnostics: [{ ...diagnostic, code: 'bad\u0000code' }] },
+      { ...envelope, records: [{ ...exportedRecord, identity: { name: 'me', domain: 'other' } }] },
       { ...envelope, records: [{ ...exportedRecord, workspace: 'unbounded' }] },
-      { ...envelope, records: [{ ...exportedRecord, nativePathTranslation: 'private-path' }] },
       {
         ...envelope,
         records: [
@@ -109,12 +111,11 @@ describe('session resurrection export protocol', () => {
     }
   });
 
-  it('projects only approved public fields and emits argv as data', () => {
+  it('projects only approved public fields while retaining native resume diagnostics', () => {
     const projected = projectSessionResurrectionRecord(sourceRecord);
     expect(projected).toEqual(exportedRecord);
     const serialized = JSON.stringify(projected);
     for (const secret of [
-      'private-native-id',
       'private-binding',
       'private-token',
       'secret-model',

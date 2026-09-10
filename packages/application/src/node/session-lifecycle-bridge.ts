@@ -3,6 +3,7 @@ import { lstat, mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { canonicalNativeRootDigest, type LaunchDescriptor } from '@mpx/launch';
 import {
+  createRuntimeSessionObservation,
   createSessionLifecycleBinding,
   type NativeSessionRef,
   type RuntimeContext,
@@ -16,7 +17,10 @@ import {
   SessionStore,
   deriveNativeBindingRef,
   type NativeBindingRecord,
+  type SessionProcessInspector,
 } from '@mpx/sessions';
+import { WindowsProcessCapabilities } from '@mpx/windows';
+import { windowsProcessIdentityInspector } from './preparation-lifecycle.js';
 
 export interface LaunchLifecyclePreparation {
   readonly binding: SessionLifecycleBinding;
@@ -35,13 +39,23 @@ export interface SessionLifecycleBridge {
   /** Consumes durable events and returns the observation bound to this launch only. */
   observe(bindingId: string): Promise<RuntimeSessionObservation | undefined>;
 }
+export function productionSessionProcessInspector(): SessionProcessInspector {
+  return windowsProcessIdentityInspector(new WindowsProcessCapabilities());
+}
+
 export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge {
   private readonly store: SessionStore;
   private readonly onSessionsChanged: (() => Promise<void>) | undefined;
+  private readonly processInspector: SessionProcessInspector;
 
-  constructor(input: { store: SessionStore; onSessionsChanged?: () => Promise<void> }) {
+  constructor(input: {
+    store: SessionStore;
+    onSessionsChanged?: () => Promise<void>;
+    processInspector?: SessionProcessInspector;
+  }) {
     this.store = input.store;
     this.onSessionsChanged = input.onSessionsChanged;
+    this.processInspector = input.processInspector ?? productionSessionProcessInspector();
   }
   async prepare(input: {
     descriptor: LaunchDescriptor;
@@ -178,7 +192,7 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
   async consume(bindingId: string): Promise<void> {
     const consumed = await new LifecycleEventDirectoryConsumer(
       this.store,
-      new SessionService(this.store),
+      new SessionService(this.store, undefined, this.processInspector),
     ).consume(bindingId);
     if (consumed > 0) {
       await this.onSessionsChanged?.();
@@ -186,10 +200,14 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
   }
   async observe(bindingId: string): Promise<RuntimeSessionObservation | undefined> {
     const binding = await this.store.readLifecycleBinding(bindingId);
-    const service = new SessionService(this.store);
-    const observations = await service.reconcile([], [bindingId]);
-    const records = await service.list({ runtime: binding.binding.runtime });
-    const matching = records.filter(
+    const nativeBinding = await this.store.readNativeBinding(binding.nativeBindingRef);
+    const service = new SessionService(this.store, undefined, this.processInspector);
+    const observations = await service.reconcile([bindingId], {
+      identity: nativeBinding.identity,
+      runtime: binding.binding.runtime,
+      lifecycleBindingId: bindingId,
+    });
+    const matching = observations.records.filter(
       (record) =>
         record.lifecycle.bindingId === bindingId &&
         record.nativeBindingRef === binding.nativeBindingRef,
@@ -203,11 +221,25 @@ export class ProductionSessionLifecycleBridge implements SessionLifecycleBridge 
     const result =
       matching.length === 0
         ? undefined
-        : observations.find(
-            (observation) =>
-              observation.runtimeQualifiedId === matching[0]!.runtimeQualifiedId &&
-              observation.identityRef === binding.binding.identityRef,
-          );
+        : (() => {
+            const record = matching[0]!;
+            return createRuntimeSessionObservation({
+              runtime: record.runtime,
+              identityRef: binding.binding.identityRef,
+              runtimeQualifiedId: record.runtimeQualifiedId,
+              displayId: record.recordId,
+              title: record.metadata.title,
+              resumeState: record.resume.state === 'resumable' ? 'resumable' : 'unknown',
+              lifecycleState: record.liveness === 'inactive' ? 'shutdown' : record.liveness,
+              workflowStatus: record.workflow.status,
+              inbox: record.workflow.inbox,
+              dispositionAt: record.workflow.dispositionAt ?? null,
+              capturedAt: record.timestamps.updatedAt,
+              freshUntil: record.timestamps.updatedAt,
+              source: 'sessions:lifecycle',
+              diagnostic: record.resume.diagnostic,
+            });
+          })();
     await this.onSessionsChanged?.();
     return result;
   }

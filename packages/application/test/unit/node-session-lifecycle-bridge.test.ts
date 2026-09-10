@@ -3,11 +3,48 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createSessionLifecycleEvent, type RuntimeContext } from '@mpx/runtime-contracts';
 import type { LaunchDescriptor } from '@mpx/launch';
-import { SessionStore } from '@mpx/sessions';
+import { SessionStore, type ProcessInspection } from '@mpx/sessions';
 import { describe, expect, it } from 'vitest';
 import { ProductionSessionLifecycleBridge } from '../../src/node/session-lifecycle-bridge.js';
 
 const hash = (character: string) => character.repeat(64);
+async function observeStartWithInspection(
+  inspection: ProcessInspection,
+): Promise<Awaited<ReturnType<ProductionSessionLifecycleBridge['observe']>>> {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-lifecycle-observation-'));
+  try {
+    const store = new SessionStore(path.join(root, 'state'));
+    const input = { ...launchFixture(root), nativeRuntimeRoot: path.join(root, 'native-pi') };
+    const bridge = new ProductionSessionLifecycleBridge({
+      store,
+      processInspector: { inspect: async () => inspection },
+    });
+    const prepared = await bridge.prepare(input);
+    const event = createSessionLifecycleEvent({
+      eventId: 'event-1',
+      bindingId: prepared.binding.bindingId,
+      type: 'start',
+      sequence: 1,
+      timestamp: new Date().toISOString(),
+      nativeSessionId: 'native-1',
+      nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/native-1.jsonl' },
+      cwd: input.cwd,
+      title: 'Session title',
+      model: 'safe-model',
+      effort: null,
+      pid: 4242,
+      startFingerprint: 'process-start-1',
+    });
+    await writeFile(
+      path.join(prepared.eventDirectory, '000000000001-event-1.json'),
+      `${JSON.stringify(event)}\n`,
+    );
+    return await bridge.observe(prepared.binding.bindingId);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 function launchFixture(root: string): {
   descriptor: LaunchDescriptor;
   runtimeContext: RuntimeContext;
@@ -38,12 +75,21 @@ function launchFixture(root: string): {
 }
 
 describe('ProductionSessionLifecycleBridge', () => {
-  it('persists launch and deterministic native bindings and durably consumes an event', async () => {
+  it('keeps an exact verified lifecycle process active while persisting and consuming its event', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-lifecycle-bridge-'));
     try {
       const store = new SessionStore(path.join(root, 'state'));
       const input = { ...launchFixture(root), nativeRuntimeRoot: path.join(root, 'native-pi') };
-      const bridge = new ProductionSessionLifecycleBridge({ store });
+      const bridge = new ProductionSessionLifecycleBridge({
+        store,
+        processInspector: {
+          inspect: async (pid) => ({
+            status: 'present',
+            pid,
+            startFingerprint: 'unavailable:test-process-start',
+          }),
+        },
+      });
 
       const prepared = await bridge.prepare(input);
       const nativeBindings = await store.listNativeBindings();
@@ -104,5 +150,17 @@ describe('ProductionSessionLifecycleBridge', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it('reports shutdown when the bound lifecycle process is absent', async () => {
+    const observation = await observeStartWithInspection({ status: 'absent' });
+
+    expect(observation?.lifecycleState).toBe('shutdown');
+  });
+
+  it('reports unknown when the bound lifecycle process cannot be verified', async () => {
+    const observation = await observeStartWithInspection({ status: 'unknown' });
+
+    expect(observation?.lifecycleState).toBe('unknown');
   });
 });

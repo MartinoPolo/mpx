@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { sanitizedEnvironment } from '@mpx/executors';
+import { publishRuntimeArtifact } from '@mpx/runtime-contracts';
 
 const cleanupRoots: string[] = [];
 const children = new Set<ChildProcessWithoutNullStreams>();
@@ -134,13 +135,25 @@ async function managedNativeDiscoveryProjection(root: string): Promise<Record<st
     writeFile(manifestPath, manifestBytes),
   ]);
 
-  const fileMapHash = digest(JSON.stringify(files));
-  const runtimeArtifactKey = digest(
-    JSON.stringify({ schemaVersion: 5, runtime: 'pi', manifestKey, fileMapHash }),
-  );
+  const runtimeArtifactKey = digest(JSON.stringify({ runtime: 'pi', manifestKey }));
   const descriptorDigest = digest(manifest);
   const launchKey = digest(JSON.stringify({ descriptorDigest, runtimeArtifactKey }));
-  const projectionKey = digest(JSON.stringify({ launchKey, manifestKey, fileMapHash }));
+  const launchBinding = {
+    launchKey,
+    descriptorDigest,
+    runtimeArtifactKey,
+    runtime: 'pi' as const,
+    manifestKey,
+  };
+  const published = await publishRuntimeArtifact({
+    sourceRoot: root,
+    artifactsRoot: path.join(root, '..', 'artifacts'),
+    launchBinding,
+  });
+  await writeFile(
+    path.join(root, '.mpx-runtime-artifact.json'),
+    await readFile(path.join(published.directory, '.mpx-runtime-artifact.json')),
+  );
   return {
     MPX_RUNTIME: 'pi',
     MPX_RUNTIME_CONTEXT: JSON.stringify({
@@ -153,7 +166,7 @@ async function managedNativeDiscoveryProjection(root: string): Promise<Record<st
         runtime: 'pi',
         manifestKey,
         artifactKey: runtimeArtifactKey,
-        fileMapHash,
+        fileMapHash: published.reference.fileMapHash,
       },
       binding,
     }),
@@ -164,17 +177,7 @@ async function managedNativeDiscoveryProjection(root: string): Promise<Record<st
       byteCount: manifestBytes.byteLength,
     }),
     MPX_COMPILED_AGENTS_DIR: path.join(root, 'agents'),
-    MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify({
-      projectionKey,
-      fileMapHash,
-      launchBinding: {
-        launchKey,
-        descriptorDigest,
-        runtimeArtifactKey,
-        runtime: 'pi',
-        manifestKey,
-      },
-    }),
+    MPX_RUNTIME_PROJECTION_REFERENCE: JSON.stringify(published.reference),
   };
 }
 

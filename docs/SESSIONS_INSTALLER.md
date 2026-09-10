@@ -7,13 +7,13 @@ mpx session list
 mpx session resume <id>
 ```
 
-MPX stores bounded lifecycle and resume metadata only. It does not copy native transcripts, prompts, credentials, command output, or private paths. Session snapshot and record schemas are version 2. Current authority is written under `sessions/v2`; existing `sessions/v1` bytes remain untouched and are never fallback-read or overwritten. Relaunch through MPX to rebuild fresh bounded authority from native-owned session sources rather than reinterpreting obsolete rights.
+MPX stores bounded lifecycle and resume metadata only. It does not copy native transcripts, prompts, credentials, command output, or private paths. Session snapshot and record schemas are version 2, and current authority is written under `sessions/v2`.
 
-## Discovery and liveness
+## Managed inventory and liveness
 
-Listing consumes pending lifecycle events, scans exact configured native account roots, and performs bounded reconciliation. Malformed native data becomes a diagnostic rather than deleting durable records. Process liveness uses PID plus start fingerprint.
+Listing consumes pending lifecycle events and reconciles only MPX-managed session records. Inventory partitions are independent: an unreadable source produces a source-attributed diagnostic without hiding healthy partitions, and public diagnostics are bounded. Process liveness uses PID plus start fingerprint.
 
-Pi and Claude preserve their real native account roots, authentication ownership, native session formats, and resume argv. MPX never switches identities or credentials based on a project, location, or provider. Reconciliation preserves monotonic record timestamps when scans overlap launches.
+Pi and Claude preserve their real native account roots, authentication ownership, native session formats, and resume argv. MPX never switches identities or credentials based on a project, location, or provider. Reconciliation preserves monotonic record timestamps when lifecycle events and process observations overlap.
 
 ## Resume authorization
 

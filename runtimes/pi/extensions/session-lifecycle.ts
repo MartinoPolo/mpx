@@ -359,12 +359,26 @@ export default function sessionLifecycle(
     };
   }
 
+  async function flushPending(owner: Writer): Promise<void> {
+    if (!configurationValue || !(await nativeSessionPersisted(owner))) {
+      return;
+    }
+    await assertPathBinding(owner.directoryBinding);
+    while (owner.pending.length > 0) {
+      const pending = owner.pending[0];
+      if (pending) {
+        await publish(configurationValue.directory, owner.directoryBinding, pending);
+        owner.pending.shift();
+      }
+    }
+  }
+
   function enqueue(type: SessionLifecycleEvent['type'], snapshotValue?: Snapshot): Promise<void> {
     if (!writer || !configurationValue) {
       return Promise.resolve();
     }
     const owner = writer;
-    const { bindingId, directory, nativeRoot } = configurationValue;
+    const { bindingId, nativeRoot } = configurationValue;
     const operation = owner.queue.then(async () => {
       const current = snapshotValue ?? owner.snapshot;
       if (
@@ -387,19 +401,8 @@ export default function sessionLifecycle(
         startFingerprint: owner.startFingerprint,
       });
       serializeEvent(event);
-      const persisted = await nativeSessionPersisted(owner);
-      await assertPathBinding(owner.directoryBinding);
-      const drain = async () => {
-        while (persisted && owner.pending.length > 0) {
-          const pending = owner.pending[0];
-          if (pending) {
-            await publish(directory, owner.directoryBinding, pending);
-            owner.pending.shift();
-          }
-        }
-      };
       if (owner.pending.length >= maximumPendingEvents) {
-        await drain();
+        await flushPending(owner);
         if (owner.pending.length >= maximumPendingEvents) {
           reject('pending event limit reached');
         }
@@ -408,7 +411,7 @@ export default function sessionLifecycle(
       owner.pending.push(event);
       owner.sequence = event.sequence;
       owner.timestamp = timestamp;
-      await drain();
+      await flushPending(owner);
     });
     // Rejection belongs to this hook; the ordering tail must still admit recovery hooks.
     owner.queue = operation.then(
@@ -588,15 +591,21 @@ export default function sessionLifecycle(
   pi.on('agent_start', (_event, context) => update('activity', context));
   pi.on('turn_end', (_event, context) => update('activity', context));
   pi.on('agent_settled', (_event, context) => update('activity', context));
-  pi.on('session_shutdown', async () => {
+  pi.on('session_shutdown', async (event) => {
     if (!writer?.active || closing) {
       return;
     }
     const owner = writer;
     closing = true;
     try {
-      // Pi may already have moved its session manager during replacement teardown.
-      await enqueue('shutdown');
+      // Reload tears down only this extension instance; the native session and OS process remain.
+      // Replacement and quit flows close the old native session even though Pi may keep its process.
+      if (event.reason !== 'reload') {
+        await enqueue('shutdown');
+      } else {
+        await owner.queue;
+        await flushPending(owner);
+      }
     } finally {
       owner.active = false;
     }

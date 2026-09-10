@@ -69,7 +69,7 @@ function maskLiteralRegions(text: string): string {
   let lineStart = 0;
 
   for (let index = 0; index < chars.length; index += 1) {
-    if (index === lineStart) {
+    if (index === lineStart && chars[index] !== '\n') {
       const lineEnd = text.indexOf('\n', lineStart);
       const end = lineEnd === -1 ? text.length : lineEnd;
       const line = text.slice(lineStart, end);

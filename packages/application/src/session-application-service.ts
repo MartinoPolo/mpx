@@ -4,7 +4,7 @@ import type {
   NativeVerifiedResumeSeed,
   ResumeDependencies,
   ResumePlan,
-  RuntimeDiscovery,
+  SessionInventoryResult,
   SessionListFilter,
   SessionRecord,
   SessionReconcileScope,
@@ -13,23 +13,13 @@ import type {
 
 export type SessionDiscoveryScope = SessionReconcileScope;
 
-export interface SessionDiscoveryInput {
-  readonly scanner: RuntimeDiscovery;
-  readonly context?: {
-    readonly identity: Identity;
-    readonly nativeBindingRef: string;
-    readonly runtime: 'claude' | 'pi';
-  };
-}
-
 export interface SessionOperations {
   list(filter?: SessionListFilter): Promise<SessionRecord[]>;
   show(id: string): Promise<SessionRecord>;
   reconcile(
-    discoveries: readonly SessionDiscoveryInput[],
     bindingIds: readonly string[],
     scope?: SessionReconcileScope,
-  ): Promise<unknown>;
+  ): Promise<SessionInventoryResult>;
 }
 
 export interface SessionNativeBindingOperations {
@@ -39,14 +29,13 @@ export interface SessionNativeBindingOperations {
 export interface SessionListDiagnostic {
   readonly runtime: 'claude' | 'pi' | null;
   readonly identity: Identity | null;
-  readonly status: 'unavailable' | 'malformed';
-  readonly code: 'SESSION_DISCOVERY_UNAVAILABLE' | 'SESSION_DISCOVERY_MALFORMED';
+  readonly status: 'unavailable' | 'malformed' | 'unknown';
+  readonly code: string;
 }
 
 export interface SessionApplicationDependencies {
   readonly sessions: SessionOperations;
   readonly nativeBindings: SessionNativeBindingOperations;
-  readonly consumePending: (scope?: SessionReconcileScope) => Promise<number>;
   readonly projectResurrectionRecord: (
     record: SessionRecord & { readonly launch: NonNullable<SessionRecord['launch']> },
   ) => SessionResurrectionExport['records'][number];
@@ -61,9 +50,6 @@ export interface SessionApplicationDependencies {
     plan: ResumePlan,
     execution: { readonly approveHost?: boolean },
   ) => Promise<unknown>;
-  readonly discoveries?: (
-    scope?: SessionDiscoveryScope,
-  ) => Promise<readonly SessionDiscoveryInput[]>;
 }
 
 export interface SessionApplication {
@@ -102,110 +88,77 @@ export class SessionApplicationService implements SessionApplication {
           ...(request.filter.identity !== undefined ? { identity: request.filter.identity } : {}),
         }
       : undefined;
-    await this.#dependencies.consumePending(scope);
-    let discoveries: readonly SessionDiscoveryInput[] = [];
-    if (!this.#dependencies.discoveries) {
+    let bindingIds: readonly string[] = [];
+    try {
+      bindingIds = await this.#dependencies.nativeBindings.listLifecycleBindingIds();
+    } catch {
       diagnostics.push({
-        runtime: null,
-        identity: null,
+        runtime: scope?.runtime ?? null,
+        identity: scope?.identity ?? null,
         status: 'unavailable',
-        code: 'SESSION_DISCOVERY_UNAVAILABLE',
-      });
-    } else {
-      try {
-        discoveries = await this.#dependencies.discoveries(scope);
-      } catch {
-        diagnostics.push({
-          runtime: null,
-          identity: null,
-          status: 'unavailable',
-          code: 'SESSION_DISCOVERY_UNAVAILABLE',
-        });
-      }
-    }
-    const instrumented: SessionDiscoveryInput[] = [];
-    for (const item of discoveries) {
-      if (
-        (scope?.runtime !== undefined && item.scanner.runtime !== scope.runtime) ||
-        (scope?.identity !== undefined &&
-          (item.context?.identity.domain !== scope.identity.domain ||
-            item.context?.identity.name !== scope.identity.name)) ||
-        (scope !== undefined &&
-          (scope.runtime !== undefined || scope.identity !== undefined) &&
-          item.context !== undefined &&
-          item.context.runtime !== item.scanner.runtime)
-      ) {
-        continue;
-      }
-      let result;
-      try {
-        result = await item.scanner.scan();
-        if (result.status !== 'available') {
-          diagnostics.push({
-            runtime: item.scanner.runtime,
-            identity: item.context?.identity ?? null,
-            status: result.status,
-            code:
-              result.status === 'malformed'
-                ? 'SESSION_DISCOVERY_MALFORMED'
-                : 'SESSION_DISCOVERY_UNAVAILABLE',
-          });
-        }
-      } catch {
-        diagnostics.push({
-          runtime: item.scanner.runtime,
-          identity: item.context?.identity ?? null,
-          status: 'unavailable',
-          code: 'SESSION_DISCOVERY_UNAVAILABLE',
-        });
-        result = {
-          status: 'unavailable' as const,
-          sessions: [],
-          diagnostic: 'SESSION_DISCOVERY_UNAVAILABLE',
-        };
-      }
-      instrumented.push({
-        ...item,
-        scanner: { runtime: item.scanner.runtime, scan: async () => result },
+        code: 'SESSION_LIFECYCLE_ENUMERATION_UNAVAILABLE',
       });
     }
-    await this.#sessions.reconcile(
-      instrumented,
-      await this.#dependencies.nativeBindings.listLifecycleBindingIds(),
-      scope,
-    );
-    const records = (await this.#sessions.list(request.filter))
+    let inventory: SessionInventoryResult;
+    try {
+      inventory = await this.#sessions.reconcile(bindingIds, scope);
+      diagnostics.push(...inventory.diagnostics);
+    } catch {
+      inventory = { records: [], diagnostics: [] };
+      diagnostics.push({
+        runtime: scope?.runtime ?? null,
+        identity: scope?.identity ?? null,
+        status: 'unknown',
+        code: 'SESSION_INVENTORY_SOURCE_UNKNOWN',
+      });
+    }
+    const records = inventory.records
+      .filter(
+        (record) =>
+          request.filter?.liveness === undefined || record.liveness === request.filter.liveness,
+      )
+      .filter(
+        (record) =>
+          request.filter?.workflowStatus === undefined ||
+          record.workflow.status === request.filter.workflowStatus,
+      )
       .sort((left, right) => left.recordId.localeCompare(right.recordId))
       .slice(0, request.limit);
     return {
       schemaVersion: 1 as const,
       kind: 'session-list' as const,
       records,
-      diagnostics: diagnostics
-        .sort((left, right) => {
-          const leftKey = [
-            left.runtime ?? '',
-            left.identity?.domain ?? '',
-            left.identity?.name ?? '',
-            left.status,
-            left.code,
-          ].join('\0');
-          const rightKey = [
-            right.runtime ?? '',
-            right.identity?.domain ?? '',
-            right.identity?.name ?? '',
-            right.status,
-            right.code,
-          ].join('\0');
-          return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
-        })
-        .slice(0, 128),
+      diagnostics: diagnostics.slice(0, 128),
     };
   }
 
   async resurrectionExport(): Promise<SessionResurrectionExport> {
-    await this.#dependencies.consumePending();
-    const records = (await this.#sessions.list())
+    const diagnostics: SessionListDiagnostic[] = [];
+    let bindingIds: readonly string[] = [];
+    try {
+      bindingIds = await this.#dependencies.nativeBindings.listLifecycleBindingIds();
+    } catch {
+      diagnostics.push({
+        runtime: null,
+        identity: null,
+        status: 'unavailable',
+        code: 'SESSION_LIFECYCLE_ENUMERATION_UNAVAILABLE',
+      });
+    }
+    let inventory: SessionInventoryResult;
+    try {
+      inventory = await this.#sessions.reconcile(bindingIds);
+      diagnostics.push(...inventory.diagnostics);
+    } catch {
+      inventory = { records: [], diagnostics: [] };
+      diagnostics.push({
+        runtime: null,
+        identity: null,
+        status: 'unknown',
+        code: 'SESSION_INVENTORY_SOURCE_UNKNOWN',
+      });
+    }
+    const records = inventory.records
       .filter(
         (record): record is SessionRecord & { launch: NonNullable<SessionRecord['launch']> } =>
           record.launch !== null &&
@@ -214,7 +167,12 @@ export class SessionApplicationService implements SessionApplication {
       )
       .sort((left, right) => left.recordId.localeCompare(right.recordId))
       .map(this.#dependencies.projectResurrectionRecord);
-    return { schemaVersion: 1, kind: 'session-resurrection-export', records };
+    return {
+      schemaVersion: 2,
+      kind: 'session-resurrection-export',
+      records,
+      diagnostics: diagnostics.slice(0, 128),
+    };
   }
 
   async resume(request: {
@@ -231,9 +189,26 @@ export class SessionApplicationService implements SessionApplication {
     }
     const initial = await this.#sessions.show(request.id);
     const planner = this.#dependencies.planResume;
-    await planner(initial, await this.#dependencies.resumeDependencies(initial));
-    await this.#dependencies.consumePending();
-    const current = await this.#sessions.show(request.id);
+    const lifecycleBindingId = initial.lifecycle?.bindingId ?? null;
+    const inventory = await this.#sessions.reconcile(
+      lifecycleBindingId === null ? [] : [lifecycleBindingId],
+      {
+        runtime: initial.runtime,
+        identity: initial.identity,
+        recordId: initial.recordId,
+        ...(lifecycleBindingId === null ? {} : { lifecycleBindingId }),
+      },
+    );
+    const current = inventory.records.find((record) => record.recordId === initial.recordId);
+    if (!current) {
+      throw applicationError('SESSION_NOT_FOUND', 'Session was not found after reconciliation.');
+    }
+    if (current.liveness === 'unknown') {
+      throw applicationError(
+        'SESSION_RESUME_LIVENESS_UNKNOWN',
+        'Session liveness is unknown and cannot be resumed automatically.',
+      );
+    }
     const seed = await planner(current, await this.#dependencies.resumeDependencies(current));
     const replanned = await this.#dependencies.planCurrentResume(seed);
     if (request.confirmation !== undefined) {

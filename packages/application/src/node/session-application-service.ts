@@ -1,5 +1,4 @@
 import {
-  LifecycleEventDirectoryConsumer,
   SessionService,
   verifyNativeResumeSeed,
   projectSessionResurrectionRecord,
@@ -16,7 +15,6 @@ export interface NodeSessionApplicationDependencies extends Omit<
   SessionApplicationDependencies,
   | 'sessions'
   | 'nativeBindings'
-  | 'consumePending'
   | 'projectResurrectionRecord'
   | 'planResume'
   | 'verifyResumeConfirmation'
@@ -32,18 +30,10 @@ export function createNodeSessionApplicationService(
 ): SessionApplicationService {
   const { store, processInspector, sessionService, ...applicationDependencies } = dependencies;
   const sessions = sessionService ?? new SessionService(store, undefined, processInspector);
-  const consumer = new LifecycleEventDirectoryConsumer(store, sessions);
   return new SessionApplicationService({
     ...applicationDependencies,
     sessions,
     nativeBindings: store,
-    consumePending: async (scope) => {
-      let consumed = 0;
-      for (const bindingId of await store.listLifecycleBindingIds()) {
-        consumed += await consumer.consume(bindingId, scope);
-      }
-      return consumed;
-    },
     projectResurrectionRecord: projectSessionResurrectionRecord,
     planResume: (record, resumeDependencies) =>
       verifyNativeResumeSeed(store, record, resumeDependencies),

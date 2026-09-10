@@ -184,7 +184,7 @@ test('invalid requests fail before any process side effect', async () => {
   assert.equal(calls, 0);
 });
 
-test('enter canonicalizes aliases and accepts only another root from the same repository', async () => {
+test('enter canonicalizes aliases and accepts only a root from the same repository', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'mpx-worktree-operations-'));
   try {
     const source = path.join(root, 'source');
@@ -215,14 +215,23 @@ test('enter canonicalizes aliases and accepts only another root from the same re
       };
     };
 
-    assert.equal(
+    assert.deepEqual(
       await prepareWorktree(
         { action: 'enter', path: targetAlias },
         source,
         execute,
         new AbortController().signal,
       ),
-      await realpath(target),
+      { path: await realpath(target), alreadyCurrent: false },
+    );
+    assert.deepEqual(
+      await prepareWorktree(
+        { action: 'enter', path: target },
+        targetAlias,
+        execute,
+        new AbortController().signal,
+      ),
+      { path: await realpath(target), alreadyCurrent: true },
     );
     await assert.rejects(
       prepareWorktree(
@@ -242,6 +251,74 @@ test('enter canonicalizes aliases and accepts only another root from the same re
       ),
       /worktree root/,
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('create without an explicit base reuses the canonical current branch checkout without Hub', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-worktree-current-create-'));
+  const source = path.join(root, 'source');
+  const sourceAlias = path.join(root, 'source-alias');
+  const subdirectory = path.join(source, 'nested');
+  const commonDirectory = path.join(source, '.git');
+  await Promise.all(
+    [subdirectory, commonDirectory].map((directory) => mkdir(directory, { recursive: true })),
+  );
+  await symlink(source, sourceAlias, process.platform === 'win32' ? 'junction' : 'dir');
+  let hubCalls = 0;
+  const execute: Execute = async (_command, args) => {
+    if (args.includes('workspace')) {
+      hubCalls += 1;
+      throw new Error('Hub must not run');
+    }
+    if (args.includes('--show-toplevel')) {
+      return { stdout: source, stderr: '', code: 0, killed: false };
+    }
+    if (args.includes('--git-common-dir')) {
+      return { stdout: commonDirectory, stderr: '', code: 0, killed: false };
+    }
+    if (args[0] === 'worktree') {
+      return {
+        stdout: `worktree ${sourceAlias}\0HEAD a\0branch refs/heads/feature\0\0`,
+        stderr: '',
+        code: 0,
+        killed: false,
+      };
+    }
+    return { stdout: '', stderr: '', code: 0, killed: false };
+  };
+
+  try {
+    assert.deepEqual(
+      await prepareWorktree(
+        { action: 'create', name: 'feature' },
+        subdirectory,
+        execute,
+        new AbortController().signal,
+      ),
+      { path: await realpath(source), alreadyCurrent: false },
+    );
+    assert.deepEqual(
+      await prepareWorktree(
+        { action: 'create', name: 'feature' },
+        sourceAlias,
+        execute,
+        new AbortController().signal,
+      ),
+      { path: await realpath(source), alreadyCurrent: true },
+    );
+    assert.equal(hubCalls, 0);
+    await assert.rejects(
+      prepareWorktree(
+        { action: 'create', name: 'feature', base: 'HEAD~1' },
+        source,
+        execute,
+        new AbortController().signal,
+      ),
+      /existed before this request/u,
+    );
+    assert.equal(hubCalls, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -294,14 +371,14 @@ test('create delegates to the release-owned workspace CLI and uses its returned 
     throw new Error(`unexpected call: ${command} ${args.join(' ')}`);
   };
 
-  assert.equal(
+  assert.deepEqual(
     await prepareWorktree(
       { action: 'create', name: 'feature', base: 'HEAD~1' },
       source,
       execute,
       new AbortController().signal,
     ),
-    target,
+    { path: target, alreadyCurrent: false },
   );
   const hub = resolveWorkspaceHubInvocation();
   assert.deepEqual(
@@ -368,15 +445,15 @@ test('create recovers a checkout that the Hub created before reporting failure',
   };
 
   try {
-    assert.equal(
-      await prepareWorktree(
-        { action: 'create', name: 'feature' },
-        source,
-        execute,
-        new AbortController().signal,
-      ),
-      target,
+    const result = await prepareWorktree(
+      { action: 'create', name: 'feature' },
+      source,
+      execute,
+      new AbortController().signal,
     );
+    assert.equal(result.path, target);
+    assert.equal(result.alreadyCurrent, false);
+    assert.match(result.warning!, /Hub reported a failure.*validated checkout/su);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

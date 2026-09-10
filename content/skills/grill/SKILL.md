@@ -3,7 +3,7 @@ name: grill
 description: 'Interviews the user about a plan, design, or requirements until the design is settled, then records...'
 metadata:
   author: MartinoPolo
-  version: '2.5'
+  version: '2.6'
   category: planning
   mpx:
     schemaVersion: 1
@@ -71,9 +71,8 @@ If not sure if important enough, ask user.
 
 **DECISIONS.md** — If architectural or design decisions were settled:
 
-- Add entries grouped by domain (Platform, UI, Data, Session)
-- Each entry: `### Title` + `Decided: date` + `What:` + `Why:` + `Rejected:`
-- Only add entries for settled decisions (open questions stay in the conversation until resolved).
+- Record confirmed decisions under the relevant domain using the concise inline format in [Documentation Strategy](../shared/DOCUMENTATION_STRATEGY.md).
+- Keep unresolved questions in the conversation.
 
 ## Report
 

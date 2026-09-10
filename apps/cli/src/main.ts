@@ -16,6 +16,7 @@ import {
 import {
   createNodeLaunchApplicationService,
   createNodeSessionResumeLaunchApplicationService,
+  productionSessionProcessInspector,
 } from '@mpx/application/node';
 import {
   errorEnvelope,
@@ -32,7 +33,6 @@ import {
   catalogPath,
   defaultContext,
   ports,
-  productionSessionProcessInspector,
   sessions,
   setupApplication,
   status,
@@ -41,10 +41,7 @@ import {
 } from './context.js';
 import { executeSessionCommand } from './session-command.js';
 import { executeContentCommand } from './content-command.js';
-import {
-  productionSessionDiscoveries,
-  productionSessionResumeDependencies,
-} from '@mpx/application/node';
+import { productionSessionResumeDependencies } from '@mpx/application/node';
 import { processIo, type CliIo } from './io.js';
 import { formatHumanError } from './error-format.js';
 import {
@@ -433,26 +430,10 @@ async function execute(parsed: Parsed, context: CliContext, io: CliIo): Promise<
       planCurrentResume:
         context.sessionResumePlanner ??
         ((seed) => productionSessionResumeLaunch(context).plan(seed, user)),
-      ...(action === 'list'
+      ...(action === 'list' || action === 'resurrect-export' || action === 'resume'
         ? {
             processInspector:
               context.sessionProcessInspector ?? productionSessionProcessInspector(),
-            discoveries:
-              context.sessionDiscoveries ??
-              ((scope) =>
-                productionSessionDiscoveries({
-                  ...(scope ? { scope } : {}),
-                  user,
-                  store: sessionStore,
-                  environment: context.env,
-                  cwd: parsed.cwd,
-                  options: {
-                    ...(context.exactNativeRootVerifier
-                      ? { exactNativeRootVerifier: context.exactNativeRootVerifier }
-                      : {}),
-                    ...(context.piAuthVerifier ? { piAuthVerifier: context.piAuthVerifier } : {}),
-                  },
-                })),
           }
         : {}),
       ...(resumeDependencies ? { resumeDependencies } : {}),

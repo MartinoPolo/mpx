@@ -16,16 +16,15 @@ it('scopes the initial Node lifecycle consumption before opening excluded event 
     }),
     eventDirectory,
   };
-  const reconcile = vi.fn(async () => []);
+  const reconcile = vi.fn(async () => ({ records: [], diagnostics: [] }));
   const application = createNodeSessionApplicationService({
     store: store as never,
     planCurrentResume: vi.fn(),
     sessionService: { list: async () => [], reconcile } as never,
-    discoveries: async () => [],
   });
   await application.list({ filter: { runtime: 'pi', identity, liveness: 'active' } });
   expect(eventDirectory).not.toHaveBeenCalled();
-  expect(reconcile).toHaveBeenCalledExactlyOnceWith([], ['work-pi', 'personal-claude'], {
+  expect(reconcile).toHaveBeenCalledExactlyOnceWith(['work-pi', 'personal-claude'], {
     runtime: 'pi',
     identity,
   });

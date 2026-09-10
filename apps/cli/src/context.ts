@@ -5,7 +5,6 @@ import {
   type LifecycleDevService,
   type LifecycleWorktreeService,
   type SetupApplicationService,
-  type SessionDiscoveryScope,
   type WorkspaceApplicationService,
 } from '@mpx/application';
 import {
@@ -36,11 +35,9 @@ import {
 } from '@mpx/executors';
 import {
   SessionStore,
-  type Identity,
   type NativeVerifiedResumeSeed,
   type ResumeDependencies,
   type ResumePlan,
-  type RuntimeDiscovery,
   type SessionProcessInspector,
   type SessionRecord,
 } from '@mpx/sessions';
@@ -106,12 +103,6 @@ export interface CliContext extends LaunchExecutionContext {
   }>;
   sessionStore?: SessionStore;
   sessionStoreFactory?: (stateRoot: string) => SessionStore;
-  sessionDiscoveries?: (scope?: SessionDiscoveryScope) => Promise<
-    readonly {
-      scanner: RuntimeDiscovery;
-      context?: { identity: Identity; nativeBindingRef: string; runtime: 'claude' | 'pi' };
-    }[]
-  >;
   sessionProcessInspector?: SessionProcessInspector;
   sessionResumeDependencies?: (record: SessionRecord) => Promise<ResumeDependencies>;
   exactNativeRootVerifier?: { verify(root: string): Promise<void> };
@@ -254,10 +245,6 @@ export function immutableInstaller(context: CliContext): InstallOrchestrator {
     activate: (releaseKey, expectedPriorReleaseKey) =>
       activateRelease(localAppData!, expectedPriorReleaseKey, releaseKey),
   });
-}
-
-export function productionSessionProcessInspector(): SessionProcessInspector {
-  return windowsProcessIdentityInspector(new WindowsProcessCapabilities());
 }
 
 export function ports(context: CliContext): CliPortService {

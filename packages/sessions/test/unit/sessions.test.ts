@@ -15,9 +15,7 @@ import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSessionLifecycleBinding, createSessionLifecycleEvent } from '@mpx/runtime-contracts';
 import {
-  ClaudeActiveScanner,
   LifecycleEventDirectoryConsumer,
-  PiV2ActiveRegistryScanner,
   SessionError,
   SessionService,
   SessionStore,
@@ -1308,217 +1306,34 @@ it('fails closed when native resume activity cannot be inspected', async () => {
   ).rejects.toMatchObject({ code: 'SESSION_RESUME_ACTIVITY_UNAVAILABLE' });
 });
 
-it('reconcile scopes observations to context identity and deduplicates scanners', async () => {
-  const store = new SessionStore(await temporary()),
-    service = new SessionService(store, () => later),
-    otherIdentity = { domain: 'other', name: 'dev' };
-  await store.put(record());
-  await store.put(
-    record({
-      identity: otherIdentity,
-      recordId: 'record-other',
-      runtimeQualifiedId: 'claude:other',
-      nativeSessionRef: { kind: 'native-id', value: 'other' },
-    }),
-  );
-  const scanner = {
-    runtime: 'claude' as const,
-    scan: async () => ({
-      status: 'available' as const,
-      sessions: [],
-      diagnostic: null,
-    }),
-  };
-  const context = { identity, nativeBindingRef: 'native:opaque', runtime: 'claude' as const };
-  const observations = await service.reconcile([
-    { scanner, context },
-    { scanner, context },
-  ]);
-  expect(observations).toHaveLength(1);
-  expect(observations[0]).toMatchObject({
-    identityRef: 'corp/a:dev%2Fone',
-    workflowStatus: 'paused',
-    inbox: false,
-    dispositionAt: null,
-  });
-});
-
-it('does not roll discovery timestamps behind a concurrently replaced record', async () => {
-  const store = new SessionStore(await temporary()),
-    service = new SessionService(store, () => instant),
-    context = { identity, nativeBindingRef: 'native:opaque', runtime: 'claude' as const },
-    discovered = {
-      nativeSessionId: 'raced',
-      nativeSessionRef: { kind: 'native-id' as const, value: 'raced' },
-      cwd: 'C:/repo',
-      title: null,
-      pid: 42,
-      startFingerprint: 'start',
-    };
-  await store.saveNativeBinding(nativeBinding());
-  await service.reconcile([
-    {
-      scanner: {
-        runtime: 'claude',
-        scan: async () => ({
-          status: 'available' as const,
-          sessions: [discovered],
-          diagnostic: null,
-        }),
-      },
-      context,
-    },
-  ]);
-  const current = await service.show('claude:raced');
-  let scanned!: () => void, release!: () => void;
-  const scanStarted = new Promise<void>((resolve) => {
-    scanned = resolve;
-  });
-  const continueScan = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const reconciling = service.reconcile([
-    {
-      scanner: {
-        runtime: 'claude',
-        scan: async () => {
-          scanned();
-          await continueScan;
-          return { status: 'available' as const, sessions: [discovered], diagnostic: null };
-        },
-      },
-      context,
-    },
-  ]);
-  await scanStarted;
-  await store.put({
-    ...current,
-    timestamps: { createdAt: later, updatedAt: later, lastActivityAt: later },
-  });
-  release();
-  await expect(reconciling).resolves.toHaveLength(1);
-  expect((await service.show('claude:raced')).timestamps).toEqual({
-    createdAt: later,
-    updatedAt: later,
-    lastActivityAt: later,
-  });
-});
-
-it('emits lifecycle-only Pi observations without duplicating Claude scanner observations', async () => {
-  const store = new SessionStore(await temporary()),
-    service = new SessionService(store, () => later);
-  await store.put(record());
-  await store.put(
-    record({
-      runtime: 'pi',
-      runtimeQualifiedId: 'pi:pi-one',
-      recordId: 'pi-one',
-      identity: { domain: 'local', name: 'pi' },
-      nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/pi-one.jsonl' },
-    }),
-  );
-  const observations = await service.reconcile([
-    {
-      scanner: {
-        runtime: 'claude',
-        scan: async () => ({
-          status: 'unavailable' as const,
-          sessions: [],
-          diagnostic: 'CLAUDE_UNAVAILABLE',
-        }),
-      },
-      context: { identity, nativeBindingRef: 'native:opaque', runtime: 'claude' },
-    },
-  ]);
-  expect(observations.filter((item) => item.runtime === 'claude')).toHaveLength(1);
-  expect(observations.filter((item) => item.runtime === 'pi')).toMatchObject([
-    {
-      runtimeQualifiedId: 'pi:pi-one',
-      source: 'sessions:lifecycle',
-      capturedAt: instant,
-      freshUntil: instant,
-    },
-  ]);
-});
-
-it('preserves active Pi lifecycle state without a process inspector and publishes lifecycle-time freshness', async () => {
+it('inventories only MPX-managed records across both runtimes without native discovery adoption', async () => {
   const store = new SessionStore(await temporary());
-  const active = record({
-    runtime: 'pi',
-    runtimeQualifiedId: 'pi:lifecycle-only',
-    recordId: 'pi-lifecycle-only',
-    identity: { domain: 'local', name: 'pi' },
-    nativeSessionRef: { kind: 'root-relative-file', value: 'lifecycle-only.jsonl' },
-    liveness: 'active',
-    process: { pid: 42, startFingerprint: 'start' },
-    lifecycle: { bindingId: 'binding', sequence: 3, timestamp: instant },
-  });
-  await store.put(active);
-  const service = new SessionService(store, () => later);
-  const observations = await service.reconcile([]);
-  expect(await service.show('pi:lifecycle-only')).toEqual(active);
-  expect(observations[0]).toMatchObject({
-    capturedAt: instant,
-    freshUntil: instant,
-    lifecycleState: 'active',
-  });
-});
-
-it('scopes reconciliation before process probes, discovery scans, lifecycle consumption, and transactions', async () => {
-  const store = new SessionStore(await temporary());
-  const otherIdentity = { domain: 'personal', name: 'other' };
+  await store.put(record({ recordId: 'claude-managed', runtimeQualifiedId: 'claude:managed' }));
   await store.put(
     record({
+      recordId: 'pi-managed',
       runtime: 'pi',
-      runtimeQualifiedId: 'pi:excluded',
-      recordId: 'excluded',
-      liveness: 'active',
-      process: { pid: 42, startFingerprint: 'start' },
+      runtimeQualifiedId: 'pi:managed',
+      nativeSessionRef: { kind: 'root-relative-file', value: 'managed.jsonl' },
     }),
   );
-  await store.saveLifecycleBinding(lifecycleBindingRecord('excluded-binding'));
-  const transaction = vi.spyOn(store, 'transaction');
-  const consume = vi.spyOn(store, 'validateEventDirectory');
-  const inspect = vi.fn(async (): Promise<ProcessInspection> => ({ status: 'absent' }));
-  const inspectMany = vi.fn(async () => new Map<number, ProcessInspection>());
-  const scan = vi.fn(async () => ({
-    status: 'available' as const,
-    sessions: [],
-    diagnostic: null,
-  }));
-  const service = new SessionService(store, () => later, { inspect, inspectMany });
-  const discoveries = [
-    {
-      scanner: { runtime: 'claude' as const, scan },
-      context: {
-        identity,
-        runtime: 'claude' as const,
-        nativeBindingRef: 'native:opaque',
-      },
-    },
-  ];
-  try {
-    expect(
-      await service.reconcile(discoveries, ['excluded-binding'], { identity: otherIdentity }),
-    ).toEqual([]);
-    expect(await service.reconcile([], [], { runtime: 'claude' })).toEqual([]);
-    expect(
-      await service.reconcile(discoveries, ['excluded-binding'], {
-        runtime: 'pi',
-        identity: otherIdentity,
-      }),
-    ).toEqual([]);
-    expect(inspect).not.toHaveBeenCalled();
-    expect(inspectMany).not.toHaveBeenCalled();
-    expect(transaction).not.toHaveBeenCalled();
-    expect(consume).not.toHaveBeenCalled();
-    expect(scan).not.toHaveBeenCalled();
-  } finally {
-    consume.mockRestore();
-  }
+  await store.put(
+    record({
+      recordId: 'unbound',
+      runtimeQualifiedId: 'claude:unbound',
+      launch: null,
+      nativeSessionRef: { kind: 'native-id', value: 'unbound' },
+    }),
+  );
+
+  const inventory = await new SessionService(store).reconcile();
+
+  expect(inventory.records.map((item) => item.recordId)).toEqual(['claude-managed', 'pi-managed']);
+  expect(inventory.records.map((item) => item.runtime)).toEqual(['claude', 'pi']);
+  expect(inventory.records).not.toContainEqual(expect.objectContaining({ recordId: 'unbound' }));
 });
 
-it('reconciles only the selected identity/runtime partition while retaining excluded records', async () => {
+it('scopes inventory and process verification to the selected managed partition', async () => {
   const store = new SessionStore(await temporary());
   const otherIdentity = { domain: identity.domain, name: 'other' };
   for (const [selectedIdentity, runtime, pid] of [
@@ -1537,27 +1352,189 @@ it('reconciles only the selected identity/runtime partition while retaining excl
       }),
     );
   }
-  const transaction = vi.spyOn(store, 'transaction');
   const inspect = vi.fn(async (pid: number): Promise<ProcessInspection> => ({
     status: 'present',
     pid,
     startFingerprint: 'start',
   }));
-  const service = new SessionService(store, () => later, { inspect });
-  expect(await service.reconcile([], [], { runtime: 'pi', identity })).toMatchObject([
-    { runtime: 'pi', runtimeQualifiedId: 'pi:42', lifecycleState: 'active' },
+
+  const inventory = await new SessionService(store, () => later, { inspect }).reconcile([], {
+    runtime: 'pi',
+    identity,
+  });
+
+  expect(inventory.records).toMatchObject([
+    { runtime: 'pi', runtimeQualifiedId: 'pi:42', liveness: 'active' },
   ]);
   expect(inspect).toHaveBeenCalledExactlyOnceWith(42);
-  expect(transaction).toHaveBeenCalledExactlyOnceWith(identity, 'pi', expect.any(Function));
-  expect(await service.show('pi:43')).toMatchObject({
+  expect(await new SessionService(store).show('pi:43')).toMatchObject({ liveness: 'active' });
+  expect(await new SessionService(store).show('claude:44')).toMatchObject({ liveness: 'active' });
+});
+
+it('does not write or advance activity timestamps when verified inventory is unchanged', async () => {
+  const store = new SessionStore(await temporary());
+  const unchanged = record({
+    runtime: 'pi',
+    runtimeQualifiedId: 'pi:unchanged',
+    recordId: 'unchanged',
     liveness: 'active',
-    timestamps: { updatedAt: instant },
+    process: { pid: 42, startFingerprint: 'start' },
   });
-  expect(await service.show('claude:44')).toMatchObject({
-    liveness: 'active',
-    timestamps: { updatedAt: instant },
+  await store.put(unchanged);
+  const transaction = vi.spyOn(store, 'transaction');
+
+  const inventory = await new SessionService(store, () => later, {
+    inspect: async (pid) => ({ status: 'present', pid, startFingerprint: 'start' }),
+  }).reconcile();
+
+  expect(inventory.records).toEqual([unchanged]);
+  expect(transaction).not.toHaveBeenCalled();
+  expect((await store.read(identity, 'pi')).records[0]?.timestamps).toEqual(unchanged.timestamps);
+});
+
+it('keeps valid account inventory when another account partition is corrupt', async () => {
+  const root = await temporary();
+  const store = new SessionStore(root);
+  await store.put(record({ recordId: 'valid', runtimeQualifiedId: 'claude:valid' }));
+  const corruptIdentity = { domain: 'work', name: 'corrupt' };
+  const corruptPath = store.registryPath(corruptIdentity, 'claude');
+  await mkdir(path.dirname(corruptPath), { recursive: true });
+  await writeFile(corruptPath, '{not-json');
+
+  const inventory = await new SessionService(store).reconcile();
+
+  expect(inventory.records.map((item) => item.recordId)).toEqual(['valid']);
+  expect(inventory.diagnostics).toContainEqual({
+    runtime: 'claude',
+    identity: corruptIdentity,
+    status: 'unknown',
+    code: 'SESSION_PARTITION_UNREADABLE',
   });
 });
+
+it('finds an exact managed record despite an unreadable unrelated account partition', async () => {
+  const root = await temporary();
+  const store = new SessionStore(root);
+  await store.put(record({ recordId: 'selected-record' }));
+  const corruptPath = store.registryPath({ domain: 'work', name: 'corrupt' }, 'claude');
+  await mkdir(path.dirname(corruptPath), { recursive: true });
+  await writeFile(corruptPath, '{not-json');
+
+  await expect(new SessionService(store).show('selected-record')).resolves.toMatchObject({
+    recordId: 'selected-record',
+    identity,
+  });
+});
+
+it('processes only the selected record during record-scoped reconciliation', async () => {
+  const store = new SessionStore(await temporary());
+  await store.put(
+    record({
+      recordId: 'selected',
+      runtimeQualifiedId: 'claude:selected',
+      liveness: 'active',
+      process: { pid: 42, startFingerprint: 'selected-start' },
+    }),
+  );
+  const excluded = record({
+    recordId: 'excluded',
+    runtimeQualifiedId: 'claude:excluded',
+    liveness: 'active',
+    process: { pid: 43, startFingerprint: 'excluded-start' },
+  });
+  await store.put(excluded);
+  const inspect = vi.fn(async (): Promise<ProcessInspection> => ({ status: 'absent' }));
+
+  const inventory = await new SessionService(store, () => later, { inspect }).reconcile([], {
+    identity,
+    runtime: 'claude',
+    recordId: 'selected',
+  });
+
+  expect(inspect).toHaveBeenCalledExactlyOnceWith(42);
+  expect(inventory.records).toMatchObject([{ recordId: 'selected', liveness: 'inactive' }]);
+  expect((await store.read(identity, 'claude')).records).toContainEqual(excluded);
+});
+
+it('reads only the selected identity and runtime during scoped reconciliation', async () => {
+  const store = new SessionStore(await temporary());
+  const otherIdentity = { domain: 'work', name: 'other' };
+  await store.put(record({ runtime: 'pi', runtimeQualifiedId: 'pi:selected' }));
+  await store.put(
+    record({
+      identity: otherIdentity,
+      runtime: 'claude',
+      runtimeQualifiedId: 'claude:other',
+      recordId: 'other',
+    }),
+  );
+  const read = vi.spyOn(store, 'read');
+
+  await new SessionService(store).reconcile([], { identity, runtime: 'pi' });
+
+  expect(read).toHaveBeenCalledExactlyOnceWith(identity, 'pi');
+});
+
+it('fails closed for a shorthand lookup when any partition is unreadable', async () => {
+  const root = await temporary();
+  const store = new SessionStore(root);
+  await store.put(record({ recordId: 'selected-record' }));
+  const corruptPath = store.registryPath({ domain: 'work', name: 'corrupt' }, 'claude');
+  await mkdir(path.dirname(corruptPath), { recursive: true });
+  await writeFile(corruptPath, '{not-json');
+
+  await expect(new SessionService(store).show('selected')).rejects.toMatchObject({
+    code: 'SESSION_AMBIGUOUS',
+  });
+});
+
+it.each(['claude', 'pi'] as const)(
+  'verifies an exact managed %s process from the fresh inspection snapshot',
+  async (runtime) => {
+    const store = new SessionStore(await temporary());
+    await store.put(
+      record({
+        runtime,
+        runtimeQualifiedId: `${runtime}:exact`,
+        recordId: `${runtime}-exact`,
+        liveness: 'unknown',
+        process: { pid: 42, startFingerprint: 'start' },
+      }),
+    );
+
+    const inventory = await new SessionService(store, () => later, {
+      inspect: async (pid) => ({ status: 'present', pid, startFingerprint: 'start' }),
+    }).reconcile();
+
+    expect(inventory.records).toMatchObject([{ runtime, liveness: 'active' }]);
+  },
+);
+
+it.each(['claude', 'pi'] as const)(
+  'marks managed %s liveness unknown when no process inspector is available',
+  async (runtime) => {
+    const store = new SessionStore(await temporary());
+    await store.put(
+      record({
+        runtime,
+        runtimeQualifiedId: `${runtime}:uninspected`,
+        recordId: `${runtime}-uninspected`,
+        liveness: 'active',
+        process: { pid: 42, startFingerprint: 'start' },
+      }),
+    );
+
+    const inventory = await new SessionService(store, () => later).reconcile();
+
+    expect(inventory.records).toMatchObject([
+      {
+        runtime,
+        liveness: 'unknown',
+        process: { pid: 42, startFingerprint: 'start' },
+      },
+    ]);
+  },
+);
 
 it('batches unique eligible Pi PIDs across partitions once per fresh reconcile without losing tuple checks', async () => {
   const store = new SessionStore(await temporary());
@@ -1685,17 +1662,13 @@ it('keeps an exact-live Pi process active and captures its verification at recon
       process: { pid: 42, startFingerprint: 'start' },
     }),
   );
-  const observations = await new SessionService(store, () => later, {
+  const inventory = await new SessionService(store, () => later, {
     inspect: async (pid) => ({ status: 'present', pid, startFingerprint: 'start' }),
   }).reconcile([]);
-  expect((await store.partitions())[0]?.records[0]).toMatchObject({
+  expect(inventory.records[0]).toMatchObject({
     liveness: 'active',
     process: { pid: 42 },
-  });
-  expect(observations[0]).toMatchObject({
-    capturedAt: later,
-    freshUntil: later,
-    lifecycleState: 'active',
+    timestamps: { updatedAt: instant, lastActivityAt: instant },
   });
 });
 
@@ -1835,12 +1808,11 @@ it('marks an absent Pi process inactive and clears its process metadata', async 
   const service = new SessionService(store, () => later, {
     inspect: async () => ({ status: 'absent' }),
   });
-  const observations = await service.reconcile([]);
-  expect(await service.show('pi:dead')).toMatchObject({ liveness: 'inactive', process: null });
-  expect(observations[0]).toMatchObject({
-    capturedAt: later,
-    freshUntil: later,
-    lifecycleState: 'shutdown',
+  const inventory = await service.reconcile([]);
+  expect(inventory.records[0]).toMatchObject({
+    liveness: 'inactive',
+    process: null,
+    timestamps: { updatedAt: later, lastActivityAt: instant },
   });
 });
 
@@ -1860,15 +1832,11 @@ it('treats a reused Pi PID with a mismatched fingerprint as liveness unknown', a
   const service = new SessionService(store, () => later, {
     inspect: async (pid) => ({ status: 'present', pid, startFingerprint: 'different' }),
   });
-  const observations = await service.reconcile([]);
-  expect(await service.show('pi:reused')).toMatchObject({
+  const inventory = await service.reconcile([]);
+  expect(inventory.records[0]).toMatchObject({
     liveness: 'unknown',
     process: { pid: 42, startFingerprint: 'start' },
-  });
-  expect(observations[0]).toMatchObject({
-    capturedAt: instant,
-    freshUntil: instant,
-    lifecycleState: 'unknown',
+    timestamps: { updatedAt: later, lastActivityAt: instant },
   });
 });
 
@@ -1888,273 +1856,10 @@ it('preserves Pi process metadata when process inspection is unknown', async () 
   const service = new SessionService(store, () => later, {
     inspect: async () => ({ status: 'unknown' }),
   });
-  const observations = await service.reconcile([]);
-  expect(await service.show('pi:unknown')).toMatchObject({
+  const inventory = await service.reconcile([]);
+  expect(inventory.records[0]).toMatchObject({
     liveness: 'unknown',
     process: { pid: 42, startFingerprint: 'start' },
+    timestamps: { updatedAt: later, lastActivityAt: instant },
   });
-  expect(observations[0]).toMatchObject({ capturedAt: instant, freshUntil: instant });
-});
-
-it('marks a previously discovered process inactive when its exact source is available and empty', async () => {
-  const store = new SessionStore(await temporary()),
-    service = new SessionService(store, () => later);
-  await store.saveNativeBinding(nativeBinding());
-  const context = { identity, nativeBindingRef: 'native:opaque', runtime: 'claude' as const };
-  await service.reconcile([
-    {
-      scanner: {
-        runtime: 'claude',
-        scan: async () => ({
-          status: 'available' as const,
-          sessions: [
-            {
-              nativeSessionId: 'gone',
-              nativeSessionRef: { kind: 'native-id' as const, value: 'gone' },
-              cwd: 'C:/repo',
-              title: null,
-              pid: 9,
-              startFingerprint: 'fp',
-            },
-          ],
-          diagnostic: null,
-        }),
-      },
-      context,
-    },
-  ]);
-  await service.reconcile([
-    {
-      scanner: {
-        runtime: 'claude',
-        scan: async () => ({ status: 'available' as const, sessions: [], diagnostic: null }),
-      },
-      context,
-    },
-  ]);
-  expect(await service.show('claude:gone')).toMatchObject({ liveness: 'inactive', process: null });
-});
-
-it('distinguishes unavailable Claude discovery from an empty result', async () => {
-  expect(
-    (
-      await new ClaudeActiveScanner(async () => ({
-        available: false,
-        exitCode: 1,
-        stdout: '',
-      })).scan()
-    ).status,
-  ).toBe('unavailable');
-  const empty = await new ClaudeActiveScanner(async () => ({
-    available: true,
-    exitCode: 0,
-    stdout: '[]',
-  })).scan();
-  expect(empty.status).toBe('available');
-  expect(empty.sessions).toEqual([]);
-});
-
-it('reads maintained Pi v2 registry files and keeps the newest registration', async () => {
-  const root = await temporary(),
-    registry = path.join(await temporary(), 'active-sessions'),
-    sessionFile = path.join(root, 'sessions', 'one.jsonl');
-  await mkdir(path.dirname(sessionFile));
-  await mkdir(registry);
-  await writeFile(sessionFile, 'x');
-  const entry = (registeredAt: string, name?: string) => ({
-    version: 2,
-    agent: 'pi',
-    sessionId: 'one',
-    sessionFile,
-    cwd: root,
-    ...(name === undefined ? {} : { name }),
-    pid: 10,
-    processStartedAt: instant,
-    registeredAt,
-  });
-  await writeFile(path.join(registry, 'old.json'), JSON.stringify(entry(instant, 'old')));
-  await writeFile(path.join(registry, 'new.json'), JSON.stringify(entry(later, 'new')));
-  const result = await new PiV2ActiveRegistryScanner(
-    root,
-    registry,
-    { inspect: async () => ({ startFingerprint: instant }) },
-    () => Date.parse(later) + 1,
-  ).scan();
-  expect(result.sessions).toMatchObject([
-    {
-      nativeSessionId: 'one',
-      nativeSessionRef: { kind: 'root-relative-file', value: 'sessions/one.jsonl' },
-      title: 'new',
-      startFingerprint: instant,
-    },
-  ]);
-});
-
-it('normalizes the PowerShell round-trip process timestamp to the Windows fingerprint', async () => {
-  const root = await temporary(),
-    registry = path.join(await temporary(), 'active-sessions'),
-    sessionFile = path.join(root, 'sessions', 'windows.jsonl'),
-    windowsStartedAt = '2025-01-02T03:04:05.1234567Z',
-    normalizedStartedAt = '2025-01-02T03:04:05.123Z';
-  await mkdir(path.dirname(sessionFile));
-  await mkdir(registry);
-  await writeFile(sessionFile, 'x');
-  await writeFile(
-    path.join(registry, 'windows.json'),
-    JSON.stringify({
-      version: 2,
-      agent: 'pi',
-      sessionId: 'windows',
-      sessionFile,
-      cwd: root,
-      pid: 10,
-      processStartedAt: windowsStartedAt,
-      registeredAt: later,
-    }),
-  );
-
-  const result = await new PiV2ActiveRegistryScanner(
-    root,
-    registry,
-    { inspect: async () => ({ startFingerprint: normalizedStartedAt }) },
-    () => Date.parse(later) + 1,
-  ).scan();
-
-  expect(result.sessions).toMatchObject([
-    { nativeSessionId: 'windows', startFingerprint: normalizedStartedAt },
-  ]);
-});
-
-it('ignores known legacy Pi v1 records without weakening v2 validation', async () => {
-  const root = await temporary(),
-    registry = path.join(await temporary(), 'active-sessions'),
-    sessionFile = path.join(root, 'sessions', 'current.jsonl');
-  await mkdir(path.dirname(sessionFile));
-  await mkdir(registry);
-  await writeFile(sessionFile, 'x');
-  await writeFile(
-    path.join(registry, 'legacy.json'),
-    JSON.stringify({
-      version: 1,
-      agent: 'pi',
-      sessionId: 'legacy',
-      sessionFile,
-      cwd: root,
-      pid: 9,
-      registeredAt: instant,
-    }),
-  );
-  await writeFile(
-    path.join(registry, 'current.json'),
-    JSON.stringify({
-      version: 2,
-      agent: 'pi',
-      sessionId: 'current',
-      sessionFile,
-      cwd: root,
-      pid: 10,
-      processStartedAt: instant,
-      registeredAt: later,
-    }),
-  );
-
-  const result = await new PiV2ActiveRegistryScanner(
-    root,
-    registry,
-    { inspect: async (pid) => (pid === 10 ? { startFingerprint: instant } : null) },
-    () => Date.parse(later) + 1,
-  ).scan();
-
-  expect(result.sessions.map((session) => session.nativeSessionId)).toEqual(['current']);
-});
-
-it.each([
-  ['unknown schema', { version: 3, processStartedAt: instant }],
-  ['timestamp offset', { version: 2, processStartedAt: '2025-01-02T03:04:05.000+00:00' }],
-  ['unsupported precision', { version: 2, processStartedAt: '2025-01-02T03:04:05.0000Z' }],
-  ['invalid date', { version: 2, processStartedAt: '2025-02-30T03:04:05.000Z' }],
-  ['future timestamp', { version: 2, processStartedAt: later }],
-])('rejects %s in a Pi v2 registry record', async (_case, changed) => {
-  const root = await temporary(),
-    registry = path.join(await temporary(), 'active-sessions'),
-    sessionFile = path.join(root, 'sessions', 'invalid.jsonl');
-  await mkdir(path.dirname(sessionFile));
-  await mkdir(registry);
-  await writeFile(sessionFile, 'x');
-  await writeFile(
-    path.join(registry, 'invalid.json'),
-    JSON.stringify(
-      Object.assign(
-        {
-          version: 2,
-          agent: 'pi',
-          sessionId: 'invalid',
-          sessionFile,
-          cwd: root,
-          pid: 10,
-          processStartedAt: instant,
-          registeredAt: instant,
-        },
-        changed,
-      ),
-    ),
-  );
-
-  await expect(
-    new PiV2ActiveRegistryScanner(
-      root,
-      registry,
-      { inspect: async () => ({ startFingerprint: instant }) },
-      () => Date.parse(instant) + 1,
-    ).scan(),
-  ).rejects.toBeInstanceOf(SessionError);
-});
-
-it('treats a missing Pi registry directory as available empty by default', async () => {
-  const result = await new PiV2ActiveRegistryScanner(
-    await temporary(),
-    path.join(await temporary(), 'missing'),
-    { inspect: async () => null },
-  ).scan();
-  expect(result).toEqual({ status: 'available', sessions: [], diagnostic: null });
-});
-
-it('can explicitly report a missing Pi registry directory as unavailable', async () => {
-  const result = await new PiV2ActiveRegistryScanner(
-    await temporary(),
-    path.join(await temporary(), 'missing'),
-    { inspect: async () => null },
-    { missingDirectory: 'unavailable' },
-  ).scan();
-  expect(result.status).toBe('unavailable');
-  expect(result.diagnostic).toBe('PI_DISCOVERY_UNAVAILABLE');
-});
-
-it('rejects unsafe Pi registry and session files without reading another root', async () => {
-  const root = await temporary(),
-    registry = path.join(await temporary(), 'active-sessions'),
-    outside = path.join(await temporary(), 'outside.jsonl');
-  await mkdir(registry);
-  await writeFile(outside, 'x');
-  await writeFile(
-    path.join(registry, 'outside.json'),
-    JSON.stringify({
-      version: 2,
-      agent: 'pi',
-      sessionId: 'one',
-      sessionFile: outside,
-      cwd: root,
-      pid: 10,
-      processStartedAt: instant,
-      registeredAt: later,
-    }),
-  );
-  await expect(
-    new PiV2ActiveRegistryScanner(
-      root,
-      registry,
-      { inspect: async () => ({ startFingerprint: instant }) },
-      () => Date.parse(later) + 1,
-    ).scan(),
-  ).rejects.toMatchObject({ code: 'PI_SESSION_ROOT_ESCAPE' });
 });

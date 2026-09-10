@@ -6,7 +6,11 @@ import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
 import { loadActiveContentProjection, readActiveContentEntry } from '@mpx/content-compiler';
-import { parseRuntimeContext } from '@mpx/runtime-contracts';
+import {
+  parseRuntimeContext,
+  revalidateRuntimeArtifact,
+  type PublishedRuntimeArtifactReference,
+} from '@mpx/runtime-contracts';
 import {
   bindNativeAgentDirectory,
   type NativeAgentDirectory,
@@ -189,7 +193,6 @@ async function resolveManagedAgentsDirectory(
   if (
     !digest(bindingText(reference, 'projectionKey', 'projection reference')) ||
     !digest(bindingText(reference, 'fileMapHash', 'projection reference')) ||
-    runtimeArtifact.fileMapHash !== bindingText(reference, 'fileMapHash', 'projection reference') ||
     context.launchKey !== bindingText(binding, 'launchKey', 'projection reference') ||
     descriptor.digest !== bindingText(binding, 'descriptorDigest', 'projection reference') ||
     context.manifestKey !== bindingText(binding, 'manifestKey', 'projection reference') ||
@@ -227,6 +230,13 @@ async function resolveManagedAgentsDirectory(
       },
     },
   });
+  const projectionValidation = await revalidateRuntimeArtifact(
+    activeRoot,
+    reference as unknown as PublishedRuntimeArtifactReference,
+  );
+  if (!projectionValidation.valid) {
+    throw new Error('Invalid managed agent discovery binding: projection integrity');
+  }
   return active;
 }
 

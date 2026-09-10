@@ -22,6 +22,19 @@ This builds and verifies the Pi extension, bundles the CLI, then publishes, sele
 
 Use `pnpm run setup`, not `pnpm setup`: the latter is pnpm's own shell-configuration command. After setup succeeds, restart your MPX runtime to load the new release. Native account data and credentials remain untouched.
 
+### Verify Pi startup after deployment
+
+Setup verification and `mpx doctor` do not exercise native extension loading. Before reporting Pi loader startup healthy, launch the installed runtime and require a successful RPC `get_state` response without extension errors:
+
+```bash
+printf '{"id":"startup-check","type":"get_state"}\n' | mpx launch pi \
+  --identity personal --executor host --workspace direct \
+  --reason 'Verify installed Pi extension startup' --approve-host \
+  --runtime-arg=--mode --runtime-arg=rpc
+```
+
+Use the intended configured identity. This no-prompt check proves that the installed extension loader reached RPC startup, but it does not prove managed-registry persistence or replace interactive UI verification. Pi defers session persistence until an assistant message is recorded; `set_session_name` alone is insufficient. Verify lifecycle registration only after a real assistant response through the normal account session path. `--no-session` and temporary session directories cannot satisfy managed lifecycle binding.
+
 ## Ownership and safety
 
 - Setup changes only receipt-owned MPX resources.

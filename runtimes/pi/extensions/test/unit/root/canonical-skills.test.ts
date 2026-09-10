@@ -101,6 +101,19 @@ test('non-MPX Pi sessions retain native skills without extension registrations',
   assert.equal(compiler.loadActiveContentProjection.mock.calls.length, 0);
 });
 
+test('pasted prose with an empty line in a code fence continues without skill expansion', async () => {
+  compiler.loadActiveContentProjection.mockResolvedValue(active([]));
+  const state = harness();
+  await canonicalSkills(state.api, env);
+
+  const text = 'The plan is settled.\n\n```text\n✓ Ready\n\nSave available sessions.\n```';
+  const result = await state.events.get('input')?.({ text, source: 'interactive' }, {});
+
+  assert.deepEqual(result, { action: 'continue' });
+  assert.equal(compiler.readActiveSkill.mock.calls.length, 0);
+  assert.deepEqual(state.sent, []);
+});
+
 test('activation registers each canonical identity once under only the mpx namespace', async () => {
   compiler.loadActiveContentProjection.mockResolvedValue(
     active([

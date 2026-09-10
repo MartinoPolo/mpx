@@ -23,6 +23,28 @@ interface PendingHandoff {
   signal?: AbortSignal;
 }
 
+interface WorktreeDependencies {
+  environment?: NodeJS.ProcessEnv;
+  prepare?: typeof prepareWorktree;
+  forkSession?: typeof forkWorktreeSession;
+}
+
+const MANAGED_LAUNCH_MARKERS = [
+  'MPX_RUNTIME',
+  'MPX_RUNTIME_EXECUTOR',
+  'MPX_RUNTIME_CONTEXT',
+  'MPX_RUNTIME_CONTEXT_FILE',
+  'MPX_RUNTIME_PROJECTION_REFERENCE',
+  'MPX_SESSION_LIFECYCLE_BINDING_ID',
+  'MPX_SESSION_LIFECYCLE_EVENT_DIR',
+  'MPX_SESSION_LIFECYCLE_SEQUENCE',
+  'MPX_SESSION_LIFECYCLE_START_FINGERPRINT',
+] as const;
+
+function hasManagedLaunchMarker(environment: NodeJS.ProcessEnv): boolean {
+  return MANAGED_LAUNCH_MARKERS.some((name) => environment[name] !== undefined);
+}
+
 function requireSession(ctx: ExtensionContext): void {
   if (ctx.mode !== 'tui' && ctx.mode !== 'rpc') {
     throw new Error(
@@ -34,7 +56,11 @@ function requireSession(ctx: ExtensionContext): void {
   }
 }
 
-export default function (pi: ExtensionAPI): void {
+export default function (pi: ExtensionAPI, dependencies: WorktreeDependencies = {}): void {
+  const environment = dependencies.environment ?? process.env;
+  const prepare = dependencies.prepare ?? prepareWorktree;
+  const forkSession = dependencies.forkSession ?? forkWorktreeSession;
+  const managedLaunch = hasManagedLaunchMarker(environment);
   let pending: PendingHandoff | undefined;
   let dispatch: ReturnType<typeof setImmediate> | undefined;
   let preparation: AbortController | undefined;
@@ -63,33 +89,48 @@ export default function (pi: ExtensionAPI): void {
     preparation = controller;
     let target: string | undefined;
     let destinationFile: string | undefined;
+    let continuation: string | undefined;
     try {
       ctx.ui.setStatus('worktree', 'Preparing worktree…');
-      target = await prepareWorktree(
+      const outcome = await prepare(
         request,
         ctx.cwd,
         (command, args, options) => pi.exec(command, args, options),
         controller.signal,
       );
+      target = outcome.path;
       controller.signal.throwIfAborted();
       if (!ctx.isIdle() || ctx.hasPendingMessages()) {
         throw new Error('Pi became busy; retry with /worktree --enter and the created path.');
       }
-      destinationFile = forkWorktreeSession(ctx, target);
-      const task = request.task;
-      ctx.ui.notify(`Entering ${target}`, 'info');
-      const result = await ctx.switchSession(destinationFile, {
-        withSession: async (replacement) => {
-          if (task !== undefined) {
-            await replacement.sendUserMessage(task);
-          }
-        },
-      });
-      if (result.cancelled) {
-        ctx.ui.notify(
-          `Session switch cancelled. Worktree preserved at ${target}. Resume with /worktree --enter "${target}".`,
-          'warning',
-        );
+      if (outcome.warning !== undefined) {
+        ctx.ui.notify(outcome.warning, 'warning');
+      }
+      if (outcome.alreadyCurrent) {
+        ctx.ui.notify(`Already in ${target}; continuing in this session.`, 'info');
+        continuation = request.task;
+      } else {
+        if (managedLaunch) {
+          throw new Error(
+            `Managed MPX worktree handoff cannot safely switch to preserved destination ${target}. Start a fresh managed Pi launch in that destination; the source session remains active.`,
+          );
+        }
+        destinationFile = forkSession(ctx, target);
+        const task = request.task;
+        ctx.ui.notify(`Entering ${target}`, 'info');
+        const result = await ctx.switchSession(destinationFile, {
+          withSession: async (replacement) => {
+            if (task !== undefined) {
+              await replacement.sendUserMessage(task);
+            }
+          },
+        });
+        if (result.cancelled) {
+          ctx.ui.notify(
+            `Session switch cancelled. Worktree preserved at ${target}. Resume with /worktree --enter "${target}".`,
+            'warning',
+          );
+        }
       }
     } catch (error) {
       const reason =
@@ -116,6 +157,9 @@ export default function (pi: ExtensionAPI): void {
       if (!disposed) {
         ctx.ui.setStatus('worktree', undefined);
       }
+    }
+    if (continuation !== undefined && !disposed && !controller.signal.aborted) {
+      pi.sendUserMessage(continuation);
     }
   }
 
@@ -166,13 +210,14 @@ export default function (pi: ExtensionAPI): void {
     label: 'Worktree handoff',
     description:
       'Create a checkout through the MPX workspace Hub (default base: current HEAD), or enter an existing worktree of this repository. ' +
-      'Forks this conversation into a new session in that checkout and automatically continues task after the current run settles. ' +
+      'From a native-origin launch, switches this conversation into a new session there and continues the task after the current run settles. From a managed-origin launch, a cross-destination handoff is refused, preserving the source session and prepared checkout; start a fresh managed launch in the destination. If already in the requested checkout, continues in place. ' +
       'Call alone, never alongside other tools. Session replacement stops session-owned background agents and servers; collect their results first. ' +
       'Does not move uncommitted changes, commit, or delete worktrees. Main TUI/RPC sessions only.',
-    promptSnippet: 'Create or enter a worktree and continue this conversation there automatically.',
+    promptSnippet:
+      'Create or enter a worktree. Native-origin handoffs switch and continue automatically; managed-origin cross-destination handoffs require a fresh managed launch.',
     promptGuidelines: [
       'For main-session worktree isolation, use worktree before implementation rather than invoking workspace setup in bash. Supply the continuation task.',
-      'Call worktree alone in its tool batch, then stop: the extension switches sessions and resumes task automatically. Do not keep editing the old checkout.',
+      'Call worktree alone in its tool batch, then stop. Native-origin handoffs switch sessions and resume automatically; already-current requests continue in place. Managed-origin cross-destination handoffs are refused while preserving the source and prepared checkout, so start a fresh managed launch there. Do not keep editing the old checkout after a native switch.',
       'Use Agent isolation for subagents; worktree changes the main session, not a child agent.',
     ],
     parameters: Type.Object(

@@ -121,7 +121,7 @@ export default function (pi: ExtensionAPI): void {
       label: 'Managed dev server',
       description:
         'Start, inspect, restart, and stop a foreground development command whose complete process tree is owned by this pi session. ' +
-        'Readiness waits for every configured localhost TCP port; omit ports for immediate readiness. Commands that daemonize are unsupported.',
+        'Readiness waits for every configured localhost TCP port; omit ports for immediate readiness. Sets BROWSER=none to suppress browser auto-open in compatible servers. Commands that daemonize are unsupported.',
       promptSnippet:
         'Manage a persistent development server with captured logs and automatic session cleanup.',
       promptGuidelines: [

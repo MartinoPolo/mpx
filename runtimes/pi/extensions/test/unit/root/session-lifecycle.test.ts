@@ -456,16 +456,15 @@ it('continues the original durable record monotonically across same-session relo
   await reloaded.emit('session_start', { reason: 'reload' });
   await reloaded.emit('agent_start');
   expect((await events()).map(({ sequence, type }) => [sequence, type])).toEqual([
-    [2, 'shutdown'],
-    [3, 'start'],
-    [4, 'activity'],
+    [2, 'start'],
+    [3, 'activity'],
   ]);
   await consumer.consume(prepared.binding.bindingId);
   expect(await service.list()).toMatchObject([
     {
       recordId: original.recordId,
       timestamps: { createdAt: original.timestamps.createdAt },
-      lifecycle: { bindingId: prepared.binding.bindingId, sequence: 4 },
+      lifecycle: { bindingId: prepared.binding.bindingId, sequence: 3 },
       liveness: 'active',
     },
   ]);
@@ -594,12 +593,11 @@ it('preserves unpublished events across reload without backfilling their timesta
   const pending = await events();
   expect(pending.map(({ sequence, type }) => [sequence, type])).toEqual([
     [1, 'start'],
-    [2, 'shutdown'],
-    [3, 'start'],
-    [4, 'activity'],
+    [2, 'start'],
+    [3, 'activity'],
   ]);
   expect(Date.parse(pending[0]!.timestamp)).toBeLessThanOrEqual(beforeReload);
-  expect(Date.parse(pending[1]!.timestamp)).toBeLessThanOrEqual(beforeReload);
+  expect(Date.parse(pending[1]!.timestamp)).toBeGreaterThanOrEqual(beforeReload);
 });
 
 it.each(['malformed', 'wrong-id', 'wrong-cwd', 'wrong-version'] as const)(
@@ -731,8 +729,7 @@ it('drains a failed startup publication on shutdown and continues after reload',
   await reloaded.emit('session_start', { reason: 'reload' });
   expect((await events()).map(({ sequence, type }) => [sequence, type])).toEqual([
     [1, 'start'],
-    [2, 'shutdown'],
-    [3, 'start'],
+    [2, 'start'],
   ]);
 });
 
@@ -755,8 +752,7 @@ it('does not republish an already drained prefix after a later publication failu
   expect(pending.map(({ sequence, type }) => [sequence, type])).toEqual([
     [1, 'start'],
     [2, 'activity'],
-    [3, 'shutdown'],
-    [4, 'start'],
+    [3, 'start'],
   ]);
   expect(pending[0]).toEqual(first);
   expect(new Set(pending.map(({ eventId }) => eventId)).size).toBe(pending.length);
@@ -831,15 +827,14 @@ it('cannot emit through recovery hooks after rejecting a substituted native root
   await expect(rejected.emit('session_start', { reason: 'reload' })).rejects.toThrow(/native root/);
   await rejected.emit('agent_start');
   await rejected.emit('session_shutdown');
-  expect((await events()).map(({ sequence }) => sequence)).toEqual([1, 2]);
+  expect((await events()).map(({ sequence }) => sequence)).toEqual([1]);
   nativeFile.mockRestore();
   const recovered = harness(manager);
   sessionLifecycle(recovered.api, environment);
   await recovered.emit('session_start', { reason: 'reload' });
   expect((await events()).map(({ sequence, type }) => [sequence, type])).toEqual([
     [1, 'start'],
-    [2, 'shutdown'],
-    [3, 'start'],
+    [2, 'start'],
   ]);
 });
 
@@ -854,7 +849,8 @@ it('revalidates a failed native header without retaining its rejected activity',
   await extension.emit('session_shutdown');
   expect((await events()).map(({ sequence, type }) => [sequence, type])).toEqual([
     [1, 'start'],
-    [2, 'shutdown'],
+    [2, 'activity'],
+    [3, 'shutdown'],
   ]);
 });
 
@@ -933,7 +929,9 @@ it('rejects native-root directory drift until the original binding is restored',
   await extension.emit('session_shutdown');
   expect((await events()).map(({ sequence, type }) => [sequence, type])).toEqual([
     [1, 'start'],
-    [2, 'shutdown'],
+    [2, 'activity'],
+    [3, 'activity'],
+    [4, 'shutdown'],
   ]);
 });
 

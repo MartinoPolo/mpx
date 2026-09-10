@@ -8,6 +8,18 @@ const runFile = promisify(execFile);
 const STOP_TIMEOUT_MS = 5_000;
 const CLOSE_GRACE_MS = 2_000;
 
+function createDevServerEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    const normalizedKey = process.platform === 'win32' ? key.toUpperCase() : key;
+    if (normalizedKey === 'BROWSER' || normalizedKey === 'BROWSER_ARGS') {
+      delete env[key];
+    }
+  }
+  env.BROWSER = 'none';
+  return env;
+}
+
 class SystemChild implements ManagedChild {
   readonly pid: number;
   readonly stdout;
@@ -91,6 +103,7 @@ export function createSystemRuntime(): RuntimeAdapter {
       const child = spawn(invocation.file, invocation.args, {
         cwd: spec.cwd,
         detached: invocation.detached,
+        env: createDevServerEnvironment(),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });

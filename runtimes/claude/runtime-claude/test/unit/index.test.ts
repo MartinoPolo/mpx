@@ -1,5 +1,5 @@
 import { execFile as execFileCallback, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -247,6 +247,24 @@ async function runGuard(
   input: unknown,
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return runNode([file], env, JSON.stringify(input));
+}
+async function runGuardWithProcessFacts(
+  root: string,
+  file: string,
+  env: NodeJS.ProcessEnv,
+  input: unknown,
+  facts: unknown,
+) {
+  const preload = path.join(root, `process-facts-${randomUUID()}.mjs`);
+  await writeFile(
+    preload,
+    `import childProcess from "node:child_process";import {syncBuiltinESMExports} from "node:module";const original=childProcess.spawnSync;childProcess.spawnSync=(file,args,options)=>file==="powershell.exe"?{status:0,stdout:process.env.MPX_TEST_PROCESS_FACTS,stderr:""}:original(file,args,options);syncBuiltinESMExports();`,
+  );
+  return runNode(
+    ['--import', pathToFileURL(preload).href, file],
+    { ...env, MPX_TEST_PROCESS_FACTS: JSON.stringify(facts) },
+    JSON.stringify(input),
+  );
 }
 async function runGuardChunks(
   file: string,
@@ -683,6 +701,7 @@ describe('Claude projection', () => {
       'PreCompact',
       'Notification',
       'Stop',
+      'SessionEnd',
     ]);
     expect(hooks.PostToolUse[0].matcher).toBe('Write|Edit|MultiEdit|NotebookEdit|Bash');
     expect(JSON.parse(files['settings.json']!)).toEqual({});
@@ -741,6 +760,142 @@ describe('Claude projection', () => {
       ).code,
     ).toBe(0);
   });
+  it('emits Stop as best-effort activity and SessionEnd as verified shutdown', async () => {
+    const f = await fixture(),
+      published = await publishClaudeProjection({
+        ...f,
+        artifactsRoot: path.join(f.root, 'lifecycle-artifacts'),
+      }),
+      guard = path.join(published.directory, 'hooks', 'runtime-guard.mjs'),
+      eventDirectory = path.join(f.root, 'lifecycle-events'),
+      environment = {
+        ...guardEnvironment(f, published.reference),
+        MPX_SESSION_LIFECYCLE_BINDING_ID: '12345678-1234-1234-1234-123456789abc',
+        MPX_SESSION_LIFECYCLE_EVENT_DIR: eventDirectory,
+      },
+      input = { session_id: 'session-1', cwd: f.root },
+      validFacts = [
+        {
+          pid: 101,
+          ppid: 202,
+          executable: 'C:\\Program Files\\nodejs\\node.exe',
+          commandLine: 'node runtime-guard.mjs',
+          startedAt: '2025-01-02T03:04:06.000Z',
+        },
+        {
+          pid: 202,
+          ppid: 1,
+          executable: 'C:\\Tools\\claude.exe',
+          commandLine: 'claude',
+          startedAt: '2025-01-02T03:04:05.000Z',
+        },
+      ];
+    await mkdir(eventDirectory);
+    expect(
+      await runGuardWithProcessFacts(
+        f.root,
+        guard,
+        environment,
+        {
+          ...input,
+          hook_event_name: 'Stop',
+        },
+        validFacts,
+      ),
+    ).toMatchObject({ code: 0 });
+    expect(
+      await runGuardWithProcessFacts(
+        f.root,
+        guard,
+        environment,
+        {
+          ...input,
+          hook_event_name: 'SessionEnd',
+        },
+        validFacts,
+      ),
+    ).toMatchObject({ code: 0 });
+    const events = await Promise.all(
+      (await readdir(eventDirectory)).map(async (name) =>
+        JSON.parse(await readFile(path.join(eventDirectory, name), 'utf8')),
+      ),
+    );
+    expect(events.map(({ type }) => type).sort()).toEqual(['activity', 'shutdown']);
+    expect(
+      events.every(
+        ({ pid, startFingerprint }) =>
+          pid === 202 && startFingerprint === '2025-01-02T03:04:05.000Z',
+      ),
+    ).toBe(true);
+
+    const invalidFacts = [
+      validFacts[0],
+      { ...validFacts[1], startedAt: '2025-01-02T03:04:07.000Z' },
+    ];
+    expect(
+      await runGuardWithProcessFacts(
+        f.root,
+        guard,
+        environment,
+        {
+          ...input,
+          hook_event_name: 'Stop',
+        },
+        invalidFacts,
+      ),
+    ).toMatchObject({ code: 0 });
+    const unknown = await runGuardWithProcessFacts(
+      f.root,
+      guard,
+      environment,
+      {
+        ...input,
+        hook_event_name: 'SessionStart',
+      },
+      invalidFacts,
+    );
+    expect(unknown.code).toBe(2);
+    expect(unknown.stderr).toContain('LIFECYCLE_PROCESS_IDENTITY_UNKNOWN');
+  });
+
+  it('rejects unrelated ancestor command text instead of adopting it as Claude', async () => {
+    const f = await fixture(),
+      published = await publishClaudeProjection({
+        ...f,
+        artifactsRoot: path.join(f.root, 'unknown-lifecycle-artifacts'),
+      }),
+      eventDirectory = path.join(f.root, 'unknown-lifecycle-events');
+    await mkdir(eventDirectory);
+    const result = await runGuardWithProcessFacts(
+      f.root,
+      path.join(published.directory, 'hooks', 'runtime-guard.mjs'),
+      {
+        ...guardEnvironment(f, published.reference),
+        MPX_SESSION_LIFECYCLE_BINDING_ID: '12345678-1234-1234-1234-123456789abc',
+        MPX_SESSION_LIFECYCLE_EVENT_DIR: eventDirectory,
+      },
+      { hook_event_name: 'SessionStart', session_id: 'session-1', cwd: f.root },
+      [
+        {
+          pid: 10,
+          ppid: 20,
+          executable: 'node.exe',
+          commandLine: 'node hook.mjs',
+          startedAt: '2025-01-02T03:04:06.000Z',
+        },
+        {
+          pid: 20,
+          ppid: 1,
+          executable: 'cmd.exe',
+          commandLine: 'cmd /c echo @anthropic-ai\\claude-code',
+          startedAt: '2025-01-02T03:04:05.000Z',
+        },
+      ],
+    );
+    expect(result.code).toBe(2);
+    expect(await readdir(eventDirectory)).toEqual([]);
+  });
+
   it('publishes against the complete launch binding and separates distinct launch contexts', async () => {
     const f = await fixture(),
       artifactsRoot = path.join(f.root, 'published');

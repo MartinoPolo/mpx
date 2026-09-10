@@ -514,43 +514,119 @@ export class SessionStore {
       return { registry: { ...registry, records }, result: valid };
     });
   }
-  async partitions(): Promise<SessionRegistry[]> {
-    const root = this.storeRoot('identities'),
-      result: SessionRegistry[] = [];
+  async loadPartitions(
+    scope: { readonly identity?: Identity; readonly runtime?: RuntimeName } = {},
+  ): Promise<{
+    readonly partitions: SessionRegistry[];
+    readonly diagnostics: readonly {
+      runtime: RuntimeName | null;
+      identity: Identity | null;
+      status: 'unavailable' | 'malformed' | 'unknown';
+      code: string;
+    }[];
+  }> {
+    const diagnostics: {
+        runtime: RuntimeName | null;
+        identity: Identity | null;
+        status: 'unavailable' | 'malformed' | 'unknown';
+        code: string;
+      }[] = [],
+      partitions: SessionRegistry[] = [],
+      runtimes = scope.runtime === undefined ? (['claude', 'pi'] as const) : [scope.runtime];
+    const loadIdentity = async (identity: Identity): Promise<void> => {
+      for (const runtime of runtimes) {
+        try {
+          const registry = await this.read(identity, runtime);
+          if (registry.records.length) {
+            partitions.push(registry);
+          }
+        } catch {
+          diagnostics.push({
+            runtime,
+            identity,
+            status: 'unknown',
+            code: 'SESSION_PARTITION_UNREADABLE',
+          });
+        }
+      }
+    };
+    if (scope.identity !== undefined) {
+      await loadIdentity(scope.identity);
+      return { partitions, diagnostics };
+    }
+
+    const root = this.storeRoot('identities');
     let domains: string[];
     try {
       domains = await readdir(root);
     } catch (error) {
       if (missing(error)) {
-        return [];
+        return { partitions, diagnostics };
       }
-      throw error;
+      return {
+        partitions,
+        diagnostics: [
+          {
+            runtime: scope.runtime ?? null,
+            identity: null,
+            status: 'unavailable',
+            code: 'SESSION_PARTITION_ENUMERATION_UNAVAILABLE',
+          },
+        ],
+      };
     }
     for (const domainEntry of domains.sort()) {
       if (!domainEntry.startsWith('d-')) {
         continue;
       }
       const domainPath = path.join(root, domainEntry);
-      if ((await lstat(domainPath)).isSymbolicLink()) {
-        continue;
-      }
-      for (const nameEntry of (await readdir(domainPath)).sort()) {
-        if (!nameEntry.startsWith('n-')) {
+      try {
+        if ((await lstat(domainPath)).isSymbolicLink()) {
           continue;
         }
-        const identity = {
-          domain: decode(domainEntry.slice(2)),
-          name: decode(nameEntry.slice(2)),
-        };
-        for (const runtime of ['claude', 'pi'] as const) {
-          const registry = await this.read(identity, runtime);
-          if (registry.records.length) {
-            result.push(registry);
-          }
+      } catch (error) {
+        if (!missing(error)) {
+          diagnostics.push({
+            runtime: scope.runtime ?? null,
+            identity: null,
+            status: 'unavailable',
+            code: 'SESSION_PARTITION_ENUMERATION_UNAVAILABLE',
+          });
+        }
+        continue;
+      }
+      let names: string[];
+      try {
+        names = await readdir(domainPath);
+      } catch {
+        diagnostics.push({
+          runtime: scope.runtime ?? null,
+          identity: null,
+          status: 'unavailable',
+          code: 'SESSION_PARTITION_ENUMERATION_UNAVAILABLE',
+        });
+        continue;
+      }
+      for (const nameEntry of names.sort()) {
+        if (nameEntry.startsWith('n-')) {
+          await loadIdentity({
+            domain: decode(domainEntry.slice(2)),
+            name: decode(nameEntry.slice(2)),
+          });
         }
       }
     }
-    return result;
+    return { partitions, diagnostics };
+  }
+
+  // fallow-ignore-next-line unused-class-member -- strict partition API consumed by SessionService.list.
+  async partitions(): Promise<SessionRegistry[]> {
+    const loaded = await this.loadPartitions();
+    const diagnostic = loaded.diagnostics[0];
+    if (diagnostic !== undefined) {
+      throw new SessionError(diagnostic.code, 'session partition inventory is incomplete');
+    }
+    return loaded.partitions;
   }
   // fallow-ignore-next-line unused-class-member -- consumed by application Node session adapters.
   async listNativeBindings(): Promise<NativeBindingRecord[]> {

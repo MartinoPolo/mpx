@@ -42,10 +42,7 @@ Settled architectural and design decisions, updated only after user confirmation
 
 ## [Domain]
 
-### [Decision title]
-
-Decided: YYYY-MM-DD What: [One sentence describing the choice.] Why: [One sentence explaining the rationale.] Rejected:
-[Alternatives considered and why they lost.]
+- YYYY-MM-DD: [Decision, with important rationale and any explicitly rejected alternatives inline.]
 ```
 
 Roles, boundaries, formatting, and splitting policy are canonical in

@@ -2,10 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { lstat, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  createRuntimeSessionObservation,
   parseSessionLifecycleEvent,
   type RuntimeName,
-  type RuntimeSessionObservation,
   type SessionLifecycleEvent,
 } from '@mpx/runtime-contracts';
 import { SessionStore } from './store.js';
@@ -25,30 +23,20 @@ export interface SessionListFilter {
   readonly liveness?: SessionLiveness;
   readonly workflowStatus?: WorkflowStatus;
 }
-export type SessionReconcileScope = Pick<SessionListFilter, 'identity' | 'runtime'>;
+export type SessionReconcileScope = Pick<SessionListFilter, 'identity' | 'runtime'> & {
+  readonly recordId?: string;
+  readonly lifecycleBindingId?: string;
+};
+export interface SessionInventoryResult {
+  readonly records: readonly SessionRecord[];
+  readonly diagnostics: readonly {
+    runtime: RuntimeName | null;
+    identity: Identity | null;
+    status: 'unavailable' | 'malformed' | 'unknown';
+    code: string;
+  }[];
+}
 
-export interface DiscoveryResult {
-  readonly status: 'available' | 'unavailable' | 'malformed';
-  readonly sessions: readonly DiscoveredSession[];
-  readonly diagnostic: string | null;
-}
-export interface DiscoveredSession {
-  readonly nativeSessionId: string;
-  readonly nativeSessionRef: SessionRecord['nativeSessionRef'];
-  readonly cwd: string;
-  readonly title: string | null;
-  readonly pid: number;
-  readonly startFingerprint: string;
-}
-export interface RuntimeDiscovery {
-  readonly runtime: RuntimeName;
-  scan(): Promise<DiscoveryResult>;
-}
-export interface DiscoveryContext {
-  readonly identity: Identity;
-  readonly nativeBindingRef: string;
-  readonly runtime: RuntimeName;
-}
 export type ProcessInspection =
   | Readonly<{ status: 'present'; pid: number; startFingerprint: string }>
   | Readonly<{ status: 'absent' | 'unknown' }>;
@@ -137,12 +125,21 @@ export class SessionService {
       );
   }
   async show(query: string): Promise<SessionRecord> {
-    const records = await this.list();
-    const exact = records.filter(
-      (record) => record.recordId === query || record.runtimeQualifiedId === query,
-    );
-    if (exact.length === 1) {
-      return exact[0]!;
+    const loaded = await this.store.loadPartitions();
+    const records = loaded.partitions.flatMap((partition) => partition.records);
+    const exactRecordId = records.filter((record) => record.recordId === query);
+    if (exactRecordId.length === 1) {
+      return exactRecordId[0]!;
+    }
+    if (exactRecordId.length > 1 || loaded.diagnostics.length > 0) {
+      throw new SessionError(
+        'SESSION_AMBIGUOUS',
+        'session lookup cannot be resolved uniquely while a partition is unreadable',
+      );
+    }
+    const exactNativeId = records.filter((record) => record.runtimeQualifiedId === query);
+    if (exactNativeId.length === 1) {
+      return exactNativeId[0]!;
     }
     const abbreviated = records.filter(
       (record) => record.recordId.startsWith(query) || record.runtimeQualifiedId.startsWith(query),
@@ -150,7 +147,7 @@ export class SessionService {
     if (abbreviated.length === 0) {
       throw new SessionError('SESSION_NOT_FOUND', 'session was not found');
     }
-    if (abbreviated.length > 1) {
+    if (exactNativeId.length > 1 || abbreviated.length > 1) {
       throw new SessionError('SESSION_AMBIGUOUS', 'session abbreviation is ambiguous');
     }
     return abbreviated[0]!;
@@ -306,334 +303,135 @@ export class SessionService {
     });
   }
   async reconcile(
-    discoveries: readonly {
-      scanner: RuntimeDiscovery;
-      context?: DiscoveryContext;
-    }[],
     lifecycleBindingIds: readonly string[] = [],
     scope: SessionReconcileScope = {},
-  ): Promise<RuntimeSessionObservation[]> {
-    const matchesScope = (candidate: { runtime: RuntimeName; identity: Identity }) =>
-      (scope.runtime === undefined || candidate.runtime === scope.runtime) &&
-      (scope.identity === undefined || sameIdentity(candidate.identity, scope.identity));
+  ): Promise<SessionInventoryResult> {
     const consumer = new LifecycleEventDirectoryConsumer(this.store, this);
-    for (const bindingId of [...lifecycleBindingIds].sort()) {
+    const bindings = scope.lifecycleBindingId
+      ? lifecycleBindingIds.filter((id) => id === scope.lifecycleBindingId)
+      : lifecycleBindingIds;
+    for (const bindingId of [...bindings].sort()) {
       await consumer.consume(bindingId, scope);
     }
-    const capturedAt = this.clock(),
-      observations: RuntimeSessionObservation[] = [],
-      observed = new Set<string>(),
-      processVerified = new Set<string>(),
-      lifecycleFactTimes = new Map<string, string>();
-    if (this.processInspector) {
-      const partitions = (await this.store.partitions()).filter(
-        (candidate) => candidate.runtime === 'pi' && matchesScope(candidate),
+
+    const capturedAt = this.clock();
+    const recovered = await this.store.loadPartitions(scope);
+    const partitions = recovered.partitions;
+    const managed = partitions.flatMap((partition) =>
+      partition.records.filter(
+        (record) =>
+          record.launch !== null &&
+          (scope.recordId === undefined || record.recordId === scope.recordId),
+      ),
+    );
+    const candidates = managed.filter(
+      (record) =>
+        (record.liveness === 'active' || record.liveness === 'unknown') && record.process !== null,
+    );
+    const inspections = this.processInspector
+      ? await inspectProcesses(this.processInspector, [
+          ...new Set(candidates.map((record) => record.process!.pid)),
+        ])
+      : new Map<number, ProcessInspection>();
+    const final = new Map(managed.map((record) => [record.recordId, record]));
+
+    for (const partition of partitions) {
+      const sampled = new Map(
+        candidates
+          .filter(
+            (record) =>
+              record.runtime === partition.runtime &&
+              sameIdentity(record.identity, partition.identity),
+          )
+          .map((record) => [
+            record.recordId,
+            {
+              pid: record.process!.pid,
+              fingerprint: record.process!.startFingerprint,
+              inspection: inspections.get(record.process!.pid) ?? ({ status: 'unknown' } as const),
+            },
+          ]),
       );
-      const eligible = (record: SessionRecord) =>
-        (record.liveness === 'active' || record.liveness === 'unknown') && record.process !== null;
-      const processInspections = await inspectProcesses(this.processInspector, [
-        ...new Set(
-          partitions.flatMap((partition) =>
-            partition.records.filter(eligible).map((record) => record.process!.pid),
-          ),
-        ),
-      ]);
-      for (const partition of partitions) {
-        const inspections = new Map<
-          string,
-          Readonly<{
-            sampledPid: number;
-            sampledStartFingerprint: string;
-            inspection: ProcessInspection;
-          }>
-        >();
-        for (const record of partition.records) {
-          if (!eligible(record) || record.process === null) {
-            continue;
+      const desired = (record: SessionRecord): SessionRecord => {
+        if (
+          record.launch === null ||
+          (scope.recordId !== undefined && record.recordId !== scope.recordId)
+        ) {
+          return record;
+        }
+        if (
+          (record.liveness === 'active' || record.liveness === 'unknown') &&
+          record.process === null
+        ) {
+          if (record.liveness === 'unknown') {
+            return record;
           }
-          const key = `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`;
-          lifecycleFactTimes.set(key, record.lifecycle.timestamp ?? record.timestamps.updatedAt);
-          inspections.set(record.recordId, {
-            sampledPid: record.process.pid,
-            sampledStartFingerprint: record.process.startFingerprint,
-            inspection: processInspections.get(record.process.pid) ?? { status: 'unknown' },
+          return parseSessionRecord({
+            ...record,
+            liveness: 'unknown',
+            timestamps: { ...record.timestamps, updatedAt: monotonicUpdatedAt(capturedAt, record) },
           });
         }
-        if (inspections.size === 0) {
-          continue;
+        const sample = sampled.get(record.recordId);
+        if (!sample || record.process === null) {
+          return record;
         }
-        await this.store.transaction(partition.identity, 'pi', (registry) => ({
-          registry: {
-            ...registry,
-            records: registry.records.map((record) => {
-              const sampled = inspections.get(record.recordId);
-              if (
-                !sampled ||
-                record.process === null ||
-                record.process.pid !== sampled.sampledPid ||
-                record.process.startFingerprint !== sampled.sampledStartFingerprint
-              ) {
-                return record;
-              }
-              const inspection = sampled.inspection;
-              const exact =
-                inspection.status === 'present' &&
-                inspection.pid === sampled.sampledPid &&
-                inspection.startFingerprint === sampled.sampledStartFingerprint;
-              if (exact) {
-                processVerified.add(
-                  `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`,
-                );
-                return record.liveness === 'active'
-                  ? record
-                  : parseSessionRecord({
-                      ...record,
-                      liveness: 'active',
-                      timestamps: {
-                        ...record.timestamps,
-                        updatedAt: monotonicUpdatedAt(capturedAt, record),
-                      },
-                    });
-              }
-              if (inspection.status === 'absent') {
-                processVerified.add(
-                  `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`,
-                );
-                return parseSessionRecord({
-                  ...record,
-                  liveness: 'inactive',
-                  process: null,
-                  timestamps: {
-                    ...record.timestamps,
-                    updatedAt: monotonicUpdatedAt(capturedAt, record),
-                  },
-                });
-              }
-              return parseSessionRecord({
-                ...record,
-                liveness: 'unknown',
-                timestamps: {
-                  ...record.timestamps,
-                  updatedAt: monotonicUpdatedAt(capturedAt, record),
-                },
-              });
-            }),
-          },
-          result: undefined,
-        }));
-      }
-    }
-    for (const item of discoveries) {
-      if (
-        (scope.runtime !== undefined && item.scanner.runtime !== scope.runtime) ||
-        (scope.identity !== undefined &&
-          (item.context === undefined || !sameIdentity(item.context.identity, scope.identity)))
-      ) {
-        continue;
-      }
-      const discovered = await item.scanner.scan();
-      if (discovered.status === 'available' && item.context) {
-        if (item.context.runtime !== item.scanner.runtime) {
-          throw new SessionError(
-            'SESSION_BINDING_MISMATCH',
-            'discovery context runtime differs from scanner',
-          );
+        const exact =
+          sample.inspection.status === 'present' &&
+          sample.inspection.pid === sample.pid &&
+          sample.inspection.startFingerprint === sample.fingerprint;
+        const liveness: SessionLiveness = exact
+          ? 'active'
+          : sample.inspection.status === 'absent'
+            ? 'inactive'
+            : 'unknown';
+        const process = liveness === 'inactive' ? null : record.process;
+        if (record.liveness === liveness && record.process === process) {
+          return record;
         }
-        for (const session of discovered.sessions) {
-          await this.upsertDiscovery(session, item.context, capturedAt);
-        }
-        const activeRefs = new Set(
-          discovered.sessions.map(
-            (session) => `${session.nativeSessionRef.kind}\0${session.nativeSessionRef.value}`,
-          ),
-        );
-        if (item.context.runtime === 'claude') {
-          await this.store.transaction(item.context.identity, item.context.runtime, (registry) => ({
-            registry: {
-              ...registry,
-              records: registry.records.map((record) =>
-                record.nativeBindingRef === item.context!.nativeBindingRef &&
-                record.liveness === 'active' &&
-                !activeRefs.has(`${record.nativeSessionRef.kind}\0${record.nativeSessionRef.value}`)
-                  ? parseSessionRecord({
-                      ...record,
-                      liveness: 'inactive',
-                      process: null,
-                      timestamps: {
-                        ...record.timestamps,
-                        updatedAt: monotonicUpdatedAt(capturedAt, record),
-                      },
-                    })
-                  : record,
-              ),
-            },
-            result: undefined,
-          }));
-        }
-      }
-      const records = await this.list({
-        runtime: item.scanner.runtime,
-        ...(item.context ? { identity: item.context.identity } : {}),
-      });
-      for (const record of records) {
-        const observationKey = `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`;
-        if (observed.has(observationKey)) {
-          continue;
-        }
-        observed.add(observationKey);
-        observations.push(
-          createRuntimeSessionObservation({
-            runtime: record.runtime,
-            identityRef: `${record.identity.domain}:${record.identity.name}`,
-            runtimeQualifiedId: record.runtimeQualifiedId,
-            displayId: record.recordId,
-            title: record.metadata.title,
-            resumeState:
-              record.resume.state === 'resumable'
-                ? 'resumable'
-                : record.resume.state === 'unavailable'
-                  ? 'not-resumable'
-                  : 'unknown',
-            lifecycleState: record.liveness === 'inactive' ? 'shutdown' : record.liveness,
-            workflowStatus: record.workflow.status,
-            inbox: record.workflow.inbox,
-            dispositionAt: record.workflow.dispositionAt ?? null,
-            capturedAt:
-              record.runtime === 'pi' && !processVerified.has(observationKey)
-                ? (lifecycleFactTimes.get(observationKey) ??
-                  record.lifecycle.timestamp ??
-                  record.timestamps.updatedAt)
-                : capturedAt,
-            freshUntil:
-              record.runtime === 'pi' && !processVerified.has(observationKey)
-                ? (lifecycleFactTimes.get(observationKey) ??
-                  record.lifecycle.timestamp ??
-                  record.timestamps.updatedAt)
-                : capturedAt,
-            source: `sessions:${item.scanner.runtime}`,
-            diagnostic: discovered.diagnostic,
-          }),
-        );
-      }
-    }
-    for (const record of scope.runtime === undefined || scope.runtime === 'pi'
-      ? await this.list({ ...scope, runtime: 'pi' })
-      : []) {
-      const observationKey = `${record.identity.domain}\0${record.identity.name}\0${record.runtime}\0${record.recordId}`;
-      if (observed.has(observationKey)) {
-        continue;
-      }
-      observed.add(observationKey);
-      observations.push(
-        createRuntimeSessionObservation({
-          runtime: record.runtime,
-          identityRef: `${record.identity.domain}:${record.identity.name}`,
-          runtimeQualifiedId: record.runtimeQualifiedId,
-          displayId: record.recordId,
-          title: record.metadata.title,
-          resumeState:
-            record.resume.state === 'resumable'
-              ? 'resumable'
-              : record.resume.state === 'unavailable'
-                ? 'not-resumable'
-                : 'unknown',
-          lifecycleState: record.liveness === 'inactive' ? 'shutdown' : record.liveness,
-          workflowStatus: record.workflow.status,
-          inbox: record.workflow.inbox,
-          dispositionAt: record.workflow.dispositionAt ?? null,
-          capturedAt: processVerified.has(observationKey)
-            ? capturedAt
-            : (lifecycleFactTimes.get(observationKey) ??
-              record.lifecycle.timestamp ??
-              record.timestamps.updatedAt),
-          freshUntil: processVerified.has(observationKey)
-            ? capturedAt
-            : (lifecycleFactTimes.get(observationKey) ??
-              record.lifecycle.timestamp ??
-              record.timestamps.updatedAt),
-          source: 'sessions:lifecycle',
-          diagnostic: record.resume.diagnostic,
-        }),
-      );
-    }
-    return observations;
-  }
-  private async upsertDiscovery(
-    session: DiscoveredSession,
-    context: DiscoveryContext,
-    timestamp: string,
-  ): Promise<void> {
-    const nativeBinding = await this.store.readNativeBinding(context.nativeBindingRef);
-    if (
-      nativeBinding.runtime !== context.runtime ||
-      !sameIdentity(nativeBinding.identity, context.identity)
-    ) {
-      throw new SessionError(
-        'SESSION_BINDING_MISMATCH',
-        'discovery context does not match recorded native binding',
-      );
-    }
-    const recordId = idFor(context.identity, context.runtime, session.nativeSessionId);
-    await this.store.transaction(context.identity, context.runtime, (registry) => {
-      const current = registry.records.find((record) => record.recordId === recordId);
-      const record = parseSessionRecord({
-        schemaVersion: 2,
-        recordId,
-        runtimeQualifiedId: `${context.runtime}:${session.nativeSessionId}`,
-        runtime: context.runtime,
-        identity: context.identity,
-        nativeBindingRef: context.nativeBindingRef,
-        nativeSessionRef: session.nativeSessionRef,
-        launch: current?.launch ?? null,
-        location: current?.location ?? {
-          cwd: session.cwd,
-          project: null,
-          repository: null,
-          worktree: null,
-        },
-        metadata: {
-          title: session.title ?? current?.metadata.title ?? null,
-          model: current?.metadata.model ?? null,
-          effort: current?.metadata.effort ?? null,
-        },
-        liveness: 'active',
-        process: { pid: session.pid, startFingerprint: session.startFingerprint },
-        workflow: current?.workflow ?? {
-          status: 'unfinished',
-          inbox: true,
-          nextAction: null,
-          priority: null,
-          note: null,
-          relatedIssue: null,
-          relatedReview: null,
-        },
-        resume: current?.resume ?? {
-          state: 'blocked',
-          diagnostic: 'SESSION_DISCOVERED_UNBOUND',
-          lastVerifiedAt: null,
-          lastPlanDigest: null,
-        },
-        timestamps: {
-          createdAt: current?.timestamps.createdAt ?? timestamp,
-          updatedAt: monotonicUpdatedAt(timestamp, current),
-          lastActivityAt: monotonicActivityAt(timestamp, current),
-        },
-        lifecycle: current?.lifecycle ?? {
-          bindingId: null,
-          sequence: 0,
-          timestamp: null,
-        },
-      });
-      return {
-        registry: {
-          ...registry,
-          records: current
-            ? registry.records.map((value) => (value.recordId === recordId ? record : value))
-            : [...registry.records, record],
-        },
-        result: undefined,
+        return parseSessionRecord({
+          ...record,
+          liveness,
+          process,
+          timestamps: { ...record.timestamps, updatedAt: monotonicUpdatedAt(capturedAt, record) },
+        });
       };
-    });
+      if (!partition.records.some((record) => desired(record) !== record)) {
+        continue;
+      }
+      const result = await this.store.transaction(
+        partition.identity,
+        partition.runtime,
+        (registry) => {
+          const records = registry.records.map((record) => {
+            const sample = sampled.get(record.recordId);
+            const originally = partition.records.find((item) => item.recordId === record.recordId);
+            if (
+              sample &&
+              (!originally ||
+                record.process?.pid !== sample.pid ||
+                record.process.startFingerprint !== sample.fingerprint)
+            ) {
+              return record;
+            }
+            return desired(record);
+          });
+          return { registry: { ...registry, records }, result: records };
+        },
+      );
+      for (const record of result) {
+        if (
+          record.launch !== null &&
+          (scope.recordId === undefined || record.recordId === scope.recordId)
+        ) {
+          final.set(record.recordId, record);
+        }
+      }
+    }
+    return {
+      records: [...final.values()].sort((a, b) => a.recordId.localeCompare(b.recordId)),
+      diagnostics: recovered.diagnostics.slice(0, 128),
+    };
   }
 }
 

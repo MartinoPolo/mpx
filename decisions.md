@@ -48,6 +48,22 @@ This document is the durable implementation source of truth. Linked technical do
 - Managed worktree creation, preparation, and removal are repository-locked and conservative. Pi handoff may fork Pi-owned session entries but never moves uncommitted changes or deletes worktrees automatically.
 - Preparation executes revalidated allowlisted argument vectors without shell-string evaluation. The per-user port registry is authoritative; `.worktree-ports.json` is only a verified projection.
 
+## Session discovery and handoff simplification
+
+### Managed-only inventory without authentication preflight
+
+Decided: 2026-09-10
+What: MPX inventories only launch-bound managed sessions; Agent Resurrect owns separate native discovery. Remove external-session adoption and listing-time authentication availability probes. Listing consumes lifecycle events once, shares fresh bounded process inspection, and writes only changed facts. Return managed resume metadata, native identity, and source-specific uncertainty together through a versioned response.
+Why: Running-session inventory is not authentication readiness or native-session adoption; combining them duplicates work and obscures ownership.
+Rejected: Native fallback authority, stale cross-request liveness caches, PID-only verification, and removing Claude discovery before its managed lifecycle/process identity can reliably replace it. Launch/resume account, root, binding, and authorization checks remain required.
+
+### Worktree handoff preserves ownership and conversation
+
+Decided: 2026-09-10
+What: A native-origin worktree handoff remains native and may fork conversation history into another validated checkout. An MPX-managed session may continue in place when the prepared destination is already current, but a managed cross-root handoff is refused after preparation: the destination is preserved and requires a fresh managed Pi launch. Any partial managed launch marker fails closed. No automatic AI compaction is performed.
+Why: Pi session replacement tears down the source before constructing the replacement and continues to use launch-fixed context, projection, skill, and lifecycle resource paths. The extension API cannot safely replace those bindings or roll back a failed replacement, so reusing them would misrepresent the destination while native fallback would discard managed ownership.
+Rejected: Same-tab managed rebinding, process-environment mutation, raw Pi fallback, automatic new tabs, forged launch bindings, adopting the replacement from lifecycle tracking, inferring identity from the destination, or requiring Herdr. A future terminal framework may provide a safe fresh-launch handoff boundary.
+
 ## Verification boundaries
 
 - Tests protect distinct observable behavior or a concrete risk, not changing counts or coverage quotas. Prefer one authoritative test at the lowest useful boundary, adding adapter or integration coverage only for real boundary differences. Do not add runtime tests solely for TypeScript aliases, constants, schema layout, fake interfaces, or duplicate same-path matrices.

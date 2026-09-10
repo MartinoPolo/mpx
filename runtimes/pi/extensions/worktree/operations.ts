@@ -22,6 +22,12 @@ export interface WorkspaceHubInvocation {
   argumentPrefix: string[];
 }
 
+export interface WorktreePreparation {
+  path: string;
+  alreadyCurrent: boolean;
+  warning?: string;
+}
+
 export function resolveWorkspaceHubInvocation(
   environment: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
@@ -332,64 +338,73 @@ export async function prepareWorktree(
   cwd: string,
   execute: Execute,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<WorktreePreparation> {
   validateRequest(request);
   const git = (args: string[], directory = cwd) =>
     checkedExecute(execute, 'git', args, directory, signal);
+  const currentDirectory = await realpath(cwd);
   const sourceRoot = await realpath(await git(['rev-parse', '--show-toplevel']));
   const sourceCommonDirectory = await realpath(
     await git(['rev-parse', '--path-format=absolute', '--git-common-dir']),
   );
   let target: string;
+  let warning: string | undefined;
   if (request.action === 'create') {
     await git(['check-ref-format', '--branch', request.name!]);
     const existingTarget = findWorktreeForBranch(
       await git(['worktree', 'list', '--porcelain', '-z'], sourceRoot),
       request.name!,
     );
-    try {
-      const hub = resolveWorkspaceHubInvocation();
-      const output = await checkedExecute(
-        execute,
-        hub.command,
-        [
-          ...hub.argumentPrefix,
-          '--cwd',
-          sourceRoot,
-          '--json',
-          'workspace',
-          'create',
-          request.name!,
-          '--base',
-          request.base ?? 'HEAD',
-        ],
-        sourceRoot,
-        signal,
-      );
-      target = parseWorkspaceCreateResult(output);
-    } catch (error) {
-      signal.throwIfAborted();
-      const hubFailure = error instanceof Error ? error.message : String(error);
-      let recoveredTarget: string | undefined;
+    const canonicalExistingTarget =
+      existingTarget === undefined ? undefined : await realpath(existingTarget);
+    if (request.base === undefined && canonicalExistingTarget === sourceRoot) {
+      target = canonicalExistingTarget;
+    } else {
       try {
-        const inventory = await git(['worktree', 'list', '--porcelain', '-z'], sourceRoot);
-        recoveredTarget = findWorktreeForBranch(inventory, request.name!);
-      } catch (recoveryError) {
+        const hub = resolveWorkspaceHubInvocation();
+        const output = await checkedExecute(
+          execute,
+          hub.command,
+          [
+            ...hub.argumentPrefix,
+            '--cwd',
+            sourceRoot,
+            '--json',
+            'workspace',
+            'create',
+            request.name!,
+            '--base',
+            request.base ?? 'HEAD',
+          ],
+          sourceRoot,
+          signal,
+        );
+        target = parseWorkspaceCreateResult(output);
+      } catch (error) {
         signal.throwIfAborted();
-        throw new Error(
-          `MPX workspace Hub is unavailable or creation failed: ${hubFailure}\nGit could not resolve a partially created worktree: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
-        );
+        const hubFailure = error instanceof Error ? error.message : String(error);
+        let recoveredTarget: string | undefined;
+        try {
+          const inventory = await git(['worktree', 'list', '--porcelain', '-z'], sourceRoot);
+          recoveredTarget = findWorktreeForBranch(inventory, request.name!);
+        } catch (recoveryError) {
+          signal.throwIfAborted();
+          throw new Error(
+            `MPX workspace Hub is unavailable or creation failed: ${hubFailure}\nGit could not resolve a partially created worktree: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+          );
+        }
+        if (recoveredTarget === undefined || existingTarget !== undefined) {
+          const manualRecovery =
+            existingTarget === undefined
+              ? 'No matching worktree was reported by Git. As a manual fallback, create the requested branch and worktree with Git, then use /worktree --enter <path>.'
+              : 'The matching worktree existed before this request, so it was not entered automatically. Inspect git worktree list and use /worktree --enter <path> if it is the intended checkout.';
+          throw new Error(
+            `MPX workspace Hub is unavailable or creation failed: ${hubFailure}\n${manualRecovery}`,
+          );
+        }
+        target = recoveredTarget;
+        warning = `MPX workspace Hub reported a failure, but Git reported the newly created worktree. Continuing with the validated checkout.\n${hubFailure}`;
       }
-      if (recoveredTarget === undefined || existingTarget !== undefined) {
-        const manualRecovery =
-          existingTarget === undefined
-            ? 'No matching worktree was reported by Git. As a manual fallback, create the requested branch and worktree with Git, then use /worktree --enter <path>.'
-            : 'The matching worktree existed before this request, so it was not entered automatically. Inspect git worktree list and use /worktree --enter <path> if it is the intended checkout.';
-        throw new Error(
-          `MPX workspace Hub is unavailable or creation failed: ${hubFailure}\n${manualRecovery}`,
-        );
-      }
-      target = recoveredTarget;
     }
   } else {
     target = path.resolve(cwd, request.path!);
@@ -405,9 +420,10 @@ export async function prepareWorktree(
   if (sourceCommonDirectory !== targetCommonDirectory) {
     throw new Error('The destination belongs to a different Git repository.');
   }
-  if (sourceRoot === targetRoot) {
-    throw new Error('Pi is already in that worktree.');
-  }
   signal.throwIfAborted();
-  return targetRoot;
+  return {
+    path: targetRoot,
+    alreadyCurrent: currentDirectory === targetRoot,
+    ...(warning === undefined ? {} : { warning }),
+  };
 }

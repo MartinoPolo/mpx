@@ -305,7 +305,7 @@ describe('canonical CLI dispatch', () => {
     expect(JSON.stringify(malformed)).not.toContain('HIDDEN');
   });
 
-  it('uses production Pi discovery to normalize stale durable liveness without touching host roots', async () => {
+  it('does not adopt or list an unbound native Pi session', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'mpx-cli-production-list-'));
     temporaryRoots.push(root);
     const appData = path.join(root, 'roaming');
@@ -414,16 +414,7 @@ describe('canonical CLI dispatch', () => {
       ok: true,
       data: {
         kind: 'session-list',
-        records: [
-          {
-            recordId: 'durable-pi',
-            runtimeQualifiedId: 'pi:native',
-            identity,
-            nativeBindingRef,
-            liveness: 'inactive',
-            process: null,
-          },
-        ],
+        records: [],
       },
     });
     expect(await store.readNativeBinding(nativeBindingRef)).not.toHaveProperty('accountBindingRef');
@@ -860,7 +851,7 @@ describe('canonical CLI dispatch', () => {
     ).toBe(0);
     expect(JSON.parse(executeIo.out.join(''))).toMatchObject({
       ok: true,
-      data: { schemaVersion: 1, records: [] },
+      data: { schemaVersion: 2, records: [], diagnostics: [] },
     });
 
     const helpIo = captureIo();
