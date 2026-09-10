@@ -39,8 +39,8 @@ unattended belongs in raw Playwright — see
 
 ## Input from Parent
 
-Target URL (default `http://localhost:3000`), numbered testing requirements with expected outcomes, and optional auth
-context.
+Actual server URL supplied by the parent, numbered testing requirements with expected outcomes, and optional auth
+context. If the URL is missing, request it from the parent rather than assuming a port.
 
 ## Execution Workflow
 

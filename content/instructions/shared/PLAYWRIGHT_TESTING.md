@@ -10,7 +10,8 @@ deterministic, assertable, and usable in headless CI. Use `mpx-chrome-devtools-t
 checks, performance traces, or audits that the repeatable runner does not cover.
 
 Discover the project's runner, dev-server command and port, authentication route, and changed surfaces from repository
-instructions and configuration. Credentials may be read from approved private local configuration but never hardcoded,
+instructions, `package.json`, and referenced configuration. Follow the shared dev-server startup policy; use the actual
+server URL for browser checks. Credentials may be read from approved private local configuration but never hardcoded,
 echoed, copied into evidence, or committed.
 
 ## Browser isolation
@@ -29,9 +30,9 @@ agent profile needs exclusive ownership: report contention rather than deleting 
 
 ## Reliability principles
 
-1. **Prove checkout freshness first.** Assert a DOM or computed-style fact introduced by the change. A mismatch means
-   the server is stale or belongs to another checkout; stop it through the approved process route, start this checkout,
-   and repeat the gate.
+1. **Prove checkout freshness first.** Assert a DOM or computed-style fact introduced by the change. On mismatch,
+   investigate stale content or a wrong-checkout server. Restart only a server owned by this task; otherwise use a
+   reliably configured alternative port or ask before stopping the existing server. Repeat the freshness gate.
 2. **Assert measured outcomes.** Prefer computed style, geometry, accessibility state, or DOM facts. Screenshots are
    evidence, not the only assertion.
 3. **Authenticate programmatically.** Use the project's test/auth API and storage state rather than driving the login

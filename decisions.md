@@ -47,6 +47,7 @@ This document is the durable implementation source of truth. Linked technical do
 - The MPX session registry contains bounded lifecycle and resume metadata only; native runtimes own session files. Resume rebuilds and revalidates the launch before spawning. Incompatible session snapshot or record schema 2 authority requires relaunch rather than reinterpretation.
 - Managed worktree creation, preparation, and removal are repository-locked and conservative. Pi handoff may fork Pi-owned session entries but never moves uncommitted changes or deletes worktrees automatically.
 - Preparation executes revalidated allowlisted argument vectors without shell-string evaluation. The per-user port registry is authoritative; `.worktree-ports.json` is only a verified projection.
+- Ordinary dev-server and Storybook startup uses `package.json` and referenced configuration; missing MPX port metadata does not block project defaults. When a port is occupied, choose an alternative only when the server and dependent URLs can be configured reliably; otherwise ask before stopping the existing server. This does not bypass managed lease validation.
 
 ## Session discovery and handoff simplification
 

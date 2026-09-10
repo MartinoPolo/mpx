@@ -44,7 +44,10 @@ test('destination-bound fork retains history and continues from the active leaf'
       true,
     );
     assert.equal(handoff.customType, 'worktree-handoff');
-    assert.match(handoff.content, /read its \.worktree-ports\.json before starting servers/u);
+    assert.match(
+      handoff.content,
+      /Follow the destination's loaded instructions and project server configuration\./u,
+    );
     assert.equal(handoff.parentId, activeLeaf);
     assert.equal(handoff.details.cwd, targetCwd);
   } finally {

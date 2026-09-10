@@ -39,7 +39,7 @@ export function forkWorktreeSession(context: ExtensionContext, target: string): 
     'worktree-handoff',
     `Working directory changed from ${context.cwd} to ${target}. This is the active checkout for all subsequent work. ` +
       'Older absolute paths in the conversation still refer to the previous checkout; do not use them for implementation. ' +
-      "Follow the destination's loaded instructions and read its .worktree-ports.json before starting servers. " +
+      "Follow the destination's loaded instructions and project server configuration. " +
       'Worktree Hub may still be installing dependencies in the background; .worktree-install.log appears only if installation fails.',
     true,
     { sourceSession: sourceFile, sourceCwd: context.cwd, cwd: target },
