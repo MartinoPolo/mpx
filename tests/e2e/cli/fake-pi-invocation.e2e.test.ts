@@ -53,7 +53,6 @@ it.each(['native-skill', 'sample'])(
     await Promise.all([
       mkdir(path.join(root, 'agents'), { recursive: true }),
       mkdir(path.join(root, 'project-skills', 'skills', 'sample'), { recursive: true }),
-      mkdir(path.join(root, 'instructions', 'pi'), { recursive: true }),
     ]);
     const context = createRuntimeContext({
       launchKey: h('a'),
@@ -80,7 +79,6 @@ it.each(['native-skill', 'sample'])(
     const agentBytes = Buffer.from('compiled agent\n'),
       skillBytes = Buffer.from('---\nname: sample\ndescription: Managed sample\n---\n# Sample\n'),
       contextBytes = Buffer.from('{}\n'),
-      managedPromptBytes = Buffer.from('Managed fixture instructions.\n'),
       sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex'),
       manifest = {
         schemaVersion: 2,
@@ -141,7 +139,6 @@ it.each(['native-skill', 'sample'])(
       writeFile(path.join(root, 'agents', 'Explore.md'), agentBytes),
       writeFile(path.join(root, 'project-skills', 'skills', 'sample', 'SKILL.md'), skillBytes),
       writeFile(contextFile, contextBytes),
-      writeFile(path.join(root, 'instructions', 'pi', 'MANAGED_PROMPT.md'), managedPromptBytes),
       writeFile(
         fake,
         `process.stdout.write(JSON.stringify({argv:process.argv.slice(2),accountRoot:process.env.PI_CODING_AGENT_DIR,bridge:process.env.MPX_PI_LAUNCH_PRIVATE_BRIDGE,status:process.env.MPX_STATUS_SNAPSHOT_FILE,runtimeStatus:process.env.MPX_RUNTIME_STATUS_ENVELOPE_FILE}));`,
@@ -154,11 +151,6 @@ it.each(['native-skill', 'sample'])(
         bytes: manifestBytes.byteLength,
       },
       { path: 'agents/Explore.md', sha256: sha256(agentBytes), bytes: agentBytes.byteLength },
-      {
-        path: 'instructions/pi/MANAGED_PROMPT.md',
-        sha256: sha256(managedPromptBytes),
-        bytes: managedPromptBytes.byteLength,
-      },
       {
         path: 'runtime-context.json',
         sha256: sha256(contextBytes),
@@ -229,11 +221,8 @@ it.each(['native-skill', 'sample'])(
       argv: plan.args,
       accountRoot: root.replaceAll('\\', '/'),
     });
-    expect(observation.argv).toContain('--no-context-files');
-    expect(observation.argv).toContain('--append-system-prompt');
-    expect(observation.argv).toContain(
-      path.join(root, 'instructions', 'pi', 'MANAGED_PROMPT.md').replaceAll('\\', '/'),
-    );
+    expect(observation.argv).not.toContain('--no-context-files');
+    expect(observation.argv).not.toContain('--append-system-prompt');
     expect(observation.argv).not.toContain('--no-extensions');
     expect(observation.argv).not.toContain('--extension');
     const skillPaths = plan.args.flatMap((argument, index) =>

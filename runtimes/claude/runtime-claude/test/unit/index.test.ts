@@ -80,18 +80,11 @@ async function fixture() {
   const canonical = path.join(root, 'skills'),
     agents = path.join(root, 'agents'),
     shared = path.join(root, 'shared'),
-    instructions = path.join(root, 'instructions'),
-    globalInstructions = path.join(instructions, 'global', 'AGENTS.md'),
-    claudeInstructions = path.join(instructions, 'runtime', 'claude', 'CLAUDE.md'),
     outputStyle = path.join(root, 'output-styles', 'mpx-terse.md');
   await mkdir(canonical);
   await mkdir(shared);
   await mkdir(agents);
   await mkdir(path.dirname(outputStyle));
-  await mkdir(path.dirname(globalInstructions), { recursive: true });
-  await mkdir(path.dirname(claudeInstructions), { recursive: true });
-  await writeFile(globalInstructions, 'GLOBAL café\n');
-  await writeFile(claudeInstructions, '@instructions/global/AGENTS.md\n');
   await writeFile(
     outputStyle,
     '---\nname: mpx-terse\ndescription: Concise, structured, action-first output\n---\n\n# Response style\n\nAnswer first.\n',
@@ -173,8 +166,6 @@ async function fixture() {
     canonical,
     agents,
     outputStyle,
-    globalInstructions,
-    claudeInstructions,
     catalog,
     manifest,
     artifact,
@@ -427,11 +418,9 @@ describe('Claude projection', () => {
       '.claude-plugin/plugin.json',
       'active-content.json',
       'agents/Explore.md',
-      'CLAUDE.md',
       'hooks/dangerous-command-policy.mjs',
       'hooks/hooks.json',
       'hooks/runtime-guard.mjs',
-      'instructions/global/AGENTS.md',
       'output-styles/mpx-terse.md',
       'runtime-context.json',
       'settings.json',
@@ -468,26 +457,21 @@ describe('Claude projection', () => {
     expect(
       Object.fromEntries(
         Object.entries(projected)
-          .filter(
-            ([name]) =>
-              name !== 'runtime-context.json' &&
-              name !== 'settings.json' &&
-              name !== 'CLAUDE.md' &&
-              !name.startsWith('instructions/'),
-          )
+          .filter(([name]) => name !== 'runtime-context.json' && name !== 'settings.json')
           .map(([name, value]) => [name, value.sha256]),
       ),
     ).toMatchSnapshot();
   });
-  it('projects managed Claude instructions while preserving canonical and compiled bytes', async () => {
+  it('leaves native Claude instruction discovery unsuppressed while preserving compiled bytes', async () => {
     const f = await fixture();
     const outputRoot = path.join(f.root, 'compiler-pass-through');
     await buildClaudePlugin({ ...f, outputRoot });
-    expect(await readFile(path.join(outputRoot, 'instructions/global/AGENTS.md'))).toEqual(
-      await readFile(f.globalInstructions),
-    );
-    const wrapper = await readFile(path.join(outputRoot, 'CLAUDE.md'), 'utf8');
-    expect(wrapper.match(/@instructions\/global\/AGENTS\.md/gu)).toHaveLength(1);
+    await expect(lstat(path.join(outputRoot, 'CLAUDE.md'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(
+      lstat(path.join(outputRoot, 'instructions/global/AGENTS.md')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
     for (const file of f.compiledContent.files) {
       expect(await readFile(path.join(outputRoot, ...file.relativePath.split('/')))).toEqual(
         Buffer.from(file.bytes),
@@ -497,10 +481,10 @@ describe('Claude projection', () => {
       ...f,
       artifactsRoot: path.join(f.root, 'managed-instruction-artifacts'),
     });
-    expect(published.files).toEqual(
+    expect(published.files).not.toEqual(
       expect.arrayContaining(['CLAUDE.md', 'instructions/global/AGENTS.md']),
     );
-    await writeFile(path.join(published.directory, 'instructions/global/AGENTS.md'), 'changed\n');
+    await writeFile(path.join(published.directory, 'runtime-context.json'), 'changed\n');
     await expect(
       revalidateRuntimeArtifact(published.directory, published.reference),
     ).resolves.toMatchObject({ valid: false });
@@ -744,9 +728,10 @@ describe('Claude projection', () => {
       permissionDecisionReason: expect.stringContaining('WRONG_PACKAGE_MANAGER'),
     });
     const session = await runGuard(guard, environment, { hook_event_name: 'SessionStart' });
-    expect(JSON.parse(session.stdout).hookSpecificOutput.additionalContext).toContain(
-      'Launch-bound session',
-    );
+    const sessionContext = JSON.parse(session.stdout).hookSpecificOutput.additionalContext;
+    expect(sessionContext).toContain('Launch-bound session');
+    expect(sessionContext).toContain('Detected project package manager: pnpm.');
+    expect(sessionContext).not.toMatch(/conventional commit|Code quality|dangerous destructive/iu);
     const compact = await runGuard(guard, environment, { hook_event_name: 'PreCompact' });
     expect(JSON.parse(compact.stdout).hookSpecificOutput.additionalContext).toContain(
       'Keep the launch binding.',

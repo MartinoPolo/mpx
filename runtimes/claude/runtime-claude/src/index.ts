@@ -62,8 +62,6 @@ export interface ClaudeBuildInput {
   readonly skillPlan: SkillProjectionPlan;
   readonly compiledContent: CompiledContentTree;
   readonly outputStyle: string;
-  readonly globalInstructions: string;
-  readonly claudeInstructions: string;
   readonly outputRoot: string;
   readonly statusSnapshot: StatusSnapshot;
   readonly runtimeStatusEnvelope?: RuntimeStatusEnvelope;
@@ -102,76 +100,6 @@ function pluginJson(name: 'mpx' | 'skill' = 'mpx') {
   return `${JSON.stringify({ name, version: '0.0.0', description }, null, 2)}\n`;
 }
 const MAX_OUTPUT_STYLE_BYTES = 1024 * 1024;
-async function canonicalInstruction(
-  file: string,
-  expectedTail: readonly string[],
-): Promise<Uint8Array> {
-  const absolute = path.resolve(file);
-  const actualTail = absolute.split(path.sep).slice(-expectedTail.length);
-  if (absolute !== file || actualTail.join('/') !== expectedTail.join('/')) {
-    throw new ClaudeRuntimeError(
-      'INSTRUCTION_ESCAPE',
-      'canonical instruction path must be absolute and contained by its expected instructions directory',
-    );
-  }
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  try {
-    handle = await open(absolute, 'r');
-    const initial = await handle.stat(),
-      named = await lstat(absolute);
-    if (
-      !initial.isFile() ||
-      !named.isFile() ||
-      named.isSymbolicLink() ||
-      initial.dev !== named.dev ||
-      initial.ino !== named.ino ||
-      initial.size > MAX_OUTPUT_STYLE_BYTES
-    ) {
-      throw new ClaudeRuntimeError(
-        'INSTRUCTION_INVALID',
-        'canonical instruction must be a bounded regular non-symlink file',
-      );
-    }
-    const bytes = Buffer.alloc(initial.size);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
-      if (result.bytesRead === 0) {
-        throw new ClaudeRuntimeError('INSTRUCTION_CHANGED', 'canonical instruction changed');
-      }
-      offset += result.bytesRead;
-    }
-    if ((await handle.read(Buffer.alloc(1), 0, 1, bytes.length)).bytesRead !== 0) {
-      throw new ClaudeRuntimeError('INSTRUCTION_CHANGED', 'canonical instruction changed');
-    }
-    const final = await handle.stat(),
-      finalNamed = await lstat(absolute),
-      resolved = await realpath(absolute);
-    if (
-      resolved !== absolute ||
-      final.dev !== initial.dev ||
-      final.ino !== initial.ino ||
-      final.size !== initial.size ||
-      final.mtimeMs !== initial.mtimeMs ||
-      finalNamed.isSymbolicLink()
-    ) {
-      throw new ClaudeRuntimeError('INSTRUCTION_CHANGED', 'canonical instruction changed');
-    }
-    try {
-      new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-      throw new ClaudeRuntimeError('INSTRUCTION_MALFORMED', 'canonical instruction must be UTF-8');
-    }
-    return bytes;
-  } catch (error) {
-    if (error instanceof ClaudeRuntimeError) {
-      throw error;
-    }
-    throw new ClaudeRuntimeError('INSTRUCTION_INVALID', 'canonical instruction cannot be read');
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
-}
 async function canonicalOutputStyle(file: string): Promise<Uint8Array> {
   const absolute = path.resolve(file);
   if (
@@ -398,7 +326,7 @@ const outputContext=(event,additionalContext)=>console.log(JSON.stringify({hookS
 const deny=decision=>console.log(JSON.stringify({hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:decision.code+": "+decision.message}}));
 const run=(file,args,timeout=120000)=>{const result=spawnSync(file,args,{cwd:process.cwd(),encoding:"utf8",windowsHide:true,timeout,maxBuffer:1024*1024,shell:false});return{status:result.status??(result.error?2:0),stdout:String(result.stdout??"").slice(-65536),stderr:String(result.stderr??result.error?.message??"").slice(-65536)}};
 function manager(){if(["npm","pnpm","yarn","bun"].includes(process.env.MPX_PACKAGE_MANAGER))return process.env.MPX_PACKAGE_MANAGER;let current=process.cwd();for(let depth=0;depth<64;depth++){for(const [name,value] of [["bun.lockb","bun"],["bun.lock","bun"],["pnpm-lock.yaml","pnpm"],["yarn.lock","yarn"],["package-lock.json","npm"]])if(existsSync(path.join(current,name)))return value;const parent=path.dirname(current);if(parent===current)break;current=parent}return null}
-${policySource.packageDecision}function projectContext(){const selected=manager(),lines=[];if(selected)lines.push("This project uses "+selected+". Use '"+selected+"' for all package commands.","Run '"+selected+" run typecheck' or the project's check script before committing.");lines.push("Git workflow: use conventional commit subjects: type(scope): description.","Code quality: fix type and lint issues rather than suppressing them.","Safety: dangerous destructive commands are blocked by policy.");return lines.join("\n")}
+${policySource.packageDecision}function projectContext(){const selected=manager();return selected?"Detected project package manager: "+selected+".":""}
 function machineContext(){const labels={MPX_PROJECTS:"personal projects",MPX_WORK:"work repositories",MPX_CLONED:"cloned OSS repositories",MPX_APPS:"local apps",MPX_ONEDRIVE:"OneDrive root",MPX_AI_GENERATED:"AI-generated assets",MPX_OBSIDIAN_VAULT:"Obsidian vault"},lines=[];for(const [name,label] of Object.entries(labels))if(process.env[name])lines.push("- "+name+" = "+process.env[name]+" - "+label);return lines.length?["Machine roots (from MPX_* env vars; use these instead of guessing paths):",...lines,"Paths outside the working directory should be resolved from these variables."].join("\n"):""}
 ${policySource.preCommitDecision}${policySource.fallowDecision}function quality(input){const candidate=input.tool_input?.file_path??input.tool_input?.notebook_path;if(typeof candidate!=="string"||candidate.length>4096||path.isAbsolute(candidate)||candidate.split(/[\\/]/u).includes(".."))return;const ext=path.extname(candidate).slice(1).toLowerCase(),selected=manager(),runner=selected==="pnpm"?["pnpm",["exec"]]:selected==="yarn"?["yarn",["exec"]]:selected==="bun"?["bunx",[]]:["npx",[]],plans=[],js=["js","jsx","ts","tsx","mjs","cjs","mts","cts","svelte","vue"].includes(ext),data=["json","jsonc","css","scss","less","html","md","yaml","yml"].includes(ext),vp=["vp","vp.cmd","vp.ps1"].some(name=>existsSync(path.join(process.cwd(),"node_modules",".bin",name)));if(ext==="py"&&existsSync(path.join(process.cwd(),"pyproject.toml"))&&/\[tool\.ruff/u.test(readFileSync(path.join(process.cwd(),"pyproject.toml"),"utf8").slice(0,1024*1024))){plans.push(["ruff",["format"],false],["ruff",["check","--fix"],true])}else if(vp&&(js||data)){plans.push(["vp",["fmt"],false]);if(js)plans.push(["vp",["lint","--fix"],true])}else if(existsSync(path.join(process.cwd(),"biome.json"))&&(js||["json","jsonc","css"].includes(ext))){plans.push(["biome",["format","--write"],false]);if(js)plans.push(["biome",["lint","--fix"],true])}else{const prettier=[".prettierrc","prettier.config.js","prettier.config.mjs"].some(name=>existsSync(path.join(process.cwd(),name))),eslint=["eslint.config.js","eslint.config.mjs","eslint.config.ts",".eslintrc"].some(name=>existsSync(path.join(process.cwd(),name)));if(prettier)plans.push(["prettier",["--write"],false]);if(eslint&&/[jt]sx?/u.test(ext))plans.push(["eslint",["--fix"],true])}const failures=[];for(const [tool,args,report] of plans){const result=run(runner[0],[...runner[1],tool,...args,candidate]);if(report&&result.status!==0)failures.push((result.stderr||result.stdout).split("\n").slice(-20).join("\n"))}if(failures.length)outputContext("PostToolUse","Post-write lint failed:\n"+failures.join("\n"))}
 async function main(){let input;try{input=await readHookInput()}catch{restart("HOOK_INPUT_INVALID")}const metadata=await validateBinding(),event=input.hook_event_name,tool=input.tool_name;if(event==="SessionStart"){await verifyTree(metadata);await emitLifecycle(input,"start",true);const context=[process.env.MPX_SESSION_CONTEXT,process.env.MPX_MACHINE_CONTEXT??machineContext(),process.env.MPX_PROJECT_CONTEXT??projectContext()].filter(Boolean).join("\n");if(context)outputContext("SessionStart",context);}else if(event==="PreCompact"){const context=[process.env.MPX_COMPACT_INSTRUCTIONS,process.env.MPX_PROJECT_CONTEXT??projectContext()].filter(Boolean).join("\n");if(context)outputContext("PreCompact",context);}else if(event==="Notification"||event==="Stop"||event==="SessionEnd"){if(event==="Notification")await emitLifecycle(input,"info",false);else if(event==="Stop")await emitLifecycle(input,"activity",false).catch(()=>{});else await emitLifecycle(input,"shutdown",true);if(process.platform==="win32"&&process.env.MPX_SESSION_ROLE!=="child"&&event!=="SessionEnd")process.stderr.write("\\x07");}else if(event==="PreToolUse"&&tool==="Skill"){const identity=input.tool_input?.skill??input.tool_input?.name;if(typeof identity!=="string"||!/^[a-z0-9][a-z0-9-]*$/u.test(identity))restart("SKILL_BODY_INVALID");const prefix="skills/"+identity+"/";let matched=0;for(const item of metadata.fileMap)if(item.path.startsWith(prefix)){matched+=1;await validateExpected(metadata,item.path)}if(!matched)restart("SKILL_BODY_INVALID");}else if(event==="PreToolUse"&&(tool==="Agent"||tool==="Task")){const identity=input.tool_input?.subagent_type??input.tool_input?.agent;if(typeof identity==="string"&&/^[A-Za-z0-9][A-Za-z0-9-]*$/u.test(identity))await validateExpected(metadata,"agents/"+identity+".md");else for(const item of metadata.fileMap)if(item.path.startsWith("agents/")&&!item.path.startsWith("agents/references/"))await validateExpected(metadata,item.path);}else if(event==="PreToolUse"&&tool==="Bash"){const command=input.tool_input?.command,packaging=packageDecision(command);if(packaging){deny(packaging);return}const commit=preCommit(command);if(commit?.block){deny(commit.block);return}await validateExpected(metadata,"hooks/dangerous-command-policy.mjs");const {classifyDangerousCommand}=await import("./dangerous-command-policy.mjs");const decision=classifyDangerousCommand(command);if(decision.action==="block"){deny(decision);return}const gate=fallow(command);if(gate?.block){deny(gate.block);return}const warnings=[commit?.warning,gate?.warning].filter(Boolean);if(warnings.length)outputContext("PreToolUse",warnings.join("\n"));}else if(event==="PostToolUse"&&["Write","Edit","MultiEdit","NotebookEdit"].includes(tool)){await emitLifecycle(input,"activity",false);quality(input);}else if((event==="PostToolUse"||event==="PostToolUseFailure")&&tool==="Bash"){if(event==="PostToolUse")await emitLifecycle(input,"activity",false);const command=input.tool_input?.command??"",stderr=input.tool_response?.stderr??"";if(/\b(?:npm|pnpm|yarn|bun)\s+(?:install|add)\b/u.test(command)&&/vulnerabilit(?:y|ies)/iu.test(String(stderr).slice(0,65536)))outputContext(event,"Package install detected vulnerabilities. Consider running the project audit policy.");else if(event==="PostToolUse"&&/\bgit\s+push\b/u.test(command)&&process.env.MPX_PULL_REQUEST_STATE==="missing")outputContext(event,"Pushed to remote. No pull request exists for this branch yet.");else if(event==="PostToolUse"&&/\bmpx\s+review\s+create\b/u.test(command)){const match=String(input.tool_response?.stdout??"").match(/https:\/\/[^\s]+/u);if(match&&match[0].length<=2048)outputContext(event,"Pull request created: "+match[0]);}}}
@@ -444,17 +372,6 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     Uint8Array.from(file.bytes),
   ]);
   const outputStyle = await canonicalOutputStyle(input.outputStyle);
-  const globalInstructions = await canonicalInstruction(input.globalInstructions, [
-    'instructions',
-    'global',
-    'AGENTS.md',
-  ]);
-  const claudeInstructions = await canonicalInstruction(input.claudeInstructions, [
-    'instructions',
-    'runtime',
-    'claude',
-    'CLAUDE.md',
-  ]);
   const runtimeContext = parseRuntimeContext(input.runtimeContext),
     runtimeStatus = input.runtimeStatusEnvelope
       ? parseRuntimeStatusEnvelope(input.runtimeStatusEnvelope)
@@ -477,8 +394,6 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     [
       '.claude-plugin/plugin.json',
       'project-skills/.claude-plugin/plugin.json',
-      'CLAUDE.md',
-      'instructions/global/AGENTS.md',
       'output-styles/mpx-terse.md',
       'hooks/hooks.json',
       'hooks/dangerous-command-policy.mjs',
@@ -512,8 +427,6 @@ export async function buildClaudePlugin(input: ClaudeBuildInput): Promise<Claude
     for (const [relative, text] of projected) {
       await write(input.outputRoot, relative, text, files);
     }
-    await write(input.outputRoot, 'CLAUDE.md', claudeInstructions, files);
-    await write(input.outputRoot, 'instructions/global/AGENTS.md', globalInstructions, files);
     await write(input.outputRoot, 'output-styles/mpx-terse.md', outputStyle, files);
     await write(input.outputRoot, 'hooks/hooks.json', hooksJson, files);
     await write(

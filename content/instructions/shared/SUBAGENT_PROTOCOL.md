@@ -15,10 +15,10 @@ Only structured runtime configuration selects a model; prose model names do not.
 | `advanced`    | implementation, design, architecture, and deep analysis   |
 | `frontier`    | deliberate manual escalation for large orchestration only |
 
-An agent definition should declare its class and effort policy. Callers omit model selection for a declaring agent.
-Generic agents with no declaration require an explicit class at every call site. A runtime resolver maps class to an
-available model and records the resolved model in execution evidence. Concrete vendor model IDs never appear in
-canonical instructions.
+An agent definition should declare its semantic class and effort policy. `exploration` is a semantic model class;
+`medium` is its separate reasoning-effort setting. Callers omit model selection for a declaring agent. Generic agents
+with no declaration require an explicit class at every call site. A runtime resolver maps class to an available model
+and records the resolved model in execution evidence. Concrete vendor model IDs never appear in canonical instructions.
 
 Select by task horizon, not perceived difficulty. Bounded tasks benefit from smaller classes; open-ended loops need
 enough capability to avoid expensive wrong turns. `frontier` is not a standing automatic-agent class.
@@ -55,9 +55,10 @@ Treat tool declarations as least-privilege allowlists and runtime denials as sub
 narrower than declarations. Verify critical capability by attempting a safe bounded operation and recording the
 structured result, not by asking the model what it can do.
 
-MCP-dependent work uses an identity-owned approved route. Check capability availability first. If unavailable, return
-structured unsupported/manual handoff rather than silently switching to web search, direct APIs, provider CLIs, or
-copied credentials.
+MCP-dependent work uses an identity-owned approved route. Check capability availability first. Public documentation
+lookup may fall back to web search when local documentation and Context7 are unavailable. This fallback does not permit
+bypassing credential or provider policy: other unavailable MCP-dependent work returns a structured unsupported/manual
+handoff rather than silently switching to direct APIs, provider CLIs, or copied credentials.
 
 ## Built-in overrides and discovery
 

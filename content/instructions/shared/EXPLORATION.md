@@ -16,9 +16,9 @@ State the breadth and a stopping condition:
 | `medium`        | obvious locations plus one alternate naming convention                      |
 | `very thorough` | exhaust relevant conventions, sibling directories, configuration, and tests |
 
-Breadth controls search scope, not reasoning effort. The canonical explorer declares the `exploration` model class and
-medium effort. Runtime profiles resolve that semantic class to a concrete model accepted by the runtime's real `model`
-field, so callers of the declaring agent omit model selection.
+Breadth controls search scope, not reasoning effort. The canonical explorer declares `exploration` as its semantic model
+class and `medium` as its separate reasoning-effort setting. Runtime profiles resolve that semantic class to a concrete
+model accepted by the runtime's real `model` field, so callers of the declaring agent omit model selection.
 
 ## Prompt context explicitly
 
@@ -36,8 +36,10 @@ configured repository collection first. When a matching clone represents the rel
 its code as the primary implementation evidence.
 
 For current public API and version facts, or when no matching clone exists, use the identity-owned approved
-documentation route, normally `mpx-context7-docs-fetcher`. If neither source is available, return a structured
-unsupported/manual handoff rather than inventing an API from memory or local dependencies.
+documentation route, normally `mpx-context7-docs-fetcher`. If local documentation and Context7 are unavailable, public
+documentation lookup may fall back to web search. This does not permit bypassing credential or provider policy. If no
+approved source is available, return a structured unsupported/manual handoff rather than inventing an API from memory
+or local dependencies.
 
 ## Paths outside the working directory
 

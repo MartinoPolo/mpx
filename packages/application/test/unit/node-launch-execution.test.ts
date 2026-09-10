@@ -798,20 +798,10 @@ describe('Node launch execution runtime adapters', () => {
         runtimeStatusMaterializer: { materialize: async () => 'C:/state/runtime.json' },
         trustedExecutable: { executable: process.execPath, argvPrefix: [] },
         builder: async (input) => {
-          expect(input.cwd).toBe('C:/project');
-          expect(input.globalInstructions).toBe(
-            path.resolve(content.agentsRoot, '..', 'instructions', 'global', 'AGENTS.md'),
-          );
-          expect(input.claudeInstructions).toBe(
-            path.resolve(
-              content.agentsRoot,
-              '..',
-              'instructions',
-              'runtime',
-              'claude',
-              'CLAUDE.md',
-            ),
-          );
+          expect(input).not.toHaveProperty('cwd');
+          expect(input).not.toHaveProperty('globalInstructions');
+          expect(input).not.toHaveProperty('claudeInstructions');
+          expect(input).not.toHaveProperty('piAppendInstructions');
           return {
             directory: stateRoot,
             pluginDirectory: stateRoot,

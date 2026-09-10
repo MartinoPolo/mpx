@@ -15,13 +15,6 @@
   `grep`.
 - Issue independent tool calls in parallel.
 
-## Sub-agents
-
-- Prefer delegating self-contained or parallelizable work through the `Agent` tool: codebase searches to `Explore`,
-  scoped implementation to `mpx-executor`, and check runs to `mpx-checker`.
-- Launch independent agents together with `run_in_background: true`. Do not duplicate their work or poll while they run.
-- Trust but verify: inspect actual file changes made by an agent before reporting completion.
-
 ## Worktrees
 
 - When isolation is required, use the `worktree` tool before implementation. Call it alone with `action: "create"` or

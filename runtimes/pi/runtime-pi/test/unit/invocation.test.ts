@@ -50,7 +50,6 @@ const projectionDirectory = mkdtempSync(path.join(tmpdir(), 'pi-invocation-proje
 const agentBytes = Buffer.from('compiled agent\n');
 const canonicalSkillBytes = Buffer.from('canonical skill\n');
 const projectSkillBytes = Buffer.from('project skill\n');
-const managedPromptBytes = Buffer.from('managed prompt\n');
 const contentFiles = [
   { relativePath: 'agents/Explore.md', bytes: agentBytes },
   { relativePath: 'skills/mpx-canonical/SKILL.md', bytes: canonicalSkillBytes },
@@ -138,11 +137,6 @@ const projectionFileMap = [
     sha256: file.sha256,
     bytes: file.byteCount,
   })),
-  {
-    path: 'instructions/pi/MANAGED_PROMPT.md',
-    sha256: createHash('sha256').update(managedPromptBytes).digest('hex'),
-    bytes: managedPromptBytes.byteLength,
-  },
 ];
 const projectionFileMapHash = digest(projectionFileMap);
 const projectionReference: PublishedRuntimeArtifactReference = {
@@ -155,16 +149,11 @@ const projectionReference: PublishedRuntimeArtifactReference = {
   fileMapHash: projectionFileMapHash,
 };
 mkdirSync(path.join(projectionDirectory, 'agents'));
-mkdirSync(path.join(projectionDirectory, 'instructions', 'pi'), { recursive: true });
 mkdirSync(path.join(projectionDirectory, 'skills', 'mpx-canonical'), { recursive: true });
 mkdirSync(path.join(projectionDirectory, 'project-skills', 'skills', 'project-skill'), {
   recursive: true,
 });
 writeFileSync(path.join(projectionDirectory, 'active-content.json'), activeManifestBytes);
-writeFileSync(
-  path.join(projectionDirectory, 'instructions', 'pi', 'MANAGED_PROMPT.md'),
-  managedPromptBytes,
-);
 for (const file of contentFiles) {
   writeFileSync(path.join(projectionDirectory, ...file.relativePath.split('/')), file.bytes);
 }
@@ -312,11 +301,6 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
     cwd: 'C:/repo',
     args: [
       '--no-skills',
-      '--no-context-files',
-      '--append-system-prompt',
-      path
-        .join(projectionDirectory, 'instructions', 'pi', 'MANAGED_PROMPT.md')
-        .replaceAll('\\', '/'),
       '--skill',
       path
         .join(projectionDirectory, 'project-skills', 'skills', 'project-skill')
@@ -367,6 +351,8 @@ it('creates a hermetic Pi invocation with launch-current-compatible runtime-cont
   expect(plan.args).not.toEqual(
     expect.arrayContaining(['--auth', '--session', '--trust', '--cache']),
   );
+  expect(plan.args).not.toContain('--no-context-files');
+  expect(plan.args).not.toContain('--append-system-prompt');
 });
 
 it('does not expose a canonical-only skill manifest through native --skill', async () => {
@@ -610,11 +596,6 @@ it.each([
 
     expect(plan.args).toEqual([
       '--no-skills',
-      '--no-context-files',
-      '--append-system-prompt',
-      path
-        .join(projectionDirectory, 'instructions', 'pi', 'MANAGED_PROMPT.md')
-        .replaceAll('\\', '/'),
       '--skill',
       path
         .join(projectionDirectory, 'project-skills', 'skills', 'project-skill')

@@ -7,7 +7,7 @@ exports[`Claude projection > matches the complete Claude projection golden acros
   "agents/Explore.md": "13f19c7a5734059e2b181f136c5835c4ae50b6408ceae3c22d0af7541ddf8781",
   "hooks/dangerous-command-policy.mjs": "f5c85d95188a10784f4f6a30665494cc55a29f3281e3da04a575cc65be9ee8b2",
   "hooks/hooks.json": "71bbb7deb92f5efe5436d78fcc15c9c2a556330149bf1b6f56fa90d75d5107d7",
-  "hooks/runtime-guard.mjs": "70abbe940bf87260fc162d91385597b679d9034118bf95bf3b4dfe35002e1968",
+  "hooks/runtime-guard.mjs": "5fa1f79398d0a23c55b1e7e98f6891161cd7d9bc010671eba43740e7782f2054",
   "output-styles/mpx-terse.md": "f47fb096ae16b05836caae941a1262ca3626a8ea1129218a1c97cf2781f5aa2f",
   "skills/explicit/SKILL.md": "ccf714a8dc5172149c77db872b782eeb9c812f4ecdec517b471bc132e90bcda1",
   "skills/explicit/asset.bin": "edc81f7e4ee358fb91e94bd9bd74079c3dcba36f40f2c8a36e7ae0567afecc8f",

@@ -191,10 +191,6 @@ export interface LaunchProjectionBuildInput {
   readonly skillPlan: SkillProjectionPlan;
   readonly compiledContent: CompiledContentTree;
   readonly agentsRoot: string;
-  readonly cwd?: string;
-  readonly globalInstructions?: string;
-  readonly claudeInstructions?: string;
-  readonly piAppendInstructions?: string;
   readonly runtimeProfilesFile: string;
   readonly artifactsRoot: string;
   readonly runtimeContext: RuntimeContext;
@@ -328,13 +324,7 @@ async function buildProductionProjection(
     runtime: input.descriptor.runtime,
     plan: input.skillPlan,
   });
-  const instructionsRoot = path.join(input.agentsRoot, '..', 'instructions');
-  const globalInstructions =
-    input.globalInstructions ?? path.resolve(instructionsRoot, 'global', 'AGENTS.md');
   if (input.descriptor.runtime === 'pi') {
-    if (!input.cwd) {
-      throw new Error('Pi projection cwd is required');
-    }
     return buildPiProjection({
       skillPlan: input.skillPlan,
       compiledContent,
@@ -346,11 +336,6 @@ async function buildProductionProjection(
       currentBinding: input.skillPlan.binding,
       artifactsRoot: input.artifactsRoot,
       piRuntimeProfile: input.piRuntimeProfile!,
-      globalInstructions,
-      piAppendInstructions:
-        input.piAppendInstructions ??
-        path.resolve(instructionsRoot, 'runtime', 'pi', 'APPEND_SYSTEM.md'),
-      cwd: input.cwd,
       ...(input.artifactRevalidator ? { artifactRevalidator: input.artifactRevalidator } : {}),
     });
   }
@@ -358,9 +343,6 @@ async function buildProductionProjection(
     skillPlan: input.skillPlan,
     compiledContent,
     outputStyle: resolveClaudeCanonicalOutputStyle(input.agentsRoot),
-    globalInstructions,
-    claudeInstructions:
-      input.claudeInstructions ?? path.resolve(instructionsRoot, 'runtime', 'claude', 'CLAUDE.md'),
     artifactsRoot: input.artifactsRoot,
     statusSnapshot: input.statusSnapshot,
     runtimeStatusEnvelope: input.runtimeStatusEnvelope,
@@ -377,13 +359,7 @@ export function productionRuntimeAdapters(input: {
   stateRoot: string;
   projectionInput: Omit<
     LaunchProjectionBuildInput,
-    | 'statusSnapshot'
-    | 'launchBanner'
-    | 'compiledContent'
-    | 'cwd'
-    | 'globalInstructions'
-    | 'claudeInstructions'
-    | 'piAppendInstructions'
+    'statusSnapshot' | 'launchBanner' | 'compiledContent'
   >;
   launchBanner: string;
   initialSnapshot: StatusSnapshot;
@@ -437,18 +413,8 @@ export function productionRuntimeAdapters(input: {
       ),
       agentRoot: input.projectionInput.agentsRoot,
     });
-    const instructionsRoot = path.resolve(input.projectionInput.agentsRoot, '..', 'instructions');
     const built = await (input.builder ?? buildProductionProjection)({
       ...input.projectionInput,
-      cwd: input.cwd,
-      globalInstructions: path.join(instructionsRoot, 'global', 'AGENTS.md'),
-      ...(runtime === 'claude'
-        ? {
-            claudeInstructions: path.join(instructionsRoot, 'runtime', 'claude', 'CLAUDE.md'),
-          }
-        : {
-            piAppendInstructions: path.join(instructionsRoot, 'runtime', 'pi', 'APPEND_SYSTEM.md'),
-          }),
       compiledContent,
       statusSnapshot: snapshot,
       launchBanner: input.launchBanner,

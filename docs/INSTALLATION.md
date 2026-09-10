@@ -1,5 +1,8 @@
 # Installation
 
+See [Instruction topology](INSTRUCTIONS.md) for native profile and project instruction discovery, ownership, and
+relocation guidance.
+
 Configure `%APPDATA%/mpx/config.json`, set the required `MPX_*` machine roots, then run:
 
 ```bash
