@@ -15,11 +15,17 @@ Keep `AGENTS.md` edits concise and limited to durable repository-authoring inten
 
 ## Execution
 
-Requests to answer, explain, inspect, or report are read-only. Requested changes include implementation and verification,
-not unrelated work. Commits, pushes, PRs, and merges require a request or an explicitly invoked workflow.
+Requests to answer, explain, inspect, or report are read-only. Requested changes include implementation and verification.
+Commits, pushes, PRs, and merges require a request or an explicitly invoked workflow.
+
+During implementation, attempt to fix even unrelated errors, especially blockers. If a fix attempt fails, undo only
+that attempt. Always report both resolved and unresolved issues to the user. Commit unrelated fixes separately if
+committing is authorized.
 
 Run the narrowest relevant checks first, then repository checks. Add tests where the repository already uses them and
-where they validate behavior. Report unrelated failures rather than suppressing or fixing them.
+where they validate behavior.
+
+Prefer bounded, path-scoped reads (e.g. `git diff -- <files>`). Read full logs only when the relevant tail is insufficient.
 
 Discover dev-server and Storybook commands in `package.json` and referenced configuration. Missing MPX port metadata must
 not block startup; use project defaults. If a port is occupied, choose another only when the server and dependent URLs
