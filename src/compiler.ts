@@ -25,6 +25,7 @@ const PLACEHOLDERS = [
   '{{MPX_AGENT_PREFIX}}',
   '{{MPX_SHARED_INSTRUCTIONS}}',
   '{{MPX_AGENT_REFERENCES}}',
+  '{{MPX_HARNESS}}',
 ] as const;
 const BARE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -249,11 +250,15 @@ function replacePlaceholders(content: Buffer, harness: Harness, outputPath: stri
     '{{MPX_AGENT_PREFIX}}': 'mpx-',
     '{{MPX_SHARED_INSTRUCTIONS}}': shared,
     '{{MPX_AGENT_REFERENCES}}': references,
+    '{{MPX_HARNESS}}': harness,
   };
-  const replaced = text.replace(/\{\{[^{}]*\}\}/g, (token) => {
+  // Named compiler placeholders use uppercase identifiers. Vue/React/Handlebars
+  // examples are content, not a request to rewrite or discard template syntax.
+  const replaced = text.replace(/\{\{[A-Z][A-Z0-9_]*\}\}/g, (token) => {
     if (!PLACEHOLDERS.includes(token as (typeof PLACEHOLDERS)[number])) throw new Error(`unknown placeholder ${token} in ${outputPath}`);
     return values[token as (typeof PLACEHOLDERS)[number]];
   });
+  if (/\{\{\s*MPX_/.test(replaced)) throw new Error(`unresolved or malformed MPX placeholder in ${outputPath}`);
   return replaced === text ? content : Buffer.from(replaced);
 }
 

@@ -655,6 +655,21 @@ mpx-pi source HEAD: 8464b23f0aef5bc235699920125e04fb94b84530; git status entries
 These bounded reviews supersede the corresponding enumeration-only cells above; all other rows
 remain unresolved. No disposition below approves retiring another workflow.
 
+Second batch: each of the seven enumerated reviewer agents (`best-practices`, `code-quality`,
+`error-handling`, `performance`, `security`, `spec-alignment`, `test-quality`) is retained as
+`content/agents/reviewer-<name>.md`, using its matching current mpx source and original Claude
+`plugins/mp/agents/mp-reviewer-<name>.md` counterpart. Disposition: daily-core. Required rewrite:
+only bare-name/semantic metadata and relocated protocol/guide paths. Parent inspected all seven
+source→destination diffs; all checkpoint, confidence/severity and framework branches remain.
+Dependency closure: REVIEWER_PROTOCOL.md for all seven; best-practices additionally requires the
+five TypeScript/React/Svelte/Python/Rust guides, with no further bundled local references.
+Each guide and the protocol was copied byte-for-byte from the dirty current source, independently
+verified by the parent. The source protocol's independence/drift requirements and current React/Rust
+fixes were retained rather than reverted to older counterparts. Native profile maps standard/medium
+reviewers; live named-agent behavior is still untested. No archive or behavioral-loss approval is
+inferred. Unknown compiler tokens still fail, but literal Vue/React brace examples are now preserved;
+TDD demonstrated both the original rejection and the corrected output.
+
 | identity | current source | original counterpart | behavioral differences | dependencies | disposition | required rewrite | acceptance evidence | user approval |
 |---|---|---|---|---|---|---|---|---|
 | handoff | `$MPX_PROJECTS/mpx/content/skills/handoff/SKILL.md` → `content/skills/handoff/SKILL.md` | `$MPX_PROJECTS/mpx-claude-code/plugins/mp/skills/mp-handoff/SKILL.md` | Current durable-artifact context and full inline template retained; obsolete task-state service replaced by available native/conversation/project state; command names projected | No bundled helper files. Optional grill/harvest-decisions follow-up remains explicitly conditional on availability; those workflows are NOT accepted yet | daily-core | Initial adaptation complete; optional companion workflow acceptance remains open | All three source bodies read completely by parent; initial handoff byte equality true; full 20–200-line template retained; compiler/native-loader fixture tests pass; actual skill workflow untested | Native-first adaptation within approved design; no companion retirement |

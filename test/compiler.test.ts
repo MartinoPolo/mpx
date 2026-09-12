@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,13 @@ import { build, checkOutput, projectContent } from '../src/compiler.js';
 
 const CLASSES = ['mechanical', 'exploration', 'standard', 'advanced', 'frontier'] as const;
 const CAPABILITIES = ['read', 'search', 'shell', 'write', 'browser', 'context', 'web'] as const;
+const temporaryRoots: string[] = [];
+async function temporaryRoot(prefix: string): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), prefix));
+  temporaryRoots.push(root);
+  return root;
+}
+test.after(async () => { for (const root of temporaryRoots) await rm(root, { recursive: true, force: true }); });
 
 async function put(root: string, relative: string, content: string | Buffer): Promise<void> {
   const file = path.join(root, relative);
@@ -29,7 +36,7 @@ function markdownBody(source: Buffer): Buffer {
 }
 
 async function fixture(): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx-compiler-'));
+  const root = await temporaryRoot('mpx-compiler-');
   const models = Object.fromEntries(CLASSES.map((name) => [name, `pi/${name}`]));
   const claudeModels = Object.fromEntries(CLASSES.map((name) => [name, `claude/${name}`]));
   const tools = Object.fromEntries(CAPABILITIES.map((name) => [name, [`${name}-tool`]]));
@@ -161,6 +168,18 @@ test('projects deterministic native metadata while preserving bodies and support
   });
 });
 
+test('preserves framework template examples while resolving only named uppercase placeholders', async () => {
+  const root = await fixture();
+  const examples = 'Vue `{{ variable }}`\nReact `<MemoizedComponent style={{ color: "red" }} />`\n';
+  await put(root, 'content/agents/references/framework-examples.md', examples);
+  await put(root, 'content/instructions/shared/harness.md', 'Use dist/{{MPX_HARNESS}}/agents for this harness.\n');
+  const projections = new Map((await projectContent(root)).map(item => [item.path, item.content.toString()]));
+  for (const harness of ['pi', 'claude']) {
+    assert.equal(projections.get(`dist/${harness}/agents/references/framework-examples.md`), examples);
+    assert.equal(projections.get(`dist/${harness}/instructions/shared/harness.md`), `Use dist/${harness}/agents for this harness.\n`);
+  }
+});
+
 test('build converges inside generated roots and checkOutput reports drift without mutation', async () => {
   const root = await fixture();
   await put(root, 'dist/packs/obsolete.txt', 'old');
@@ -194,6 +213,7 @@ test('rejects malformed metadata, unknown placeholders, duplicate outputs, and b
     ['unknown model class', async (root) => put(root, 'content/agents/explorer.md', `---\nname: explorer\ndescription: bad\nmetadata: { mpx: { schemaVersion: 1, modelClass: turbo, thinking: high, capabilities: [read] } }\n---\nbody\n`), /modelClass/],
     ['unknown capability', async (root) => put(root, 'content/agents/explorer.md', `---\nname: explorer\ndescription: bad\nmetadata: { mpx: { schemaVersion: 1, modelClass: standard, thinking: high, capabilities: [telepathy] } }\n---\nbody\n`), /capabilit/],
     ['unknown placeholder', async (root) => put(root, 'content/rules/rule.md', '{{NOT_DECLARED}}\n'), /unknown placeholder/],
+    ['malformed reserved placeholder', async (root) => put(root, 'content/rules/rule.md', '{{MPX_HARNESS\n'), /placeholder/],
     ['placeholder in metadata', async (root) => put(root, 'content/skills/review/SKILL.md', `---\nname: review\ndescription: "{{MPX_AGENT_PREFIX}} review"\nmetadata: { mpx: { schemaVersion: 1, skillPacks: [development] } }\n---\nbody\n`), /only allowed in bodies/],
     ['broken inline image', async (root) => put(root, 'content/rules/rule.md', '![missing](missing.png)\n'), /broken local Markdown reference/],
     ['broken reference-style link', async (root) => put(root, 'content/rules/rule.md', '[guide][g]\n\n[g]: missing.md\n'), /broken local Markdown reference/],
@@ -228,7 +248,7 @@ test('accepts the longest skill name whose mp- projection is 64 characters', asy
 test('refuses escaping source links and linked generated directories', async (t) => {
   await t.test('source link', async () => {
     const root = await fixture();
-    const outside = await mkdtemp(path.join(tmpdir(), 'mpx-outside-'));
+    const outside = await temporaryRoot('mpx-outside-');
     await put(outside, 'secret.md', 'outside\n');
     await symlink(path.join(outside, 'secret.md'), path.join(root, 'content/rules/linked.md'));
     await assert.rejects(projectContent(root), /symlink.*escapes.*content/i);
@@ -236,7 +256,7 @@ test('refuses escaping source links and linked generated directories', async (t)
 
   await t.test('output directory link', async () => {
     const root = await fixture();
-    const outside = await mkdtemp(path.join(tmpdir(), 'mpx-output-'));
+    const outside = await temporaryRoot('mpx-output-');
     await mkdir(path.join(root, 'dist'), { recursive: true });
     await symlink(outside, path.join(root, 'dist/pi'), process.platform === 'win32' ? 'junction' : 'dir');
     await assert.rejects(build(root), /linked output directory|symlink/i);

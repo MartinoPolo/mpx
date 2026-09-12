@@ -14,8 +14,9 @@ pnpm status
 ```
 
 `content/` is authored source; `dist/{packs,pi,claude}` contains deterministic committed
-projections. Never edit projections. The initial slice contains the handoff skill and checker
-specialist; the remaining inventory is not silently retired.
+projections. Never edit projections. The retained slice contains the handoff skill, checker,
+seven reviewer specialists, their shared protocol and five framework guides. The remaining
+inventory is not silently retired.
 
 Public shell support is Git Bash. Checkout-local `bin/mpx`, `bin/pi`, `bin/piw`, `bin/cc`,
 `bin/ccw`, and `bin/xpi` exist, but are **not installed into PATH**. Do not point daily launchers
