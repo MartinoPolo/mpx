@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf '%s\n' 'Legacy Pi: isolated legacy launcher is not configured or accepted in MPX2. No fallback was launched.' >&2
+exit 1

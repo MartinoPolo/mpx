@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "claude": {
+      "mechanical": "haiku",
+      "exploration": "sonnet",
+      "standard": "sonnet",
+      "advanced": "opus",
+      "frontier": "fable"
+    },
+    "pi": {
+      "mechanical": "openai-codex/gpt-5.6-luna",
+      "exploration": "openai-codex/gpt-5.6-luna",
+      "standard": "openai-codex/gpt-5.6-terra",
+      "advanced": "openai-codex/gpt-5.6-sol",
+      "frontier": "openai-codex/gpt-6-astra"
+    }
+  },
+  "tools": {
+    "claude": {
+      "read": [
+        "Read"
+      ],
+      "search": [
+        "Grep",
+        "Glob"
+      ],
+      "shell": [
+        "Bash"
+      ],
+      "write": [
+        "Edit",
+        "Write"
+      ],
+      "browser": [
+        "mcp__chrome-devtools__*"
+      ],
+      "context": [
+        "mcp__context7__*"
+      ],
+      "web": [
+        "WebSearch",
+        "WebFetch"
+      ]
+    },
+    "pi": {
+      "read": [
+        "read"
+      ],
+      "search": [
+        "grep",
+        "find",
+        "ls"
+      ],
+      "shell": [
+        "bash"
+      ],
+      "write": [
+        "edit",
+        "write"
+      ],
+      "browser": [
+        "ext:pi-mcp-adapter"
+      ],
+      "context": [
+        "ext:pi-mcp-adapter"
+      ],
+      "web": [
+        "ext:pi-web-access"
+      ]
+    }
+  }
+}

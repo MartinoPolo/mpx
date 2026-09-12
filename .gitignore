@@ -1,0 +1,5 @@
+node_modules/
+.local/
+coverage/
+*.tsbuildinfo
+# Projections in dist/ are intentionally committed.
