@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFile, mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { planAgentLinks, syncAgentLinks } from '../src/install.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -14,12 +15,14 @@ test('published upstream parser loads actual generated specialist names/models/e
   try {
     const account = join(root, 'account');
     const project = join(root, 'project');
-    await mkdir(join(account, 'agents'), { recursive: true });
+    const accounts = { personal: { pi: account, claude: join(root, 'personal-cc') }, work: { pi: join(root, 'work-pi'), claude: join(root, 'work-cc') } };
+    for (const roots of Object.values(accounts)) for (const directory of Object.values(roots)) await mkdir(directory);
+    const installed = await syncAgentLinks(await planAgentLinks(packageRoot, { accounts, domains: { personal: [], work: [] } }));
+    assert.equal(installed.ok, true, JSON.stringify(installed.results));
     await mkdir(join(project, '.pi', 'agents'), { recursive: true });
     await exec('git', ['init', '--quiet'], { cwd: project });
     const generatedRoot = join(packageRoot, 'dist', 'pi', 'agents');
     const files = (await readdir(generatedRoot)).filter(name => name.endsWith('.md'));
-    for (const name of files) await copyFile(join(generatedRoot, name), join(account, 'agents', name));
     await writeFile(join(project, '.pi', 'agents', 'project-native.md'), '---\nname: project-native\ndescription: Independent project specialist\ntools: read\n---\nRead only.\n');
     const upstream = join(packageRoot, 'node_modules', '@tintinweb', 'pi-subagents', 'src', 'custom-agents.ts').replaceAll('\\', '/');
     const probe = join(root, 'definitions-probe.ts');
@@ -34,7 +37,7 @@ test('published upstream parser loads actual generated specialist names/models/e
       const agent = loaded.find(item => item.name === name);
       assert.ok(agent, `missing generated agent ${name}`);
       const checker = name === 'mpx-checker';
-      assert.equal(agent.model, checker ? 'openai-codex/gpt-5.6-luna' : 'openai-codex/gpt-5.6-terra');
+      assert.equal(agent.model, checker || name === 'mpx-explorer' ? 'openai-codex/gpt-5.6-luna' : 'openai-codex/gpt-5.6-terra');
       assert.equal(agent.thinking, checker ? 'low' : 'medium');
       assert.deepEqual(agent.tools, ['read', 'grep', 'find', 'ls', 'bash']);
     }
