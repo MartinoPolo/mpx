@@ -1,35 +1,37 @@
 # MPX2
 
-Private, single-package migration checkout. **Not ready for daily use or cutover.**
-[DECISIONS.md](DECISIONS.md) and [MIGRATION_PLAN.md](MIGRATION_PLAN.md) remain authoritative.
+Private, single-package migration checkout. **Not ready for installed cutover or daily-use acceptance.**
+[DECISIONS.md](DECISIONS.md) is authority; [MIGRATION_PLAN.md](MIGRATION_PLAN.md) owns acceptance.
+Current implementation, evidence and remaining gates: [migration/PROGRESS.md](migration/PROGRESS.md).
 
 ## Local development
 
-Requires Node 22.20+ (tested on 22.23.1) and pinned pnpm 11.15.1.
+Node 22.20+ (verified on 22.23.1), pnpm 11.15.1, public Git Bash:
 
 ```bash
-pnpm install --ignore-scripts
+pnpm install --frozen-lockfile --ignore-scripts
 pnpm build
 pnpm run typecheck
 pnpm test
 pnpm status
 ```
 
-`content/` is authored source; `dist/{packs,pi,claude}` contains deterministic committed
-projections. Never edit projections. The retained slice contains the handoff skill, checker,
-explorer, seven reviewer specialists, their shared protocol, five framework guides and shared
-compaction guidance. The remaining inventory is not silently retired.
+`content/` is authored authority; `dist/{packs,pi,claude}` contains deterministic **committed**
+projections. Never edit projections. Current coverage: 51 skills, 21 specialists, 16 rules,
+shared/provider/harness instructions and terse style; 195 canonical files, 386 projections.
+All current workflows/support contracts were retained or explicitly adapted, not silently retired.
+See [migration/COVERAGE.md](migration/COVERAGE.md) for source provenance.
 
-Public shell support is Git Bash. Checkout-local `bin/mpx`, `bin/pi`, `bin/piw`, `bin/cc`,
-`bin/ccw`, and `bin/xpi` exist, but are **not installed into PATH**. Do not point daily launchers
-here yet: safeguards, resume, extensions, account synchronization, and interactive acceptance
-are unfinished. Full `sync`, `project setup`, actual resume launch and `lpi` fail explicitly
-instead of pretending installation or restoration succeeded. Scoped operations are available below.
+The runtime supplies thin native context/safeguard/format/UI adapters, native resume preparation,
+owned registration previews and an Agent Resurrect/Orca launch recipe. It does not provide a daemon,
+session registry, credential router, project server manager, or competing notification writer.
+The only upstream patch is checkout-local pi-subagents 0.19.0 selected-pack discovery/preloading.
+The installed 0.14.3 migration bootstrap remains untouched.
 
-## Configuration and launch preview
+## Configuration
 
-User-owned configuration will live at `$APPDATA/mpx2/config.json`; this checkout does not create
-or alter that file. Required shape:
+User configuration lives at `$APPDATA/mpx2/config.json`; these development commands do not create
+or alter it. Example required shape:
 
 ```json
 {
@@ -42,13 +44,14 @@ or alter that file. Required shape:
 }
 ```
 
-Native roots must remain separate. Executable overrides can instead come directly from the two
-approved environment variables. No credentials, MCP configuration, or whole account settings are
-copied; the separate scoped hook operation below mirrors only Orca-managed entries.
-`defaultPacks` optionally overrides personal/work defaults. Missing required roots are errors,
-not guessed paths.
+Native roots stay separate. Executable overrides may instead use those two approved environment
+variables. Missing required roots are errors, not guessed paths. Native authentication, settings,
+packages and histories remain native; no credential/history copying occurs. `defaultPacks` optionally
+overrides personal/work defaults. Optional `piTitle` specifies an exact `provider`, `model`, and
+`thinking` level; without an available supported configuration, naming uses a prompt-derived fallback,
+not another model. Existing/manual names are preserved.
 
-Repository `mpxconfig.json`:
+Repository-owned `mpxconfig.json` keeps repository and issue routing independent:
 
 ```json
 {
@@ -60,61 +63,56 @@ Repository `mpxconfig.json`:
 }
 ```
 
-Repository/review and issue providers are independent. Supported repository providers: GitHub,
-GitLab, Gerrit; issue providers: GitHub, KanbanFlow. Local issues are explicitly unsupported.
-The package-manager field is metadata, **not** safeguard authority.
+Repository providers: GitHub/GitLab/Gerrit. Issue providers: GitHub/KanbanFlow; local issues stop
+explicitly. Package-manager metadata is **not** safeguard authority. Explicit `packs: []` selects
+native skills only; invalid/unavailable selection is diagnosed without disabling native resources.
+
+## Preview and inspection
+
+Checkout-local `bin/mpx`, `pi`, `piw`, `cc`, `ccw`, `xpi`, and `lpi` are not installed into PATH.
+**Do not apply account synchronization or point daily launchers here without cutover authorization.**
 
 ```bash
 bash bin/mpx launch-preview pi work -- --literal-prompt
-```
-
-Preview prints only executable, arguments, selected account root and packs—not inherited secrets.
-Explicit `packs: []` means native skills only. Invalid selections warn and fall back; unavailable
-fallback paths warn and leave native resources enabled. The current slice has no personal pack,
-so the default personal development+personal selection intentionally falls back to native-only.
-Use an explicit repository selection only for disposable testing, not to pretend cutover is ready.
-
-## Scoped development operations
-
-```bash
+bash bin/mpx sync --preview
 bash bin/mpx sync --agents-only --preview
 bash bin/mpx sync --orca-hooks-only --preview
+bash bin/mpx project setup --preview
 bash bin/mpx resume --list
 bash bin/mpx resume --preview '<absolute Pi transcript>' --account work
 bash bin/mpx check-staged-secrets .
 bash bin/mpx check-package-manager 'pnpm install' .
 ```
 
-- Specialist sync touches only individual generated-agent links. Removing `--preview` permits
-  those link writes; conflicting/unrelated entries are preserved and stale links reported, not deleted.
-  `status` inspects links when user configuration exists. No live account sync has been performed.
-- Orca-only sync mirrors three marked Pi files and managed nested Claude hooks, preserving unrelated
-  settings and `statusLine`. Removing `--preview` permits those writes. Missing sources, unsafe paths
-  and target-only hook metadata conflicts are reported without overwriting the affected resource.
-  Only disposable accounts have been tested; this is not Orca/UI acceptance.
-- Resume currently lists/inspects native Pi v3 files read-only. Unknown provider/model/effort needs
-  an explicit, labeled override; preview is **not** proof of actual restoration or model availability.
-- Staged-secret scanning is bounded, read-only and standalone. Credible findings block; uncertain
-  findings and collection failures warn. Package-manager inspection likewise never executes its
-  input; it uses native package/lock/workspace evidence, warns on unresolved shell scope, and blocks
-  credible mismatches/direct `npx tsc`. Hook interception is not yet installed.
-- The Pi context extension is fixture-tested but not registered in live accounts. It preserves native
-  compaction mechanics, adds retained guidance, and supplies concise style and allowlisted roots.
+Full sync can install owned links/native registrations after authorization; previews/status report
+missing resources and conflicts rather than treating agent links alone as readiness. Unrelated native
+settings/packages/hooks are preserved. Removing `--preview` permits writes: this migration has used
+only disposable-account installation fixtures. Project setup creates only the optional project-owned
+skill link; Orca snippets are text, not terminal/server startup.
+
+Resume supports native Pi/Claude account/project selection and exact launch preparation. Pi's no-session
+RPC preflight verifies native model/auth/effort availability without a provider request or transcript
+mutation. **Preflight is not resumed-startup acceptance.** Unknown saved Claude effort requires an
+explicit override; no guessed restoration or Claude startup verification is claimed.
+
+Legacy access requires `legacyPi.accountRoot` and `legacyPi.checkout`, separate existing resources and
+complete retained native packages/tool-display entries. The known footer hardcoding a different
+`~/.pi/agent` root blocks launch. There is no reduced fallback and no legacy compatibility acceptance.
 
 ## Verification boundaries
 
-Tests use temporary repositories, worktrees, account fixtures and separate native SDK processes.
-They verify compiler bytes, actual native catalogs, trust boundaries, concurrent selections and
-Windows/Git Bash argument forwarding. A separate native Pi process verifies actual model-bound
-context using a synthetic model stream. `migration/claude-probe.mjs` runs the installed Claude
-against a disposable loopback backend with tools disabled: additive skill catalogs, leading handoff
-expansion, exact-ID history and account isolation passed. Naive resume changed model/effort;
-explicit selectors preserved history and corrected both. The probe intentionally exits 1 for that
-native fidelity gap; missing saved effort remains unknown.
+The current automated gate passes 212 tests, typecheck, frozen installation and projection drift checks.
+Fixtures use disposable repositories/accounts, actual native loaders/sessions/tool loops and offline
+model streams. Safeguards, formatting serialization, selected-pack children, resume preparation and
+resurrection adapters are exercised without an installed cutover.
 
-These fixtures do **not** establish live Claude/Pi interactive workflow completion, native Tab
-completion, deployed subagent model invocation, Manual permissions, real compaction summaries,
-complete resume, reboot, Orca status/notifications, or safeguard interception.
+Native web/MCP/question packages load for both accounts. Local MCP/question callbacks pass; web's
+loopback request is SSRF-blocked, **not successful retrieval**. Existing package versions are preserved.
+The unchanged Orca status hook reproduces premature parent completion with a held child event; no
+aggregate adapter/patch has been approved or deployed. See
+[migration/evidence-final-integration.md](migration/evidence-final-integration.md).
 
-See [migration/INVENTORY.md](migration/INVENTORY.md),
-[migration/PROGRESS.md](migration/PROGRESS.md), and [extensions/README.md](extensions/README.md).
+These checks do not prove authenticated workflows, real compaction summaries, physical newline/wheel/
+footer/title/question behavior, resumed startup, Orca attention/notification fidelity, or reboot
+restoration. Those remain explicit human/live gates. No remote creation, push, source archival/rename,
+credential migration, installed cutover, or reboot has occurred.

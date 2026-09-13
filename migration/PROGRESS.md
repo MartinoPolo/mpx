@@ -8,8 +8,11 @@ Remote creation remains deferred (future owner: MartinoPolo).
 
 - `45fc3a0 docs(migration): approve local pack patch and defer remote setup` — authority only;
   typecheck passed immediately before committing.
-- Implementation/content/generated outputs/evidence: final gate and local checkpoint in progress.
-  No push, remote creation, installed cutover, account migration, archival, rename, or reboot.
+- `f86207b feat(migration): port canonical workflows and native runtime integrations` — verified local
+  implementation checkpoint, 605 changed files including 352 new projections (386 tracked in total).
+  Typecheck passed immediately before commit; native hooks were not bypassed. README/ledger final
+  accounting follows as a documentation-only checkpoint.
+- No push, remote creation, installed cutover, account migration, archival, rename, or reboot.
 
 ## Implemented in MPX2
 
