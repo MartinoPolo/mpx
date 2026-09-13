@@ -18,7 +18,11 @@ test('legacy launch requires separate complete resources and excludes duplicate 
     config.legacyPi.accountRoot = join(root, 'legacy-account');
     await mkdir(config.legacyPi.accountRoot);
     const source = config.legacyPi.checkout;
-    for (const extension of ['subagents/index.ts', 'terminal-progress/index.ts', 'guard-hooks.ts', 'footer.ts']) {
+    for (const extension of [
+      'agent-resurrect.ts', 'auto-title.ts', 'footer.ts', 'guard-hooks.ts',
+      'kf-namespace-commands.ts', 'mp-namespace-commands.ts', 'subagents/index.ts',
+      'terminal-progress/index.ts', 'dev-server/index.ts', 'worktree/index.ts',
+    ]) {
       const file = join(source, 'extensions', extension); await mkdir(join(file, '..'), { recursive: true }); await writeFile(file, 'export default () => {};');
     }
     await assert.rejects(createLegacyLaunch(resolve('.'), root, config, { warnings: [] }, []), /native packages/);
@@ -38,7 +42,10 @@ test('legacy launch requires separate complete resources and excludes duplicate 
     assert.ok(spec.args.includes('--no-extensions'));
     assert.ok(spec.args.includes(join(display, 'index.ts')));
     assert.ok(spec.args.includes(join(source, 'extensions/subagents/index.ts')));
-    assert.ok(!spec.args.some(arg => /guard-hooks|terminal-progress/.test(arg)));
+    for (const retained of ['agent-resurrect.ts', 'auto-title.ts', 'kf-namespace-commands.ts', 'mp-namespace-commands.ts']) {
+      assert.ok(spec.args.includes(join(source, 'extensions', retained)), `${retained} must remain selected`);
+    }
+    assert.ok(!spec.args.some(arg => /guard-hooks|terminal-progress|[\\/]dev-server[\\/]|[\\/]worktree[\\/]/.test(arg)), 'retired manager entrypoints must not be selected');
     assert.match(spec.label, /LEGACY.*formatting manual/);
     assert.equal(spec.args.at(-1), '--offline');
     await writeFile(join(source, 'extensions/footer.ts'), 'function agentDirectory(): string { return path.join(homedir(), ".pi", "agent"); }');

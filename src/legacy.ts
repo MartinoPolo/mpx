@@ -38,9 +38,10 @@ export async function createLegacyLaunch(root: string, cwd: string, config: User
   }
   if (!foundDisplay) throw new Error('Retained legacy tool-display loading entry is unavailable; no reduced-mode fallback launched.');
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    // The old guard bundle emits desktop notifications directly; do not execute it.
-    // Orca is the sole attention owner, with no legacy sound/progress fallback.
-    if (['guard-hooks.ts', 'terminal-progress'].includes(entry.name)) continue;
+    // Retired manager entrypoints and the old direct-notification bundle must not execute.
+    // Orca is the sole attention owner; agent-resurrect and display/namespace/title
+    // integrations remain explicit retained resources.
+    if (['dev-server', 'guard-hooks.ts', 'terminal-progress', 'worktree'].includes(entry.name)) continue;
     const file = path.join(extensionRoot, entry.name, ...(entry.isDirectory() ? ['index.ts'] : []));
     const info = (entry.name.endsWith('.ts') || entry.isDirectory()) ? await stat(file).catch(() => undefined) : undefined;
     if (!info?.isFile()) continue;
@@ -60,6 +61,6 @@ export async function createLegacyLaunch(root: string, cwd: string, config: User
   spec.args.push('--extension', path.join(root, 'extensions/pi-safeguards.ts'));
   for (const extension of extensions) spec.args.push('--extension', extension);
   spec.args.push(...args);
-  spec.label = 'LEGACY · Pi · isolated account · old alert bundle excluded · MPX2 command safeguards · formatting manual · see actual native extension list';
+  spec.label = 'LEGACY · Pi · isolated account · retired manager/alert entrypoints excluded · MPX2 command safeguards · formatting manual · see actual native extension list';
   return spec;
 }

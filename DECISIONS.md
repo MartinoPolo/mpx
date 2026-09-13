@@ -88,6 +88,13 @@ chronology or superseded alternatives. Recommendations alone do not constitute a
   demonstrated selected-pack discovery and named-skill preload gaps. Test and document the patch,
   preserve native project/unrelated resource discovery, and keep concurrent selections independent.
   This approval does not authorize replacing the installed bootstrap or unrelated upstream changes.
+- Preparing and testing checkout-local Orca aggregate-hook compatibility changes is approved. Keep
+  Orca as the sole status/attention writer; cover pending follow-ups, child/background work, questions,
+  and deliberate cancellation. Do not edit the original/installed Orca files or deploy the candidate.
+- Preparing and testing checkout-local legacy-footer/extension compatibility changes is approved for
+  the explicitly separate legacy account. Preserve retained display behavior and dependencies; do
+  not edit legacy repositories, route credentials, reactivate retired services, or install the candidate.
+  This does not expand the approved pi-subagents patch beyond selected-pack discovery/preloading.
 - Version one requires background subagents, result retrieval, and steering, with running and finished
   agents visible and model, effort, elapsed time, and token usage shown where supported by actual data.
   Separate Orca worker panes and foreground delegation are not version-one requirements. Nested

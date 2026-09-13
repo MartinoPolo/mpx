@@ -310,6 +310,15 @@ reported premature-done sequence with disposable sessions before selecting an up
 or narrow adapter. Keep a single authoritative status path and let Orca own desktop notifications for
 whole-session done or human-needed events. Exercise child completion while peers/parent remain active,
 queued follow-ups, questions during background work, cancellation, and reload with no duplicate alerts.
+Preparation and disposable testing of checkout-local Orca hook and legacy compatibility candidates
+are approved. Keep original/installed Orca and legacy repositories unchanged. The Orca candidate must
+remain the sole sender and consume authoritative outstanding-work state, not a timer-based guess.
+The legacy candidate must honor its separate native account and preserve retained tool display without
+re-enabling retired services or duplicate alerts. Record source provenance and patch scope, test native
+loaders and failure/cancellation paths in disposable accounts, and stop for further approval if another
+upstream patch or a material behavioral reduction is necessary. Neither preparation nor passing fixtures
+authorizes deployment or installed cutover.
+
 Evaluate Orca's native terminal-attention option before adding custom visual attention. Fine-grained
 labels and Windows taskbar flashing require capability validation, not an assumed settings toggle.
 

@@ -5,6 +5,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { withoutDeletedHeaders } from './context.js';
 
 export const PI_ACTIVITY_EVENT = 'mpx2:pi-ui:activity';
+export const PI_ACTIVITY_REQUEST_EVENT = 'mpx2:pi-ui:activity:request';
 export const PI_BACKGROUND_ACTIVITY_EVENT = 'mpx2:pi-ui:background';
 export const PI_FOLLOW_UP_ACTIVITY_EVENT = 'mpx2:pi-ui:follow-up';
 
@@ -82,10 +83,11 @@ export class PiActivityAggregate {
     this.publish('idle');
   }
 
-  startMain(): void {
+  startMain(fresh = true): void {
+    if (this.mainActive && !fresh) return;
     this.cancelCompletion();
     this.hadWork = true;
-    this.cancelled = false;
+    if (fresh) this.cancelled = false;
     this.mainActive = true;
     this.settling = false;
     const pending = [...this.followUps].find((id) => id.startsWith('native-'));
@@ -94,6 +96,13 @@ export class PiActivityAggregate {
   }
 
   settleMain(): void {
+    // Native agent_settled is authoritative for its own queued input messages,
+    // including follow-ups processed inside one agent loop without another agent_start.
+    let removedNativeInput = false;
+    for (const id of this.followUps) {
+      if (id.startsWith('native-')) removedNativeInput = this.followUps.delete(id) || removedNativeInput;
+    }
+    if (!this.mainActive && !removedNativeInput) return;
     this.mainActive = false;
     this.recompute();
   }
@@ -101,34 +110,33 @@ export class PiActivityAggregate {
   cancelMain(): void {
     this.cancelCompletion();
     this.mainActive = false;
-    this.followUps.clear();
+    for (const id of this.followUps) {
+      if (!id.startsWith('subagent-result:')) this.followUps.delete(id);
+    }
     this.cancelled = true;
     this.settling = false;
     this.recompute();
   }
 
   startChild(id: string): void {
-    if (!id) return;
+    if (!id || this.children.has(id)) return;
     this.cancelCompletion();
     this.hadWork = true;
-    this.cancelled = false;
     this.children.add(id);
     this.settling = false;
     this.recompute();
   }
 
   finishChild(id: string): void {
-    if (!id) return;
-    this.children.delete(id);
+    if (!id || !this.children.delete(id)) return;
     this.recompute();
   }
 
   setBackground(id: string, active: boolean): void {
-    if (!id) return;
+    if (!id || this.background.has(id) === active) return;
     if (active) {
       this.cancelCompletion();
       this.hadWork = true;
-      this.cancelled = false;
       this.background.add(id);
       this.settling = false;
     } else {
@@ -138,11 +146,10 @@ export class PiActivityAggregate {
   }
 
   setFollowUp(id: string, active: boolean): void {
-    if (!id) return;
+    if (!id || this.followUps.has(id) === active) return;
     if (active) {
       this.cancelCompletion();
       this.hadWork = true;
-      this.cancelled = false;
       this.followUps.add(id);
       this.settling = false;
     } else {
@@ -158,11 +165,13 @@ export class PiActivityAggregate {
   }
 
   endHumanPrompt(): void {
-    this.humanPromptDepth = Math.max(0, this.humanPromptDepth - 1);
+    if (this.humanPromptDepth === 0) return;
+    this.humanPromptDepth -= 1;
     this.recompute();
   }
 
   setExternallyBlocked(active: boolean): void {
+    if (this.externallyBlocked === active) return;
     this.externallyBlocked = active;
     if (active) this.cancelCompletion();
     this.recompute();
@@ -557,8 +566,19 @@ function truncatePlain(text: string, width: number): string {
 }
 
 const PROCESS_OWNER = Symbol.for('mpx2:pi-ui:process-owner');
+const SUBAGENT_MANAGER = Symbol.for('pi-subagents:manager');
 
-type GlobalWithOwner = typeof globalThis & { [PROCESS_OWNER]?: object };
+type GlobalWithOwner = typeof globalThis & {
+  [PROCESS_OWNER]?: object;
+  [SUBAGENT_MANAGER]?: { getRecord?(id: string): unknown };
+};
+
+interface PiActivityEnvelope extends PiActivitySnapshot {
+  /** Native Pi session identity; deliberately not inferred or persisted. */
+  sessionId: string;
+  /** Unique to this extension activation, including same-session reloads. */
+  activityId: string;
+}
 
 /**
  * Compose from extensions/pi-runtime.ts with an explicit title config and, once
@@ -577,11 +597,30 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   let pendingAutomaticName: string | undefined;
   let titleController: AbortController | undefined;
   let followUpSequence = 0;
+  let mainWasCancelled = false;
+  let activitySessionId = '';
+  let activityId = '';
+  let currentSnapshot: Readonly<PiActivitySnapshot> | undefined;
+  let diagnosticCount = 0;
   const finished = new Map<string, FinishedAgent>();
+  const knownSubagents = new Set<string>();
+  const terminalSubagents = new Set<string>();
+  const reservedSubagentResults = new Set<string>();
+  const diagnosedReservations = new Set<string>();
 
-  const sink: PiActivitySink = options.activitySink ?? ((snapshot) => {
-    pi.events.emit(PI_ACTIVITY_EVENT, snapshot);
-  });
+  const emitActivity = (snapshot: Readonly<PiActivitySnapshot>): void => {
+    const envelope: PiActivityEnvelope = {
+      ...snapshot,
+      sessionId: activitySessionId,
+      activityId,
+    };
+    pi.events.emit(PI_ACTIVITY_EVENT, envelope);
+  };
+  const sink: PiActivitySink = (snapshot) => {
+    currentSnapshot = snapshot;
+    if (options.activitySink) options.activitySink(snapshot);
+    else emitActivity(snapshot);
+  };
 
   const abortTitle = (): void => {
     titleController?.abort();
@@ -589,6 +628,61 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   };
 
   const own = (): boolean => ownsProcess;
+  const reservationKey = (id: string): string => `subagent-result:${id}`;
+
+  const diagnoseHeldReservation = (id: string, reason: string): void => {
+    const key = `${id}:${reason}`;
+    if (diagnosticCount >= 3 || diagnosedReservations.has(key)) return;
+    diagnosedReservations.add(key);
+    diagnosticCount += 1;
+    try {
+      currentContext?.ui.notify?.(
+        `Holding activity for subagent ${id}: native result state ${reason}.`,
+        'warning',
+      );
+    } catch {
+      // Diagnostics are bounded and observational, just like activity publishing.
+    }
+  };
+
+  const nativeRecord = (id: string): { status?: string; resultConsumed?: boolean } | undefined => {
+    const manager = (globalThis as GlobalWithOwner)[SUBAGENT_MANAGER];
+    if (typeof manager?.getRecord !== 'function') return undefined;
+    try {
+      const source = record(manager.getRecord(id));
+      if (!source) return undefined;
+      return {
+        ...(typeof source.status === 'string' ? { status: source.status } : {}),
+        ...(typeof source.resultConsumed === 'boolean'
+          ? { resultConsumed: source.resultConsumed }
+          : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  };
+
+  const reserveSubagentResult = (id: string): void => {
+    if (reservedSubagentResults.has(id)) return;
+    reservedSubagentResults.add(id);
+    aggregate?.setFollowUp(reservationKey(id), true);
+  };
+  const releaseSubagentResult = (id: string): void => {
+    if (!reservedSubagentResults.delete(id)) return;
+    aggregate?.setFollowUp(reservationKey(id), false);
+  };
+  const refreshConsumedResults = (): void => {
+    if (!own()) return;
+    for (const id of [...reservedSubagentResults]) {
+      if (!knownSubagents.has(id)) continue;
+      const native = nativeRecord(id);
+      if (native?.resultConsumed === true) releaseSubagentResult(id);
+      else if (!native) diagnoseHeldReservation(id, 'is unavailable');
+    }
+  };
+  const refreshConsumedResultsSoon = (): void => {
+    queueMicrotask(refreshConsumedResults);
+  };
 
   const onBackground = (payload: unknown): void => {
     if (!own()) return;
@@ -607,25 +701,58 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     const source = record(payload);
     if (typeof source?.active === 'boolean') aggregate?.setExternallyBlocked(source.active);
   };
+  const onActivityRequest = (): void => {
+    if (own() && !options.activitySink && currentSnapshot) emitActivity(currentSnapshot);
+  };
 
   const unsubscribeBackground = pi.events.on(PI_BACKGROUND_ACTIVITY_EVENT, onBackground);
   const unsubscribeFollowUp = pi.events.on(PI_FOLLOW_UP_ACTIVITY_EVENT, onFollowUp);
   const unsubscribeQuestion = pi.events.on('rpiv:ask-user:blocked', onQuestionBlocked);
+  const unsubscribeActivityRequest = pi.events.on(PI_ACTIVITY_REQUEST_EVENT, onActivityRequest);
+  const unsubscribeConsume = pi.events.on('subagents:rpc:consume', refreshConsumedResultsSoon);
 
+  const beginChildRun = (id: string): void => {
+    terminalSubagents.delete(id);
+    aggregate?.startChild(id);
+    releaseSubagentResult(id);
+  };
+  const onChildCreated = (payload: unknown): void => {
+    if (!own()) return;
+    const id = nonempty(record(payload)?.id);
+    if (!id) return;
+    knownSubagents.add(id);
+    if (terminalSubagents.has(id)) {
+      const status = nativeRecord(id)?.status;
+      if (status !== 'queued' && status !== 'running') return;
+    }
+    beginChildRun(id);
+  };
+  const onChildStarted = (payload: unknown): void => {
+    if (!own()) return;
+    const id = nonempty(record(payload)?.id);
+    if (!id) return;
+    knownSubagents.add(id);
+    beginChildRun(id);
+  };
   const onChildFinished = (payload: unknown): void => {
     if (!own()) return;
     const agent = finishedAgentFromLifecycle(payload);
     if (!agent) return;
+    knownSubagents.add(agent.id);
+    const alreadyTerminal = terminalSubagents.has(agent.id);
+    terminalSubagents.add(agent.id);
+    const native = nativeRecord(agent.id);
+    if (native?.resultConsumed === true) releaseSubagentResult(agent.id);
+    else if (!alreadyTerminal) {
+      reserveSubagentResult(agent.id);
+      if (!native) diagnoseHeldReservation(agent.id, 'is unavailable');
+    }
     const prior = finished.get(agent.id);
     finished.set(agent.id, { ...prior, ...agent, model: prior?.model, effort: prior?.effort });
     aggregate?.finishChild(agent.id);
     requestRender();
   };
-  const onChildStarted = (payload: unknown): void => {
-    if (!own()) return;
-    const id = nonempty(record(payload)?.id);
-    if (id) aggregate?.startChild(id);
-  };
+  const unsubscribeCreated = pi.events.on('subagents:created', onChildCreated);
   const unsubscribeStarted = pi.events.on('subagents:started', onChildStarted);
   const unsubscribeCompleted = pi.events.on('subagents:completed', onChildFinished);
   const unsubscribeFailed = pi.events.on('subagents:failed', onChildFinished);
@@ -637,16 +764,25 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (!ownsProcess) return;
 
     currentContext = ctx;
+    abortTitle();
     aggregate?.dispose();
+    activitySessionId = ctx.sessionManager.getSessionId();
+    activityId = randomUUID();
+    currentSnapshot = undefined;
     aggregate = new PiActivityAggregate(
       sink,
       Math.min(2_000, Math.max(0, options.settleDelayMs ?? DEFAULT_SETTLE_DELAY_MS)),
     );
     finished.clear();
+    knownSubagents.clear();
+    terminalSubagents.clear();
+    reservedSubagentResults.clear();
+    diagnosedReservations.clear();
+    diagnosticCount = 0;
+    mainWasCancelled = false;
     requestRender();
 
-    abortTitle();
-    titleSessionId = ctx.sessionManager.getSessionId();
+    titleSessionId = activitySessionId;
     firstPrompt = firstUserPrompt(ctx);
     titleStarted = false;
     explicitlyNamed = pi.getSessionName() !== undefined;
@@ -713,18 +849,26 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     }
   });
 
+  pi.on('before_agent_start', () => {
+    if (!own()) return;
+    mainWasCancelled = false;
+    aggregate?.startMain(true);
+  });
+
   pi.on('agent_start', () => {
-    if (own()) aggregate?.startMain();
+    if (own()) aggregate?.startMain(false);
   });
 
   pi.on('agent_end', (event) => {
-    if (own() && isCancelledAgentEnd(event)) aggregate?.cancelMain();
+    if (!own() || !isCancelledAgentEnd(event)) return;
+    mainWasCancelled = true;
+    aggregate?.cancelMain();
   });
 
   pi.on('agent_settled', (_event, ctx) => {
     if (!own()) return;
     aggregate?.settleMain();
-    if (titleStarted || explicitlyNamed || pi.getSessionName() !== undefined) return;
+    if (mainWasCancelled || titleStarted || explicitlyNamed || pi.getSessionName() !== undefined) return;
     firstPrompt ??= firstUserPrompt(ctx);
     if (!firstPrompt) return;
 
@@ -732,8 +876,9 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     const expectedSessionId = titleSessionId;
     const prompt = firstPrompt;
     const controller = new AbortController();
+    const titleAggregate = aggregate;
     titleController = controller;
-    aggregate?.setBackground('automatic-title', true);
+    titleAggregate?.setBackground('automatic-title', true);
     void generateTitle(prompt, options.title, ctx, controller.signal).then((title) => {
       if (
         controller.signal.aborted ||
@@ -744,7 +889,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       pendingAutomaticName = title;
       pi.setSessionName(title);
     }).catch(() => { /* Native naming failure must not interrupt the session. */ }).finally(() => {
-      if (titleSessionId === expectedSessionId) aggregate?.setBackground('automatic-title', false);
+      if (aggregate === titleAggregate) titleAggregate?.setBackground('automatic-title', false);
     });
   });
 
@@ -755,8 +900,23 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (own()) aggregate?.endHumanPrompt();
   });
 
+  pi.on('message_start', (event) => {
+    if (!own()) return;
+    const message = record(event.message);
+    if (message?.role !== 'custom' || message.customType !== 'subagent-notification') return;
+    const details = record(message.details);
+    const delivered = [nonempty(details?.id)];
+    if (Array.isArray(details?.others)) {
+      for (const other of details.others) delivered.push(nonempty(record(other)?.id));
+    }
+    for (const id of delivered) {
+      if (id && knownSubagents.has(id)) releaseSubagentResult(id);
+    }
+  });
+
   pi.on('tool_result', (event) => {
     if (!own() || (event.toolName !== 'Agent' && event.toolName !== 'get_subagent_result')) return;
+    refreshConsumedResultsSoon();
     const source = record(event.details);
     const id = nonempty(source?.agentId);
     const merged = mergeFinishedAgentToolResult(id ? finished.get(id) : undefined, event.details);
@@ -788,6 +948,8 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     aggregate?.dispose();
     aggregate = undefined;
     currentContext = undefined;
+    currentSnapshot = undefined;
+    mainWasCancelled = false;
     requestRender = () => {};
     const global = globalThis as GlobalWithOwner;
     if (global[PROCESS_OWNER] === token) delete global[PROCESS_OWNER];
@@ -801,6 +963,9 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     unsubscribeBackground();
     unsubscribeFollowUp();
     unsubscribeQuestion();
+    unsubscribeActivityRequest();
+    unsubscribeConsume();
+    unsubscribeCreated();
     unsubscribeStarted();
     unsubscribeCompleted();
     unsubscribeFailed();

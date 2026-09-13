@@ -97,20 +97,24 @@ explicit override; no guessed restoration or Claude startup verification is clai
 
 Legacy access requires `legacyPi.accountRoot` and `legacyPi.checkout`, separate existing resources and
 complete retained native packages/tool-display entries. The known footer hardcoding a different
-`~/.pi/agent` root blocks launch. There is no reduced fallback and no legacy compatibility acceptance.
+`~/.pi/agent` root still blocks launch. An approved copied footer patch passes a native account-root
+probe, but is not installed/selected. Retired manager/alert entrypoints are excluded; no reduced fallback
+or full legacy compatibility acceptance is implied.
 
 ## Verification boundaries
 
-The current automated gate passes 212 tests, typecheck, frozen installation and projection drift checks.
+The current automated gate passes 225 tests, typecheck, frozen installation and projection drift checks.
 Fixtures use disposable repositories/accounts, actual native loaders/sessions/tool loops and offline
 model streams. Safeguards, formatting serialization, selected-pack children, resume preparation and
 resurrection adapters are exercised without an installed cutover.
 
 Native web/MCP/question packages load for both accounts. Local MCP/question callbacks pass; web's
 loopback request is SSRF-blocked, **not successful retrieval**. Existing package versions are preserved.
-The unchanged Orca status hook reproduces premature parent completion with a held child event; no
-aggregate adapter/patch has been approved or deployed. See
-[migration/evidence-final-integration.md](migration/evidence-final-integration.md).
+The approved checkout-local Orca hook candidate passes actual native child/follow-up/result-consumption
+fixtures without premature completion. It remains **undeployed**: the current Orca receiver drops its
+cancellation flag, and a separate receiver patch awaits approval. See
+[migration/evidence-orca-compat.md](migration/evidence-orca-compat.md) and
+[migration/evidence-legacy-compat.md](migration/evidence-legacy-compat.md).
 
 These checks do not prove authenticated workflows, real compaction summaries, physical newline/wheel/
 footer/title/question behavior, resumed startup, Orca attention/notification fidelity, or reboot
