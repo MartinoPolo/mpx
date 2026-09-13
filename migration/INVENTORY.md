@@ -1,5 +1,10 @@
 # Migration-local inventory
 
+**Preserved source-inventory snapshot.** Its provisional `adapt-later`/`UNVERIFIED` cells describe
+initial enumeration, not the current implementation backlog. [COVERAGE.md](COVERAGE.md) maps every
+resulting canonical file; [PROGRESS.md](PROGRESS.md) and per-slice evidence record current verification
+and unresolved gates. The authority files own dispositions; no archival is inferred from this table.
+
 This is a migration-local inventory, not a runtime manifest. Byte-preserving source status is read-only; source HEAD and git status counts are recorded (never copies from HEAD); no whole repos copied. Dependency entries are lexical leads only; closure is unverified. This deterministic enumeration is not behavioral reduction.
 
 Roots enumerated exactly: $MPX_PROJECTS/mpx/content, $MPX_PROJECTS/mpx/scripts, $MPX_PROJECTS/mpx/packages/runtime-hooks/src, $MPX_PROJECTS/mpx/runtimes/pi/extensions, $MPX_PROJECTS/mpx-claude-code/plugins/mp/skills, $MPX_PROJECTS/mpx-claude-code/plugins/gh/skills, $MPX_PROJECTS/mpx-claude-code/local/skills, $MPX_PROJECTS/mpx-claude-code/plugins/mp/agents, $MPX_PROJECTS/mpx-claude-code/plugins/gh/agents, $MPX_PROJECTS/mpx-claude-code/instructions, $MPX_PROJECTS/mpx-claude-code/rules, $MPX_PROJECTS/mpx-claude-code/rules-per-project, $MPX_PROJECTS/mpx-claude-code/plugins/mp/scripts, $MPX_PROJECTS/mpx-claude-code/plugins/mp/hooks, $MPX_PROJECTS/mpx-claude-code/plugins/mp/templates, $MPX_PROJECTS/mpx-pi/extensions, $MPX_PROJECTS/mpx-pi/scripts, $MPX_PROJECTS/mpx-pi/prompts.

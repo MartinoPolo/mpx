@@ -56,8 +56,10 @@ test('explicit partial sync previews without writes, then converges while preser
     assert.doesNotMatch(second.stdout, /created/);
     assert.match(second.stdout, /unchanged/);
     const status = await f.run('status');
-    assert.equal(status.code, 0, status.stderr);
+    assert.equal(status.code, 1, 'agent-only sync must not claim that missing runtime/package registrations are ready');
     assert.match(status.stdout, /linked/);
+    assert.match(status.stdout, /Runtime registrations\/settings/);
+    assert.match(status.stdout, /missing/);
     assert.match(status.stdout, /NOT VERIFIED/);
     assert.equal(await readFile(untouched, 'utf8'), '{"userOwned":true}\n');
     assert.equal((await readdir(f.accounts.work.pi)).includes('skills'), false);
@@ -161,10 +163,10 @@ test('explicit Orca-only sync previews and converges without copying unrelated s
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
-test('unfinished full sync and unknown flags fail without account writes', async () => {
+test('full sync preview reports missing managed sources and unknown flags without account writes', async () => {
   const f = await fixture();
   try {
-    assert.notEqual((await f.run('sync')).code, 0);
+    assert.notEqual((await f.run('sync', '--preview')).code, 0);
     assert.notEqual((await f.run('sync', '--agents-only', '--force')).code, 0);
     for (const roots of Object.values(f.accounts)) for (const directory of Object.values(roots)) assert.deepEqual(await readdir(directory), []);
   } finally { await rm(f.root, { recursive: true, force: true }); }

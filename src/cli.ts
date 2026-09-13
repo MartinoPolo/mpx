@@ -8,8 +8,13 @@ import { evaluatePackageManager } from './safeguards/package-manager.js';
 import { build, checkOutput } from './compiler.js';
 import { readUserConfig, resolveProject, selectPacks } from './config.js';
 import { createLaunchSpec, confirmLaunch, runLaunch } from './launch.js';
-import type { Account, Harness, Thinking } from './contracts.js';
-import { listNativeSessions, readPiSession, planResume } from './resume.js';
+import type { Account, Harness } from './contracts.js';
+import { resumeCommand } from './resume-cli.js';
+import { syncRuntime } from './runtime-install.js';
+import { setupProject, orcaProjectSnippet } from './project.js';
+import { evaluateDangerousCommand } from './safeguards/dangerous.js';
+import { createLegacyLaunch } from './legacy.js';
+import { inspectNativePackages } from './native-packages.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...args] = process.argv.slice(2);
@@ -56,9 +61,31 @@ async function main(): Promise<number> {
           console.log(`  ${entry.account}/${entry.harness}: ${entry.status} ${entry.source ?? '(unowned entry)'} -> ${entry.destination}${entry.error ? ` (${entry.error})` : ''}`);
           if (entry.status !== 'linked') missingLinks = true;
         }
+        const runtime = await syncRuntime(root, config, true);
+        console.log('Runtime registrations/settings (read-only preview):');
+        for (const entry of runtime.entries) {
+          console.log(`  ${entry.status}: ${entry.source} -> ${entry.destination}${entry.diagnostic ? ` (${entry.diagnostic})` : ''}`);
+          if (entry.status !== 'unchanged') missingLinks = true;
+        }
+        const orca = await mirrorOrcaHooks(config, { preview: true });
+        for (const entry of orca.results) console.log(`  Orca ${entry.status}: ${entry.source} -> ${entry.destination}${entry.error ? ` (${entry.error})` : ''}`);
+        if (!orca.ok) missingLinks = true;
+        const packages = await inspectNativePackages(['personal', 'work'].map(account => ({ account, root: config.accounts[account as Account].pi })));
+        for (const item of packages.packages) {
+          console.log(`  ${item.account}/${item.packageName}: ${item.status}; ${item.version ?? 'unknown version'}; ${item.loadTargets.join(', ')}${item.missing.length ? ` (${item.missing.join('; ')})` : ''}`);
+          if (item.status !== 'ready') missingLinks = true;
+        }
+        for (const conflict of packages.conflicts) console.log(`  Native package versions differ: ${conflict.packageName} ${conflict.versions.join(' / ')} (preserved; no upgrades)`);
       } else console.log('Agent links: NOT VERIFIED; no MPX2 user configuration.');
       console.log('Hooks/extensions, interactive discovery and cutover: NOT VERIFIED.');
       return drift.length || missingLinks ? 1 : 0;
+    }
+    case 'legacy-launch': {
+      const spec = await createLegacyLaunch(root, process.cwd(), await readUserConfig(userConfigPath()), await resolveProject(process.cwd()), args);
+      console.error(spec.label);
+      for (const warning of spec.warnings) console.error(`Warning: ${warning}`);
+      await confirmLaunch(spec);
+      return runLaunch(spec);
     }
     case 'launch':
     case 'launch-preview': {
@@ -82,6 +109,13 @@ async function main(): Promise<number> {
       await confirmLaunch(spec);
       return runLaunch(spec);
     }
+    case 'check-dangerous': {
+      if (!args[0]?.trim() || args.length > 2) throw new Error('Usage: mpx check-dangerous <quoted shell command> [directory]. Inspects only.');
+      const result = await evaluateDangerousCommand(args[0], resolve(args[1] ?? process.cwd()));
+      console.log(`Dangerous-command policy: ${result.decision}`);
+      for (const diagnostic of result.diagnostics) console.error(diagnostic);
+      return result.decision === 'block' ? 1 : 0;
+    }
     case 'check-package-manager': {
       if (!args[0]?.trim() || args.length > 2) throw new Error('Usage: mpx check-package-manager <quoted shell command> [directory]. Inspects only; never executes the command.');
       const result = await evaluatePackageManager(args[0], resolve(args[1] ?? process.cwd()));
@@ -97,9 +131,27 @@ async function main(): Promise<number> {
       return result.decision === 'block' ? 1 : 0;
     }
     case 'sync': {
-      const scopes = args.filter(arg => arg === '--agents-only' || arg === '--orca-hooks-only');
-      if (scopes.length !== 1 || new Set(args).size !== args.length || args.some(arg => !['--agents-only', '--orca-hooks-only', '--preview'].includes(arg))) {
-        throw new Error('Full sync is not ready. Choose one scoped operation: sync --agents-only [--preview] or sync --orca-hooks-only [--preview]. Full MPX runtime registration and cutover remain incomplete; no account files changed.');
+      const scopes = args.filter(arg => ['--agents-only', '--orca-hooks-only', '--runtime-only'].includes(arg));
+      if (scopes.length > 1 || new Set(args).size !== args.length || args.some(arg => !['--agents-only', '--orca-hooks-only', '--runtime-only', '--preview'].includes(arg))) {
+        throw new Error('Usage: sync [--agents-only|--orca-hooks-only|--runtime-only] [--preview]. No live cutover is performed.');
+      }
+      if (scopes.length === 0 || scopes[0] === '--runtime-only') {
+        const config = await readUserConfig(userConfigPath());
+        const preview = args.includes('--preview');
+        if (!preview) await build(root);
+        const runtime = await syncRuntime(root, config, preview);
+        for (const entry of runtime.entries) console.log(`${entry.status}: ${entry.source} -> ${entry.destination}${entry.diagnostic ? ` (${entry.diagnostic})` : ''}`);
+        let ok = runtime.ok;
+        if (scopes.length === 0) {
+          const plan = await planAgentLinks(root, config);
+          const agents = preview ? await inspectAgentLinks(plan) : await syncAgentLinks(plan);
+          const orca = await mirrorOrcaHooks(config, { preview });
+          for (const entry of agents.results) console.log(`${entry.status}: ${entry.source ?? '(unowned)'} -> ${entry.destination}${entry.error ? ` (${entry.error})` : ''}`);
+          for (const entry of orca.results) console.log(`${entry.status}: ${entry.source} -> ${entry.destination}${entry.error ? ` (${entry.error})` : ''}`);
+          ok &&= agents.ok && orca.ok;
+        }
+        console.log('Owned entries only. Legacy disconnection, installed runtime acceptance and cutover are NOT VERIFIED; no launcher/account switch is performed.');
+        return ok ? 0 : 1;
       }
       if (scopes[0] === '--orca-hooks-only') {
         const config = await readUserConfig(userConfigPath());
@@ -125,35 +177,17 @@ async function main(): Promise<number> {
       if (!result.ok) console.error('Partial sync failed for the reported entries; unrelated entries were preserved.');
       return result.ok ? 0 : 1;
     }
-    case 'resume': {
-      if (args.length === 1 && args[0] === '--list') {
-        const config = await readUserConfig(userConfigPath());
-        const result = await listNativeSessions(config, process.cwd());
-        console.log(JSON.stringify({ ...result, launchVerified: false }, null, 2));
-        return 0;
-      }
-      if (args[0] !== '--preview' || !args[1]) throw new Error('Resume launch is not yet verified. Available read-only operations: resume --list; resume --preview <absolute Pi transcript> --account <personal|work> [--provider value] [--model value] [--thinking level].');
-      const values = new Map<string, string>();
-      for (let index = 2; index < args.length; index += 2) {
-        const flag = args[index]!;
-        const value = args[index + 1];
-        if (!['--account', '--provider', '--model', '--thinking'].includes(flag) || value === undefined || value.startsWith('--') || values.has(flag)) throw new Error('Invalid or duplicate resume preview option.');
-        values.set(flag, value);
-      }
-      const account = values.get('--account');
-      if (account !== 'personal' && account !== 'work') throw new Error('Resume preview requires an explicit personal/work account.');
-      const thinking = values.get('--thinking');
-      if (thinking !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) throw new Error('Invalid resume thinking override.');
-      const config = await readUserConfig(userConfigPath());
-      const result = await readPiSession(args[1], account, config.accounts[account].pi);
-      const plan = await planResume(result.session, { provider: values.get('--provider'), model: values.get('--model'), thinking: thinking as Thinking | undefined });
-      console.log(JSON.stringify({ plan, warnings: result.warnings, launchVerified: false }, null, 2));
-      return 0;
+    case 'resume':
+      return resumeCommand(root, await readUserConfig(userConfigPath()), args);
+    case 'project': {
+      if (args[0] !== 'setup' || args.slice(2).some(arg => !['--preview', '--non-interactive'].includes(arg))) throw new Error('Usage: mpx project setup <directory> [--preview] [--non-interactive]');
+      const result = await setupProject(resolve(args[1] ?? '.'), args.includes('--preview'));
+      console.log(`${result.status}: ${result.source} -> ${result.destination}${result.diagnostic ? ` (${result.diagnostic})` : ''}`);
+      console.log(orcaProjectSnippet());
+      return result.status === 'conflict' ? 1 : 0;
     }
-    case 'project':
-      throw new Error(`${command} is not ready: installation gates remain open. No account or project files changed. See migration/PROGRESS.md.`);
     default:
-      console.log('MPX2 development checkout\nCommands: build, status, sync <--agents-only|--orca-hooks-only> [--preview], check-staged-secrets [directory], check-package-manager <command> [directory], resume --list/--preview, launch-preview, launch\nFull installation, native resume, safeguards and live cutover are not yet accepted.');
+      console.log('MPX2 development checkout\nCommands: build, status, sync [--agents-only|--orca-hooks-only|--runtime-only] [--preview], project setup, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.');
       return command ? 1 : 0;
   }
 }

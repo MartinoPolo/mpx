@@ -22,6 +22,7 @@ const EXPOSURES: readonly Exposure[] = ['normal', 'name-only', 'explicit-only'];
 const OUTPUT_ROOTS = ['dist/packs', 'dist/pi', 'dist/claude'] as const;
 const PLACEHOLDERS = [
   '{{MPX_SKILL_COMMAND}}',
+  '{{MPX_SKILL_PREFIX}}',
   '{{MPX_AGENT_PREFIX}}',
   '{{MPX_SHARED_INSTRUCTIONS}}',
   '{{MPX_AGENT_REFERENCES}}',
@@ -247,6 +248,7 @@ function replacePlaceholders(content: Buffer, harness: Harness, outputPath: stri
     : relativeReference(outputPath, `${targetRoot}/agents/references`);
   const values: Record<(typeof PLACEHOLDERS)[number], string> = {
     '{{MPX_SKILL_COMMAND}}': harness === 'pi' ? '/skill:mp-' : '/mp-',
+    '{{MPX_SKILL_PREFIX}}': canonical ? '' : 'mp-',
     '{{MPX_AGENT_PREFIX}}': 'mpx-',
     '{{MPX_SHARED_INSTRUCTIONS}}': shared,
     '{{MPX_AGENT_REFERENCES}}': references,
@@ -285,7 +287,25 @@ function markdownTargets(content: Buffer): string[] {
   if (text === undefined) return [];
   const clean = withoutCode(text.replace(/^---\r?\n[\s\S]*?^---[ \t]*(?:\r?\n|$)/m, ''));
   const targets: string[] = [];
-  for (const match of clean.matchAll(/!?\[[^\]\n]*\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+[^)]*)?\)/g)) targets.push(match[1]!);
+  for (const match of clean.matchAll(/!?\[[^\]\n]*\]\(\s*/g)) {
+    let cursor = match.index! + match[0].length;
+    if (clean[cursor] === '<') {
+      const end = clean.indexOf('>', cursor + 1);
+      if (end >= 0) targets.push(clean.slice(cursor + 1, end));
+      continue;
+    }
+    let target = ''; let depth = 0;
+    for (; cursor < clean.length; cursor++) {
+      const char = clean[cursor]!;
+      if (char === '\\' && cursor + 1 < clean.length) { target += char + clean[++cursor]!; continue; }
+      if (char === ')' && depth === 0 || /\s/.test(char) && depth === 0) break;
+      if (char === '(') depth++;
+      if (char === ')') depth--;
+      target += char;
+    }
+    if (target) targets.push(target);
+  }
+  for (const match of clean.matchAll(/<(?:a|img|source)\b[^>]*?\b(?:href|src)\s*=\s*(["'])(.*?)\1/gi)) targets.push(match[2]!);
   for (const match of clean.matchAll(/^ {0,3}\[[^\]\n]+\]:\s*(<[^>]+>|\S+)/gm)) targets.push(match[1]!);
   return targets;
 }
@@ -296,7 +316,7 @@ function localTarget(raw: string): string | undefined {
   target = target.split('#', 1)[0]!.split('?', 1)[0]!;
   if (!target) return undefined;
   try {
-    return decodeURIComponent(target).replaceAll('\\', '/');
+    return decodeURIComponent(target).replace(/\\([() ])/g, '$1').replaceAll('\\', '/');
   } catch {
     return target.replaceAll('\\', '/');
   }

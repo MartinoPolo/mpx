@@ -38,6 +38,8 @@ export interface UserConfig {
   domains: Record<Account, string[]>;
   defaultPacks?: Partial<Record<Account, string[]>>;
   executables?: Partial<Record<Harness, string>>;
+  legacyPi?: { accountRoot: string; checkout: string };
+  piTitle?: { provider: string; model: string; thinking: Thinking };
 }
 export interface ProjectSelection {
   mainCheckout?: string;

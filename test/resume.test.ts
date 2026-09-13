@@ -32,6 +32,7 @@ async function fixture() {
     work: { pi: path.join(root, 'work-pi'), claude: path.join(root, 'work-claude') },
   };
   for (const roots of Object.values(accounts)) for (const accountRoot of Object.values(roots)) await mkdir(accountRoot, { recursive: true });
+  await Promise.all(Object.values(accounts).map(roots => mkdir(path.join(roots.claude, 'projects'), { recursive: true })));
   const config: UserConfig = { accounts, domains: { personal: [], work: [] } };
   const writeSession = async (
     account: 'personal' | 'work', name: string, values: unknown[], options: { newline?: boolean; modified?: number } = {},
@@ -287,7 +288,7 @@ test('combined listing has current-project priority, keeps every same-cwd sessio
     assert.deepEqual(sessions.map(session => session.id), ['current-new', 'current-old', 'other', 'other-old']);
     assert.deepEqual(sessions.map(session => session.account), ['work', 'personal', 'work', 'personal']);
     assert.equal(sessions.filter(session => session.cwd === current).length, 2);
-    assert.equal(warnings.filter(warning => /Claude session listing is unsupported/.test(warning)).length, 2);
+    assert.deepEqual(warnings, []);
     await assert.rejects(stat(path.join(f.accounts.personal.claude, 'sessions')), { code: 'ENOENT' });
     await assert.rejects(stat(path.join(f.accounts.work.claude, 'sessions')), { code: 'ENOENT' });
   } finally { await f.cleanup(); }
@@ -356,8 +357,8 @@ test('planning fails for missing transcript/cwd and unsupported Claude without c
     const { session: moved } = await readPiSession(movedFile, 'personal', f.accounts.personal.pi);
     await assert.rejects(planResume(moved, { provider: 'p', model: 'm', thinking: 'off' }), /Resume cwd is unavailable/);
 
-    const claude = { ...session, harness: 'claude', file } as NativeSession;
-    await assert.rejects(planResume(claude, { provider: 'p', model: 'm', thinking: 'off' }), /Claude native resume is unsupported/);
+    const claude = { ...session, harness: 'claude', file, accountRoot: f.accounts.personal.claude } as NativeSession;
+    await assert.rejects(planResume(claude, { model: 'm', thinking: 'low' }), /outside the configured transcript store/);
     await assert.rejects(stat(path.join(f.accounts.personal.claude, 'sessions')), { code: 'ENOENT' });
   } finally { await f.cleanup(); }
 });

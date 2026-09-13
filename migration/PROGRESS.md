@@ -1,70 +1,97 @@
-# Migration progress and evidence
+# Migration progress — 2026-09-13
 
-Authorities: `DECISIONS.md` and `MIGRATION_PLAN.md`, read completely on 2026-09-12.
-Migration-local continuation evidence only. **Partial implementation; NOT cutover-ready.**
+**State: repository implementation and isolated verification; NOT cutover-ready.**
+`DECISIONS.md` is authority; `MIGRATION_PLAN.md` owns acceptance. Evidence does not authorize installation.
+Remote creation remains deferred (future owner: MartinoPolo).
 
-## Runtime preflight
+## Local checkpoints
 
-- Parent native Pi **0.85.1**, Node **22.23.1**; selected `MPX_PI_EXECUTABLE`. Windows process PID 7000 command line and native transcript `01a097ae-1945-7724-bcfe-433965aef4a0` confirm openai-codex/gpt-6-astra/high; native shell metadata agrees.
-- Actual parent flags disable extension/context/skill/prompt/theme discovery and explicitly load only `npm:@tintinweb/pi-subagents@0.14.3` plus the migration append prompt. No SYSTEM.md override exists. Explicit append prompt prevents automatic APPEND_SYSTEM discovery (native loader inspected).
-- Standalone artifact: `$PI_CODING_AGENT_DIR/tmp/extensions/npm/f35b2129/node_modules/@tintinweb/pi-subagents`, entry `src/index.ts`. No installed package replaced. Tools: native read/bash/edit/write plus Agent/get_subagent_result/steer_subagent. **No legacy safeguards, MCP or guard hooks.**
-- Definitions still come from `$PI_CODING_AGENT_DIR/agents` → `$MPX_PROJECTS/mpx-pi/agents` (23 generated definitions), plus built-ins. Installed schema inspected; no invented fields. `isolated: true` suppresses child extension/skill/context/prompt/theme discovery and orchestration tools, not filesystem access.
-- Pilot `2565c2ef-b3dd-498`: background/results/steering worked, but explicit Luna/xhigh became **medium** in recorded native Bash output. Cause: installed invocation resolver gives definition fields precedence despite tool-description override claims; legacy Explore pins medium.
-- Second pilot `435c7054-4df6-4d2`, existing unpinned general-purpose, PASSED actual Luna/xhigh with marker `MPX2-GENERIC-STEER`. Used this route thereafter with real model/thinking/isolated fields. No bootstrap/global edits. Sol/high, Sol/medium and Terra/medium execution evidence checked separately; config child initially queried a nonexistent effort variable, then reran the correct `PI_REASONING_LEVEL` check.
-- Automatic completion messages were not observed during continuous parent work; earlier notifications arrived only in a later user turn. Results were retrieved once at dependency barriers, without polling loops. Some continuation task records expired before retrieval; their tool-provided native output files supplied completion/execution evidence instead. Resumed calls completed synchronously despite requesting background. Reliable notification timing and long-lived result/history retention are NOT passed.
-- At most four independent children; no nested delegation, schedules or automatic worktree isolation. Test-created worktrees were scoped disposable Git fixtures only.
-- Continuation preflight repeated against PID 7000 and native session metadata: same Pi 0.85.1, Astra/high, standalone 0.14.3 only, discovery disabled, explicit bootstrap append prompt, no legacy guards. Read-only pilot `1f93d007-99bf-4d0` actually ran Luna/xhigh and received CONTINUATION_STEER_20260913. Sol medium/high and mechanical Luna/low shell effort checked using PI_REASONING_LEVEL (not nonexistent PI_EFFORT). Source heads/dirty counts still matched the preserved baseline before new work.
+- `45fc3a0 docs(migration): approve local pack patch and defer remote setup` — authority only;
+  typecheck passed immediately before committing.
+- Implementation/content/generated outputs/evidence: final gate and local checkpoint in progress.
+  No push, remote creation, installed cutover, account migration, archival, rename, or reboot.
 
-## Implemented slice
+## Implemented in MPX2
 
-- One private pnpm/TypeScript package; explicit build/typecheck/test/status CLI. All dependencies installed locally with scripts disabled. Running bootstrap dependencies untouched. An unrelated pnpm user-package module-type warning was not suppressed by editing user files.
-- `src/compiler.ts`: deterministic native skill/agent projections, semantic profile mapping, exposure mapping, declared placeholders, local references, duplicate/metadata validation, UTF-8 body and support-byte fidelity, scoped drift/build and link-conflict protections. Pi agent filenames use mpx- and thinking; Claude uses mpx- and effort. Complex HTML/nested-parenthesis references and executable-mode transfer still need broader acceptance.
-- `src/config.ts`: independent providers; strict two-level JSON; absolute allowlisted environment-expanded paths; account alias checks; Git main/separate-git-dir/linked-worktree resolution; explicit-empty/default/invalid/unavailable selections; concurrent selection isolation.
-- `src/launch.ts`, `bin/*`: personal/work native-root selection, additive skill args, warnings/Enter gate, native xpi label/verbose/no-extensions, exit propagation, no default model/effort injection. Mixed-case Windows environment selectors are scrubbed. All caller args remain positional.
-- Current canonical content: handoff + checker specialist + seven reviewer specialists + shared reviewer protocol + five framework guides + runtime profile. Bodies copied by file operations from dirty working sources, not regenerated or HEAD-only. Initial handoff bytes and checker body equality verified. Handoff retains full template/merge/reasoning guidance, uses available native/project/conversation task state, and explicitly gates unavailable optional grill/harvest companions. No other skill retired. Reviewer checkpoint/confidence/severity/framework branches preserved; parent inspected all seven source diffs and independently verified all six support files byte-identical. Full local dependency closure for this reviewer batch is now inside MPX2. Compiler now distinguishes uppercase named placeholders from literal Vue/React examples, adds the declared MPX_HARNESS placeholder, and rejects malformed reserved MPX tokens; both failures reproduced red before green. Actual committed-content drift tests added.
-- `migration/INVENTORY.md`: **631 source-file rows + 8 package/installed-capability placeholders**. All 51 current SKILL.md files enumerated, including untracked REPORTING_LINKS support. Most counterpart/dependency leads are explicitly UNVERIFIED. Reviewed slice evidence is preserved separately within that same inventory.
-- Initial broad inventory agents exhausted their bounds without writing; replaced by explicit mechanical enumeration. Do not repeat that fan-out. Follow dependency closure in small review/port batches instead.
-- `src/install.ts` plus explicit `sync --agents-only [--preview]` install only generated specialist file links; native account roots are never created, linked ancestors/conflicts are preserved, source failures are independent, stale links are reported without removal. Status now honors user defaults and inspects these links. Only disposable account fixtures have been synchronized.
-- `src/safeguards/staged-secrets.ts` provides a standalone streamed bounded aggregate staged diff scan, exposed as `check-staged-secrets`. No global check/commit-message enforcement. Positive findings survive later faults; infrastructure failures warn rather than report clean. Hook interception/separate-call index-mutation enforcement remain pending.
-- `src/resume.ts` provides native Pi v3 read-only active-branch inspection and planning, exposed as `resume --list` / `resume --preview`. No native SessionManager.open migrations or transcript rewriting; unknown fields require labeled overrides. Actual launch/picker/model availability and Claude parsing still pending.
-- `extensions/pi-context.ts` / `src/context.ts` implement approved Pi compaction guidance, concise per-prompt style and seven-root context. Shared COMPACT.md copied byte-identically from dirty current source; original counterpart differs only in whitespace. Native compaction algorithm/auth/request shaping retained, manual guidance first, failures visibly fall back. Root snapshots update only when needed, including A→B→A and all-unset clearing. No live loading registration changed.
-- `src/safeguards/package-manager.ts` / `shell.ts` and explicit `check-package-manager` CLI inspect only: native package/lock/workspace evidence, conservative successful-&& cwd inference, visible unsupported grammar, direct npx tsc blocking. Bounded config reads, native glob matching and per-call-only directory reuse replace unsafe guesses/repeated scans. Node minimum is 22.20 for stable native glob support; running Node unchanged.
-- Explorer now retained as exploration/medium, with native search terminology and only seven-root inspection (not all MPX_* variables). Parent read current and both original counterparts and inspected the complete diff. This deployed declaration remains distinct from the migration-child Luna/xhigh allocation. Nine specialists and shared COMPACT now yield 34 projections.
-- Orca source ownership inspected at the planned/current commit 729491597f33031089148bc2fba41a99e0b95de7. `src/orca.ts` / fixture tests implement default-preview personal→work mirroring of three marked Pi files and only managed nested Claude hooks. No statusLine/auth/history/account-root copies or live operations. Explicit `sync --orca-hooks-only [--preview]` is available; full sync is still gated. Bounded reads, fatal JSON UTF-8 decoding, observed-change checks, temporary-write cleanup and merged-size limits are tested. Missing managed sources are visible, not healthy no-ops.
-- Parent ran the simplified native Claude 2.1.236 fixture: five bounded launches, fake loopback API, no tools. Native catalogs, leading handoff expansion, exact-ID user+assistant history and separate-root rejection passed. Naive resume used claude-opus-5/high instead of initial fixture model/low; explicit model+effort restored both with history intact. Probe intentionally exits 1 for this native fidelity gap; effort not proven persisted. Source bytes unchanged, temporary roots removed. A prior probe version was overly elaborate; reduced from ~790 to ~260 lines before parent verification.
-- Requested approval for a checkout-local, version-pinned upstream adaptation of selected-pack propagation/named preloading. No such patch or live bootstrap replacement has been made; unrelated local implementation continues.
+| Area | Implemented | Evidence / qualification |
+|---|---|---|
+| Canonical content | All 51 current skills, 21 specialists, shared/provider/harness instructions, 16 rules, terse style; 195 canonical files and 386 projections | [COVERAGE.md](COVERAGE.md), core/remaining/shared evidence. Historical `mp-to-epic` → `epic-create`, `mp-init-repo` → `init-github-repo`; no silent retirement. |
+| Compiler | Deterministic source/output build, declared body placeholders, specialist projection, balanced/escaped Markdown and HTML support closure | Compiler/content tests; committed source and output must move together. |
+| Native wrappers/context | Pi/Claude personal/work, native selectors/escape paths, project/account content roots, shared instructions/style, native Pi compaction guidance | Original discovery/context evidence and native composed fixture. No auth router, per-session environment protocol, or MPX registry. |
+| Upstream selected packs | Pinned checkout-local 0.19.0 patch, only discovery/preload wiring in runner/skill loader | Actual native child loaders/runAgent, concurrent selections, linked worktree, named bodies. Installed 0.14.3 bootstrap untouched. |
+| Shared safeguards | Dangerous command/NUL policy, bounded trusted Git metadata, staged-secret checks including no-verify, push-only opted-in Fallow | Infrastructure policy distinctions retained: dangerous inspection fails closed; incomplete secret/Fallow audits warn/allow, never clean. Opaque inline interpreters remain blocked. |
+| Native formatting | Configured local Prettier/Biome/Ruff only; trusted/ignored/generated checks; edited file only, native mutation queue, bounded execution | Optional at cutover. Failure preserves successful mutation; native diff is pre-format. No lint/restage/download. |
+| Native transports | Pi tool_call plus native filesystem operations; Claude native permission/result/context hooks | Claude compaction guidance uses SessionStart context, **not unsupported PreCompact stdout**. Native summary quality remains live acceptance. |
+| Pi UI | Native running rows plus finished metadata footer; aggregate lifecycle boundary, bounded configured title request/fallback, Windows Terminal-only wheel trial | No Orca transport deployed. Aggregate completion is not accepted from a timer alone. Actual physical UI still pending. |
+| Resume | Native discovery, project/account ordering, exact selectors, fresh metadata checks, read-only Pi RPC model/auth/effort preflight, list/preview/launch picker | Preserves transcripts. Unknown Claude effort needs explicit override. Preflight ≠ resumed startup; Claude startup verification not claimed. |
+| Resurrection/Orca recipe | Adapter consumes verified prepared launch; cwd/account/selectors preserved, unrelated/credential env deltas rejected | Current Agent Resurrect disposable save/restore pilot passed unchanged. Orca terminal CLI recipe only; no new daemon/session registry or deployed restart behavior. |
+| Install/status/project | Owned links, bounded optimistic native JSON merge, conflict preservation, native registrations/package readiness, optional project symlink and text-only Orca snippets | Preview and disposable merge/idempotence tests. No actual account installation. |
+| Retained native packages | Exact configured package/path/version/filter inspection; native loaders for both accounts | Web 0.28.0 personal / 0.27.0 work mismatch preserved; MCP 2.32.1 and question 2.9.0 both. No upgrades. |
+| Legacy access | Explicit separate existing account and complete package/tool-display dependencies required; no fallback, old alert bundle excluded | The known hardcoded footer root now blocks launch rather than crossing accounts. Fixtures are not full legacy UI compatibility acceptance. |
+| Tutorial helper | Root package YAML/Shiki dependencies, adapted-placeholder validation, actual projected helper execution | Shiki 3.23.0; optional Mermaid/browser setup and other external workflow tools remain explicit prerequisites. |
 
-## Verification
+## Verified and limits
 
-- Compiler/config/launcher TDD red → green, with actual temporary Git/filesystem/process fixtures.
-- Real Git Bash wrapper test exposed LF argument splitting at Node→MSYS boundary. Forced CRT quoting for shim argv fixed it. pi/piw/cc/ccw/xpi now pass spaces, empty strings, LF, quotes, trailing backslashes and hostile-looking literals through real disposable shims.
-- Independent Terra review reproduced a Windows case-insensitive environment leak. Fixed and regression-tested in an actual spawned child. Terra follow-up found no remaining confirmed defects in that scope. Kept xpi `--verbose`: native loaded-extension visibility, not MPX content injection; reviewer agreed no demonstrated loss.
-- `test/native-discovery.test.ts`: separate Pi 0.85.1 SDK processes verify native catalogs, selected generated pack files/support, lazy body/exposure metadata, account separation, native project/shared-global/account/unrelated-package discovery, trust, explicit-empty and concurrent selections, restart stability. `test/agents.test.ts` also loads actual generated specialist definitions with published upstream's native-loaded parser alongside an independent project agent, checking names/model/effort/tools. **Parsing is not actual model execution, interactive invocation or deployed child acceptance.**
-- `node migration/upstream-probe.mjs`: published pinned upstream 0.19.0 loaded by native Pi extension loader in a disposable Git/account fixture. Normal resource-discovery adapter yields native-project + mp-selected; upstream named preload still says mp-selected not found. Zero model requests. Exact implementation gap demonstrated; see extensions/README.md.
-- Probe drafts: direct tsx/CJS import failure was not native incompatibility; corrected to native loading. A non-Git temp fixture initially discovered ancestor native skill metadata; a Git boundary and exact catalog assertion corrected isolation. No legacy skill/extension execution occurred.
-- Continuation verification: scanner 18 focused tests; specialist installer 9 focused tests including all-source-agents-removed stale reporting; real native upstream parser now reads installer-created fixture symlinks. CLI fixture tests cover partial sync, status defaults, staged scan and read-only resume. A separate native Pi SDK process drives seven prompts with only the model stream stubbed, verifies actual model-bound root/style context, changes/clearing/deduplication and a synthetic compaction boundary. This does NOT establish real generated summaries or installed-account behavior. Pi-ai 0.85.1 added as a pinned local dev dependency for its public event-stream fixture; installed bootstrap untouched.
-- Independent Terra continuation reviews found installer ancestry/planning/stale-report gaps, resume memory/effort-validation, and native-test assertion gaps (fixed). Parent found scanner color/relative-diff and truncated-hunk/diagnostic-order gaps (red→green fixed), and strengthened native context assertions. A further real 64MB-heap regression proved sliced user-title strings retained large abandoned payloads; bounded code-unit-preserving copies fixed it (13 resume tests pass).
-- Independent Terra integration review fbb58278-877a-4e5 passed typecheck and 55 focused tests, then identified generic credentials in filenames (parent reproduced red and fixed). Its four-second deadline finding was rejected against DECISIONS.md:277, which requires below five seconds, including Git; the four-second default is not the end-to-end contract.
-- Separate native Pi SDK restoration fixture now creates real own v3 transcripts, performs model/effort changes, verifies byte-read-only inspection/planning, then reopens/resumes without selectors and verifies actual restored model/effort and role-filtered history. Only model streaming is stubbed. Parent reran corrected child test successfully; installed CLI/unknown-model fallback remains unaccepted.
-- Package-policy 2000-command read-only measurement improved from 1604ms to 14ms with per-inspection directory reuse, not a persistent cache; cross-call freshness has regression coverage. Terra review c4f834a0-2ce5-4b3 found no confirmed actionable issues in package policy, native-resume/Claude fixtures, CLI integration and the scanner redaction fix.
-- Terra Orca review 726a2125-b990-46b identified target-only wrapper metadata loss. Parent reproduced red and made that case an explicit conflict preserving target bytes, rather than inventing a merge or deleting metadata. Both preview/write and same-metadata idempotence are tested; Terra recheck confirmed resolved. Fourteen Orca and seven CLI tests passed.
-- Parent additionally reproduced Windows repository-local git.exe hijacking with a harmless trusted-Node fixture: the old scanner executed a repository-supplied diff script. Git now starts from the trusted helper directory and receives the requested absolute repository via -C. The regression passes; no PATH-resolution framework was added. Terra b38b8d68-ea35-4e4 confirmed no actionable issues. An additional red→green fix prevents isolated private-key headers combining with unrelated hunks/unscanned context; Terra recheck accepted it. All eighteen scanner tests pass.
-- Final continuation gate: **132 tests passed, none failed/skipped**, typecheck/status/diff checks passed, **34 projections with 0 rebuild changes**. Independent mechanical Luna/low gate had already passed the preceding 129-test state; parent reran the full final state after the final reviewed fixes. No remote, live sync, runtime replacement or cutover.
-- Initial slice committed as `f5e03f4` after 37 tests and deterministic build passed. Second content batch: `pnpm build` (30 projections), `pnpm run typecheck`, and the 41-test suite passed, followed by the additional native-agent parser test. Independent Terra content/placeholder/path review found no confirmed issues. Final **42 tests**, status and deterministic rebuild all passed; repeated build reported **0 changes**. This second content batch was committed as `52384df`. Status visibly warns about the not-yet-ported personal pack and labels installed hooks/account/interactive state NOT VERIFIED. Source HEADs and dirty-entry counts rechecked unchanged. No push or cutover performed. Local commits only, with native repository hooks left in place.
+- Frozen checkout install with `--ignore-scripts` passes; no retained native package/account installation.
+- `pnpm build`: 386 projections, zero drift. `pnpm run typecheck`: passed. `pnpm test`:
+  **212 passed, 0 failed/skipped/cancelled**, with native fixture concurrency bounded at four.
+  Earlier failed runs were repaired and rerun, not counted as passing.
+- Pi 0.85.1 composed native loader/session/tool-loop fixtures pass for personal/work: dangerous clean
+  blocked before deletion, NUL write blocked, safe native write/edit, shared/style/root context, and one
+  upstream Agent/result/steer registration. Offline provider and in-memory credentials; streaming stubbed;
+  outbound fetch/socket attempts actively rejected. Not authenticated service acceptance.
+- Retained web/MCP/question packages load through native Pi for both existing configurations. Native
+  package manager read-only resolution independently confirms six installed source/path matches. Local
+  MCP echo and question callbacks pass. Web loopback is **SSRF-blocked with zero requests**, not retrieval success.
+- Native resume preflight and resurrection fixtures preserve exact account/cwd/model/effort. The current
+  Agent Resurrect registration loads unchanged in a disposable account and its save/restore pilot passes.
+- The unchanged installed Orca hook was loaded into an isolated native parent session. With a held public
+  child lifecycle event, it posted `agent_end` while aggregate state remained working/one active child.
+  Posts were intercepted: no receiver contact, deployment, provider-executed child, or physical UI claim.
+- Native process tests cover real descendant termination, unavailable-killer startup refusal, and explicit
+  dual-killer failure without waiting on inherited pipes. Failed OS termination is not falsely guaranteed;
+  the exceptional manual-stop diagnostic must be obeyed before further edits.
+- See [evidence-final-integration.md](evidence-final-integration.md) for transport/process corrections and
+  [evidence-native-packages.md](evidence-native-packages.md) for package acceptance boundaries.
 
-## Open gates — do not confuse missing work with approval
+## Pending decisions / implementation blockers
 
-- **External blocker:** exact private GitHub owner/name is unconfirmed. No remote created or guessed.
-- **Demonstrated runtime gap:** upstream named preload bypasses selected paths and runs before native resource events; selected-pack child integration needs a narrow reviewed adaptation covering both paths. No fork or installed replacement adopted; custom-adaptation/live replacement approval is not inferred.
-- **Unimplemented:** combined native picker/actual launch-state checks and Claude reader; full installer/runtime registration/project links; safeguard interception and remaining safety/formatting/verification policies; aggregate Orca activity/notifications; footer/model-generated titles and other UI integration; Claude context integration and live Pi context registration; usable isolated lpi; 50 current skills, 12 current specialists and other dependency closures. Full sync, project setup, actual resume launch and lpi fail explicitly; scoped sync/inspection commands do not imply complete installation.
-- Existing Agent Resurrect save/restore remains untouched and requires its baseline acceptance trial. Native inspection/SDK evidence does not adopt an alternative external restoration workflow.
-- **Untested:** deployed Claude discovery/subagents and account behavior; Pi/Claude interactive catalogs/body invocation/multiple mid-prompt skills/Tab; real selected-pack child conversations and model/effort; native Manual prompts and Enter/Ctrl+C; effective MCP/web/question package loading in both accounts; all resume/account/cwd/provider/model/effort/restart/reboot matrices; safeguard interception/fault/deadline matrices; physical terminal scroll/newline; Orca states/alerts/dev ports.
-- No personal pack ported yet. Default personal development+personal therefore warns and falls back to native-only; explicit development fixtures and work defaults function. This is not retirement of personal skills.
+1. **Orca hook patch approval unanswered.** Permission was requested to prepare a narrow checkout-local
+   hook patch for aggregate completion/cancellation, without editing Orca source or deploying it. No patch
+   or competing sender has been added. Required single-writer integration must account for children,
+   background work, pending follow-ups, cancellation, and human-needed state; native-parent end is insufficient.
+2. **Legacy footer isolation/compatibility.** Retained `mpx-pi/extensions/footer.ts:1817` hardcodes
+   `~/.pi/agent`. Separate-root launch arguments do not fix that internal access. Do not treat `lpi` fixtures
+   as permission to run the real legacy display against a managed root; compatibility needs an approved fix
+   and actual native-loader/live acceptance. MPX2 now rejects that known footer before launch when its
+   fixed root differs from the selected legacy account. No old repository was changed.
+3. **Ctrl+Enter in Orca** retains its known deferred routing fix. Shift+Enter/Ctrl+J are the alternatives.
 
-## Preservation / continuation / reversible cutover
+## Human/live acceptance — still required
 
-Source heads preserved: mpx b8e323e02c734bff852766cebf2dbc897fc45c49 (184 dirty/untracked status entries), mpx-claude-code ab77de05843c4fde97e8483e7712c327f4cdf59f (2), mpx-pi 8464b23f0aef5bc235699920125e04fb94b84530 (1). Accidental source NUL left untouched/excluded. No source cleanup, whole-account copying, live credential/settings/transcript rewrite, global launcher changes, Orca source changes or legacy disconnection. Native writes in tests were confined to owned disposable fixtures.
+- Explicit installed registration/cutover authorization and review of conflicts/version differences.
+- Physical prompt scrolling/newlines/wheel/footer/title/manual-name/question UI behavior in real terminals.
+- Authenticated main/child/title calls, native MCP/web/browser workflows, and manual/automatic compaction
+  summary quality for both harnesses/accounts; account login/auth remains native.
+- Exact real resumed startup, current-session handling, multiple project sessions, and account/model/effort
+  checks after launch; an offline preflight is not that acceptance.
+- Approved Orca aggregate transport, one completion/attention writer, foreground/background/follow-up and
+  cancellation/human-needed lifecycle, real terminal recipes and Agent Resurrect behavior.
+- Actual close/reopen and reboot matrix. No reboot or reboot acceptance has occurred.
+- Optional external workflow tools (including Mermaid/browser) need explicit setup where absent; preserve
+  warnings and do not claim their live workflows or rendered output have passed.
 
-Continue with bounded retained-content closures and approved child-preload adaptation; then resume, hooks/extensions and installer integration against the authority gates. Do not deploy this partial slice. Next runtime decision: narrow upstream-adaptation approval. Confirm the private remote only when it is needed; it does not block local work. Coordinate interactive and reboot acceptance later.
+## Preservation / provenance
 
-Cutover is **not yet prepared for execution**. Before any live switch, complete all prerequisite gates, record actual command resolution/owned link and registration targets, and preserve the existing launcher selection. Switch mpx/pi/piw/cc/ccw together through one approved owned entrypoint; never mix old launchers/new content. Verify fresh shells, both accounts and reboot with a human. Roll back all five together to recorded old targets and remove only proven MPX2-managed entries. Keep source checkouts/native accounts intact. Do not disconnect legacy entrypoints, archive repositories, reboot, or rename folders unattended.
+The original [INVENTORY.md](INVENTORY.md) is retained as an initial snapshot, not a stale implementation
+backlog. [COVERAGE.md](COVERAGE.md) maps current outcomes to dirty source, including shared COMPACT.
+Transfer scripts/hashes are migration-only evidence, never runtime integrity authority.
+
+At `2026-09-13T20:32:36+02:00`, source HEADs/dirty-entry counts remained:
+`mpx b8e323e… / 184`, `mpx-claude-code ab77de0… / 2`, `mpx-pi 8464b23… / 1`.
+Installed accounts, credentials, histories, native packages and 0.14.3 migration bootstrap were preserved.
+
+Parent runtime was reported as `openai-codex/gpt-6-astra/high`; implementation workers' actual metadata
+was generally `gpt-5.6-sol/high`. One pinned Explore definition ran `gpt-5.6-luna/medium` despite the tool
+request; it is not mislabeled Sol/high. Interrupted workers' unfinished claims were repaired and rerun by
+parent/completion workers, not accepted at face value. Native fixture/probe details are evidence-scoped.

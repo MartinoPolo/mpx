@@ -1,0 +1,94 @@
+diff --git a/src/agent-runner.ts b/src/agent-runner.ts
+index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..9ea50ce6d4308271b6de4d741d3a3771bc0826b7 100644
+--- a/src/agent-runner.ts
++++ b/src/agent-runner.ts
+@@ -4,7 +4,7 @@
+ 
+ import { readFileSync } from "node:fs";
+ import { homedir } from "node:os";
+-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
++import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+ import type { Model } from "@earendil-works/pi-ai";
+ import type { ExtensionContext, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
+ import {
+@@ -47,6 +47,32 @@ export const SUBAGENT_TOOL_NAMES = {
+ /** Names of tools registered by this extension that subagents must NOT inherit. */
+ const EXCLUDED_TOOL_NAMES: string[] = Object.values(SUBAGENT_TOOL_NAMES);
+ 
++/**
++ * Recover the MPX pack roots already selected by the parent native loader.
++ *
++ * MPX launchers provide only stable account/content context. The effective pack
++ * selection remains local to each parent session, so use Pi's documented command
++ * provenance instead of introducing process-global per-session environment state.
++ */
++export function getSelectedMpxSkillPaths(pi: Pick<ExtensionAPI, "getCommands">): string[] {
++  const contentRoot = process.env.MPX_ACTIVE_CONTENT_ROOT?.trim();
++  const account = process.env.MPX_ACCOUNT;
++  if (!contentRoot || (account !== "personal" && account !== "work")) return [];
++
++  const packsRoot = resolve(contentRoot, "dist", "packs");
++  const selected = new Set<string>();
++  for (const command of pi.getCommands()) {
++    if (command.source !== "skill") continue;
++    const skillPath = resolve(command.sourceInfo.path);
++    const fromPacks = relative(packsRoot, skillPath);
++    if (!fromPacks || isAbsolute(fromPacks) || fromPacks === ".." || fromPacks.startsWith(`..${sep}`)) continue;
++    const [pack, harness, resourceType, skillEntry] = fromPacks.split(sep);
++    if (!pack || harness !== "pi" || resourceType !== "skills" || !skillEntry) continue;
++    selected.add(resolve(packsRoot, pack, harness, resourceType));
++  }
++  return [...selected];
++}
++
+ /**
+  * Canonical name of an extension for `extensions: [...]` allowlist matching.
+  * Lowercased — extension names match case-insensitively so `extensions: [Mcp]`
+@@ -638,10 +664,11 @@ export async function runAgent(
+   // isolation is an intentional override, not a misconfiguration.
+   const excludeExtensions = options.isolated ? undefined : config.excludeExtensions;
+   const skills = options.isolated ? false : config.skills;
++  const selectedMpxSkillPaths = skills === false ? [] : getSelectedMpxSkillPaths(options.pi);
+ 
+   // Skill preloading: when skills is string[], preload their content into prompt
+   if (Array.isArray(skills)) {
+-    const loaded = preloadSkills(skills, configCwd);
++    const loaded = preloadSkills(skills, configCwd, selectedMpxSkillPaths);
+     if (loaded.length > 0) {
+       extras.skillBlocks = loaded;
+     }
+@@ -749,6 +776,7 @@ export async function runAgent(
+     agentDir,
+     noExtensions,
+     additionalExtensionPaths,
++    additionalSkillPaths: selectedMpxSkillPaths,
+     extensionsOverride,
+     noSkills,
+     noPromptTemplates: true,
+diff --git a/src/skill-loader.ts b/src/skill-loader.ts
+index 643589eeec082f2bc0d458bfe20823c92bb87312..6ac89e6654369d364f93cf731ed3df682f8ca50d 100644
+--- a/src/skill-loader.ts
++++ b/src/skill-loader.ts
+@@ -30,11 +30,11 @@ export interface PreloadedSkill {
+   content: string;
+ }
+ 
+-export function preloadSkills(skillNames: string[], cwd: string): PreloadedSkill[] {
+-  return skillNames.map((name) => ({ name, content: loadSkillContent(name, cwd) }));
++export function preloadSkills(skillNames: string[], cwd: string, additionalSkillPaths: string[] = []): PreloadedSkill[] {
++  return skillNames.map((name) => ({ name, content: loadSkillContent(name, cwd, additionalSkillPaths) }));
+ }
+ 
+-function loadSkillContent(name: string, cwd: string): string {
++function loadSkillContent(name: string, cwd: string, additionalSkillPaths: string[]): string {
+   if (isUnsafeName(name)) {
+     return `(Skill "${name}" skipped: name contains path traversal characters)`;
+   }
+@@ -44,6 +44,7 @@ function loadSkillContent(name: string, cwd: string): string {
+     join(getAgentDir(), "skills"), // user — Pi standard
+     join(homedir(), ".agents", "skills"), // user — Agent Skills spec
+     join(homedir(), ".pi", "skills"), // legacy global, pre-Pi
++    ...additionalSkillPaths,
+   ];
+   for (const root of roots) {
+     const content = findInRoot(root, name);

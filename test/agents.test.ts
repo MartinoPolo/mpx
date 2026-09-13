@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { planAgentLinks, syncAgentLinks } from '../src/install.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { parse } from 'yaml';
 import { fileURLToPath } from 'node:url';
 const exec = promisify(execFile);
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -36,10 +37,11 @@ test('published upstream parser loads actual generated specialist names/models/e
     for (const name of files.map(file => file.slice(0, -3))) {
       const agent = loaded.find(item => item.name === name);
       assert.ok(agent, `missing generated agent ${name}`);
-      const checker = name === 'mpx-checker';
-      assert.equal(agent.model, checker || name === 'mpx-explorer' ? 'openai-codex/gpt-5.6-luna' : 'openai-codex/gpt-5.6-terra');
-      assert.equal(agent.thinking, checker ? 'low' : 'medium');
-      assert.deepEqual(agent.tools, ['read', 'grep', 'find', 'ls', 'bash']);
+      const projected = await readFile(join(generatedRoot, `${name}.md`), 'utf8');
+      const metadata = parse(projected.split('---')[1]!) as { model: string; thinking: string; tools: string };
+      assert.equal(agent.model, metadata.model, name);
+      assert.equal(agent.thinking, metadata.thinking, name);
+      assert.deepEqual(agent.tools, metadata.tools.split(',').map(tool => tool.trim()).filter(tool => !tool.startsWith('ext:')), name);
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+const TRUSTED_GIT_CWD = path.dirname(fileURLToPath(import.meta.url));
 import type {
   Account,
   Harness,
@@ -141,7 +143,7 @@ export async function readUserConfig(
     throw new Error(`cannot read user config ${path.normalize(file)}: ${error instanceof Error ? error.message : String(error)}`);
   }
   const source = object(parsed, 'user config');
-  allowedKeys(source, ['accounts', 'domains', 'defaultPacks', 'executables'], 'user config');
+  allowedKeys(source, ['accounts', 'domains', 'defaultPacks', 'executables', 'legacyPi', 'piTitle'], 'user config');
   const accountsSource = object(source.accounts, 'accounts');
   const domainsSource = object(source.domains, 'domains');
   allowedKeys(accountsSource, ['personal', 'work'], 'accounts');
@@ -197,6 +199,19 @@ export async function readUserConfig(
     }
     result.executables = executables;
   }
+  if (source.legacyPi !== undefined) {
+    const legacy = object(source.legacyPi, 'legacyPi');
+    allowedKeys(legacy, ['accountRoot', 'checkout'], 'legacyPi');
+    result.legacyPi = { accountRoot: expandPath(legacy.accountRoot, 'legacyPi.accountRoot', env), checkout: expandPath(legacy.checkout, 'legacyPi.checkout', env) };
+    if ([await comparablePath(accounts.personal.pi), await comparablePath(accounts.work.pi)].includes(await comparablePath(result.legacyPi.accountRoot))) throw new Error('Legacy Pi must use a separate account root, not a normal MPX2 root.');
+  }
+  if (source.piTitle !== undefined) {
+    const title = object(source.piTitle, 'piTitle');
+    allowedKeys(title, ['provider', 'model', 'thinking'], 'piTitle');
+    const thinking = nonemptyString(title.thinking, 'piTitle.thinking');
+    if (!['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking)) throw new Error('Invalid title thinking level.');
+    result.piTitle = { provider: nonemptyString(title.provider, 'piTitle.provider'), model: nonemptyString(title.model, 'piTitle.model'), thinking: thinking as NonNullable<UserConfig['piTitle']>['thinking'] };
+  }
   return result;
 }
 
@@ -205,8 +220,8 @@ export async function resolveProject(cwd: string): Promise<ProjectSelection> {
   try {
     const { stdout } = await execFileAsync(
       'git',
-      ['worktree', 'list', '--porcelain', '-z'],
-      { cwd, encoding: 'utf8', windowsHide: true },
+      ['-C', cwd, 'worktree', 'list', '--porcelain', '-z'],
+      { cwd: TRUSTED_GIT_CWD, encoding: 'utf8', windowsHide: true, timeout: 3000 },
     );
     const firstRecord = stdout.split('\0\0', 1)[0];
     firstWorktree = firstRecord?.split('\0').filter(Boolean) ?? [];
@@ -221,16 +236,16 @@ export async function resolveProject(cwd: string): Promise<ProjectSelection> {
   try {
     const { stdout: commonOutput } = await execFileAsync(
       'git',
-      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-      { cwd, encoding: 'utf8', windowsHide: true },
+      ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd: TRUSTED_GIT_CWD, encoding: 'utf8', windowsHide: true, timeout: 3000 },
     );
     const commonDirectory = path.resolve(commonOutput.trim());
     if (normalizeForComparison(checkoutCandidate) === normalizeForComparison(commonDirectory)) {
       try {
         const { stdout: worktreeOutput } = await execFileAsync(
           'git',
-          ['config', '--path', '--get', 'core.worktree'],
-          { cwd, encoding: 'utf8', windowsHide: true },
+          ['-C', cwd, 'config', '--path', '--get', 'core.worktree'],
+          { cwd: TRUSTED_GIT_CWD, encoding: 'utf8', windowsHide: true, timeout: 3000 },
         );
         const configuredWorktree = worktreeOutput.trim();
         if (configuredWorktree !== '') {
@@ -241,11 +256,11 @@ export async function resolveProject(cwd: string): Promise<ProjectSelection> {
       } catch {
         try {
           const [{ stdout: gitDirectoryOutput }, { stdout: topLevelOutput }] = await Promise.all([
-            execFileAsync('git', ['rev-parse', '--path-format=absolute', '--git-dir'], {
-              cwd, encoding: 'utf8', windowsHide: true,
+            execFileAsync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-dir'], {
+              cwd: TRUSTED_GIT_CWD, encoding: 'utf8', windowsHide: true, timeout: 3000,
             }),
-            execFileAsync('git', ['rev-parse', '--path-format=absolute', '--show-toplevel'], {
-              cwd, encoding: 'utf8', windowsHide: true,
+            execFileAsync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--show-toplevel'], {
+              cwd: TRUSTED_GIT_CWD, encoding: 'utf8', windowsHide: true, timeout: 3000,
             }),
           ]);
           if (normalizeForComparison(gitDirectoryOutput.trim()) === normalizeForComparison(commonDirectory)) {

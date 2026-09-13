@@ -99,6 +99,20 @@ Remain an exploration-class agent. See [roles](references/roles.md). Delegate to
   return root;
 }
 
+test('balanced Markdown/HTML references and skill-prefix placeholders resolve without rewriting support bodies', async () => {
+  const root = await fixture();
+  const file = path.join(root, 'content/skills/review/SKILL.md');
+  const body = await readFile(file, 'utf8');
+  await put(root, 'content/skills/review/references/nested(a).md', 'Guide');
+  await writeFile(file, `${body}\n[balanced](references/nested(a).md)\n<a href="references/nested(a).md">HTML</a>\n[other](../{{MPX_SKILL_PREFIX}}personal-note/SKILL.md)\n`);
+  // Both fixture skills need matching packs for a sibling reference.
+  const other = path.join(root, 'content/skills/personal-note/SKILL.md');
+  await writeFile(other, (await readFile(other, 'utf8')).replace('skillPacks: [personal]', 'skillPacks: [development, personal]'));
+  await build(root);
+  await writeFile(file, `${body}\n<img src="missing-image.png">\n`);
+  await assert.rejects(projectContent(root), /missing-image/);
+});
+
 async function filesBelow(root: string, relative = ''): Promise<string[]> {
   const directory = path.join(root, relative);
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);

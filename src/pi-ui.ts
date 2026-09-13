@@ -1,0 +1,808 @@
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { withoutDeletedHeaders } from './context.js';
+
+export const PI_ACTIVITY_EVENT = 'mpx2:pi-ui:activity';
+export const PI_BACKGROUND_ACTIVITY_EVENT = 'mpx2:pi-ui:background';
+export const PI_FOLLOW_UP_ACTIVITY_EVENT = 'mpx2:pi-ui:follow-up';
+
+export type PiActivityState = 'idle' | 'working' | 'human-needed' | 'done' | 'cancelled';
+
+export interface PiActivitySnapshot {
+  state: PiActivityState;
+  mainActive: boolean;
+  activeChildren: number;
+  backgroundWork: number;
+  pendingFollowUps: number;
+  humanNeeded: boolean;
+  settling: boolean;
+  revision: number;
+}
+
+export type PiActivitySink = (snapshot: Readonly<PiActivitySnapshot>) => void;
+
+export interface PiTitleConfig {
+  /** Exact provider id. There is deliberately no provider fallback. */
+  provider: string;
+  /** Exact model id. There is deliberately no model fallback. */
+  model: string;
+  effort: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+}
+
+export interface PiUiOptions {
+  /** Supplied by the parent runtime from the approved user-config schema. */
+  title?: PiTitleConfig;
+  /** Authoritative adapter boundary; this slice does not post to Orca itself. */
+  activitySink?: PiActivitySink;
+  /** Delay prevents a child-completion event preceding its follow-up from flashing done. */
+  settleDelayMs?: number;
+  environment?: Readonly<Record<string, string | undefined>>;
+}
+
+interface Timer {
+  cancel(): void;
+}
+
+export interface ActivityTiming {
+  delay(callback: () => void, milliseconds: number): Timer;
+}
+
+const DEFAULT_SETTLE_DELAY_MS = 500;
+
+const defaultTiming: ActivityTiming = {
+  delay(callback, milliseconds) {
+    const handle = setTimeout(callback, milliseconds);
+    handle.unref?.();
+    return { cancel: () => clearTimeout(handle) };
+  },
+};
+
+/** Pure aggregate used by the Pi lifecycle adapter and fixture tests. */
+export class PiActivityAggregate {
+  private mainActive = false;
+  private readonly children = new Set<string>();
+  private readonly background = new Set<string>();
+  private readonly followUps = new Set<string>();
+  private humanPromptDepth = 0;
+  private externallyBlocked = false;
+  private hadWork = false;
+  private cancelled = false;
+  private settling = false;
+  private revision = 0;
+  private completionTimer: Timer | undefined;
+  private lastSignature = '';
+
+  constructor(
+    private readonly sink: PiActivitySink,
+    private readonly settleDelayMs = DEFAULT_SETTLE_DELAY_MS,
+    private readonly timing: ActivityTiming = defaultTiming,
+  ) {
+    this.publish('idle');
+  }
+
+  startMain(): void {
+    this.cancelCompletion();
+    this.hadWork = true;
+    this.cancelled = false;
+    this.mainActive = true;
+    this.settling = false;
+    const pending = [...this.followUps].find((id) => id.startsWith('native-'));
+    if (pending !== undefined) this.followUps.delete(pending);
+    this.recompute();
+  }
+
+  settleMain(): void {
+    this.mainActive = false;
+    this.recompute();
+  }
+
+  cancelMain(): void {
+    this.cancelCompletion();
+    this.mainActive = false;
+    this.followUps.clear();
+    this.cancelled = true;
+    this.settling = false;
+    this.recompute();
+  }
+
+  startChild(id: string): void {
+    if (!id) return;
+    this.cancelCompletion();
+    this.hadWork = true;
+    this.cancelled = false;
+    this.children.add(id);
+    this.settling = false;
+    this.recompute();
+  }
+
+  finishChild(id: string): void {
+    if (!id) return;
+    this.children.delete(id);
+    this.recompute();
+  }
+
+  setBackground(id: string, active: boolean): void {
+    if (!id) return;
+    if (active) {
+      this.cancelCompletion();
+      this.hadWork = true;
+      this.cancelled = false;
+      this.background.add(id);
+      this.settling = false;
+    } else {
+      this.background.delete(id);
+    }
+    this.recompute();
+  }
+
+  setFollowUp(id: string, active: boolean): void {
+    if (!id) return;
+    if (active) {
+      this.cancelCompletion();
+      this.hadWork = true;
+      this.cancelled = false;
+      this.followUps.add(id);
+      this.settling = false;
+    } else {
+      this.followUps.delete(id);
+    }
+    this.recompute();
+  }
+
+  startHumanPrompt(): void {
+    this.cancelCompletion();
+    this.humanPromptDepth += 1;
+    this.recompute();
+  }
+
+  endHumanPrompt(): void {
+    this.humanPromptDepth = Math.max(0, this.humanPromptDepth - 1);
+    this.recompute();
+  }
+
+  setExternallyBlocked(active: boolean): void {
+    this.externallyBlocked = active;
+    if (active) this.cancelCompletion();
+    this.recompute();
+  }
+
+  reset(): void {
+    this.cancelCompletion();
+    this.mainActive = false;
+    this.children.clear();
+    this.background.clear();
+    this.followUps.clear();
+    this.humanPromptDepth = 0;
+    this.externallyBlocked = false;
+    this.hadWork = false;
+    this.cancelled = false;
+    this.settling = false;
+    this.recompute();
+  }
+
+  dispose(): void {
+    this.cancelCompletion();
+  }
+
+  snapshot(): PiActivitySnapshot {
+    return this.buildSnapshot(this.currentState());
+  }
+
+  private hasOutstandingWork(): boolean {
+    return (
+      this.mainActive ||
+      this.children.size > 0 ||
+      this.background.size > 0 ||
+      this.followUps.size > 0
+    );
+  }
+
+  private hasHumanNeed(): boolean {
+    return this.humanPromptDepth > 0 || this.externallyBlocked;
+  }
+
+  private currentState(): PiActivityState {
+    if (this.hasHumanNeed()) return 'human-needed';
+    if (this.hasOutstandingWork() || this.settling) return 'working';
+    if (this.cancelled) return 'cancelled';
+    return this.hadWork ? 'done' : 'idle';
+  }
+
+  private recompute(): void {
+    if (this.hasHumanNeed() || this.hasOutstandingWork() || this.cancelled || !this.hadWork) {
+      this.cancelCompletion();
+      this.settling = false;
+      this.publish(this.currentState());
+      return;
+    }
+
+    if (!this.settling) {
+      this.settling = true;
+      this.publish('working');
+      this.completionTimer = this.timing.delay(() => {
+        this.completionTimer = undefined;
+        this.settling = false;
+        if (!this.hasHumanNeed() && !this.hasOutstandingWork() && !this.cancelled) {
+          this.publish('done');
+        } else {
+          this.recompute();
+        }
+      }, Math.max(0, this.settleDelayMs));
+    }
+  }
+
+  private cancelCompletion(): void {
+    this.completionTimer?.cancel();
+    this.completionTimer = undefined;
+  }
+
+  private buildSnapshot(state: PiActivityState): PiActivitySnapshot {
+    return {
+      state,
+      mainActive: this.mainActive,
+      activeChildren: this.children.size,
+      backgroundWork: this.background.size,
+      pendingFollowUps: this.followUps.size,
+      humanNeeded: this.hasHumanNeed(),
+      settling: this.settling,
+      revision: this.revision,
+    };
+  }
+
+  private publish(state: PiActivityState): void {
+    const withoutRevision = {
+      state,
+      mainActive: this.mainActive,
+      activeChildren: this.children.size,
+      backgroundWork: this.background.size,
+      pendingFollowUps: this.followUps.size,
+      humanNeeded: this.hasHumanNeed(),
+      settling: this.settling,
+    };
+    const signature = JSON.stringify(withoutRevision);
+    if (signature === this.lastSignature) return;
+    this.lastSignature = signature;
+    this.revision += 1;
+    try {
+      this.sink({ ...withoutRevision, revision: this.revision });
+    } catch {
+      // Status reporting is observational and must never interrupt agent work.
+    }
+  }
+}
+
+export interface FinishedAgent {
+  id: string;
+  type: string;
+  status: string;
+  model?: string;
+  effort?: string;
+  elapsedMs?: number;
+  tokens?: number;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function nonempty(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
+function finiteNonNegative(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/** Reads only fields actually emitted by pi-subagents; missing values remain unknown. */
+export function finishedAgentFromLifecycle(payload: unknown): FinishedAgent | undefined {
+  const source = record(payload);
+  const id = nonempty(source?.id);
+  if (!source || !id) return undefined;
+  const tokenSource = record(source.tokens);
+  return {
+    id,
+    type: nonempty(source.type) ?? 'agent',
+    status: nonempty(source.status) ?? 'unknown',
+    ...(finiteNonNegative(source.durationMs) === undefined
+      ? {}
+      : { elapsedMs: finiteNonNegative(source.durationMs) }),
+    ...(finiteNonNegative(tokenSource?.total) === undefined
+      ? {}
+      : { tokens: finiteNonNegative(tokenSource?.total) }),
+  };
+}
+
+/** Correlates public Agent/get_subagent_result details without inventing absent numbers. */
+export function mergeFinishedAgentToolResult(
+  existing: FinishedAgent | undefined,
+  details: unknown,
+): FinishedAgent | undefined {
+  const source = record(details);
+  const id = nonempty(source?.agentId) ?? existing?.id;
+  if (!source || !id) return existing;
+  const terminalStatus = nonempty(source.status);
+  if (!existing && (!terminalStatus || ['background', 'queued', 'running'].includes(terminalStatus))) {
+    return undefined;
+  }
+  const tags = Array.isArray(source.tags)
+    ? source.tags.filter((value): value is string => typeof value === 'string')
+    : [];
+  const effort = tags
+    .map((tag) => /^thinking:\s*(.+)$/i.exec(tag)?.[1]?.trim())
+    .find((value): value is string => Boolean(value));
+  const elapsedMs = finiteNonNegative(source.durationMs);
+  return {
+    id,
+    type: nonempty(source.subagentType) ?? existing?.type ?? 'agent',
+    status: terminalStatus ?? existing?.status ?? 'unknown',
+    ...(nonempty(source.modelName) === undefined && existing?.model === undefined
+      ? {}
+      : { model: nonempty(source.modelName) ?? existing?.model }),
+    ...(effort === undefined && existing?.effort === undefined
+      ? {}
+      : { effort: effort ?? existing?.effort }),
+    ...(elapsedMs === undefined && existing?.elapsedMs === undefined
+      ? {}
+      : { elapsedMs: elapsedMs ?? existing?.elapsedMs }),
+    ...(existing?.tokens === undefined ? {} : { tokens: existing.tokens }),
+  };
+}
+
+export function formatFinishedAgent(agent: FinishedAgent): string {
+  const success = agent.status === 'completed';
+  const glyph = success ? '✓' : agent.status === 'stopped' || agent.status === 'aborted' ? '■' : '×';
+  const elapsed = agent.elapsedMs === undefined ? 'unknown' : formatDuration(agent.elapsedMs);
+  const tokens = agent.tokens === undefined ? 'unknown' : formatCount(agent.tokens);
+  return `${glyph} ${agent.type} · model ${agent.model ?? 'unknown'} · effort ${agent.effort ?? 'unknown'} · elapsed ${elapsed} · tokens ${tokens}`;
+}
+
+function formatDuration(milliseconds: number): string {
+  if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(1)}s`;
+  return `${Math.floor(milliseconds / 60_000)}m ${Math.floor((milliseconds % 60_000) / 1000)}s`;
+}
+
+function formatCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(Math.trunc(value));
+}
+
+function textFromContent(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      const item = record(part);
+      return item?.type === 'text' && typeof item.text === 'string' ? item.text : '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function firstUserPrompt(ctx: ExtensionContext): string | undefined {
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (entry.type !== 'message' || entry.message.role !== 'user') continue;
+    const text = textFromContent(entry.message.content);
+    if (text) return text;
+  }
+  return undefined;
+}
+
+const MAX_TITLE_INPUT_CHARACTERS = 4_000;
+const MAX_TITLE_CHARACTERS = 80;
+const MAX_TITLE_TOKENS = 96;
+const TITLE_TIMEOUT_MS = 15_000;
+const TITLE_SYSTEM_PROMPT = `Create a concise title for a coding-agent session from the user's first prompt.
+Return only a 3-7 word title with no quotes, markdown, label, or trailing punctuation.
+Describe the concrete task, preserve important product and file names, and do not answer the prompt.`;
+
+export function fallbackTitle(prompt: string): string {
+  const words = prompt
+    .replace(/[`*_#>[\](){}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 8);
+  const value = words.join(' ').replace(/[.!?,;:]+$/g, '').trim();
+  return (value || 'New Pi Session').slice(0, MAX_TITLE_CHARACTERS).trimEnd();
+}
+
+export function normalizeGeneratedTitle(value: string): string | undefined {
+  const line = value.split(/\r?\n/).map((part) => part.trim()).find(Boolean);
+  if (!line) return undefined;
+  const title = line
+    .replace(/^title\s*:\s*/i, '')
+    .replace(/^[`"'*_]+|[`"'*_]+$/g, '')
+    .replace(/[.!?,;:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return title ? title.slice(0, MAX_TITLE_CHARACTERS).trimEnd() : undefined;
+}
+
+function validTitleConfig(value: PiTitleConfig | undefined): value is PiTitleConfig {
+  return Boolean(
+    value &&
+      value.provider.trim() &&
+      value.model.trim() &&
+      ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value.effort),
+  );
+}
+
+async function requestTitle(
+  prompt: string,
+  config: PiTitleConfig | undefined,
+  ctx: ExtensionContext,
+  signal: AbortSignal,
+): Promise<string> {
+  if (!validTitleConfig(config)) return fallbackTitle(prompt);
+  const model = ctx.modelRegistry.find(config.provider, config.model);
+  if (!model || !ctx.modelRegistry.hasConfiguredAuth(model) || !getSupportedThinkingLevels(model).includes(config.effort)) return fallbackTitle(prompt);
+  try {
+    const provider = ctx.modelRegistry.getProvider(config.provider);
+    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+    if (!provider || !auth.ok || signal.aborted) return fallbackTitle(prompt);
+    const response = await provider.streamSimple(
+      auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model,
+      {
+        systemPrompt: TITLE_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: prompt.slice(0, MAX_TITLE_INPUT_CHARACTERS) }],
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        apiKey: auth.apiKey,
+        headers: withoutDeletedHeaders(auth.headers),
+        env: auth.env,
+        ...(config.effort === 'off' ? {} : { reasoning: config.effort }),
+        maxTokens: MAX_TITLE_TOKENS,
+        cacheRetention: 'none',
+        maxRetries: 0,
+        timeoutMs: TITLE_TIMEOUT_MS,
+        sessionId: randomUUID(),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(TITLE_TIMEOUT_MS)]),
+      },
+    ).result();
+    return normalizeGeneratedTitle(textFromContent(response.content)) ?? fallbackTitle(prompt);
+  } catch {
+    return fallbackTitle(prompt);
+  }
+}
+
+function generateTitle(prompt: string, config: PiTitleConfig | undefined, ctx: ExtensionContext, signal: AbortSignal): Promise<string> {
+  const deadline = new AbortController();
+  return new Promise(resolve => {
+    const timer = setTimeout(() => { deadline.abort(); resolve(fallbackTitle(prompt)); }, TITLE_TIMEOUT_MS);
+    timer.unref?.();
+    void requestTitle(prompt, config, ctx, AbortSignal.any([signal, deadline.signal])).then(
+      title => { clearTimeout(timer); resolve(title); },
+      () => { clearTimeout(timer); resolve(fallbackTitle(prompt)); },
+    );
+  });
+}
+
+function isCancelledAgentEnd(event: { messages?: readonly unknown[] }): boolean {
+  for (let index = (event.messages?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const message = record(event.messages?.[index]);
+    if (message?.role === 'assistant') return message.stopReason === 'aborted';
+  }
+  return false;
+}
+
+export function isPositiveOrcaEnvironment(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return Boolean(environment.ORCA_PANE_KEY?.trim() || environment.ORCA_TAB_ID?.trim());
+}
+
+export function shouldUseThreeLineWheel(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  // Orca inherits WT_SESSION from its own launch environment; its positive marker wins.
+  if (isPositiveOrcaEnvironment(environment)) return false;
+  return Boolean(environment.WT_SESSION?.trim());
+}
+
+interface FullscreenTui {
+  mode?: string;
+  wheelScrollLines?: number;
+}
+
+export function applyThreeLineFullscreenWheel(tui: unknown): boolean {
+  const candidate = tui as FullscreenTui;
+  if (candidate.mode !== 'fullscreen' || candidate.wheelScrollLines === 3) return false;
+  candidate.wheelScrollLines = 3;
+  return true;
+}
+
+function safeFooterText(text: string): string {
+  return text.replace(/\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))?/g, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+}
+
+function terminalColumns(character: string): number {
+  const code = character.codePointAt(0) ?? 0;
+  if (/\p{Mark}/u.test(character)) return 0;
+  return code >= 0x1100 && (
+    code <= 0x115f || code === 0x2329 || code === 0x232a ||
+    (code >= 0x2e80 && code <= 0xa4cf) || (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) || (code >= 0xfe10 && code <= 0xfe6f) ||
+    (code >= 0xff00 && code <= 0xff60) || (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x1f300 && code <= 0x1faff) || (code >= 0x20000 && code <= 0x3fffd)
+  ) ? 2 : 1;
+}
+
+function truncatePlain(text: string, width: number): string {
+  if (width <= 0) return '';
+  const characters = [...safeFooterText(text)];
+  if (characters.reduce((sum, character) => sum + terminalColumns(character), 0) <= width) {
+    return characters.join('');
+  }
+  if (width === 1) return '…';
+  let used = 0;
+  let output = '';
+  for (const character of characters) {
+    const columns = terminalColumns(character);
+    if (used + columns > width - 1) break;
+    output += character;
+    used += columns;
+  }
+  return `${output}…`;
+}
+
+const PROCESS_OWNER = Symbol.for('mpx2:pi-ui:process-owner');
+
+type GlobalWithOwner = typeof globalThis & { [PROCESS_OWNER]?: object };
+
+/**
+ * Compose from extensions/pi-runtime.ts with an explicit title config and, once
+ * authorized, the single Orca activity sink. The default sink is bus-only.
+ */
+export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void {
+  const token = {};
+  let ownsProcess = false;
+  let aggregate: PiActivityAggregate | undefined;
+  let currentContext: ExtensionContext | undefined;
+  let requestRender = () => {};
+  let titleSessionId = '';
+  let firstPrompt: string | undefined;
+  let titleStarted = false;
+  let explicitlyNamed = false;
+  let pendingAutomaticName: string | undefined;
+  let titleController: AbortController | undefined;
+  let followUpSequence = 0;
+  const finished = new Map<string, FinishedAgent>();
+
+  const sink: PiActivitySink = options.activitySink ?? ((snapshot) => {
+    pi.events.emit(PI_ACTIVITY_EVENT, snapshot);
+  });
+
+  const abortTitle = (): void => {
+    titleController?.abort();
+    titleController = undefined;
+  };
+
+  const own = (): boolean => ownsProcess;
+
+  const onBackground = (payload: unknown): void => {
+    if (!own()) return;
+    const source = record(payload);
+    const id = nonempty(source?.id);
+    if (id && typeof source?.active === 'boolean') aggregate?.setBackground(id, source.active);
+  };
+  const onFollowUp = (payload: unknown): void => {
+    if (!own()) return;
+    const source = record(payload);
+    const id = nonempty(source?.id);
+    if (id && typeof source?.active === 'boolean') aggregate?.setFollowUp(id, source.active);
+  };
+  const onQuestionBlocked = (payload: unknown): void => {
+    if (!own()) return;
+    const source = record(payload);
+    if (typeof source?.active === 'boolean') aggregate?.setExternallyBlocked(source.active);
+  };
+
+  const unsubscribeBackground = pi.events.on(PI_BACKGROUND_ACTIVITY_EVENT, onBackground);
+  const unsubscribeFollowUp = pi.events.on(PI_FOLLOW_UP_ACTIVITY_EVENT, onFollowUp);
+  const unsubscribeQuestion = pi.events.on('rpiv:ask-user:blocked', onQuestionBlocked);
+
+  const onChildFinished = (payload: unknown): void => {
+    if (!own()) return;
+    const agent = finishedAgentFromLifecycle(payload);
+    if (!agent) return;
+    const prior = finished.get(agent.id);
+    finished.set(agent.id, { ...prior, ...agent, model: prior?.model, effort: prior?.effort });
+    aggregate?.finishChild(agent.id);
+    requestRender();
+  };
+  const onChildStarted = (payload: unknown): void => {
+    if (!own()) return;
+    const id = nonempty(record(payload)?.id);
+    if (id) aggregate?.startChild(id);
+  };
+  const unsubscribeStarted = pi.events.on('subagents:started', onChildStarted);
+  const unsubscribeCompleted = pi.events.on('subagents:completed', onChildFinished);
+  const unsubscribeFailed = pi.events.on('subagents:failed', onChildFinished);
+
+  pi.on('session_start', (_event, ctx) => {
+    const global = globalThis as GlobalWithOwner;
+    if (global[PROCESS_OWNER] === undefined) global[PROCESS_OWNER] = token;
+    ownsProcess = global[PROCESS_OWNER] === token;
+    if (!ownsProcess) return;
+
+    currentContext = ctx;
+    aggregate?.dispose();
+    aggregate = new PiActivityAggregate(
+      sink,
+      Math.min(2_000, Math.max(0, options.settleDelayMs ?? DEFAULT_SETTLE_DELAY_MS)),
+    );
+    finished.clear();
+    requestRender();
+
+    abortTitle();
+    titleSessionId = ctx.sessionManager.getSessionId();
+    firstPrompt = firstUserPrompt(ctx);
+    titleStarted = false;
+    explicitlyNamed = pi.getSessionName() !== undefined;
+    pendingAutomaticName = undefined;
+
+    if (ctx.mode !== 'tui') return;
+
+    if (shouldUseThreeLineWheel(options.environment)) {
+      ctx.ui.setWidget('mpx2-fullscreen-wheel', (tui) => ({
+        render: () => {
+          applyThreeLineFullscreenWheel(tui);
+          return [];
+        },
+        invalidate: () => {
+          applyThreeLineFullscreenWheel(tui);
+        },
+      }));
+    }
+
+    ctx.ui.setFooter((tui, _theme, footerData) => {
+      requestRender = () => tui.requestRender();
+      const unsubscribeBranch = footerData.onBranchChange(requestRender);
+      return {
+        dispose: unsubscribeBranch,
+        invalidate() {},
+        render(width: number): string[] {
+          const active = currentContext ?? ctx;
+          const usage = active.getContextUsage();
+          const branch = footerData.getGitBranch();
+          const sessionName = pi.getSessionName();
+          const compactions = active.sessionManager.getBranch().filter((entry) => entry.type === 'compaction');
+          const base = [
+            sessionName,
+            `#${active.sessionManager.getSessionId().slice(0, 8)}`,
+            path.basename(active.cwd),
+            branch ? `git:${branch}` : undefined,
+            active.model ? `${active.model.provider}/${active.model.id}` : 'model unknown',
+            `effort ${active.thinkingLevel ?? 'unknown'}`,
+            usage?.tokens === null || usage?.tokens === undefined
+              ? 'context unknown'
+              : `context ${formatCount(usage.tokens)}${usage.percent === null || usage.percent === undefined ? '' : ` (${Math.trunc(usage.percent)}%)`}`,
+            `compact ${compactions.length}`,
+          ].filter((value): value is string => Boolean(value)).join(' · ');
+
+          const agents = [...finished.values()];
+          const visible = agents.slice(-5);
+          const rows = [truncatePlain(base, width)];
+          if (agents.length > visible.length) rows.push(truncatePlain(`… ${agents.length - visible.length} earlier finished agent(s)`, width));
+          rows.push(...visible.map((agent) => truncatePlain(formatFinishedAgent(agent), width)));
+          return rows;
+        },
+      };
+    });
+  });
+
+  pi.on('input', (event) => {
+    if (!own()) return;
+    if (event.source !== 'extension' && firstPrompt === undefined && event.text.trim()) {
+      firstPrompt = event.text.trim();
+    }
+    if (event.streamingBehavior === 'followUp') {
+      followUpSequence += 1;
+      aggregate?.setFollowUp(`native-${followUpSequence}`, true);
+    }
+  });
+
+  pi.on('agent_start', () => {
+    if (own()) aggregate?.startMain();
+  });
+
+  pi.on('agent_end', (event) => {
+    if (own() && isCancelledAgentEnd(event)) aggregate?.cancelMain();
+  });
+
+  pi.on('agent_settled', (_event, ctx) => {
+    if (!own()) return;
+    aggregate?.settleMain();
+    if (titleStarted || explicitlyNamed || pi.getSessionName() !== undefined) return;
+    firstPrompt ??= firstUserPrompt(ctx);
+    if (!firstPrompt) return;
+
+    titleStarted = true;
+    const expectedSessionId = titleSessionId;
+    const prompt = firstPrompt;
+    const controller = new AbortController();
+    titleController = controller;
+    aggregate?.setBackground('automatic-title', true);
+    void generateTitle(prompt, options.title, ctx, controller.signal).then((title) => {
+      if (
+        controller.signal.aborted ||
+        titleSessionId !== expectedSessionId ||
+        explicitlyNamed ||
+        pi.getSessionName() !== undefined
+      ) return;
+      pendingAutomaticName = title;
+      pi.setSessionName(title);
+    }).catch(() => { /* Native naming failure must not interrupt the session. */ }).finally(() => {
+      if (titleSessionId === expectedSessionId) aggregate?.setBackground('automatic-title', false);
+    });
+  });
+
+  pi.on('ui_prompt_start', () => {
+    if (own()) aggregate?.startHumanPrompt();
+  });
+  pi.on('ui_prompt_end', () => {
+    if (own()) aggregate?.endHumanPrompt();
+  });
+
+  pi.on('tool_result', (event) => {
+    if (!own() || (event.toolName !== 'Agent' && event.toolName !== 'get_subagent_result')) return;
+    const source = record(event.details);
+    const id = nonempty(source?.agentId);
+    const merged = mergeFinishedAgentToolResult(id ? finished.get(id) : undefined, event.details);
+    if (!merged) return;
+    finished.set(merged.id, merged);
+    requestRender();
+  });
+
+  pi.on('session_info_changed', (event) => {
+    if (!own()) return;
+    if (pendingAutomaticName !== undefined && event.name === pendingAutomaticName) {
+      pendingAutomaticName = undefined;
+      requestRender();
+      return;
+    }
+    explicitlyNamed = true;
+    abortTitle();
+    requestRender();
+  });
+
+  pi.on('session_before_switch', () => {
+    if (own()) abortTitle();
+  });
+
+  pi.on('session_shutdown', () => {
+    if (!own()) return;
+    abortTitle();
+    aggregate?.reset();
+    aggregate?.dispose();
+    aggregate = undefined;
+    currentContext = undefined;
+    requestRender = () => {};
+    const global = globalThis as GlobalWithOwner;
+    if (global[PROCESS_OWNER] === token) delete global[PROCESS_OWNER];
+    ownsProcess = false;
+  });
+
+  // EventBus listeners are factory-scoped rather than session-handler scoped.
+  // Pi invalidates the whole extension instance after shutdown; release explicit
+  // subscriptions as well so reload never accumulates bus consumers.
+  pi.on('session_shutdown', () => {
+    unsubscribeBackground();
+    unsubscribeFollowUp();
+    unsubscribeQuestion();
+    unsubscribeStarted();
+    unsubscribeCompleted();
+    unsubscribeFailed();
+  });
+}
