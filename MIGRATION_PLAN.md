@@ -22,9 +22,10 @@ parallel specifications or historical alternatives.
 ### Repository
 
 - Initialize `mpx2` as one private TypeScript package using pnpm.
-- Create a private GitHub repository during implementation. Its fresh history becomes authoritative;
-  preserve old repository histories separately. Confirm exact remote names before renaming or
-  archiving any remote.
+- Continue locally for now; private GitHub repository creation and naming are deferred. The confirmed
+  future owner is MartinoPolo. The new repository's fresh history becomes authoritative; preserve old
+  repository histories separately. Confirm exact remote names before creation, renaming or archival.
+  Remote setup must not block local implementation.
 - Use conventional commits and run `pnpm run typecheck` before each commit.
 - Treat the current dirty `C:/_MP_projects/mpx` working tree as the newest content intent.
 - Use `mpx-claude-code` and `mpx-pi` as behavioral references when adapting each workflow.
@@ -123,6 +124,9 @@ installed harnesses before treating discovery as ready:
   settings edits are authorized merely by selecting this candidate.
 - Propagate selected pack paths into Pi's SDK child `DefaultResourceLoader`; verify named-skill
   preloading as well as ordinary child discovery. Top-level wrapper arguments alone do not propagate.
+  The demonstrated gaps may be fixed with the approved minimal checkout-local patch to pinned
+  `@tintinweb/pi-subagents@0.19.0`. Document and test both paths and concurrent selections; this does
+  not authorize installed bootstrap replacement or unrelated upstream changes.
 - Exercise both accounts/harnesses, main checkouts and fresh worktrees, reload/restart, concurrent
   repository selections, default/empty/invalid selections, and unavailable fallback paths.
 - Inspect actual initial catalogs and loaded body/support paths, including normal/name-only/explicit-

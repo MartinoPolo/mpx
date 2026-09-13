@@ -12,6 +12,8 @@ chronology or superseded alternatives. Recommendations alone do not constitute a
 
 - Build a fresh private TypeScript/pnpm package in `mpx2`, eventually renamed to `mpx`, with a private
   GitHub repository. Preserve old histories and confirm remote targets before changing them.
+  The future GitHub owner is MartinoPolo; repository creation and naming are deferred. Continue
+  locally without treating the remote as an implementation blocker.
 - Orca owns worktrees, terminals, status, notifications, review/orchestration UI, and operational visibility.
   MPX owns canonical content, a small compiler, account wrappers, project metadata, approved extensions,
   native-session resume, and individually approved safeguards.
@@ -82,6 +84,10 @@ chronology or superseded alternatives. Recommendations alone do not constitute a
   evaluate local changes individually and scrutinize custom machinery. Popularity alone is not acceptance.
   Evaluate a pinned upstream subagent package first; add local adaptations only for demonstrated gaps.
   This is a prototype-selection decision, not approval to replace an installed package.
+- A minimal checkout-local patch to pinned `@tintinweb/pi-subagents@0.19.0` is approved for the
+  demonstrated selected-pack discovery and named-skill preload gaps. Test and document the patch,
+  preserve native project/unrelated resource discovery, and keep concurrent selections independent.
+  This approval does not authorize replacing the installed bootstrap or unrelated upstream changes.
 - Version one requires background subagents, result retrieval, and steering, with running and finished
   agents visible and model, effort, elapsed time, and token usage shown where supported by actual data.
   Separate Orca worker panes and foreground delegation are not version-one requirements. Nested
