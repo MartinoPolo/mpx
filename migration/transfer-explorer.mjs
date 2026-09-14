@@ -15,7 +15,7 @@ function replaceOnce(before, after) {
   source = source.replace(before, after);
 }
 replaceOnce('name: mpx-explorer\n', 'name: explorer\n');
-replaceOnce("---\n\nLocate and report.", "metadata:\n  mpx:\n    schemaVersion: 1\n    modelClass: exploration\n    thinking: medium\n    capabilities: [read, search, shell]\n---\n\nLocate and report.");
+replaceOnce("---\n\nLocate and report.", "metadata:\n  mpx:\n    schemaVersion: 1\n    modelClass: exploration\n    thinking: xhigh\n    capabilities: [read, search, shell]\n---\n\nLocate and report.");
 replaceOnce('Cast wide first (`Glob`, then `Grep` on symbol and string patterns), then read only the excerpts', 'Cast wide first (native file-name search, then text search on symbol and string patterns), then read only the excerpts');
 replaceOnce("env | grep '^MPX_' | sort", 'for name in MPX_PROJECTS MPX_WORK MPX_CLONED MPX_APPS MPX_ONEDRIVE MPX_AI_GENERATED MPX_OBSIDIAN_VAULT; do\n  printf \'%s=%s\\n\' "$name" "${!name}"\ndone');
 await writeFile(destination, source, { flag: 'wx' });

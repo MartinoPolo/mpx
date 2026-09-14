@@ -11,7 +11,7 @@ test('committed projections match the retained canonical content slice', async (
 
 test('explorer preserves bounded read-only search and limits root inspection to approved names', async () => {
   const source = await readFile(new URL('../content/agents/explorer.md', import.meta.url), 'utf8');
-  for (const text of ['modelClass: exploration', 'thinking: medium', 'Do not review, audit, or propose changes.', 'one alternative naming convention', 'relevant project and version or source', 'file_path:line_number', 'native file-name search']) assert.ok(source.replace(/\s+/g, ' ').includes(text), text);
+  for (const text of ['modelClass: exploration', 'thinking: xhigh', 'Do not review, audit, or propose changes.', 'one alternative naming convention', 'relevant project and version or source', 'file_path:line_number', 'native file-name search']) assert.ok(source.replace(/\s+/g, ' ').includes(text), text);
   assert.match(source, /for name in MPX_PROJECTS MPX_WORK MPX_CLONED MPX_APPS MPX_ONEDRIVE MPX_AI_GENERATED MPX_OBSIDIAN_VAULT;/);
   assert.doesNotMatch(source, /env \| grep|Overrides the built-in/);
 });

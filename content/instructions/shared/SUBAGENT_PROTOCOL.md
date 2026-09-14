@@ -17,7 +17,7 @@ sites use model classes:
 | `frontier`    | deliberate manual escalation for large orchestration only |
 
 An agent definition should declare its semantic class and effort policy. `exploration` is a semantic
-model class; `medium` is its separate reasoning-effort setting. Callers omit model selection for a
+model class; `xhigh` is its separate reasoning-effort setting. Callers omit model selection for a
 declaring agent. Generic agents with no declaration require an explicit class at every call site. The content compiler maps each class through `content/runtime-profiles.json`; native execution
 evidence reports the model actually used. Concrete vendor model IDs never appear in canonical instructions.
 
@@ -30,7 +30,7 @@ automatic-agent class.
 Effort is runtime configuration, not prompt prose. Pin it in the agent definition when the runtime
 supports it:
 
-- exploration: `exploration`, medium;
+- exploration: `exploration`, xhigh;
 - review: `standard`, medium;
 - implementation with a pre-analyzed chunk: `advanced`, low;
 - TDD iteration and design: `advanced`, medium;
@@ -82,7 +82,7 @@ changes; stale measured claims are defects.
 | pre-analyzed implementation            | `advanced` low                                        |
 | interactive browser loop               | `advanced` high                                       |
 | review                                 | `standard` medium                                     |
-| codebase exploration                   | `exploration` medium                                  |
+| codebase exploration                   | `exploration` xhigh                                   |
 | bounded composition/finding            | `standard` low                                        |
 | deterministic check/commit/docs lookup | `mechanical`                                          |
 

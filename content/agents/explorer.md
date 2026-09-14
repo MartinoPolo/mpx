@@ -10,7 +10,7 @@ metadata:
   mpx:
     schemaVersion: 1
     modelClass: exploration
-    thinking: medium
+    thinking: xhigh
     capabilities: [read, search, shell]
 ---
 
