@@ -111,8 +111,10 @@ resurrection adapters are exercised without an installed cutover.
 Native web/MCP/question packages load for both accounts. Local MCP/question callbacks pass; web's
 loopback request is SSRF-blocked, **not successful retrieval**. Existing package versions are preserved.
 The approved checkout-local Orca hook candidate passes actual native child/follow-up/result-consumption
-fixtures without premature completion. It remains **undeployed**: the current Orca receiver drops its
-cancellation flag, and a separate receiver patch awaits approval. See
+fixtures without premature completion. The approved receiver candidate preserves cancellation through
+normalization and renderer ingress; Orca's formatter says **stopped**, not **finished**. Both candidates
+remain **undeployed**. Existing stopped notifications/unread attention are not suppressed by this patch.
+See [migration/evidence-orca-receiver.md](migration/evidence-orca-receiver.md),
 [migration/evidence-orca-compat.md](migration/evidence-orca-compat.md) and
 [migration/evidence-legacy-compat.md](migration/evidence-legacy-compat.md).
 

@@ -1,0 +1,15 @@
+diff --git a/src/shared/agent-hook-listener/providers/pi-family-events.ts b/src/shared/agent-hook-listener/providers/pi-family-events.ts
+--- a/src/shared/agent-hook-listener/providers/pi-family-events.ts
++++ b/src/shared/agent-hook-listener/providers/pi-family-events.ts
+@@ -75,6 +75,11 @@ export function normalizePiCompatibleEvent(
+ 
+   return normalizeAgentStatusPayload({
+     state: stateName,
++    // Why: a native Pi cancellation must not become a successful-completion alert.
++    interrupted:
++      agentType === 'pi' && eventName === 'agent_end' && hookPayload.interrupted === true
++        ? true
++        : undefined,
+     prompt: resolvePrompt(state, paneKey, promptText, {
+       resetOnNewTurn: isNewTurnEvent(agentType, eventName)
+     }),

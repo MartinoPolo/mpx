@@ -1,4 +1,4 @@
-# Migration progress — 2026-09-13
+# Migration progress — 2026-09-14
 
 **State: repository implementation and isolated verification; NOT cutover-ready.**
 `DECISIONS.md` is authority; `MIGRATION_PLAN.md` owns acceptance. Evidence does not authorize installation.
@@ -13,8 +13,10 @@ Remote creation remains deferred (future owner: MartinoPolo).
   Typecheck passed immediately before commit; native hooks were not bypassed. README/ledger final
   accounting follows as a documentation-only checkpoint.
 - `bf25536 docs(migration): record verified checkpoint and remaining gates` — prior final accounting.
-- Current compatibility checkpoint: approved checkout-local Orca/legacy candidates and native disposable
-  probes; no original/installed hook or legacy repository edits. See the compatibility evidence below.
+- `0691721 feat(migration): prepare Orca and legacy compatibility candidates` — approved copied
+  candidates and native disposable probes; no original/installed hook or legacy repository edits.
+- Receiver follow-up: separately approved copied Pi receiver patch preserves strict cancellation and
+  downstream stopped presentation. No installation or notification-policy change.
 - No push, remote creation, installed cutover, account migration, archival, rename, or reboot.
 
 ## Implemented in MPX2
@@ -56,8 +58,11 @@ Remote creation remains deferred (future owner: MartinoPolo).
   Posts were intercepted: no receiver contact, deployment, provider-executed child, or physical UI claim.
 - Approved copied Orca hook passes actual native parent/child/nudge/get-result fixtures, including a
   nudge held beyond 700 ms, background/question public events, cancellation payload and stale activation
-  rejection. Original receiver drops `interrupted`: **deployment blocked; receiver patch approval pending**.
-  [evidence-orca-compat.md](evidence-orca-compat.md) distinguishes streams and clock fixtures from live UI.
+  rejection. The separately approved copied receiver now preserves `interrupted`; 33 receiver scenarios,
+  actual native abort, renderer ingress and stopped/finished formatting checks pass. Original receiver is
+  untouched and still drops the flag; paired installation/live acceptance remains pending. Existing Orca
+  stopped notifications/unread behavior is not suppressed. [evidence-orca-receiver.md](evidence-orca-receiver.md)
+  and [evidence-orca-compat.md](evidence-orca-compat.md) distinguish fixture boundaries from live UI.
 - Copied legacy footer uses native `getAgentDir()`; actual native loader observes only disposable account
   settings, not decoy HOME settings. Retained subagents/tool-display load; no live child/provider/UI claim.
   [evidence-legacy-compat.md](evidence-legacy-compat.md). Candidate is not automatically applied or selected.
@@ -69,10 +74,10 @@ Remote creation remains deferred (future owner: MartinoPolo).
 
 ## Pending decisions / implementation blockers
 
-1. **Orca receiver compatibility approval unanswered.** Hook preparation/testing was approved and is
-   complete locally. Its cancellation payload contains `interrupted:true`, but the unchanged Orca Pi
-   receiver drops that flag. A separate checkout-local receiver patch was requested, not authorized or
-   implemented. Do not deploy the hook candidate or claim cancellation-alert acceptance.
+1. **Orca paired installation/live acceptance.** Receiver preparation/testing is now approved and
+   complete locally. The copied receiver preserves `interrupted:true`; original receiver/app are untouched.
+   No deployment, physical notification or silent-cancellation acceptance is implied. Orca intentionally
+   still permits stopped notifications and unread attention; changing that policy requires separate scope.
 2. **Legacy installation/live acceptance.** The approved copied footer patch and loader/account-root
    probe pass. Original `mpx-pi/extensions/footer.ts:1817` still hardcodes `~/.pi/agent` and is untouched.
    MPX2 continues to refuse that unsafe launch. No candidate application/selection, installed synchronization,

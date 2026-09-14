@@ -91,6 +91,9 @@ chronology or superseded alternatives. Recommendations alone do not constitute a
 - Preparing and testing checkout-local Orca aggregate-hook compatibility changes is approved. Keep
   Orca as the sole status/attention writer; cover pending follow-ups, child/background work, questions,
   and deliberate cancellation. Do not edit the original/installed Orca files or deploy the candidate.
+- Preparing and testing the separate checkout-local Orca Pi receiver cancellation patch is approved.
+  Preserve native `interrupted` semantics and ordinary completion behavior. Do not edit the original
+  Orca checkout, change installed registrations, deploy, or expand unrelated provider behavior.
 - Preparing and testing checkout-local legacy-footer/extension compatibility changes is approved for
   the explicitly separate legacy account. Preserve retained display behavior and dependencies; do
   not edit legacy repositories, route credentials, reactivate retired services, or install the candidate.

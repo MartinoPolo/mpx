@@ -1,5 +1,5 @@
 // Native Pi + unchanged upstream manager + patched Orca hook, all in disposable data.
-// Only model streaming, nudge-clock delay, and HTTP delivery are controlled fixtures.
+// Model streaming, nudge-clock delay, HTTP delivery and notification translation are fixture boundaries.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm, copyFile } from 'node:fs/promises';
@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import net from 'node:net';
 import { createHash } from 'node:crypto';
 import { withSourceIntegrity } from './source-integrity.mjs';
+import { loadOrcaReceiverCandidate } from './orca-receiver-candidate.mjs';
+import { checkReceiverNormalization, loadReceiverPresentation, checkReceiverPresentation } from './orca-receiver-checks.mjs';
 import { pathToFileURL } from 'node:url';
 import { createAssistantMessageEventStream, InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createAgentSession, createEventBus } from '@earendil-works/pi-coding-agent';
@@ -76,8 +78,11 @@ try {
     return realTimeout(callback, milliseconds, ...args);
   };
   globalThis.clearTimeout = handle => { held.delete(handle); realClear(handle); };
-  ({ normalizePiCompatibleEvent } = await import(pathToFileURL(path.join(orcaSource, 'src/shared/agent-hook-listener/providers/pi-family-events.ts')).href));
+  const receiver = await loadOrcaReceiverCandidate(orcaSource, temporary);
+  ({ normalizePiCompatibleEvent } = receiver.candidate);
   const { createHookListenerState } = await import(pathToFileURL(path.join(orcaSource, 'src/shared/agent-hook-listener/listener-state.ts')).href);
+  const receiverScenarios = checkReceiverNormalization(receiver, createHookListenerState);
+  const presentation = await loadReceiverPresentation(orcaSource, temporary);
   receiverState = createHookListenerState();
   const events = createEventBus();
   events.on('mpx2:pi-ui:activity', value => activities.push(value));
@@ -197,7 +202,9 @@ try {
   assert.equal(cancelled.interrupted, true);
   const receivedCancellation = normalizePiCompatibleEvent(createHookListenerState(), 'pi', 'agent_end', '', 'fixture-pane', cancelled);
   assert.equal(receivedCancellation.state, 'done');
-  assert.equal(receivedCancellation.interrupted, undefined, 'confirmed current receiver gap, NOT cancellation acceptance');
+  assert.equal(receivedCancellation.interrupted, true, 'copied receiver preserves actual native cancellation');
+  assert.equal(receiver.original.normalizePiCompatibleEvent(createHookListenerState(), 'pi', 'agent_end', '', 'fixture-pane', cancelled).interrupted, undefined, 'unchanged original still reproduces the gap');
+  const presentationEvidence = checkReceiverPresentation(presentation, receivedCancellation, normalized.find(row => row?.state === 'done' && row.interrupted !== true));
   assert.equal(activities.at(-1).state, 'cancelled');
 
   const old = activities.at(-1);
@@ -215,7 +222,7 @@ try {
   await bounded(reloadedEnd, 'replacement hook aggregate completion');
   assert.deepEqual(await readFile(source), original);
   const piVersion = JSON.parse(await readFile(new URL('../package.json', import.meta.resolve('@earendil-works/pi-coding-agent')), 'utf8')).version;
-  return { sourceSha256: createHash('sha256').update(original).digest('hex'), nativePi: piVersion, nativeChildAndFollowUp: true, heldNudgeMs: 700, noPrematureDone: true, execution, rootCompletions: 4, nativeResultConsumption: true, cancellationPayload: 'interrupted:true; current Orca receiver drops it, companion approval required', humanNeeded: 'public package-event fixture, not physical UI', reloadStaleEventRejected: true, replacementListenerWorks: true, networkRequests: 0, installedChanges: 0 };
+  return { sourceSha256: createHash('sha256').update(original).digest('hex'), nativePi: piVersion, nativeChildAndFollowUp: true, heldNudgeMs: 700, noPrematureDone: true, execution, rootCompletions: 4, nativeResultConsumption: true, cancellationPayload: 'interrupted:true preserved by copied receiver; original still drops it', receiverScenarios, receiverProvenance: { sourceSha256: receiver.sourceSha256, candidateSha256: receiver.candidateSha256, executedSourceSha256: receiver.executedSourceSha256, patchSha256: receiver.patchSha256 }, presentation: presentationEvidence, humanNeeded: 'public package-event fixture, not physical UI', reloadStaleEventRejected: true, replacementListenerWorks: true, networkRequests: 0, installedChanges: 0 };
 } finally {
   releaseChild.resolve(); releaseSecondChild.resolve();
   for (const handle of held.keys()) realClear(handle);

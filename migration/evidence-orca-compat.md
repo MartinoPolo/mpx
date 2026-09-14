@@ -89,13 +89,14 @@ Implementation transcripts identify `openai-codex/gpt-5.6-sol`; review transcrip
 `openai-codex/gpt-5.6-terra`. High thinking was requested, but their actual thinking levels were not exposed;
 the native fixture stream metadata above is separate and directly observed.
 
-## Open gate — receiver approval required
+## Receiver follow-up — prepared, undeployed
 
-The unchanged Orca `normalizePiCompatibleEvent` was invoked directly with the captured cancellation
-payload. It **drops `interrupted`**, so hook-only deployment cannot reliably suppress completion alerts.
-A separate checkout-local receiver patch was requested and remains unapproved/unimplemented. Do not
-install this hook candidate, claim notification/cancellation acceptance, or silently choose a second
-transport to bypass that ownership boundary.
+The unchanged Orca `normalizePiCompatibleEvent` drops `interrupted`. Separate receiver preparation/testing
+was subsequently approved on 2026-09-14 and is recorded in [evidence-orca-receiver.md](evidence-orca-receiver.md).
+The combined copied candidate now preserves the flag through renderer ingress and labels interruption
+**stopped**, not **finished**. Further tracing corrected the earlier suppression assumption: native Orca
+still permits stopped notifications and unread attention. No notification-policy change was authorized.
+Do not install either candidate or claim physical notification/cancellation acceptance from these fixtures.
 
 Authenticated workflows, physical Orca attention, manual question/title/footer behavior, installed
 registration, real resumed startup and reboot remain separate human/live acceptance gates.
