@@ -68,7 +68,6 @@ function factory(overrides: Record<string, unknown> = {}) {
       },
     }),
     status: () => ({}) as never,
-    sessions: () => ({}) as never,
     ...overrides,
   });
 }
@@ -97,8 +96,7 @@ describe('Node launch production factory', () => {
   it('fails closed for explicit Docker without host fallback or downstream execution', async () => {
     executionSpy.mockClear();
     const status = vi.fn(() => ({}) as never);
-    const sessions = vi.fn(() => ({}) as never);
-    const service = factory({ status, sessions });
+    const service = factory({ status });
     const error = await service
       .prepare({
         operation: 'launch',
@@ -117,7 +115,6 @@ describe('Node launch production factory', () => {
       details: { executor: 'docker', hostFallback: false },
     });
     expect(status).not.toHaveBeenCalled();
-    expect(sessions).not.toHaveBeenCalled();
     expect(executionSpy).not.toHaveBeenCalled();
   });
 
@@ -182,10 +179,9 @@ describe('Node launch production factory', () => {
 
   it('does not implicitly attach session lifecycle recording during a normal launch', async () => {
     executionSpy.mockClear();
-    const sessions = vi.fn(() => ({}));
     const environment = { APPDATA: 'C:/appdata', LOCALAPPDATA: 'C:/local' };
     const context = { launchExecutorAdapters: [verifiedHost] };
-    const service = factory({ sessions, environment, context });
+    const service = factory({ environment, context });
 
     await service.execute(await resolvedLaunch(service));
 
@@ -195,18 +191,15 @@ describe('Node launch production factory', () => {
     expect(execution.environment).toEqual(environment);
     expect(execution.environment).not.toHaveProperty('MPX_SESSION_LIFECYCLE_BINDING_ID');
     expect(execution.environment).not.toHaveProperty('MPX_SESSION_LIFECYCLE_EVENT_DIR');
-    expect(sessions).not.toHaveBeenCalled();
   });
 
   it('forwards an explicitly injected lifecycle bridge during production launch', async () => {
     executionSpy.mockClear();
-    const sessions = vi.fn(() => ({}));
     const lifecycle = {
       prepare: vi.fn(),
       consume: vi.fn(),
     };
     const service = factory({
-      sessions,
       context: { launchExecutorAdapters: [verifiedHost], launchLifecycleBridge: lifecycle },
     });
 
@@ -214,15 +207,11 @@ describe('Node launch production factory', () => {
 
     const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
     expect(execution.context.launchLifecycleBridge).toBe(lifecycle);
-    expect(sessions).not.toHaveBeenCalled();
   });
 
-  it('keeps candidate and no-runtime selection explanations free of mutable production services', async () => {
+  it('keeps candidate and no-runtime selection explanations free of status infrastructure', async () => {
     const status = vi.fn(() => {
       throw new Error('status must remain lazy');
-    });
-    const sessions = vi.fn(() => {
-      throw new Error('sessions must remain lazy');
     });
     const service = createNodeLaunchApplicationService({
       cwd: process.cwd(),
@@ -232,7 +221,6 @@ describe('Node launch production factory', () => {
       interaction: { json: true },
       discoverProjectConfig: async () => undefined,
       status,
-      sessions,
     });
 
     const candidates = await service.prepareCandidates({
@@ -249,6 +237,5 @@ describe('Node launch production factory', () => {
     expect(candidates.data).toMatchObject({ schemaVersion: 1, runtime: null });
     expect(selection.data).toMatchObject({ schemaVersion: 1, runtime: null });
     expect(status).not.toHaveBeenCalled();
-    expect(sessions).not.toHaveBeenCalled();
   });
 });

@@ -7,16 +7,17 @@ mpx session list
 mpx session resume <id>
 ```
 
-MPX stores bounded lifecycle and resume metadata only. It does not copy native transcripts, prompts,
-credentials, command output, or private paths. Session snapshot and record schemas are version 2,
-and current authority is written under `sessions/v2`.
+MPX preserves bounded historical lifecycle and resume metadata only. Ordinary launch and resume do
+not create new MPX lifecycle bindings. It does not copy native transcripts, prompts, credentials,
+command output, or private paths. Session snapshot and record schemas are version 2, and existing
+authority remains under `sessions/v2`.
 
 ## Managed inventory and liveness
 
-Listing consumes pending lifecycle events and reconciles only MPX-managed session records. Inventory
-partitions are independent: an unreadable source produces a source-attributed diagnostic without
-hiding healthy partitions, and public diagnostics are bounded. Process liveness uses PID plus start
-fingerprint.
+Listing consumes any retained lifecycle events and reconciles only existing MPX-managed session
+records. Inventory partitions are independent: an unreadable source produces a source-attributed
+diagnostic without hiding healthy partitions, and public diagnostics are bounded. Process liveness
+uses PID plus start fingerprint.
 
 Pi and Claude preserve their real native account roots, authentication ownership, native session
 formats, and resume argv. MPX never switches identities or credentials based on a project, location,

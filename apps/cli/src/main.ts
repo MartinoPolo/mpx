@@ -649,7 +649,6 @@ async function execute(parsed: Parsed, context: CliContext, io: CliIo): Promise<
       },
       discoverProjectConfig: projectDiscovery,
       status: () => status(context),
-      sessions: () => sessions(context),
     });
     const prepared = await service.prepare({
       operation: 'launch',

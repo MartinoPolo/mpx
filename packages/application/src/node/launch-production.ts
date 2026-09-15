@@ -2,7 +2,6 @@ import path from 'node:path';
 import { discoverProjectConfig, type UserConfig } from '@mpx/config';
 import { MpxError, sha256Canonical, type JsonValue } from '@mpx/core';
 import { sanitizeHostReason, type DirectTty } from '@mpx/executors';
-import type { SessionStore } from '@mpx/sessions';
 import { inventoryCanonical, inventoryProjectSkills } from '@mpx/skills';
 import type { StatusProvider } from '@mpx/status';
 import {
@@ -41,8 +40,6 @@ export interface NodeLaunchApplicationInput {
   readonly discoverProjectConfig?: typeof discoverProjectConfig;
   /** Lazily initialized; candidate, selection, and unbound paths never call it. */
   status(): StatusProvider;
-  /** Lazily initialized; read-only paths never call it. */
-  sessions(): SessionStore;
 }
 
 function piAuth(input: NodeLaunchApplicationInput): PiAuthVerifier {

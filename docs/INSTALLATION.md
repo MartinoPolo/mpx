@@ -51,11 +51,8 @@ printf '{"id":"startup-check","type":"get_state"}\n' | mpx launch pi \
 ```
 
 Use the intended configured identity. This no-prompt check proves that the installed extension
-loader reached RPC startup, but it does not prove managed-registry persistence or replace
-interactive UI verification. Pi defers session persistence until an assistant message is recorded;
-`set_session_name` alone is insufficient. Verify lifecycle registration only after a real assistant
-response through the normal account session path. `--no-session` and temporary session directories
-cannot satisfy managed lifecycle binding.
+loader reached RPC startup, but it does not replace interactive UI verification. Ordinary launch
+does not create an MPX lifecycle binding; native Pi session persistence remains owned by Pi.
 
 ## Ownership and safety
 
