@@ -18,7 +18,7 @@ pnpm test
 - `src/` contains the compiler, configuration, launch, resume, safeguard, and runtime implementation.
 - `extensions/` contains thin native Pi adapters.
 - `bin/` contains Git Bash entrypoints.
-- `migration/` contains bounded evidence and recovery tooling, not normal runtime APIs.
+- `migration/` contains current acceptance and recovery tooling, not normal runtime APIs.
 - `patches/` contains reviewed checkout-local dependency and undeployed compatibility candidates.
 
 User configuration is `$APPDATA/mpx2/config.json`; repository configuration is `mpxconfig.json`.
@@ -40,5 +40,6 @@ first. Never write through legacy directory links.
 
 Keep `README.md` focused on user-facing commands and setup. Keep `DECISIONS.md` limited to durable
 choices and their rationale. Put changing acceptance state and recovery instructions under
-`migration/`; do not copy dated status into durable docs. Package-local behavior may be documented
+`migration/`; keep current state in `migration/HANDOFF.md` and recovery in `migration/ACCOUNT_ROLLOUT.md`.
+Retire one-off tooling and superseded reports to Git history. Package-local behavior may be documented
 beside that package.

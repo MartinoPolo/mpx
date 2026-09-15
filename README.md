@@ -16,6 +16,7 @@ Run these from Git Bash:
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" resume --list` | List resumable native sessions |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" status` | Inspect MPX2 resources and conflicts |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --preview` | Preview account-resource synchronization |
+| `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --runtime-only --account personal --harness pi --preview` | Preview one account/harness runtime scope |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --orca-hooks-only --harness pi --preview` | Preview only Orca-owned Pi extension mirroring |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" project setup --preview` | Preview optional project setup |
 
@@ -70,8 +71,9 @@ ORCA_ROOT_PATH=/path/to/root ORCA_WORKTREE_PATH=/path/to/worktree \
   node /path/to/mpx/scripts/prepare-worktree.mjs
 ```
 
-The helper copies only missing `.vscode`, `.cursor`, and `.local` files. It does not create worktrees,
-install packages, copy environment files, configure permissions, allocate ports, or start servers.
+The helper copies only missing files under `.vscode`, `.cursor`, and `.local`; these trees may contain
+private configuration. Root-level environment files are excluded. It does not create worktrees,
+install packages, configure permissions, allocate ports, or start servers.
 
 ## Ownership and safety
 
@@ -84,5 +86,5 @@ Synchronizing or project setup can write user/project resources. Preview first a
 native or project-authored files. Safeguards are accident prevention, not a security sandbox.
 
 Durable design rationale is in [DECISIONS.md](DECISIONS.md). Current migration status and recovery are
-in [migration/PROGRESS.md](migration/PROGRESS.md) and
+in [migration/HANDOFF.md](migration/HANDOFF.md) and
 [migration/ACCOUNT_ROLLOUT.md](migration/ACCOUNT_ROLLOUT.md).

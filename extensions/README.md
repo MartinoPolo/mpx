@@ -40,4 +40,4 @@ rendering. MPX supplies thin adapters and selected content. Orca owns terminal/w
 desktop attention; this runtime must not become a second notification writer.
 
 Current rollout evidence and physical-verification limits belong in
-[`migration/PROGRESS.md`](../migration/PROGRESS.md), not this package document.
+[`migration/HANDOFF.md`](../migration/HANDOFF.md), not this package document.

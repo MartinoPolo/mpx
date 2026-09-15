@@ -1,7 +1,7 @@
 # Applied account rollout
 
-The automated structural rollout is authorized in `DECISIONS.md`. It does not authorize source
-repository deletion, publication, or Orca deployment.
+This records the already-applied account rollout and its recovery locations, not authorization for
+another apply. Current acceptance and remaining work are tracked only in [HANDOFF.md](HANDOFF.md).
 
 ## Current routing
 
@@ -13,7 +13,7 @@ repository deletion, publication, or Orca deployment.
 | `cc` | Unchanged; personal Claude live checks deferred |
 | `lpi`, `lpiw` | Temporary direct legacy Pi recovery launchers |
 | `lccw` | Temporary direct work-Claude recovery launcher |
-| `xpi`, `xpiw`, `xccw` | Removed; previously installed MPX is no longer exposed |
+| `xpi`, `xpiw`, `xccw` | Removed; bare `mpx`, personal `cc`, and suffixed legacy functions remain |
 
 A fresh Git Bash shell loads these functions. Existing shells retain their old definitions until
 refreshed. Installed MPX strips Git Bash shell markers, causing Claude's Bash-style hooks to be
@@ -51,9 +51,10 @@ Yarn remain intact. The sibling workspace marker and project-authored native ski
 
 ## Protected recovery
 
-Each protected single-file script defaults to preview. Add `--apply` only for deliberate recovery;
-newer file edits are refused rather than overwritten. Recover routing before configurations and
-account surfaces. Preserve all protected artifacts until migration acceptance is complete.
+Current account and single-file recovery scripts default to preview and refuse newer edits detected
+by their checks. Add `--apply` only for deliberate recovery. Recover routing before configurations
+and account surfaces; preserve protected artifacts through restart acceptance. The older personal
+pilot uses a separate recovery implementation with the concurrency limitation below.
 
 1. **Removal of installed-MPX `x*` launchers**:
    `$MPX_APPS/_backups/mpx2-remove-x-launchers-2026-09-15T13-27-11.764Z/`
@@ -88,8 +89,27 @@ that defect. The incomplete preparation at `mpx2-work-configuration-2026-09-15T0
 contains no applied transaction and is retained, not silently deleted. Recovery candidates use
 unique attempt names so a Windows sharing failure cannot permanently block retry.
 
-## Remaining retirement boundaries
+## Original personal pilot recovery
 
-Continue semantic review during ordinary work. Retain original sources, dirty/untracked legacy
-state, native histories, and direct fallback launchers. Legacy dependency reconciliation, publication,
-source archival/deletion, physical resurrection, and paired Orca changes remain separate gates.
+The original protected pilot backup remains at:
+
+`$MPX_APPS/_backups/mpx2-personal-pilot-2026-09-14T14-03-39.437Z`
+
+It contains its own standalone Node recovery script and manifests; it does not require the retired
+repository pilot installer or checkout dependencies. Resolve later personal-account transactions
+before considering this older rollback. Never restore the whole native profile over newer settings,
+authentication, or conversations.
+
+```bash
+backup="$MPX_APPS/_backups/mpx2-personal-pilot-2026-09-14T14-03-39.437Z"
+node "$backup/rollback-personal-pilot.mjs" "$backup"
+```
+
+**Legacy limitation:** this script can delete a newer file if another writer replaces a pilot-owned
+file between verification and removal. The protected copy has not been upgraded. Do not automate its
+`--apply`: stop affected sessions/editors and review current targets and the transaction before a
+manual recovery. Preview is not a concurrency guarantee. Original directory links are restored only
+when unrelated private changes would not be lost; the private pilot agent copy is retained.
+
+The original pilot's stale launcher table and pending-acceptance instructions are superseded by the
+current routing above and [HANDOFF.md](HANDOFF.md). Historical installer sources remain in Git.
