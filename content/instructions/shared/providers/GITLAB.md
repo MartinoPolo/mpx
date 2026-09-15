@@ -1,12 +1,14 @@
 # GitLab Native Guide (`glab`)
 
-Applies only when the selected role is `gitlab`. Follow [Provider Routing](../PROVIDER_ROUTING.md), preserve native
-authentication and any launch-injected `GLAB_CONFIG_DIR`, and bind CLI commands with `--repo <TARGET>`. Use
-`TARGET=PROJECT` only when the independently selected host is the validated default; otherwise use `HOST/PROJECT`. For
-API calls percent-encode every `/` in the complete project path as `%2F` and pass `--hostname <HOST>`.
+Applies only when the selected role is `gitlab`. Follow [Provider Routing](../PROVIDER_ROUTING.md),
+preserve native authentication and any launch-injected `GLAB_CONFIG_DIR`, and bind CLI commands with
+`--repo <TARGET>`. Use `TARGET=PROJECT` only when the independently selected host is the validated
+default; otherwise use `HOST/PROJECT`. For API calls percent-encode every `/` in the complete
+project path as `%2F` and pass `--hostname <HOST>`.
 
-Installed `glab 1.107.0 --help` verifies `--repo`, JSON issue output, API `--field key=@file`, pagination, milestone
-JSON, and the CI commands below. Check subcommand help before optional version-sensitive flags.
+Installed `glab 1.107.0 --help` verifies `--repo`, JSON issue output, API `--field key=@file`,
+pagination, milestone JSON, and the CI commands below. Check subcommand help before optional
+version-sensitive flags.
 
 ## Issues and milestones
 
@@ -28,8 +30,8 @@ glab label list --repo <TARGET> --output json
 glab milestone list --repo <TARGET> --project <PROJECT> --state active|closed --output json --per-page 100
 ```
 
-Resolve exact milestone IDs before assignment. Label or milestone creation is unsupported by this guide. Relationships
-use reciprocal body links rather than Epic/sub-Issue semantics.
+Resolve exact milestone IDs before assignment. Label or milestone creation is unsupported by this
+guide. Relationships use reciprocal body links rather than Epic/sub-Issue semantics.
 
 ## Merge requests and CI
 
@@ -51,6 +53,6 @@ glab ci retry <job-id> --repo <TARGET>
 glab mr merge <iid> --yes --repo <TARGET> [--squash|--rebase]
 ```
 
-Poll explicit pipeline/job IDs boundedly; never infer an update or retry target. Merge requires fresh human
-authorization. Reliable cross-version watch semantics, client-selected non-exposed merge behavior, native hierarchy, and
-automatic body-link synchronization are unsupported.
+Poll explicit pipeline/job IDs boundedly; never infer an update or retry target. Merge requires
+fresh human authorization. Reliable cross-version watch semantics, client-selected non-exposed merge
+behavior, native hierarchy, and automatic body-link synchronization are unsupported.

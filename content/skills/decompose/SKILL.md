@@ -17,8 +17,8 @@ metadata:
 
 # Decompose Large Files
 
-Split oversized files into logical modules. Keep functionality unchanged, enforce DRY, and improve organization. Use
-`the invocation input` as the requested scope.
+Split oversized files into logical modules. Keep functionality unchanged, enforce DRY, and improve
+organization. Use `the invocation input` as the requested scope.
 
 Resolve bundled skill assets relative to this loaded skill. For literal absolute reads, follow
 [Content Paths](../shared/CONTENT_PATHS.md).
@@ -27,7 +27,8 @@ Resolve bundled skill assets relative to this loaded skill. For literal absolute
 
 - Preserve runtime behavior and public API.
 - Reduce file size and responsibility overlap.
-- Organize by role: constants, utilities, types, hooks, context, components, and services as applicable.
+- Organize by role: constants, utilities, types, hooks, context, components, and services as
+  applicable.
 - Keep each requested large file as an independently verifiable decomposition unit.
 
 ## Workflow
@@ -38,17 +39,18 @@ Parse `the invocation input` into explicit file or folder targets.
 
 - Ask for scope when none was supplied.
 - Preserve each supplied file as a separate decomposition unit.
-- For a folder, inventory candidate source files deterministically, identify the large files, and prioritize the
-  highest-impact units using size, responsibility overlap, and dependency centrality. Report the resulting units before
-  editing.
+- For a folder, inventory candidate source files deterministically, identify the large files, and
+  prioritize the highest-impact units using size, responsibility overlap, and dependency centrality.
+  Report the resulting units before editing.
 
 ### Step 2: Dispatch decomposition units
 
-Spawn one `general-purpose` sub-agent per unit. Resolve the canonical `advanced` class to a concrete model using the
-existing active runtime profile, and pass that structured model selection with medium effort; do not use a prose class
-name as model selection or add new model-resolution machinery. Use fresh bounded context for each unit and dispatch
-multiple units in parallel. Each prompt must name the target, allowed related paths, project conventions, and exact
-verification commands when known.
+Spawn one `general-purpose` sub-agent per unit. Resolve the canonical `advanced` class to a concrete
+model using the existing active runtime profile, and pass that structured model selection with
+medium effort; do not use a prose class name as model selection or add new model-resolution
+machinery. Use fresh bounded context for each unit and dispatch multiple units in parallel. Each
+prompt must name the target, allowed related paths, project conventions, and exact verification
+commands when known.
 
 Use this prompt contract for every unit:
 
@@ -85,15 +87,15 @@ Required output:
 - Residual risks.
 ```
 
-Require the sub-agent to stop and return the concrete blocker when a safe multi-module split is not possible. A blocked
-unit must not cause independent units to be abandoned.
+Require the sub-agent to stop and return the concrete blocker when a safe multi-module split is not
+possible. A blocked unit must not cause independent units to be abandoned.
 
 ### Step 3: Validate preservation
 
-Reconcile each unit's edits and evidence exactly once. Run the project-native targeted checks supplied by the caller or
-discovered in directly relevant project configuration. Do not invent commands. When executable checks are unavailable,
-statically validate imports, exports, public entry points, and call paths, and label that evidence as static rather than
-test evidence.
+Reconcile each unit's edits and evidence exactly once. Run the project-native targeted checks
+supplied by the caller or discovered in directly relevant project configuration. Do not invent
+commands. When executable checks are unavailable, statically validate imports, exports, public entry
+points, and call paths, and label that evidence as static rather than test evidence.
 
 Confirm for every unit that:
 

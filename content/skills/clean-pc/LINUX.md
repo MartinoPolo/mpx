@@ -1,11 +1,11 @@
 # Linux Commands
 
-> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the tested one. Treat
-> everything here as a starting point: dry-run each command, confirm paths exist, and prefer reporting over deleting
-> until a run has proven itself.
+> **UNVERIFIED.** These commands have never been executed by this skill. The Windows path is the
+> tested one. Treat everything here as a starting point: dry-run each command, confirm paths exist,
+> and prefer reporting over deleting until a run has proven itself.
 
-Domain rules live in [DOMAINS.md](DOMAINS.md). The bundled `scripts/*.ps1` are Windows-only; on Linux the shell commands
-below replace them.
+Domain rules live in [DOMAINS.md](DOMAINS.md). The bundled `scripts/*.ps1` are Windows-only; on
+Linux the shell commands below replace them.
 
 ## Scan boundary
 
@@ -25,8 +25,8 @@ sudo apt install ncdu     # or dnf/pacman; offer once, then fall back
 du -x -d 3 -BG / 2>/dev/null | sort -rn | head -50
 ```
 
-`-x` keeps `du` on one filesystem — the equivalent of the junction-safe rule, and it also stops the walk from descending
-into `/proc`, `/sys` and bind mounts.
+`-x` keeps `du` on one filesystem — the equivalent of the junction-safe rule, and it also stops the
+walk from descending into `/proc`, `/sys` and bind mounts.
 
 ## Deletion
 
@@ -54,8 +54,8 @@ sudo apt clean            # or: dnf clean all / pacman -Sc
 journalctl --vacuum-size=200M
 ```
 
-Cache roots: `~/.cache`, `~/.npm`, `~/.local/share/pnpm/store`, `~/.cargo/registry/src`, `~/.gradle/caches`,
-`~/.cache/ms-playwright`, `/var/cache`, `/var/tmp`.
+Cache roots: `~/.cache`, `~/.npm`, `~/.local/share/pnpm/store`, `~/.cargo/registry/src`,
+`~/.gradle/caches`, `~/.cache/ms-playwright`, `/var/cache`, `/var/tmp`.
 
 `journalctl` logs and old kernels in `/boot` are frequently the largest system-side win.
 
@@ -68,8 +68,8 @@ docker builder prune -f
 docker image prune -f
 ```
 
-Storage lives at `/var/lib/docker` (root-owned — sizing needs `sudo`). With the overlay2 driver, space frees on delete
-without a compaction step, so there is no vhdx-equivalent.
+Storage lives at `/var/lib/docker` (root-owned — sizing needs `sudo`). With the overlay2 driver,
+space frees on delete without a compaction step, so there is no vhdx-equivalent.
 
 ### 3. Stale build output
 
@@ -87,8 +87,8 @@ flatpak uninstall --unused
 snap list --all               # then remove disabled revisions
 ```
 
-Leftover config after removal: `~/.config`, `~/.local/share`, `~/.cache`. Match those against the installed-package
-list; anything unmatched and older than 6 months qualifies.
+Leftover config after removal: `~/.config`, `~/.local/share`, `~/.cache`. Match those against the
+installed-package list; anything unmatched and older than 6 months qualifies.
 
 ### 5. Screenshots
 
@@ -126,8 +126,8 @@ dpkg --list | grep '^rc'             # removed-but-configured packages
 sudo du -sh /var/log/*
 ```
 
-Old kernels in `/boot` matter most on a small boot partition. Keep at least the running kernel and one fallback. Collect
-all `sudo` operations into one script rather than prompting repeatedly.
+Old kernels in `/boot` matter most on a small boot partition. Keep at least the running kernel and
+one fallback. Collect all `sudo` operations into one script rather than prompting repeatedly.
 
 ## Visual review
 

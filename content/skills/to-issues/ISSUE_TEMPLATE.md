@@ -35,13 +35,14 @@ Canonical task Issue body for `to-issues`.
 
 ## Rules
 
-- Omit the unanswered-questions blockquote for AFK Issues. HITL means an unresolved human decision, not manual testing,
-  visual inspection, review, or QA.
-- Description uses domain language without file paths. Requirements map to the Epic. Acceptance criteria describe
-  behavior, not implementation.
-- Always retain `## Epic`. Omit optional empty sections. After creation, relationships use immutable IDs plus canonical
-  URLs and are written in both directions, sorted by ID.
-- Every task receives `task`, exactly one of `HITL` or `AFK`, relevant area labels, and `design needed` for substantial
-  new visual workflows.
-- The Epic body owns the ordered `## Child Issues` index. These body links intentionally replace native parent/sub-Issue
-  APIs and do not imply provider-native hierarchy or automatic checkbox synchronization.
+- Omit the unanswered-questions blockquote for AFK Issues. HITL means an unresolved human decision,
+  not manual testing, visual inspection, review, or QA.
+- Description uses domain language without file paths. Requirements map to the Epic. Acceptance
+  criteria describe behavior, not implementation.
+- Always retain `## Epic`. Omit optional empty sections. After creation, relationships use immutable
+  IDs plus canonical URLs and are written in both directions, sorted by ID.
+- Every task receives `task`, exactly one of `HITL` or `AFK`, relevant area labels, and
+  `design needed` for substantial new visual workflows.
+- The Epic body owns the ordered `## Child Issues` index. These body links intentionally replace
+  native parent/sub-Issue APIs and do not imply provider-native hierarchy or automatic checkbox
+  synchronization.

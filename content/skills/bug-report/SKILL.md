@@ -13,36 +13,40 @@ metadata:
 
 # Bug Report
 
-Investigate each bug from the invocation input to its root cause, design a TDD fix plan, and create or update an Issue
-through the selected Issue provider.
+Investigate each bug from the invocation input to its root cause, design a TDD fix plan, and create
+or update an Issue through the selected Issue provider.
 
 ## Provider routing
 
 Read the nearest committed `mpxconfig.json`, resolve `issues.provider`, and follow
-[provider routing](../shared/PROVIDER_ROUTING.md). Load only the selected [GitHub](../shared/providers/GITHUB.md),
-[GitLab](../shared/providers/GITLAB.md), [KanbanFlow](../shared/providers/KANBANFLOW.md), or
-[Local Markdown](../shared/providers/LOCAL.md) guide. Preserve launch-bound authentication and explicit target identity.
-Never infer from remotes, switch providers, or invent commands. Local Markdown uses only its documented application entrypoint. Resolve canonical tool paths through [content paths](../shared/CONTENT_PATHS.md).
+[provider routing](../shared/PROVIDER_ROUTING.md). Load only the selected
+[GitHub](../shared/providers/GITHUB.md), [GitLab](../shared/providers/GITLAB.md),
+[KanbanFlow](../shared/providers/KANBANFLOW.md), or [Local Markdown](../shared/providers/LOCAL.md)
+guide. Preserve launch-bound authentication and explicit target identity. Never infer from remotes,
+switch providers, or invent commands. Local Markdown uses only its documented application
+entrypoint. Resolve canonical tool paths through [content paths](../shared/CONTENT_PATHS.md).
 
 ## Input resolution
 
-- If the invocation input is present, parse it as one or more bug descriptions. Blocks separated by blank lines are
-  separate bugs only when each block describes a distinct failure.
+- If the invocation input is present, parse it as one or more bug descriptions. Blocks separated by
+  blank lines are separate bugs only when each block describes a distinct failure.
 - If it is absent, ask the user to describe actual behavior, expected behavior, and reproduction.
-- Investigate one bug once. For multiple independent bugs, run separate named investigations in parallel.
+- Investigate one bug once. For multiple independent bugs, run separate named investigations in
+  parallel.
 
 ## Process per bug
 
 ### 1. Capture the problem
 
-Extract actual behavior, expected behavior, reproduction steps, environment details relevant to the failure, and
-observed diagnostics. Ask only for critical information without which investigation cannot proceed; then investigate
-promptly. Never publish secrets, machine paths, private identity data, or unrelated logs.
+Extract actual behavior, expected behavior, reproduction steps, environment details relevant to the
+failure, and observed diagnostics. Ask only for critical information without which investigation
+cannot proceed; then investigate promptly. Never publish secrets, machine paths, private identity
+data, or unrelated logs.
 
 ### 2. Investigate root cause
 
-Spawn a named `mpx-issue-analyzer` agent for each bug. For multiple bugs, launch those agents in parallel and keep their
-evidence separate. Give each agent the parsed problem and require it to:
+Spawn a named `mpx-issue-analyzer` agent for each bug. For multiple bugs, launch those agents in
+parallel and keep their evidence separate. Give each agent the parsed problem and require it to:
 
 1. locate where the failure manifests;
 2. reproduce or trace the relevant public behavior when feasible;
@@ -51,8 +55,8 @@ evidence separate. Give each agent the parsed problem and require it to:
 5. find related patterns, regressions, tests, and likely affected behavior;
 6. return evidence, affected modules, and a durable root-cause explanation.
 
-Reconcile the agent result with repository evidence. If the root cause remains uncertain, label it as a hypothesis and
-identify the missing evidence rather than asserting certainty.
+Reconcile the agent result with repository evidence. If the root cause remains uncertain, label it
+as a hypothesis and identify the missing evidence rather than asserting certainty.
 
 ### 3. Design the TDD fix plan
 
@@ -63,24 +67,26 @@ Create ordered RED-GREEN cycles. Each cycle is a vertical behavioral slice:
 - repeat for distinct behaviors;
 - **REFACTOR:** clean up only after all cycles pass.
 
-Tests must survive internal refactors. Include regression boundaries and relevant error cases without prescribing
-brittle implementation details.
+Tests must survive internal refactors. Include regression boundaries and relevant error cases
+without prescribing brittle implementation details.
 
 ### 4. Search for duplicates
 
-Before creating anything, search open and closed Issues through the selected provider using the symptom, domain terms,
-diagnostics, and root-cause concepts. View plausible matches.
+Before creating anything, search open and closed Issues through the selected provider using the
+symptom, domain terms, diagnostics, and root-cause concepts. View plausible matches.
 
-- If an existing Issue describes the same root cause and scope, update its durable body when authorized or add a concise
-  evidence comment; do not create a duplicate.
+- If an existing Issue describes the same root cause and scope, update its durable body when
+  authorized or add a concise evidence comment; do not create a duplicate.
 - If a similar Issue differs materially, record the relationship in the new Issue body.
-- If provider search, edit, or comment is unsupported, report that limitation and do not claim duplicate resolution.
+- If provider search, edit, or comment is unsupported, report that limitation and do not claim
+  duplicate resolution.
 
 ### 5. Create or update the Issue
 
-Use title format `bug: [concise description]`. Ensure the `bug` label exists using only the selected provider's
-supported label operation, and include relevant existing area labels discovered during investigation. KanbanFlow labels
-must already exist. If label creation is unsupported, report the gap truthfully.
+Use title format `bug: [concise description]`. Ensure the `bug` label exists using only the selected
+provider's supported label operation, and include relevant existing area labels discovered during
+investigation. KanbanFlow labels must already exist. If label creation is unsupported, report the
+gap truthfully.
 
 Use this durable body:
 
@@ -96,7 +102,8 @@ Use this durable body:
 
 ## Root Cause Analysis
 
-[Why the code path fails and contributing contract or state conditions, expressed in durable module and behavior terms]
+[Why the code path fails and contributing contract or state conditions, expressed in durable module
+and behavior terms]
 
 ## TDD Fix Plan
 
@@ -112,13 +119,14 @@ Use this durable body:
 - [ ] [regression boundary]
 ```
 
-Omit unsupported or unknown details rather than fabricating them. Do not put file paths, line numbers, transient
-implementation details, or machine-specific data in the Issue. Use project domain language, including `.mpx/CONTEXT.md`
-when present. Review multiline content before submission.
+Omit unsupported or unknown details rather than fabricating them. Do not put file paths, line
+numbers, transient implementation details, or machine-specific data in the Issue. Use project domain
+language, including `.mpx/CONTEXT.md` when present. Review multiline content before submission.
 
-Create or update only through the selected guide. Capture the immutable Issue ID and canonical URL from the successful
-response. A successful creation remains valid if a later optional label, assignment, comment, or relationship update
-fails; report the exact capability gap and required manual action.
+Create or update only through the selected guide. Capture the immutable Issue ID and canonical URL
+from the successful response. A successful creation remains valid if a later optional label,
+assignment, comment, or relationship update fails; report the exact capability gap and required
+manual action.
 
 ## Report
 

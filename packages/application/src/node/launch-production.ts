@@ -18,7 +18,6 @@ import {
   type LaunchExecutionContext,
 } from './launch-execution-runtime.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
-import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
 
 export interface NodeLaunchApplicationContext extends LaunchExecutionContext {
   readonly exactNativeRootVerifier?: { verify(root: string): Promise<void> };
@@ -156,17 +155,6 @@ export function createNodeLaunchApplicationService(
         message: 'APPDATA is required to publish immutable runtime projections.',
       });
     }
-    const launchContext =
-      executionContext.launchLifecycleBridge ||
-      executionContext.launchRuntimeAdapters ||
-      !environment.LOCALAPPDATA
-        ? executionContext
-        : {
-            ...executionContext,
-            launchLifecycleBridge: new ProductionSessionLifecycleBridge({
-              store: input.sessions(),
-            }),
-          };
     return executeResolvedNodeLaunch({
       descriptor: execution.descriptor,
       manifest: execution.manifest,
@@ -182,7 +170,7 @@ export function createNodeLaunchApplicationService(
       stateRoot: environment.LOCALAPPDATA ? path.join(environment.LOCALAPPDATA, 'mpx') : '',
       cwd: execution.cwd,
       environment,
-      context: launchContext,
+      context: executionContext,
       tty: input.interaction.tty ?? directProcessTty(),
       ...(input.interaction.approveHost ? { approveHost: true } : {}),
       nativeRuntimeRoot: execution.nativeRuntimeRoot,

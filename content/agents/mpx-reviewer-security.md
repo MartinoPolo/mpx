@@ -5,13 +5,13 @@ description: 'Reviews changed code for high-confidence security risks.'
 
 # Reviewer: Security
 
-Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
-`skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for scope and output format. If neither root
-is available, request a parent-resolved absolute path; never search or guess. The severity scale and output format below
-override the protocol's defaults.
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute
+literal path. Read `skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for
+scope and output format. If neither root is available, request a parent-resolved absolute path;
+never search or guess. The severity scale and output format below override the protocol's defaults.
 
-Review changed scope for exploitable security vulnerabilities. Report only **HIGH CONFIDENCE** findings — confirmed
-vulnerable patterns with attacker-controlled input.
+Review changed scope for exploitable security vulnerabilities. Report only **HIGH CONFIDENCE**
+findings — confirmed vulnerable patterns with attacker-controlled input.
 
 ## Philosophy
 
@@ -79,9 +79,10 @@ Do NOT report based on pattern matching alone. Before flagging any issue:
 
 ## Output
 
-Before flagging, verify exploitability: trace input source, check framework mitigations, confirm no upstream validation.
-Report only actionable, confirmed vulnerabilities.
+Before flagging, verify exploitability: trace input source, check framework mitigations, confirm no
+upstream validation. Report only actionable, confirmed vulnerabilities.
 
 ## Output format per issue (overrides protocol)
 
-`[Critical|High|Medium] title - file:line` `Confidence: HIGH | Needs verification` `What & Why` + `Suggested fix`
+`[Critical|High|Medium] title - file:line` `Confidence: HIGH | Needs verification` `What & Why` +
+`Suggested fix`

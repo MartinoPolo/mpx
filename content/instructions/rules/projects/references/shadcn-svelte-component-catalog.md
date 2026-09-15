@@ -5,8 +5,8 @@ selector: shadcn-svelte
 
 # shadcn-svelte Component Catalog
 
-Reference lookup — not auto-loaded. Consult when choosing which component to reach for; linked from the
-`shadcn-svelte.md` rule.
+Reference lookup — not auto-loaded. Consult when choosing which component to reach for; linked from
+the `shadcn-svelte.md` rule.
 
 ## Prefer Built-in Components
 
@@ -27,7 +27,8 @@ Reference lookup — not auto-loaded. Consult when choosing which component to r
 
 #### Need: Form inputs
 
-- **Use:** `Input` , `Select` , `Combobox` , `Switch` , `Checkbox` , `RadioGroup` , `Textarea` , `InputOTP` , `Slider`
+- **Use:** `Input` , `Select` , `Combobox` , `Switch` , `Checkbox` , `RadioGroup` , `Textarea` ,
+  `InputOTP` , `Slider`
 
 #### Need: Toggle 2–5 options
 

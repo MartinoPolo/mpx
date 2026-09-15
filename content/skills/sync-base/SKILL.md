@@ -17,11 +17,12 @@ Merge a target branch into the current branch. the invocation input
 
 **Args:** `[branch]`
 
-Resolve [`scripts/detect-base-branch.js`](scripts/detect-base-branch.js) relative to this loaded skill first. If
-projection relocation makes that impossible, read `MPX_ACTIVE_CONTENT_ROOT`, require an absolute path, resolve
-`skills/sync-base/scripts/detect-base-branch.js` beneath it, and verify that the literal result exists and remains
-contained by that root. Stop if validation fails; do not search ordered roots or guess an installation checkout. Store
-the validated literal path as `BASE_BRANCH_DETECTOR`.
+Resolve [`scripts/detect-base-branch.js`](scripts/detect-base-branch.js) relative to this loaded
+skill first. If projection relocation makes that impossible, read `MPX_ACTIVE_CONTENT_ROOT`, require
+an absolute path, resolve `skills/sync-base/scripts/detect-base-branch.js` beneath it, and verify
+that the literal result exists and remains contained by that root. Stop if validation fails; do not
+search ordered roots or guess an installation checkout. Store the validated literal path as
+`BASE_BRANCH_DETECTOR`.
 
 ## Workflow
 
@@ -38,10 +39,11 @@ git check-ref-format --branch <current>
 git remote get-url <remote>
 ```
 
-Use the configured remote; if none exists, ask which existing remote to use. Validate an explicit target with
-`git check-ref-format --branch <target>`. Otherwise, run `node "$BASE_BRANCH_DETECTOR" "" "<remote>"`. The detector
-chooses the existing candidate with the **fewest commits HEAD is ahead of its merge-base**, with priority
-`dev > develop > main > master` only breaking ties; it falls back to `main`. Display the target and remote.
+Use the configured remote; if none exists, ask which existing remote to use. Validate an explicit
+target with `git check-ref-format --branch <target>`. Otherwise, run
+`node "$BASE_BRANCH_DETECTOR" "" "<remote>"`. The detector chooses the existing candidate with the
+**fewest commits HEAD is ahead of its merge-base**, with priority `dev > develop > main > master`
+only breaking ties; it falls back to `main`. Display the target and remote.
 
 ### Step 2: Pre-merge Checks
 
@@ -96,7 +98,8 @@ git rev-parse --verify refs/remotes/<remote>/<target>
 git log HEAD..refs/remotes/<remote>/<target> --oneline
 ```
 
-Display incoming commits. If none, restore this operation's stash (if any), then report "Already up-to-date" and stop:
+Display incoming commits. If none, restore this operation's stash (if any), then report "Already
+up-to-date" and stop:
 
 ```bash
 git stash apply <own-stash>
@@ -116,9 +119,10 @@ git merge refs/remotes/<remote>/<target>
 If conflicts occur:
 
 1. List conflicted files: `git diff --name-only --diff-filter=U`
-2. For each conflicted file: a. Read the file (use Read tool) b. Analyze conflict markers (`<<<<<<<`, `=======`,
-   `>>>>>>>`) c. **Simple conflicts** (non-overlapping, clear intent) → resolve with Edit tool, then `git add <file>` d.
-   **Complex conflicts** (overlapping logic, ambiguous) → show both sides to user, ask how to resolve
+2. For each conflicted file: a. Read the file (use Read tool) b. Analyze conflict markers
+   (`<<<<<<<`, `=======`, `>>>>>>>`) c. **Simple conflicts** (non-overlapping, clear intent) →
+   resolve with Edit tool, then `git add <file>` d. **Complex conflicts** (overlapping logic,
+   ambiguous) → show both sides to user, ask how to resolve
 3. After all resolved: `git commit` (accept default merge message)
 4. If new conflicts appear → repeat from step 1
 

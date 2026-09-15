@@ -92,5 +92,5 @@ interface HttpClient {
 
 ## Decision Rule
 
-> Can I swap this dependency in production for a different provider? If yes, it's a system boundary — mock it in tests.
-> If no, it's internal — test the real thing.
+> Can I swap this dependency in production for a different provider? If yes, it's a system boundary
+> — mock it in tests. If no, it's internal — test the real thing.

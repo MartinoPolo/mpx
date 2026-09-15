@@ -9,8 +9,8 @@ paths:
 applyTo: '**/*.svelte,**/*.svelte.ts,**/*.svelte.js, **/*.context.**'
 ---
 
-Use the **reactivity classes** in `src/lib/reactivity/` with Svelte's **Context API** for shared state. Never use raw
-Svelte stores (`writable`, `readable`) — use these classes instead.
+Use the **reactivity classes** in `src/lib/reactivity/` with Svelte's **Context API** for shared
+state. Never use raw Svelte stores (`writable`, `readable`) — use these classes instead.
 
 ## Reactivity Classes (`src/lib/reactivity/`)
 
@@ -73,8 +73,8 @@ function createMyFeatureContext() {
 4. Compose state from `StateRaw`, `Derived`, `Persisted` inside the `create*` factory function.
 5. `type <Feature>Context = ReturnType<typeof create*>`.
 6. Files named `<feature>.context.svelte.ts`.
-7. File ordering: imports → type alias + `createContext` destructuring → `set*Context()` → `create*` factory (last, so
-   the return is the final thing in the file).
+7. File ordering: imports → type alias + `createContext` destructuring → `set*Context()` → `create*`
+   factory (last, so the return is the final thing in the file).
 
 ## Persisted State Example
 

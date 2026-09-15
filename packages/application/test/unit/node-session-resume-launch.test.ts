@@ -200,6 +200,50 @@ async function fixture(runtime: 'claude' | 'pi' = 'claude') {
 }
 
 describe('Node session resume launch composition', () => {
+  it('does not implicitly attach session lifecycle recording during a normal resume', async () => {
+    const f = await fixture();
+    const environment = { LOCALAPPDATA: '/local' };
+    const put = vi.spyOn(f.store, 'put');
+    const saveNativeBinding = vi.spyOn(f.store, 'saveNativeBinding');
+    const input = { ...f.input, environment };
+    const service = createNodeSessionResumeLaunchApplicationService(input);
+    const plan = await service.plan(f.seed, user);
+
+    await service.execute(await service.prepare(plan, user));
+
+    const execution = mocks.execute.mock.calls.at(-1)![0] as {
+      context: NodeSessionResumeLaunchInput['context'];
+      environment: NodeJS.ProcessEnv;
+    };
+    expect(execution.context).toBe(input.context);
+    expect(execution.context.launchLifecycleBridge).toBeUndefined();
+    expect(execution.environment).toEqual(environment);
+    expect(execution.environment).not.toHaveProperty('MPX_SESSION_LIFECYCLE_BINDING_ID');
+    expect(execution.environment).not.toHaveProperty('MPX_SESSION_LIFECYCLE_EVENT_DIR');
+    expect(put).not.toHaveBeenCalled();
+    expect(saveNativeBinding).not.toHaveBeenCalled();
+    expect((await f.store.read(f.record.identity, f.record.runtime)).records).toEqual([f.record]);
+  });
+
+  it('forwards an explicitly injected lifecycle bridge during resume', async () => {
+    const f = await fixture();
+    const lifecycle = {
+      prepare: vi.fn(),
+      consume: vi.fn(),
+    };
+    const context = { ...f.input.context, launchLifecycleBridge: lifecycle };
+    const service = createNodeSessionResumeLaunchApplicationService({ ...f.input, context });
+    const plan = await service.plan(f.seed, user);
+
+    await service.execute(await service.prepare(plan, user));
+
+    const execution = mocks.execute.mock.calls.at(-1)![0] as {
+      context: NodeSessionResumeLaunchInput['context'];
+    };
+    expect(execution.context).toBe(context);
+    expect(execution.context.launchLifecycleBridge).toBe(lifecycle);
+  });
+
   it('rebuilds the current proposal deterministically without materialization and without a confirmation cycle', async () => {
     const f = await fixture();
     const first = await f.service.plan(f.seed, user);

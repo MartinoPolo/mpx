@@ -5,12 +5,13 @@ description: 'Reviews tests for correctness, value, and mocking discipline.'
 
 # Reviewer: Test Quality
 
-Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute literal path. Read
-`skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for scope and output format. If neither root
-is available, request a parent-resolved absolute path; never search or guess.
+Resolve the declared loaded content base, or `MPX_ACTIVE_CONTENT_ROOT` when set, once to an absolute
+literal path. Read `skills/shared/REVIEWER_PROTOCOL.md` beneath that exact root and follow it for
+scope and output format. If neither root is available, request a parent-resolved absolute path;
+never search or guess.
 
-Evaluate new/modified test files for correctness, anti-patterns, and redundancy. For each test file in scope, also read
-the corresponding source file to understand public API vs internals.
+Evaluate new/modified test files for correctness, anti-patterns, and redundancy. For each test file
+in scope, also read the corresponding source file to understand public API vs internals.
 
 ## Good Tests
 
@@ -22,24 +23,26 @@ the corresponding source file to understand public API vs internals.
 
 ## Anti-Patterns (flag these)
 
-1. **Implementation-detail coupling**: testing private methods, internal state, or call order instead of observable
-   output
-2. **Mock-what-you-own**: mocking internal collaborators instead of system boundaries (external APIs, time, randomness,
-   FS)
+1. **Implementation-detail coupling**: testing private methods, internal state, or call order
+   instead of observable output
+2. **Mock-what-you-own**: mocking internal collaborators instead of system boundaries (external
+   APIs, time, randomness, FS)
 3. **Call-count assertions**: `toHaveBeenCalledTimes(N)` on internal methods — breaks on refactor
-4. **Constant-shape tests**: asserting keys/values of `as const satisfies Record` objects — TypeScript already enforces
-   this
-5. **Type-check tests**: verifying that a TypeScript interface is importable/usable — the compiler does this
-6. **Trivial/no-op tests**: testing functions that currently return input unchanged, or asserting `!== undefined` on
-   required fields
+4. **Constant-shape tests**: asserting keys/values of `as const satisfies Record` objects —
+   TypeScript already enforces this
+5. **Type-check tests**: verifying that a TypeScript interface is importable/usable — the compiler
+   does this
+6. **Trivial/no-op tests**: testing functions that currently return input unchanged, or asserting
+   `!== undefined` on required fields
 7. **Duplicate tests**: identical inputs and expectations with different names
-8. **Magic-number counts**: `array.length === 15` on growing collections — use `toBeGreaterThan(0)` or dynamic checks
+8. **Magic-number counts**: `array.length === 15` on growing collections — use `toBeGreaterThan(0)`
+   or dynamic checks
 9. **Wrong-level tests**: unit-testing what should be an integration test, or vice versa
 
 ## Mocking Rules
 
-Mock at system boundaries only. Decision rule: "Can I swap this dependency in production for a different provider?" If
-yes → mock. If no → test the real thing.
+Mock at system boundaries only. Decision rule: "Can I swap this dependency in production for a
+different provider?" If yes → mock. If no → test the real thing.
 
 ## Correctness Checks
 
@@ -56,5 +59,5 @@ yes → mock. If no → test the real thing.
 
 ## Role Note
 
-Before flagging, read the source file under test — confirm the test actually couples to internals, or actually
-duplicates another.
+Before flagging, read the source file under test — confirm the test actually couples to internals,
+or actually duplicates another.

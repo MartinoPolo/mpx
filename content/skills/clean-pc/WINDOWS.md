@@ -4,14 +4,15 @@ The verified platform path. Domain rules live in [DOMAINS.md](DOMAINS.md).
 
 ## Two rules that govern everything here
 
-**1. Run every deletion through the PowerShell tool.** The `dangerous-command-guard.mjs` hook is registered `PreToolUse`
-with `matcher: "Bash"`, so it inspects Bash only. It blocks `rmdir /s`, `del /f /q /s`, and
-`rm -rf <single-component-name>` outside its allowlist. The PowerShell tool is not intercepted, and PowerShell is the
-right tool for this work anyway. Route deletions through `scripts/Invoke-Removal.ps1`.
+**1. Run every deletion through the PowerShell tool.** The `dangerous-command-guard.mjs` hook is
+registered `PreToolUse` with `matcher: "Bash"`, so it inspects Bash only. It blocks `rmdir /s`,
+`del /f /q /s`, and `rm -rf <single-component-name>` outside its allowlist. The PowerShell tool is
+not intercepted, and PowerShell is the right tool for this work anyway. Route deletions through
+`scripts/Invoke-Removal.ps1`.
 
-**2. Keep the trailing backslash on drive roots.** `"C:\".TrimEnd('\')` yields `"C:"`, which in .NET means _the current
-directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5 GB, twice in a row, with no error.
-`Get-NormalizedRoot` in `scripts/_Common.ps1` handles it.
+**2. Keep the trailing backslash on drive roots.** `"C:\".TrimEnd('\')` yields `"C:"`, which in .NET
+means _the current directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5
+GB, twice in a row, with no error. `Get-NormalizedRoot` in `scripts/_Common.ps1` handles it.
 
 ## Footguns encoded in the bundled scripts
 
@@ -21,8 +22,8 @@ directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5 G
 
 #### Record 2
 
-- **Footgun:** `.Attributes` on a child dir throws on locked junctions (`C:\Documents and Settings`) and aborts the
-  whole sibling loop, silently truncating the scan
+- **Footgun:** `.Attributes` on a child dir throws on locked junctions (`C:\Documents and Settings`)
+  and aborts the whole sibling loop, silently truncating the scan
 - **Handling:** `Get-ChildDirectoryPath` returns plain strings; `Test-ReparsePoint` checks per item
 
 #### Footgun: Junctions get followed and double-counted
@@ -31,28 +32,28 @@ directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5 G
 
 #### Record 4
 
-- **Footgun:** Skipping every reparse point drops the whole OneDrive tree: Files-On-Demand tags each folder, so scanners
-  report zero findings there with no error
-- **Handling:** `Get-ReparsePointKind` reads the reparse **tag** via `FindFirstFileW` and skips only the name-surrogate
-  bit `0x20000000` ; cloud/dedup/WIM placeholders get walked
+- **Footgun:** Skipping every reparse point drops the whole OneDrive tree: Files-On-Demand tags each
+  folder, so scanners report zero findings there with no error
+- **Handling:** `Get-ReparsePointKind` reads the reparse **tag** via `FindFirstFileW` and skips only
+  the name-surrogate bit `0x20000000` ; cloud/dedup/WIM placeholders get walked
 
 #### Record 5
 
-- **Footgun:** The cloud attribute flags (`RECALL_ON_OPEN`, `PINNED` ) do **not** identify a OneDrive folder — most
-  carry `ReparsePoint` with none of them set
+- **Footgun:** The cloud attribute flags (`RECALL_ON_OPEN`, `PINNED` ) do **not** identify a
+  OneDrive folder — most carry `ReparsePoint` with none of them set
 - **Handling:** Classify by tag, never by attributes
 
 #### Record 6
 
-- **Footgun:** A fully dehydrated placeholder enumerates as **empty** with no error, indistinguishable from a genuinely
-  empty folder
-- **Handling:** Collected into `-UnscannedPlaceholderPath` ; every scanner prints `Write-UnscannedPlaceholderWarning` so
-  an under-scan is never read as a clean result
+- **Footgun:** A fully dehydrated placeholder enumerates as **empty** with no error,
+  indistinguishable from a genuinely empty folder
+- **Handling:** Collected into `-UnscannedPlaceholderPath` ; every scanner prints
+  `Write-UnscannedPlaceholderWarning` so an under-scan is never read as a clean result
 
 #### Footgun: `Remove-Item -Recurse` on a junction can delete the target's contents in PowerShell 5.1
 
-- **Handling:** `Invoke-Removal.ps1` calls `.Delete()` to unlink instead, and only for `Link` — placeholders take the
-  normal path
+- **Handling:** `Invoke-Removal.ps1` calls `.Delete()` to unlink instead, and only for `Link` —
+  placeholders take the normal path
 
 #### Footgun: pnpm-hardlinked `node_modules` free far less than logical size
 
@@ -72,21 +73,22 @@ directory on drive C:_, not the root. This once reported a 459 GB drive as 0.5 G
 
 #### Record 12
 
-- **Footgun:** Matching an app to its data folder on the first word filed **Auto Dark Mode → Autodesk**, **Fast Node
-  Manager → FastStone**, **VLC → JellyfinMediaPlayer**, making ten active apps look idle
-- **Handling:** Token containment both ways, one name wholly inside the other, ignoring generic vendor words; the
-  `MatchedOn` column shows what the verdict rests on
+- **Footgun:** Matching an app to its data folder on the first word filed **Auto Dark Mode →
+  Autodesk**, **Fast Node Manager → FastStone**, **VLC → JellyfinMediaPlayer**, making ten active
+  apps look idle
+- **Handling:** Token containment both ways, one name wholly inside the other, ignoring generic
+  vendor words; the `MatchedOn` column shows what the verdict rests on
 
 #### Record 13
 
-- **Footgun:** `Import-Csv` in 5.1 ignores the UTF-8 BOM `Export-Csv` writes, so non-ASCII paths come back mangled and
-  every row logs as `Missing` — a silent no-op that reads like success
+- **Footgun:** `Import-Csv` in 5.1 ignores the UTF-8 BOM `Export-Csv` writes, so non-ASCII paths
+  come back mangled and every row logs as `Missing` — a silent no-op that reads like success
 - **Handling:** `Read-ScanCsv` in `_Common.ps1` ; never call `Import-Csv` directly
 
 #### Record 14
 
-- **Footgun:** `Measure-Object -Sum` over an empty set has no `Sum` property, which throws under `Set-StrictMode`
-  instead of returning zero
+- **Footgun:** `Measure-Object -Sum` over an empty set has no `Sum` property, which throws under
+  `Set-StrictMode` instead of returning zero
 - **Handling:** Read it through `Get-PropertyValue ... 'Sum' 0`
 
 #### Footgun: `@($list)` on a `List[object]` throws `ArgumentException` and yields an **empty** array in PowerShell 5.1
@@ -169,7 +171,8 @@ docker image rm <id>                                           # cherry-picked, 
 wsl -l -v
 ```
 
-Cross-reference `docker ps -a` before calling any image unused. Images held by stopped containers are live work.
+Cross-reference `docker ps -a` before calling any image unused. Images held by stopped containers
+are live work.
 
 Virtual disk locations:
 
@@ -207,7 +210,8 @@ Start-Process -FilePath "<uninstaller.exe>" -ArgumentList '/S' -Wait
 Test-Path "<InstallLocation>"        # True means it deregistered but left its folder
 ```
 
-Orphaned app data lives in `$env:APPDATA` and `$env:LOCALAPPDATA` immediate subfolders — match against the apps CSV.
+Orphaned app data lives in `$env:APPDATA` and `$env:LOCALAPPDATA` immediate subfolders — match
+against the apps CSV.
 
 ### 5. Screenshots
 
@@ -263,8 +267,8 @@ powershell -NoProfile -File scripts/New-VisualStaging.ps1 `
     -Open
 ```
 
-Hardlinks when the candidate is on the staging volume, `.lnk` shortcuts across volumes. Thumbnails render either way.
-Ask the group's approval after the window opens, then delete the staging folder.
+Hardlinks when the candidate is on the staging volume, `.lnk` shortcuts across volumes. Thumbnails
+render either way. Ask the group's approval after the window opens, then delete the staging folder.
 
 ## Execution
 
@@ -276,8 +280,10 @@ powershell -NoProfile -File scripts/Invoke-Removal.ps1 `
     -LogCsv "<scratch>\removed.csv"
 ```
 
-`-DryRun` is an explicit switch, not `SupportsShouldProcess`/`-WhatIf`: `-WhatIf` sets `$WhatIfPreference` for the whole
-script scope, which leaks into module auto-loading and buries the report under `What if: Set Alias` lines.
+`-DryRun` is an explicit switch, not `SupportsShouldProcess`/`-WhatIf`: `-WhatIf` sets
+`$WhatIfPreference` for the whole script scope, which leaks into module auto-loading and buries the
+report under `What if: Set Alias` lines.
 
-`-Destination Fast` is for regenerable caches only. Quarantine lands in `<drive>:\_cleanup_quarantine\<YYYY-MM-DD>\`,
-one root per drive so every move stays same-volume and instant.
+`-Destination Fast` is for regenerable caches only. Quarantine lands in
+`<drive>:\_cleanup_quarantine\<YYYY-MM-DD>\`, one root per drive so every move stays same-volume and
+instant.

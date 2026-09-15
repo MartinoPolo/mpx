@@ -42,7 +42,7 @@ const user: UserConfig = {
   executors: { host: {}, docker: {} },
 };
 
-const catalogRoot = path.resolve(import.meta.dirname, '../../../../content/skills');
+const catalogRoot = path.resolve(import.meta.dirname, '../fixtures/skills');
 
 const verifiedHost = {
   name: 'host' as const,
@@ -180,14 +180,41 @@ describe('Node launch production factory', () => {
     expect(verifyRoot).toHaveBeenCalledWith('C:/native/work/pi');
   });
 
-  it('creates a lifecycle bridge without account authority', async () => {
+  it('does not implicitly attach session lifecycle recording during a normal launch', async () => {
     executionSpy.mockClear();
     const sessions = vi.fn(() => ({}));
-    const service = factory({ sessions, context: { launchExecutorAdapters: [verifiedHost] } });
+    const environment = { APPDATA: 'C:/appdata', LOCALAPPDATA: 'C:/local' };
+    const context = { launchExecutorAdapters: [verifiedHost] };
+    const service = factory({ sessions, environment, context });
+
     await service.execute(await resolvedLaunch(service));
+
     const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
-    expect(execution.context.launchLifecycleBridge).toBeDefined();
-    expect(sessions).toHaveBeenCalledOnce();
+    expect(execution.context).toBe(context);
+    expect(execution.context.launchLifecycleBridge).toBeUndefined();
+    expect(execution.environment).toEqual(environment);
+    expect(execution.environment).not.toHaveProperty('MPX_SESSION_LIFECYCLE_BINDING_ID');
+    expect(execution.environment).not.toHaveProperty('MPX_SESSION_LIFECYCLE_EVENT_DIR');
+    expect(sessions).not.toHaveBeenCalled();
+  });
+
+  it('forwards an explicitly injected lifecycle bridge during production launch', async () => {
+    executionSpy.mockClear();
+    const sessions = vi.fn(() => ({}));
+    const lifecycle = {
+      prepare: vi.fn(),
+      consume: vi.fn(),
+    };
+    const service = factory({
+      sessions,
+      context: { launchExecutorAdapters: [verifiedHost], launchLifecycleBridge: lifecycle },
+    });
+
+    await service.execute(await resolvedLaunch(service));
+
+    const execution = executionSpy.mock.calls[0]![0] as NodeLaunchExecutionInput;
+    expect(execution.context.launchLifecycleBridge).toBe(lifecycle);
+    expect(sessions).not.toHaveBeenCalled();
   });
 
   it('keeps candidate and no-runtime selection explanations free of mutable production services', async () => {

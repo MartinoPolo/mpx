@@ -1,11 +1,12 @@
 # Sub-Agent Protocol
 
-Canonical rules for delegation, model classes, tools, evidence, and runtime drift. Runtime adapters resolve these
-policies to concrete harness fields and model IDs.
+Canonical rules for delegation, model classes, tools, evidence, and runtime drift. Runtime adapters
+resolve these policies to concrete harness fields and model IDs.
 
 ## Model selection
 
-Only structured runtime configuration selects a model; prose model names do not. Canonical call sites use model classes:
+Only structured runtime configuration selects a model; prose model names do not. Canonical call
+sites use model classes:
 
 | Class         | Best for                                                  |
 | ------------- | --------------------------------------------------------- |
@@ -15,17 +16,20 @@ Only structured runtime configuration selects a model; prose model names do not.
 | `advanced`    | implementation, design, architecture, and deep analysis   |
 | `frontier`    | deliberate manual escalation for large orchestration only |
 
-An agent definition should declare its semantic class and effort policy. `exploration` is a semantic model class;
-`medium` is its separate reasoning-effort setting. Callers omit model selection for a declaring agent. Generic agents
-with no declaration require an explicit class at every call site. A runtime resolver maps class to an available model
-and records the resolved model in execution evidence. Concrete vendor model IDs never appear in canonical instructions.
+An agent definition should declare its semantic class and effort policy. `exploration` is a semantic
+model class; `medium` is its separate reasoning-effort setting. Callers omit model selection for a
+declaring agent. Generic agents with no declaration require an explicit class at every call site. A
+runtime resolver maps class to an available model and records the resolved model in execution
+evidence. Concrete vendor model IDs never appear in canonical instructions.
 
-Select by task horizon, not perceived difficulty. Bounded tasks benefit from smaller classes; open-ended loops need
-enough capability to avoid expensive wrong turns. `frontier` is not a standing automatic-agent class.
+Select by task horizon, not perceived difficulty. Bounded tasks benefit from smaller classes;
+open-ended loops need enough capability to avoid expensive wrong turns. `frontier` is not a standing
+automatic-agent class.
 
 ## Effort
 
-Effort is runtime configuration, not prompt prose. Pin it in the agent definition when the runtime supports it:
+Effort is runtime configuration, not prompt prose. Pin it in the agent definition when the runtime
+supports it:
 
 - exploration: `exploration`, medium;
 - review: `standard`, medium;
@@ -34,43 +38,48 @@ Effort is runtime configuration, not prompt prose. Pin it in the agent definitio
 - live browser exploration: `advanced`, high;
 - mechanical tasks: resolver default.
 
-Do not request effort levels beyond the adapter's approved ceiling. If effort cannot be set at a call site, choose a
-canonical agent that declares it or accept documented inheritance.
+Do not request effort levels beyond the adapter's approved ceiling. If effort cannot be set at a
+call site, choose a canonical agent that declares it or accept documented inheritance.
 
 ## Orchestration and nesting
 
-Fan out from the parent by default. Parent-owned workflows are a deliberate control-flow choice, not a claim that
-nesting is unavailable: Pi's extension and Claude Code support bounded nested delegation when an active workflow grants
-it. Sub-agents must not assume they can spawn children or inherit the parent's tools, repository instructions, git
-status, machine roots, or provider identity. Prompts include the bounded context needed for the job. An agent without
-delegation authority returns the exact capability needed to its parent.
+Fan out from the parent by default. Parent-owned workflows are a deliberate control-flow choice, not
+a claim that nesting is unavailable: Pi's extension and Claude Code support bounded nested
+delegation when an active workflow grants it. Sub-agents must not assume they can spawn children or
+inherit the parent's tools, repository instructions, git status, machine roots, or provider
+identity. Prompts include the bounded context needed for the job. An agent without delegation
+authority returns the exact capability needed to its parent.
 
-Runtime ceilings and nesting behavior drift. Adapters declare supported and statically verified behavior separately from
-live execution evidence and fail closed when a required grant is unavailable; canonical policy does not encode version-
-specific tool names or claim live testing without structured evidence.
+Runtime ceilings and nesting behavior drift. Adapters declare supported and statically verified
+behavior separately from live execution evidence and fail closed when a required grant is
+unavailable; canonical policy does not encode version- specific tool names or claim live testing
+without structured evidence.
 
 ## Tool grants
 
-Treat tool declarations as least-privilege allowlists and runtime denials as subtractive. Effective tools may be
-narrower than declarations. Verify critical capability by attempting a safe bounded operation and recording the
-structured result, not by asking the model what it can do.
+Treat tool declarations as least-privilege allowlists and runtime denials as subtractive. Effective
+tools may be narrower than declarations. Verify critical capability by attempting a safe bounded
+operation and recording the structured result, not by asking the model what it can do.
 
-MCP-dependent work uses an identity-owned approved route. Check capability availability first. Public documentation
-lookup may fall back to web search when local documentation and Context7 are unavailable. This fallback does not permit
-bypassing credential or provider policy: other unavailable MCP-dependent work returns a structured unsupported/manual
-handoff rather than silently switching to direct APIs, provider CLIs, or copied credentials.
+MCP-dependent work uses an identity-owned approved route. Check capability availability first.
+Public documentation lookup may fall back to web search when local documentation and Context7 are
+unavailable. This fallback does not permit bypassing credential or provider policy: other
+unavailable MCP-dependent work returns a structured unsupported/manual handoff rather than silently
+switching to direct APIs, provider CLIs, or copied credentials.
 
 ## Built-in overrides and discovery
 
-Runtime adapters may override built-ins to project canonical agents. Preserve any runtime-required identity
-capitalization and routing description, keep the override body thin, and test reload and auto-delegation behavior on
-every adapter version change. These are projection concerns, not canonical names.
+Runtime adapters may override built-ins to project canonical agents. Preserve any runtime-required
+identity capitalization and routing description, keep the override body thin, and test reload and
+auto-delegation behavior on every adapter version change. These are projection concerns, not
+canonical names.
 
 ## Evidence and drift
 
-Measure resolved model, tools, and runtime behavior from structured session evidence. Do not trust model self-report.
-Each projection records canonical source/version and adapter version. Re-run behavior probes after runtime upgrades,
-tool-server renames, resolver changes, or permission-policy changes; stale measured claims are defects.
+Measure resolved model, tools, and runtime behavior from structured session evidence. Do not trust
+model self-report. Each projection records canonical source/version and adapter version. Re-run
+behavior probes after runtime upgrades, tool-server renames, resolver changes, or permission-policy
+changes; stale measured claims are defects.
 
 ## Task-shape defaults
 
@@ -87,9 +96,9 @@ tool-server renames, resolver changes, or permission-policy changes; stale measu
 | bounded composition/finding            | `standard` low                                        |
 | deterministic check/commit/docs lookup | `mechanical`                                          |
 
-Two contracts are load-bearing: `mpx-executor` receives a pre-analyzed bounded scope, while `mpx-tdd-executor` owns
-red/green iteration. A vague executor prompt violates [EXECUTOR_CONTRACT.md](EXECUTOR_CONTRACT.md) rather than
-justifying silent model drift.
+Two contracts are load-bearing: `mpx-executor` receives a pre-analyzed bounded scope, while
+`mpx-tdd-executor` owns red/green iteration. A vague executor prompt violates
+[EXECUTOR_CONTRACT.md](EXECUTOR_CONTRACT.md) rather than justifying silent model drift.
 
 ## Related
 

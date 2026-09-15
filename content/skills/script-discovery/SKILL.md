@@ -13,15 +13,16 @@ metadata:
 
 # Script Discovery
 
-Wrap [`scripts/detect-project-scripts.mjs`](scripts/detect-project-scripts.mjs). Use this skill when agents need a
-reliable fallback reference for script discovery behavior.
+Wrap [`scripts/detect-project-scripts.mjs`](scripts/detect-project-scripts.mjs). Use this skill when
+agents need a reliable fallback reference for script discovery behavior.
 
-Resolve the bundled script relative to this loaded skill first. If that path is unavailable and an absolute executable
-path is required, read `MPX_ACTIVE_CONTENT_ROOT`, require it to be an absolute path, and resolve
-`skills/script-discovery/scripts/detect-project-scripts.mjs` beneath it. Verify that the literal result exists and
-remains contained by that root; otherwise stop and report the failed condition. Do not search ordered roots or guess an
-installation checkout. Store the validated literal absolute path as `SCRIPT_DETECTOR`; never assign an unexpanded
-placeholder such as `$MPX_ACTIVE_CONTENT_ROOT/...`.
+Resolve the bundled script relative to this loaded skill first. If that path is unavailable and an
+absolute executable path is required, read `MPX_ACTIVE_CONTENT_ROOT`, require it to be an absolute
+path, and resolve `skills/script-discovery/scripts/detect-project-scripts.mjs` beneath it. Verify
+that the literal result exists and remains contained by that root; otherwise stop and report the
+failed condition. Do not search ordered roots or guess an installation checkout. Store the validated
+literal absolute path as `SCRIPT_DETECTOR`; never assign an unexpanded placeholder such as
+`$MPX_ACTIVE_CONTENT_ROOT/...`.
 
 ## Goal
 
@@ -187,5 +188,6 @@ Return this structure:
 - Do not start servers automatically in this skill
 - Do not mutate files
 - Keep output deterministic
-- Prefer default detector mode first; use `--recursive`, `--category`, or `--json` only when task requires them
+- Prefer default detector mode first; use `--recursive`, `--category`, or `--json` only when task
+  requires them
 - If no frontend script exists, return `frontend.recommended=null`

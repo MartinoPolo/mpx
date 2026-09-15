@@ -1,13 +1,13 @@
 # NotebookLM Backend Flow
 
-The generation path, validated end to end on 2026-07-24 (Shadow DOM, 33.5 min, zero manual browser steps) with
-`notebooklm-py` 0.7.3.
+The generation path, validated end to end on 2026-07-24 (Shadow DOM, 33.5 min, zero manual browser
+steps) with `notebooklm-py` 0.7.3.
 
-Full CLI surface — every command, flag and JSON schema — is exposed by `/mpx:notebooklm`. This file covers only the
-podcast path and the quirks the test run exposed.
+Full CLI surface — every command, flag and JSON schema — is exposed by `/mpx:notebooklm`. This file
+covers only the podcast path and the quirks the test run exposed.
 
-Pass `-n <notebook_id>` (or `--notebook`) on every command. Relying on the CLI's implicit context breaks the moment two
-agents run at once.
+Pass `-n <notebook_id>` (or `--notebook`) on every command. Relying on the CLI's implicit context
+breaks the moment two agents run at once.
 
 ## The sequence
 
@@ -37,22 +37,25 @@ Step 5 returns immediately with `status: pending`. Audio takes 10-20 minutes.
 
 ## Waiting without blocking
 
-Resolve the canonical `mechanical` class through the active runtime profile and hand the wait to a background
-`general-purpose` sub-agent using that concrete value in the runtime's real `model` field; the generic agent declares no
-model of its own ([Sub-agent Protocol](../../shared/SUBAGENT_PROTOCOL.md) § 1). Give it the notebook id, the task id,
+Resolve the canonical `mechanical` class through the active runtime profile and hand the wait to a
+background `general-purpose` sub-agent using that concrete value in the runtime's real `model`
+field; the generic agent declares no model of its own
+([Sub-agent Protocol](../../shared/SUBAGENT_PROTOCOL.md) § 1). Give it the notebook id, the task id,
 the output path, and this instruction:
 
-> Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr saying `Timeout after Ns`,
-> means still rendering — re-check with `notebooklm artifact list -n <nb> --json`, and when that artifact's `status` is
-> `pending` or `in_progress`, wait again. Treat it as failed only when `artifact list` reports an error status or the
-> artifact has vanished. Once `status` is `completed`, run `notebooklm download audio <path> -a <task_id> -n <nb>` and
-> report the file path and size.
+> Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr saying
+> `Timeout after Ns`, means still rendering — re-check with
+> `notebooklm artifact list -n <nb> --json`, and when that artifact's `status` is `pending` or
+> `in_progress`, wait again. Treat it as failed only when `artifact list` reports an error status or
+> the artifact has vanished. Once `status` is `completed`, run
+> `notebooklm download audio <path> -a <task_id> -n <nb>` and report the file path and size.
 
 ## Quirks the test run exposed
 
 #### Quirk: `artifact wait` exits 1 with `Timeout after Ns` while the artifact is still pending
 
-- **What to do:** Confirm with `artifact list --json` and wait again — a timeout is a status report, not a failure
+- **What to do:** Confirm with `artifact list --json` and wait again — a timeout is a status report,
+  not a failure
 
 #### Quirk: `download audio` rejects `--yes` (no such flag)
 
@@ -75,8 +78,8 @@ the output path, and this instruction:
 #### Symptom: `auth check --test` gives `token_fetch: false`
 
 - **Cause:** Google rotated the session cookies
-- **Action:** `notebooklm auth refresh` ; still failing → ask the user for one interactive `notebooklm login` , then
-  re-check
+- **Action:** `notebooklm auth refresh` ; still failing → ask the user for one interactive
+  `notebooklm login` , then re-check
 
 #### Symptom: `No result found for RPC ID`
 
@@ -103,8 +106,8 @@ the output path, and this instruction:
 - **Cause:** Artifact incomplete
 - **Action:** Check `artifact list --json` before retrying
 
-Every one of these gets reported to the user as a plain sentence naming the cause and the concrete next command —
-including which backend to switch to.
+Every one of these gets reported to the user as a plain sentence naming the cause and the concrete
+next command — including which backend to switch to.
 
 ## Post-processing
 
@@ -113,11 +116,11 @@ mkdir -p "$MPX_AI_GENERATED/_PODCASTS/<slug>"
 ffmpeg -i <slug>-raw.mp3 -codec:a libmp3lame -b:a 64k -ac 1 "$MPX_AI_GENERATED/_PODCASTS/<slug>/<slug>.mp3"
 ```
 
-`<slug>-raw.mp3` is a scratchpad staging file; the per-slug folder receives only the re-encoded MP3 plus `script.txt`
-and `sources.md`.
+`<slug>-raw.mp3` is a scratchpad staging file; the per-slug folder receives only the re-encoded MP3
+plus `script.txt` and `sources.md`.
 
-NotebookLM ships a high-bitrate stereo file; a 33-minute episode measured 62 MB and came out at about 15 MB after this
-re-encode. Two voices in a dialogue carry fine at 64 kbps mono.
+NotebookLM ships a high-bitrate stereo file; a 33-minute episode measured 62 MB and came out at
+about 15 MB after this re-encode. Two voices in a dialogue carry fine at 64 kbps mono.
 
-Delete the raw download once the re-encode verifies, unless it is within 20% of the original size — then the re-encode
-bought nothing and the original stays.
+Delete the raw download once the re-encode verifies, unless it is within 20% of the original size —
+then the re-encode bought nothing and the original stays.

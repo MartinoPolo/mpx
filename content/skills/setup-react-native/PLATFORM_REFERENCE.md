@@ -2,9 +2,10 @@
 
 ## Framework rule link
 
-The source is `rules-per-project/react.md` beneath an authorized MPX content/repository root. Resolve it relative to
-known compiled content first, then through [CONTENT_PATHS](../shared/CONTENT_PATHS.md). Do not probe guessed checkout
-locations. Destination: `<project-path>/.claude/rules/react.md`.
+The source is `rules-per-project/react.md` beneath an authorized MPX content/repository root.
+Resolve it relative to known compiled content first, then through
+[CONTENT_PATHS](../shared/CONTENT_PATHS.md). Do not probe guessed checkout locations. Destination:
+`<project-path>/.claude/rules/react.md`.
 
 Create the parent directory first:
 
@@ -26,8 +27,9 @@ Git Bash `ln -s` may create a copied or emulated link. Create a real file symbol
 cmd.exe /c mklink "<project-path>\.claude\rules\react.md" "<resolved-react-rule>"
 ```
 
-If permission is denied, recommend Windows Developer Mode or an elevated terminal and provide the exact resolved
-command. Continue without copying the mutable central rule while claiming it is linked.
+If permission is denied, recommend Windows Developer Mode or an elevated terminal and provide the
+exact resolved command. Continue without copying the mutable central rule while claiming it is
+linked.
 
 Verify that the destination is a symbolic link and resolves to the expected source.
 

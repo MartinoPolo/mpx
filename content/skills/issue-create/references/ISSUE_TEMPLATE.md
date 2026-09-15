@@ -35,13 +35,14 @@ Provider-neutral task Issue body for `issue-create`.
 
 ## Rules
 
-- Omit the unanswered-questions blockquote for AFK Issues. HITL means an unresolved human decision, not manual testing,
-  visual inspection, review, or QA.
-- Description uses domain language without file paths. Requirements map to the Epic when linked. Acceptance criteria
-  describe behavior, not implementation.
-- Omit optional empty sections. Represent relationships with ordinary body links and immutable IDs; write reciprocal
-  links without native sub-Issue APIs.
-- Every task receives `task`, exactly one of `HITL` or `AFK`, relevant area labels, and `design needed` for substantial
-  new visual workflows.
-- Apply labels, assignment, and milestones only through capabilities documented in the selected provider guide. Report
-  unsupported operations or partial failures without discarding a successfully created Issue.
+- Omit the unanswered-questions blockquote for AFK Issues. HITL means an unresolved human decision,
+  not manual testing, visual inspection, review, or QA.
+- Description uses domain language without file paths. Requirements map to the Epic when linked.
+  Acceptance criteria describe behavior, not implementation.
+- Omit optional empty sections. Represent relationships with ordinary body links and immutable IDs;
+  write reciprocal links without native sub-Issue APIs.
+- Every task receives `task`, exactly one of `HITL` or `AFK`, relevant area labels, and
+  `design needed` for substantial new visual workflows.
+- Apply labels, assignment, and milestones only through capabilities documented in the selected
+  provider guide. Report unsupported operations or partial failures without discarding a
+  successfully created Issue.

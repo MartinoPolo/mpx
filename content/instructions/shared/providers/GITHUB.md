@@ -1,18 +1,22 @@
 # GitHub Native Guide (`gh`)
 
-Applies only when the selected role is `github`. Follow [Provider Routing](../PROVIDER_ROUTING.md), preserve native
-authentication and any launch-injected `GH_CONFIG_DIR`, and bind every command with `--repo [HOST/]OWNER/REPO`.
+Applies only when the selected role is `github`. Follow [Provider Routing](../PROVIDER_ROUTING.md),
+preserve native authentication and any launch-injected `GH_CONFIG_DIR`, and bind every command with
+`--repo [HOST/]OWNER/REPO`.
 
-Installed `gh 2.86.0 --help` verifies the forms below. Prefer `--body-file <file>` for reviewed multiline content.
+Installed `gh 2.86.0 --help` verifies the forms below. Prefer `--body-file <file>` for reviewed
+multiline content.
 
 ## Repository initialization
 
-The explicitly invoked development `init-github-repo` skill owns repository creation, initial pushes, default-branch
-selection, and protection setup. Its reviewed native commands are `gh repo create OWNER/REPO --private|--public
---source=. --remote=origin --push`, and `gh api --hostname github.com` for `user`, `repos/OWNER/REPO`, and
-`repos/OWNER/REPO/branches/BRANCH[/protection]`. Confirm owner/name and visibility before creating; bind API paths to
-those literal validated values. Follow the repository-creation exception in Provider Routing instead of requiring a
-remote that does not exist yet. Preserve the native authentication environment.
+The explicitly invoked development `init-github-repo` skill owns repository creation, initial
+pushes, default-branch selection, and protection setup. Its reviewed native commands are
+`gh repo create OWNER/REPO --private|--public --source=. --remote=origin --push`, and
+`gh api --hostname github.com` for `user`, `repos/OWNER/REPO`, and
+`repos/OWNER/REPO/branches/BRANCH[/protection]`. Confirm owner/name and visibility before creating;
+bind API paths to those literal validated values. Follow the repository-creation exception in
+Provider Routing instead of requiring a remote that does not exist yet. Preserve the native
+authentication environment.
 
 ## Issues
 
@@ -32,8 +36,8 @@ gh label create <name> --repo <target> --color <hex> --description <text>
 gh api --hostname <host> repos/<owner>/<repo>/milestones --paginate --jq '.[] | {number,title,state,due_on}'
 ```
 
-Resolve milestones by exact title before assignment; create one only with explicit authorization. Use body links, not
-native sub-Issues.
+Resolve milestones by exact title before assignment; create one only with explicit authorization.
+Use body links, not native sub-Issues.
 
 ## Pull requests and CI
 
@@ -52,5 +56,5 @@ gh run rerun <run-id> --repo <target> --failed
 gh pr merge <pr> --repo <target> --merge|--squash|--rebase
 ```
 
-Merge only with fresh human authorization for the exact strategy. Arbitrary review-state transitions, native hierarchy,
-and automatic body-link synchronization are unsupported.
+Merge only with fresh human authorization for the exact strategy. Arbitrary review-state
+transitions, native hierarchy, and automatic body-link synchronization are unsupported.

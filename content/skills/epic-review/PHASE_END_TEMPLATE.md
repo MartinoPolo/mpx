@@ -3,8 +3,9 @@
 ```markdown
 # Epic Review: Epic <ID> — [Title]
 
-Generated: [date] | Issue provider: [provider] | Repository provider: [provider] Children: [IDs from validated body
-links] | PRs: [explicit confirmed IDs] Evidence unavailable: [none or bounded provider limitation/manual route]
+Generated: [date] | Issue provider: [provider] | Repository provider: [provider] Children: [IDs from
+validated body links] | PRs: [explicit confirmed IDs] Evidence unavailable: [none or bounded
+provider limitation/manual route]
 
 ## Summary
 
@@ -65,7 +66,8 @@ links] | PRs: [explicit confirmed IDs] Evidence unavailable: [none or bounded pr
 [Complete | Deferred | Partial] — [remaining human action and confirmed Epic state]
 ```
 
-Every finding appears exactly once; every actionable item has one checkbox; severity totals match; unresolved work has
-one disposition. Keep dropped/deferred disposition visible. Record `issues.provider` and `repository.provider`
-separately, native command evidence, deterministic body-link status, and unavailable evidence. Exclude credentials,
-unrelated private discussion, and inferred identity details.
+Every finding appears exactly once; every actionable item has one checkbox; severity totals match;
+unresolved work has one disposition. Keep dropped/deferred disposition visible. Record
+`issues.provider` and `repository.provider` separately, native command evidence, deterministic
+body-link status, and unavailable evidence. Exclude credentials, unrelated private discussion, and
+inferred identity details.

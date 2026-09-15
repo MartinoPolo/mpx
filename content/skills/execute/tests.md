@@ -36,8 +36,8 @@ test('created user can be retrieved by email', async () => {
 });
 ```
 
-Why this works: tests the real contract (create then retrieve), uses a real database helper, survives any internal
-refactor that preserves the behavior.
+Why this works: tests the real contract (create then retrieve), uses a real database helper,
+survives any internal refactor that preserves the behavior.
 
 ### Bad: Mock internals, bypass interface
 
@@ -62,8 +62,9 @@ test('createUser calls database.insert with correct args', async () => {
 });
 ```
 
-Why this fails you: asserts on HOW (`.insert` called with specific args, exactly once). Rename the internal method or
-batch inserts differently — test breaks despite identical behavior. Tests nothing a caller cares about.
+Why this fails you: asserts on HOW (`.insert` called with specific args, exactly once). Rename the
+internal method or batch inserts differently — test breaks despite identical behavior. Tests nothing
+a caller cares about.
 
 ## Decision Checklist
 

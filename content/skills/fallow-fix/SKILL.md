@@ -19,9 +19,11 @@ Diagnose and resolve fallow code-quality failures. Use the invocation input as d
 
 Run the appropriate diagnostic command based on what failed:
 
-- **Dead-code regression** (`check:fallow` failed): output already shows all issues with file:line and rule explanations
+- **Dead-code regression** (`check:fallow` failed): output already shows all issues with file:line
+  and rule explanations
 - **Audit failure** (fallow-gate hook blocked commit/push): `pnpm fallow:audit` for JSON details
-- **Need more detail**: re-run `pnpm check:fallow` — `--explain` includes rule descriptions and docs URLs
+- **Need more detail**: re-run `pnpm check:fallow` — `--explain` includes rule descriptions and docs
+  URLs
 
 Parse the JSON output. Each issue has `path`, `line`, `name`, `severity`, and `actions`.
 
@@ -66,15 +68,17 @@ For each issue, determine the correct action:
 
 ### Available suppression kinds
 
-`unused-export`, `unused-type`, `unused-class-member`, `unused-enum-member`, `unresolved-import`, `unlisted-dependency`,
-`duplicate-export`, `circular-dependency`, `complexity`, `code-duplication`, `coverage-gaps`
+`unused-export`, `unused-type`, `unused-class-member`, `unused-enum-member`, `unresolved-import`,
+`unlisted-dependency`, `duplicate-export`, `circular-dependency`, `complexity`, `code-duplication`,
+`coverage-gaps`
 
 ## Step 3: Apply Fixes
 
 1. Fix or suppress each issue.
-2. After each fix, use the narrowest available form of the original diagnostic as incremental feedback. Do not treat
-   this per-fix rerun as final verification.
-3. If dead-code count legitimately changed (new public API, refactored exports), update the baseline:
+2. After each fix, use the narrowest available form of the original diagnostic as incremental
+   feedback. Do not treat this per-fix rerun as final verification.
+3. If dead-code count legitimately changed (new public API, refactored exports), update the
+   baseline:
 
 ```bash
 pnpm fallow:baseline
@@ -89,8 +93,8 @@ After all fixes and any baseline update, run the original failing check once as 
 - `pnpm check:fallow` — must exit 0
 - `pnpm fallow:audit` — verdict must be `pass` or `warn`
 
-If both commands were part of the original failure path, run each once. Do not rerun a command solely to duplicate
-successful final evidence.
+If both commands were part of the original failure path, run each once. Do not rerun a command
+solely to duplicate successful final evidence.
 
 ## Rules
 

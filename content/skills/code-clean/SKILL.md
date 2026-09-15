@@ -13,8 +13,8 @@ metadata:
 
 # Code Clean
 
-Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition, and dead/unused code.
-Use the invocation input as the requested scope.
+Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition,
+and dead/unused code. Use the invocation input as the requested scope.
 
 ## Objectives
 
@@ -41,8 +41,8 @@ Rules:
 
 ### Step 2: Spawn Review Subagents per Group
 
-For each file group, spawn the named `mpx-reviewer-code-quality` agent using its declared review model policy (finding
-duplication and judging risk needs judgment).
+For each file group, spawn the named `mpx-reviewer-code-quality` agent using its declared review
+model policy (finding duplication and judging risk needs judgment).
 
 Use this exact review prompt shape:
 
@@ -72,10 +72,11 @@ Required output:
 
 ### Step 3: Spawn Fix Subagents per Group
 
-For each reviewed group, spawn the named `mpx-executor` agent with approved findings. The prompt must carry the full
-pre-analyzed plan with exact files and concrete changes, leaving only mechanical application — `mpx-executor` applies,
-it does not decide. If a finding still needs judgment (unclear plan, cross-module tradeoffs), return it to
-`mpx-reviewer-code-quality` for a concrete decision and plan before dispatching `mpx-executor`.
+For each reviewed group, spawn the named `mpx-executor` agent with approved findings. The prompt
+must carry the full pre-analyzed plan with exact files and concrete changes, leaving only mechanical
+application — `mpx-executor` applies, it does not decide. If a finding still needs judgment (unclear
+plan, cross-module tradeoffs), return it to `mpx-reviewer-code-quality` for a concrete decision and
+plan before dispatching `mpx-executor`.
 
 Use this exact fix prompt shape:
 

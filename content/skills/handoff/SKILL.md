@@ -17,8 +17,8 @@ Create or update `HANDOFF.md` in the project root — a general session summary 
 
 ## Purpose
 
-Capture accumulated knowledge, context, and insights that would be lost when starting a new conversation. `HANDOFF.md`
-persists in the project root and is updated at the end of each session.
+Capture accumulated knowledge, context, and insights that would be lost when starting a new
+conversation. `HANDOFF.md` persists in the project root and is updated at the end of each session.
 
 ## Workflow
 
@@ -41,8 +41,8 @@ Use the runtime task-state contract to inspect:
 - in-progress work; and
 - pending work.
 
-If task-state access is unavailable, derive only what the conversation and durable artifacts support and say so in
-Working Memory; do not invent status.
+If task-state access is unavailable, derive only what the conversation and durable artifacts support
+and say so in Working Memory; do not invent status.
 
 ### Step 3: Identify project context (optional)
 
@@ -54,13 +54,15 @@ Working Memory; do not invent status.
 ### Step 4: Create or update HANDOFF.md
 
 1. Check whether `HANDOFF.md` already exists in the project root.
-2. If it exists, read it and merge current context: preserve still-relevant items and update or replace stale ones.
+2. If it exists, read it and merge current context: preserve still-relevant items and update or
+   replace stale ones.
 3. Otherwise create it from scratch.
 
 Write only `HANDOFF.md` in the **project root**.
 
-**Target 20–200 lines. Be thorough — this is the only context the next agent gets.** Write as if briefing a developer
-with zero context. Every section must contain enough detail to continue without re-investigating.
+**Target 20–200 lines. Be thorough — this is the only context the next agent gets.** Write as if
+briefing a developer with zero context. Every section must contain enough detail to continue without
+re-investigating.
 
 ```markdown
 # Session Handoff
@@ -122,8 +124,8 @@ Show the user what was created:
 ## Notes
 
 - `HANDOFF.md` is updated each session, not deleted.
-- This skill writes only `HANDOFF.md`; use `mpx grill` or `mpx harvest-decisions` to persist settled decisions to
-  `.mpx/DECISIONS.md`.
+- This skill writes only `HANDOFF.md`; use `mpx grill` or `mpx harvest-decisions` to persist settled
+  decisions to `.mpx/DECISIONS.md`.
 - Focus on why, not only what — reasoning is crucial.
 - Capture implicit knowledge not documented elsewhere.
 - Existing handoffs are merged, not blindly overwritten.

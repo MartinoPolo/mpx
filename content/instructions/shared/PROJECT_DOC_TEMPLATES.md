@@ -1,7 +1,7 @@
 # Project Documentation Scaffolds
 
-Create both files with these headings when a setup workflow initializes `.mpx/` documentation. Replace `[Project Name]`
-when known.
+Create both files with these headings when a setup workflow initializes `.mpx/` documentation.
+Replace `[Project Name]` when known.
 
 ## `.mpx/CONTEXT.md`
 

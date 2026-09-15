@@ -11,13 +11,14 @@ metadata:
     defaultExposure: name-only
 ---
 
-Consolidate `.mpx/CONTEXT.md` into a concise, future-proof reference. Preserve all important detail while removing
-noise.
+Consolidate `.mpx/CONTEXT.md` into a concise, future-proof reference. Preserve all important detail
+while removing noise.
 
-Read [Documentation Strategy](../shared/DOCUMENTATION_STRATEGY.md) for format details. Resolve it relative to this
-loaded skill first. If runtime projection relocation makes that impossible, read `MPX_ACTIVE_CONTENT_ROOT`, require it
-to be an absolute path, resolve `skills/shared/DOCUMENTATION_STRATEGY.md` beneath it, and verify that the literal result
-exists and remains contained by that root. Stop if validation fails. Do not search ordered roots or guess an
+Read [Documentation Strategy](../shared/DOCUMENTATION_STRATEGY.md) for format details. Resolve it
+relative to this loaded skill first. If runtime projection relocation makes that impossible, read
+`MPX_ACTIVE_CONTENT_ROOT`, require it to be an absolute path, resolve
+`skills/shared/DOCUMENTATION_STRATEGY.md` beneath it, and verify that the literal result exists and
+remains contained by that root. Stop if validation fails. Do not search ordered roots or guess an
 installation checkout.
 
 ## Input Resolution
@@ -34,11 +35,13 @@ Read every line of the full file against each issue type and build a classified 
 
 #### Issue Type: **Duplicates**
 
-- **What to Look For:** Terms or features covering the same concept (keep the most current/complete version)
+- **What to Look For:** Terms or features covering the same concept (keep the most current/complete
+  version)
 
 #### Issue Type: **Superseded**
 
-- **What to Look For:** Content explicitly marked as superseded, replaced, or overridden by newer entries
+- **What to Look For:** Content explicitly marked as superseded, replaced, or overridden by newer
+  entries
 
 #### Issue Type: **Negative framing**
 
@@ -46,12 +49,13 @@ Read every line of the full file against each issue type and build a classified 
 
 #### Issue Type: **Non-content noise**
 
-- **What to Look For:** Implementation notes, deviation notes, historical provenance, issue-tracking meta, "Plan vN" /
-  date labels
+- **What to Look For:** Implementation notes, deviation notes, historical provenance, issue-tracking
+  meta, "Plan vN" / date labels
 
 #### Issue Type: **Outdated**
 
-- **What to Look For:** Struck-through items, removed parameters still referenced, resolved issue references
+- **What to Look For:** Struck-through items, removed parameters still referenced, resolved issue
+  references
 
 #### Issue Type: **Inconsistencies**
 
@@ -63,13 +67,15 @@ Read every line of the full file against each issue type and build a classified 
 
 #### Issue Type: **Misplaced content**
 
-- **What to Look For:** Architectural decisions that belong in DECISIONS.md, implementation details that belong in epics
+- **What to Look For:** Architectural decisions that belong in DECISIONS.md, implementation details
+  that belong in epics
 
 ### Step 2: Rewrite
 
 Apply all changes directly and automatically. Produce the consolidated file:
 
-- § Domain Language: one sentence max per definition, definition-list format (`**Term** — Definition.`)
+- § Domain Language: one sentence max per definition, definition-list format
+  (`**Term** — Definition.`)
 - § Core Features: index only (name + status + epic#), no implementation details
 - § Key Constraints: concise bullets
 - § Flagged Ambiguities: resolved term conflicts with rationale
@@ -85,8 +91,8 @@ Apply all changes directly and automatically. Produce the consolidated file:
 
 ### Step 3: Write Result
 
-Write the consolidated file to the original path (overwrite), then re-read it to confirm the intended sections and
-retained technical details. Git history preserves the original.
+Write the consolidated file to the original path (overwrite), then re-read it to confirm the
+intended sections and retained technical details. Git history preserves the original.
 
 ## Report
 

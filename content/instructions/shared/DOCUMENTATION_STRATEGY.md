@@ -23,36 +23,40 @@ Group decisions by domain. Write each decision as one concise, clear, inline bul
 - State the decision directly
 - Prefix new entries with `YYYY-MM-DD:` (current date)
 - Include rationale naturally in the same entry only when it materially clarifies the decision.
-- Mention rejected alternatives only when the user explicitly rejected them in their own words. Choosing an option does not
-  reject the others
+- Mention rejected alternatives only when the user explicitly rejected them in their own words.
+  Choosing an option does not reject the others
 - Record only confirmed decisions. Keep unresolved questions in the conversation.
-- Replace superseded decisions and briefly identify reversals rather than retaining contradictory rules.
+- Replace superseded decisions and briefly identify reversals rather than retaining contradictory
+  rules.
 
 Example, when the user explicitly rejected sharp corners:
 
-- 2026-09-10: Use rounded corners on all buttons for visual consistency. Sharp corners were explicitly rejected.
+- 2026-09-10: Use rounded corners on all buttons for visual consistency. Sharp corners were
+  explicitly rejected.
 
 ## Domain language
 
 ```markdown
-**Workspace** — Top-level container for one repository, project folder, and window. **Issue** — Atomic work unit
-identified by one MPX Issue ID, worktree, branch, and color. **Session** — One agent execution tied to an issue, with
-transcript, cost, and state.
+**Workspace** — Top-level container for one repository, project folder, and window. **Issue** —
+Atomic work unit identified by one MPX Issue ID, worktree, branch, and color. **Session** — One
+agent execution tied to an issue, with transcript, cost, and state.
 
 _Avoid_: “task” for Issue, “project” for Workspace, “run” for Session.
 ```
 
-Use one sentence per definition, an em dash, and `_Avoid_` lines after related clusters. Do not use a terminology table.
+Use one sentence per definition, an em dash, and `_Avoid_` lines after related clusters. Do not use
+a terminology table.
 
 ## Responsibilities
 
-Context discovery and vocabulary workflows read/update `CONTEXT.md`. Planning and review workflows read both; review may
-update feature status using explicit MPX Issue IDs. Decision harvesting and user-confirmed architecture sessions update
-`DECISIONS.md`. Setup workflows create only these two files. Handoff workflows summarize them without becoming a third
-source of truth.
+Context discovery and vocabulary workflows read/update `CONTEXT.md`. Planning and review workflows
+read both; review may update feature status using explicit MPX Issue IDs. Decision harvesting and
+user-confirmed architecture sessions update `DECISIONS.md`. Setup workflows create only these two
+files. Handoff workflows summarize them without becoming a third source of truth.
 
-Older `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, and `.mpx/ARCHITECTURE.md` files are read-only history. Never
-create, update, or fall back to them.
+Older `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, and `.mpx/ARCHITECTURE.md` files are read-only
+history. Never create, update, or fall back to them.
 
-When `DECISIONS.md` exceeds about 500 lines, split by stable domains under `decisions/` (for example `platform.md`,
-`ui-design.md`, `data-state.md`, and `session-providers.md`). Until then keep one file.
+When `DECISIONS.md` exceeds about 500 lines, split by stable domains under `decisions/` (for example
+`platform.md`, `ui-design.md`, `data-state.md`, and `session-providers.md`). Until then keep one
+file.

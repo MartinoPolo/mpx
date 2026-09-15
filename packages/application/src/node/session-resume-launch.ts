@@ -25,7 +25,6 @@ import { executorAdapter, type LaunchExecutionContext } from './launch-execution
 import { directProcessTty } from './launch-execution-runtime.js';
 import { executeResolvedNodeLaunch } from './launch-execution.js';
 import { resolveTrustedRuntimeExecutable } from './launch-execution-adapters.js';
-import { ProductionSessionLifecycleBridge } from './session-lifecycle-bridge.js';
 import { productionSessionResumeDependencies } from './session-production-adapters.js';
 
 export interface NodeSessionResumeLaunchContext extends LaunchExecutionContext {
@@ -177,13 +176,6 @@ export function createNodeSessionResumeLaunchApplicationService(
           const nativeBinding = execution.nativeBinding as Awaited<
             ReturnType<SessionStore['readNativeBinding']>
           >;
-          const launchContext =
-            resumeContext.launchLifecycleBridge || resumeContext.launchRuntimeAdapters
-              ? resumeContext
-              : {
-                  ...resumeContext,
-                  launchLifecycleBridge: new ProductionSessionLifecycleBridge({ store }),
-                };
           const statusSnapshot = project
             ? async (): Promise<StatusSnapshot> =>
                 input.status().snapshot({
@@ -208,7 +200,7 @@ export function createNodeSessionResumeLaunchApplicationService(
             stateRoot: execution.roots.stateRoot,
             cwd: execution.cwd,
             environment,
-            context: launchContext,
+            context: resumeContext,
             tty: context.launchTty ?? directProcessTty(),
             ...(authority.approveHost ? { approveHost: true } : {}),
             nativeRuntimeRoot: execution.nativeRuntimeRoot,

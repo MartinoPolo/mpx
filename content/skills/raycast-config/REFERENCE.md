@@ -1,7 +1,7 @@
 # Raycast config reference
 
-Everything here was recovered from Raycast for Windows' own backend bundle (`<Raycast install>\backend\index.mjs`) and
-verified against a real export.
+Everything here was recovered from Raycast for Windows' own backend bundle
+(`<Raycast install>\backend\index.mjs`) and verified against a real export.
 
 ## File format
 
@@ -14,22 +14,23 @@ data     = hex( aes-256-gcm( gzip(JSON payload) ) )   password set
 key      = crypto.scrypt(password, salt, 32)          Node defaults: N=16384, r=8, p=1
 ```
 
-`iv`, `salt` and `authTag` are each 16 bytes, hex-encoded. Accepted `schemaVersion` values are 1 and 2; write 2.
+`iv`, `salt` and `authTag` are each 16 bytes, hex-encoded. Accepted `schemaVersion` values are 1 and
+2; write 2.
 
-The export UI requires a password of at least 8 characters, typed twice. The **import** path checks `isExportEncrypted`
-first, so a rebuilt file may omit encryption entirely and still import — convenient, at the cost of a plaintext copy of
-everything on disk.
+The export UI requires a password of at least 8 characters, typed twice. The **import** path checks
+`isExportEncrypted` first, so a rebuilt file may omit encryption entirely and still import —
+convenient, at the cost of a plaintext copy of everything on disk.
 
 ## Payload categories
 
-`ai`, `clipboardHistory`, `emoji`, `focusCategories`, `mcpServers`, `nodeExtensions`, `notes`, `quicklinks`, `settings`,
-`snippets`, `userActivity`, `windowLayouts`.
+`ai`, `clipboardHistory`, `emoji`, `focusCategories`, `mcpServers`, `nodeExtensions`, `notes`,
+`quicklinks`, `settings`, `snippets`, `userActivity`, `windowLayouts`.
 
-Import is per category — the user ticks which ones to apply. Editing quicklinks and aliases needs `quicklinks` and
-`settings` only.
+Import is per category — the user ticks which ones to apply. Editing quicklinks and aliases needs
+`quicklinks` and `settings` only.
 
-`clipboardHistory` holds whatever the user has copied, in clear text once decoded. Keep decoded configs in the session
-scratchpad and out of any synced or version-controlled folder.
+`clipboardHistory` holds whatever the user has copied, in clear text once decoded. Keep decoded
+configs in the session scratchpad and out of any synced or version-controlled folder.
 
 ## Quicklink record
 
@@ -50,21 +51,22 @@ scratchpad and out of any synced or version-controlled folder.
 }
 ```
 
-A sibling `openWithPlatforms` array repeats the binding per platform: `{ id, windows?, macos?, ios? }`. Write all three
-when setting `openWith`.
+A sibling `openWithPlatforms` array repeats the binding per platform:
+`{ id, windows?, macos?, ios? }`. Write all three when setting `openWith`.
 
 ## Ids — where a rebuild goes wrong
 
-The importer validates `id` as a **real ULID**, not a 26-character string. A ULID-shaped id that violates the alphabet
-fails the whole category with:
+The importer validates `id` as a **real ULID**, not a 26-character string. A ULID-shaped id that
+violates the alphabet fails the whole category with:
 
 ```
 not a valid ULID string on QuickLinkCreate.id
 ```
 
-The alphabet is Crockford base32 — `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, with **`I`, `L`, `O` and `U` excluded**.
-`Date.now().toString(36).toUpperCase()` produces all four and is therefore not a source of ids. The layout is 10
-characters of millisecond timestamp followed by 16 of randomness, first character `0`–`7`:
+The alphabet is Crockford base32 — `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, with **`I`, `L`, `O` and `U`
+excluded**. `Date.now().toString(36).toUpperCase()` produces all four and is therefore not a source
+of ids. The layout is 10 characters of millisecond timestamp followed by 16 of randomness, first
+character `0`–`7`:
 
 ```js
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -81,8 +83,9 @@ function ulid() {
 }
 ```
 
-The failure surfaces only in the import dialog, as a red badge on the affected category — the file itself decodes and
-round-trips perfectly. Run `audit.mjs` on the edited payload, which checks this, before handing anything back.
+The failure surfaces only in the import dialog, as a red badge on the affected category — the file
+itself decodes and round-trips perfectly. Run `audit.mjs` on the edited payload, which checks this,
+before handing anything back.
 
 ## Alias and hotkey record
 
@@ -100,8 +103,8 @@ Aliases live in `settings.commands[]`, **not** on the quicklink:
 }
 ```
 
-This is why a quicklinks-only JSON import cannot carry aliases — that command surfaces `name`, `link`, `iconName` and
-`openWith`, and merges without deleting.
+This is why a quicklinks-only JSON import cannot carry aliases — that command surfaces `name`,
+`link`, `iconName` and `openWith`, and merges without deleting.
 
 ## Import semantics — the part that matters
 
@@ -111,37 +114,38 @@ From the quicklinks importer:
 for (let id of existingIds) importedIds.has(id) || (await deleteOne(id));
 ```
 
-- **The file is a mirror, not a patch.** Any quicklink present in Raycast and absent from the file is **deleted**.
-  Removing an entry from the JSON is how deletion happens.
-- **Matching `id` → update in place**, refreshing `name`, `link`, `rawContent`, `icon`, `openWith` and `tags`.
-  `openCount` and `createdAt` survive, so a rename keeps its ranking. Preserve ids when editing.
+- **The file is a mirror, not a patch.** Any quicklink present in Raycast and absent from the file
+  is **deleted**. Removing an entry from the JSON is how deletion happens.
+- **Matching `id` → update in place**, refreshing `name`, `link`, `rawContent`, `icon`, `openWith`
+  and `tags`. `openCount` and `createdAt` survive, so a rename keeps its ranking. Preserve ids when
+  editing.
 - **New `id` → insert.** Use a fresh, valid ULID.
-- Importing `settings` also **deletes themes** absent from the file, so round-trip the user's own export rather than
-  composing a settings category from scratch.
+- Importing `settings` also **deletes themes** absent from the file, so round-trip the user's own
+  export rather than composing a settings category from scratch.
 
 ## `openWith` application ids
 
-`/Applications/<uuid>` ids come from Raycast's own app index. They are UUIDv5 in shape but derive from something other
-than the executable path — probing every standard namespace against known ids produced no match. Treat them as opaque:
-**copy an id from an existing quicklink that opens the same application** rather than constructing one. To bind an
-application never used before, have the user set `openWith` once in the Raycast UI, re-export, and read the new id out
-of the config.
+`/Applications/<uuid>` ids come from Raycast's own app index. They are UUIDv5 in shape but derive
+from something other than the executable path — probing every standard namespace against known ids
+produced no match. Treat them as opaque: **copy an id from an existing quicklink that opens the same
+application** rather than constructing one. To bind an application never used before, have the user
+set `openWith` once in the Raycast UI, re-export, and read the new id out of the config.
 
 ## Naming rules
 
-1. **Bare alias is the default; a letter prefix selects the project.** `issues` for the cross-project view,
-   `<letter>issues` for one project. Aliases beat fuzzy matching, so the most-used member of a family earns the bare
-   word.
-2. **Name reads `<project> <thing> (<keywords>)`, project first.** Matching ignores word order, so this is for the eye:
-   everything for one project clusters as it is typed.
-3. **Every member of a family carries the family keyword.** Every meeting link contains `zoom`; every port link contains
-   `localhost`, the port number, and what runs there.
-4. **A second language goes in the alias, not the name.** An alias in the user's other language makes an English-named
-   entry reachable without bloating the name.
+1. **Bare alias is the default; a letter prefix selects the project.** `issues` for the
+   cross-project view, `<letter>issues` for one project. Aliases beat fuzzy matching, so the
+   most-used member of a family earns the bare word.
+2. **Name reads `<project> <thing> (<keywords>)`, project first.** Matching ignores word order, so
+   this is for the eye: everything for one project clusters as it is typed.
+3. **Every member of a family carries the family keyword.** Every meeting link contains `zoom`;
+   every port link contains `localhost`, the port number, and what runs there.
+4. **A second language goes in the alias, not the name.** An alias in the user's other language
+   makes an English-named entry reachable without bloating the name.
 5. **`openWith` is copied, never invented** — see above.
 
-Suggested per-project family: `repo`, `prs` (or `mrs`), `issues`, `dash`, `folder`, `code`, `term`, plus `dev` / `sb`
-for running servers.
+Suggested per-project family: `repo`, `prs` (or `mrs`), `issues`, `dash`, `folder`, `code`, `term`,
+plus `dev` / `sb` for running servers.
 
 ## Link forms that work on Windows
 

@@ -37,7 +37,8 @@ metadata:
 
 **Step 4: Confirm with user**
 
-Present each candidate term with its full proposed entry text (`**Term** — One-sentence definition.`):
+Present each candidate term with its full proposed entry text
+(`**Term** — One-sentence definition.`):
 
 - New terms — show the exact text that would be written
 - Updated definitions — show old → new
@@ -53,8 +54,8 @@ Update `.mpx/CONTEXT.md` `## Domain Language` section using definition-list form
 ```markdown
 ## Domain Language
 
-**Workspace** — Top-level container: one GitHub repo + one project folder + one window. **Issue** — Atomic work unit.
-One GitHub issue, one worktree, one branch, one color.
+**Workspace** — Top-level container: one GitHub repo + one project folder + one window. **Issue** —
+Atomic work unit. One GitHub issue, one worktree, one branch, one color.
 
 _Avoid_: "task" for Issue, "project" for Workspace.
 
@@ -68,11 +69,13 @@ _Avoid_: "task" for Issue, "project" for Workspace.
 - **Workspace** means the app-level container, not a VS Code workspace.
 ```
 
-If updating: merge new terms into existing structure, update changed definitions, preserve terms that haven't changed.
+If updating: merge new terms into existing structure, update changed definitions, preserve terms
+that haven't changed.
 
 **Step 6: Summary**
 
-- Output inline: number of terms added, updated, and unchanged; reconcile these counts with the final file
+- Output inline: number of terms added, updated, and unchanged; reconcile these counts with the
+  final file
 - List any unresolved ambiguities for future discussion
 
 ### Rules
@@ -81,4 +84,5 @@ If updating: merge new terms into existing structure, update changed definitions
 - Keep definitions to ONE sentence maximum
 - Flag conflicts explicitly — never silently resolve ambiguity
 - Show relationships with bold term names and cardinality
-- When re-running: read existing file, incorporate new terms, update definitions, re-flag ambiguities
+- When re-running: read existing file, incorporate new terms, update definitions, re-flag
+  ambiguities
