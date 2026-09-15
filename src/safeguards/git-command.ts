@@ -25,6 +25,7 @@ export function gitInvocations(command: string, cwd: string): { invocations: Git
 const READ_ONLY_GIT = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'ls-tree', 'remote']);
 export function readOnlyPrefix(calls: readonly StaticShellCommand[]): boolean {
   return calls.every(call => {
+    if (call.hasRedirection) return false;
     const [first, operation, ...args] = call.words.map(w => w.value);
     if (['echo', 'printf', 'pwd', 'true', 'test', '['].includes(first ?? '')) return !call.words.some(w => /[<>]/.test(w.value));
     if (first === 'git' && READ_ONLY_GIT.has(operation ?? '')) return operation !== 'remote' || args.length === 0 || args.every(a => ['-v', '--verbose'].includes(a));

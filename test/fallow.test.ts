@@ -40,12 +40,13 @@ test('Fallow is opted-in, push-only, local, trusted and verdict-driven', async (
 
 test('bounded child process output and deadline are visible, not success', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-process-'));
+  const processTimeoutMilliseconds = 3000;
   try {
-    assert.equal((await runBounded(process.execPath, ['-e', 'console.log("ok")'], root, 2000)).stdout.trim(), 'ok');
+    assert.equal((await runBounded(process.execPath, ['-e', 'console.log("ok")'], root, processTimeoutMilliseconds)).stdout.trim(), 'ok');
     const start = Date.now();
-    const timed = await runBounded(process.execPath, ['-e', 'setInterval(()=>{},1000)'], root, 2000);
+    const timed = await runBounded(process.execPath, ['-e', 'setInterval(()=>{},1000)'], root, processTimeoutMilliseconds);
     assert.equal(timed.incomplete, 'deadline exceeded');
     assert.ok(Date.now() - start < 5000);
-    assert.equal((await runBounded(process.execPath, ['-e', 'console.log("x".repeat(4096))'], root, 2000, 100)).incomplete, 'output limit exceeded');
+    assert.equal((await runBounded(process.execPath, ['-e', 'console.log("x".repeat(4096));setInterval(()=>{},1000)'], root, processTimeoutMilliseconds, 100)).incomplete, 'output limit exceeded');
   } finally { await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); }
 });

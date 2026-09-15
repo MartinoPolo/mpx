@@ -287,12 +287,14 @@ void test('pipelines and background commands do not supply a parent cwd', async 
       'npm/package.json': JSON.stringify({ packageManager: 'npm@11' }),
     },
     async (root) => {
-      for (const command of ['echo x | cd npm; npm install', 'cd npm & npm install']) {
-        const result = await evaluatePackageManager(command, root);
-        assert.equal(result.decision, 'warn', command);
-        assert.match(result.diagnostics.join('\n'), /unsupported pipeline or background/i, command);
-        assert.match(result.diagnostics.join('\n'), /dynamic or unresolved/i, command);
-      }
+      const pipelineCd = await evaluatePackageManager('echo x | cd npm; npm install', root);
+      assert.equal(pipelineCd.decision, 'warn');
+      assert.match(pipelineCd.diagnostics.join('\n'), /dynamic or unresolved/i);
+      assert.doesNotMatch(pipelineCd.diagnostics.join('\n'), /unsupported pipeline or background/i);
+
+      const backgroundCd = await evaluatePackageManager('cd npm & npm install', root);
+      assert.equal(backgroundCd.decision, 'block');
+      assert.match(backgroundCd.diagnostics.join('\n'), /uses pnpm/i);
 
       const directTsc = await evaluatePackageManager('echo x | npx tsc', root);
       assert.equal(directTsc.decision, 'block');
@@ -378,6 +380,47 @@ void test('repeated commands share only the current inspection, never stale cros
     assert.equal(batch.diagnostics.filter(message => /uses pnpm/.test(message)).length, 2);
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ packageManager: 'npm@11' }));
     assert.equal((await evaluatePackageManager('npm install; npm test', root)).decision, 'allow');
+  });
+});
+
+void test('allows resolved managers in ordinary pipelines and ignores unrelated shell diagnostics', async () => {
+  await fixture({ 'package.json': JSON.stringify({ packageManager: 'pnpm@10' }) }, async (root) => {
+    for (const command of [
+      'pnpm test | tail', 'pnpm dev &', 'rg x | head', 'git status | head',
+      `printf '%s' 'pnpm install'`, `node -e "console.log('npm install')"`,
+      'powershell -Command Get-Process', 'cmd /c dir',
+      "node <<'NODE'\nconsole.log('hello');\nNODE",
+      'pnpm test >|output.log',
+      "for npm in files; do printf '%s' 'npm install'; done",
+      `(printf '%s' 'pnpm install')`, `for x in pnpm; do printf '%s' "$x"; done`,
+    ]) assert.deepEqual(await evaluatePackageManager(command, root), { decision: 'allow', diagnostics: [] }, command);
+
+    for (const command of ['(pnpm install)', 'powershell -Command pnpm install', 'eval "pnpm install"', 'bash -c "$TASK"', 'sudo npm install', 'sudo npx tsc', 'if command npm install; then echo ok; fi', 'pnpm test <<EOF\ntext\nEOF']) {
+      const result = await evaluatePackageManager(command, root);
+      assert.equal(result.decision, 'warn', command);
+      assert.match(result.diagnostics.join('\n'), /inspection|unsupported/i);
+    }
+  });
+});
+
+void test('redirections do not hide manager calls and unsafe pipeline cd stays unresolved', async () => {
+  await fixture({
+    'package.json': JSON.stringify({ packageManager: 'pnpm@10' }),
+    'npm/package.json': JSON.stringify({ packageManager: 'npm@11' }),
+  }, async (root) => {
+    assert.equal((await evaluatePackageManager('pnpm run check:all > log 2>&1; status=$?; exit $status', root)).decision, 'allow');
+    assert.equal((await evaluatePackageManager('git status; pnpm exec playwright test --list > log 2>&1; tail log', root)).decision, 'allow');
+    assert.equal((await evaluatePackageManager('cd npm && npm test | tail', root)).decision, 'allow');
+    const mismatch = await evaluatePackageManager('cd npm && pnpm test | tail', root);
+    assert.equal(mismatch.decision, 'block');
+    assert.match(mismatch.diagnostics.join('\n'), /uses npm/i);
+    assert.equal((await evaluatePackageManager('cd npm && npm dev & pnpm test', root)).decision, 'allow');
+    assert.equal((await evaluatePackageManager('cd npm && echo x | cat && npm test', root)).decision, 'allow');
+    for (const command of ['cd npm | pnpm test']) {
+      const result = await evaluatePackageManager(command, root);
+      assert.equal(result.decision, 'warn', command);
+      assert.match(result.diagnostics.join('\n'), /dynamic or unresolved/i, command);
+    }
   });
 });
 

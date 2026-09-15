@@ -3,11 +3,18 @@ import path from 'node:path';
 import { evaluateTool } from '../src/safeguards/tools.js';
 import { repositoryRoot } from '../src/safeguards/fallow.js';
 
+const MAX_NOTIFIED_WARNINGS = 128;
+
 /** Thin native interception; project trust is never granted by MPX configuration. */
 export default function piSafeguards(pi: ExtensionAPI): void {
   const warnings = new Map<string, string[]>();
-  pi.on('session_start', () => { warnings.clear(); });
+  const notifiedWarnings = new Set<string>();
+  let generation = 0;
+  const reset = () => { generation++; warnings.clear(); notifiedWarnings.clear(); };
+  pi.on('session_start', reset);
+  pi.on('session_shutdown', reset);
   pi.on('tool_call', async (event, ctx) => {
+    const callGeneration = generation;
     const currentRoot = await repositoryRoot(ctx.cwd);
     const branch = ctx.sessionManager.getBranch();
     const last = branch.at(-1);
@@ -20,10 +27,18 @@ export default function piSafeguards(pi: ExtensionAPI): void {
       isTrusted: root => ctx.isProjectTrusted() && currentRoot !== undefined && path.resolve(root) === path.resolve(currentRoot),
     });
     if (result.decision === 'block') return { block: true, reason: result.diagnostics.join('\n') };
-    if (result.diagnostics.length) {
+    if (callGeneration === generation && result.diagnostics.length) {
       warnings.set(event.toolCallId, result.diagnostics);
-      if (ctx.hasUI) ctx.ui.notify(result.diagnostics.join('\n'), 'warning');
-      else process.stderr.write(`${result.diagnostics.join('\n')}\n`);
+      if (ctx.hasUI) {
+        const unseen = result.diagnostics.filter(message => !notifiedWarnings.has(message));
+        if (unseen.length) {
+          for (const message of unseen) {
+            if (notifiedWarnings.size >= MAX_NOTIFIED_WARNINGS) notifiedWarnings.delete(notifiedWarnings.values().next().value!);
+            notifiedWarnings.add(message);
+          }
+          ctx.ui.notify(unseen.join('\n'), 'warning');
+        }
+      }
     }
     return undefined;
   });

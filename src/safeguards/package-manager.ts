@@ -17,6 +17,8 @@ const LOCKFILES: Readonly<Record<string, PackageManager>> = {
 };
 
 const MANAGER_COMMANDS = new Set(['npm', 'npx', 'pnpm', 'yarn', 'bun', 'bunx']);
+const MANAGER_MENTION = new RegExp(`(^|[^A-Za-z0-9_-])(?:${[...MANAGER_COMMANDS].join('|')})(?:\\.(?:exe|cmd|bat))?([^A-Za-z0-9_-]|$)`, 'iu');
+const MAX_OPAQUE_INSPECTION_LENGTH = 64 * 1024;
 const EXPECTED_COMMANDS: Readonly<Record<PackageManager, ReadonlySet<string>>> = {
   npm: new Set(['npm', 'npx']),
   pnpm: new Set(['pnpm']),
@@ -346,7 +348,21 @@ async function directoryDiagnostic(directory: string): Promise<string | undefine
 /** Evaluate package-manager invocations in their statically resolved effective directories. */
 export async function evaluatePackageManager(command: string, cwd: string): Promise<PolicyResult> {
   const inspection = inspectStaticShell(command, cwd);
-  const warnings = [...inspection.diagnostics];
+  const inspectedManager = inspection.commands.some(invocation =>
+    MANAGER_COMMANDS.has(executableName(invocation.words[0]?.value ?? '')),
+  );
+  const potentiallyHiddenManager = inspection.uninspected.some(fragment => {
+    const first = fragment[0];
+    if (!first) return false;
+    if (first.dynamic || MANAGER_COMMANDS.has(executableName(first.value))) return true;
+    const wrapper = executableName(first.value);
+    if (!['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'zsh', 'dash', 'ksh', 'env', 'sudo', 'eval', 'source', '.', '!'].includes(wrapper)) return false;
+    return fragment.slice(1).some(word => word.dynamic || MANAGER_MENTION.test(word.value));
+  });
+  const potentiallyOpaqueManager = inspection.opaqueInputs.some(input =>
+    input.length > MAX_OPAQUE_INSPECTION_LENGTH || MANAGER_MENTION.test(input) || /(?:^|[;\n|&()])\s*\$/u.test(input),
+  );
+  const warnings = inspectedManager || potentiallyHiddenManager || potentiallyOpaqueManager ? [...inspection.diagnostics] : [];
   const blocks: string[] = [];
   // One inspection-call cache only: the shell text is never executed while it is checked.
   const directories = new Map<string, ReturnType<typeof detectManager>>();

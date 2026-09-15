@@ -6,6 +6,18 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { runBounded } from '../src/safeguards/process.js';
 
+test('bounded children receive isolated environment without mutating parent routing', async () => {
+  const before = process.env.MPX_CHILD_ENV_FIXTURE;
+  const [first, second] = await Promise.all(['personal-fixture', 'work-fixture'].map(value =>
+    runBounded(process.execPath, ['-e', 'console.log(process.env.MPX_CHILD_ENV_FIXTURE)'], process.cwd(), 3000, undefined, undefined, { ...process.env, MPX_CHILD_ENV_FIXTURE: value }),
+  ));
+  assert.equal(first?.stdout.trim(), 'personal-fixture');
+  assert.equal(second?.stdout.trim(), 'work-fixture');
+  assert.equal(first?.incomplete, undefined);
+  assert.equal(second?.incomplete, undefined);
+  assert.equal(process.env.MPX_CHILD_ENV_FIXTURE, before);
+});
+
 test('deadline stops a real process tree before its delayed write', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-process-'));
   try {

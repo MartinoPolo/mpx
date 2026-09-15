@@ -19,7 +19,7 @@ async function windowsTreeFallback(pid: number, powershell: string, timeout: num
 
 export interface ProcessResult { code: number | null; stdout: string; incomplete?: string }
 /** Bounded execution and tree-termination attempts; failed termination is never reported as success. */
-export async function runBounded(executable: string, args: string[], cwd: string, timeoutMs: number, maxBytes = 256 * 1024, windowsSystemRoot = process.env.SystemRoot ?? 'C:/Windows'): Promise<ProcessResult> {
+export async function runBounded(executable: string, args: string[], cwd: string, timeoutMs: number, maxBytes = 256 * 1024, windowsSystemRoot = process.env.SystemRoot ?? 'C:/Windows', environment?: NodeJS.ProcessEnv): Promise<ProcessResult> {
   const windows = process.platform === 'win32';
   const system = join(windowsSystemRoot, 'System32');
   const taskkill = join(system, 'taskkill.exe');
@@ -31,7 +31,7 @@ export async function runBounded(executable: string, args: string[], cwd: string
   return new Promise(resolve => {
     const bash = process.platform === 'win32' && /(?:^|[\\/])bash(?:\.exe)?$/i.test(executable);
     const forwarded = bash ? args.map(value => `"${value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1')}"`) : args;
-    const child = spawn(executable, forwarded, { cwd, shell: false, windowsVerbatimArguments: bash, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executable, forwarded, { cwd, env: environment, shell: false, windowsVerbatimArguments: bash, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = ''; let bytes = 0; let incomplete: string | undefined; let stopping: Promise<void> | undefined;
     const stop = (reason: string) => {
       incomplete ??= reason;

@@ -24,6 +24,40 @@ test('shared interception blocks NUL, dangerous commands, manager mismatches and
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
 
+test('quiet shell syntax retains destructive, package-manager and index-mutation blocks', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'mpx-shell-protections-'));
+  try {
+    await writeFile(join(cwd, 'package.json'), '{"packageManager":"pnpm@11"}');
+    const options = { isTrusted: () => false };
+    for (const command of [
+      'pnpm run check > check.log 2>&1',
+      'git status --short > status.log 2>&1',
+      'pnpm run check | tail -n 20',
+      'rg pattern src | head -n 20',
+    ]) {
+      assert.deepEqual(await evaluateTool({ name: 'bash', input: { command }, cwd }, options), { decision: 'allow', diagnostics: [] }, command);
+    }
+    for (const command of [
+      'rm -rf src > delete.log 2>&1',
+      'git push --force origin main > push.log 2>&1',
+      'git clean -fd | tail -n 20',
+      'pnpm run check 2>NUL',
+      'pnpm run check &>NUL',
+      'printf x > /dev/sda',
+      'npm install > install.log 2>&1',
+      'npm install | tail -n 20',
+      'git add . > add.log 2>&1 && git commit -m check > commit.log 2>&1',
+      'bash -c "$TASK"',
+      'echo $(rm -rf src)',
+    ]) {
+      assert.equal((await evaluateTool({ name: 'bash', input: { command }, cwd }, options)).decision, 'block', command);
+    }
+    const unknown = await evaluateTool({ name: 'bash', input: { command: 'cd "$TARGET" && pnpm run check' }, cwd }, options);
+    assert.equal(unknown.decision, 'warn');
+    assert.match(unknown.diagnostics.join('\n'), /dynamic or unresolved/);
+  } finally { await rm(cwd, { recursive: true, force: true }); }
+});
+
 test('Claude native event transport preserves policy and nonblocking context fallbacks', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'mpx-claude-hooks-'));
   try {
@@ -47,7 +81,15 @@ test('real staged secrets block commits even with no-verify through the thin pol
     execFileSync('git', ['init', '-q', cwd]);
     await writeFile(join(cwd, 'app.js'), `const token = "${'ghp_' + 'a'.repeat(36)}";\n`);
     execFileSync('git', ['-C', cwd, 'add', 'app.js']);
-    const result = await evaluateTool({ name: 'Bash', input: { command: 'git commit --no-verify -m check' }, cwd }, { isTrusted: () => false });
-    assert.equal(result.decision, 'block'); assert.doesNotMatch(result.diagnostics.join('\n'), /ghp_/);
+    for (const command of [
+      'git commit --no-verify -m check',
+      'git commit --no-verify -m check > commit.log 2>&1',
+      'git commit --no-verify -m check | tail -n 20',
+    ]) {
+      const result = await evaluateTool({ name: 'Bash', input: { command }, cwd }, { isTrusted: () => false });
+      assert.equal(result.decision, 'block', command);
+      assert.doesNotMatch(result.diagnostics.join('\n'), /ghp_/);
+      assert.match(result.diagnostics.join('\n'), /Blocked staged GitHub token/, 'actual staged-secret inspection must still run');
+    }
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
