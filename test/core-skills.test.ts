@@ -83,7 +83,7 @@ test('bounded core batch has exact canonical exposure metadata', async () => {
 
 test('private support closure is copied into every consuming skill', async () => {
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'execute')), [
-    'CLOSE_OUT.md', 'SKILL.md', 'detect-check-scripts.mjs', 'mocking.md', 'tests.md',
+    'CLOSE_OUT.md', 'DEV_SERVER.md', 'SKILL.md', 'detect-check-scripts.mjs', 'mocking.md', 'tests.md',
   ]);
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'epic-review')), [
     'ANALYSIS_BRANCHES.md', 'EXECUTION.md', 'ISSUE_TEMPLATE.md', 'PHASE_END_TEMPLATE.md', 'SKILL.md',
@@ -98,6 +98,10 @@ test('private support closure is copied into every consuming skill', async () =>
     await readFile(path.join(skillsRoot, 'board-to-issues', 'ISSUE_TEMPLATE.md'), 'utf8'),
     await readFile(path.join(skillsRoot, 'issue-create', 'references', 'ISSUE_TEMPLATE.md'), 'utf8'),
   );
+  const boardToIssues = await readFile(path.join(skillsRoot, 'board-to-issues', 'SKILL.md'), 'utf8');
+  const boardConvention = await readFile(path.join(root, 'content', 'instructions', 'shared', 'BOARD_CONVENTION.md'), 'utf8');
+  assert.match(boardToIssues, /append the canonical ` → issue:<id>`/);
+  assert.match(boardConvention, /Use `issue:<id>` as the canonical annotation/);
   assert.equal(
     await readFile(path.join(skillsRoot, 'epic-review', 'ISSUE_TEMPLATE.md'), 'utf8'),
     await readFile(path.join(skillsRoot, 'to-issues', 'ISSUE_TEMPLATE.md'), 'utf8'),
@@ -127,6 +131,44 @@ test('core workflows are native-first without retired services or cross-skill fi
   assert.match(source, /user-created Orca checkout/);
   assert.match(source, /does not manage development-server processes or port state/);
   assert.match(source, /explicitly approved project test-auth context/);
+});
+
+test('execute projects autonomous server and delivery defaults with safety gates', async () => {
+  const projections = await projectContent(root);
+  for (const harness of ['pi', 'claude']) {
+    const skillDirectory = harness === 'pi'
+      ? 'dist/packs/development/pi/skills/mp-execute'
+      : 'dist/packs/development/claude/.claude/skills/mp-execute';
+    const textAt = (relative: string): string => {
+      const projection = projections.find(item => item.path === relative);
+      assert.ok(projection, `missing projection: ${relative}`);
+      return projection.content.toString('utf8');
+    };
+    const skill = textAt(`${skillDirectory}/SKILL.md`);
+    const server = textAt(`${skillDirectory}/DEV_SERVER.md`);
+    const closeOut = textAt(`${skillDirectory}/CLOSE_OUT.md`);
+    const instructions = textAt(`dist/${harness}/instructions/shared/AGENTS.md`);
+    assert.match(skill, /delivery defaults without routine confirmation/);
+    assert.match(skill, /\]\(DEV_SERVER\.md\)/);
+    assert.match(skill, /Inline work commits\s+locally/);
+    assert.match(skill, /`--no-auto-merge`/);
+    assert.match(skill, /For `PM_UNKNOWN=true`, ask for the package manager/);
+    assert.match(server, /`package\.json` scripts and `packageManager`/);
+    assert.match(server, /confirm readiness with a bounded wait/);
+    assert.match(server, /stop only processes started for this execution/);
+    assert.match(server, /Required browser verification remains blocked/);
+    assert.match(closeOut, /prefer squash, then merge,\s+then rebase/);
+    assert.match(closeOut, /Invocation\s+authorizes this without confirmation/);
+    assert.match(closeOut, /Merge only after the explicit green gate/);
+    assert.match(instructions, /parent may start a server/);
+    const browser = textAt(`dist/${harness}/agents/mpx-chrome-devtools-tester.md`);
+    const playwright = textAt(`dist/${harness}/instructions/shared/PLAYWRIGHT_TESTING.md`);
+    assert.match(browser, /Return missing URLs or server failures to the parent, not the user/);
+    assert.match(playwright, /parent prepares the server according to its workflow/);
+    for (const policy of [instructions, browser, playwright]) {
+      assert.doesNotMatch(policy, /servers are started manually|if it is missing,\s+ask/);
+    }
+  }
 });
 
 test('repository and Issue provider roles remain independent', async () => {

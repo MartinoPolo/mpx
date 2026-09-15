@@ -43,9 +43,11 @@ and proceed only when repository policy permits.
 1. Compose a normal professional report: Issue/task, tests, changed files from agent contracts, PR
    URL, CI URL/status, retries, unresolved triage, review summary, and blockers.
 2. Post byte-identical report as a native PR comment where supported.
-3. Unless `--no-auto-merge`, select an allowed repository merge method (prefer squash, then merge,
-   then rebase), merge only after the explicit green gate, and poll until native PR state is merged.
-   Never use automatic merge as the CI gate.
+3. Unless `--no-auto-merge`, apply repository merge policy; otherwise prefer squash, then merge,
+   then rebase among allowed methods (or the provider's configured submit strategy). Invocation
+   authorizes this without confirmation. Merge only after the explicit green gate and poll until
+   native PR state is merged. Report policy/approval blockers; never bypass them or use automatic
+   merge as the CI gate.
 4. After confirmed merge, delete the remote branch when policy permits. Report the main-branch
    synchronization command the user can run in the appropriate Orca checkout; do not switch the
    current checkout or create, remove, or update another worktree.

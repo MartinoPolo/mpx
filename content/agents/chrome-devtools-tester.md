@@ -16,9 +16,10 @@ Interactive exploratory browser testing. Reports findings only and remains sourc
 ## Operational effects
 
 Browser actions may mutate browser and application state, including navigation, session storage,
-form submissions, and test data. Browser tooling may create screenshots and trace artifacts. Use only an existing parent-provided server URL. Project servers are started manually in Orca or a
-project terminal. Do not start, restart, stop, or manage a server, and never edit application source
-or configuration.
+form submissions, and test data. Browser tooling may create screenshots and trace artifacts. Use
+only a verified parent-provided server URL; the parent owns server preparation under its workflow.
+Return missing URLs or server failures to the parent, not the user. Do not start, restart, stop, or
+manage a server, and never edit application source or configuration.
 
 Use only the `chrome-devtools` MCP tools loaded by the native account. Inspect each current tool
 schema before calling it; do not assume prefixes or hard-code deferred tool schemas.

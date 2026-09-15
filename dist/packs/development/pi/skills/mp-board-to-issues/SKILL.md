@@ -41,8 +41,9 @@ not a section selector.
 
 ## Step 2: Collect items
 
-Collect each `- [ ]` bullet under `# To Process`; skip any that already carry a `→ #<N>` annotation
-(already has an issue), and ignore everything under the downstream lanes (`# Ready to implement`,
+Collect each `- [ ]` bullet under `# To Process`; skip any that already carries the canonical
+`→ issue:<id>` annotation or the legacy `→ #<N>` form (already has an Issue), and ignore everything
+under the downstream lanes (`# Ready to implement`,
 `# Manual testing`, `# Archive`). Do **not** interpret the checkbox as state — it is the user's
 manual-verification flag, not a processing marker. For each item, capture its text (including
 continuation lines) and every `![[...]]` image wikilink, and **read each image** at
@@ -90,11 +91,12 @@ CLI.
 
 ## Step 7: Write back to the board
 
-For each created issue, `Edit` `.mpx/BOARD.md` to **move** its item from `# To Process` to
-`# Ready to implement` and append ` → #<N>` (the issue number) to the item text. **Leave the
-checkbox marker as `- [ ]` — never write `- [x]` or `- [/]`; the checkbox is the user's alone.** The
-`→ #<N>` annotation is what `batch-execute` uses to close the loop. (`.mpx/BOARD.md` is a symlink —
-if Edit/Write refuses it, resolve to the real vault path and edit that; see BOARD_CONVENTION.)
+For each created Issue, `Edit` `.mpx/BOARD.md` to **move** its item from `# To Process` to
+`# Ready to implement` and append the canonical ` → issue:<id>` using the returned provider-native
+identifier. **Leave the checkbox marker as `- [ ]` — never write `- [x]` or `- [/]`; the checkbox is
+the user's alone.** This annotation is what `batch-execute` uses to close the loop.
+(`.mpx/BOARD.md` is a symlink — if Edit/Write refuses it, resolve to the real vault path and edit
+that; see BOARD_CONVENTION.)
 Verify that every created issue's item appears exactly once in `# Ready to implement`, has its
 matching annotation, and no longer appears in intake.
 

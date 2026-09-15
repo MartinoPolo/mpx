@@ -30,10 +30,11 @@ already uses them and where they validate behavior.
 Prefer bounded, path-scoped reads (e.g. `git diff -- <files>`). Read full logs only when the
 relevant tail is insufficient.
 
-Discover development-server and Storybook commands in `package.json` and referenced project
-configuration. Project servers are started manually in an Orca or project terminal. MPX does not
-own server processes or port state. Use the parent-provided URL for browser work; if it is missing,
-ask rather than starting, restarting, stopping, or guessing a server.
+For implementation workflows, discover development-server and Storybook commands in `package.json`
+and referenced project configuration. The parent may start a server when verification needs one,
+verify readiness, and pass its URL to browser agents without an initial user prompt. Respect project
+restrictions, preserve user-owned processes, and clean up only servers started by the workflow.
+Missing optional MPX port metadata is not a startup blocker.
 
 ## Project instructions and skills
 

@@ -144,7 +144,8 @@ test('native-first content has stable projected dependencies and no retired runt
   assert.match(source, /dist\/\{\{MPX_HARNESS\}\}\/instructions\/shared/);
   assert.match(source, /\/skill:mp-<name>/);
   assert.match(source, /\/mp-<name>/);
-  assert.match(source, /manually in Orca or a project terminal/);
+  assert.match(source, /parent may start a server/);
+  assert.doesNotMatch(source, /Project servers are started manually/);
   assert.match(source, /Do not create, switch, or remove worktrees/);
 });
 

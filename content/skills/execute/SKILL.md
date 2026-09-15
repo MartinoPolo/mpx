@@ -5,7 +5,7 @@ description:
 argument-hint: '[issue|inline/checklist] [--full-review|--no-auto-merge]'
 metadata:
   author: MartinoPolo
-  version: '2.9'
+  version: '2.10'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -23,6 +23,9 @@ evidence, while main evaluates findings, decides repairs, and owns retries, publ
 verification. Follow the shared [parent-owned repair workflow]({{MPX_SHARED_INSTRUCTIONS}}/REPAIR_ORCHESTRATION.md).
 Use concise normal prose for progress updates and a professional final report.
 
+Apply these delivery defaults without routine confirmation. Ask for unresolved prerequisites or
+material ambiguity, not preferences already settled by the workflow.
+
 Before any provider command, read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), then load
 `mpxconfig.json` and independently resolve `issues.provider` and `repository.provider`. Load the
 corresponding native guides linked there: repository providers are GitHub, GitLab, or Gerrit; Issue
@@ -39,10 +42,10 @@ Parse `the invocation input`:
 - Inline text: parse comma-separated tasks or Markdown checklist items. It has no Issue writeback.
 - No argument: ask what to execute.
 
-Before inspecting code or editing, confirm the current checkout is the user-created Orca checkout
-for this exact Issue/task. If its identity or existing changes are ambiguous, stop and ask the user
-to select or create the correct checkout in Orca. Do not create, switch, or remove worktrees. Then
-read repository instructions and status and preserve unrelated work.
+Use the checkout where the user launched the workflow. Read repository instructions, branch,
+status, and available Issue/task metadata to establish its identity without routine confirmation.
+Preserve unrelated work; ask only if a concrete checkout mismatch or overlapping changes prevent
+safe execution. Do not create, switch, or remove worktrees.
 
 If an Issue has `HITL` or `design needed`, ask whether to abort, run HITL grilling, or complete
 design first.
@@ -90,6 +93,9 @@ Preserve the exact key=value output: `CHECK_ALL`, `TYPECHECK`, `LINT`, `FORMAT`,
 emitted. Pass command strings byte-for-byte with their working directories to every agent that
 verifies, resolves conflicts, or fixes CI. Test commands are first-class CI-parity checks: checks
 run in CI must pass locally before push.
+
+When verification needs a server, main follows [server discovery and lifecycle](DEV_SERVER.md)
+and supplies the verified URL to check/browser agents. A user-provided URL is optional.
 
 ## 4. Execute with TDD
 
@@ -166,6 +172,6 @@ identity and never replace it by discovery. Then read and follow [CLOSE_OUT.md](
 
 TDD is mandatory; one focused behavior per test; red before green; minimal green; fix causes rather
 than suppressing diagnostics. Commit after the selected Issue. CI is the completion gate. Default
-after green is provider-policy-compliant merge and branch synchronization in the current checkout. Main never
+after green is provider-policy-compliant merge; checkout handling follows [CLOSE_OUT.md](CLOSE_OUT.md). Main never
 requests or exposes raw reviewer findings, test output, or CI logs when a bounded agent contract
 exists.

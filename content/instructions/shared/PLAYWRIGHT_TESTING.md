@@ -12,16 +12,16 @@ does not cover.
 
 Discover the project's runner, authentication route, and changed surfaces from repository
 instructions, `package.json`, and referenced configuration. Use the actual server URL supplied by
-the parent. Project servers are started manually in Orca or a project terminal unless a
-repository-native test command owns its own server lifecycle. Use parent-provided test auth context
+the parent. The parent prepares the server according to its workflow, or a repository-native test
+command owns its own server lifecycle. Use parent-provided test auth context
 or approved private project-local configuration; never hardcode, echo, publish, or commit credentials.
 
 ## Browser isolation
 
-Keep manual development-server behavior separate from automation. A repository-native E2E command
-may own a test server according to project configuration. Otherwise use the manually started server
-at the supplied URL; do not start, restart, stop, or manage it. Never use the OS-default browser as
-an automation fallback.
+Keep browser verification separate from server preparation. A repository-native E2E command may
+own a test server according to project configuration. Otherwise browser agents use the verified
+parent-provided URL and return server problems to the parent; they do not manage its processes.
+Never use the OS-default browser as an automation fallback.
 
 Use Google Chrome explicitly for Chromium automation (`channel: 'chrome'`) with temporary Playwright
 contexts. If Chrome is unavailable, report the missing prerequisite rather than selecting Brave or
@@ -37,8 +37,8 @@ another owner.
 
 1. **Prove checkout freshness first.** Assert a DOM or computed-style fact introduced by the change.
    On mismatch, investigate stale content or a wrong-checkout server, then report `BLOCKED` with the
-   observed URL and freshness evidence. The user decides whether to restart or replace the server.
-   Repeat the freshness gate only after receiving a corrected URL.
+   observed URL and freshness evidence. The parent repairs or replaces workflow-owned servers while
+   preserving user-owned processes. Repeat the freshness gate after receiving a corrected URL.
 2. **Assert measured outcomes.** Prefer computed style, geometry, accessibility state, or DOM facts.
    Screenshots are evidence, not the only assertion.
 3. **Authenticate programmatically.** Use the project's test/auth API and storage state rather than
