@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { withoutDeletedHeaders } from './context.js';
+import { createPiFooterComponent, type PiFooterComponent } from './pi-footer-runtime.js';
 
 export const PI_ACTIVITY_EVENT = 'mpx2:pi-ui:activity';
 export const PI_ACTIVITY_REQUEST_EVENT = 'mpx2:pi-ui:activity:request';
@@ -40,6 +42,8 @@ export interface PiUiOptions {
   /** Delay prevents a child-completion event preceding its follow-up from flashing done. */
   settleDelayMs?: number;
   environment?: Readonly<Record<string, string | undefined>>;
+  readCompactionSettings?: typeof import('./pi-footer-settings.js').readFooterCompactionSettings;
+  requestQuota?: typeof import('./pi-footer-quota.js').requestFooterQuota;
 }
 
 interface Timer {
@@ -290,6 +294,7 @@ export interface FinishedAgent {
   effort?: string;
   elapsedMs?: number;
   tokens?: number;
+  url?: string;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -331,8 +336,9 @@ export function mergeFinishedAgentToolResult(
   const source = record(details);
   const id = nonempty(source?.agentId) ?? existing?.id;
   if (!source || !id) return existing;
-  const terminalStatus = nonempty(source.status);
-  if (!existing && (!terminalStatus || ['background', 'queued', 'running'].includes(terminalStatus))) {
+  const reportedStatus = nonempty(source.status);
+  const terminalStatus = reportedStatus && !['background', 'queued', 'running'].includes(reportedStatus) ? reportedStatus : undefined;
+  if (!existing && !terminalStatus) {
     return undefined;
   }
   const tags = Array.isArray(source.tags)
@@ -356,26 +362,8 @@ export function mergeFinishedAgentToolResult(
       ? {}
       : { elapsedMs: elapsedMs ?? existing?.elapsedMs }),
     ...(existing?.tokens === undefined ? {} : { tokens: existing.tokens }),
+    ...(existing?.url === undefined ? {} : { url: existing.url }),
   };
-}
-
-export function formatFinishedAgent(agent: FinishedAgent): string {
-  const success = agent.status === 'completed';
-  const glyph = success ? '✓' : agent.status === 'stopped' || agent.status === 'aborted' ? '■' : '×';
-  const elapsed = agent.elapsedMs === undefined ? 'unknown' : formatDuration(agent.elapsedMs);
-  const tokens = agent.tokens === undefined ? 'unknown' : formatCount(agent.tokens);
-  return `${glyph} ${agent.type} · model ${agent.model ?? 'unknown'} · effort ${agent.effort ?? 'unknown'} · elapsed ${elapsed} · tokens ${tokens}`;
-}
-
-function formatDuration(milliseconds: number): string {
-  if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(1)}s`;
-  return `${Math.floor(milliseconds / 60_000)}m ${Math.floor((milliseconds % 60_000) / 1000)}s`;
-}
-
-function formatCount(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
-  return String(Math.trunc(value));
 }
 
 function textFromContent(content: unknown): string {
@@ -531,40 +519,6 @@ export function applyThreeLineFullscreenWheel(tui: unknown): boolean {
   return true;
 }
 
-function safeFooterText(text: string): string {
-  return text.replace(/\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))?/g, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
-}
-
-function terminalColumns(character: string): number {
-  const code = character.codePointAt(0) ?? 0;
-  if (/\p{Mark}/u.test(character)) return 0;
-  return code >= 0x1100 && (
-    code <= 0x115f || code === 0x2329 || code === 0x232a ||
-    (code >= 0x2e80 && code <= 0xa4cf) || (code >= 0xac00 && code <= 0xd7a3) ||
-    (code >= 0xf900 && code <= 0xfaff) || (code >= 0xfe10 && code <= 0xfe6f) ||
-    (code >= 0xff00 && code <= 0xff60) || (code >= 0xffe0 && code <= 0xffe6) ||
-    (code >= 0x1f300 && code <= 0x1faff) || (code >= 0x20000 && code <= 0x3fffd)
-  ) ? 2 : 1;
-}
-
-function truncatePlain(text: string, width: number): string {
-  if (width <= 0) return '';
-  const characters = [...safeFooterText(text)];
-  if (characters.reduce((sum, character) => sum + terminalColumns(character), 0) <= width) {
-    return characters.join('');
-  }
-  if (width === 1) return '…';
-  let used = 0;
-  let output = '';
-  for (const character of characters) {
-    const columns = terminalColumns(character);
-    if (used + columns > width - 1) break;
-    output += character;
-    used += columns;
-  }
-  return `${output}…`;
-}
-
 const PROCESS_OWNER = Symbol.for('mpx2:pi-ui:process-owner');
 const SUBAGENT_MANAGER = Symbol.for('pi-subagents:manager');
 
@@ -590,6 +544,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   let aggregate: PiActivityAggregate | undefined;
   let currentContext: ExtensionContext | undefined;
   let requestRender = () => {};
+  let footer: PiFooterComponent | undefined;
   let titleSessionId = '';
   let firstPrompt: string | undefined;
   let titleStarted = false;
@@ -645,13 +600,18 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     }
   };
 
-  const nativeRecord = (id: string): { status?: string; resultConsumed?: boolean } | undefined => {
+  const nativeRecord = (id: string): { status?: string; resultConsumed?: boolean; model?: string; effort?: string; url?: string } | undefined => {
     const manager = (globalThis as GlobalWithOwner)[SUBAGENT_MANAGER];
     if (typeof manager?.getRecord !== 'function') return undefined;
     try {
       const source = record(manager.getRecord(id));
       if (!source) return undefined;
+      const invocation = record(source.invocation);
+      const sessionFile = nonempty(source.sessionFile);
       return {
+        model: nonempty(invocation?.modelId) ?? nonempty(invocation?.modelName),
+        effort: nonempty(invocation?.thinking),
+        url: sessionFile && path.isAbsolute(sessionFile) ? pathToFileURL(sessionFile).href : undefined,
         ...(typeof source.status === 'string' ? { status: source.status } : {}),
         ...(typeof source.resultConsumed === 'boolean'
           ? { resultConsumed: source.resultConsumed }
@@ -748,7 +708,12 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       if (!native) diagnoseHeldReservation(agent.id, 'is unavailable');
     }
     const prior = finished.get(agent.id);
-    finished.set(agent.id, { ...prior, ...agent, model: prior?.model, effort: prior?.effort });
+    finished.set(agent.id, {
+      ...prior, ...agent,
+      model: native?.model ?? prior?.model,
+      effort: native?.effort ?? prior?.effort,
+      url: native?.url ?? prior?.url,
+    });
     aggregate?.finishChild(agent.id);
     requestRender();
   };
@@ -764,6 +729,8 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (!ownsProcess) return;
 
     currentContext = ctx;
+    footer?.dispose();
+    footer = undefined;
     abortTitle();
     aggregate?.dispose();
     activitySessionId = ctx.sessionManager.getSessionId();
@@ -802,40 +769,37 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       }));
     }
 
-    ctx.ui.setFooter((tui, _theme, footerData) => {
+    ctx.ui.setFooter((tui, theme, footerData) => {
+      footer?.dispose();
       requestRender = () => tui.requestRender();
-      const unsubscribeBranch = footerData.onBranchChange(requestRender);
-      return {
-        dispose: unsubscribeBranch,
-        invalidate() {},
-        render(width: number): string[] {
-          const active = currentContext ?? ctx;
-          const usage = active.getContextUsage();
-          const branch = footerData.getGitBranch();
-          const sessionName = pi.getSessionName();
-          const compactions = active.sessionManager.getBranch().filter((entry) => entry.type === 'compaction');
-          const base = [
-            sessionName,
-            `#${active.sessionManager.getSessionId().slice(0, 8)}`,
-            path.basename(active.cwd),
-            branch ? `git:${branch}` : undefined,
-            active.model ? `${active.model.provider}/${active.model.id}` : 'model unknown',
-            `effort ${active.thinkingLevel ?? 'unknown'}`,
-            usage?.tokens === null || usage?.tokens === undefined
-              ? 'context unknown'
-              : `context ${formatCount(usage.tokens)}${usage.percent === null || usage.percent === undefined ? '' : ` (${Math.trunc(usage.percent)}%)`}`,
-            `compact ${compactions.length}`,
-          ].filter((value): value is string => Boolean(value)).join(' · ');
-
-          const agents = [...finished.values()];
-          const visible = agents.slice(-5);
-          const rows = [truncatePlain(base, width)];
-          if (agents.length > visible.length) rows.push(truncatePlain(`… ${agents.length - visible.length} earlier finished agent(s)`, width));
-          rows.push(...visible.map((agent) => truncatePlain(formatFinishedAgent(agent), width)));
-          return rows;
-        },
-      };
+      footer = createPiFooterComponent(
+        pi, currentContext ?? ctx, tui, theme, footerData,
+        options.environment ?? process.env, () => [...finished.values()], undefined, options.readCompactionSettings, options.requestQuota,
+      );
+      return footer;
     });
+  });
+
+  pi.on('message_end', (_event, ctx) => {
+    if (own()) { currentContext = ctx; footer?.update(ctx); }
+  });
+  pi.on('turn_end', (_event, ctx) => {
+    if (own()) { currentContext = ctx; footer?.update(ctx, true); }
+  });
+  pi.on('model_select', (_event, ctx) => {
+    if (own()) { currentContext = ctx; footer?.update(ctx); }
+  });
+  pi.on('thinking_level_select', (_event, ctx) => {
+    if (own()) { currentContext = ctx; footer?.update(ctx); }
+  });
+  pi.on('session_tree', (_event, ctx) => {
+    if (own()) { currentContext = ctx; footer?.update(ctx, true); }
+  });
+  pi.on('session_compact', (event, ctx) => {
+    if (own()) { currentContext = ctx; footer?.compacted(event.compactionEntry.id, event.reason, ctx); }
+  });
+  pi.on('after_provider_response', (event, ctx) => {
+    if (own()) footer?.response(event.headers, ctx);
   });
 
   pi.on('input', (event) => {
@@ -868,6 +832,8 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   pi.on('agent_settled', (_event, ctx) => {
     if (!own()) return;
     aggregate?.settleMain();
+    currentContext = ctx;
+    footer?.update(ctx, true);
     if (mainWasCancelled || titleStarted || explicitlyNamed || pi.getSessionName() !== undefined) return;
     firstPrompt ??= firstUserPrompt(ctx);
     if (!firstPrompt) return;
@@ -921,7 +887,13 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     const id = nonempty(source?.agentId);
     const merged = mergeFinishedAgentToolResult(id ? finished.get(id) : undefined, event.details);
     if (!merged) return;
-    finished.set(merged.id, merged);
+    const native = nativeRecord(merged.id);
+    finished.set(merged.id, {
+      ...merged,
+      model: native?.model ?? merged.model,
+      effort: native?.effort ?? merged.effort,
+      url: native?.url ?? merged.url,
+    });
     requestRender();
   });
 
@@ -944,6 +916,8 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   pi.on('session_shutdown', () => {
     if (!own()) return;
     abortTitle();
+    footer?.dispose();
+    footer = undefined;
     aggregate?.reset();
     aggregate?.dispose();
     aggregate = undefined;

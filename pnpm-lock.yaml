@@ -14,6 +14,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 0.85.1
         version: 0.85.1(ws@8.21.3)
+      '@earendil-works/pi-tui':
+        specifier: 0.85.1
+        version: 0.85.1
       '@tintinweb/pi-subagents':
         specifier: 0.19.0
         version: 0.19.0(patch_hash=9e77a8dbd5de43d34991a90687c03664b288bd7b41603f7e0dfc30431ee58af7)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)

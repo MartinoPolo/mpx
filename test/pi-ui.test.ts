@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { stripVTControlCharacters } from 'node:util';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { createPiUiExtension } from '../extensions/pi-ui.js';
 import type { UserConfig } from '../src/contracts.js';
@@ -10,13 +11,21 @@ import {
   applyThreeLineFullscreenWheel,
   fallbackTitle,
   finishedAgentFromLifecycle,
-  formatFinishedAgent,
   mergeFinishedAgentToolResult,
-  registerPiUi,
+  registerPiUi as registerNativePiUi,
+  type PiUiOptions,
   shouldUseThreeLineWheel,
   type ActivityTiming,
   type PiActivitySnapshot,
 } from '../src/pi-ui.js';
+
+function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void {
+  registerNativePiUi(pi, {
+    readCompactionSettings: async () => ({ enabled: true, reserveTokens: 16384 }),
+    requestQuota: async () => undefined,
+    ...options,
+  });
+}
 
 class FakeTiming implements ActivityTiming {
   pending: Array<{ active: boolean; callback: () => void }> = [];
@@ -141,8 +150,8 @@ test('finished-agent lifecycle data stays unknown when upstream omits it', () =>
     elapsedMs: 1_250,
     tokens: 120,
   });
-  assert.match(formatFinishedAgent(lifecycle!), /model unknown · effort unknown/);
-  assert.doesNotMatch(formatFinishedAgent(lifecycle!), /model .*gpt|tokens 0/);
+  assert.equal('model' in lifecycle!, false);
+  assert.equal('effort' in lifecycle!, false);
 });
 
 test('public tool_result details enrich model and effective effort without replacing actual usage', () => {
@@ -236,6 +245,9 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
     sessionManager: {
       getSessionId: () => 'session-12345678',
       getBranch: () => entries,
+      getEntries: () => entries,
+      getSessionFile: () => undefined,
+      getLeafId: () => String(entries.length),
     },
     modelRegistry: {
       find: (provider: string, id: string) =>
@@ -278,7 +290,7 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
 
 const SUBAGENT_MANAGER_FIXTURE = Symbol.for('pi-subagents:manager');
 
-type RegistryFixtureRecord = { status: string; resultConsumed?: boolean };
+type RegistryFixtureRecord = { status: string; resultConsumed?: boolean; invocation?: { modelId?: string; thinking?: string; requestedModel?: string; requestedThinking?: string } };
 
 function installNativeRegistryFixture(records: Map<string, RegistryFixtureRecord>): () => void {
   // Fixture only: this stubs the documented in-process registry; no provider or child process runs.
@@ -382,10 +394,13 @@ test('a child-bound extension instance emits no aggregate activity or child aler
   await root.call('session_shutdown', { reason: 'quit' });
 });
 
-test('footer keeps native context/compaction visibility and finished rows, not running duplicates or help/ports', async () => {
+const footerTheme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+
+test('footer keeps current context tokens, compaction and responsive agents without cumulative tokens/help/ports', async () => {
   const harness = extensionHarness();
   registerPiUi(harness.pi, { settleDelayMs: 0, environment: {} });
-  harness.entries.push({ type: 'compaction', id: 'compact-1' });
+  harness.entries.push({ type: 'compaction', id: 'compact-1', timestamp: '2026-09-14T10:00:00Z' });
+  harness.entries.push({ type: 'message', message: { role: 'assistant', usage: { input: 9_876_543, cost: { total: 0 } } } });
   await harness.call('session_start');
 
   harness.emitBus('subagents:started', { id: 'agent-1', type: 'Explore' });
@@ -394,8 +409,8 @@ test('footer keeps native context/compaction visibility and finished rows, not r
     getGitBranch: () => 'feature/ui',
     onBranchChange: () => () => {},
   };
-  const component = harness.footerFactory()(tui, {}, footerData);
-  assert.equal(component.render(180).length, 1, 'running agents stay in the upstream live panel');
+  const component = harness.footerFactory()(tui, footerTheme, footerData);
+  assert.equal(component.render(180).length, 6, 'five core rows plus compaction; running agents stay upstream');
 
   harness.emitBus('subagents:completed', {
     id: 'agent-1', type: 'Explore', status: 'completed', durationMs: 2_000, tokens: { total: 321 },
@@ -407,14 +422,130 @@ test('footer keeps native context/compaction visibility and finished rows, not r
       tags: ['thinking: low'], durationMs: 2_000,
     },
   });
-  const rendered = component.render(180).join('\n');
-  assert.match(rendered, /context 12\.3k \(25%\)/);
-  assert.match(rendered, /compact 1/);
-  assert.match(rendered, /Explore · model luna 5\.6 · effort low · elapsed 2\.0s · tokens 321/);
-  assert.doesNotMatch(rendered, /port|Ctrl\+|Alt\+/i);
+  const rendered = stripVTControlCharacters(component.render(180).join('\n'));
+  assert.match(rendered, /12\.3k \(25%\)/);
+  assert.match(rendered, /compact/);
+  assert.match(rendered, /Explore.*luna 5\.6.*◆◆◇◇◇◇/);
+  assert.doesNotMatch(rendered, /Context|9\.9m|9876543|tokens 321|port|Ctrl\+|Alt\+|\blow\b/i);
 
   assert.ok(harness.emitted.some((event) => event.name === PI_ACTIVITY_EVENT));
   await harness.call('session_shutdown', { reason: 'quit' });
+});
+
+test('background footer uses resolved native invocation without waiting for a result tool or inventing requested settings', async () => {
+  const records = new Map<string, RegistryFixtureRecord>([
+    ['background', { status: 'completed', resultConsumed: true, invocation: {
+      modelId: 'openai-codex/gpt-5.6-luna', thinking: 'low', requestedModel: 'other-model', requestedThinking: 'max',
+    } }],
+  ]);
+  const restore = installNativeRegistryFixture(records);
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { environment: { MPX_ACCOUNT: 'personal' } });
+  try {
+    await harness.call('session_start');
+    const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+      getGitBranch: () => 'dev', onBranchChange: () => () => {},
+    });
+    harness.emitBus('subagents:completed', { id: 'background', type: 'Explore', status: 'completed', durationMs: 2_000 });
+    const text = stripVTControlCharacters(component.render(180).join('\n'));
+    assert.match(text, /Personal/);
+    assert.match(text, /Explore.*gpt-5\.6-luna.*◆◆◇◇◇◇/);
+    assert.doesNotMatch(text, /other-model|\bmax\b|model unknown/);
+    await harness.call('tool_result', { toolName: 'Agent', details: {
+      agentId: 'background', status: 'background', modelName: 'other-model', tags: ['thinking: low (asked max)'],
+    } });
+    const afterResult = stripVTControlCharacters(component.render(180).join('\n'));
+    assert.match(afterResult, /✓ Explore.*gpt-5\.6-luna.*◆◆◇◇◇◇/);
+    assert.doesNotMatch(afterResult, /other-model|<unknown>/);
+  } finally {
+    await harness.call('session_shutdown');
+    restore();
+  }
+});
+
+test('footer refreshes native cost, compaction, naming, model and quota without making provider calls', async () => {
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { environment: { MPX_ACCOUNT: 'work' } });
+  await harness.call('session_start');
+  let disposed = 0;
+  const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+    getGitBranch: () => 'dev', onBranchChange: () => () => { disposed++; },
+  });
+  try {
+    harness.pi.setSessionName('Readable session title');
+    await harness.call('message_end');
+    harness.entries.push({ type: 'message', message: { role: 'assistant', usage: { cost: { total: 1.25 } } } });
+    assert.match(stripVTControlCharacters(component.render(100)[3]), /\$1\.250/, 'native persistence follows message_end; the next render sees it');
+    await harness.call('turn_end');
+    await harness.call('after_provider_response', { headers: {
+      'x-codex-primary-used-percent': '27', 'x-codex-primary-window-minutes': '300', 'x-codex-primary-reset-after-seconds': '600',
+    } });
+    let lines = component.render(100).map(stripVTControlCharacters);
+    assert.equal(lines.length, 5);
+    assert.match(lines[0], /Readable session title.*Work/);
+    assert.match(lines[3], /25%.*\$1\.250/);
+    assert.match(lines[4], /^5h.*27%.*\dm/);
+    assert.doesNotMatch(lines[4], /Quota|resets in/);
+    harness.entries.push({ type: 'compaction', id: 'compact', timestamp: '2026-09-14T10:00:00Z' });
+    await harness.call('session_compact', { compactionEntry: { id: 'compact' }, reason: 'threshold' });
+    lines = component.render(100).map(stripVTControlCharacters);
+    assert.match(lines[4], /threshold/);
+    assert.match(lines[5], /^5h/);
+    const changed = { ...harness.ctx, model: { ...harness.ctx.model, provider: 'other', id: 'short-model' }, thinkingLevel: 'max' };
+    await harness.call('model_select', {}, changed);
+    lines = component.render(100).map(stripVTControlCharacters);
+    assert.match(lines[1], /short-model.*◆◆◆◆◆◆/);
+    assert.doesNotMatch(lines[1], /\bmax\b/);
+    assert.equal(lines[5], 'unavailable');
+    assert.equal(harness.completedCalls.length, 0);
+  } finally {
+    component.dispose();
+    await harness.call('session_shutdown');
+  }
+  assert.equal(disposed, 1);
+  assert.deepEqual(component.render(100), []);
+});
+
+test('quota restores native acquisition with throttling, header precedence and lifecycle cancellation', async () => {
+  const harness = extensionHarness();
+  type Observation = Awaited<ReturnType<NonNullable<PiUiOptions['requestQuota']>>>;
+  const calls: Array<{ signal: AbortSignal; resolve: (value: Observation) => void }> = [];
+  registerPiUi(harness.pi, { requestQuota: (context, signal) => {
+    assert.equal(context.modelRegistry, harness.ctx.modelRegistry);
+    return new Promise(resolve => calls.push({ signal, resolve }));
+  } });
+  await harness.call('session_start');
+  const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+    getGitBranch: () => 'dev', onBranchChange: () => () => {},
+  });
+  try {
+    assert.equal(calls.length, 1, 'quota acquisition starts without an inference response');
+    for (let index = 0; index < 3; index++) await harness.call('agent_settled');
+    assert.equal(calls.length, 1, 'single-flight across lifecycle events');
+    await harness.call('after_provider_response', { headers: { 'x-codex-primary-used-percent': '27' } });
+    calls[0]!.resolve({ windows: [{ label: '5h', usedPercent: 11 }], observedAt: Date.now() });
+    await pause();
+    assert.match(stripVTControlCharacters(component.render(100).at(-1)), /27%/);
+    await harness.call('agent_settled');
+    assert.equal(calls.length, 1, 'settled refresh is throttled after completion');
+    await harness.call('model_select', {}, { ...harness.ctx, model: { ...harness.ctx.model, provider: 'other' } });
+    assert.equal(stripVTControlCharacters(component.render(100).at(-1)), 'unavailable');
+    await harness.call('model_select', {}, harness.ctx);
+    assert.equal(calls.length, 2);
+    await harness.call('model_select', {}, { ...harness.ctx, model: { ...harness.ctx.model, provider: 'other' } });
+    assert.equal(calls[1]!.signal.aborted, true, 'provider switch cancels pending acquisition');
+    await harness.call('model_select', {}, harness.ctx);
+    assert.equal(calls.length, 3);
+    component.dispose();
+    assert.equal(calls[2]!.signal.aborted, true, 'disposal cancels pending acquisition');
+    for (const call of calls.slice(1)) call.resolve({ windows: [{ label: '5h', usedPercent: 99 }], observedAt: Date.now() });
+    await pause();
+    assert.deepEqual(component.render(100), []);
+    assert.equal(harness.completedCalls.length, 0);
+  } finally {
+    component.dispose();
+    await harness.call('session_shutdown');
+  }
 });
 
 test('native registry fixture holds an unconsumed result beyond settling and releases on result tool consumption', async () => {
