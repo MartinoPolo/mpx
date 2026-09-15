@@ -371,11 +371,14 @@ async function mirrorClaude(config: UserConfig, preview: boolean): Promise<OrcaM
 /** Preview by default; writes only when preview is explicitly false. */
 export async function mirrorOrcaHooks(
   config: UserConfig,
-  options: { preview?: boolean } = {},
+  options: { preview?: boolean; harness?: Harness } = {},
 ): Promise<OrcaMirrorResult> {
   const preview = options.preview !== false;
-  const [pi, claude] = await Promise.all([mirrorPi(config, preview), mirrorClaude(config, preview)]);
-  const results = [...pi, claude];
+  const results = options.harness === 'pi'
+    ? await mirrorPi(config, preview)
+    : options.harness === 'claude'
+      ? [await mirrorClaude(config, preview)]
+      : [...await mirrorPi(config, preview), await mirrorClaude(config, preview)];
   return {
     ok: results.every(entry => entry.status !== 'failed' && entry.status !== 'conflict'),
     preview,

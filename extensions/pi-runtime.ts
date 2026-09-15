@@ -1,7 +1,9 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readUserConfig } from '../src/config.js';
+import { isMpx2RuntimeSelected } from '../src/runtime-selection.js';
 import { createPiUiExtension } from './pi-ui.js';
 import context from './pi-context.js';
 import safeguards from './pi-safeguards.js';
@@ -9,6 +11,7 @@ import formatting from './pi-format.js';
 
 /** MPX2-owned composition only; native-account MCP/web/question packages remain native. */
 export default async function mpx2(pi: ExtensionAPI): Promise<void> {
+  if (!(await isMpx2RuntimeSelected(fileURLToPath(new URL('../', import.meta.url))))) return;
   context(pi);
   safeguards(pi);
   formatting(pi);

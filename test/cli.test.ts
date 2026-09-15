@@ -27,6 +27,19 @@ async function fixture() {
   return { root, accounts, run };
 }
 
+test('command help exposes the same scoped sync syntax as validation errors', async () => {
+  const f = await fixture();
+  try {
+    const help = await f.run();
+    const invalid = await f.run('sync', '--account', 'personal');
+    assert.equal(help.code, 0, help.stderr);
+    assert.equal(invalid.code, 1);
+    const usage = invalid.stderr.match(/Usage: (sync .*?)\. No live cutover/)?.[1];
+    assert.ok(usage);
+    assert.ok(help.stdout.includes(usage), 'help must expose the accepted account and harness scopes');
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 test('status honors configured defaults and reports missing agent links without mutation', async () => {
   const f = await fixture();
   try {
@@ -160,6 +173,66 @@ test('explicit Orca-only sync previews and converges without copying unrelated s
     assert.equal(settings.sourceOnly, undefined);
     assert.equal(settings.hooks.Stop.length, 1);
     assert.notEqual((await f.run('sync', '--orca-hooks-only', '--agents-only')).code, 0);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test('scoped Orca Pi sync does not access or change Claude settings', async () => {
+  const f = await fixture();
+  try {
+    await mkdir(join(f.accounts.personal.pi, 'extensions'));
+    for (const name of ['orca-agent-status.ts', 'orca-prefill.ts', 'orca-titlebar-spinner.ts']) {
+      await writeFile(join(f.accounts.personal.pi, 'extensions', name), '// @orca-managed-pi-extension\n');
+    }
+    await rm(f.accounts.personal.claude, { recursive: true });
+    const target = join(f.accounts.work.claude, 'settings.json');
+    await writeFile(target, '{"userOwned":true}\n');
+    const preview = await f.run('sync', '--orca-hooks-only', '--harness', 'pi', '--preview');
+    assert.equal(preview.code, 0, preview.stderr);
+    assert.doesNotMatch(preview.stdout, /claude|settings\.json/i);
+    assert.deepEqual(await readdir(f.accounts.work.pi), []);
+    const applied = await f.run('sync', '--orca-hooks-only', '--harness', 'pi');
+    assert.equal(applied.code, 0, applied.stderr);
+    assert.deepEqual((await readdir(join(f.accounts.work.pi, 'extensions'))).sort(), [
+      'orca-agent-status.ts', 'orca-prefill.ts', 'orca-titlebar-spinner.ts',
+    ]);
+    assert.equal(await readFile(target, 'utf8'), '{"userOwned":true}\n');
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test('scoped runtime-only sync applies personal Pi without accessing or changing unselected roots', async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.accounts.personal.pi, 'settings.json'), JSON.stringify({ packages: ['keep'], providers: { fixture: true }, model: 'keep-model' }));
+    await rm(f.accounts.personal.claude, { recursive: true });
+    await rm(f.accounts.work.pi, { recursive: true });
+    await rm(f.accounts.work.claude, { recursive: true });
+    const preview = await f.run('sync', '--runtime-only', '--account', 'personal', '--harness', 'pi', '--preview');
+    assert.equal(preview.code, 0, preview.stderr);
+    assert.deepEqual(await readdir(f.accounts.personal.pi), ['settings.json']);
+    const applied = await f.run('sync', '--runtime-only', '--account', 'personal', '--harness', 'pi');
+    assert.equal(applied.code, 0, applied.stderr);
+    assert.match(applied.stdout, /personal\/pi/);
+    const settings = JSON.parse(await readFile(join(f.accounts.personal.pi, 'settings.json'), 'utf8'));
+    assert.deepEqual(settings.packages, ['keep']);
+    assert.deepEqual(settings.providers, { fixture: true });
+    assert.equal(settings.model, 'keep-model');
+    assert.equal(settings.treeFilterMode, 'no-tools');
+    assert.ok((await readdir(f.accounts.personal.pi)).includes('extensions'));
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test('runtime selectors reject partial, duplicate, malformed, and mixed scope before writes', async () => {
+  const f = await fixture();
+  try {
+    const invalid = [
+      ['sync', '--runtime-only', '--account', 'personal'],
+      ['sync', '--runtime-only', '--account', 'personal', '--harness', 'native'],
+      ['sync', '--runtime-only', '--account', 'personal', '--account', 'work', '--harness', 'pi'],
+      ['sync', '--account', 'personal', '--harness', 'pi'],
+      ['sync', '--runtime-only', '--agents-only', '--account', 'personal', '--harness', 'pi'],
+    ];
+    for (const invocation of invalid) assert.notEqual((await f.run(...invocation)).code, 0, invocation.join(' '));
+    for (const roots of Object.values(f.accounts)) for (const directory of Object.values(roots)) assert.deepEqual(await readdir(directory), []);
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 

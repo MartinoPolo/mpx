@@ -10,7 +10,7 @@ import { readUserConfig, resolveProject, selectPacks } from './config.js';
 import { createLaunchSpec, confirmLaunch, runLaunch } from './launch.js';
 import type { Account, Harness } from './contracts.js';
 import { resumeCommand } from './resume-cli.js';
-import { syncRuntime } from './runtime-install.js';
+import { syncRuntime, syncRuntimeScope } from './runtime-install.js';
 import { setupProject, orcaProjectSnippet } from './project.js';
 import { evaluateDangerousCommand } from './safeguards/dangerous.js';
 import { createLegacyLaunch } from './legacy.js';
@@ -18,6 +18,7 @@ import { inspectNativePackages } from './native-packages.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...args] = process.argv.slice(2);
+const syncSyntax = 'sync [--agents-only|--orca-hooks-only [--harness pi|claude]|--runtime-only [--account personal|work --harness pi|claude]] [--preview]';
 function userConfigPath(): string {
   if (!process.env.APPDATA) throw new Error('APPDATA is unset; cannot resolve mpx2/config.json.');
   return join(process.env.APPDATA, 'mpx2', 'config.json');
@@ -131,18 +132,54 @@ async function main(): Promise<number> {
       return result.decision === 'block' ? 1 : 0;
     }
     case 'sync': {
-      const scopes = args.filter(arg => ['--agents-only', '--orca-hooks-only', '--runtime-only'].includes(arg));
-      if (scopes.length > 1 || new Set(args).size !== args.length || args.some(arg => !['--agents-only', '--orca-hooks-only', '--runtime-only', '--preview'].includes(arg))) {
-        throw new Error('Usage: sync [--agents-only|--orca-hooks-only|--runtime-only] [--preview]. No live cutover is performed.');
+      const usage = `Usage: ${syncSyntax}. No live cutover is performed.`;
+      let component: '--agents-only' | '--orca-hooks-only' | '--runtime-only' | undefined;
+      let preview = false;
+      let account: Account | undefined;
+      let harness: Harness | undefined;
+      const seen = new Set<string>();
+      for (let index = 0; index < args.length; index++) {
+        const argument = args[index];
+        if (!argument || seen.has(argument)) throw new Error(usage);
+        seen.add(argument);
+        if (argument === '--preview') { preview = true; continue; }
+        if (argument === '--agents-only' || argument === '--orca-hooks-only' || argument === '--runtime-only') {
+          if (component) throw new Error(usage);
+          component = argument;
+          continue;
+        }
+        if (argument === '--account' || argument === '--harness') {
+          const value = args[++index];
+          if (!value || value.startsWith('--') || (argument === '--account' ? account !== undefined : harness !== undefined)) throw new Error(usage);
+          if (argument === '--account') {
+            if (value !== 'personal' && value !== 'work') throw new Error(usage);
+            account = value;
+          } else {
+            if (value !== 'pi' && value !== 'claude') throw new Error(usage);
+            harness = value;
+          }
+          continue;
+        }
+        throw new Error(usage);
       }
-      if (scopes.length === 0 || scopes[0] === '--runtime-only') {
+      if (component === '--runtime-only') {
+        if ((account === undefined) !== (harness === undefined)) throw new Error(usage);
+      } else if (component === '--orca-hooks-only') {
+        if (account !== undefined) throw new Error(usage);
+      } else if (account !== undefined || harness !== undefined) throw new Error(usage);
+
+      if (!component || component === '--runtime-only') {
         const config = await readUserConfig(userConfigPath());
-        const preview = args.includes('--preview');
-        if (!preview) await build(root);
-        const runtime = await syncRuntime(root, config, preview);
-        for (const entry of runtime.entries) console.log(`${entry.status}: ${entry.source} -> ${entry.destination}${entry.diagnostic ? ` (${entry.diagnostic})` : ''}`);
+        const runtimeScope = account !== undefined && harness !== undefined ? { account, harness } : undefined;
+        // Scoped runtime sources are already present in the checkout; never rebuild unrelated projections.
+        if (!preview && !runtimeScope) await build(root);
+        const runtime = runtimeScope
+          ? await syncRuntimeScope(root, config, runtimeScope, preview)
+          : await syncRuntime(root, config, preview);
+        if (!runtimeScope) console.log('Broad runtime scope: personal/work and Pi/Claude roots.');
+        for (const entry of runtime.entries) console.log(`${entry.account}/${entry.harness} ${entry.status}: ${entry.source} -> ${entry.destination}${entry.diagnostic ? ` (${entry.diagnostic})` : ''}`);
         let ok = runtime.ok;
-        if (scopes.length === 0) {
+        if (!component) {
           const plan = await planAgentLinks(root, config);
           const agents = preview ? await inspectAgentLinks(plan) : await syncAgentLinks(plan);
           const orca = await mirrorOrcaHooks(config, { preview });
@@ -153,19 +190,19 @@ async function main(): Promise<number> {
         console.log('Owned entries only. Legacy disconnection, installed runtime acceptance and cutover are NOT VERIFIED; no launcher/account switch is performed.');
         return ok ? 0 : 1;
       }
-      if (scopes[0] === '--orca-hooks-only') {
+      if (component === '--orca-hooks-only') {
         const config = await readUserConfig(userConfigPath());
-        const result = await mirrorOrcaHooks(config, { preview: args.includes('--preview') });
+        const result = await mirrorOrcaHooks(config, { preview, harness });
         console.log('Partial sync: Orca-owned hooks only. Runtime registration, Orca/UI behavior and cutover are NOT VERIFIED.');
         for (const entry of result.results) console.log(`${entry.status}: ${entry.source} -> ${entry.destination}${entry.error ? ` (${entry.error})` : ''}`);
         return result.ok ? 0 : 1;
       }
       const config = await readUserConfig(userConfigPath());
       // Preview must not mutate either projections or native roots.
-      if (!args.includes('--preview')) await build(root);
+      if (!preview) await build(root);
       const plan = await planAgentLinks(root, config);
       console.log('Partial sync: specialist links only. Hooks/extensions and cutover are NOT VERIFIED.');
-      if (args.includes('--preview')) {
+      if (preview) {
         const inspection = await inspectAgentLinks(plan);
         for (const error of inspection.errors) console.error(`Agent-link planning failed (${error.harness}, ${error.sourceDirectory}): ${error.error}`);
         for (const entry of inspection.results) console.log(`${entry.status}: ${entry.source ?? '(unowned entry)'} -> ${entry.destination}${entry.error ? ` (${entry.error})` : ''}`);
@@ -187,7 +224,7 @@ async function main(): Promise<number> {
       return result.status === 'conflict' ? 1 : 0;
     }
     default:
-      console.log('MPX2 development checkout\nCommands: build, status, sync [--agents-only|--orca-hooks-only|--runtime-only] [--preview], project setup, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.');
+      console.log(`MPX2 development checkout\nCommands: build, status, ${syncSyntax}, project setup, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
       return command ? 1 : 0;
   }
 }
