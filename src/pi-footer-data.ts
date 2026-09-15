@@ -72,6 +72,12 @@ export function parseFooterQuota(headers: Record<string, string>, now: number): 
   return windows.length ? windows : undefined;
 }
 
+export interface FooterReviewRepository {
+  provider: 'github' | 'gitlab';
+  target: string;
+  url: string;
+}
+
 export interface FooterRepository {
   project: string;
   projectRoot: string;
@@ -79,6 +85,7 @@ export interface FooterRepository {
   worktreeRoot: string;
   repositoryUrl?: string;
   provider?: string;
+  reviewRepository?: FooterReviewRepository;
   headUrl?: string;
 }
 
@@ -94,6 +101,31 @@ async function gitValue(cwd: string, args: string[]): Promise<string | undefined
     });
     const value = result.stdout.trim();
     return value && !/[\x00-\x1f\x7f]/.test(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function reviewRepository(remote: string | undefined, provider: string | undefined): FooterReviewRepository | undefined {
+  if (!remote || (provider !== 'github' && provider !== 'gitlab')) return undefined;
+  const standard = /^(https?|ssh):\/\/([^/?#]+)(\/[^?#]*)$/.exec(remote);
+  const scp = standard || /^[a-z][a-z+.-]*:\/\//i.test(remote)
+    ? undefined : /^(?:[^@/:]+@)?([^@/:]+):(.+)$/.exec(remote);
+  if (!standard && !scp) return undefined;
+  try {
+    const parsed = standard ? new URL(remote) : undefined;
+    if (parsed && ((parsed.protocol !== 'ssh:' && (parsed.username || parsed.password)) || parsed.password)) return undefined;
+    const host = scp?.[1] ?? parsed?.host;
+    const rawPath = scp?.[2] ?? standard?.[3]?.replace(/^\//, '');
+    if (!host || !rawPath) return undefined;
+    const pathSegments = rawPath.replace(/\.git\/?$/, '').replace(/\/$/, '').split('/');
+    if (!pathSegments.length || pathSegments.some(segment => {
+      if (!segment) return true;
+      const decoded = decodeURIComponent(segment);
+      return decoded === '.' || decoded === '..';
+    })) return undefined;
+    const projectPath = pathSegments.join('/');
+    return { provider, target: `${host}/${projectPath}`, url: `https://${host}/${projectPath}` };
   } catch {
     return undefined;
   }
@@ -126,7 +158,7 @@ export async function resolveFooterRepository(cwd: string): Promise<FooterReposi
   if (!worktreeRoot) return fallbackFooterRepository(cwd);
   const projectRoot = project.mainCheckout ?? worktreeRoot;
   const remoteName = project.config?.repository.remote ?? 'origin';
-  const remote = await gitValue(cwd, ['config', '--get', `remote.${remoteName}.url`]);
+  const remote = await gitValue(cwd, ['remote', 'get-url', '--', remoteName]);
   const repositoryUrl = repositoryWebUrl(remote);
   return {
     project: path.basename(projectRoot),
@@ -135,8 +167,18 @@ export async function resolveFooterRepository(cwd: string): Promise<FooterReposi
     worktreeRoot,
     repositoryUrl,
     provider: project.config?.repository.provider ?? (repositoryUrl?.startsWith('https://github.com/') ? 'github' : undefined),
+    reviewRepository: reviewRepository(remote, project.config?.repository.provider),
     headUrl: gitDirectory ? pathToFileURL(path.join(gitDirectory, 'HEAD')).href : undefined,
   };
+}
+
+function vscodeFolderUrl(folder: string): string {
+  const fileUrl = pathToFileURL(folder);
+  const windowsDrivePath = /^\/[a-z]:\//i.test(fileUrl.pathname);
+  const folderPath = fileUrl.host
+    ? `/${fileUrl.host}${fileUrl.pathname}`
+    : windowsDrivePath ? fileUrl.pathname.slice(1) : fileUrl.pathname;
+  return `vscode://file/${folderPath}`;
 }
 
 export function repositoryFooterLocation(repository: FooterRepository, branch: string | null): FooterLocation {
@@ -148,6 +190,7 @@ export function repositoryFooterLocation(repository: FooterRepository, branch: s
     branch: branch ?? (repository.headUrl ? 'detached HEAD' : 'no branch'),
     projectUrl: pathToFileURL(repository.projectRoot).href,
     worktreeUrl: isMainCheckout ? undefined : pathToFileURL(repository.worktreeRoot).href,
+    editorUrl: vscodeFolderUrl(repository.worktreeRoot),
     branchUrl: branch && branchPath && repository.repositoryUrl
       ? `${repository.repositoryUrl}${branchPath}${encodeURIComponent(branch)}` : repository.headUrl,
   };

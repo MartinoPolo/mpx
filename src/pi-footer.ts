@@ -8,6 +8,14 @@ export interface FooterLocation {
   projectUrl?: string;
   worktreeUrl?: string;
   branchUrl?: string;
+  editorUrl?: string;
+}
+
+export interface FooterReview {
+  provider: 'github' | 'gitlab';
+  number: number;
+  url: string;
+  title?: string;
 }
 
 export interface FooterCompaction {
@@ -42,6 +50,7 @@ export interface FooterSnapshot {
   model?: string;
   effort?: string;
   location: FooterLocation;
+  review?: FooterReview;
   contextPercent?: number | null;
   contextTokens?: number | null;
   compactionTrigger?: number;
@@ -61,6 +70,7 @@ const EFFORT: Readonly<Record<string, number>> = {
 const EFFORT_COLOR: Readonly<Record<string, number>> = {
   off: 255, minimal: 245, low: 114, medium: 75, high: 179, xhigh: 208, max: 203,
 };
+const VSCODE_ICON = '󰨞';
 const MAX_HISTORY = 5;
 const MAX_AGENTS = 5;
 const ACCOUNT_COLOR = {
@@ -81,7 +91,8 @@ function safeUrl(value: string | undefined): string | undefined {
   if (!value || /[\u0000-\u001f\u007f-\u009f]/.test(value)) return undefined;
   try {
     const parsed = new URL(value);
-    if (!['file:', 'http:', 'https:'].includes(parsed.protocol)) return undefined;
+    if (!['file:', 'http:', 'https:', 'vscode:'].includes(parsed.protocol)) return undefined;
+    if (parsed.protocol === 'vscode:' && parsed.hostname !== 'file') return undefined;
     if (parsed.username || parsed.password) return undefined;
     // Validate with URL, but retain the collector's complete target verbatim.
     return value;
@@ -140,26 +151,36 @@ function sessionLine(snapshot: FooterSnapshot, width: number, theme: FooterTheme
   return bounded(`${styledName}${separator}${styledId}${styledAccount ? `${separator}${styledAccount}` : ''}`, width);
 }
 
-function modelLine(snapshot: FooterSnapshot, theme: FooterTheme): string {
-  const model = theme.fg('accent', shortModel(snapshot.model));
-  const level = safeText(snapshot.effort, 'unknown').toLowerCase();
-  return `${model}${footerSeparator(theme)}${thinkingGauge(level)}`;
+function modelLine(snapshot: FooterSnapshot, width: number, theme: FooterTheme): string {
+  const separator = footerSeparator(theme);
+  const gauge = thinkingGauge(safeText(snapshot.effort, 'unknown').toLowerCase());
+  const review = snapshot.review;
+  const reference = review ? `${review.provider === 'github' ? 'PR #' : 'MR !'}${review.number}` : '';
+  const reservedWidth = visibleWidth(gauge) + visibleWidth(separator)
+    + (review ? visibleWidth(separator) + visibleWidth(reference) : 0);
+  const model = theme.fg('accent', bounded(shortModel(snapshot.model), Math.max(1, width - reservedWidth)));
+  const modelAndEffort = `${model}${separator}${gauge}`;
+  if (!review) return modelAndEffort;
+  const reviewLink = linked(theme.fg('accent', reference), review.url);
+  const metadata = review.title === undefined ? '' : `${separator}${theme.fg('muted', safeText(review.title, ''))}`;
+  return `${modelAndEffort}${separator}${reviewLink}${metadata}`;
 }
 
 function locationLine(location: FooterLocation, width: number, theme: FooterTheme): string {
   const separator = footerSeparator(theme);
+  const editor = location.editorUrl === undefined ? '' : ` ${linked(theme.fg('muted', VSCODE_ICON), location.editorUrl)}`;
   const fields = [
     { value: location.project, url: location.projectUrl },
-    ...(location.worktree === undefined ? [] : [{ value: location.worktree, url: location.worktreeUrl }]),
-    { value: location.branch, url: location.branchUrl },
+    ...(location.worktree === undefined ? [] : [{ value: location.worktree, url: location.worktreeUrl, maximum: 20 }]),
+    { value: location.branch, url: location.branchUrl, maximum: 20 },
   ];
-  const available = Math.max(fields.length, width - (fields.length - 1) * visibleWidth(separator));
+  const available = Math.max(fields.length, width - visibleWidth(editor) - (fields.length - 1) * visibleWidth(separator));
   const base = Math.max(1, Math.floor(available / fields.length));
-  return fields.map(({ value, url }, index) => {
+  return fields.map(({ value, url, maximum }, index) => {
     const allocation = index === fields.length - 1 ? Math.max(1, available - base * index) : base;
-    const label = bounded(safeText(value), allocation);
+    const label = bounded(safeText(value), Math.min(allocation, maximum ?? allocation));
     const colored = index === 0 ? `\x1b[38;2;255;255;255m${label}${RESET}` : theme.fg('muted', label);
-    return linked(colored, url);
+    return `${linked(colored, url)}${index === 0 ? editor : ''}`;
   }).join(separator);
 }
 
@@ -269,7 +290,7 @@ export function renderPiFooter(snapshot: FooterSnapshot, width: number, theme: F
   const columns = Math.max(1, Math.floor(width));
   const makeCore = (coreWidth: number): string[] => [
     sessionLine(snapshot, coreWidth, theme),
-    modelLine(snapshot, theme),
+    modelLine(snapshot, coreWidth, theme),
     locationLine(snapshot.location, coreWidth, theme),
     contextLine(snapshot, theme),
     ...compactionLines(snapshot.compactions, theme),

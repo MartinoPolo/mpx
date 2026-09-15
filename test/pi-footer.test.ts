@@ -95,6 +95,55 @@ test('reserves session id and account while truncating a long session name', () 
   assert.match(text[0]!, /… · #12345678 · Work$/);
 });
 
+test('caps worktree and branch labels at twenty display cells while preserving complete links', () => {
+  const location = {
+    project: 'project',
+    worktree: '超長工作樹名稱超長工作樹名稱',
+    branch: 'feature/a-very-long-footer-branch',
+    projectUrl: 'file:///C:/projects/project',
+    worktreeUrl: 'file:///C:/projects/a-complete-worktree-destination',
+    branchUrl: 'https://example.test/project/tree/feature%2Fa-very-long-footer-branch',
+    editorUrl: 'vscode://file/C:/projects/a-complete-worktree-destination',
+  };
+  const line = renderPiFooter(snapshot({ location }), 120, theme)[2]!;
+  const fields = stripTerminalSequences(line).split(' · ');
+  assert.equal(fields.length, 3);
+  assert.equal(fields[0], 'project 󰨞');
+  assert.ok(visibleWidth(fields[1]!) <= 20 && fields[1]!.endsWith('…'));
+  assert.ok(visibleWidth(fields[2]!) <= 20 && fields[2]!.endsWith('…'));
+  assert.doesNotMatch(stripTerminalSequences(line), /VS Code/);
+  assert.ok(line.includes(`\x1b]8;;${location.editorUrl}\x1b\\`));
+  assert.ok(line.indexOf(location.projectUrl) < line.indexOf(location.editorUrl));
+  assert.ok(line.indexOf(location.editorUrl) < line.indexOf(location.worktreeUrl));
+  for (const width of [1, 20, 35, 60]) {
+    assertBounded(renderPiFooter(snapshot({ location }), width, theme), width);
+  }
+  assert.ok(line.includes(location.worktreeUrl));
+  assert.ok(line.includes(location.branchUrl));
+  assert.ok(line.includes(location.editorUrl));
+});
+
+test('keeps review beside effort on the existing model row with full links and no added row', () => {
+  const url = 'https://github.com/owner/project/pull/4242?complete=true';
+  const lines = renderPiFooter(snapshot({
+    location: { project: 'project-with-a-long-name', worktree: 'worktree-with-a-long-name', branch: 'branch-with-a-long-name' },
+    review: { provider: 'github', number: 4242, url, title: '修正 footer metadata that is long' },
+  }), 60, theme);
+  const text = plain(lines);
+  assert.equal(lines.length, renderPiFooter(snapshot(), 60, theme).length);
+  assert.equal(text[2]!.includes('PR #4242'), false);
+  assert.match(text[1]!, /◆.* · PR #4242 · 修/);
+  assert.ok(lines[1]!.includes(url));
+  assertBounded(lines, 60);
+
+  const narrow = renderPiFooter(snapshot({
+    model: 'a-model-name-that-would-otherwise-hide-the-review',
+    review: { provider: 'gitlab', number: 42, url: 'https://gitlab.example/group/project/-/merge_requests/42' },
+  }), 35, theme);
+  assert.match(plain(narrow)[1]!, /… · ◆.* · MR !42$/);
+  assertBounded(narrow, 35);
+});
+
 test('balances location widths and bounds Unicode output at narrow and zero widths', () => {
   const narrow = renderPiFooter(snapshot({ location: { project: '超長項目名稱', worktree: 'another-very-long-worktree', branch: 'feature/extremely-long' } }), 35, theme);
   const location = plain(narrow)[2]!;

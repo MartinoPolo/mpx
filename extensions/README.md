@@ -18,6 +18,21 @@ The installer writes a physical forwarding module at the native account's `exten
 Do not replace it with a file symlink: Pi resolves relative imports from the registration path. The
 forwarder activates only for an explicitly selected MPX account and checkout.
 
+## Footer links and reviews
+
+The Pi footer keeps file links for the project and linked checkout, places the same VS Code icon as
+Claude beside the project name to open the active checkout, and bounds long checkout and branch labels
+without shortening their hyperlink targets. For a
+repository whose `repository.provider` is explicitly configured as `github` or `gitlab`, it uses the
+matching native CLI and configured remote to discover an open pull or merge request for the current
+branch. The review link follows the effort indicator on the existing model row, without adding a row.
+Missing CLIs, authentication, malformed responses, and branches without an open review remain silent.
+
+Review discovery runs at footer startup, after branch changes, and approximately once per minute. It
+does not run while rendering or on ordinary session updates. Use Pi's `/reload` after changing the
+extension code; changing branches or waiting for the periodic refresh is enough for review state.
+Launch-provided `GH_CONFIG_DIR` and `GLAB_CONFIG_DIR` bindings are inherited unchanged.
+
 ## Selected-pack subagents
 
 MPX pins `@tintinweb/pi-subagents` and applies the reviewed patch in

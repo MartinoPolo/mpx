@@ -3,8 +3,61 @@ import test from 'node:test';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { createPiFooterComponent } from '../src/pi-footer-runtime.js';
 import { fallbackFooterRepository, type FooterRepository } from '../src/pi-footer-data.js';
+import type { FooterReview } from '../src/pi-footer.js';
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test('review refreshes at startup, branch changes, and the clock without render or update lookups or stale branch data', async (testContext) => {
+  testContext.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 1000 });
+  let branch = 'main';
+  let branchChanged = () => {};
+  const reviewRequests: Array<{ branch: string | null; resolve: (review: FooterReview | undefined) => void }> = [];
+  const repository: FooterRepository = {
+    project: 'project', projectRoot: '/project', worktree: 'project', worktreeRoot: '/project',
+    provider: 'github', repositoryUrl: 'https://github.com/owner/project',
+    reviewRepository: { provider: 'github', target: 'github.com/owner/project', url: 'https://github.com/owner/project' },
+  };
+  const context = {
+    cwd: process.cwd(), model: undefined,
+    sessionManager: {
+      getEntries: () => [], getBranch: () => [], getSessionFile: () => undefined,
+      getSessionId: () => 'review-session', getLeafId: () => null,
+    },
+    getContextUsage: () => undefined,
+  } as unknown as ExtensionContext;
+  const component = createPiFooterComponent(
+    { getSessionName: () => undefined } as unknown as ExtensionAPI,
+    context, { requestRender: () => {} },
+    { fg: (_color, text) => text, bold: text => text },
+    {
+      getGitBranch: () => branch, getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1,
+      onBranchChange: callback => { branchChanged = callback; return () => {}; },
+    }, {}, () => [], async () => repository, async () => undefined, async () => undefined,
+    async (_repository, requestedBranch) => new Promise(resolve => reviewRequests.push({ branch: requestedBranch, resolve })),
+  );
+  await flush();
+  assert.deepEqual(reviewRequests.map(request => request.branch), ['main']);
+  component.render(100);
+  component.update(context);
+  component.render(100);
+  assert.equal(reviewRequests.length, 1, 'render and ordinary updates perform no network lookup');
+
+  branch = 'feature/next';
+  branchChanged();
+  await flush();
+  reviewRequests[0]!.resolve({ provider: 'github', number: 1, url: 'https://github.com/owner/project/pull/1' });
+  await flush();
+  assert.equal(component.render(100).some(line => line.includes('PR #1')), false, 'prior-branch review is never shown');
+  assert.deepEqual(reviewRequests.map(request => request.branch), ['main', 'feature/next']);
+  reviewRequests[1]!.resolve({ provider: 'github', number: 2, url: 'https://github.com/owner/project/pull/2' });
+  await flush();
+  assert.ok(component.render(100).some(line => line.includes('PR #2')));
+
+  testContext.mock.timers.tick(60_000);
+  await flush();
+  assert.deepEqual(reviewRequests.map(request => request.branch), ['main', 'feature/next', 'feature/next']);
+  component.dispose();
+});
 
 test('footer refreshes coalesce, retain valid settings on failure, and fence disposal', async (testContext) => {
   testContext.mock.timers.enable({ apis: ['Date'], now: 1000 });

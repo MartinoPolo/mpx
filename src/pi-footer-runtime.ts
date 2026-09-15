@@ -2,7 +2,8 @@ import type { ExtensionAPI, ExtensionContext, Theme } from '@earendil-works/pi-c
 import type { Component, TUI } from '@earendil-works/pi-tui';
 import { pathToFileURL } from 'node:url';
 import { fallbackFooterRepository, footerCompactions, footerSessionCost, parseFooterQuota, repositoryFooterLocation, resolveFooterRepository, type FooterRepository } from './pi-footer-data.js';
-import { renderPiFooter, type FooterAgent, type FooterCompaction, type FooterQuotaWindow } from './pi-footer.js';
+import { renderPiFooter, type FooterAgent, type FooterCompaction, type FooterQuotaWindow, type FooterReview } from './pi-footer.js';
+import { discoverFooterReview } from './footer-review.js';
 
 import { readFooterCompactionSettings, type FooterCompactionSettings } from './pi-footer-settings.js';
 import { requestFooterQuota } from './pi-footer-quota.js';
@@ -27,12 +28,17 @@ export function createPiFooterComponent(
   loadRepository: (cwd: string) => Promise<FooterRepository> = resolveFooterRepository,
   loadCompactionSettings = readFooterCompactionSettings,
   loadQuota = requestFooterQuota,
+  loadReview: (repository: FooterRepository, branch: string | null) => Promise<FooterReview | undefined> = discoverFooterReview,
 ): PiFooterComponent {
   let context = initialContext;
   let disposed = false;
   let repository = fallbackFooterRepository(context.cwd);
   let repositoryRefreshActive = false;
   let repositoryRefreshRequested = false;
+  let review: FooterReview | undefined;
+  let reviewRevision = 0;
+  let reviewRefreshActive = false;
+  let reviewRefreshRequested = false;
   let provider = context.model?.provider;
   let quota: FooterQuotaWindow[] | undefined;
   let quotaObservedAt: number | undefined;
@@ -83,6 +89,34 @@ export function createPiFooterComponent(
     cost = footerSessionCost(context.sessionManager.getEntries());
     compactions = footerCompactions(context.sessionManager.getBranch(), reasons, sessionUrl);
   };
+  const refreshReview = () => {
+    if (disposed || !repository.reviewRepository) return;
+    reviewRefreshRequested = true;
+    if (reviewRefreshActive) return;
+    reviewRefreshActive = true;
+    void (async () => {
+      try {
+        while (!disposed && reviewRefreshRequested) {
+          reviewRefreshRequested = false;
+          const requestedRepository = repository;
+          const requestedBranch = footerData.getGitBranch();
+          const revision = reviewRevision;
+          try {
+            const value = await loadReview(requestedRepository, requestedBranch);
+            if (!disposed && revision === reviewRevision && requestedRepository === repository
+              && requestedBranch === footerData.getGitBranch() && !reviewRefreshRequested) {
+              review = value;
+              render();
+            }
+          } catch {
+            // Review discovery is optional when the selected provider CLI or authentication is unavailable.
+          }
+        }
+      } finally {
+        reviewRefreshActive = false;
+      }
+    })();
+  };
   const refreshRepository = () => {
     if (disposed) return;
     repositoryRefreshRequested = true;
@@ -94,7 +128,11 @@ export function createPiFooterComponent(
           repositoryRefreshRequested = false;
           try {
             const value = await loadRepository(context.cwd);
-            if (!disposed && !repositoryRefreshRequested) { repository = value; render(); }
+            if (!disposed && !repositoryRefreshRequested) {
+              repository = value;
+              refreshReview();
+              render();
+            }
           } catch {
             // Keep the local fallback when Git metadata is unavailable.
           }
@@ -108,8 +146,13 @@ export function createPiFooterComponent(
   refreshRepository();
   refreshSettings();
   refreshQuota();
-  const unsubscribeBranch = footerData.onBranchChange(() => { refreshRepository(); render(); });
-  const clock = setInterval(() => { refreshSettings(); refreshQuota(); render(); }, 60_000);
+  const unsubscribeBranch = footerData.onBranchChange(() => {
+    reviewRevision++;
+    review = undefined;
+    refreshRepository();
+    render();
+  });
+  const clock = setInterval(() => { refreshSettings(); refreshQuota(); refreshReview(); render(); }, 60_000);
   clock.unref();
 
   const update = (next: ExtensionContext, history = false) => {
@@ -162,6 +205,7 @@ export function createPiFooterComponent(
         model: context.model?.id,
         effort: context.thinkingLevel,
         location: repositoryFooterLocation(repository, footerData.getGitBranch()),
+        review,
         contextPercent: contextUsage?.percent,
         contextTokens: contextUsage?.tokens,
         compactionTrigger,
@@ -178,6 +222,8 @@ export function createPiFooterComponent(
       quotaRefreshController?.abort();
       quotaRefreshController = undefined;
       repositoryRefreshRequested = false;
+      reviewRefreshRequested = false;
+      reviewRevision++;
       clearInterval(clock);
       unsubscribeBranch();
     },

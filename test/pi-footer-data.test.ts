@@ -78,10 +78,36 @@ test('repository identity distinguishes project, actual checkout root and branch
     assert.equal(location.branch, 'feature/footer');
     assert.equal(location.projectUrl, pathToFileURL(project).href);
     assert.equal(location.worktreeUrl, pathToFileURL(checkout).href);
+    assert.equal(location.editorUrl, 'vscode://file/' + pathToFileURL(checkout).pathname.replace(/^\//, ''));
     assert.equal(location.branchUrl, 'https://github.com/owner/example/tree/feature%2Ffooter');
+    assert.deepEqual(identity.reviewRepository, {
+      provider: 'github', target: 'github.com/owner/example', url: 'https://github.com/owner/example',
+    });
     const renamed = repositoryFooterLocation(identity, 'fix/new');
     assert.equal(renamed.branchUrl, 'https://github.com/owner/example/tree/fix%2Fnew');
-    const main = repositoryFooterLocation(await resolveFooterRepository(project), 'main');
+
+    git(project, 'remote', 'set-url', 'origin', 'https://github.com/owner/example.git');
+    assert.deepEqual((await resolveFooterRepository(project)).reviewRepository, {
+      provider: 'github', target: 'github.com/owner/example', url: 'https://github.com/owner/example',
+    });
+    await writeFile(path.join(project, 'mpxconfig.json'), JSON.stringify({ projectId: 'group/sub/project', repository: { provider: 'gitlab', remote: 'origin' }, issues: { provider: 'github' } }));
+    git(project, 'remote', 'set-url', 'origin', 'https://gitlab.corp.example/group/sub/project.git');
+    assert.deepEqual((await resolveFooterRepository(project)).reviewRepository, {
+      provider: 'gitlab', target: 'gitlab.corp.example/group/sub/project', url: 'https://gitlab.corp.example/group/sub/project',
+    });
+    git(project, 'remote', 'set-url', 'origin', 'ssh://git@gitlab.corp.example/group/sub/project.git');
+    assert.deepEqual((await resolveFooterRepository(project)).reviewRepository, {
+      provider: 'gitlab', target: 'gitlab.corp.example/group/sub/project', url: 'https://gitlab.corp.example/group/sub/project',
+    });
+    git(project, 'remote', 'set-url', 'origin', 'git@gitlab.corp.example:group/sub/project.git');
+    assert.deepEqual((await resolveFooterRepository(project)).reviewRepository, {
+      provider: 'gitlab', target: 'gitlab.corp.example/group/sub/project', url: 'https://gitlab.corp.example/group/sub/project',
+    });
+
+    git(project, 'remote', 'set-url', 'origin', 'https://github.com/owner/example.git?credential=secret');
+    const invalidNetworkTarget = await resolveFooterRepository(project);
+    assert.equal(invalidNetworkTarget.reviewRepository, undefined, 'network lookup rejects rather than normalizing an ambiguous remote');
+    const main = repositoryFooterLocation(invalidNetworkTarget, 'main');
     assert.equal(main.worktree, undefined);
     assert.equal(main.worktreeUrl, undefined);
     const sameBasename = repositoryFooterLocation({ ...identity, worktree: 'project', worktreeRoot: path.join(root, 'linked', 'project') }, 'feature/footer');
