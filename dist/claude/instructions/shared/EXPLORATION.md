@@ -17,7 +17,7 @@ State the breadth and a stopping condition:
 | `very thorough` | exhaust relevant conventions, sibling directories, configuration, and tests |
 
 Breadth controls search scope, not reasoning effort. The canonical explorer declares `exploration`
-as its semantic model class and `medium` as its separate reasoning-effort setting. Runtime profiles
+as its semantic model class and `xhigh` as its separate reasoning-effort setting. Runtime profiles
 resolve that semantic class to a concrete model accepted by the runtime's real `model` field, so
 callers of the declaring agent omit model selection.
 
