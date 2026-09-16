@@ -6,12 +6,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import test, { after } from 'node:test';
-import { apply, prepare } from '../migration/protected-file-change.js';
+import { apply, isAllowedProtectedTarget, prepare as prepareProtected, type PrepareProtectedFileChangeOptions } from '../migration/protected-file-change.js';
+const prepare = (options: PrepareProtectedFileChangeOptions) => prepareProtected({ ...options, projectRoot: path.dirname(options.target) });
 const exec = promisify(execFile);
 const protect = async () => {};
 const temporaryRoots: string[] = [];
 after(async () => { for (const directory of temporaryRoots) await rm(directory, { recursive: true, force: true }); });
-async function fixture(name = '.bashrc', content = 'old\r\n') { const root = await mkdtemp(path.join(os.tmpdir(), 'mpx-protected-')); temporaryRoots.push(root); const target = path.join(root, name); await writeFile(target, content); return { root, target, backup: path.join(root, 'backup') }; }
+async function fixture(name = 'mpxconfig.json', content = 'old\r\n') { const root = await mkdtemp(path.join(os.tmpdir(), 'mpx-protected-')); temporaryRoots.push(root); const target = path.join(root, name); await writeFile(target, content); return { root, target, backup: path.join(root, 'backup') }; }
 
 test('round trip preserves requested newline bytes and standalone recovery is preview-first', async () => {
   const f = await fixture(); const plan = await prepare({ target: f.target, backupRoot: f.backup, transform: () => 'new\r\n', protect }); await apply(plan);
@@ -33,6 +34,26 @@ test('real Windows protection covers both directory and file candidates', { skip
   assert.equal(await readFile(fixtureState.target, 'utf8'), 'old\r\n');
 });
 
+test('allows only exact native settings and profile paths', () => {
+  const root = path.resolve(os.tmpdir(), 'mpx-policy-root');
+  const roots = { home: path.join(root, 'home'), documents: path.join(root, 'documents'), appData: path.join(root, 'appdata'), localAppData: path.join(root, 'localappdata') };
+  const allowed = [
+    path.join(roots.home, '.bashrc'),
+    path.join(roots.home, '.pi', 'agent', 'settings.json'),
+    path.join(roots.home, '.pi', 'agent-work', 'settings.json'),
+    path.join(roots.home, '.claude', 'settings.json'),
+    path.join(roots.home, '.claude-work', 'settings.json'),
+    path.join(roots.home, '.claude', 'settings.local.json'),
+    path.join(roots.home, '.claude-work', 'settings.local.json'),
+    path.join(roots.documents, 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
+    path.join(roots.appData, 'mpx2', 'config.json'),
+    path.join(roots.localAppData, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json'),
+  ];
+  for (const target of allowed) assert.equal(isAllowedProtectedTarget(target, roots), true, target);
+  assert.equal(isAllowedProtectedTarget(path.join(root, 'arbitrary', 'settings.json'), roots), false);
+  assert.equal(isAllowedProtectedTarget(path.join(roots.localAppData, 'Packages', 'OtherTerminal', 'LocalState', 'settings.json'), roots), false);
+});
+
 test('supports selected repository mpxconfig.json conversion without interpreting it', async () => {
   const f = await fixture('mpxconfig.json', '{"old":true}\n'); const plan = await prepare({ target: f.target, backupRoot: f.backup, transform: () => '{"new":true}\n', protect }); await apply(plan); assert.equal(await readFile(f.target, 'utf8'), '{"new":true}\n');
 });
@@ -48,9 +69,9 @@ test('refuses stale source and an existing adjacent candidate', async () => {
 });
 
 test('refuses a target beneath a linked parent', async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'mpx-linked-')); temporaryRoots.push(root); const real = path.join(root, 'real'); await mkdir(real); await writeFile(path.join(real, '.bashrc'), 'old\n'); const linked = path.join(root, 'linked');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'mpx-linked-')); temporaryRoots.push(root); const real = path.join(root, 'real'); await mkdir(real); await writeFile(path.join(real, 'mpxconfig.json'), 'old\n'); const linked = path.join(root, 'linked');
   try { await symlink(real, linked, process.platform === 'win32' ? 'junction' : 'dir'); } catch (error) { t.skip(`symlink unavailable: ${String(error)}`); return; }
-  await assert.rejects(prepare({ target: path.join(linked, '.bashrc'), backupRoot: path.join(root, 'backup'), transform: () => 'new\n', protect }), /symlink/);
+  await assert.rejects(prepare({ target: path.join(linked, 'mpxconfig.json'), backupRoot: path.join(root, 'backup'), transform: () => 'new\n', protect }), /symlink/);
 });
 
 test('post-write checkpoint failure compensates while owned', async () => {

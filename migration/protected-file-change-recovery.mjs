@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, rename } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -12,12 +13,28 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const missing = error => error?.code === 'ENOENT';
 const hex = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-function allowedTarget(file) {
-  if (!path.isAbsolute(file)) return false; const absolute = path.resolve(file);
-  if (['.bashrc', 'mpxconfig.json'].includes(path.basename(absolute))) return true;
-  const appData = process.env.APPDATA;
-  return path.basename(absolute) === 'config.json' && typeof appData === 'string' && path.isAbsolute(appData)
-    && (process.platform === 'win32' ? absolute.toLowerCase() === path.resolve(appData, 'mpx2/config.json').toLowerCase() : absolute === path.resolve(appData, 'mpx2/config.json'));
+function allowedTarget(file, projectRoot) {
+  if (!path.isAbsolute(file)) return false; const absolute = path.resolve(file), home = os.homedir();
+  if (typeof projectRoot === 'string' && path.isAbsolute(projectRoot)) {
+    const expected = path.join(projectRoot, 'mpxconfig.json');
+    if (process.platform === 'win32' ? absolute.toLowerCase() === expected.toLowerCase() : absolute === expected) return true;
+  }
+  const documents = path.join(home, 'Documents');
+  const candidates = [
+    path.join(home, '.bashrc'),
+    path.join(home, '.pi', 'agent', 'settings.json'),
+    path.join(home, '.pi', 'agent-work', 'settings.json'),
+    path.join(home, '.claude', 'settings.json'),
+    path.join(home, '.claude-work', 'settings.json'),
+    path.join(home, '.claude', 'settings.local.json'),
+    path.join(home, '.claude-work', 'settings.local.json'),
+    path.join(documents, 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
+  ];
+  const appData = process.env.APPDATA, localAppData = process.env.LOCALAPPDATA;
+  if (typeof appData === 'string' && path.isAbsolute(appData)) candidates.push(path.join(appData, 'mpx2', 'config.json'));
+  if (typeof localAppData === 'string' && path.isAbsolute(localAppData)) candidates.push(path.join(localAppData, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json'));
+  const same = candidate => process.platform === 'win32' ? absolute.toLowerCase() === path.resolve(candidate).toLowerCase() : absolute === path.resolve(candidate);
+  return candidates.some(same);
 }
 async function physical(file, kind = 'file', allowMissingLeaf = false) {
   const absolute = path.resolve(file); let cursor = absolute;
@@ -41,6 +58,10 @@ async function writeExclusive(file, bytes, mode) { await physical(file, 'either'
 function validate(plan) {
   const states = ['prepared', 'applying', 'applied', 'rolled-back', 'recovery-incomplete'];
   const keys = ['backup','backupRoot','candidate','id','mode','planPath','postHash','preHash','recoveryPath','staged','state','target','version'];
+  if (plan?.projectRoot !== undefined) {
+    if (typeof plan.projectRoot !== 'string' || !path.isAbsolute(plan.projectRoot)) throw new Error('invalid project root');
+    keys.push('projectRoot'); keys.sort();
+  }
   if (!plan || Object.getPrototypeOf(plan) !== Object.prototype || JSON.stringify(Object.keys(plan).sort()) !== JSON.stringify(keys) || plan.version !== 1 || !uuid(plan.id) || !states.includes(plan.state) || !hex(plan.preHash) || !hex(plan.postHash) || !Number.isInteger(plan.mode) || plan.mode < 0 || plan.mode > 0xffffffff) throw new Error('invalid recovery plan');
   for (const key of ['target','backupRoot','backup','staged','candidate','planPath','recoveryPath']) if (typeof plan[key] !== 'string' || !path.isAbsolute(plan[key])) throw new Error('invalid recovery plan');
 }
@@ -49,7 +70,7 @@ export async function recoverProtectedFileChange(planPath, apply = false) {
   if (!path.isAbsolute(planPath)) throw new Error('plan path must be absolute'); planPath = path.resolve(planPath); await physical(planPath, 'file');
   const plan = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBounded(planPath, MAX_PLAN))); validate(plan);
   const target = path.resolve(plan.target), root = path.dirname(planPath), same = (a, b) => process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b);
-  if (!allowedTarget(target) || !same(plan.backupRoot, root) || !same(plan.backup, path.join(root, 'before')) || !same(plan.staged, path.join(root, 'after')) || !same(plan.planPath, planPath) || !same(plan.recoveryPath, path.join(root, 'protected-file-change-recovery.mjs')) || !same(plan.candidate, `${target}.mpx-${plan.id}-candidate`)) throw new Error('recovery paths escaped protected root');
+  if (!allowedTarget(target, plan.projectRoot) || !same(plan.backupRoot, root) || !same(plan.backup, path.join(root, 'before')) || !same(plan.staged, path.join(root, 'after')) || !same(plan.planPath, planPath) || !same(plan.recoveryPath, path.join(root, 'protected-file-change-recovery.mjs')) || !same(plan.candidate, `${target}.mpx-${plan.id}-candidate`)) throw new Error('recovery paths escaped protected root');
   await physical(root, 'directory'); await physical(plan.backup, 'file'); await physical(target, 'file');
   const before = await readBounded(plan.backup, MAX_BYTES); if (hash(before) !== plan.preHash) throw new Error('protected backup mismatch');
   const liveHash = hash(await readBounded(target, MAX_BYTES)); if (liveHash === plan.preHash) return { action: 'already-restored', target, applied: false };
