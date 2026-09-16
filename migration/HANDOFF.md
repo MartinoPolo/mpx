@@ -36,6 +36,14 @@ personal-pilot rollback has a concurrency limitation documented in [account reco
 
 ## Remaining work
 
+### Complete live subagent acceptance
+
+The [quiet-subagent runtime](../extensions/README.md#quiet-subagents) is maintained through Pi and
+subagent dependency patches with installed-package regression tests. Live provider and desktop
+acceptance remain unverified: start a fresh Pi process to check waits, steering, resume, cancellation,
+and Windows attention. No Orca application patch was deployed; aggregate-aware Orca completion
+remains a separate live-evidence decision.
+
 ### Preserve external history and reconcile consumers
 
 1. Inventory branch, HEAD, remotes, status, stashes, reflogs, worktrees, and unreachable objects for

@@ -672,6 +672,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   const unsubscribeQuestion = pi.events.on('rpiv:ask-user:blocked', onQuestionBlocked);
   const unsubscribeActivityRequest = pi.events.on(PI_ACTIVITY_REQUEST_EVENT, onActivityRequest);
   const unsubscribeConsume = pi.events.on('subagents:rpc:consume', refreshConsumedResultsSoon);
+  const unsubscribeDelivery = pi.events.on('subagents:result-delivered', refreshConsumedResultsSoon);
 
   const beginChildRun = (id: string): void => {
     terminalSubagents.delete(id);
@@ -825,6 +826,13 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (own()) aggregate?.startMain(false);
   });
 
+  pi.on('session_abort', () => {
+    if (!own()) return;
+    mainWasCancelled = true;
+    abortTitle();
+    aggregate?.cancelMain();
+  });
+
   pi.on('agent_end', (event) => {
     if (!own() || !isCancelledAgentEnd(event)) return;
     mainWasCancelled = true;
@@ -941,6 +949,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     unsubscribeQuestion();
     unsubscribeActivityRequest();
     unsubscribeConsume();
+    unsubscribeDelivery();
     unsubscribeCreated();
     unsubscribeStarted();
     unsubscribeCompleted();

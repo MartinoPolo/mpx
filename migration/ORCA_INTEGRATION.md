@@ -53,6 +53,17 @@ Pi/Claude runtime.
 These are small integration adapters that MPX maintains. The actual installed Orca hook and Pi extension
 implementations remain Orca-owned.
 
+## Subagent isolation boundary
+
+The [maintained subagent patch](../extensions/README.md#quiet-subagents) excludes parent-only Orca
+extensions before their factories execute: removing handlers after loading cannot undo factory
+side effects. [Installed-package isolation tests](../test/subagent-isolation.test.ts) cover this
+boundary, not installed Orca HTTP callbacks or Windows toasts.
+
+The native Pi cancellation event disarms quiet-result recovery without adding model messages or
+notifications. This integration does not deploy the aggregate-aware Orca candidates below; live
+sender/receiver and desktop acceptance remain separate.
+
 ## Undeployed candidates
 
 - `patches/orca-pi-aggregate.patch` delays whole-session completion while child, background, question, or

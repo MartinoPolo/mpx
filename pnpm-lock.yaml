@@ -5,7 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@tintinweb/pi-subagents@0.19.0': 9e77a8dbd5de43d34991a90687c03664b288bd7b41603f7e0dfc30431ee58af7
+  '@earendil-works/pi-coding-agent@0.85.1': 8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5
+  '@tintinweb/pi-subagents@0.19.0': fcf50338cd9d08d2b06cd6a9f28b1d073f9920388182692456038fd7f2e612cb
 
 importers:
 
@@ -13,13 +14,13 @@ importers:
     dependencies:
       '@earendil-works/pi-coding-agent':
         specifier: 0.85.1
-        version: 0.85.1(ws@8.21.3)
+        version: 0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3)
       '@earendil-works/pi-tui':
         specifier: 0.85.1
         version: 0.85.1
       '@tintinweb/pi-subagents':
         specifier: 0.19.0
-        version: 0.19.0(patch_hash=9e77a8dbd5de43d34991a90687c03664b288bd7b41603f7e0dfc30431ee58af7)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)
+        version: 0.19.0(patch_hash=fcf50338cd9d08d2b06cd6a9f28b1d073f9920388182692456038fd7f2e612cb)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)
       shiki:
         specifier: ^3.23.0
         version: 3.23.0
@@ -1359,7 +1360,7 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-coding-agent@0.85.1(ws@8.21.3)':
+  '@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3)':
     dependencies:
       '@earendil-works/chord': 0.85.1
       '@earendil-works/pi-agent-core': 0.85.1(ws@8.21.3)
@@ -1720,10 +1721,10 @@ snapshots:
 
   '@stablelib/base64@1.0.1': {}
 
-  '@tintinweb/pi-subagents@0.19.0(patch_hash=9e77a8dbd5de43d34991a90687c03664b288bd7b41603f7e0dfc30431ee58af7)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)':
+  '@tintinweb/pi-subagents@0.19.0(patch_hash=fcf50338cd9d08d2b06cd6a9f28b1d073f9920388182692456038fd7f2e612cb)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)':
     dependencies:
       '@earendil-works/pi-ai': 0.85.1(ws@8.21.3)
-      '@earendil-works/pi-coding-agent': 0.85.1(ws@8.21.3)
+      '@earendil-works/pi-coding-agent': 0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3)
       '@earendil-works/pi-tui': 0.85.1
       '@sinclair/typebox': 0.34.52
       croner: 10.0.1

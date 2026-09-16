@@ -632,6 +632,44 @@ test('native registry fixture handles pre-consumption and synchronous consume RP
   }
 });
 
+test('quiet result receipts release only the current consumed native record', async () => {
+  const records = new Map<string, RegistryFixtureRecord>([
+    ['quiet', { status: 'completed', resultConsumed: false }],
+  ]);
+  const restore = installNativeRegistryFixture(records);
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { settleDelayMs: 0, environment: {} });
+  try {
+    await harness.call('session_start');
+    harness.emitBus('subagents:completed', { id: 'quiet', status: 'completed' });
+    harness.emitBus('subagents:result-delivered', { id: 'quiet', runRevision: 1 });
+    await pause();
+    assert.equal(activityEvents(harness).at(-1)?.pendingFollowUps, 1);
+    records.set('quiet', { status: 'completed', resultConsumed: true });
+    harness.emitBus('subagents:result-delivered', { id: 'quiet', runRevision: 2 });
+    await pause();
+    assert.equal(activityEvents(harness).at(-1)?.pendingFollowUps, 0);
+  } finally {
+    await harness.call('session_shutdown', { reason: 'quit' });
+    restore();
+  }
+});
+
+test('native idle cancellation keeps aggregate cancelled without an assistant abort message', async () => {
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { settleDelayMs: 0, environment: {} });
+  try {
+    await harness.call('session_start');
+    await harness.call('before_agent_start');
+    await harness.call('agent_settled');
+    await harness.call('session_abort');
+    await pause();
+    assert.equal(activityEvents(harness).at(-1)?.state, 'cancelled');
+  } finally {
+    await harness.call('session_shutdown', { reason: 'quit' });
+  }
+});
+
 test('individual and grouped native notification message starts release only event-known results', async () => {
   const records = new Map<string, RegistryFixtureRecord>([
     ['one', { status: 'completed', resultConsumed: false }],
