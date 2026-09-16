@@ -396,6 +396,26 @@ test('a child-bound extension instance emits no aggregate activity or child aler
 
 const footerTheme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 
+test('Pi UI footer uses the repository loader supplied by runtime composition', async () => {
+  const harness = extensionHarness();
+  const calls: string[] = [];
+  registerPiUi(harness.pi, {
+    environment: {},
+    loadRepository: async cwd => {
+      calls.push(cwd);
+      return { project: 'fixture', projectRoot: cwd, worktree: 'fixture', worktreeRoot: cwd };
+    },
+  });
+  await harness.call('session_start');
+  const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+    getGitBranch: () => 'main', onBranchChange: () => () => {},
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [harness.ctx.cwd]);
+  component.dispose();
+  await harness.call('session_shutdown', { reason: 'quit' });
+});
+
 test('footer keeps current context tokens, compaction and responsive agents without cumulative tokens/help/ports', async () => {
   const harness = extensionHarness();
   registerPiUi(harness.pi, { settleDelayMs: 0, environment: {} });

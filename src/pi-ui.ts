@@ -5,6 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { withoutDeletedHeaders } from './context.js';
 import { createPiFooterComponent, type PiFooterComponent } from './pi-footer-runtime.js';
+import type { FooterRepository } from './pi-footer-data.js';
 
 export const PI_ACTIVITY_EVENT = 'mpx2:pi-ui:activity';
 export const PI_ACTIVITY_REQUEST_EVENT = 'mpx2:pi-ui:activity:request';
@@ -44,6 +45,7 @@ export interface PiUiOptions {
   environment?: Readonly<Record<string, string | undefined>>;
   readCompactionSettings?: typeof import('./pi-footer-settings.js').readFooterCompactionSettings;
   requestQuota?: typeof import('./pi-footer-quota.js').requestFooterQuota;
+  loadRepository?: (cwd: string) => Promise<FooterRepository>;
 }
 
 interface Timer {
@@ -774,7 +776,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       requestRender = () => tui.requestRender();
       footer = createPiFooterComponent(
         pi, currentContext ?? ctx, tui, theme, footerData,
-        options.environment ?? process.env, () => [...finished.values()], undefined, options.readCompactionSettings, options.requestQuota,
+        options.environment ?? process.env, () => [...finished.values()], options.loadRepository, options.readCompactionSettings, options.requestQuota,
       );
       return footer;
     });

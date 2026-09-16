@@ -43,6 +43,12 @@ history; see `migration/` for those records.
 - **Keep account and repository configuration separate.** User configuration maps personal/work native
   roots, domain roots, defaults, and executables. Repository `mpxconfig.json` selects project identity,
   packs, package manager, repository provider, and Issue provider.
+- **Separate account ownership from project metadata.** Recursive account domains identify personal
+  and work locations; a missing manifest is not an unknown owner. Account mismatches remain overridable
+  warnings. Every launch warning requires acknowledgement before a fullscreen native UI can hide it.
+- **Keep exceptional project metadata machine-local.** Explicit per-project user overrides supply
+  missing metadata or deliberately accept its absence. Existing repository manifests remain authoritative;
+  parent-directory inheritance would risk routing unrelated repositories through the wrong providers.
 - **Keep repository and Issue providers independent.** A GitLab repository may use KanbanFlow Issues;
   skills must route each operation through its selected provider guide rather than infer one from the
   other.

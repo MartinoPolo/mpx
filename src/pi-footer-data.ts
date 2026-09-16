@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { resolveProject } from './config.js';
+import type { UserConfig } from './contracts.js';
 import type { FooterCompaction, FooterLocation, FooterQuotaWindow } from './pi-footer.js';
 
 const executeFile = promisify(execFile);
@@ -149,15 +150,15 @@ function repositoryWebUrl(remote: string | undefined): string | undefined {
   }
 }
 
-export async function resolveFooterRepository(cwd: string): Promise<FooterRepository> {
+export async function resolveFooterRepository(cwd: string, userConfig?: UserConfig): Promise<FooterRepository> {
   const [project, worktreeRoot, gitDirectory] = await Promise.all([
-    resolveProject(cwd),
+    resolveProject(cwd, userConfig),
     gitValue(cwd, ['rev-parse', '--show-toplevel']),
     gitValue(cwd, ['rev-parse', '--absolute-git-dir']),
   ]);
   if (!worktreeRoot) return fallbackFooterRepository(cwd);
   const projectRoot = project.mainCheckout ?? worktreeRoot;
-  const remoteName = project.config?.repository.remote ?? 'origin';
+  const remoteName = project.config?.repository?.remote ?? 'origin';
   const remote = await gitValue(cwd, ['remote', 'get-url', '--', remoteName]);
   const repositoryUrl = repositoryWebUrl(remote);
   return {
@@ -166,8 +167,8 @@ export async function resolveFooterRepository(cwd: string): Promise<FooterReposi
     worktree: path.basename(worktreeRoot),
     worktreeRoot,
     repositoryUrl,
-    provider: project.config?.repository.provider ?? (repositoryUrl?.startsWith('https://github.com/') ? 'github' : undefined),
-    reviewRepository: reviewRepository(remote, project.config?.repository.provider),
+    provider: project.config?.repository?.provider ?? (repositoryUrl?.startsWith('https://github.com/') ? 'github' : undefined),
+    reviewRepository: reviewRepository(remote, project.config?.repository?.provider),
     headUrl: gitDirectory ? pathToFileURL(path.join(gitDirectory, 'HEAD')).href : undefined,
   };
 }

@@ -6,8 +6,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { createLaunchSpec, runLaunch, confirmLaunch } from '../src/launch.js';
-import type { UserConfig } from '../src/contracts.js';
+import { createLaunchSpec, runLaunch, confirmLaunch, formatLaunchWarning } from '../src/launch.js';
+import { LAUNCH_WARNING_CODE, WARNING_SEVERITY, type UserConfig } from '../src/contracts.js';
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'mpx2-launch-'));
@@ -23,10 +23,10 @@ test('additive arguments and selected native roots preserve all caller argument 
   try {
     const args = ['--settings', '{"a":"b c"}', '--', 'line one\nline two', '$(touch nope)', '', 'C:\\a b\\'];
     const packs = { packs: ['development'], paths: [join(f.root, 'pack space')], warnings: [] };
-    const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'work', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
+    const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
     assert.deepEqual(spec.args, ['--verbose', '--skill', packs.paths[0], ...args]);
-    assert.equal(spec.env.PI_CODING_AGENT_DIR, f.config.accounts.work.pi);
-    assert.equal(spec.env.MPX_ACCOUNT, 'work');
+    assert.equal(spec.env.PI_CODING_AGENT_DIR, f.config.accounts.personal.pi);
+    assert.equal(spec.env.MPX_ACCOUNT, 'personal');
     assert.equal(spec.env.MPX_ACTIVE_CONTENT_ROOT, f.root);
     assert.equal(spec.env.MPX_PROJECTS, 'preserved');
     assert.equal(spec.env.MPX_SESSION_ID, undefined);
@@ -41,27 +41,76 @@ test('additive arguments and selected native roots preserve all caller argument 
   } finally { await f.cleanup(); }
 });
 
-test('personal work-domain and either unregistered account wait; path boundaries are not prefixes', async () => {
+test('ownership and configuration warnings are typed, prioritized, deduplicated, and all require confirmation', async () => {
   const f = await fixture();
   try {
     const base = { root: f.root, harness: 'pi' as const, config: f.config, selection: { packs: [], paths: [], warnings: [] }, args: [] };
-    assert.equal((await createLaunchSpec({ ...base, cwd: join(f.root, 'work', 'repo'), account: 'personal', project: registered })).requiresConfirmation, true);
-    assert.equal((await createLaunchSpec({ ...base, cwd: join(f.root, 'work-other'), account: 'personal', project: registered })).requiresConfirmation, false);
-    assert.equal((await createLaunchSpec({ ...base, cwd: f.root, account: 'work', project: { warnings: [] } })).requiresConfirmation, true);
-    assert.equal((await createLaunchSpec({ ...base, cwd: join(f.root, 'elsewhere'), account: 'personal', project: { ...registered, mainCheckout: join(f.root, 'work', 'main') } })).requiresConfirmation, true);
+    const red = await createLaunchSpec({ ...base, cwd: join(f.root, 'work', 'repo'), account: 'personal', project: { warnings: [] } });
+    assert.deepEqual(red.warnings.map(warning => [warning.code, warning.severity]), [
+      ['personal-in-work', 'red'], ['project-config-missing', 'yellow'],
+    ]);
+    assert.equal(red.requiresConfirmation, true);
+    const orange = await createLaunchSpec({ ...base, cwd: join(f.root, 'personal', 'repo'), account: 'work', project: registered });
+    assert.equal(orange.warnings[0]?.code, 'work-in-personal');
+    const unknown = await createLaunchSpec({ ...base, cwd: join(f.root, 'elsewhere'), account: 'personal', project: registered });
+    assert.equal(unknown.warnings[0]?.code, 'ownership-unknown');
+    assert.match(formatLaunchWarning(red.warnings[0]!), /^\x1b\[31m\[personal-in-work\]: /);
+  } finally { await f.cleanup(); }
+});
+
+test('warning formatting retains severity colors without spelling out color names', () => {
+  const colors = {
+    [WARNING_SEVERITY.red]: '\x1b[31m',
+    [WARNING_SEVERITY.orange]: '\x1b[38;5;208m',
+    [WARNING_SEVERITY.yellow]: '\x1b[33m',
+  };
+  for (const severity of Object.values(WARNING_SEVERITY)) {
+    assert.equal(
+      formatLaunchWarning({ code: LAUNCH_WARNING_CODE.projectConfigMissing, severity, message: 'Configuration missing.' }),
+      `${colors[severity]}[project-config-missing]: Configuration missing.\x1b[0m`,
+    );
+  }
+});
+
+test('project diagnostics survive pack selection and do not falsely claim missing configuration', async () => {
+  const f = await fixture();
+  try {
+    for (const code of [LAUNCH_WARNING_CODE.projectConfigInvalid, LAUNCH_WARNING_CODE.projectOverrideInvalid, LAUNCH_WARNING_CODE.projectDiscoveryFailed]) {
+      const spec = await createLaunchSpec({
+        root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config,
+        project: { warnings: [{ code, severity: WARNING_SEVERITY.orange, message: 'Cannot resolve project metadata.' }] },
+        selection: { packs: [], paths: [], warnings: [] }, args: [],
+      });
+      assert.deepEqual(spec.warnings.map(warning => warning.code), [code]);
+      assert.equal(spec.requiresConfirmation, true);
+    }
+  } finally { await f.cleanup(); }
+});
+
+test('work ownership wins across canonical cwd and main checkout locations', async () => {
+  const f = await fixture();
+  try {
+    const spec = await createLaunchSpec({
+      root: f.root, cwd: join(f.root, 'personal', 'linked'), harness: 'pi', account: 'personal', config: f.config,
+      project: { ...registered, mainCheckout: join(f.root, 'work', 'main') }, selection: { packs: [], paths: [], warnings: [] }, args: [],
+    });
+    assert.equal(spec.warnings[0]?.code, 'personal-in-work');
+    assert.match(spec.warnings[0]?.message ?? '', /personal[\\/]linked/);
+    assert.match(spec.warnings[0]?.message ?? '', /work[\\/]main/);
   } finally { await f.cleanup(); }
 });
 
 test('missing account/executable blocks only launch; xpi adds no packs or MPX runtime context', async () => {
   const f = await fixture();
   try {
-    const base = { root: f.root, cwd: f.root, harness: 'pi' as const, account: 'personal' as const, config: f.config, project: registered, selection: { packs: ['development'], paths: ['/pack'], warnings: [] }, args: ['-e', '/explicit.ts'] };
+    const base = { root: f.root, cwd: f.root, harness: 'pi' as const, account: 'personal' as const, config: f.config, project: registered, selection: { packs: ['development'], paths: ['/pack'], warnings: [{ code: 'native-only' as const, severity: 'orange' as const, message: 'packs unavailable' }] }, args: ['-e', '/explicit.ts'] };
     const native = await createLaunchSpec({ ...base, native: true, env: { MPX_ACCOUNT: 'work', MPX_ACTIVE_CONTENT_ROOT: '/old', MPX_WORK: '/kept' } });
     assert.deepEqual(native.args, ['--verbose', '--no-extensions', '-e', '/explicit.ts']);
     assert.equal(native.env.MPX_ACCOUNT, undefined);
     assert.equal(native.env.MPX_ACTIVE_CONTENT_ROOT, undefined);
     assert.equal(native.env.MPX_WORK, '/kept');
     assert.match(native.label, /discovery-disabled/);
+    assert.equal(native.warnings.some(warning => warning.code === 'native-only'), false);
     f.config.executables!.pi = join(f.root, 'missing');
     await assert.rejects(createLaunchSpec(base), /executable/i);
     f.config.executables!.pi = process.execPath;
@@ -89,8 +138,12 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
   try {
     const appdata = join(f.root, 'appdata');
     await mkdir(join(appdata, 'mpx2'), { recursive: true });
-    await exec('git', ['init', '--quiet'], { cwd: f.root });
-    await writeFile(join(f.root, 'mpxconfig.json'), JSON.stringify({ ...registered.config, packs: [] }));
+    const launchDirectories = { personal: join(f.root, 'personal'), work: join(f.root, 'work') };
+    for (const directory of Object.values(launchDirectories)) {
+      await mkdir(directory, { recursive: true });
+      await exec('git', ['init', '--quiet'], { cwd: directory });
+      await writeFile(join(directory, 'mpxconfig.json'), JSON.stringify({ ...registered.config, packs: [] }));
+    }
     const capture = join(f.root, 'capture.mjs');
     await writeFile(capture, 'console.log(JSON.stringify({args:process.argv.slice(2),pi:process.env.PI_CODING_AGENT_DIR,cc:process.env.CLAUDE_CONFIG_DIR,account:process.env.MPX_ACCOUNT,cwd:process.cwd()}));');
     const shim = join(f.root, 'native shim');
@@ -103,14 +156,14 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
       const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
       const command = ['bash', fileURLToPath(new URL(`../bin/${wrapper}`, import.meta.url)), ...nativeArgs].map(quote).join(' ');
       const { stdout } = await exec('bash', ['--noprofile', '--norc', '-c', command], {
-        cwd: f.root, env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
+        cwd: launchDirectories[account], env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
       });
       const actual = JSON.parse(stdout.trim());
       const prefix = wrapper === 'xpi' ? ['--verbose', '--no-extensions'] : harness === 'pi' ? ['--verbose'] : [];
       assert.deepEqual(actual.args, [...prefix, ...nativeArgs]);
       assert.equal(actual[harness === 'pi' ? 'pi' : 'cc'], f.config.accounts[account][harness]);
       assert.equal(actual.account, wrapper === 'xpi' ? undefined : account);
-      assert.equal(actual.cwd, f.root);
+      assert.equal(actual.cwd, launchDirectories[account]);
     }
   } finally { await f.cleanup(); }
 });
@@ -130,4 +183,87 @@ test('mixed-case Windows environment cannot restore stale model/session or accou
 
 test('confirmation does not silently proceed without terminal input', async () => {
   await assert.rejects(confirmLaunch({ requiresConfirmation: true } as never, { isTTY: false } as never), /interactive|terminal/i);
+});
+
+test('readline confirmation handles fragmented arrows and restores null, paused, flowing, and raw input state', async () => {
+  const { PassThrough } = await import('node:stream');
+  class TerminalInput extends PassThrough {
+    isTTY = true; isRaw = false; rawChanges: boolean[] = [];
+    setRawMode(value: boolean) { this.isRaw = value; this.rawChanges.push(value); return this; }
+  }
+  const spec = { requiresConfirmation: true } as never;
+
+  const initiallyNull = new TerminalInput();
+  assert.equal(initiallyNull.readableFlowing, null);
+  const accepted = confirmLaunch(spec, initiallyNull as never);
+  initiallyNull.write(Buffer.from('\x1b')); initiallyNull.write(Buffer.from('[A\r'));
+  await accepted;
+  assert.equal(initiallyNull.isPaused(), true);
+  assert.equal(initiallyNull.listenerCount('keypress'), 0);
+
+  const paused = new TerminalInput(); paused.pause();
+  const pausedResult = confirmLaunch(spec, paused as never); paused.write('\r'); await pausedResult;
+  assert.equal(paused.isPaused(), true);
+
+  const flowing = new TerminalInput(); const observer = () => undefined; flowing.on('data', observer);
+  const flowingResult = confirmLaunch(spec, flowing as never); flowing.write('\r'); await flowingResult;
+  assert.equal(flowing.readableFlowing, true); flowing.off('data', observer);
+
+  const raw = new TerminalInput(); raw.isRaw = true;
+  const alreadyRaw = confirmLaunch(spec, raw as never); raw.write('\n'); await alreadyRaw;
+  assert.equal(raw.isRaw, true);
+});
+
+test('confirmation cleans up when terminal raw-mode setup fails', async () => {
+  const { PassThrough } = await import('node:stream');
+  class BrokenTerminalInput extends PassThrough {
+    isTTY = true; isRaw = false;
+    setRawMode() { throw new Error('raw mode unavailable'); }
+  }
+  const input = new BrokenTerminalInput();
+  await assert.rejects(confirmLaunch({ requiresConfirmation: true } as never, input as never), /raw mode unavailable/);
+  assert.equal(input.listenerCount('keypress'), 0);
+  assert.equal(input.listenerCount('error'), 0);
+  assert.equal(input.isPaused(), true);
+});
+
+test('confirmation releases listeners and flow when raw-mode restoration fails', async () => {
+  const { PassThrough } = await import('node:stream');
+  class BrokenRestoreInput extends PassThrough {
+    isTTY = true; isRaw = false;
+    setRawMode(value: boolean) {
+      if (!value) throw new Error('raw restore unavailable');
+      this.isRaw = true;
+      return this;
+    }
+  }
+  const input = new BrokenRestoreInput();
+  const result = confirmLaunch({ requiresConfirmation: true } as never, input as never);
+  input.write('\r');
+  await assert.rejects(result, /raw restore unavailable/);
+  assert.equal(input.listenerCount('keypress'), 0);
+  assert.equal(input.listenerCount('error'), 0);
+  assert.equal(input.isPaused(), true);
+});
+
+test('readline confirmation rejects Ctrl+C, Escape, EOF, and input errors with cleanup', async () => {
+  const { PassThrough } = await import('node:stream');
+  class TerminalInput extends PassThrough {
+    isTTY = true; isRaw = false;
+    setRawMode(value: boolean) { this.isRaw = value; return this; }
+  }
+  const spec = { requiresConfirmation: true } as never;
+  for (const [action, message] of [
+    [(input: TerminalInput) => input.write(Buffer.from([3])), /Ctrl\+C/],
+    [(input: TerminalInput) => input.write(Buffer.from([27])), /Escape/],
+    [(input: TerminalInput) => input.end(), /input closed/],
+    [(input: TerminalInput) => input.emit('error', new Error('fixture input failure')), /fixture input failure/],
+  ] as const) {
+    const input = new TerminalInput();
+    const result = confirmLaunch(spec, input as never); action(input);
+    await assert.rejects(result, message);
+    assert.equal(input.isPaused(), true);
+    assert.equal(input.listenerCount('keypress'), 0);
+    assert.equal(input.listenerCount('error'), 0);
+  }
 });

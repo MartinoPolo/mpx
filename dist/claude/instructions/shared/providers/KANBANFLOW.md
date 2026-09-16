@@ -1,9 +1,9 @@
 # KanbanFlow Native Guide (`kf`)
 
-Applies only when `issues.provider` in committed `mpxconfig.json` is `kanbanflow`.
-`repository.provider` still independently controls PR and CI. `issues.boardId`, optional
-`issues.boardName`, and every workflow mapping in `issues.states` come exclusively from that
-project configuration. Never run `kf init`, infer a board from local files, remap columns interactively, or write
+Applies only when `issues.provider` in `mpxconfig.json` (or its explicit local override) is `kanbanflow`.
+`repository.provider` still independently controls PR and CI. `issues.metadata.boardId`, optional
+`issues.metadata.boardName`, and every workflow mapping in `issues.metadata.states` come exclusively
+from that project configuration. Never run `kf init`, infer a board from local files, remap columns interactively, or write
 board configuration. Credentials remain in the OS keyring; do not request or expose them.
 
 ## Native command contract
@@ -42,9 +42,9 @@ returned `issueId` or issue `_id` as the immutable target rather than assuming a
 envelope.
 
 Before every read or write, require the single `_id` from `kf board --json` to equal configured
-`issues.boardId`; stop on absence, duplication, or mismatch. Issue identifiers may be a displayed
+`issues.metadata.boardId`; stop on absence, duplication, or mismatch. Issue identifiers may be a displayed
 number such as `E613` or native issue ID. Labels must already exist; `kf` has no label-create
-command. Use only canonical state names whose mappings are present in `mpxconfig.json`; optional
+command. Use only canonical state names whose mappings are present in `mpxconfig.json` or its local override; optional
 `archive` is unsupported when not configured. `--force`, deletion, assignment changes, attachments,
 subtasks, and `grab` require separate explicit workflow authorization.
 

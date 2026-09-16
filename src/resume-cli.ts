@@ -2,7 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import type { Account, Harness, Thinking, UserConfig } from './contracts.js';
 import { listNativeSessions, readClaudeSession, readPiSession, planResume, type NativeSession, type ResumeOverrides } from './resume.js';
 import { prepareResumeLaunch } from './resume-launch.js';
-import { confirmLaunch, runLaunch } from './launch.js';
+import { confirmLaunch, formatLaunchWarning, runLaunch } from './launch.js';
 
 export async function resumeCommand(root: string, config: UserConfig, args: string[]): Promise<number> {
   if (args.length === 1 && args[0] === '--list') {
@@ -54,7 +54,7 @@ export async function resumeCommand(root: string, config: UserConfig, args: stri
   console.error(prepared.spec.label);
   console.error(`Native session ${session.id}\n${session.cwd}`);
   for (const [name, field] of Object.entries(prepared.plan.fields)) if (field) console.error(`${name}: ${field.value} (${field.provenance})`);
-  for (const warning of prepared.spec.warnings) console.error(`Warning: ${warning}`);
+  for (const warning of prepared.spec.warnings) console.error(formatLaunchWarning(warning));
   console.error(prepared.verification.verified ? 'Native Pi model/effort availability preflight passed; verify actual resumed state in the native UI.' : `NOT VERIFIED: ${prepared.verification.reason}`);
   await confirmLaunch(prepared.spec);
   return runLaunch(prepared.spec);

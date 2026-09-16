@@ -243,7 +243,7 @@ export async function verifyPiResumePreflight(
 export async function prepareResumeLaunch(options: PrepareResumeLaunchOptions): Promise<PreparedResumeLaunch> {
   await assertExactAccountRoot(options.session, options.config);
   const plan = await planResume(options.session, options.overrides);
-  const project = await resolveProject(plan.cwd);
+  const project = await resolveProject(plan.cwd, options.config);
   const selection = await selectPacks(options.root, plan.harness, plan.account, project, options.config);
   const spec = await createLaunchSpec({
     root: options.root, cwd: plan.cwd, harness: plan.harness, account: plan.account,

@@ -40,6 +40,22 @@ test('command help exposes the same scoped sync syntax as validation errors', as
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
+test('project config reports override provenance and explicit omission as JSON', async () => {
+  const f = await fixture();
+  try {
+    const configFile = join(f.root, 'mpx2', 'config.json');
+    const user = JSON.parse(await readFile(configFile, 'utf8'));
+    user.projectOverrides = [{ path: f.root, omitConfig: true }];
+    await writeFile(configFile, JSON.stringify(user));
+    const result = await f.run('project', 'config', f.root);
+    assert.equal(result.code, 0, result.stderr);
+    const selection = JSON.parse(result.stdout);
+    assert.equal(selection.configOmitted, true);
+    assert.equal(selection.configPath, f.root);
+    assert.deepEqual(selection.warnings, []);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 test('retired legacy launch command cannot launch', async () => {
   const f = await fixture();
   try {
@@ -58,6 +74,7 @@ test('status honors configured defaults and reports missing agent links without 
   try {
     const result = await f.run('status');
     assert.equal(result.code, 1, 'configured missing installation must not look healthy');
+    assert.match(result.stdout, /Project: metadata missing/);
     assert.match(result.stdout, /work\/pi: native skills only/);
     assert.match(result.stdout, /Agent links/);
     assert.match(result.stdout, /missing/);

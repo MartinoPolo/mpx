@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -49,6 +49,19 @@ function userConfig(overrides: Partial<UserConfig> = {}): UserConfig {
   };
 }
 
+test('parseRepositoryConfig accepts a projectId-only configuration', () => {
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'personal/orca' }), { projectId: 'personal/orca' });
+});
+
+test('parseRepositoryConfig accepts repository and issue roles independently', () => {
+  assert.deepEqual(parseRepositoryConfig({
+    projectId: 'repository-only', repository: repositoryConfig.repository,
+  }), { projectId: 'repository-only', repository: repositoryConfig.repository });
+  assert.deepEqual(parseRepositoryConfig({
+    projectId: 'issues-only', issues: repositoryConfig.issues,
+  }), { projectId: 'issues-only', issues: repositoryConfig.issues });
+});
+
 test('parseRepositoryConfig accepts independent supported providers and manager metadata', () => {
   assert.deepEqual(parseRepositoryConfig(repositoryConfig), repositoryConfig);
   for (const provider of ['github', 'gitlab', 'gerrit'] as const) {
@@ -58,9 +71,18 @@ test('parseRepositoryConfig accepts independent supported providers and manager 
       issues: { provider: 'kanbanflow', metadata: { boardId: 'board' } },
       packageManager: 'bun',
     });
-    assert.equal(parsed.repository.provider, provider);
-    assert.equal(parsed.issues.provider, 'kanbanflow');
+    assert.deepEqual(parsed.repository, { provider, remote: 'origin' });
+    assert.deepEqual(parsed.issues, { provider: 'kanbanflow', metadata: { boardId: 'board' } });
   }
+});
+
+test('parseRepositoryConfig strictly rejects malformed provided repository and issue roles', () => {
+  for (const [value, message] of [
+    [{ projectId: 'fixture', repository: null }, /repository must be an object/],
+    [{ projectId: 'fixture', repository: { provider: 'github' } }, /repository remote/],
+    [{ projectId: 'fixture', issues: [] }, /issues must be an object/],
+    [{ projectId: 'fixture', issues: { provider: 'github', extra: true } }, /unsupported field extra/],
+  ] as const) assert.throws(() => parseRepositoryConfig(value), message);
 });
 
 test('parseRepositoryConfig rejects malformed configuration and local issues directly', () => {
@@ -175,6 +197,103 @@ test('readUserConfig rejects missing paths, unsupported expansion, aliases, and 
   await assert.rejects(readUserConfig(file), /ambiguous.*domain/i);
 });
 
+test('readUserConfig retains safely identifiable malformed project overrides as local diagnostics', async () => {
+  const root = await temporaryDirectory('mpx-config-invalid-override-');
+  const file = path.join(root, 'config.json');
+  await writeFile(file, JSON.stringify({
+    accounts: {
+      personal: { pi: path.join(root, 'ppi'), claude: path.join(root, 'pcc') },
+      work: { pi: path.join(root, 'wpi'), claude: path.join(root, 'wcc') },
+    },
+    domains: { personal: [], work: [] },
+    projectOverrides: [{ path: path.join(root, 'project'), config: { projectId: '' } }],
+  }));
+  const config = await readUserConfig(file);
+  assert.match(config.projectOverrideDiagnostics?.[0]?.message ?? '', /projectId/);
+});
+
+test('a non-Git folder accepts a direct minimal manifest without a missing-config warning', async () => {
+  const root = await temporaryDirectory('mpx-config-minimal-folder-');
+  await writeFile(path.join(root, 'mpxconfig.json'), JSON.stringify({ projectId: 'personal/orca' }));
+  const selected = await resolveProject(root);
+  assert.deepEqual(selected.config, { projectId: 'personal/orca' });
+  assert.equal(selected.configSource, 'manifest');
+  assert.deepEqual(selected.warnings, []);
+});
+
+test('project overrides provide absent configs, preserve manifests, and diagnose matching malformed overrides', async () => {
+  const root = await temporaryDirectory('mpx-config-overrides-');
+  const project = path.join(root, 'project');
+  await mkdir(project);
+  git(project, 'init');
+  const overrideConfig = { projectId: 'override' };
+  const fallback = userConfig({ projectOverrides: [{ path: project, config: overrideConfig }] });
+  const selected = await resolveProject(project, fallback);
+  assert.equal(selected.config?.projectId, 'override');
+  assert.equal(selected.configSource, 'override');
+  assert.equal(selected.configPath, await realpath(project));
+
+  await writeFile(path.join(project, 'mpxconfig.json'), JSON.stringify(repositoryConfig));
+  assert.equal((await resolveProject(project, fallback)).config?.projectId, 'example');
+
+  await rm(path.join(project, 'mpxconfig.json'));
+  const malformed = userConfig({ projectOverrideDiagnostics: [{ path: project, message: 'repository config projectId must be a non-empty string' }] });
+  const invalid = await resolveProject(project, malformed);
+  assert.equal(invalid.config, undefined);
+  assert.equal(invalid.warnings[0]?.code, 'project-override-invalid');
+  assert.equal(invalid.warnings[0]?.severity, 'orange');
+});
+
+test('Git discovery failures do not leak recursive ordinary-folder overrides or add missing-config warnings', async () => {
+  const root = await temporaryDirectory('mpx-config-git-failure-');
+  const parent = path.join(root, 'ordinary');
+  const nested = path.join(parent, 'nested-repository');
+  await mkdir(nested, { recursive: true });
+  const shim = path.join(root, 'git-failure.mjs');
+  await writeFile(shim, `process.stderr.write('fixture git unavailable'); process.exitCode = 2;`);
+  const selected = await resolveProject(nested, userConfig({
+    projectOverrides: [{ path: parent, config: { projectId: 'must-not-leak' } }],
+  }), { gitExecutable: process.execPath, gitArguments: [shim] });
+  assert.equal(selected.config, undefined);
+  assert.deepEqual(selected.warnings.map(warning => warning.code), ['project-discovery-failed']);
+  assert.equal(selected.warnings[0]?.severity, 'orange');
+  assert.match(selected.warnings[0]?.message ?? '', new RegExp(nested.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(selected.warnings[0]?.message ?? '', /fixture git unavailable/);
+});
+
+test('broken Git metadata is not treated as an ordinary folder', async () => {
+  const root = await temporaryDirectory('mpx-config-broken-git-');
+  const nested = path.join(root, 'repository');
+  await mkdir(nested);
+  const config = userConfig({
+    projectOverrides: [{ path: root, config: { projectId: 'must-not-leak' } }],
+  });
+  await writeFile(path.join(nested, '.git'), 'gitdir: missing-metadata\n');
+  const selected = await resolveProject(nested, config);
+  assert.equal(selected.config, undefined);
+  assert.deepEqual(selected.warnings.map(warning => warning.code), ['project-discovery-failed']);
+  await rm(path.join(nested, '.git'));
+  await mkdir(path.join(nested, '.git'));
+  const child = path.join(nested, 'child');
+  await mkdir(child);
+  const corruptDirectory = await resolveProject(child, config);
+  assert.equal(corruptDirectory.config, undefined);
+  assert.deepEqual(corruptDirectory.warnings.map(warning => warning.code), ['project-discovery-failed']);
+});
+
+test('non-Git overrides recurse but never leak into a nested Git repository', async () => {
+  const root = await temporaryDirectory('mpx-config-ordinary-');
+  const parent = path.join(root, 'ordinary');
+  const child = path.join(parent, 'child');
+  const repository = path.join(parent, 'repository');
+  await mkdir(child, { recursive: true });
+  await mkdir(repository);
+  git(repository, 'init');
+  const config = userConfig({ projectOverrides: [{ path: parent, config: repositoryConfig }] });
+  assert.equal((await resolveProject(child, config)).configSource, 'override');
+  assert.equal((await resolveProject(repository, config)).config, undefined);
+});
+
 test('resolveProject handles main checkout, subdirectories, and a fresh linked worktree', async () => {
   const root = await temporaryDirectory('mpx-config-git-');
   const main = path.join(root, 'main');
@@ -199,6 +318,10 @@ test('resolveProject handles main checkout, subdirectories, and a fresh linked w
   const linkedSelection = await resolveProject(linked);
   assert.equal(linkedSelection.mainCheckout, await realpath(main));
   assert.deepEqual(linkedSelection.config?.packs, []);
+
+  await writeFile(path.join(main, 'mpxconfig.json'), '{broken');
+  const malformedLinked = await resolveProject(linked);
+  assert.match(malformedLinked.warnings[0]?.message ?? '', new RegExp(path.join(main, 'mpxconfig.json').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('resolveProject finds a separate-git-dir main checkout and its linked worktrees', async () => {
@@ -232,23 +355,27 @@ test('resolveProject treats a bare repository as having no registered checkout',
   const root = await temporaryDirectory('mpx-config-bare-git-');
   const bare = path.join(root, 'bare.git');
   git(root, 'init', '--bare', bare);
-  assert.deepEqual(await resolveProject(bare), { warnings: [] });
+  const selection = await resolveProject(bare, userConfig({
+    projectOverrides: [{ path: root, config: { projectId: 'must-not-recurse-into-bare' } }],
+  }));
+  assert.equal(selection.config, undefined);
+  assert.equal(selection.warnings[0]?.code, 'project-config-missing');
 });
 
 test('resolveProject treats no Git, missing manifest, and malformed manifest as unregistered', async () => {
   const root = await temporaryDirectory('mpx-config-unregistered-');
-  assert.deepEqual(await resolveProject(root), { warnings: [] });
+  assert.equal((await resolveProject(root)).warnings[0]?.code, 'project-config-missing');
 
   git(root, 'init');
   const missing = await resolveProject(root);
   assert.equal(missing.config, undefined);
   assert.equal(missing.mainCheckout, await realpath(root));
-  assert.deepEqual(missing.warnings, []);
+  assert.equal(missing.warnings[0]?.code, 'project-config-missing');
 
   await writeFile(path.join(root, 'mpxconfig.json'), '{broken');
   const malformed = await resolveProject(root);
   assert.equal(malformed.config, undefined);
-  assert.match(malformed.warnings.join('\n'), /mpxconfig\.json.*invalid/i);
+  assert.match(malformed.warnings.map(warning => warning.message).join('\n'), /mpxconfig\.json.*invalid/i);
 });
 
 test('selectPacks applies account defaults and configured defaults', async () => {
@@ -287,17 +414,17 @@ test('selectPacks falls back on unsafe, unknown, or unavailable explicit selecti
     });
     assert.deepEqual(result.packs, ['development', 'personal']);
     assert.deepEqual(result.paths, [development, personal]);
-    assert.match(result.warnings.join('\n'), /selection.*fallback/i);
+    assert.match(result.warnings.map(warning => warning.message).join('\n'), /selection.*fallback/i);
   }
 
   const nativeOnlyRoot = await temporaryDirectory('mpx-config-native-only-');
   const result = await selectPacks(nativeOnlyRoot, 'pi', 'work', {
-    config: { ...repositoryConfig, packs: ['missing'] }, warnings: ['manifest warning'],
+    config: { ...repositoryConfig, packs: ['missing'] }, warnings: [{ code: 'project-config-invalid', severity: 'orange', message: 'manifest warning' }],
   });
   assert.deepEqual(result.packs, []);
   assert.deepEqual(result.paths, []);
-  assert.match(result.warnings.join('\n'), /manifest warning/);
-  assert.match(result.warnings.join('\n'), /native skills only/i);
+  assert.match(result.warnings.map(warning => warning.message).join('\n'), /manifest warning/);
+  assert.match(result.warnings.map(warning => warning.message).join('\n'), /native skills only/i);
 });
 
 test('selectPacks requires directories and keeps concurrent repository selections isolated', async () => {
@@ -314,5 +441,5 @@ test('selectPacks requires directories and keeps concurrent repository selection
   assert.deepEqual(second, { packs: ['beta'], paths: [beta], warnings: [] });
   assert.deepEqual(fileSelection.packs, []);
   assert.deepEqual(fileSelection.paths, []);
-  assert.match(fileSelection.warnings.join('\n'), /selection.*fallback/i);
+  assert.match(fileSelection.warnings.map(warning => warning.message).join('\n'), /selection.*fallback/i);
 });

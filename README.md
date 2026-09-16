@@ -18,6 +18,7 @@ Run these from Git Bash:
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --runtime-only --account personal --harness pi --preview` | Preview one account/harness runtime scope |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --orca-hooks-only --harness pi --preview` | Preview only Orca-owned Pi extension mirroring |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" project setup --preview` | Preview optional project setup |
+| `mpx project config <directory>` | Inspect `mpxconfig.json` or its local override |
 
 Bare `mpx` and the account commands now use this checkout. Legacy recovery and suffixed launchers
 are removed. PowerShell and the Windows `mpx.cmd` shim explicitly select Git Bash rather than the
@@ -37,16 +38,72 @@ A repository may define `mpxconfig.json`:
 }
 ```
 
-Repository and Issue providers are independent. Supported repository providers are GitHub, GitLab,
-and Gerrit; supported Issue providers are GitHub and KanbanFlow. An explicit empty `packs` array
+Repository and Issue providers are independent and optional. Ordinary folders can use a minimal
+`mpxconfig.json` such as `{ "projectId": "personal/assets" }`, without inventing a repository or tracker.
+A provider-dependent workflow still requires its corresponding role. Supported repository providers
+are GitHub, GitLab, and Gerrit; supported Issue providers are GitHub and KanbanFlow. An explicit empty `packs` array
 loads no MPX global packs while retaining native project and account resources. Linked worktrees use
 the main checkout's configuration.
 
 User configuration lives at `$APPDATA/mpx2/config.json` and maps personal/work Pi and Claude roots,
-domain roots, optional default packs, and executable overrides. MPX never copies credentials or
-conversation history between profiles. Claude's explicitly configured native permission mode,
+recursive domain roots, optional default packs, executable overrides, and local project overrides.
+Domain ownership and project configuration are independent: a personal folder can still have missing
+or invalid project metadata. MPX never copies credentials or conversation history between profiles. Claude's explicitly configured native permission mode,
 including Auto, is preserved; Orca's Manual launch option means no bypass flag, not a forced Claude
 permission mode.
+
+### Launch warnings
+
+Launchers display all warnings before starting the native UI and wait for one explicit acknowledgement.
+Enter continues; Ctrl+C or Escape cancels. Warnings never expire automatically. Prepared Orca
+resurrection commands use the same acknowledgement before executing the native process. A noninteractive launch cannot
+acknowledge warnings; use `mpx launch-preview pi personal` to inspect without starting a session.
+
+| Situation | Color |
+| --- | --- |
+| Personal account opening a work folder | Red |
+| Work account opening a personal folder | Orange |
+| Folder outside recognized account domains | Yellow |
+| Missing project configuration | Yellow |
+| Invalid or unreadable project configuration | Orange |
+| Git project discovery failed | Orange |
+| Requested packs unavailable, or fallback packs unavailable | Orange |
+
+Domain checks consider the current directory and the Git main checkout, including resolved filesystem
+links. A work location takes precedence when a worktree and its main checkout have different ownership.
+Warnings do not switch accounts or prohibit a launch after acknowledgement. Missing executables or
+unusable account configuration can still prevent startup.
+
+### Machine-local project configuration
+
+For repositories where committing MPX metadata is inappropriate, add a `projectOverrides` entry to
+user configuration. These settings stay on the machine; no parent-directory `mpxconfig.json` is inherited.
+
+```json
+{
+  "projectOverrides": [
+    {
+      "path": "${MPX_WORK}/example",
+      "config": {
+        "projectId": "example",
+        "repository": { "provider": "gitlab", "remote": "origin" },
+        "issues": { "provider": "kanbanflow", "metadata": { "boardId": "example" } }
+      }
+    },
+    { "path": "${MPX_AI_GENERATED}", "omitConfig": true }
+  ]
+}
+```
+
+Use either `config` or `omitConfig: true`, not both. An existing repository manifest remains
+authoritative, including its validation errors; a local entry cannot silently replace a broken file.
+`omitConfig` explicitly accepts absent metadata, rather than inventing providers for an ordinary folder.
+Repository entries match their Git main checkout, so linked worktrees share the same configuration.
+An ordinary-folder entry can cover its subfolders but does not supply metadata to nested Git repositories.
+Account domains still determine which account warnings appear. Git discovery failures do not grant
+ordinary-folder fallback behavior to an unidentified repository. `mpx project config <directory>`
+returns the same resolved metadata as the launcher, allowing workflows to use local overrides without
+writing them into a repository.
 
 Both Claude accounts load the main and subagent status lines from
 [`src/claude-statusline/`](src/claude-statusline/README.md). Their existing layout is retained without

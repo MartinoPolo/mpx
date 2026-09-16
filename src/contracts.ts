@@ -28,14 +28,42 @@ export interface BuildResult { files: string[]; changed: string[] }
 
 export interface RepositoryConfig {
   projectId: string;
-  repository: { provider: 'github' | 'gitlab' | 'gerrit'; remote: string };
-  issues: { provider: 'github' | 'kanbanflow'; metadata?: Record<string, unknown> };
+  repository?: { provider: 'github' | 'gitlab' | 'gerrit'; remote: string };
+  issues?: { provider: 'github' | 'kanbanflow'; metadata?: Record<string, unknown> };
   packageManager?: 'pnpm' | 'npm' | 'yarn' | 'bun';
   packs?: string[];
 }
+export const WARNING_SEVERITY = { red: 'red', orange: 'orange', yellow: 'yellow' } as const;
+export type WarningSeverity = (typeof WARNING_SEVERITY)[keyof typeof WARNING_SEVERITY];
+export const LAUNCH_WARNING_CODE = {
+  projectConfigInvalid: 'project-config-invalid',
+  projectOverrideInvalid: 'project-override-invalid',
+  projectConfigMissing: 'project-config-missing',
+  projectDiscoveryFailed: 'project-discovery-failed',
+  packFallback: 'pack-fallback',
+  nativeOnly: 'native-only',
+  personalInWork: 'personal-in-work',
+  workInPersonal: 'work-in-personal',
+  ownershipUnknown: 'ownership-unknown',
+} as const;
+export type LaunchWarningCode = (typeof LAUNCH_WARNING_CODE)[keyof typeof LAUNCH_WARNING_CODE];
+export interface LaunchWarning { code: LaunchWarningCode; severity: WarningSeverity; message: string }
+const WARNING_PRIORITY = { red: 0, orange: 1, yellow: 2 } satisfies Record<WarningSeverity, number>;
+export function sortLaunchWarnings(warnings: readonly LaunchWarning[]): LaunchWarning[] {
+  const unique = new Map<string, LaunchWarning>();
+  for (const warning of warnings) unique.set(`${warning.code}\0${warning.message}`, warning);
+  return [...unique.values()].sort((left, right) => WARNING_PRIORITY[left.severity] - WARNING_PRIORITY[right.severity]
+    || left.code.localeCompare(right.code) || left.message.localeCompare(right.message));
+}
+export type ProjectOverride =
+  | { path: string; config: RepositoryConfig; omitConfig?: never }
+  | { path: string; omitConfig: true; config?: never };
 export interface UserConfig {
   accounts: Record<Account, Record<Harness, string>>;
   domains: Record<Account, string[]>;
+  projectOverrides?: ProjectOverride[];
+  /** Parse diagnostics retained by readUserConfig; not a user-authored field. */
+  projectOverrideDiagnostics?: { path: string; message: string }[];
   defaultPacks?: Partial<Record<Account, string[]>>;
   executables?: Partial<Record<Harness, string>>;
   piTitle?: { provider: string; model: string; thinking: Thinking };
@@ -43,15 +71,18 @@ export interface UserConfig {
 export interface ProjectSelection {
   mainCheckout?: string;
   config?: RepositoryConfig;
-  warnings: string[];
+  configSource?: 'manifest' | 'override';
+  configPath?: string;
+  configOmitted?: boolean;
+  warnings: LaunchWarning[];
 }
-export interface PackSelection { packs: string[]; paths: string[]; warnings: string[] }
+export interface PackSelection { packs: string[]; paths: string[]; warnings: LaunchWarning[] }
 export interface LaunchSpec {
   executable: string;
   args: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
   label: string;
-  warnings: string[];
+  warnings: LaunchWarning[];
   requiresConfirmation: boolean;
 }

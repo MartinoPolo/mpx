@@ -7,8 +7,8 @@ import { scanStagedSecrets } from './safeguards/staged-secrets.js';
 import { evaluatePackageManager } from './safeguards/package-manager.js';
 import { build, checkOutput } from './compiler.js';
 import { readUserConfig, resolveProject, selectPacks } from './config.js';
-import { createLaunchSpec, confirmLaunch, runLaunch } from './launch.js';
-import type { Account, Harness } from './contracts.js';
+import { createLaunchSpec, confirmLaunch, formatLaunchWarning, runLaunch } from './launch.js';
+import { sortLaunchWarnings, type Account, type Harness } from './contracts.js';
 import { resumeCommand } from './resume-cli.js';
 import { syncRuntime, syncRuntimeScope } from './runtime-install.js';
 import { setupProject, orcaProjectSnippet } from './project.js';
@@ -40,15 +40,16 @@ async function main(): Promise<number> {
     }
     case 'status': {
       const drift = await checkOutput(root);
-      const project = await resolveProject(process.cwd());
       const config = await optionalUserConfig();
+      const project = await resolveProject(process.cwd(), config);
       console.log(drift.length ? `Output drift:\n${drift.map(file => `  ${file}`).join('\n')}` : 'Committed projection bytes match canonical source.');
-      console.log(`Project: ${project.config?.projectId ?? 'unregistered'}${project.mainCheckout ? ` (${project.mainCheckout})` : ''}`);
+      const projectLabel = project.config?.projectId ?? (project.configOmitted ? 'metadata omitted' : 'metadata missing');
+      console.log(`Project: ${projectLabel}${project.mainCheckout ? ` (${project.mainCheckout})` : ''}`);
       for (const account of ['personal', 'work'] as const) {
         for (const harness of ['pi', 'claude'] as const) {
           const selection = await selectPacks(root, harness, account, project, config);
           console.log(`${account}/${harness}: ${selection.packs.join(', ') || 'native skills only'}`);
-          for (const warning of selection.warnings) console.warn(`Warning: ${warning}`);
+          for (const warning of sortLaunchWarnings(selection.warnings)) console.warn(formatLaunchWarning(warning));
         }
       }
       let missingLinks = false;
@@ -89,14 +90,14 @@ async function main(): Promise<number> {
       const harness: Harness = harnessName === 'claude' ? 'claude' : 'pi';
       const account = accountName as Account;
       const config = await readUserConfig(userConfigPath());
-      const project = await resolveProject(process.cwd());
+      const project = await resolveProject(process.cwd(), config);
       const selection = await selectPacks(root, harness, account, project, config);
       const spec = await createLaunchSpec({ root, cwd: process.cwd(), harness, account, config, project, selection, args: callerArgs, native: harnessName === 'xpi' });
       console.error(spec.label);
-      for (const warning of spec.warnings) console.error(`\x1b[33mWarning: ${warning}\x1b[0m`);
+      for (const warning of spec.warnings) console.error(formatLaunchWarning(warning));
       if (command === 'launch-preview') {
         // Never print the full inherited environment: it may contain provider credentials.
-        console.log(JSON.stringify({ executable: spec.executable, args: spec.args, cwd: spec.cwd, accountRoot: config.accounts[account][harness], packs: selection.packs, requiresConfirmation: spec.requiresConfirmation }, null, 2));
+        console.log(JSON.stringify({ executable: spec.executable, args: spec.args, cwd: spec.cwd, accountRoot: config.accounts[account][harness], packs: selection.packs, warnings: spec.warnings, requiresConfirmation: spec.requiresConfirmation }, null, 2));
         return 0;
       }
       await confirmLaunch(spec);
@@ -209,6 +210,13 @@ async function main(): Promise<number> {
     case 'resume':
       return resumeCommand(root, await readUserConfig(userConfigPath()), args);
     case 'project': {
+      if (args[0] === 'config') {
+        if (args.length > 2) throw new Error('Usage: mpx project config [directory]');
+        const config = await optionalUserConfig();
+        const selection = await resolveProject(resolve(args[1] ?? process.cwd()), config);
+        console.log(JSON.stringify(selection, null, 2));
+        return selection.config || selection.configOmitted ? 0 : 1;
+      }
       if (args[0] !== 'setup' || args.slice(2).some(arg => !['--preview', '--non-interactive'].includes(arg))) throw new Error('Usage: mpx project setup <directory> [--preview] [--non-interactive]');
       const result = await setupProject(resolve(args[1] ?? '.'), args.includes('--preview'));
       console.log(`${result.status}: ${result.source} -> ${result.destination}${result.diagnostic ? ` (${result.diagnostic})` : ''}`);
@@ -216,7 +224,7 @@ async function main(): Promise<number> {
       return result.status === 'conflict' ? 1 : 0;
     }
     default:
-      console.log(`MPX2 development checkout\nCommands: build, status, ${syncSyntax}, project setup, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
+      console.log(`MPX2 development checkout\nCommands: build, status, ${syncSyntax}, project setup, project config, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
       return command ? 1 : 0;
   }
 }

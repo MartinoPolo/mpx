@@ -1,4 +1,5 @@
 import { win32 } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { LaunchSpec } from './contracts.js';
 import type { PreparedResumeLaunch } from './resume-launch.js';
 
@@ -102,10 +103,18 @@ export function buildPreparedLaunchCommand(
     })
     .map(([, entry]) => entry)
     .sort((left, right) => left.key.localeCompare(right.key));
+  const requiresAcknowledgement = launch.spec.warnings.length > 0 || launch.spec.requiresConfirmation;
+  const confirmationCommand = [
+    process.execPath,
+    fileURLToPath(new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url)),
+    fileURLToPath(new URL('./confirm-launch-cli.ts', import.meta.url)),
+    JSON.stringify(launch.spec.warnings),
+  ].map(shellQuote).join(' ');
   const statements = [
     `cd -- ${shellQuote(launch.spec.cwd.replaceAll('\\', '/'))} || exit 1`,
     ...(unset.length > 0 ? [`unset -v ${unset.map(shellQuote).join(' ')}`] : []),
     ...assign.map(({ key, value }) => `export ${key}=${shellQuote(value)}`),
+    ...(requiresAcknowledgement ? [`${confirmationCommand} || exit $?`] : []),
     `exec ${[launch.spec.executable, ...launch.spec.args].map(shellQuote).join(' ')}`,
   ];
   return statements.join('; ');

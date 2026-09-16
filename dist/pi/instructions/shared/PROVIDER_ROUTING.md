@@ -6,9 +6,11 @@ typed Issue, Review, or CI facade commands.
 
 ## Resolve only the roles needed
 
-From the explicit repository or board working directory, walk toward the filesystem root and stop at
-the nearest committed `mpxconfig.json`. Do not skip an invalid nearer file. Parse it as JSON and
-validate the project and role fields needed by the operation.
+Resolve `mpxconfig.json` from the Git main checkout, or the current directory for a non-Git folder.
+Do not inherit parent manifests or skip an invalid file. If the file is absent, an explicitly configured
+machine-local project override may supply the same fields; `mpx project config <directory>` inspects
+that configuration. Without either source, stop provider-dependent work rather than infer providers.
+Validate only the project and role fields needed by the operation.
 
 - Issue and board work selects `issues.provider`.
 - PR and CI work selects `repository.provider`.
@@ -40,7 +42,7 @@ terminal `.git`. Preserve the complete namespace path and host. If a caller-supp
 conflicts, stop rather than choosing silently.
 
 For KanbanFlow, run `kf` at the repository root, read `kf board --json`, and require its single
-board `_id` to equal configured `issues.boardId` before any operation. Validate configured state
+board `_id` to equal configured `issues.metadata.boardId` before any operation. Validate configured state
 mappings before movement. A local Issue provider is unsupported and receives a manual handoff.
 
 Use explicit Issue, PR, run, job, branch, repository, project, and board IDs. Capture returned

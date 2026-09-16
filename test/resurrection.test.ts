@@ -1,4 +1,9 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import type { PreparedResumeLaunch } from '../src/resume-launch.js';
 import {
@@ -31,7 +36,7 @@ function prepared(overrides: Partial<PreparedResumeLaunch> = {}): PreparedResume
         MPX_ACCOUNT: 'work',
         MPX_ACTIVE_CONTENT_ROOT: 'C:\\mpx2',
       },
-      label: 'MPX2 · WORK · Pi', warnings: ['visible warning'], requiresConfirmation: false,
+      label: 'MPX2 · WORK · Pi', warnings: [{ code: 'ownership-unknown', severity: 'yellow', message: 'visible warning' }], requiresConfirmation: true,
     },
     verification: {
       verified: true, method: 'pi-rpc-read-only-preflight',
@@ -80,6 +85,37 @@ test('adapter fails closed on unverified, mismatched, non-Pi, and permission-byp
   assert.throws(() => adaptPreparedPiResurrection(claude), /Pi resumes only/);
 });
 
+test('command confirms typed warnings before the unchanged native exec', () => {
+  const source = prepared();
+  source.spec.warnings = [
+    { code: 'work-in-personal', severity: 'orange', message: "don't launch silently" },
+    { code: 'ownership-unknown', severity: 'yellow', message: 'visible warning' },
+  ];
+  const command = buildPreparedLaunchCommand(adaptPreparedPiResurrection(source), source.spec.env);
+  const tsxCli = fileURLToPath(new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url));
+  const confirmationCli = fileURLToPath(new URL('../src/confirm-launch-cli.ts', import.meta.url));
+  const expectedWarnings = JSON.stringify(source.spec.warnings);
+  const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
+  const confirmation = [process.execPath, tsxCli, confirmationCli, expectedWarnings].map(quote).join(' ');
+  const native = `exec ${[source.spec.executable, ...source.spec.args].map(quote).join(' ')}`;
+  assert.ok(command.includes(`${confirmation} || exit $?; ${native}`), command);
+  assert.ok(command.indexOf(confirmation) < command.indexOf(native));
+});
+
+test('warnings cannot bypass acknowledgement when a stale caller clears the confirmation flag', () => {
+  const source = prepared();
+  source.spec.requiresConfirmation = false;
+  const command = buildPreparedLaunchCommand(adaptPreparedPiResurrection(source), source.spec.env);
+  assert.match(command, /confirm-launch-cli\.ts/);
+});
+
+test('an explicit confirmation request with no diagnostics still invokes acknowledgement', () => {
+  const source = prepared();
+  source.spec.warnings = [];
+  const command = buildPreparedLaunchCommand(adaptPreparedPiResurrection(source), source.spec.env);
+  assert.match(command, /confirm-launch-cli\.ts' '\[\]'/);
+});
+
 test('command applies only the exact environment delta and keeps argv as quoted data', () => {
   const source = prepared();
   source.spec.args.splice(-2, 0, "apostrophe's-value", 'two words');
@@ -110,10 +146,78 @@ test('Orca recipe uses pinned terminal create interface, explicit workspace, and
     'terminal', 'create', '--worktree', 'path:C:/fixture/project', '--title', 'WORK · Pi',
   ]);
   assert.deepEqual(recipe.argv.slice(-3), ['--command', recipe.command, '--json']);
-  assert.match(recipe.command, /^cd -- 'C:\/fixture\/project' \|\| exit 1; exec /);
+  assert.match(recipe.command, /^cd -- 'C:\/fixture\/project' \|\| exit 1; /);
+  assert.match(recipe.command, /confirm-launch-cli\.ts.* \|\| exit \$\?; exec /);
   assert.ok(recipe.command.includes("'--skill' 'C:\\mpx packs\\work'"));
   assert.equal(recipe.argv.includes('worker-start'), false);
   assert.equal(recipe.argv.includes('run'), false);
+});
+
+test('non-TTY warning acknowledgement fails without spawning the native process', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mpx-resurrection-warning-'));
+  try {
+    const capture = join(directory, 'native-capture.json');
+    const script = join(directory, 'capture.mjs');
+    writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], 'spawned');`);
+    const source = prepared();
+    source.plan.cwd = directory;
+    source.spec.cwd = directory;
+    source.plan.args = [script, capture];
+    source.spec.executable = process.execPath;
+    source.spec.args = [script, capture];
+    source.spec.env = { ...process.env, PI_CODING_AGENT_DIR: source.plan.accountRoot };
+    const command = buildPreparedLaunchCommand(adaptPreparedPiResurrection(source), source.spec.env);
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-c', command], {
+      cwd: directory, env: source.spec.env, encoding: 'utf8', timeout: 20_000,
+    });
+    assert.notEqual(result.status, 0, result.stderr);
+    assert.match(result.stderr, /\x1b\[33m\[ownership-unknown\]: visible warning\x1b\[0m/);
+    assert.match(result.stderr, /interactive terminal|launch cancelled/i);
+    assert.equal(existsSync(capture), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('warning-free recipe executes native directly with exact arguments and environment', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mpx-resurrection-native-'));
+  try {
+    const capture = join(directory, 'native-capture.json');
+    const script = join(directory, 'capture.mjs');
+    writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], JSON.stringify({ args: process.argv.slice(3), account: process.env.MPX_ACCOUNT }));`);
+    const source = prepared();
+    source.plan.cwd = directory;
+    source.spec.cwd = directory;
+    source.plan.args = [script, capture, "apostrophe's-value", 'two words'];
+    source.spec.executable = process.execPath;
+    source.spec.args = [...source.plan.args];
+    source.spec.warnings = [];
+    source.spec.requiresConfirmation = false;
+    source.spec.env = { ...process.env, PI_CODING_AGENT_DIR: source.plan.accountRoot, MPX_ACCOUNT: 'work' };
+    const command = buildPreparedLaunchCommand(adaptPreparedPiResurrection(source), process.env);
+    assert.doesNotMatch(command, /confirm-launch-cli/);
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-c', command], {
+      cwd: directory, env: process.env, encoding: 'utf8', timeout: 20_000,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(capture, 'utf8')), {
+      args: ["apostrophe's-value", 'two words'], account: 'work',
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('confirmation helper safely rejects malformed warning input', () => {
+  const tsxCli = fileURLToPath(new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url));
+  const confirmationCli = fileURLToPath(new URL('../src/confirm-launch-cli.ts', import.meta.url));
+  for (const malformed of ['not-json', '{}', '[{"code":"unknown","severity":"yellow","message":"bad"}]']) {
+    const result = spawnSync(process.execPath, [tsxCli, confirmationCli, malformed], {
+      encoding: 'utf8', timeout: 20_000,
+    });
+    assert.notEqual(result.status, 0, malformed);
+    assert.match(result.stderr, /valid JSON|required typed warning format/);
+  }
 });
 
 test('native Windows environment names are preserved and credential changes are never serialized', () => {
