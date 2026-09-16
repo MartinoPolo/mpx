@@ -14,6 +14,9 @@ history; see `migration/` for those records.
 - **Keep Orca as the sole operational shell.** Orca owns worktrees, terminals, server visibility,
   orchestration status, and desktop attention. MPX may provide thin status events but must not create a
   competing notification writer.
+- **Preserve separately chosen user utilities.** `agent-resurrect`, `mpx-worktrees`, and the
+  `mpx-ports` inspect/kill utility remain independent tools by explicit user choice. Retiring the
+  old MPX managers does not uninstall them or absorb their state into MPX.
 - **Support Git Bash as the Windows shell contract.** Launchers preserve shell identity so native hooks
   execute with the syntax under which they were configured.
 
@@ -48,6 +51,9 @@ history; see `migration/` for those records.
 - **Preserve native profiles in place.** Account sharing is intentional, but it is not isolation.
   Installation and recovery must change exact owned resources without replacing credentials, settings,
   histories, or unrelated packages.
+- **Let Claude own its native permission mode.** Orca's Manual launch option means no bypass flag;
+  it does not force Claude's native Manual mode. Synchronization preserves an explicitly configured
+  native mode, including Auto, and initializes only an absent default.
 - **Fail visibly on invalid routing.** Missing roots, unavailable packs, model substitution, and unknown
   resume metadata are reported rather than guessed.
 
@@ -85,6 +91,9 @@ history; see `migration/` for those records.
 - **Keep the Pi footer compact and operational.** It shows account, model/effort, project/worktree/branch,
   current context usage, compaction history, cost, quota/reset, and bounded child status. It omits
   cumulative token totals, ports, branch-state counts, and shortcut hints.
+- **Preserve the accepted Claude status lines in this repository.** Claude retains its native
+  status-line and subagent payloads; the renderers own only presentation and bounded derived caches,
+  not a service or session registry. Native location links replace generated editor launchers.
 - **Use native account quota data without credential-file reads.** Bounded selected-account provider
   requests and response headers may update usage; unavailable data stays explicit and does not block a
   session.
@@ -102,3 +111,7 @@ history; see `migration/` for those records.
   folder renaming, and deletion are explicit operations rather than side effects of installation.
 - **Deprecation means disconnecting active dependencies first.** Source can remain read-only for
   provenance after launchers, hooks, links, patches, and project resources no longer depend on it.
+- **Keep one active MPX implementation.** This repository replaces the previous MPX installation and
+  the separate Pi/Claude repositories. Carry over accepted active features before archival; do not
+  retain legacy launch commands, fallback runtimes, or discoverable legacy resources. Native account
+  data stays in place. Protected offline recovery artifacts are not active installations.

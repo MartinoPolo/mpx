@@ -40,6 +40,19 @@ test('command help exposes the same scoped sync syntax as validation errors', as
   } finally { await rm(f.root, { recursive: true, force: true }); }
 });
 
+test('retired legacy launch command cannot launch', async () => {
+  const f = await fixture();
+  try {
+    const result = await f.run('legacy-launch');
+    assert.equal(result.code, 1);
+    assert.match(result.stdout, /Commands:/);
+    assert.doesNotMatch(result.stdout + result.stderr, /Legacy Pi|legacy-launch/);
+    for (const roots of Object.values(f.accounts)) {
+      for (const directory of Object.values(roots)) assert.deepEqual(await readdir(directory), []);
+    }
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 test('status honors configured defaults and reports missing agent links without mutation', async () => {
   const f = await fixture();
   try {

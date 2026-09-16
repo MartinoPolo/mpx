@@ -1,32 +1,54 @@
-import type { RuntimeScope } from '../src/runtime-install.js';
+const MANAGED_START = '# >>> MPX MANAGED LAUNCHERS >>>';
+const MANAGED_END = '# <<< MPX MANAGED LAUNCHERS <<<';
+const LEGACY_START = '# allow cd after creating a worktree';
+const LEGACY_END = 'alias y="yarn"';
+const COMMANDS = ['mpx', 'pi', 'piw', 'cc', 'ccw'] as const;
 
-function replaceOnce(source: string, before: string, after: string): string {
-  const lines = source.split('\n');
-  const matches = lines.flatMap((line, index) => line === before ? [index] : []);
-  if (matches.length !== 1) throw new Error('Launcher layout changed; preserve it and review before rollout.');
-  lines[matches[0]!] = after;
-  return lines.join('\n');
+function markerIndex(lines: readonly string[], marker: string): number {
+  const matches = lines.flatMap((line, index) => line === marker ? [index] : []);
+  if (matches.length !== 1) throw new Error('Launcher layout changed; expected exactly one layout marker.');
+  return matches[0]!;
 }
 
-export function renderAccountRolloutShell(source: string, scopes: readonly RuntimeScope[]): string {
+function shellLaunchers(): string[] {
+  return COMMANDS.map(command => `${command}() { bash "\${MPX_PROJECTS:?${command} requires MPX_PROJECTS}/mpx2/bin/${command}" "$@"; }`);
+}
+
+function preserveNewline(source: string, transform: (lines: string[]) => string[]): string {
   const newline = source.includes('\r\n') ? '\r\n' : '\n';
-  let result = source.replaceAll('\r\n', '\n');
-  const unique = new Set(scopes.map(scope => `${scope.account}/${scope.harness}`));
-  if (unique.size !== scopes.length) throw new Error('Duplicate launcher rollout scope.');
-  for (const scope of scopes) {
-    if (!['personal', 'work'].includes(scope.account) || !['pi', 'claude'].includes(scope.harness)) throw new Error('Invalid launcher rollout scope.');
-    if (scope.harness === 'pi') {
-      if (scope.account === 'personal') throw new Error('Personal Pi already belongs to the accepted pilot.');
-      result = replaceOnce(result, 'piw() { piw-mpx "$@"; }', 'piw() { bash "${MPX_PROJECTS:?piw requires MPX_PROJECTS}/mpx2/bin/piw" "$@"; }');
-      continue;
-    }
-    const command = scope.account === 'personal' ? 'cc' : 'ccw';
-    const legacy = scope.account === 'personal'
-      ? 'xcc()  { _claude_account_launch personal "$HOME/.claude"      "$@"; }'
-      : 'xccw() { _claude_account_launch work     "$HOME/.claude-work" "$@"; }';
-    if (new RegExp(`^l${command}\\(\\)`, 'mu').test(result)) throw new Error('Original Claude fallback launcher already exists; preserve it.');
-    result = replaceOnce(result, legacy, `${legacy.replace(`x${command}()`, `l${command}()`)}\nx${command}() { ${command}-mpx "$@"; }`);
-    result = replaceOnce(result, `${command}() { ${command}-mpx "$@"; }`, `${command}() { bash "\${MPX_PROJECTS:?${command} requires MPX_PROJECTS}/mpx2/bin/${command}" "$@"; }`);
-  }
-  return result.replaceAll('\n', newline);
+  return transform(source.replaceAll('\r\n', '\n').split('\n')).join(newline);
+}
+
+export function renderFinalCutoverShell(source: string): string {
+  return preserveNewline(source, lines => {
+    const legacyStart = markerIndex(lines, LEGACY_START);
+    const legacyEnd = markerIndex(lines, LEGACY_END);
+    const managedStart = markerIndex(lines, MANAGED_START);
+    const managedEnd = markerIndex(lines, MANAGED_END);
+    if (legacyStart >= legacyEnd || managedStart >= managedEnd) throw new Error('Launcher layout changed; marker order is invalid.');
+
+    const withoutManaged = [...lines.slice(0, managedStart), ...lines.slice(managedEnd + 1)];
+    const adjustedLegacyStart = markerIndex(withoutManaged, LEGACY_START);
+    const adjustedLegacyEnd = markerIndex(withoutManaged, LEGACY_END);
+    const launchers = shellLaunchers();
+    const result = [...withoutManaged.slice(0, adjustedLegacyStart), ...launchers, ...withoutManaged.slice(adjustedLegacyEnd)];
+    return result
+      .filter(line => !/^alias gw(?:r)?=/.test(line))
+      .map(line => line === 'alias p0="cd \\"$mpProjectsFolder/mpx-claude-code\\""'
+        ? 'alias p0=\'cd "${MPX_PROJECTS:?p0 requires MPX_PROJECTS}/mpx2"\''
+        : line);
+  });
+}
+
+function powershellLaunchers(): string[] {
+  return COMMANDS.map(command => `function ${command} { if (-not $env:MPX_PROJECTS -or -not $env:MPX_APPS) { throw '${command} requires MPX_PROJECTS and MPX_APPS' }; & "$env:MPX_APPS/Git/bin/bash.exe" --login "$env:MPX_PROJECTS/mpx2/bin/${command}" @args }`);
+}
+
+export function renderFinalPowerShellProfile(source: string): string {
+  return preserveNewline(source, lines => {
+    const start = markerIndex(lines, MANAGED_START);
+    const end = markerIndex(lines, MANAGED_END);
+    if (start >= end) throw new Error('Launcher layout changed; marker order is invalid.');
+    return [...lines.slice(0, start), MANAGED_START, ...powershellLaunchers(), MANAGED_END, ...lines.slice(end + 1)];
+  });
 }

@@ -11,8 +11,7 @@ Run these from Git Bash:
 | Command | Purpose |
 | --- | --- |
 | `pi` / `piw` | Start Pi with the personal / work account |
-| `ccw` | Start Claude Code with the MPX work account |
-| `cc` | Start the existing personal Claude route; MPX live acceptance is deferred |
+| `cc` / `ccw` | Start Claude Code with the personal / work account |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" resume --list` | List resumable native sessions |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" status` | Inspect MPX2 resources and conflicts |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --preview` | Preview account-resource synchronization |
@@ -20,10 +19,9 @@ Run these from Git Bash:
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --orca-hooks-only --harness pi --preview` | Preview only Orca-owned Pi extension mirroring |
 | `bash "$MPX_PROJECTS/mpx2/bin/mpx" project setup --preview` | Preview optional project setup |
 
-`lpi`/`lpiw` and `lccw` temporarily retain direct recovery launch paths during migration. The
-previously installed MPX `x*` launchers are no longer exposed. Until final command cutover, the bare
-`mpx` command and personal `cc` still use the previous installation; use the checkout command above
-for MPX2 management operations.
+Bare `mpx` and the account commands now use this checkout. Legacy recovery and suffixed launchers
+are removed. PowerShell and the Windows `mpx.cmd` shim explicitly select Git Bash rather than the
+Windows/WSL `bash` executable. Reopen existing terminals after migration to discard cached routing.
 
 ## Project configuration
 
@@ -46,7 +44,13 @@ the main checkout's configuration.
 
 User configuration lives at `$APPDATA/mpx2/config.json` and maps personal/work Pi and Claude roots,
 domain roots, optional default packs, and executable overrides. MPX never copies credentials or
-conversation history between profiles.
+conversation history between profiles. Claude's explicitly configured native permission mode,
+including Auto, is preserved; Orca's Manual launch option means no bypass flag, not a forced Claude
+permission mode.
+
+Both Claude accounts load the main and subagent status lines from
+[`src/claude-statusline/`](src/claude-statusline/README.md). Their existing layout is retained without
+legacy script links, credential-file reads, port-manager dependencies, or generated editor launchers.
 
 ## Development
 

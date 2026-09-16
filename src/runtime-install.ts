@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import type { Account, Harness, UserConfig } from './contracts.js';
@@ -73,10 +74,28 @@ async function ownedPiRuntime(root: string, destination: string, preview: boolea
   return 'installed';
 }
 function quote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'`; }
+function canonicalNodePath(): string { return realpathSync(process.execPath).replaceAll('\\', '/'); }
+function canonicalizeOwnedNodeCommand(command: string): string {
+  const match = /^'([^']+)' (.+)$/.exec(command);
+  if (!match) return command;
+  try {
+    return realpathSync(match[1]!).replaceAll('\\', '/') === canonicalNodePath() ? `${quote(canonicalNodePath())} ${match[2]}` : command;
+  } catch { return command; }
+}
+function canonicalizeOwnedRegistration(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (typeof record.command === 'string') return { ...record, command: canonicalizeOwnedNodeCommand(record.command) };
+  if (Array.isArray(record.hooks)) return { ...record, hooks: record.hooks.map(canonicalizeOwnedRegistration) };
+  return value;
+}
+function ownedRegistrationEquals(left: unknown, right: unknown): boolean {
+  return isDeepStrictEqual(canonicalizeOwnedRegistration(left), canonicalizeOwnedRegistration(right));
+}
 function buildClaudeHookEntries(root: string, legacy = false): Record<string, unknown[]> {
   const loader = path.join(root, 'node_modules/tsx/dist/loader.mjs');
   const loaderSpecifier = legacy ? loader.replaceAll('\\', '/') : pathToFileURL(loader).href;
-  const prefix = `${quote(process.execPath.replaceAll('\\', '/'))} --import ${quote(loaderSpecifier)} ${quote(path.join(root, 'src/claude-hooks.ts').replaceAll('\\', '/'))}`;
+  const prefix = `${quote(canonicalNodePath())} --import ${quote(loaderSpecifier)} ${quote(path.join(root, 'src/claude-hooks.ts').replaceAll('\\', '/'))}`;
   return Object.fromEntries([
     ['PreToolUse', 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|apply_patch', 40],
     ['PostToolUse', 'Write|Edit|MultiEdit|NotebookEdit|apply_patch', 6],
@@ -87,6 +106,26 @@ function buildClaudeHookEntries(root: string, legacy = false): Record<string, un
 export function claudeHookEntries(root: string): Record<string, unknown[]> {
   return buildClaudeHookEntries(root);
 }
+
+export function claudeStatusLineEntries(root: string): Record<'statusLine' | 'subagentStatusLine', Record<string, string>> {
+  const command = (script: string) => `${quote(canonicalNodePath())} ${quote(path.join(root, 'src/claude-statusline/scripts', script).replaceAll('\\', '/'))}`;
+  return {
+    statusLine: { type: 'command', command: command('status-line.mts') },
+    subagentStatusLine: { type: 'command', command: command('subagent-status-line.mts') },
+  };
+}
+
+const LEGACY_CLAUDE_STATUS_LINES = {
+  statusLine: [
+    { type: 'command', command: 'node "$HOME/.claude/scripts/status-line.mts"' },
+    { type: 'command', command: 'node "$HOME/.claude-work/scripts/status-line.mts"' },
+  ],
+  subagentStatusLine: [
+    { type: 'command', command: 'node "$HOME/.claude/scripts/subagent-status-line.mts"' },
+    { type: 'command', command: 'node "$HOME/.claude-work/scripts/subagent-status-line.mts"' },
+  ],
+} as const;
+
 export function validateRuntimeScope(scope: unknown): RuntimeScope {
   if (!scope || typeof scope !== 'object' || Array.isArray(scope)) throw new Error('runtime scope must specify account and harness');
   const value = scope as Record<string, unknown>;
@@ -126,15 +165,22 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
         if (current.hooks !== undefined && (!current.hooks || typeof current.hooks !== 'object' || Array.isArray(current.hooks))) throw new Error('invalid hooks object; preserved');
         if (current.permissions !== undefined && (!current.permissions || typeof current.permissions !== 'object' || Array.isArray(current.permissions))) throw new Error('invalid permissions object; preserved');
         const permissions = (current.permissions ?? {}) as Record<string, unknown>;
+        if (permissions.defaultMode !== undefined && typeof permissions.defaultMode !== 'string') throw new Error('invalid permissions.defaultMode; preserved');
         const hooks = (current.hooks ?? {}) as Record<string, unknown>;
         const previousRegistrations = buildClaudeHookEntries(root, true);
         for (const [event, expected] of Object.entries(claudeHookEntries(root))) {
           const existing = hooks[event] ?? [];
           if (!Array.isArray(existing)) throw new Error(`invalid ${event} registrations; preserved`);
-          const upgraded = existing.map(value => previousRegistrations[event]?.some(previous => isDeepStrictEqual(value, previous)) ? expected[0] : value);
-          hooks[event] = [...upgraded, ...expected.filter(entry => !upgraded.some(value => isDeepStrictEqual(value, entry)))];
+          const upgraded = existing.map(value => previousRegistrations[event]?.some(previous => ownedRegistrationEquals(value, previous)) || expected.some(entry => ownedRegistrationEquals(value, entry)) ? expected[0] : value);
+          hooks[event] = [...upgraded, ...expected.filter(entry => !upgraded.some(value => ownedRegistrationEquals(value, entry)))];
         }
-        return { ...current, hooks, permissions: { ...permissions, defaultMode: 'default' }, outputStyle: 'mpx-terse' };
+        const statusLines = claudeStatusLineEntries(root);
+        const statusLineSettings = Object.fromEntries(Object.entries(statusLines).map(([field, expected]) => {
+          const existing = current[field];
+          const legacy = LEGACY_CLAUDE_STATUS_LINES[field as keyof typeof LEGACY_CLAUDE_STATUS_LINES];
+          return [field, existing === undefined || legacy.some(value => isDeepStrictEqual(value, existing)) || ownedRegistrationEquals(existing, expected) ? expected : existing];
+        }));
+        return { ...current, ...statusLineSettings, hooks, permissions: { defaultMode: 'default', ...permissions }, outputStyle: 'mpx-terse' };
       }, preview));
     }
   }

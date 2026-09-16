@@ -149,6 +149,11 @@ test('readUserConfig rejects missing paths, unsupported expansion, aliases, and 
   await assert.rejects(readUserConfig(file), /domains\.work\[0\].*absolute path/i);
   await writeFile(file, JSON.stringify({ ...base, executables: { pi: 'relative/pi' } }));
   await assert.rejects(readUserConfig(file), /executables\.pi.*absolute path/i);
+  await writeFile(file, JSON.stringify({
+    ...base,
+    legacyPi: { accountRoot: path.join(root, 'legacy-account'), checkout: path.join(root, 'legacy-checkout') },
+  }));
+  await assert.rejects(readUserConfig(file), /unsupported field legacyPi/i);
 
   const shared = path.join(root, 'shared-account');
   await mkdir(shared);

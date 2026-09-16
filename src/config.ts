@@ -143,7 +143,7 @@ export async function readUserConfig(
     throw new Error(`cannot read user config ${path.normalize(file)}: ${error instanceof Error ? error.message : String(error)}`);
   }
   const source = object(parsed, 'user config');
-  allowedKeys(source, ['accounts', 'domains', 'defaultPacks', 'executables', 'legacyPi', 'piTitle'], 'user config');
+  allowedKeys(source, ['accounts', 'domains', 'defaultPacks', 'executables', 'piTitle'], 'user config');
   const accountsSource = object(source.accounts, 'accounts');
   const domainsSource = object(source.domains, 'domains');
   allowedKeys(accountsSource, ['personal', 'work'], 'accounts');
@@ -198,12 +198,6 @@ export async function readUserConfig(
       }
     }
     result.executables = executables;
-  }
-  if (source.legacyPi !== undefined) {
-    const legacy = object(source.legacyPi, 'legacyPi');
-    allowedKeys(legacy, ['accountRoot', 'checkout'], 'legacyPi');
-    result.legacyPi = { accountRoot: expandPath(legacy.accountRoot, 'legacyPi.accountRoot', env), checkout: expandPath(legacy.checkout, 'legacyPi.checkout', env) };
-    if ([await comparablePath(accounts.personal.pi), await comparablePath(accounts.work.pi)].includes(await comparablePath(result.legacyPi.accountRoot))) throw new Error('Legacy Pi must use a separate account root, not a normal MPX2 root.');
   }
   if (source.piTitle !== undefined) {
     const title = object(source.piTitle, 'piTitle');

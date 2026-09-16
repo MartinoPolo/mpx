@@ -184,19 +184,19 @@ export async function execute(spec: LaunchSpec, expected: ExpectedSkill[], runne
   const first = await runner(spec, [...spec.args, ...safe, '--session-id', sessionId, firstPrompt], TIMEOUT_MS, OUTPUT_LIMIT);
   requireSuccessfulProcess(first, 'fresh');
   const initial = parseStream(first.stdout);
-  if (!initial.successfulResult || initial.sessionId !== sessionId || initial.cwd !== resolve(spec.cwd) || !initial.model || initial.permissionMode !== 'default' || !initial.responseText.includes(marker)) throw new Error('fresh marker, final result, or native state mismatch');
+  if (!initial.successfulResult || initial.sessionId !== sessionId || initial.cwd !== resolve(spec.cwd) || !initial.model || !['default', 'auto'].includes(initial.permissionMode ?? '') || !initial.responseText.includes(marker)) throw new Error('fresh marker, final result, or native state mismatch');
   validateCatalog(initial, expected);
 
   const resumePrompt = 'What exact marker did I ask you to remember? Reply with only that marker.';
   const resumed = await runner(spec, [...spec.args, ...safe, '--resume', sessionId, resumePrompt], TIMEOUT_MS, OUTPUT_LIMIT);
   requireSuccessfulProcess(resumed, 'resume');
   const resume = parseStream(resumed.stdout);
-  if (!resume.successfulResult || !resume.responseText.includes(marker) || resume.sessionId !== sessionId || resume.cwd !== initial.cwd || resume.model !== initial.model || resume.permissionMode !== 'default') throw new Error('resumed marker, final result, or state mismatch');
+  if (!resume.successfulResult || !resume.responseText.includes(marker) || resume.sessionId !== sessionId || resume.cwd !== initial.cwd || resume.model !== initial.model || resume.permissionMode !== initial.permissionMode) throw new Error('resumed marker, final result, or state mismatch');
   return {
     sessionId,
     model: initial.model,
     cwd: initial.cwd,
-    permissionMode: 'default',
+    permissionMode: initial.permissionMode,
     catalogs: { skills: initial.skills.length, slashCommands: initial.slashCommands.length },
     effort: { explicitOverride: 'low', observedInInitialInit: initial.effort === 'low', observedInResumeInit: resume.effort === 'low', savedRecoveryVerified: false },
     safety: { toolsDisabled: true, mcpDisabled: true },

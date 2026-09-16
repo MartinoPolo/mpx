@@ -13,7 +13,6 @@ import { resumeCommand } from './resume-cli.js';
 import { syncRuntime, syncRuntimeScope } from './runtime-install.js';
 import { setupProject, orcaProjectSnippet } from './project.js';
 import { evaluateDangerousCommand } from './safeguards/dangerous.js';
-import { createLegacyLaunch } from './legacy.js';
 import { inspectNativePackages } from './native-packages.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -80,13 +79,6 @@ async function main(): Promise<number> {
       } else console.log('Agent links: NOT VERIFIED; no MPX2 user configuration.');
       console.log('Hooks/extensions, interactive discovery and cutover: NOT VERIFIED.');
       return drift.length || missingLinks ? 1 : 0;
-    }
-    case 'legacy-launch': {
-      const spec = await createLegacyLaunch(root, process.cwd(), await readUserConfig(userConfigPath()), await resolveProject(process.cwd()), args);
-      console.error(spec.label);
-      for (const warning of spec.warnings) console.error(`Warning: ${warning}`);
-      await confirmLaunch(spec);
-      return runLaunch(spec);
     }
     case 'launch':
     case 'launch-preview': {

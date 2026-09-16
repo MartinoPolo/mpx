@@ -101,8 +101,11 @@ test('fresh and exact resume retain marker and stable default permission state',
   assert.equal(result.permissionMode, 'default');
 });
 
-test('rejects auto and bypass permission modes on either launch', async () => {
-  await assert.rejects(execute(spec, expected, runnerFor('M', (_call, output) => output.replace('"permissionMode":"default"', '"permissionMode":"auto"')), 'M'), /fresh marker/);
+test('accepts stable native Auto while rejecting bypass and resume permission drift', async () => {
+  const automatic = await execute(spec, expected, runnerFor('M', (_call, output) => output.replace('"permissionMode":"default"', '"permissionMode":"auto"')), 'M');
+  assert.equal(automatic.permissionMode, 'auto');
+  await assert.rejects(execute(spec, expected, runnerFor('M', (_call, output) => output.replace('"permissionMode":"default"', '"permissionMode":"bypassPermissions"')), 'M'), /fresh marker/);
+  await assert.rejects(execute(spec, expected, runnerFor('M', (call, output) => call === 1 ? output.replace('"permissionMode":"default"', '"permissionMode":"auto"') : output), 'M'), /resumed marker/);
   await assert.rejects(execute(spec, expected, runnerFor('M', (call, output) => call === 1 ? output.replace('"permissionMode":"default"', '"permissionMode":"bypassPermissions"') : output), 'M'), /resumed marker/);
 });
 

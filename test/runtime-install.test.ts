@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { claudeHookEntries, syncRuntime, syncRuntimeScope, validateRuntimeScope } from '../src/runtime-install.js';
+import { claudeHookEntries, claudeStatusLineEntries, syncRuntime, syncRuntimeScope, validateRuntimeScope } from '../src/runtime-install.js';
 import type { UserConfig } from '../src/contracts.js';
 
 test('runtime scope rejects coercible values rather than widening or guessing selection', () => {
@@ -49,24 +49,31 @@ test('scoped runtime preflights every selected destination before writing any of
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
-test('Claude scopes enforce native Manual permissions while preserving unrelated permission settings', async () => {
+test('Claude scopes preserve native permission modes and initialize only an absent default', async () => {
   const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-claude-permissions-'));
   const selected = join(scratch, 'claude');
   const config: UserConfig = { accounts: { personal: { pi: join(scratch, 'unused-pi'), claude: selected }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } };
   try {
     await mkdir(selected);
-    const before = JSON.stringify({ permissions: { defaultMode: 'auto', allow: ['Read'], deny: ['Bash(secret-command)'] }, unrelated: true });
-    await writeFile(join(selected, 'settings.json'), before);
-    assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, true)).ok, true);
-    assert.equal(await readFile(join(selected, 'settings.json'), 'utf8'), before);
+    for (const defaultMode of ['auto', 'plan', 'acceptEdits']) {
+      const before = JSON.stringify({ permissions: { defaultMode, allow: ['Read'], deny: ['Bash(secret-command)'] }, unrelated: true });
+      await writeFile(join(selected, 'settings.json'), before);
+      assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, true)).ok, true);
+      assert.equal(await readFile(join(selected, 'settings.json'), 'utf8'), before);
+      assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).ok, true);
+      const after = JSON.parse(await readFile(join(selected, 'settings.json'), 'utf8'));
+      assert.deepEqual(after.permissions, { defaultMode, allow: ['Read'], deny: ['Bash(secret-command)'] });
+      assert.equal(after.unrelated, true);
+    }
+    await writeFile(join(selected, 'settings.json'), JSON.stringify({ permissions: { allow: ['Read'] } }));
     assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).ok, true);
-    const after = JSON.parse(await readFile(join(selected, 'settings.json'), 'utf8'));
-    assert.deepEqual(after.permissions, { defaultMode: 'default', allow: ['Read'], deny: ['Bash(secret-command)'] });
-    assert.equal(after.unrelated, true);
-    assert.equal(after.outputStyle, 'mpx-terse');
-    await writeFile(join(selected, 'settings.json'), '{"permissions":"invalid"}');
-    assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).ok, false);
-    assert.equal(await readFile(join(selected, 'settings.json'), 'utf8'), '{"permissions":"invalid"}');
+    assert.deepEqual(JSON.parse(await readFile(join(selected, 'settings.json'), 'utf8')).permissions, { defaultMode: 'default', allow: ['Read'] });
+    for (const malformed of ['"invalid"', '{"defaultMode":42}']) {
+      const contents = `{"permissions":${malformed}}`;
+      await writeFile(join(selected, 'settings.json'), contents);
+      assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).ok, false);
+      assert.equal(await readFile(join(selected, 'settings.json'), 'utf8'), contents);
+    }
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
@@ -83,6 +90,51 @@ test('generated Claude hook commands load through native Node and fail closed be
   const unavailable = command.replace(loaderSpecifier, pathToFileURL(join(root, '.local/nonexistent-acceptance-loader.mjs')).href);
   const failure = spawnSync('bash', ['--noprofile', '--norc', '-c', unavailable], { input, encoding: 'utf8', timeout: 15000 });
   assert.equal(failure.status, 2, failure.stderr);
+});
+
+test('Claude status-line registrations are explicit, quoted native Node commands', () => {
+  const entries = claudeStatusLineEntries(resolve('.'));
+  assert.match(entries.statusLine.command!, /^'.*node(?:\.exe)?' '.*status-line\.mts'$/i);
+  assert.match(entries.subagentStatusLine.command!, /^'.*node(?:\.exe)?' '.*subagent-status-line\.mts'$/i);
+  assert.ok(!JSON.stringify(entries).includes('mpx-claude-code'));
+});
+
+test('Claude status-line sync replaces exact legacy entries while preserving custom registrations', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-statusline-'));
+  const customRoot = join(scratch, 'custom');
+  const legacyRoot = join(scratch, 'legacy');
+  const config = (claude: string): UserConfig => ({ accounts: { personal: { pi: join(scratch, 'unused-pi'), claude }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } });
+  try {
+    for (const directory of [customRoot, legacyRoot]) await mkdir(directory);
+    const custom = { type: 'command', command: 'node /custom/status.mts', padding: 2 };
+    await writeFile(join(customRoot, 'settings.json'), JSON.stringify({ statusLine: custom }));
+    await writeFile(join(legacyRoot, 'settings.json'), JSON.stringify({ statusLine: { type: 'command', command: 'node "$HOME/.claude/scripts/status-line.mts"' }, subagentStatusLine: { type: 'command', command: 'node "$HOME/.claude/scripts/subagent-status-line.mts"' } }));
+    assert.equal((await syncRuntimeScope(resolve('.'), config(customRoot), { account: 'personal', harness: 'claude' }, false)).ok, true);
+    assert.deepEqual(JSON.parse(await readFile(join(customRoot, 'settings.json'), 'utf8')).statusLine, custom);
+    assert.equal((await syncRuntimeScope(resolve('.'), config(legacyRoot), { account: 'personal', harness: 'claude' }, false)).ok, true);
+    const expected = claudeStatusLineEntries(resolve('.'));
+    const upgraded = JSON.parse(await readFile(join(legacyRoot, 'settings.json'), 'utf8'));
+    assert.deepEqual(upgraded.statusLine, expected.statusLine);
+    assert.deepEqual(upgraded.subagentStatusLine, expected.subagentStatusLine);
+    assert.ok((await syncRuntimeScope(resolve('.'), config(legacyRoot), { account: 'personal', harness: 'claude' }, false)).entries.every(entry => entry.status === 'unchanged'));
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
+test('Claude registrations converge when an owned command uses an alias to the same Node executable', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-node-alias-'));
+  const config: UserConfig = { accounts: { personal: { pi: join(scratch, 'unused-pi'), claude: scratch }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } };
+  try {
+    const alias = join(scratch, process.platform === 'win32' ? 'node-alias.exe' : 'node-alias');
+    await symlink(process.execPath, alias, 'file');
+    const root = resolve('.');
+    const expected = claudeStatusLineEntries(root);
+    const aliased = { ...expected.statusLine, command: expected.statusLine.command!.replace(/^'[^']+'/, `'${alias.replaceAll('\\', '/')}'`) };
+    await writeFile(join(scratch, 'settings.json'), JSON.stringify({ statusLine: aliased }));
+    assert.equal((await syncRuntimeScope(root, config, { account: 'personal', harness: 'claude' }, false)).ok, true);
+    const settings = JSON.parse(await readFile(join(scratch, 'settings.json'), 'utf8'));
+    assert.deepEqual(settings.statusLine, expected.statusLine);
+    assert.ok((await syncRuntimeScope(root, config, { account: 'personal', harness: 'claude' }, false)).entries.every(entry => entry.status === 'unchanged'));
+  } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
 test('runtime upgrades exact old Windows loader registrations without retaining duplicate broken hooks', async () => {
