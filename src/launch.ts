@@ -91,7 +91,7 @@ export async function createLaunchSpec(options: {
     env.MPX_ACCOUNT = account;
     env.MPX_ACTIVE_CONTENT_ROOT = resolve(root);
   }
-  const injected = harness === 'pi' ? ['--verbose'] : [];
+  const injected: string[] = [];
   if (native) injected.push('--no-extensions');
   else for (const path of selection.paths) injected.push(harness === 'pi' ? '--skill' : '--add-dir', path);
   return {

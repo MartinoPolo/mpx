@@ -24,6 +24,9 @@ Bare `mpx` and the account commands now use this checkout. Legacy recovery and s
 are removed. PowerShell and the Windows `mpx.cmd` shim explicitly select Git Bash rather than the
 Windows/WSL `bash` executable. Reopen existing terminals after migration to discard cached routing.
 
+Pi launchers leave the startup overview at its native compact default rather than forcing verbose
+output. Pass `pi --verbose` or `piw --verbose` when expanded resource paths are useful.
+
 ## Project configuration
 
 A repository may define `mpxconfig.json`:

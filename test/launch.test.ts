@@ -24,7 +24,9 @@ test('additive arguments and selected native roots preserve all caller argument 
     const args = ['--settings', '{"a":"b c"}', '--', 'line one\nline two', '$(touch nope)', '', 'C:\\a b\\'];
     const packs = { packs: ['development'], paths: [join(f.root, 'pack space')], warnings: [] };
     const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
-    assert.deepEqual(spec.args, ['--verbose', '--skill', packs.paths[0], ...args]);
+    assert.deepEqual(spec.args, ['--skill', packs.paths[0], ...args]);
+    const verbose = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args: ['--verbose'] });
+    assert.deepEqual(verbose.args, ['--skill', packs.paths[0], '--verbose']);
     assert.equal(spec.env.PI_CODING_AGENT_DIR, f.config.accounts.personal.pi);
     assert.equal(spec.env.MPX_ACCOUNT, 'personal');
     assert.equal(spec.env.MPX_ACTIVE_CONTENT_ROOT, f.root);
@@ -105,7 +107,7 @@ test('missing account/executable blocks only launch; xpi adds no packs or MPX ru
   try {
     const base = { root: f.root, cwd: f.root, harness: 'pi' as const, account: 'personal' as const, config: f.config, project: registered, selection: { packs: ['development'], paths: ['/pack'], warnings: [{ code: 'native-only' as const, severity: 'orange' as const, message: 'packs unavailable' }] }, args: ['-e', '/explicit.ts'] };
     const native = await createLaunchSpec({ ...base, native: true, env: { MPX_ACCOUNT: 'work', MPX_ACTIVE_CONTENT_ROOT: '/old', MPX_WORK: '/kept' } });
-    assert.deepEqual(native.args, ['--verbose', '--no-extensions', '-e', '/explicit.ts']);
+    assert.deepEqual(native.args, ['--no-extensions', '-e', '/explicit.ts']);
     assert.equal(native.env.MPX_ACCOUNT, undefined);
     assert.equal(native.env.MPX_ACTIVE_CONTENT_ROOT, undefined);
     assert.equal(native.env.MPX_WORK, '/kept');
@@ -159,7 +161,7 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
         cwd: launchDirectories[account], env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
       });
       const actual = JSON.parse(stdout.trim());
-      const prefix = wrapper === 'xpi' ? ['--verbose', '--no-extensions'] : harness === 'pi' ? ['--verbose'] : [];
+      const prefix = wrapper === 'xpi' ? ['--no-extensions'] : [];
       assert.deepEqual(actual.args, [...prefix, ...nativeArgs]);
       assert.equal(actual[harness === 'pi' ? 'pi' : 'cc'], f.config.accounts[account][harness]);
       assert.equal(actual.account, wrapper === 'xpi' ? undefined : account);
