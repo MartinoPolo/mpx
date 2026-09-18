@@ -12,6 +12,11 @@ the intent or the constraint. Update documentation when behavior changes.
 Avoid numeric values describing repository state in comments, docs, skills, and references. These
 drift over time. Describe the general shape or point to the authoritative source instead.
 
+Save to memory only what a fresh session cannot easily explore from the repository, its config, or a
+cloned upstream source; for a narrowly scoped fact, prefer a code comment. Pointers to authoritative
+files are encouraged to speed that exploration. Reserve memory for decisions, rationale, time-costly
+gotchas, and machine- or person-specific setup.
+
 Keep `AGENTS.md` edits concise and limited to durable repository-authoring intent.
 
 ## Execution
