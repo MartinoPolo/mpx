@@ -38,10 +38,8 @@ Preserve unrelated native and project-authored resources. Project skills can ove
 never delete or rename one solely because its name collides. Establish provenance and compare behavior
 first. Never write through legacy directory links.
 
-## Documentation
+## Content authoring
 
-Keep `README.md` focused on user-facing commands and setup. Keep `DECISIONS.md` limited to durable
-choices and their rationale. Put changing acceptance state and recovery instructions under
-`migration/`; keep current state in `migration/HANDOFF.md` and recovery in `migration/ACCOUNT_ROLLOUT.md`.
-Retire one-off tooling and superseded reports to Git history. Package-local behavior may be documented
-beside that package.
+Before restructuring instructions, review their direct, transitive, and runtime consumers and agree
+the disposition with the user. Keep essential agent behavior self-contained. Keep instructions concise and
+complete, using at most one short example when useful.
