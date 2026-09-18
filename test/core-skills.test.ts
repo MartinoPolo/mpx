@@ -71,6 +71,7 @@ test('inactive skills retain their sources without any build projections', async
   for (const [category, name] of [
     ['archived', 'architecture-review'],
     ['archived', 'epic-review'],
+    ['archived', 'vocabulary'],
     ['unfinished', 'harvest-decisions'],
     ['unfinished', 'grill-voice'],
   ] as const) {

@@ -105,8 +105,9 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 
 - **Separate rationale, conventions, and state.** `README.md` explains use, `AGENTS.md` governs
   repository work, this file records lasting choices, and `migration/` holds rollout and recovery.
-- **Keep project-document guidance with its workflows.** Scaffolds define initial structure;
-  editing skills carry their own confirmation and preservation boundaries. Avoid a separate strategy
+- **Keep project-document guidance with its workflows.** Setup shares a minimal initialization
+  contract for context and decisions; add sections only for substantive content, not placeholders.
+  Editing skills carry their own confirmation and preservation boundaries. Avoid a separate strategy
   layer, mandatory decision dates, and arbitrary document-length targets.
 - **Retire dependencies before artifacts.** Preserve dirty state, histories, and recovery material
   until active consumers are disconnected and restart/recovery checks pass. Publication, archival,

@@ -184,9 +184,33 @@ test('documentation workflows retain local safeguards without a shared strategy'
     assert.match(workflow, /Replace superseded entries/);
   }
   const templates = await readFile(path.join(content, 'instructions/shared/PROJECT_DOC_TEMPLATES.md'), 'utf8');
-  assert.match(templates, /Preserve substantive files/);
-  assert.match(templates, /Do not create, update, or fall back/);
+  assert.match(templates, /preserve substantive existing content/);
+  assert.match(templates, /Do not recreate or fall back/);
   assert.doesNotMatch(templates, /YYYY-MM-DD|\d+ lines/);
+});
+
+test('project documentation starts minimal and writers populate sections on demand', async () => {
+  const templates = await readFile(path.join(content, 'instructions/shared/PROJECT_DOC_TEMPLATES.md'), 'utf8');
+  assert.match(templates, /Create missing `\.mpx\/CONTEXT\.md` and `\.mpx\/DECISIONS\.md`/);
+  assert.match(templates, /leave only the document title/);
+  assert.match(templates, /only for\s+confirmed choices/);
+  assert.doesNotMatch(templates, /\[Project Name\]|\[Domain\]|Three-sentence|```/);
+  for (const skill of ['setup-sveltekit', 'setup-react-native', 'init-github-repo']) {
+    const workflow = await readFile(path.join(content, 'skills', skill, 'SKILL.md'), 'utf8');
+    assert.match(workflow, /PROJECT_DOC_TEMPLATES\.md/);
+    assert.doesNotMatch(workflow, /content procedure|canonical scaffold|exact.*scaffolds|project-name placeholder/);
+  }
+  for (const file of [
+    'grill/SKILL.md', 'unfinished/grill-voice/GRILL_WORKFLOW.md',
+    'unfinished/consolidate-context/SKILL.md', 'unfinished/harvest-decisions/SKILL.md',
+  ]) {
+    const workflow = await readFile(path.join(content, 'skills', file), 'utf8');
+    assert.match(workflow, /Create missing\s+sections only/, file);
+    assert.match(workflow, /(?:do not|Do not)\s+add empty sections/, file);
+  }
+  const initialization = await readFile(path.join(content, 'skills/init-github-repo/SKILL.md'), 'utf8');
+  assert.match(initialization, /Verify both files\s+exist/);
+  assert.match(initialization, /never stage unrelated files or secrets/);
 });
 
 test('Pi agents assigned to Luna use xhigh thinking', async () => {

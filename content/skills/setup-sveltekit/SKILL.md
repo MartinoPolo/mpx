@@ -65,9 +65,8 @@ derive the provider from another project's configuration.
    ```bash
    cd <path> && pnpm dlx sv add mcp
    ```
-7. Resolve [PROJECT_DOC_TEMPLATES]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_DOC_TEMPLATES.md) through the content
-   procedure. Create its exact `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md` scaffolds with the project
-   placeholder replaced; preserve substantive files.
+7. Follow [project documentation initialization]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_DOC_TEMPLATES.md)
+   for `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`; preserve substantive files.
 8. Verify the compiler-projected Svelte rule through the active native account location. For a
    configured Claude account root, inspect its `rules/svelte.md` link:
    ```bash

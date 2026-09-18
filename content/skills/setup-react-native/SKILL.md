@@ -97,9 +97,8 @@ is recorded and confirmed not to make setup unusable.
 
 ### 5. Project documentation
 
-Resolve [PROJECT_DOC_TEMPLATES]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_DOC_TEMPLATES.md) using the content procedure.
-Create canonical `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`, replacing the project placeholder, but
-never overwrite substantive content.
+Follow [project documentation initialization]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_DOC_TEMPLATES.md)
+for `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`; preserve substantive files.
 
 ### 6. Framework rule
 

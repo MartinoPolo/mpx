@@ -51,7 +51,8 @@ Only write confirmed terms.
 
 **Step 5: Write**
 
-Update `.mpx/CONTEXT.md` `## Domain Language` section using definition-list format:
+Update `.mpx/CONTEXT.md` `## Domain Language` section using definition-list format. Create missing
+sections only when confirmed content belongs in them; do not add empty sections or placeholders:
 
 ```markdown
 ## Domain Language

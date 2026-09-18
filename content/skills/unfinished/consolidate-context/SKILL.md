@@ -74,7 +74,8 @@ Read every line of the full file against each issue type and build a classified 
 ### Step 2: Rewrite
 
 Apply changes supported by authoritative evidence. Ask about unresolved conflicts before changing
-the affected content. Produce the consolidated file:
+the affected content. Create missing sections only when substantive content belongs in them; do not
+add empty sections or placeholders. Produce the consolidated file:
 
 - § Domain Language: one sentence max per definition, definition-list format
   (`**Term** — Definition.`)

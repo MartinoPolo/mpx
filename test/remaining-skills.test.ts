@@ -33,7 +33,6 @@ const skills = {
   symlink: ['development', 'name-only', 'Windows Symlinks & Junctions'],
   'tutorial-create': ['personal', 'explicit-only', 'Outline Gate'],
   'video-to-image': ['personal', 'explicit-only', 'Gemini watches the video'],
-  vocabulary: ['development', 'name-only', 'Only write confirmed terms'],
 } as const;
 
 const exactSupportHashes: Record<string, string> = {

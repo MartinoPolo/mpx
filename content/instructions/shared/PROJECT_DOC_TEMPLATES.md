@@ -1,47 +1,12 @@
-# Project Documentation Scaffolds
+# Project Documentation Initialization
 
-Create both files with these headings when a setup workflow initializes `.mpx/` documentation.
-Replace `[Project Name]` when known. Preserve substantive files. Do not create, update, or fall back
-to the retired `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, or `.mpx/ARCHITECTURE.md` files.
+Create missing `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`; preserve substantive existing content.
 
-## `.mpx/CONTEXT.md`
+- **CONTEXT.md:** use a project-context title and a concise summary supported by known facts. Add
+  populated sections as needed: What This Is, Domain Language, Relationships, Flagged Ambiguities,
+  Core Features, and Key Constraints. Do not invent facts or leave instructional placeholders.
+- **DECISIONS.md:** use `# Decisions`. Add domain headings and concise decision bullets only for
+  confirmed choices, with useful rationale and only explicitly rejected alternatives.
 
-```markdown
-# [Project Name] Context
-
-## What This Is
-
-[Three-sentence project summary]
-
-## Domain Language
-
-[One-line definition-list entries]
-
-## Relationships
-
-[Entity cardinalities such as 1:N and N:1]
-
-## Flagged Ambiguities
-
-[Resolved term conflicts with rationale]
-
-## Core Features
-
-[Feature index: name, status, configured-provider Issue ID, and design pointer]
-
-## Key Constraints
-
-[Settled facts about the system]
-```
-
-## `.mpx/DECISIONS.md`
-
-```markdown
-# Decisions
-
-Settled architectural and design decisions, updated only after user confirmation.
-
-## [Domain]
-
-- [Confirmed decision, with useful rationale and only explicitly rejected alternatives inline.]
-```
+If no substantive content is known, leave only the document title. Do not recreate or fall back to
+retired REQUIREMENTS, VOCABULARY, or ARCHITECTURE documents.

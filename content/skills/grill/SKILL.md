@@ -65,6 +65,9 @@ After grilling concludes, check which docs exist and have relevant updates. We'r
 these files concise and on point, so think twice before adding anything. It should be the most
 important context and decisions for the project. If not sure if important enough, ask user.
 
+Create missing sections only when confirmed content belongs in them; do not add empty sections or
+placeholders.
+
 **CONTEXT.md** — If new terms, features, or constraints emerged:
 
 - § Domain Language: for each candidate term, show the full proposed entry

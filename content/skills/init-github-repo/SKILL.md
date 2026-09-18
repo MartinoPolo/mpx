@@ -59,11 +59,11 @@ versioned, not ignored.
 
 ## 3. Create project documentation
 
-Read [PROJECT_DOC_TEMPLATES]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_DOC_TEMPLATES.md) as the single source for
-`.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`. Preserve substantive planning, research, decisions, and
-prior grilling output. Create only missing files or untouched placeholders, reproducing the
-canonical scaffold and replacing the project-name placeholder. Verify each file contains preserved
-substantive content or the new scaffold. Then run:
+Follow [project documentation initialization]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_DOC_TEMPLATES.md)
+for `.mpx/CONTEXT.md` and `.mpx/DECISIONS.md`. Preserve substantive planning, research, decisions, and
+prior grilling output. Initialize missing files or replace untouched placeholders. Verify both files
+exist with preserved content, known facts, or only their titles when nothing substantive is known.
+Then run:
 
 ```bash
 git add .mpx/CONTEXT.md .mpx/DECISIONS.md
