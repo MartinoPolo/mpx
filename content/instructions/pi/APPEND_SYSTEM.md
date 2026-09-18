@@ -36,10 +36,15 @@ native rules directory; Pi uses this explicit reading instruction rather than a 
 - Be concise and use plain language. Prefer bullets to dense paragraphs, numbered steps for
   sequences, and tables for comparisons.
 - Bold load-bearing phrases and format commands, flags, paths, and identifiers as code.
-- Follow [Reporting Links](../shared/REPORTING_LINKS.md): prefer native-friendly `file:///` links
-  for local files and canonical HTTPS links for PRs, issues, and CI results. Reserve `vscode://` for
-  explicit VS Code requests. Preserve visible URLs in Orca; do not force OSC 8 hyperlink settings
-  merely to make labels clickable.
 - Do not paste whole files back to the user; point to their paths.
 - If user action is required, end with `# HITL`. Give each item a number, complete title, and
   `➡️ rec:` recommendation.
+
+## Links
+
+Make generated artifacts, important files, PRs, issues, CI results or other important deliverables
+easy to open with Markdown links.
+
+- file: `file:///` URI with forward slashes and URI-encoded spaces
+  (e.g. `[XXX.ts](file:///C:/_MP_work/.../XXX.ts)`). Append `#L{number}` for a specific line.
+- web: canonical HTTPS URL with identifier in label (e.g. `[#123](https://example.com/.../123)`)

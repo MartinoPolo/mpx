@@ -61,7 +61,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/PROJECT_DOC_TEMPLATES.md',
     'shared/PROVIDER_ROUTING.md',
     'shared/REPAIR_ORCHESTRATION.md',
-    'shared/REPORTING_LINKS.md',
     'shared/REVIEWER_PROTOCOL.md',
     'shared/SENTRY.md',
     'shared/SUBAGENT_PROTOCOL.md',
@@ -98,6 +97,27 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     .map(name => readFile(path.join(content, 'instructions/shared', name), 'utf8')));
   for (const needle of ['Test observable behavior', 'Mock at System Boundaries Only', 'Deep modules', 'Interface Design for Testability']) {
     assert.ok(helpers.some(source => source.includes(needle)), needle);
+  }
+});
+
+test('reporting links are self-contained in native presentation instructions', async () => {
+  const projections = await projectContent(root);
+  for (const harness of ['pi', 'claude']) {
+    const guidance = projections.find(file => file.path === `dist/${harness}/instructions/shared/AGENTS.md`);
+    assert.ok(guidance);
+    assert.doesNotMatch(guidance.content.toString('utf8'), /## Reporting|file:\/\/\//);
+  }
+  for (const destination of ['dist/pi/instructions/pi/APPEND_SYSTEM.md', 'dist/claude/output-styles/mpx-terse.md']) {
+    const presentation = projections.find(file => file.path === destination);
+    assert.ok(presentation, destination);
+    const text = presentation.content.toString('utf8');
+    assert.match(text, /file:\/\/\//);
+    assert.match(text, /#L\{number\}/);
+    assert.match(text, /canonical HTTPS URL/);
+  }
+  for (const projection of projections) {
+    assert.doesNotMatch(projection.path, /REPORTING_LINKS\.md/);
+    assert.doesNotMatch(projection.content.toString('utf8'), /REPORTING_LINKS\.md/);
   }
 });
 

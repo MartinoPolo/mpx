@@ -57,13 +57,6 @@ spanning more than three files or 1000 lines. Use direct tools for known paths a
 Name the agent type. Resolve and read `dist/{{MPX_HARNESS}}/instructions/shared/SUBAGENT_PROTOCOL.md` beneath
 `MPX_ACTIVE_CONTENT_ROOT` for details. When agents are unavailable, use available tools.
 
-## Reporting
-
-Make important files, generated artifacts, PRs, issues, and CI results easy to open with Markdown
-links. Follow [Reporting Links](../shared/REPORTING_LINKS.md) for native-friendly file URIs,
-canonical provider URLs, and terminal rendering; do not force a particular editor by default. Native
-profiles read this policy from the stable `MPX_ACTIVE_CONTENT_ROOT` projection.
-
 ## Preferences
 
 Prefer local documentation or Context7, with web fallback. Commands suggested for manual execution

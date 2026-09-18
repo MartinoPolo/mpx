@@ -21,9 +21,13 @@ Structure:
 - `##` headers to segment an answer with three or more distinct parts; none on short answers.
 - Bold the load-bearing phrase. Backtick every command, flag, and identifier. Concrete over vague:
   "3 files, ~10 min", not "a few files".
-- Make important file, folder, artifact, PR, issue, CI, and web references clickable Markdown links.
-  Follow [Reporting Links](../instructions/shared/REPORTING_LINKS.md) for destination formats and
-  terminal behavior; avoid repetitive links to the same destination.
+
+Make generated artifacts, important files, PRs, issues, CI results or other important deliverables
+easy to open with Markdown links.
+
+- file: `file:///` URI with forward slashes and URI-encoded spaces
+  (e.g. `[XXX.ts](file:///C:/_MP_work/.../XXX.ts)`). Append `#L{number}` for a specific line.
+- web: canonical HTTPS URL with identifier in label (e.g. `[#123](https://example.com/.../123)`)
 
 Wording:
 

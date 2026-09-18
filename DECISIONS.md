@@ -94,6 +94,10 @@ history; see `migration/` for those records.
 
 ## User interface
 
+- **Keep reporting links in native presentation instructions.** Inline link guidance in Pi's
+  appended system instructions and Claude's output style, not general agent guidance or a deferred
+  shared document.
+
 - **Keep the Pi footer compact and operational.** It shows account, model/effort, project/worktree/branch,
   current context usage, compaction history, cost, quota/reset, and bounded child status. It omits
   cumulative token totals, ports, branch-state counts, and shortcut hints.
