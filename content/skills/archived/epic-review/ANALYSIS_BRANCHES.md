@@ -6,17 +6,16 @@ provider facts; agents do not discover or change providers.
 
 ## 7. Architecture
 
-The parent applies the existing `architecture-review` method and reads its linked deep-module and
-interface-design references. Dispatch `mpx-explorer` to gather facts and
+Dispatch `mpx-explorer` to gather facts and
 evidence from the Epic's changed files, including coupling, shallow modules, misplaced policy,
 unstable interfaces, test boundaries, and decomposition candidates. Supply the changed-file stats
 and confirmed architectural decisions, and stop after the changed surfaces and their direct
 architectural seams are evidenced.
 
 The explorer returns facts and `file:line` evidence only. The parent evaluates that evidence using
-the architecture review method and returns severity, title, `file:line`, consequence, evidence, and
-suggested action, or an explicit no-findings result. This review branch does not enter
-architecture-review's interactive candidate-selection or Issue- creation stages.
+interface simplicity, encapsulation, and whether module boundaries hide complexity. Return severity,
+title, `file:line`, consequence, evidence, and suggested action, or an explicit no-findings result.
+This branch reports candidates only; it does not select candidates interactively or create Issues.
 
 ## 8. Cleanup
 

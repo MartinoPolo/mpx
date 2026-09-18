@@ -49,7 +49,7 @@ provider limitation/manual route]
 
 ## Architecture Promotion Candidates
 
-- [title — evidence — recommendation for `{{MPX_SKILL_COMMAND}}architecture-review`]
+- [title — evidence — proposed interface or module-boundary improvement]
 
 ## Execution Evidence
 

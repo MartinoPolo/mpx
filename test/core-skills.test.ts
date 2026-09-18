@@ -11,9 +11,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const skillsRoot = path.join(root, 'content', 'skills');
 const names = [
   'batch-execute', 'bug-report', 'check-fix', 'commit', 'commit-push', 'commit-push-pr',
-  'continue', 'decompose', 'epic-create', 'epic-review', 'execute', 'issue-create', 'pr',
+  'continue', 'decompose', 'epic-create', 'execute', 'issue-create', 'pr',
   'review', 'ship', 'sync-base', 'to-issues', 'board-to-issues', 'design-init', 'design-brief',
-  'mockup', 'design-refine', 'grill', 'grill-voice', 'harvest-decisions',
+  'mockup', 'design-refine', 'grill',
 ] as const;
 const exposures: Record<(typeof names)[number], 'normal' | 'name-only' | 'explicit-only'> = {
   'batch-execute': 'explicit-only',
@@ -25,7 +25,6 @@ const exposures: Record<(typeof names)[number], 'normal' | 'name-only' | 'explic
   continue: 'explicit-only',
   decompose: 'name-only',
   'epic-create': 'explicit-only',
-  'epic-review': 'explicit-only',
   execute: 'normal',
   'issue-create': 'name-only',
   pr: 'name-only',
@@ -39,8 +38,6 @@ const exposures: Record<(typeof names)[number], 'normal' | 'name-only' | 'explic
   mockup: 'explicit-only',
   'design-refine': 'name-only',
   grill: 'name-only',
-  'grill-voice': 'explicit-only',
-  'harvest-decisions': 'explicit-only',
 };
 
 function frontmatter(source: string): Record<string, any> {
@@ -69,6 +66,20 @@ async function allBatchText(): Promise<string> {
   return (await Promise.all(files.map(file => readFile(file, 'utf8')))).join('\n');
 }
 
+test('inactive skills retain their sources without any build projections', async () => {
+  const projections = await projectContent(root);
+  for (const [category, name] of [
+    ['archived', 'architecture-review'],
+    ['archived', 'epic-review'],
+    ['unfinished', 'harvest-decisions'],
+    ['unfinished', 'grill-voice'],
+  ] as const) {
+    const source = await readFile(path.join(skillsRoot, category, name, 'SKILL.md'), 'utf8');
+    assert.equal(frontmatter(source).name, name);
+    assert.ok(!projections.some(item => item.path.includes(`/skills/mp-${name}/`)), name);
+  }
+});
+
 test('bounded core batch has exact canonical exposure metadata', async () => {
   for (const name of names) {
     const data = frontmatter(await readFile(path.join(skillsRoot, name, 'SKILL.md'), 'utf8'));
@@ -85,14 +96,8 @@ test('private support closure is copied into every consuming skill', async () =>
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'execute')), [
     'CLOSE_OUT.md', 'DEV_SERVER.md', 'SKILL.md', 'detect-check-scripts.mjs', 'mocking.md', 'tests.md',
   ]);
-  assert.deepEqual(await filesBelow(path.join(skillsRoot, 'epic-review')), [
-    'ANALYSIS_BRANCHES.md', 'EXECUTION.md', 'ISSUE_TEMPLATE.md', 'PHASE_END_TEMPLATE.md', 'SKILL.md',
-  ]);
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'board-to-issues')), ['ISSUE_TEMPLATE.md', 'SKILL.md']);
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'review')), ['SKILL.md', 'scripts/detect-base-branch.js']);
-  assert.deepEqual(await filesBelow(path.join(skillsRoot, 'grill-voice')), [
-    'CONTRACT.md', 'GRILL_WORKFLOW.md', 'SKILL.md', 'scripts/grill-voice.js',
-  ]);
 
   assert.equal(
     await readFile(path.join(skillsRoot, 'board-to-issues', 'ISSUE_TEMPLATE.md'), 'utf8'),
@@ -103,16 +108,8 @@ test('private support closure is copied into every consuming skill', async () =>
   assert.match(boardToIssues, /append the canonical ` → issue:<id>`/);
   assert.match(boardConvention, /Use `issue:<id>` as the canonical annotation/);
   assert.equal(
-    await readFile(path.join(skillsRoot, 'epic-review', 'ISSUE_TEMPLATE.md'), 'utf8'),
-    await readFile(path.join(skillsRoot, 'to-issues', 'ISSUE_TEMPLATE.md'), 'utf8'),
-  );
-  assert.equal(
     await readFile(path.join(skillsRoot, 'review', 'scripts', 'detect-base-branch.js'), 'utf8'),
     await readFile(path.join(skillsRoot, 'sync-base', 'scripts', 'detect-base-branch.js'), 'utf8'),
-  );
-  assert.equal(
-    await readFile(path.join(skillsRoot, 'grill-voice', 'GRILL_WORKFLOW.md'), 'utf8'),
-    await readFile(path.join(skillsRoot, 'grill', 'SKILL.md'), 'utf8'),
   );
 });
 
@@ -206,7 +203,7 @@ test('compiler closure is valid, with MPX_SKILL_PREFIX owned by parent integrati
     const projected = await projectContent(temporary);
     assert.ok(projected.some(item => item.path.endsWith('/skills/mp-execute/detect-check-scripts.mjs')));
     assert.ok(projected.some(item => item.path.endsWith('/skills/mp-board-to-issues/ISSUE_TEMPLATE.md')));
-    assert.ok(projected.some(item => item.path.endsWith('/skills/mp-grill-voice/GRILL_WORKFLOW.md')));
+    assert.ok(!projected.some(item => item.path.includes('/skills/mp-grill-voice/')));
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

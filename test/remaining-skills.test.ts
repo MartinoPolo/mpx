@@ -12,7 +12,6 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const contentRoot = path.join(root, 'content', 'skills');
 const skills = {
   'agent-create': ['development', 'explicit-only', 'Create a focused custom agent'],
-  'architecture-review': ['development', 'name-only', 'Design multiple interfaces'],
   'board-setup': ['development', 'explicit-only', 'four-lane skeleton'],
   'clean-pc': ['personal', 'explicit-only', 'measured free-space delta'],
   'code-clean': ['development', 'name-only', 'Spawn Fix Subagents'],
@@ -39,7 +38,6 @@ const skills = {
 } as const;
 
 const exactSupportHashes: Record<string, string> = {
-  'architecture-review/REFERENCE.md': '4d5ceaffcb578ec7f28ef0e649d0b4d90da12c8b96845842bfa6e7f624db1a60',
   'board-setup/scripts/link-board.ps1': 'b5f4e80e038ceb8d9c46a2737f35b12140fe9df34a8dcb4cdbdefaa32a5cc196',
   'clean-pc/DOMAINS.md': '049503a589dea49a003e9e8ef460e6ef9eed35b8b7ad09c1c6a7802dafc1a3a3',
   'clean-pc/LINUX.md': '85485a4c09053f13b38005036102ca847ad1b661270f24b1c228b84aa593fc7e',
@@ -114,8 +112,7 @@ function sha256(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
-test('bounded set retains all 25 workflows with source metadata and semantic bodies', async () => {
-  assert.equal(Object.keys(skills).length, 25);
+test('active workflows retain source metadata and semantic bodies', async () => {
   for (const [name, [pack, exposure, needle]] of Object.entries(skills)) {
     const source = await readFile(path.join(contentRoot, name, 'SKILL.md'), 'utf8');
     const data = frontmatter(source);

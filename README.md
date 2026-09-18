@@ -125,6 +125,8 @@ pnpm status
 ```
 
 Author canonical resources under `content/`, then run `pnpm build` from the repository root.
+Keep retired skills in `content/skills/archived/` and incomplete skills in
+`content/skills/unfinished/`; both trees are excluded from build validation and distribution.
 The compiler writes ignored, reproducible projections under `dist/`; do not edit or commit them.
 Build after a fresh checkout and after content changes before launching a harness or running tests.
 Runtime code is under `src/`, native Pi adapters

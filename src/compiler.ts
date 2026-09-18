@@ -209,6 +209,7 @@ async function collectSource(contentRoot: string): Promise<SourceFile[]> {
     for (const entry of entries) {
       const absolute = path.join(directory, entry.name);
       const relative = joined(relativeDirectory, entry.name);
+      if (relative === 'skills/archived' || relative === 'skills/unfinished') continue;
       const info = await lstat(absolute);
       if (info.isSymbolicLink()) {
         const target = await realpath(absolute).catch(() => '');

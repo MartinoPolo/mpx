@@ -221,6 +221,24 @@ test('build converges inside generated roots and checkOutput reports drift witho
   assert.deepEqual(await filesBelow(path.join(root, 'dist')), before, 'checkOutput must be read-only');
 });
 
+test('excludes archived and unfinished skill trees and removes their stale outputs', async () => {
+  const root = await fixture();
+  const expected = await projectContent(root);
+  for (const category of ['archived', 'unfinished']) {
+    await put(root, `content/skills/${category}/draft/SKILL.md`, 'Incomplete {{UNKNOWN}} [missing](missing.md)\n');
+    await put(root, `content/skills/${category}/draft/scripts/helper.js`, 'unfinished support\n');
+    await put(root, `content/skills/${category}/notes.md`, 'category notes\n');
+  }
+  assert.deepEqual(await projectContent(root), expected);
+  for (const directory of ['dist/packs/development/pi/skills', 'dist/packs/development/claude/.claude/skills']) {
+    await put(root, `${directory}/mp-draft/SKILL.md`, 'stale skill\n');
+    await put(root, `${directory}/mp-draft/scripts/helper.js`, 'stale support\n');
+  }
+  await build(root);
+  assert.deepEqual(await checkOutput(root), []);
+  assert.ok(!(await filesBelow(path.join(root, 'dist'))).some(file => file.includes('mp-draft')));
+});
+
 test('rejects malformed metadata, unknown placeholders, duplicate outputs, and broken local Markdown references', async (t) => {
   const cases: Array<[string, (root: string) => Promise<void>, RegExp]> = [
     ['unsafe skill name', async (root) => put(root, 'content/skills/review/SKILL.md', `---\nname: ../review\ndescription: bad\nmetadata: { mpx: { schemaVersion: 1, skillPacks: [development] } }\n---\nbody\n`), /safe lowercase bare name/],
